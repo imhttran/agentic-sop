@@ -233,7 +233,11 @@ llamacpp   OpenAI-compatible /v1/chat/completions (llama.cpp llama-server)
 ```
 
 The provider is selected by `agent.provider` in configuration, overridden by
-`SOP_AGENT_PROVIDER`; credentials and endpoints come from the environment.
+`SOP_AGENT_PROVIDER`; credentials and endpoints come from the environment. Each
+provider declares which capabilities it serves; `agent.Checked` wraps the
+resolved provider and rejects a request for an unsupported capability with a
+message naming the supported set, so an unsupported role/provider combination
+fails clearly rather than being sent to a provider that cannot serve it.
 
 ### Validation Runner
 
@@ -860,12 +864,12 @@ local model providers (Ollama, llama.cpp)
 task-file loader
 run state and run report
 graph execution (sop run over the persisted task graph)
+provider capability detection
 ```
 
 Remaining:
 
 ```text
-provider capability detection
 MCP server; CI review output
 Jev decision layer (optional); evaluation harness
 ```

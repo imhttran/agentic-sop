@@ -651,6 +651,7 @@ T031 review stage (sop review)
 T032 local run lifecycle + run state and report (sop run)
 T033 bounded fix loop (review → fix → re-validate, max_fix_cycles)
 T034 dependency-aware graph execution (sop run over the task graph)
+T035 provider capability detection and routing (agent.Checked)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
@@ -658,7 +659,6 @@ The Go module was renamed to `github.com/imhttran/agentic-sop`.
 ## Remaining
 
 ```text
-provider capability detection     (plan T032)
 MCP server; CI review output      (plan T038–T041)
 Jev decision layer (optional)     (plan T033–T037)
 evaluation harness                (plan T045–T046)

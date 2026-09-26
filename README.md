@@ -108,6 +108,7 @@ Implemented:
 - test runner (build / unit / integration / lint / Docker)
 - provider-independent Agent harness and command adapter
 - local model providers (Ollama, OpenAI-compatible llama.cpp)
+- provider capability detection and routing (`agent.Checked` rejects unsupported role/provider combinations)
 - project configuration (`.agent-sdlc/config.yaml`) with schema validation, defaults, and a generated template; the configuration selects the agent provider (the environment overrides it)
 - Markdown task-file loader (`sop plan TASK.md`)
 - deterministic quality gate (`PASS` / `FAIL` / `NEEDS_HUMAN`) from verification, findings, and the fix-loop budget
@@ -1569,14 +1570,15 @@ Implemented on top of the V1 core (wrap-up work):
 ✓ Run lifecycle and run state (sop run)
 ✓ Bounded fix loop (review → fix → re-validate)
 ✓ Dependency-aware graph execution (sop run over the task graph)
+✓ Provider capability detection
 ```
 
 Next candidates, in the plan's build order:
 
 ```text
-  Provider capability detection and routing
   MCP server and CI review mode
   Evaluation harness
+  Jev decision layer (optional)
 ```
 
 The project is intentionally built incrementally: sequential correctness and
