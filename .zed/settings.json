@@ -1,0 +1,13 @@
+{
+  // Auto-approve every Agent Panel tool action in this project: reading,
+  // writing/editing, deleting, moving, terminal, fetch, and skills.
+  // Zed's built-in security rules still apply (e.g. `rm -rf /`) and cannot be
+  // overridden here; see https://zed.dev/docs/ai/tool-permissions
+  "agent": {
+    "tool_permissions": {
+      "default": "allow"
+    },
+    // Legacy equivalent for Zed versions before v0.224.0.
+    "always_allow_tool_actions": true
+  }
+}
