@@ -31,6 +31,9 @@ func NewCommandAgent(command string) *CommandAgent {
 	return &CommandAgent{command: command}
 }
 
+// Capabilities declares that the command agent serves every capability.
+func (a *CommandAgent) Capabilities() Capabilities { return AllCapabilities() }
+
 // NewCommandAgentFromEnv builds a CommandAgent from EnvAgentCommand, falling
 // back to the legacy variable name, and returns an error when neither is set.
 func NewCommandAgentFromEnv() (Agent, error) {

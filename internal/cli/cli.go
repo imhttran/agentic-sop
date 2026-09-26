@@ -49,8 +49,14 @@ type deps struct {
 
 func defaultDeps() deps {
 	return deps{
-		getwd:    os.Getwd,
-		newAgent: agent.FromConfig,
+		getwd: os.Getwd,
+		newAgent: func(provider string) (agent.Agent, error) {
+			a, err := agent.FromConfig(provider)
+			if err != nil {
+				return nil, err
+			}
+			return agent.NewChecked(a), nil
+		},
 		newResources: func(dir string) (resume.Observer, error) {
 			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil
 		},

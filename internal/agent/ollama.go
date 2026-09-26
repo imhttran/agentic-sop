@@ -89,3 +89,6 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	}
 	return requireNonEmpty("ollama", request.Capability, out.Message.Content)
 }
+
+// Capabilities declares that the Ollama provider serves every capability.
+func (o *Ollama) Capabilities() Capabilities { return AllCapabilities() }

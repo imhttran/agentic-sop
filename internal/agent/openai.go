@@ -106,3 +106,6 @@ func (c *LlamaCpp) Generate(ctx context.Context, request Request) (Response, err
 	}
 	return requireNonEmpty("llamacpp", request.Capability, out.Choices[0].Message.Content)
 }
+
+// Capabilities declares that the llama.cpp provider serves every capability.
+func (c *LlamaCpp) Capabilities() Capabilities { return AllCapabilities() }
