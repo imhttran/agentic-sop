@@ -45,6 +45,8 @@ type deps struct {
 	newAgent     func(provider string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
+	commit       func(ctx context.Context, dir, message string) error
+	newGitHub    func(dir string) github.Client
 }
 
 func defaultDeps() deps {
@@ -63,6 +65,14 @@ func defaultDeps() deps {
 		readDiff: func(ctx context.Context, dir string) (string, error) {
 			return git.New(dir).Diff(ctx)
 		},
+		commit: func(ctx context.Context, dir, message string) error {
+			g := git.New(dir)
+			if err := g.Add(ctx); err != nil {
+				return err
+			}
+			return g.Commit(ctx, message)
+		},
+		newGitHub: func(dir string) github.Client { return github.NewCommandClient(dir) },
 	}
 }
 
@@ -102,6 +112,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runReview(rest, stdout, stderr, d)
 	case "run":
 		return runRun(rest, stdout, stderr, d)
+	case "commit":
+		return runCommit(rest, stdout, stderr, d)
+	case "pr":
+		return runPr(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -134,7 +148,9 @@ Commands:
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine
-  run       run a task file through the local lifecycle
+  run       run a task file or the task graph through the local lifecycle
+  commit    commit the current changes (needs --yes when the human gate is on)
+  pr        push a task branch and open a pull request (needs --yes)
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help

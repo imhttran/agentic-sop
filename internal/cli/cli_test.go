@@ -14,6 +14,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/resume"
 	"github.com/imhttran/agentic-sop/internal/review"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -45,7 +46,9 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 			}
 			return a, nil
 		},
-		readDiff: func(context.Context, string) (string, error) { return "", nil },
+		readDiff:  func(context.Context, string) (string, error) { return "", nil },
+		commit:    func(context.Context, string, string) error { return nil },
+		newGitHub: func(string) github.Client { return &fakeGitHub{} },
 	}
 	code = run(args, &out, &errOut, d)
 	return code, out.String(), errOut.String()
@@ -700,7 +703,9 @@ func runInjectedCLI(t *testing.T, dir, diff string, a agent.Agent, args ...strin
 			}
 			return a, nil
 		},
-		readDiff: func(context.Context, string) (string, error) { return diff, nil },
+		readDiff:  func(context.Context, string) (string, error) { return diff, nil },
+		commit:    func(context.Context, string, string) error { return nil },
+		newGitHub: func(string) github.Client { return &fakeGitHub{} },
 	}
 	code = run(args, &out, &errOut, d)
 	return code, out.String(), errOut.String()
@@ -1035,6 +1040,136 @@ func TestRunFixLoopExhausted(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "fix cycles: 3/3") {
 		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+// fakeGitHub records the remote operations a command performs.
+type fakeGitHub struct {
+	pushed  string
+	created github.CreateRequest
+}
+
+func (f *fakeGitHub) PushBranch(_ context.Context, branch string) error {
+	f.pushed = branch
+	return nil
+}
+
+func (f *fakeGitHub) CreatePullRequest(_ context.Context, req github.CreateRequest) (github.PullRequest, error) {
+	f.created = req
+	return github.PullRequest{Number: 1, URL: "https://example.com/pr/1"}, nil
+}
+
+func (f *fakeGitHub) GetPullRequest(context.Context, string) (github.PullRequest, error) {
+	return github.PullRequest{}, nil
+}
+
+func (f *fakeGitHub) Checks(context.Context, int) ([]github.Check, error) { return nil, nil }
+
+func (f *fakeGitHub) Merge(context.Context, int, string) error { return nil }
+
+func TestRunCommitRequiresApproval(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd: func() (string, error) { return dir, nil },
+		commit: func(context.Context, string, string) error {
+			t.Error("commit must not run without approval")
+			return nil
+		},
+	}
+	if code := run([]string{"commit", "TASK.md"}, &out, &errOut, d); code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(errOut.String(), "approval required") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestRunCommitWithApproval(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	var got string
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd:  func() (string, error) { return dir, nil },
+		commit: func(_ context.Context, _, message string) error { got = message; return nil },
+	}
+	if code := run([]string{"commit", "TASK.md", "--yes"}, &out, &errOut, d); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	if got != "task(T001): Add widget" {
+		t.Errorf("message = %q", got)
+	}
+}
+
+func TestRunCommitNoApprovalWhenDisabled(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "project:\n  name: x\nhuman:\n  approval_before_commit: false\n")
+	var got string
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd:  func() (string, error) { return dir, nil },
+		commit: func(_ context.Context, _, message string) error { got = message; return nil },
+	}
+	if code := run([]string{"commit"}, &out, &errOut, d); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	if got != "sop: apply changes" {
+		t.Errorf("message = %q", got)
+	}
+}
+
+func TestRunPr(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	gh := &fakeGitHub{}
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd:     func() (string, error) { return dir, nil },
+		newGitHub: func(string) github.Client { return gh },
+	}
+	if code := run([]string{"pr", "TASK.md", "--yes"}, &out, &errOut, d); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	if gh.pushed != "task/T001-add-widget" {
+		t.Errorf("pushed = %q", gh.pushed)
+	}
+	if gh.created.Base != "main" || gh.created.Head != "task/T001-add-widget" {
+		t.Errorf("create = %+v", gh.created)
+	}
+	if !strings.Contains(out.String(), "opened") {
+		t.Errorf("stdout = %q", out.String())
+	}
+}
+
+func TestRunPrRequiresApproval(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd:     func() (string, error) { return dir, nil },
+		newGitHub: func(string) github.Client { t.Error("github must not be used without approval"); return &fakeGitHub{} },
+	}
+	if code := run([]string{"pr", "TASK.md"}, &out, &errOut, d); code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(errOut.String(), "approval required") {
+		t.Errorf("stderr = %q", errOut.String())
+	}
+}
+
+func TestRunPrRequiresTaskFile(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	var out, errOut bytes.Buffer
+	d := deps{getwd: func() (string, error) { return dir, nil }}
+	if code := run([]string{"pr", "--yes"}, &out, &errOut, d); code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
 	}
 }
 

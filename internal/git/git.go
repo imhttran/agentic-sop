@@ -171,6 +171,23 @@ func (a *Adapter) Diff(ctx context.Context) (string, error) {
 	return out, nil
 }
 
+// Add stages paths for the next commit. With no paths it stages all changes
+// (git add -A). Arguments are structured, never a shell; a leading "--" keeps a
+// path from being read as an option.
+func (a *Adapter) Add(ctx context.Context, paths ...string) error {
+	args := []string{"add"}
+	if len(paths) == 0 {
+		args = append(args, "-A")
+	} else {
+		args = append(args, "--")
+		args = append(args, paths...)
+	}
+	if _, err := run(ctx, a.dir, args...); err != nil {
+		return fmt.Errorf("add: %w", err)
+	}
+	return nil
+}
+
 // Commit creates a normal commit from staged changes. It returns an error when
 // there is nothing to commit, never amends, and never bypasses hooks.
 func (a *Adapter) Commit(ctx context.Context, message string) error {
