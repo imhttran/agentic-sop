@@ -306,6 +306,15 @@ plan and the current diff; validation and review then run again (regression
 protection). The loop is bounded by `quality.max_fix_cycles`; exhausting the
 budget yields `NEEDS_HUMAN`, never an unbounded agent loop.
 
+### Graph Execution
+
+`sop run` with no task file drives the persisted task graph: the scheduler selects
+the next ready task and the same local lifecycle runs for it, marking it `DONE` on
+a passing gate or `BLOCKED` otherwise, until no runnable work remains. Local
+execution has no remote PR/CI/merge, so a passing lifecycle synthesizes the
+terminal transitions; the dependency rule (a dependency is complete only at
+`DONE`) then holds.
+
 ### Command Policy
 
 Before a command runs, it is classified deterministically:
@@ -850,12 +859,12 @@ command policy
 local model providers (Ollama, llama.cpp)
 task-file loader
 run state and run report
+graph execution (sop run over the persisted task graph)
 ```
 
 Remaining:
 
 ```text
-plan/DAG-driven execution
 provider capability detection
 MCP server; CI review output
 Jev decision layer (optional); evaluation harness

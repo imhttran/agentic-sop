@@ -114,7 +114,7 @@ Implemented:
 - command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
 - configuration-driven validation runner (`sop validate`)
 - review stage (`sop review`) over the working-tree diff, blocking on configured severities
-- local run lifecycle (`sop run TASK.md`) with durable run state, a bounded fix loop, and a markdown/JSON run report
+- local run lifecycle (`sop run [TASK.md]`) with durable run state, a bounded fix loop, a markdown/JSON run report, and dependency-aware graph execution
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -708,7 +708,7 @@ sop plan [TASK.md]
 sop tasks
 sop validate
 sop review
-sop run TASK.md
+sop run [TASK.md]
 sop status
 sop task <id>
 sop resume [task-id]
@@ -784,10 +784,11 @@ When there are no working-tree changes it reports “no changes to review”.
 
 ## `run`
 
-Run a task file through the local lifecycle:
+Run a task file through the local lifecycle, or drive the persisted task graph:
 
 ```bash
-sop run TASK.md
+sop run TASK.md   # one task file
+sop run           # the persisted task graph, in dependency order
 ```
 
 ```text
@@ -795,6 +796,13 @@ task → plan → implement → detect changes
      → { validate → review → gate → fix }   (≤ quality.max_fix_cycles)
      → report
 ```
+
+With a file, the task comes from the Markdown. With no argument, the
+**scheduler** selects the next ready task from `.agent-sdlc/plan.json`'s
+persisted graph and the same lifecycle runs for it; a passing gate marks the
+task `DONE` and a failing gate marks it `BLOCKED`, repeating until no runnable
+work remains. Local execution has no remote PR/CI/merge, so a passing lifecycle
+advances the task to `DONE` directly.
 
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
@@ -1560,12 +1568,12 @@ Implemented on top of the V1 core (wrap-up work):
 ✓ Review stage (sop review)
 ✓ Run lifecycle and run state (sop run)
 ✓ Bounded fix loop (review → fix → re-validate)
+✓ Dependency-aware graph execution (sop run over the task graph)
 ```
 
 Next candidates, in the plan's build order:
 
 ```text
-  Plan/DAG-driven execution (sop run over the task graph)
   Provider capability detection and routing
   MCP server and CI review mode
   Evaluation harness
