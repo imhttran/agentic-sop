@@ -109,6 +109,11 @@ Implemented:
 - provider-independent Agent harness and command adapter
 - local model providers (Ollama, OpenAI-compatible llama.cpp)
 - provider capability detection and routing (`agent.Checked` rejects unsupported role/provider combinations)
+- explicit Git workflow commands (`sop commit`, `sop pr`) behind the human gate
+- MCP server (`sop mcp`) exposing status/validate/review over stdio
+- optional decision layer (deterministic provider + routing/escalation policy)
+- run report command (`sop report`)
+- evaluation harness (`sop eval`)
 - project configuration (`.agent-sdlc/config.yaml`) with schema validation, defaults, and a generated template; the configuration selects the agent provider (the environment overrides it)
 - Markdown task-file loader (`sop plan TASK.md`)
 - deterministic quality gate (`PASS` / `FAIL` / `NEEDS_HUMAN`) from verification, findings, and the fix-loop budget
@@ -710,6 +715,11 @@ sop tasks
 sop validate
 sop review
 sop run [TASK.md]
+sop report [run-id]
+sop commit [TASK.md] [--yes]
+sop pr TASK.md [--yes]
+sop mcp
+sop eval DIR
 sop status
 sop task <id>
 sop resume [task-id]
@@ -814,6 +824,57 @@ review run again, up to `quality.max_fix_cycles` times — exhausting the budget
 yields `NEEDS_HUMAN` rather than looping forever. The quality gate is
 deterministic. `sop run` **stops at the human gate** and never commits, pushes,
 or merges.
+
+## `report`
+
+Print a concise, informational summary of a run (the latest by default):
+
+```bash
+sop report
+sop report T001
+```
+
+Shows stage, provider, gate, per-check validation, and findings by severity.
+
+## `commit`
+
+Commit the current changes with a message derived from a task file (no push):
+
+```bash
+sop commit TASK.md --yes
+```
+
+When `human.approval_before_commit` is on (the default), `--yes` is required.
+
+## `pr`
+
+Push a task branch and open a pull request:
+
+```bash
+sop pr TASK.md --yes
+```
+
+The branch is `task/<id>-<slug>` and the base is the integration branch. It never
+merges.
+
+## `mcp`
+
+Serve tools over the Model Context Protocol on stdio:
+
+```bash
+sop mcp
+```
+
+Exposes `sop_status`, `sop_validate`, and `sop_review`, backed by the same
+services as the CLI.
+
+## `eval`
+
+Run a corpus of task files through the lifecycle and report benchmark metrics:
+
+```bash
+sop eval corpus/
+```
 
 ## `status`
 
@@ -1571,14 +1632,20 @@ Implemented on top of the V1 core (wrap-up work):
 ✓ Bounded fix loop (review → fix → re-validate)
 ✓ Dependency-aware graph execution (sop run over the task graph)
 ✓ Provider capability detection
+✓ Git workflow commands (sop commit, sop pr)
+✓ MCP server (sop mcp)
+✓ Optional decision layer (deterministic + routing)
+✓ Run report command (sop report)
+✓ Evaluation harness (sop eval)
 ```
 
 Next candidates, in the plan's build order:
 
 ```text
-  MCP server and CI review mode
-  Evaluation harness
-  Jev decision layer (optional)
+  Interactive approval workflow
+  Local network service (team mode)
+  Small-device dashboard
+  Jev adapter + Jev-vs-deterministic evaluation
 ```
 
 The project is intentionally built incrementally: sequential correctness and

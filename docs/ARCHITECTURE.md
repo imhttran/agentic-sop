@@ -420,6 +420,31 @@ Produces a small, deterministic capsule describing a completed task, with
 optional provider-independent compression of bulky artifacts. Authoritative
 truth remains in the state store, Git, verification results, and PR/CI state.
 
+### Git Workflow Commands
+
+`sop commit` and `sop pr` make the two Git operations explicit and gated: both
+require `--yes` when the human gate is on, a commit message is derived from the
+task file, and a PR uses the deterministic `task/<id>-<slug>` branch. Neither
+merges.
+
+### MCP Server
+
+`sop mcp` serves the Model Context Protocol over stdio. Its tools call the same
+services as the CLI, so the workflow is not reimplemented; only registered,
+project-scoped tools exist.
+
+### Decision Layer (optional)
+
+A bounded decision boundary: a provider proposes a choice with a confidence, and
+policy (configuration thresholds) routes it to a model tier or a human. The
+default provider is deterministic and the layer is disabled by default.
+
+### Evaluation Harness
+
+`sop eval DIR` runs a corpus through the real lifecycle and aggregates task
+success, fix cycles, findings, and elapsed time, so harness changes can be
+measured rather than asserted.
+
 ## 5. Task State Machine
 
 ```text
@@ -865,11 +890,17 @@ task-file loader
 run state and run report
 graph execution (sop run over the persisted task graph)
 provider capability detection
+Git workflow commands (sop commit, sop pr)
+MCP server (sop mcp)
+optional decision layer (deterministic + routing)
+run report command (sop report)
+evaluation harness (sop eval)
 ```
 
 Remaining:
 
 ```text
-MCP server; CI review output
-Jev decision layer (optional); evaluation harness
+local network service (team mode)
+small-device dashboard
+Jev adapter + Jev-vs-deterministic evaluation
 ```

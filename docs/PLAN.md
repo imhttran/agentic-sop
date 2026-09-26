@@ -652,6 +652,11 @@ T032 local run lifecycle + run state and report (sop run)
 T033 bounded fix loop (review → fix → re-validate, max_fix_cycles)
 T034 dependency-aware graph execution (sop run over the task graph)
 T035 provider capability detection and routing (agent.Checked)
+T036 explicit Git workflow commands (sop commit, sop pr)
+T037 MCP server (sop mcp)
+T038 optional decision layer (deterministic + routing)
+T039 run report command (sop report)
+T040 evaluation harness (sop eval)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
@@ -659,9 +664,9 @@ The Go module was renamed to `github.com/imhttran/agentic-sop`.
 ## Remaining
 
 ```text
-MCP server; CI review output      (plan T038–T041)
-Jev decision layer (optional)     (plan T033–T037)
-evaluation harness                (plan T045–T046)
+local network service (team mode)         (plan T047)
+small-device dashboard                    (plan T048)
+Jev adapter + Jev-vs-deterministic eval   (plan T037)
 ```
 
 ---
