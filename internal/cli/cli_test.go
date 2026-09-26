@@ -1173,6 +1173,39 @@ func TestRunPrRequiresTaskFile(t *testing.T) {
 	}
 }
 
+func TestRunReport(t *testing.T) {
+	dir := t.TempDir()
+	runDir := filepath.Join(dir, stateDirName, "runs", "T001")
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	report := `{"id":"T001","stage":"PASSED","provider":"command","review_engine":"self","decision":"PASS","fix_cycles":0,"validation":[{"Category":"BUILD","Command":"go build ./...","Status":"PASS"}],"findings":[{"Severity":"MEDIUM","Title":"x","File":"a.go","Line":1}]}`
+	if err := os.WriteFile(filepath.Join(runDir, "report.json"), []byte(report), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := runCLI(t, dir, "report")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	for _, want := range []string{"Run: T001", "Gate: PASS", "BUILD", "MEDIUM"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestRunReportNoRuns(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLI(t, dir, "report")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "no runs") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

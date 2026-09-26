@@ -118,6 +118,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runPr(rest, stdout, stderr, d)
 	case "mcp":
 		return runMCP(rest, stdout, stderr, d)
+	case "report":
+		return runReport(rest, stdout, stderr, d.getwd)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -154,6 +156,7 @@ Commands:
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
+  report    print a concise summary of the latest run
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help
