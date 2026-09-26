@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/imhttran/agentic-sdlc/internal/config"
 	"github.com/imhttran/agentic-sdlc/internal/store"
 )
 
@@ -39,5 +40,22 @@ func runInit(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 	}
 
 	fmt.Fprintln(stdout, "initialized .agent-sdlc/state.db")
+
+	// Generate the configuration template when absent; never overwrite a
+	// human-edited configuration.
+	configPath := config.Path(dir)
+	present, err := exists(configPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "init: %v\n", err)
+		return exitError
+	}
+	if !present {
+		if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
+			fmt.Fprintf(stderr, "init: write config: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintln(stdout, "wrote .agent-sdlc/config.yaml")
+	}
+
 	return exitOK
 }
