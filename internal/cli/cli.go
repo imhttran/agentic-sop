@@ -4,12 +4,14 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
 	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sdlc/internal/config"
 	"github.com/imhttran/agentic-sdlc/internal/git"
 	"github.com/imhttran/agentic-sdlc/internal/github"
 	"github.com/imhttran/agentic-sdlc/internal/resume"
@@ -19,9 +21,9 @@ import (
 const Version = "dev"
 
 const (
-	// stateDirName is the per-project directory holding sop state. The name is
-	// kept deliberately: renaming it would require a persistence migration.
-	stateDirName = ".agent-sdlc"
+	// stateDirName is the per-project directory holding sop state. Its value
+	// comes from the config package, the single owner of the on-disk layout.
+	stateDirName = config.DirName
 	// stateFileName is the SQLite database file name inside stateDirName.
 	stateFileName = "state.db"
 )
@@ -35,17 +37,18 @@ const (
 
 // deps holds the external boundaries the CLI depends on so commands can be
 // driven with fakes in tests: the working-directory resolver, the agent
-// constructor, and the resume observer.
+// constructor (parameterised by the configured provider), and the resume
+// observer.
 type deps struct {
 	getwd        func() (string, error)
-	newAgent     func() (agent.Agent, error)
+	newAgent     func(provider string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 }
 
 func defaultDeps() deps {
 	return deps{
 		getwd:    os.Getwd,
-		newAgent: agent.NewCommandAgentFromEnv,
+		newAgent: agent.FromConfig,
 		newResources: func(dir string) (resume.Observer, error) {
 			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil
 		},
@@ -110,7 +113,7 @@ Commands:
   init      initialize project state (.agent-sdlc/state.db)
   status    list persisted tasks
   task <id> show details for a single task
-  plan      generate PLAN.md from PRD.md using the configured agent
+  plan      generate PLAN.md from PRD.md or a task file
   tasks     build and persist tasks from .agent-sdlc/plan.json
   resume    report the next legal action for interrupted work
   version   print the CLI version
@@ -133,4 +136,19 @@ func projectDir(getwd func() (string, error), stderr io.Writer) (string, bool) {
 // It is the single place that knows the on-disk state layout.
 func statePath(projectDir string) string {
 	return filepath.Join(projectDir, stateDirName, stateFileName)
+}
+
+// configuredProvider returns the agent provider named by the project
+// configuration, or "" when there is no configuration (the environment then
+// decides). A present but invalid configuration is an error, not a silent
+// fallback.
+func configuredProvider(projectDir string) (string, error) {
+	cfg, err := config.LoadDir(projectDir)
+	if errors.Is(err, config.ErrNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", err
+	}
+	return cfg.Agent.Provider, nil
 }

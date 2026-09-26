@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sdlc/internal/config"
 	"github.com/imhttran/agentic-sdlc/internal/domain"
 	"github.com/imhttran/agentic-sdlc/internal/resume"
 	"github.com/imhttran/agentic-sdlc/internal/store"
@@ -37,7 +38,7 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func() (agent.Agent, error) {
+		newAgent: func(_ string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}
@@ -121,6 +122,41 @@ func TestRunInitCreatesState(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "initialized") {
 		t.Errorf("unexpected stdout: %q", stdout)
+	}
+}
+
+func TestRunInitWritesConfigTemplate(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, stderr := runCLI(t, dir, "init"); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	cfg, err := config.LoadDir(dir)
+	if err != nil {
+		t.Fatalf("generated config does not load: %v", err)
+	}
+	if cfg.Project.Name != filepath.Base(dir) {
+		t.Errorf("project name = %q, want %q", cfg.Project.Name, filepath.Base(dir))
+	}
+}
+
+func TestRunInitPreservesExistingConfig(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, stderr := runCLI(t, dir, "init"); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	custom := []byte("project:\n  name: my-custom-name\n")
+	if err := os.WriteFile(config.Path(dir), custom, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if code, _, stderr := runCLI(t, dir, "init"); code != exitOK {
+		t.Fatalf("second init failed: code=%d stderr=%s", code, stderr)
+	}
+	got, err := os.ReadFile(config.Path(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(got, custom) {
+		t.Errorf("init overwrote an existing config:\n%s", got)
 	}
 }
 
@@ -371,6 +407,49 @@ func TestRunPlanWritesMarkdown(t *testing.T) {
 	}
 }
 
+func TestRunPlanUsesConfiguredProvider(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "PRD.md", "# Book RAG\n")
+	initProject(t, dir)
+	if err := os.WriteFile(config.Path(dir), []byte("project:\n  name: x\nagent:\n  provider: ollama\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv(agent.EnvAgentProvider, "")
+
+	var got string
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd: func() (string, error) { return dir, nil },
+		newAgent: func(provider string) (agent.Agent, error) {
+			got = provider
+			return &fakeAgent{content: validPlanJSON}, nil
+		},
+	}
+	if code := run([]string{"plan"}, &out, &errOut, d); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, errOut.String())
+	}
+	if got != "ollama" {
+		t.Errorf("provider = %q, want ollama", got)
+	}
+}
+
+func TestRunPlanRejectsInvalidConfig(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "PRD.md", "# Book RAG\n")
+	if err := os.MkdirAll(filepath.Join(dir, config.DirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join(config.DirName, config.FileName), "project:\n  name: x\nagent:\n  provider: skynet\n")
+
+	code, _, stderr := runCLIWithAgent(t, dir, &fakeAgent{content: validPlanJSON}, "plan")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "agent.provider") {
+		t.Errorf("stderr missing config error: %s", stderr)
+	}
+}
+
 func TestRunPlanMissingPRD(t *testing.T) {
 	dir := t.TempDir()
 	code, stdout, stderr := runCLIWithAgent(t, dir, &fakeAgent{content: validPlanJSON}, "plan")
@@ -467,7 +546,7 @@ func TestRunPlanUnconfiguredAgent(t *testing.T) {
 
 func TestRunPlanBadArgs(t *testing.T) {
 	dir := t.TempDir()
-	code, _, stderr := runCLI(t, dir, "plan", "extra")
+	code, _, stderr := runCLI(t, dir, "plan", "one.md", "two.md")
 	if code != exitUsage {
 		t.Errorf("code=%d, want %d", code, exitUsage)
 	}
@@ -483,6 +562,52 @@ func writePlanJSON(t *testing.T, dir, content string) {
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	writeFile(t, dir, filepath.Join(stateDirName, "plan.json"), content)
+}
+
+// capturingAgent records the request it received, for asserting what the CLI
+// sent to the agent.
+type capturingAgent struct {
+	content string
+	got     agent.Request
+}
+
+func (c *capturingAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	c.got = r
+	return agent.Response{Content: c.content}, nil
+}
+
+func TestRunPlanFromTaskFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", "# T042 --- Add widget\n\n## Objective\n\nAdd the widget.\n\n## Acceptance Criteria\n\n- [ ] widget works\n")
+
+	a := &capturingAgent{content: validPlanJSON}
+	code, stdout, stderr := runCLIWithAgent(t, dir, a, "plan", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "wrote PLAN.md") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if a.got.Capability != agent.Plan {
+		t.Errorf("capability = %q, want PLAN", a.got.Capability)
+	}
+	if !strings.Contains(a.got.Input, "Add widget") || !strings.Contains(a.got.Input, "widget works") {
+		t.Errorf("agent input missing task content:\n%s", a.got.Input)
+	}
+}
+
+func TestRunPlanTaskFileMissing(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLIWithAgent(t, dir, &fakeAgent{content: validPlanJSON}, "plan", "NOPE.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "NOPE.md") {
+		t.Errorf("stderr missing file name: %s", stderr)
+	}
+	if stateExists(filepath.Join(dir, "PLAN.md")) {
+		t.Error("PLAN.md must not be created when the task file is missing")
+	}
 }
 
 func TestRunTasksBuildsFromPlan(t *testing.T) {

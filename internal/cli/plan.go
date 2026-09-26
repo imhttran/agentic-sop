@@ -12,14 +12,15 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sdlc/internal/planner"
+	"github.com/imhttran/agentic-sdlc/internal/taskfile"
 )
 
 // runPlan reads PRD.md, asks the configured agent for a plan, then writes both
 // PLAN.md (human) and .agent-sdlc/plan.json (machine). An existing PLAN.md is
 // never overwritten, so a human-edited plan is safe.
 func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
-	if len(args) != 0 {
-		fmt.Fprintln(stderr, "usage: sop plan")
+	if len(args) > 1 {
+		fmt.Fprintln(stderr, "usage: sop plan [TASK.md]")
 		return exitUsage
 	}
 
@@ -39,28 +40,55 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	prdPath := filepath.Join(dir, "PRD.md")
-	prd, err := os.ReadFile(prdPath)
+	// The planning input is PRD.md by default, or a Markdown task file when one
+	// is given. A task file is parsed and normalized so the agent reasons over a
+	// stable shape rather than raw prose.
+	sourceName := "PRD.md"
+	if len(args) == 1 {
+		sourceName = args[0]
+	}
+	sourcePath := sourceName
+	if !filepath.IsAbs(sourcePath) {
+		sourcePath = filepath.Join(dir, sourceName)
+	}
+
+	source, err := os.ReadFile(sourcePath)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			fmt.Fprintln(stderr, "PRD.md not found in project directory")
+			fmt.Fprintf(stderr, "%s not found in project directory\n", sourceName)
 			return exitError
 		}
-		fmt.Fprintf(stderr, "plan: read PRD.md: %v\n", err)
+		fmt.Fprintf(stderr, "plan: read %s: %v\n", sourceName, err)
 		return exitError
 	}
-	if strings.TrimSpace(string(prd)) == "" {
-		fmt.Fprintln(stderr, "PRD.md is empty")
+	if strings.TrimSpace(string(source)) == "" {
+		fmt.Fprintf(stderr, "%s is empty\n", sourceName)
 		return exitError
 	}
 
-	a, err := d.newAgent()
+	input := string(source)
+	if len(args) == 1 {
+		spec, err := taskfile.Parse(source)
+		if err != nil {
+			fmt.Fprintf(stderr, "plan: %v\n", err)
+			return exitError
+		}
+		input = spec.Render()
+	}
+
+	provider, err := configuredProvider(dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
 	}
 
-	plan, err := planner.New(a).Generate(context.Background(), string(prd))
+	a, err := d.newAgent(provider)
+	if err != nil {
+		fmt.Fprintf(stderr, "plan: %v\n", err)
+		return exitError
+	}
+
+	plan, err := planner.New(a).Generate(context.Background(), input)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
