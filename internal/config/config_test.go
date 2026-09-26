@@ -91,6 +91,12 @@ func TestParseDefaults(t *testing.T) {
 	if got := strings.Join(c.Quality.FailOn, ","); got != "critical,high" {
 		t.Errorf("fail_on = %q, want critical,high", got)
 	}
+	if c.Decision.Provider != "deterministic" {
+		t.Errorf("decision.provider = %q, want deterministic", c.Decision.Provider)
+	}
+	if c.Decision.Thresholds.RouteToStrongModel == 0 || c.Decision.Thresholds.RequireHuman == 0 {
+		t.Errorf("decision thresholds not defaulted: %+v", c.Decision.Thresholds)
+	}
 }
 
 func TestParseErrors(t *testing.T) {
@@ -108,6 +114,8 @@ func TestParseErrors(t *testing.T) {
 		{"unknown provider", "project:\n  name: a\nagent:\n  provider: skynet\n", "unknown agent.provider"},
 		{"unknown engine", "project:\n  name: a\nreview:\n  engine: clippy\n", "unknown review.engine"},
 		{"unknown severity", "project:\n  name: a\nquality:\n  fail_on:\n    - blocker\n", "unknown quality.fail_on"},
+		{"unknown decision provider", "project:\n  name: a\ndecision:\n  provider: skynet\n", "unknown decision.provider"},
+		{"decision threshold out of range", "project:\n  name: a\ndecision:\n  thresholds:\n    require_human: 2\n", "within [0,1]"},
 		{"negative cycles", "project:\n  name: a\nquality:\n  max_fix_cycles: -1\n", "must not be negative"},
 		{"multiple documents", "project:\n  name: a\n---\nversion: 1\n", "multiple YAML documents"},
 	}

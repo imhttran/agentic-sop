@@ -18,6 +18,8 @@ import (
 	"strings"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/imhttran/agentic-sop/internal/decision"
 )
 
 // Layout: the configuration lives alongside the SQLite state in one directory.
@@ -51,13 +53,15 @@ var ErrNotFound = errors.New("config: not found")
 // Config is the resolved project configuration: every default has been applied
 // and the values have passed Validate.
 type Config struct {
-	Version    int        `yaml:"version"`
-	Project    Project    `yaml:"project"`
-	Agent      Agent      `yaml:"agent"`
-	Validation Validation `yaml:"validation"`
-	Review     Review     `yaml:"review"`
-	Quality    Quality    `yaml:"quality"`
-	Human      Human      `yaml:"human"`
+	Version    int            `yaml:"version"`
+	Project    Project        `yaml:"project"`
+	Agent      Agent          `yaml:"agent"`
+	Validation Validation     `yaml:"validation"`
+	Review     Review         `yaml:"review"`
+	Quality    Quality        `yaml:"quality"`
+	Human      Human          `yaml:"human"`
+	Decision   DecisionConfig `yaml:"decision"`
+	Features   Features       `yaml:"features"`
 }
 
 // Project holds project metadata.
@@ -117,6 +121,20 @@ func (h Human) RequiresApprovalBeforeCommit() bool {
 	return *h.ApprovalBeforeCommit
 }
 
+// DecisionConfig holds the decision-layer policy. The layer is disabled by
+// default: the deterministic rules are the baseline, and a Jev adapter must
+// demonstrate value before it is trusted (plan T037).
+type DecisionConfig struct {
+	Provider   string              `yaml:"provider"` // deterministic | jev
+	Enabled    bool                `yaml:"enabled"`
+	Thresholds decision.Thresholds `yaml:"thresholds"`
+}
+
+// Features toggles optional capabilities.
+type Features struct {
+	JevDecisions bool `yaml:"jev_decisions"`
+}
+
 // Default returns the built-in configuration, the same values the generated
 // template documents.
 func Default() Config {
@@ -133,6 +151,10 @@ func Default() Config {
 			FailOn:       []string{"critical", "high"},
 		},
 		Human: Human{ApprovalBeforeCommit: &approval},
+		Decision: DecisionConfig{
+			Provider:   "deterministic",
+			Thresholds: decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4},
+		},
 	}
 }
 
@@ -210,6 +232,12 @@ func (c *Config) applyDefaults() {
 	if len(c.Quality.FailOn) == 0 {
 		c.Quality.FailOn = []string{"critical", "high"}
 	}
+	if strings.TrimSpace(c.Decision.Provider) == "" {
+		c.Decision.Provider = "deterministic"
+	}
+	if c.Decision.Thresholds == (decision.Thresholds{}) {
+		c.Decision.Thresholds = decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4}
+	}
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -236,6 +264,15 @@ func (c *Config) Validate() error {
 			return fmt.Errorf("config: unknown quality.fail_on severity %q (want %s)",
 				sev, strings.Join(sortedKeys(supportedSeverity), ", "))
 		}
+	}
+	switch strings.TrimSpace(c.Decision.Provider) {
+	case "deterministic", "jev":
+	default:
+		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, jev)", c.Decision.Provider)
+	}
+	t := c.Decision.Thresholds
+	if t.RouteToStrongModel < 0 || t.RouteToStrongModel > 1 || t.RequireHuman < 0 || t.RequireHuman > 1 {
+		return errors.New("config: decision thresholds must be within [0,1]")
 	}
 	return nil
 }
