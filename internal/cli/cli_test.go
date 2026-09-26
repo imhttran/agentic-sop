@@ -688,8 +688,8 @@ func TestRunValidateBadArgs(t *testing.T) {
 	}
 }
 
-// runReviewCLI runs a command with an injected working-tree diff and agent.
-func runReviewCLI(t *testing.T, dir, diff string, a agent.Agent, args ...string) (code int, stdout, stderr string) {
+// runInjectedCLI runs a command with an injected working-tree diff and agent.
+func runInjectedCLI(t *testing.T, dir, diff string, a agent.Agent, args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	d := deps{
@@ -708,7 +708,7 @@ func runReviewCLI(t *testing.T, dir, diff string, a agent.Agent, args ...string)
 
 func TestRunReviewNoChanges(t *testing.T) {
 	dir := t.TempDir()
-	code, stdout, stderr := runReviewCLI(t, dir, "  \n", &fakeAgent{content: "{}"}, "review")
+	code, stdout, stderr := runInjectedCLI(t, dir, "  \n", &fakeAgent{content: "{}"}, "review")
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -720,7 +720,7 @@ func TestRunReviewNoChanges(t *testing.T) {
 func TestRunReviewBlockingFinding(t *testing.T) {
 	dir := t.TempDir()
 	findings := `{"summary":"looks fine","findings":[{"severity":"HIGH","title":"nil deref","file":"a.go","line":3}]}`
-	code, stdout, _ := runReviewCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
+	code, stdout, _ := runInjectedCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -735,7 +735,7 @@ func TestRunReviewBlockingFinding(t *testing.T) {
 func TestRunReviewNonBlockingFinding(t *testing.T) {
 	dir := t.TempDir()
 	findings := `{"summary":"minor","findings":[{"severity":"MEDIUM","title":"style","file":"a.go","line":1}]}`
-	code, stdout, _ := runReviewCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
+	code, stdout, _ := runInjectedCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
 	if code != exitOK {
 		t.Errorf("code=%d, want %d", code, exitOK)
 	}
@@ -748,7 +748,7 @@ func TestRunReviewOCRNotConfigured(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, "project:\n  name: x\nreview:\n  engine: open-code-review\n")
 	t.Setenv(review.EnvReviewCommand, "")
-	code, _, stderr := runReviewCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review")
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -759,7 +759,126 @@ func TestRunReviewOCRNotConfigured(t *testing.T) {
 
 func TestRunReviewBadArgs(t *testing.T) {
 	dir := t.TempDir()
-	code, _, stderr := runReviewCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review", "extra")
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review", "extra")
+	if code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr, "usage") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+// fakeCapabilityAgent returns different content per agent capability.
+type fakeCapabilityAgent struct {
+	plan, impl, review string
+}
+
+func (f *fakeCapabilityAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	switch r.Capability {
+	case agent.Plan:
+		return agent.Response{Content: f.plan}, nil
+	case agent.Implement:
+		return agent.Response{Content: f.impl}, nil
+	case agent.Review:
+		return agent.Response{Content: f.review}, nil
+	default:
+		return agent.Response{Content: "{}"}, nil
+	}
+}
+
+const runTaskFile = "# T001 --- Add widget\n\n## Objective\n\nAdd the widget.\n"
+
+func TestRunEndToEndPass(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "PASS") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "awaiting human approval") {
+		t.Errorf("stdout missing human-gate message: %q", stdout)
+	}
+
+	runDir := filepath.Join(dir, stateDirName, "runs", "T001")
+	for _, name := range []string{
+		"state.json", "task.md", "plan.md", "implementation.md",
+		"diff.patch", "validation.json", "review.json", "report.md", "report.json",
+	} {
+		if !stateExists(filepath.Join(runDir, name)) {
+			t.Errorf("missing run artifact %s", name)
+		}
+	}
+}
+
+func TestRunNoChanges(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "nothing"}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "   \n", a, "run", "TASK.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "no changes") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunValidationFailureFailsGate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "FAIL") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunBlockingFindingFailsGate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{
+		plan:   validPlanJSON,
+		impl:   "x",
+		review: `{"summary":"issue","findings":[{"severity":"CRITICAL","title":"boom","file":"a.go","line":1}]}`,
+	}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "FAIL") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunMissingTaskFile(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "NOPE.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "NOPE.md") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunBadArgs(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
 	if code != exitUsage {
 		t.Errorf("code=%d, want %d", code, exitUsage)
 	}

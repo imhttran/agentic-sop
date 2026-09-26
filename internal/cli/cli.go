@@ -94,6 +94,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runValidate(rest, stdout, stderr, d.getwd)
 	case "review":
 		return runReview(rest, stdout, stderr, d)
+	case "run":
+		return runRun(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -126,6 +128,7 @@ Commands:
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine
+  run       run a task file through the local lifecycle
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help

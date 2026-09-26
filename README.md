@@ -114,6 +114,7 @@ Implemented:
 - command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
 - configuration-driven validation runner (`sop validate`)
 - review stage (`sop review`) over the working-tree diff, blocking on configured severities
+- local run lifecycle (`sop run TASK.md`) with durable run state and a markdown/JSON run report
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -707,6 +708,7 @@ sop plan [TASK.md]
 sop tasks
 sop validate
 sop review
+sop run TASK.md
 sop status
 sop task <id>
 sop resume [task-id]
@@ -779,6 +781,26 @@ The `self` engine (default) asks the agent for structured findings; the
 model never decides the verdict: findings whose severity is named in
 `quality.fail_on` are blocking, and the exit code is non-zero when any remain.
 When there are no working-tree changes it reports “no changes to review”.
+
+## `run`
+
+Run a task file through the local lifecycle:
+
+```bash
+sop run TASK.md
+```
+
+```text
+task → plan → implement → detect changes
+     → validate → review → quality gate → report
+```
+
+Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
+`plan.md`, `implementation.md`, `diff.patch`, `validation.json`, `review.json`,
+`report.md`, `report.json`, `state.json`), so a run stays inspectable. Git is
+the authority on what changed; validation fails fast before review; the quality
+gate is deterministic. `sop run` **stops at the human gate** and never commits,
+pushes, or merges.
 
 ## `status`
 
@@ -1169,24 +1191,25 @@ That decision remains deterministic.
 
 ---
 
-# Future Execution
+# Run Lifecycle
 
-Eventually the normal workflow should become:
+The task-file lifecycle is implemented:
 
 ```bash
 cd my-project
 
 sop init
-sop plan
-sop tasks
-sop run
+sop run TASK.md
 ```
 
-`run` will drive the lifecycle.
+`sop run` drives task → plan → implement → detect changes → validate → review →
+quality gate → report, writing artifacts under `.agent-sdlc/runs/<id>/` and
+stopping at the human gate without committing.
 
-The orchestration components behind it already exist (task runner, review,
-commit gate, GitHub/CI adapters, CI remediation, merge gate, completion loop,
-resume, parallelism); `run` is the remaining CLI wiring that composes them.
+Plan/DAG-driven execution over the persisted task graph still composes the same
+orchestration components (task runner, review, commit gate, GitHub/CI adapters,
+CI remediation, merge gate, completion loop, resume, parallelism); it is the
+remaining CLI wiring.
 
 ```text
                     Task DAG
@@ -1531,14 +1554,14 @@ Implemented on top of the V1 core (wrap-up work):
 ✓ Command policy
 ✓ Validation runner (sop validate)
 ✓ Review stage (sop review)
+✓ Run lifecycle and run state (sop run)
 ```
 
 Next candidates, in the plan's build order:
 
 ```text
-  Run lifecycle end to end (sop run TASK.md)
+  Plan/DAG-driven execution (sop run over the task graph)
   Provider capability detection and routing
-  Run report
   MCP server and CI review mode
   Evaluation harness
 ```
