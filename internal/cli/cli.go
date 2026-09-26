@@ -120,6 +120,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runMCP(rest, stdout, stderr, d)
 	case "report":
 		return runReport(rest, stdout, stderr, d.getwd)
+	case "eval":
+		return runEval(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -157,6 +159,7 @@ Commands:
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
   report    print a concise summary of the latest run
+  eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help

@@ -1206,6 +1206,54 @@ func TestRunReportNoRuns(t *testing.T) {
 	}
 }
 
+func TestRunEval(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	corpus := filepath.Join(dir, "corpus")
+	if err := os.MkdirAll(corpus, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(corpus, "case1.md"), []byte(runTaskFile), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "eval", "corpus")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "passed: 1") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "success: 100%") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunEvalNoFiles(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "eval", "empty")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "no .md task files") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunEvalBadArgs(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLI(t, dir, "eval")
+	if code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr, "usage") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
