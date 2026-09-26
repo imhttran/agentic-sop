@@ -4,17 +4,18 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/config"
-	"github.com/imhttran/agentic-sdlc/internal/git"
-	"github.com/imhttran/agentic-sdlc/internal/github"
-	"github.com/imhttran/agentic-sdlc/internal/resume"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/github"
+	"github.com/imhttran/agentic-sop/internal/resume"
 )
 
 // Version is the CLI version reported by the version command.
@@ -37,12 +38,13 @@ const (
 
 // deps holds the external boundaries the CLI depends on so commands can be
 // driven with fakes in tests: the working-directory resolver, the agent
-// constructor (parameterised by the configured provider), and the resume
-// observer.
+// constructor (parameterised by the configured provider), the resume observer,
+// and the working-tree diff reader.
 type deps struct {
 	getwd        func() (string, error)
 	newAgent     func(provider string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
+	readDiff     func(ctx context.Context, dir string) (string, error)
 }
 
 func defaultDeps() deps {
@@ -51,6 +53,9 @@ func defaultDeps() deps {
 		newAgent: agent.FromConfig,
 		newResources: func(dir string) (resume.Observer, error) {
 			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil
+		},
+		readDiff: func(ctx context.Context, dir string) (string, error) {
+			return git.New(dir).Diff(ctx)
 		},
 	}
 }
@@ -85,6 +90,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runPlan(rest, stdout, stderr, d)
 	case "tasks":
 		return runTasks(rest, stdout, stderr, d)
+	case "validate":
+		return runValidate(rest, stdout, stderr, d.getwd)
+	case "review":
+		return runReview(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -115,6 +124,8 @@ Commands:
   task <id> show details for a single task
   plan      generate PLAN.md from PRD.md or a task file
   tasks     build and persist tasks from .agent-sdlc/plan.json
+  validate  run the configured build/test/lint commands
+  review    review the current changes with the configured engine
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help

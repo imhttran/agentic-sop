@@ -12,10 +12,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/git"
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // Outcome is the terminal outcome of a task run.

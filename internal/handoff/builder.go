@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // maxItems bounds every list so a capsule stays small and deterministic.

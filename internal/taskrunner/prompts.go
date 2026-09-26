@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // maxOutput bounds the diagnostic text carried into agent requests and attempt

@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 func testDB(t *testing.T) string {

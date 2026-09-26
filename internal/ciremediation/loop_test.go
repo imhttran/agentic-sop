@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/github"
+	"github.com/imhttran/agentic-sop/internal/github"
 )
 
 func checks(state github.CheckState) []github.Check {

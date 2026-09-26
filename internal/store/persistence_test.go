@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // fixedTime returns a deterministic timestamp without a monotonic clock

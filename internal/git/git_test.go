@@ -9,7 +9,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 func setGitEnv(t *testing.T) {

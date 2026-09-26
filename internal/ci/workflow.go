@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // Render produces a deterministic GitHub Actions workflow that runs the

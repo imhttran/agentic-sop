@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/github"
+	"github.com/imhttran/agentic-sop/internal/github"
 )
 
 // readyInput is an Input where every required condition holds.

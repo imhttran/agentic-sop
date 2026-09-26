@@ -5,7 +5,7 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // fakeStore is an in-memory TaskStore for deterministic tests.

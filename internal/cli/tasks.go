@@ -9,9 +9,9 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/imhttran/agentic-sdlc/internal/planner"
-	"github.com/imhttran/agentic-sdlc/internal/store"
-	"github.com/imhttran/agentic-sdlc/internal/taskbuilder"
+	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/store"
+	"github.com/imhttran/agentic-sop/internal/taskbuilder"
 )
 
 // runTasks turns the machine plan (.agent-sdlc/plan.json) into persisted tasks.

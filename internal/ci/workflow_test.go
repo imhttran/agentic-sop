@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 func TestRenderTriggersAndCheckout(t *testing.T) {

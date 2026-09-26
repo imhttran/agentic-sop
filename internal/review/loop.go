@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // Fixer applies a fix for the blocking findings in a report.

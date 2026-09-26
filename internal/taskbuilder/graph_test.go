@@ -3,7 +3,7 @@ package taskbuilder
 import (
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 func task(id string, deps ...string) *domain.Task {

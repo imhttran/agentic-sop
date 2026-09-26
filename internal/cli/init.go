@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/imhttran/agentic-sdlc/internal/config"
-	"github.com/imhttran/agentic-sdlc/internal/store"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/store"
 )
 
 // runInit creates the project state directory and database. It is idempotent:

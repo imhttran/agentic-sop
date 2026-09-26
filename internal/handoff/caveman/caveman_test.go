@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/handoff"
+	"github.com/imhttran/agentic-sop/internal/handoff"
 )
 
 type fakeRunner struct {

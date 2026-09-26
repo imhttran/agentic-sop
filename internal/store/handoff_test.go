@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/handoff"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/handoff"
 )
 
 func openStore(t *testing.T) *Store {

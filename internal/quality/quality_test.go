@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/config"
-	"github.com/imhttran/agentic-sdlc/internal/review"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/review"
 )
 
 // policy builds a config.Quality with an explicit test requirement.

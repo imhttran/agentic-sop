@@ -5,11 +5,11 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/git"
-	"github.com/imhttran/agentic-sdlc/internal/github"
-	"github.com/imhttran/agentic-sdlc/internal/resume"
-	"github.com/imhttran/agentic-sdlc/internal/store"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/github"
+	"github.com/imhttran/agentic-sop/internal/resume"
+	"github.com/imhttran/agentic-sop/internal/store"
 )
 
 // runResume reports the next legal action for interrupted work. With an explicit

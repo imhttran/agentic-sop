@@ -1,6 +1,6 @@
 package store
 
-import "github.com/imhttran/agentic-sdlc/internal/domain"
+import "github.com/imhttran/agentic-sop/internal/domain"
 
 type TaskRepository interface {
 	Save(task *domain.Task) error

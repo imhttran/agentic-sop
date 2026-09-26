@@ -11,11 +11,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/config"
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/resume"
-	"github.com/imhttran/agentic-sdlc/internal/store"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/resume"
+	"github.com/imhttran/agentic-sop/internal/review"
+	"github.com/imhttran/agentic-sop/internal/store"
 )
 
 // stateExists reports whether a file exists, for test assertions.
@@ -44,6 +45,7 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 			}
 			return a, nil
 		},
+		readDiff: func(context.Context, string) (string, error) { return "", nil },
 	}
 	code = run(args, &out, &errOut, d)
 	return code, out.String(), errOut.String()
@@ -607,6 +609,162 @@ func TestRunPlanTaskFileMissing(t *testing.T) {
 	}
 	if stateExists(filepath.Join(dir, "PLAN.md")) {
 		t.Error("PLAN.md must not be created when the task file is missing")
+	}
+}
+
+// writeConfig writes a project configuration under .agent-sdlc/.
+func writeConfig(t *testing.T, dir, content string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(dir, config.DirName), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join(config.DirName, config.FileName), content)
+}
+
+func TestRunValidatePass(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	code, stdout, stderr := runCLI(t, dir, "validate")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "validation: PASS") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunValidateFailIsFailFast(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"echo boom >&2; exit 1\"\n  lint:\n    - \"true\"\n")
+	code, stdout, _ := runCLI(t, dir, "validate")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "validation: FAIL") {
+		t.Errorf("stdout missing FAIL: %q", stdout)
+	}
+	if !strings.Contains(stdout, "boom") {
+		t.Errorf("stdout missing diagnostics: %q", stdout)
+	}
+	if !strings.Contains(stdout, "UNIT_TEST") {
+		t.Errorf("stdout missing the failing category: %q", stdout)
+	}
+	if strings.Contains(stdout, "LINT") {
+		t.Errorf("lint should not run after a failure (fail-fast): %q", stdout)
+	}
+}
+
+func TestRunValidateNoConfig(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLI(t, dir, "validate")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "no configuration") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunValidateNoCommands(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "project:\n  name: x\n")
+	code, stdout, stderr := runCLI(t, dir, "validate")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "no validation commands") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunValidateBadArgs(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runCLI(t, dir, "validate", "extra")
+	if code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr, "usage") {
+		t.Errorf("stderr missing usage: %s", stderr)
+	}
+}
+
+// runReviewCLI runs a command with an injected working-tree diff and agent.
+func runReviewCLI(t *testing.T, dir, diff string, a agent.Agent, args ...string) (code int, stdout, stderr string) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd: func() (string, error) { return dir, nil },
+		newAgent: func(string) (agent.Agent, error) {
+			if a == nil {
+				return nil, errors.New("no agent configured")
+			}
+			return a, nil
+		},
+		readDiff: func(context.Context, string) (string, error) { return diff, nil },
+	}
+	code = run(args, &out, &errOut, d)
+	return code, out.String(), errOut.String()
+}
+
+func TestRunReviewNoChanges(t *testing.T) {
+	dir := t.TempDir()
+	code, stdout, stderr := runReviewCLI(t, dir, "  \n", &fakeAgent{content: "{}"}, "review")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "no changes to review") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunReviewBlockingFinding(t *testing.T) {
+	dir := t.TempDir()
+	findings := `{"summary":"looks fine","findings":[{"severity":"HIGH","title":"nil deref","file":"a.go","line":3}]}`
+	code, stdout, _ := runReviewCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "nil deref") {
+		t.Errorf("stdout missing finding: %q", stdout)
+	}
+	if !strings.Contains(stdout, "1 blocking") {
+		t.Errorf("stdout missing blocking count: %q", stdout)
+	}
+}
+
+func TestRunReviewNonBlockingFinding(t *testing.T) {
+	dir := t.TempDir()
+	findings := `{"summary":"minor","findings":[{"severity":"MEDIUM","title":"style","file":"a.go","line":1}]}`
+	code, stdout, _ := runReviewCLI(t, dir, "diff --git a/a.go b/a.go\n", &fakeAgent{content: findings}, "review")
+	if code != exitOK {
+		t.Errorf("code=%d, want %d", code, exitOK)
+	}
+	if !strings.Contains(stdout, "0 blocking") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunReviewOCRNotConfigured(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, "project:\n  name: x\nreview:\n  engine: open-code-review\n")
+	t.Setenv(review.EnvReviewCommand, "")
+	code, _, stderr := runReviewCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, review.EnvReviewCommand) {
+		t.Errorf("stderr should name the missing variable: %q", stderr)
+	}
+}
+
+func TestRunReviewBadArgs(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runReviewCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "review", "extra")
+	if code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr, "usage") {
+		t.Errorf("stderr = %q", stderr)
 	}
 }
 

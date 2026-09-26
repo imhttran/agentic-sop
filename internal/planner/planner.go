@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/agent"
 )
 
 // planTaskPrompt is the stable instruction sent to the agent. It is an

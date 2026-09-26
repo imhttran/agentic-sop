@@ -14,7 +14,7 @@ import (
 	"os/exec"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/handoff"
+	"github.com/imhttran/agentic-sop/internal/handoff"
 )
 
 // Runner executes a configured command, sending input on stdin and returning

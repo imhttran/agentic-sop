@@ -8,8 +8,8 @@ import (
 	"context"
 	"errors"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/scheduler"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/scheduler"
 )
 
 // Outcome is the terminal outcome of a completion step or run.

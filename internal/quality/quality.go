@@ -8,8 +8,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/config"
-	"github.com/imhttran/agentic-sdlc/internal/review"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/review"
 )
 
 // Decision is the quality gate's verdict.
@@ -69,7 +69,7 @@ func Evaluate(policy config.Quality, in Input) Result {
 		checkFailed = true
 	}
 
-	blocking := blockingFindings(policy.FailOn, in.Unresolved)
+	blocking := BlockingFindings(policy.FailOn, in.Unresolved)
 
 	if in.FixCycles >= policy.MaxFixCycles && (checkFailed || blocking > 0) {
 		reasons = append(reasons, fmt.Sprintf("fix-loop limit reached (%d/%d)", in.FixCycles, policy.MaxFixCycles))
@@ -91,9 +91,10 @@ func Evaluate(policy config.Quality, in Input) Result {
 	return Result{Decision: Pass, Reasons: reasons}
 }
 
-// blockingFindings counts unresolved findings whose severity is named in the
-// policy's fail_on list. An empty list blocks nothing.
-func blockingFindings(failOn []string, findings []review.Finding) int {
+// BlockingFindings counts unresolved findings whose severity is named in the
+// policy's fail_on list. An empty list blocks nothing. It is exported so the
+// review stage and the gate agree on what blocks.
+func BlockingFindings(failOn []string, findings []review.Finding) int {
 	if len(failOn) == 0 {
 		return 0
 	}

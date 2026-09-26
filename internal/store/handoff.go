@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/handoff"
+	"github.com/imhttran/agentic-sop/internal/handoff"
 )
 
 // SaveHandoff upserts a handoff record keyed by task id, so regenerating a

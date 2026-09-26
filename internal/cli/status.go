@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/imhttran/agentic-sdlc/internal/store"
+	"github.com/imhttran/agentic-sop/internal/store"
 )
 
 // notInitializedMsg is shown by read commands when project state is missing.

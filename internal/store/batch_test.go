@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 func batchTask(id string, deps ...string) *domain.Task {

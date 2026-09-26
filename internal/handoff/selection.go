@@ -1,6 +1,6 @@
 package handoff
 
-import "github.com/imhttran/agentic-sdlc/internal/domain"
+import "github.com/imhttran/agentic-sop/internal/domain"
 
 // Select returns the handoff records for a task's direct dependencies, in
 // dependency order. It deliberately returns nothing else, so a new task never

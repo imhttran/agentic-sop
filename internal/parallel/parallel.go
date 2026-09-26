@@ -11,8 +11,8 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/git"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/git"
 )
 
 // Workspaces provisions an isolated working directory per task (for example a

@@ -9,8 +9,8 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/github"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/github"
 )
 
 // Action is the next legal step for a task.

@@ -11,8 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/planner"
-	"github.com/imhttran/agentic-sdlc/internal/taskfile"
+	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
 
 // runPlan reads PRD.md, asks the configured agent for a plan, then writes both

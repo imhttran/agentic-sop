@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/bootstrap"
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/bootstrap"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/planner"
 )
 
 // SerializeAcceptanceCriteria renders stage criteria into the single string the

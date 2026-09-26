@@ -5,8 +5,8 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // --- fakes ---

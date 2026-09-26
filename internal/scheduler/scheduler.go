@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"sort"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // Outcome describes the result of a scheduling attempt.

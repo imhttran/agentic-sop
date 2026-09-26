@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/agent"
 )
 
 // stubAgent is a deterministic Agent for tests: it records the request and

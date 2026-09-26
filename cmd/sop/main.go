@@ -3,7 +3,7 @@ package main
 import (
 	"os"
 
-	"github.com/imhttran/agentic-sdlc/internal/cli"
+	"github.com/imhttran/agentic-sop/internal/cli"
 )
 
 func main() {

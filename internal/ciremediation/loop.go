@@ -8,7 +8,7 @@ import (
 	"context"
 	"strings"
 
-	"github.com/imhttran/agentic-sdlc/internal/github"
+	"github.com/imhttran/agentic-sop/internal/github"
 )
 
 // Outcome is the terminal outcome of a remediation run.

@@ -10,11 +10,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/git"
-	"github.com/imhttran/agentic-sdlc/internal/store"
-	"github.com/imhttran/agentic-sdlc/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/store"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // --- fakes ---

@@ -1,4 +1,4 @@
-module github.com/imhttran/agentic-sdlc
+module github.com/imhttran/agentic-sop
 
 go 1.27.1
 

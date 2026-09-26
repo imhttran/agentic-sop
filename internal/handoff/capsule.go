@@ -7,7 +7,7 @@
 // Compressor.
 package handoff
 
-import "github.com/imhttran/agentic-sdlc/internal/domain"
+import "github.com/imhttran/agentic-sop/internal/domain"
 
 // VerificationSummary records the outcome of one verification check.
 type VerificationSummary struct {

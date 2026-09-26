@@ -5,7 +5,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // Manager builds and persists handoffs at the task boundary. Compression is a

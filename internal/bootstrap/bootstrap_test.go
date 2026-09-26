@@ -4,8 +4,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
-	"github.com/imhttran/agentic-sdlc/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/planner"
 )
 
 func task(id string, deps ...string) *domain.Task {

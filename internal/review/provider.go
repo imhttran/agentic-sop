@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/agent"
 )
 
 // reviewOutputSchema is the output contract for the REVIEW capability.

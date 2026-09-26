@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/imhttran/agentic-sdlc/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/domain"
 	_ "modernc.org/sqlite"
 )
 
