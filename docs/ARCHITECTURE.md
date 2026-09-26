@@ -74,10 +74,10 @@ The core rule is:
                     +--------------------------+-------------------+
                     |              |              |               |
                     v              v              v               v
-                 Git Adapter    Test Runner   Review Runner    CI Adapter
+                 Git Adapter   Validation      Review          CI Adapter
                     |              |              |               |
                     v              v              v               v
-                 local git     project cmds   agent/OCR        GitHub
+                 local git   project cmds   agent/OCR        GitHub
                     |
                     v
               Working Branch
@@ -92,19 +92,23 @@ The core rule is:
 
 ### CLI
 
-Provides human entry points such as:
+Human entry points implemented today:
 
 ```text
-init
-plan
-run
-status
-resume
-task
-retry
+init        create state and the configuration template
+plan        generate PLAN.md from PRD.md or a task file
+tasks       build and persist tasks from .agent-sdlc/plan.json
+validate    run the configured build/test/lint commands
+review      review the working-tree diff with the configured engine
+run         run a task file through the local lifecycle
+status      list persisted tasks
+task        show one task
+resume      report the next legal action for interrupted work
+version     print the CLI version
+help        show usage
 ```
 
-It should remain thin and delegate behavior to application services.
+It remains thin and delegates behavior to application services.
 
 ### Orchestrator
 
@@ -120,6 +124,14 @@ Responsibilities:
 - coordinate planner, scheduler, task runner, review, CI, and merge.
 
 The orchestrator should not contain code-generation intelligence.
+
+### Task Loader
+
+Reads a single task from a Markdown file (or plain Markdown), extracting ID,
+title, description, requirements, acceptance criteria, constraints, and
+dependencies. Plain Markdown stays usable. `sop plan TASK.md` and
+`sop run TASK.md` accept a task file; the loader normalizes it before a model
+sees it.
 
 ### Planner
 
@@ -210,43 +222,94 @@ Fix(task, findings) -> result
 
 The workflow should not depend permanently on one model or harness.
 
-### Test Runner
+### Agent Providers
 
-Discovers or executes project-defined verification commands.
-
-Possible categories:
+The harness ships provider adapters behind the same boundary:
 
 ```text
-format
-compile
-unit
-integration
+command    subprocess: JSON request on stdin, response on stdout
+ollama     local Ollama /api/chat
+llamacpp   OpenAI-compatible /v1/chat/completions (llama.cpp llama-server)
+```
+
+The provider is selected by `agent.provider` in configuration, overridden by
+`SOP_AGENT_PROVIDER`; credentials and endpoints come from the environment.
+
+### Validation Runner
+
+Runs the project's configured verification commands and classifies the result
+deterministically. Categories:
+
+```text
+build
+unit test
+integration test
 lint
-static analysis
 docker build
 ```
 
-Project configuration defines which are required.
+`.agent-sdlc/config.yaml` defines the commands; they run in a fixed order (build,
+test, lint) and fail fast, so an uncompilable change never reaches review.
+`sop validate` exposes this directly.
+
+### Quality Gate
+
+Combines verification status, unresolved review findings, the fix-loop budget,
+and human-required flags into one deterministic verdict:
+
+```text
+PASS | FAIL | NEEDS_HUMAN
+```
+
+The policy (`quality.require_tests`, `quality.fail_on`, `quality.max_fix_cycles`)
+comes from configuration; the verdict is computed in code, never by a model. The
+same `BlockingFindings` rule is shared with review, so review and the gate agree
+on what blocks.
 
 ### Review Runner
 
-Coordinates review gates.
-
-Potential flow:
+Reviews the working-tree diff with a replaceable engine. `sop review` runs it
+standalone; `sop run` runs it as a stage.
 
 ```text
-Self/Ponytail Review
+working-tree diff (Git is authoritative)
         ↓
-Fix
+engine: self (agent) | open-code-review (external command)
         ↓
-Open Code Review
+structured findings
         ↓
-Classify Findings
-        ↓
-Pass / Fix Required
+blocking = severity ∈ quality.fail_on  → exit code
 ```
 
-External review is an adapter rather than hard-coded into orchestration.
+The `open-code-review` engine is an adapter (`SOP_REVIEW_COMMAND`); when it is
+not configured the command reports guidance rather than silently substituting
+the internal reviewer. The model produces findings; the deterministic policy
+decides whether they block.
+
+### Run State and Report
+
+`run` persists an inspectable record under `.agent-sdlc/runs/<id>/`:
+
+```text
+task.md  plan.md  implementation.md  diff.patch
+validation.json  review.json  report.md  report.json  state.json
+```
+
+`state.json` records the lifecycle stage (`CREATED`…`FAILED`); the report records
+the task, provider, validation results, findings, and the final gate. A run that
+terminates for any reason stays inspectable.
+
+### Command Policy
+
+Before a command runs, it is classified deterministically:
+
+```text
+SAFE | REQUIRES_APPROVAL | DENIED
+```
+
+Read-only and verification commands are `SAFE`; `git commit`/`git push` require
+approval; a force-push is `DENIED`. Project policy can only tighten the defaults.
+Commands are structured argument lists, never a shell string.
 
 ### GitHub Adapter
 
@@ -665,41 +728,60 @@ ci_runs
   conclusion
 ```
 
+Runs are stored on the filesystem rather than in SQLite, so they stay readable
+without the tool:
+
+```text
+.agent-sdlc/runs/<id>/
+  task.md  plan.md  implementation.md  diff.patch
+  validation.json  review.json  report.md  report.json  state.json
+```
+
 The exact schema should emerge during implementation, but workflow state
 must be durable.
 
 ## 13. Configuration
 
-Example conceptual configuration:
+`.agent-sdlc/config.yaml` is generated by `sop init`. It describes policy only:
+no mutable task state, and no secrets (unknown keys are rejected, so credentials
+cannot be committed by accident).
 
 ```yaml
+version: 1
+
 project:
+  name: book-rag
   integration_branch: main
 
-scheduler:
-  max_parallel_tasks: 2
+agent:
+  provider: command # command | ollama | llamacpp
 
-retries:
-  local_test: 3
-  review: 3
-  ci: 3
-
-commands:
-  unit_test: go test ./...
-  integration_test: go test -tags=integration ./...
-  lint: golangci-lint run
+validation:
+  build:
+    - go build ./...
+  test:
+    - go test ./...
+  lint:
+    - go vet ./...
 
 review:
-  self_review: true
-  open_code_review: optional
+  engine: self # self | open-code-review
+  delegation: false
 
-github:
-  require_ci: true
-  auto_merge: true
+quality:
+  require_tests: true
+  max_fix_cycles: 3
+  fail_on:
+    - critical
+    - high
+
+human:
+  approval_before_commit: true
 ```
 
-Configuration should describe policy; it should not contain mutable task
-state.
+Omitted fields take safe defaults; an invalid file fails with a clear message.
+The environment overrides configuration where it matters (for example
+`SOP_AGENT_PROVIDER` overrides `agent.provider`).
 
 ## 14. Security and Permissions
 
@@ -740,15 +822,34 @@ The orchestrator does not need Kubernetes or a server deployment for V1.
 
 ## 16. Architecture Evolution
 
-Recommended evolution:
+Delivered:
 
 ```text
-V1  Sequential lifecycle + state machine
-V2  GitHub PR/CI integration
-V3  Review adapters + bounded remediation
-V4  Two-task parallel scheduling/worktrees
-V5  richer policies, providers, observability
+V1  Sequential lifecycle + state machine       (done)
+V2  GitHub PR/CI integration                   (done)
+V3  Review adapters + bounded remediation      (done)
+V4  Two-task parallel scheduling/worktrees     (done)
 ```
 
-The architecture should prove the state machine before adding
-concurrency.
+Delivered on top of V1 (`sop validate`, `sop review`, `sop run`):
+
+```text
+configuration model + provider selection
+validation runner (config-driven, fail-fast)
+review stage (self | open-code-review)
+deterministic quality gate
+command policy
+local model providers (Ollama, llama.cpp)
+task-file loader
+run state and run report
+```
+
+Remaining:
+
+```text
+fix loop + regression re-checks
+plan/DAG-driven execution
+provider capability detection
+MCP server; CI review output
+Jev decision layer (optional); evaluation harness
+```
