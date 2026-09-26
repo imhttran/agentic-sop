@@ -116,6 +116,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runCommit(rest, stdout, stderr, d)
 	case "pr":
 		return runPr(rest, stdout, stderr, d)
+	case "mcp":
+		return runMCP(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
 	default:
@@ -151,6 +153,7 @@ Commands:
   run       run a task file or the task graph through the local lifecycle
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
+  mcp       serve tools over the Model Context Protocol (stdio)
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help
