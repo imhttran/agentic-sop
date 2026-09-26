@@ -389,16 +389,16 @@ Documentation files may also exist and should not be removed.
 
 T000 is DONE only when:
 
-- [ ] task branch was used
-- [ ] Go module exists
-- [ ] CLI executes successfully
-- [ ] CLI uses `internal/app`
-- [ ] automated test exists
-- [ ] `make check` passes
-- [ ] GitHub Actions workflow exists
-- [ ] PR was created
-- [ ] CI passes
-- [ ] changes were merged into `main`
+- [x] task branch was used
+- [x] Go module exists
+- [x] CLI executes successfully
+- [x] CLI uses `internal/app`
+- [x] automated test exists
+- [x] `make check` passes
+- [x] GitHub Actions workflow exists
+- [x] PR was created
+- [x] CI passes
+- [x] changes were merged into `main`
 
 ---
 

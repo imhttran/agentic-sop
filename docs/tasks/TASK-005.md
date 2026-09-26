@@ -748,24 +748,24 @@ Then OCR review.
 
 ## Acceptance Criteria
 
-- [ ] Plan stages map deterministically to Tasks.
-- [ ] Stage IDs become Task IDs.
-- [ ] Dependencies are preserved.
-- [ ] Acceptance criteria are preserved.
-- [ ] New Tasks start PLANNED.
-- [ ] Retry defaults are initialized.
-- [ ] DAG cycles are rejected.
-- [ ] Valid diamond graphs pass.
-- [ ] Task order is deterministic.
-- [ ] Batch persistence is atomic.
-- [ ] Dependency insertion works regardless of input order.
-- [ ] Existing Tasks are not silently overwritten.
-- [ ] T004 persists `.agent-sdlc/plan.json`.
-- [ ] PLAN.md remains human-facing.
-- [ ] PLAN.md is never parsed for execution.
-- [ ] `agent-sdlc tasks` consumes plan.json.
-- [ ] T005 makes no LLM calls.
-- [ ] No scheduling behavior is introduced.
-- [ ] Tests require no model/network.
-- [ ] OCR review completed.
-- [ ] CI passes.
+- [x] Plan stages map deterministically to Tasks.
+- [x] Stage IDs become Task IDs.
+- [x] Dependencies are preserved.
+- [x] Acceptance criteria are preserved.
+- [x] New Tasks start PLANNED.
+- [x] Retry defaults are initialized.
+- [x] DAG cycles are rejected.
+- [x] Valid diamond graphs pass.
+- [x] Task order is deterministic.
+- [x] Batch persistence is atomic.
+- [x] Dependency insertion works regardless of input order.
+- [x] Existing Tasks are not silently overwritten.
+- [x] T004 persists `.agent-sdlc/plan.json`.
+- [x] PLAN.md remains human-facing.
+- [x] PLAN.md is never parsed for execution.
+- [x] `agent-sdlc tasks` consumes plan.json.
+- [x] T005 makes no LLM calls.
+- [x] No scheduling behavior is introduced.
+- [x] Tests require no model/network.
+- [x] OCR review completed.
+- [x] CI passes.

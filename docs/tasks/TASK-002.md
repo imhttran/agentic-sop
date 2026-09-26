@@ -918,30 +918,30 @@ Then T002 is DONE.
 
 # Acceptance Criteria
 
-- [ ] SQLite dependency added
-- [ ] SQLite store package exists
-- [ ] domain package has no SQLite dependency
-- [ ] schema initializes automatically
-- [ ] schema version is tracked
-- [ ] foreign keys are enabled
-- [ ] Task can be saved
-- [ ] Task can be loaded
-- [ ] Tasks can be listed
-- [ ] existing Task can be updated
-- [ ] dependencies persist
-- [ ] stale dependencies are removed on update
-- [ ] attempts persist
-- [ ] duplicate Tasks are not created
-- [ ] duplicate dependency rows are not created
-- [ ] Task save is transactional
-- [ ] not-found behavior is explicit
-- [ ] invalid stored status is rejected
-- [ ] timestamps round-trip correctly
-- [ ] database survives close/reopen
-- [ ] temporary databases are used by tests
-- [ ] `make check` passes
-- [ ] GitHub CI passes
-- [ ] PR merged into main
+- [x] SQLite dependency added
+- [x] SQLite store package exists
+- [x] domain package has no SQLite dependency
+- [x] schema initializes automatically
+- [x] schema version is tracked
+- [x] foreign keys are enabled
+- [x] Task can be saved
+- [x] Task can be loaded
+- [x] Tasks can be listed
+- [x] existing Task can be updated
+- [x] dependencies persist
+- [x] stale dependencies are removed on update
+- [x] attempts persist
+- [x] duplicate Tasks are not created
+- [x] duplicate dependency rows are not created
+- [x] Task save is transactional
+- [x] not-found behavior is explicit
+- [x] invalid stored status is rejected
+- [x] timestamps round-trip correctly
+- [x] database survives close/reopen
+- [x] temporary databases are used by tests
+- [x] `make check` passes
+- [x] GitHub CI passes
+- [x] PR merged into main
 
 ---
 

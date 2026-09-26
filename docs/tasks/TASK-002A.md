@@ -596,22 +596,22 @@ Merge only if:
 
 # Acceptance Criteria
 
-- [ ] `List()` loads Attempts
-- [ ] `List()` loads dependencies
-- [ ] `Get()` and `List()` return equivalent domain state
-- [ ] shared hydration logic reduces duplication
-- [ ] `mattn/go-sqlite3` removed
-- [ ] pure-Go SQLite driver added
-- [ ] Store API unchanged
-- [ ] foreign keys reliably enforced
-- [ ] behavioral FK regression test exists
-- [ ] transaction semantics unchanged
-- [ ] schema version remains valid
-- [ ] close/reopen persistence still works
-- [ ] existing T002 tests continue passing
-- [ ] new regression tests pass
-- [ ] `make check` passes
-- [ ] GitHub CI passes
+- [x] `List()` loads Attempts
+- [x] `List()` loads dependencies
+- [x] `Get()` and `List()` return equivalent domain state
+- [x] shared hydration logic reduces duplication
+- [x] `mattn/go-sqlite3` removed
+- [x] pure-Go SQLite driver added
+- [x] Store API unchanged
+- [x] foreign keys reliably enforced
+- [x] behavioral FK regression test exists
+- [x] transaction semantics unchanged
+- [x] schema version remains valid
+- [x] close/reopen persistence still works
+- [x] existing T002 tests continue passing
+- [x] new regression tests pass
+- [x] `make check` passes
+- [x] GitHub CI passes
 
 ---
 

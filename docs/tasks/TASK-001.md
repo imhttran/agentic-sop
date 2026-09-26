@@ -510,19 +510,19 @@ agentic-sdlc/
 
 T001 is DONE only when:
 
-- [ ] task branch was used
-- [ ] TaskStatus enum defined with all states
-- [ ] BlockedReason enum defined
-- [ ] Task type with all required fields
-- [ ] State transition rules implemented and tested
-- [ ] Dependency model works
-- [ ] Attempt tracking works
-- [ ] Retry policy defined
-- [ ] comprehensive state-transition tests exist and pass
-- [ ] `make check` passes
-- [ ] PR was created
-- [ ] CI passes
-- [ ] changes were merged into `main`
+- [x] task branch was used
+- [x] TaskStatus enum defined with all states
+- [x] BlockedReason enum defined
+- [x] Task type with all required fields
+- [x] State transition rules implemented and tested
+- [x] Dependency model works
+- [x] Attempt tracking works
+- [x] Retry policy defined
+- [x] comprehensive state-transition tests exist and pass
+- [x] `make check` passes
+- [x] PR was created
+- [x] CI passes
+- [x] changes were merged into `main`
 
 ---
 

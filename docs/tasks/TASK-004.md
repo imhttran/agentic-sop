@@ -714,25 +714,25 @@ Merge only after:
 
 ## Acceptance Criteria
 
-- [ ] Agent interface exists.
-- [ ] Planner depends only on Agent abstraction.
-- [ ] Fake agent supports deterministic tests.
-- [ ] Agent output is structured JSON.
-- [ ] JSON maps to typed Plan.
-- [ ] Plan validation is deterministic.
-- [ ] Stage IDs must be unique.
-- [ ] Dependencies must reference valid stages.
-- [ ] Self dependencies rejected.
-- [ ] Acceptance criteria required.
-- [ ] Go renders PLAN.md.
-- [ ] `agent-sdlc plan` reads PRD.md.
-- [ ] Missing PRD fails safely.
-- [ ] Empty PRD fails safely.
-- [ ] Existing PLAN.md is protected.
-- [ ] Invalid agent output fails safely.
-- [ ] Unit tests require no real LLM.
-- [ ] CI requires no LLM credentials.
-- [ ] Planner does not create Tasks.
-- [ ] Planner does not touch workflow state.
-- [ ] OCR review completed.
-- [ ] CI passes.
+- [x] Agent interface exists.
+- [x] Planner depends only on Agent abstraction.
+- [x] Fake agent supports deterministic tests.
+- [x] Agent output is structured JSON.
+- [x] JSON maps to typed Plan.
+- [x] Plan validation is deterministic.
+- [x] Stage IDs must be unique.
+- [x] Dependencies must reference valid stages.
+- [x] Self dependencies rejected.
+- [x] Acceptance criteria required.
+- [x] Go renders PLAN.md.
+- [x] `agent-sdlc plan` reads PRD.md.
+- [x] Missing PRD fails safely.
+- [x] Empty PRD fails safely.
+- [x] Existing PLAN.md is protected.
+- [x] Invalid agent output fails safely.
+- [x] Unit tests require no real LLM.
+- [x] CI requires no LLM credentials.
+- [x] Planner does not create Tasks.
+- [x] Planner does not touch workflow state.
+- [x] OCR review completed.
+- [x] CI passes.

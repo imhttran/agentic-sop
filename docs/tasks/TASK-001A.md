@@ -423,26 +423,26 @@ PR:
 
 ## Acceptance Criteria
 
-- [ ] Full workflow state vocabulary exists.
-- [ ] Happy-path transitions are explicit.
-- [ ] FIX_REQUIRED remediation path exists.
-- [ ] DONE is terminal.
-- [ ] BLOCKED is terminal.
-- [ ] Transition() validates before mutation.
-- [ ] Illegal transitions leave Task unchanged.
-- [ ] UpdatedAt changes on successful transition.
-- [ ] Blocked Tasks require a meaningful reason.
-- [ ] CanTransitionTo() remains side-effect free.
-- [ ] Store understands every new status.
-- [ ] Legacy IN_PROGRESS/CI_FAIL are deliberately handled.
-- [ ] SQLite schema does not require redesign.
-- [ ] CLI displays new statuses without owning workflow logic.
-- [ ] Existing T002/T003 behavior remains intact.
-- [ ] race tests pass.
-- [ ] CGO-disabled tests pass.
-- [ ] make check passes.
-- [ ] OCR review completed.
-- [ ] GitHub CI passes.
+- [x] Full workflow state vocabulary exists.
+- [x] Happy-path transitions are explicit.
+- [x] FIX_REQUIRED remediation path exists.
+- [x] DONE is terminal.
+- [x] BLOCKED is terminal.
+- [x] Transition() validates before mutation.
+- [x] Illegal transitions leave Task unchanged.
+- [x] UpdatedAt changes on successful transition.
+- [x] Blocked Tasks require a meaningful reason.
+- [x] CanTransitionTo() remains side-effect free.
+- [x] Store understands every new status.
+- [x] Legacy IN_PROGRESS/CI_FAIL are deliberately handled.
+- [x] SQLite schema does not require redesign.
+- [x] CLI displays new statuses without owning workflow logic.
+- [x] Existing T002/T003 behavior remains intact.
+- [x] race tests pass.
+- [x] CGO-disabled tests pass.
+- [x] make check passes.
+- [x] OCR review completed.
+- [x] GitHub CI passes.
 
 ## Definition of Done
 

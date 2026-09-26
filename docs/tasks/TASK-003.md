@@ -645,28 +645,28 @@ After 3 unsuccessful attempts, stop rather than continuing blindly.
 
 ## Acceptance Criteria
 
-- [ ] `agent-sdlc --help` works.
-- [ ] `agent-sdlc version` works.
-- [ ] `agent-sdlc init` creates `.agent-sdlc/state.db`.
-- [ ] `init` is idempotent.
-- [ ] Re-running `init` preserves persisted tasks.
-- [ ] `status` reads tasks through Store.List().
-- [ ] `task <id>` reads through Store.Get().
-- [ ] status/task do not create an uninitialized database.
-- [ ] Missing task returns exit 1.
-- [ ] Invalid arguments return exit 2.
-- [ ] Success returns exit 0.
-- [ ] Errors go to stderr.
-- [ ] Normal output goes to stdout.
-- [ ] main.go remains thin.
-- [ ] Tests use temporary project directories.
-- [ ] Store connections are closed.
-- [ ] No workflow/orchestration logic added.
-- [ ] race tests pass.
-- [ ] CGO-disabled tests pass.
-- [ ] make check passes.
-- [ ] OCR review completed.
-- [ ] GitHub CI passes.
+- [x] `agent-sdlc --help` works.
+- [x] `agent-sdlc version` works.
+- [x] `agent-sdlc init` creates `.agent-sdlc/state.db`.
+- [x] `init` is idempotent.
+- [x] Re-running `init` preserves persisted tasks.
+- [x] `status` reads tasks through Store.List().
+- [x] `task <id>` reads through Store.Get().
+- [x] status/task do not create an uninitialized database.
+- [x] Missing task returns exit 1.
+- [x] Invalid arguments return exit 2.
+- [x] Success returns exit 0.
+- [x] Errors go to stderr.
+- [x] Normal output goes to stdout.
+- [x] main.go remains thin.
+- [x] Tests use temporary project directories.
+- [x] Store connections are closed.
+- [x] No workflow/orchestration logic added.
+- [x] race tests pass.
+- [x] CGO-disabled tests pass.
+- [x] make check passes.
+- [x] OCR review completed.
+- [x] GitHub CI passes.
 
 ---
 
