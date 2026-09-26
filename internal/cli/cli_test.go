@@ -768,9 +768,13 @@ func TestRunReviewBadArgs(t *testing.T) {
 	}
 }
 
-// fakeCapabilityAgent returns different content per agent capability.
+// fakeCapabilityAgent returns different content per agent capability. reviews,
+// if set, is returned in order (the last repeats), so a fix loop can change its
+// verdict across cycles.
 type fakeCapabilityAgent struct {
-	plan, impl, review string
+	plan, impl, review, fix string
+	reviews                 []string
+	reviewIdx               int
 }
 
 func (f *fakeCapabilityAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
@@ -779,7 +783,17 @@ func (f *fakeCapabilityAgent) Generate(_ context.Context, r agent.Request) (agen
 		return agent.Response{Content: f.plan}, nil
 	case agent.Implement:
 		return agent.Response{Content: f.impl}, nil
+	case agent.Fix:
+		return agent.Response{Content: f.fix}, nil
 	case agent.Review:
+		if len(f.reviews) > 0 {
+			i := f.reviewIdx
+			if i >= len(f.reviews) {
+				i = len(f.reviews) - 1
+			}
+			f.reviewIdx++
+			return agent.Response{Content: f.reviews[i]}, nil
+		}
 		return agent.Response{Content: f.review}, nil
 	default:
 		return agent.Response{Content: "{}"}, nil
@@ -846,7 +860,7 @@ func TestRunValidationFailureFailsGate(t *testing.T) {
 	}
 }
 
-func TestRunBlockingFindingFailsGate(t *testing.T) {
+func TestRunBlockingFindingNeedsHuman(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
@@ -856,11 +870,12 @@ func TestRunBlockingFindingFailsGate(t *testing.T) {
 		review: `{"summary":"issue","findings":[{"severity":"CRITICAL","title":"boom","file":"a.go","line":1}]}`,
 	}
 
+	// A finding that never clears exhausts the fix budget and needs a human.
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "FAIL") {
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
 		t.Errorf("stdout = %q", stdout)
 	}
 }
@@ -884,6 +899,51 @@ func TestRunBadArgs(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "usage") {
 		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunFixLoopResolves(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{
+		plan: validPlanJSON, impl: "impl", fix: "fixed",
+		reviews: []string{
+			`{"summary":"issue","findings":[{"severity":"HIGH","title":"bug","file":"a.go","line":1}]}`,
+			`{"summary":"clean","findings":[]}`,
+		},
+	}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "fix cycles: 1/3") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !stateExists(filepath.Join(dir, stateDirName, "runs", "T001", "fix-1.md")) {
+		t.Error("fix artifact not written")
+	}
+}
+
+func TestRunFixLoopExhausted(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{
+		plan: validPlanJSON, impl: "impl", fix: "still broken",
+		reviews: []string{`{"summary":"issue","findings":[{"severity":"CRITICAL","title":"bug","file":"a.go","line":1}]}`},
+	}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "fix cycles: 3/3") {
+		t.Errorf("stdout = %q", stdout)
 	}
 }
 
