@@ -112,6 +112,8 @@ Implemented:
 - Markdown task-file loader (`sop plan TASK.md`)
 - deterministic quality gate (`PASS` / `FAIL` / `NEEDS_HUMAN`) from verification, findings, and the fix-loop budget
 - command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
+- configuration-driven validation runner (`sop validate`)
+- review stage (`sop review`) over the working-tree diff, blocking on configured severities
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -139,7 +141,7 @@ For example:
 ```text
 ~/workspace/
 │
-├── agentic-sdlc/             # SOP source
+├── agentic-sop/              # SOP source
 │
 └── projects/
     ├── book-rag/             # Project being managed
@@ -187,8 +189,8 @@ SQLite support is provided through the Go SQLite driver.
 ## Clone SOP
 
 ```bash
-git clone https://github.com/imhttran/agentic-sdlc.git
-cd agentic-sdlc
+git clone https://github.com/imhttran/agentic-sop.git
+cd agentic-sop
 ```
 
 ## Install the CLI
@@ -352,21 +354,30 @@ What are we building?
 
 # 3. Configure an AI Agent
 
-SOP does not directly depend on a specific model provider.
+SOP does not directly depend on a specific model provider. It communicates
+through an Agent interface and ships three adapters:
 
-Instead it communicates through an Agent interface.
+| Provider   | Required            | Optional                                                                                      | Endpoint                                                                              |
+| ---------- | ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `command`  | `SOP_AGENT_COMMAND` | —                                                                                             | a subprocess that reads a JSON request on `stdin` and writes the response to `stdout` |
+| `ollama`   | `SOP_OLLAMA_MODEL`  | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_TIMEOUT`                                                   | Ollama `/api/chat`                                                                    |
+| `llamacpp` | —                   | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | OpenAI-compatible `/v1/chat/completions` (llama.cpp `llama-server`)                   |
 
-The current implementation provides a command-backed Agent.
+Select a provider in `.agent-sdlc/config.yaml`:
 
-Configure the command using:
-
-```bash
-export SOP_AGENT_COMMAND="your-agent-command"
+```yaml
+agent:
+  provider: ollama
 ```
 
-The pre-rename name `AGENT_SDLC_AGENT_COMMAND` is still accepted for backward compatibility.
+The environment overrides the configuration for a single run:
 
-The configured command receives a JSON request through `stdin` and returns its response through `stdout`.
+```bash
+export SOP_AGENT_PROVIDER=ollama
+```
+
+When neither is set, the command agent is used. The pre-rename
+`AGENT_SDLC_AGENT_COMMAND` is still accepted for backward compatibility.
 
 Conceptually:
 
@@ -374,25 +385,13 @@ Conceptually:
 SOP
       │
       ▼
- CommandAgent
-      │
-      ▼
- external command
-      │
-      ▼
- AI harness / model
+    Agent
+   ├── CommandAgent  → external command
+   ├── Ollama        → local Ollama
+   └── LlamaCpp      → OpenAI-compatible endpoint
 ```
 
-This keeps the core application independent of:
-
-- Ollama
-- OpenAI-compatible APIs
-- Claude
-- local models
-- cloud models
-- coding-agent harnesses
-
-The application depends only on the Agent contract.
+This keeps the core application independent of any specific provider or harness.
 
 ---
 
@@ -704,8 +703,10 @@ Currently available commands:
 
 ```text
 sop init
-sop plan
+sop plan [TASK.md]
 sop tasks
+sop validate
+sop review
 sop status
 sop task <id>
 sop resume [task-id]
@@ -715,11 +716,15 @@ sop help
 
 ## `init`
 
-Initialize SOP state:
+Initialize SOP state and generate the configuration template:
 
 ```bash
 sop init
 ```
+
+Creates `.agent-sdlc/state.db` and, when absent, `.agent-sdlc/config.yaml`.
+Re-running it is safe: existing state and a hand-edited configuration are never
+overwritten.
 
 ## `plan`
 
@@ -748,6 +753,33 @@ Convert the machine-readable Plan into persisted tasks:
 sop tasks
 ```
 
+## `validate`
+
+Run the configured build/test/lint commands and report a deterministic result:
+
+```bash
+sop validate
+```
+
+Commands come from `validation` in `.agent-sdlc/config.yaml`; they run in the
+project directory, in order (build, test, lint), and stop at the first failure
+so uncompilable changes are not carried forward. The exit code is non-zero on
+failure.
+
+## `review`
+
+Review the current working-tree changes with the configured engine:
+
+```bash
+sop review
+```
+
+The `self` engine (default) asks the agent for structured findings; the
+`open-code-review` engine runs an external command (`SOP_REVIEW_COMMAND`). The
+model never decides the verdict: findings whose severity is named in
+`quality.fail_on` are blocking, and the exit code is non-zero when any remain.
+When there are no working-tree changes it reports “no changes to review”.
+
 ## `status`
 
 Show project task state:
@@ -773,6 +805,56 @@ single in-flight task:
 sop resume
 sop resume S001
 ```
+
+---
+
+# Configuration
+
+`sop init` generates `.agent-sdlc/config.yaml`. Configuration describes policy
+only: it never holds mutable task state and must not contain secrets. Unknown
+keys are rejected, so credentials cannot be committed by accident — agent
+credentials stay in the environment.
+
+```yaml
+version: 1
+
+project:
+  name: book-rag
+  integration_branch: main
+
+agent:
+  provider: command # command | ollama | llamacpp
+
+validation: # commands run by the verification stages
+  build:
+    - go build ./...
+  test:
+    - go test ./...
+  lint:
+    - go vet ./...
+
+review:
+  engine: self # self | open-code-review
+  delegation: false
+
+quality:
+  require_tests: true
+  max_fix_cycles: 3
+  fail_on: # severities that block a pass
+    - critical
+    - high
+
+human:
+  approval_before_commit: true
+```
+
+Omitted fields take safe defaults (documented by the generated template). An
+invalid file — malformed YAML, an unknown key, an unknown provider/engine/
+severity, a missing `project.name`, or an unsupported version — fails with a
+clear message rather than a silent fallback.
+
+The environment overrides configuration where it matters; for example
+`SOP_AGENT_PROVIDER` overrides `agent.provider`.
 
 ---
 
@@ -803,9 +885,9 @@ The architecture separates reasoning from control.
                         SQLite
 ```
 
-Not every component shown above is implemented yet.
-
-The architecture is being built incrementally.
+Every component shown above is implemented. Agents (the LLM boundary) propose
+and execute work; the orchestrator decides the workflow state and what is
+allowed to happen next.
 
 ---
 
@@ -1165,7 +1247,8 @@ resume, parallelism); `run` is the remaining CLI wiring that composes them.
 
 # Controlled Parallelism
 
-The dependency DAG eventually allows independent tasks to run concurrently.
+The dependency DAG allows independent tasks to run concurrently, up to a
+configured bound, each in its own Git worktree.
 
 For example:
 
@@ -1405,7 +1488,7 @@ make check
 
 # Development Roadmap
 
-Current progress:
+V1 is complete; every V1 stage below is implemented and tested.
 
 ```text
 ✓ Repository / CI
@@ -1417,30 +1500,52 @@ Current progress:
 ✓ PRD → Plan
 ✓ Plan → Tasks
 ✓ Dependency DAG
-
-→ Scheduler
-  Git Adapter
-  Test Runner
-  Agent Harness
-  TDD Task Runner
-  Structured Self Review
-  Open Code Review Integration
-  Commit / Documentation Gate
-  GitHub Adapter
-  GitHub Actions Integration
-  CI Remediation
-  Merge Gate
-  Completion Loop
-  Resume / Recovery
-  Environment Bootstrap
-  Controlled Parallel Execution
-  Documentation Automation
-  End-to-End Dogfooding
+✓ Scheduler
+✓ Git Adapter
+✓ Test Runner
+✓ Agent Harness
+✓ TDD Task Runner
+✓ Structured Self Review
+✓ Open Code Review Integration
+✓ Commit / Documentation Gate
+✓ GitHub Adapter
+✓ GitHub Actions Integration
+✓ CI Remediation
+✓ Merge Gate
+✓ Completion Loop
+✓ Resume / Recovery
+✓ Environment Bootstrap
+✓ Controlled Parallel Execution
+✓ Documentation Automation
+✓ End-to-End Dogfooding
 ```
 
-The project is intentionally being built incrementally.
+Implemented on top of the V1 core (wrap-up work):
 
-Sequential correctness and recovery come before parallel execution.
+```text
+✓ Local model providers (Ollama, OpenAI-compatible llama.cpp)
+✓ Project configuration (.agent-sdlc/config.yaml)
+✓ Configuration-driven agent selection
+✓ Markdown task-file loader (sop plan TASK.md)
+✓ Deterministic quality gate
+✓ Command policy
+✓ Validation runner (sop validate)
+✓ Review stage (sop review)
+```
+
+Next candidates, in the plan's build order:
+
+```text
+  Run lifecycle end to end (sop run TASK.md)
+  Provider capability detection and routing
+  Run report
+  MCP server and CI review mode
+  Evaluation harness
+```
+
+The project is intentionally built incrementally: sequential correctness and
+recovery come before parallelism, and each stage is usable and tested before the
+next is added.
 
 ---
 
