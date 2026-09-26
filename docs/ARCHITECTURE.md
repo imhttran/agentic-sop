@@ -296,8 +296,15 @@ validation.json  review.json  report.md  report.json  state.json
 ```
 
 `state.json` records the lifecycle stage (`CREATED`…`FAILED`); the report records
-the task, provider, validation results, findings, and the final gate. A run that
-terminates for any reason stays inspectable.
+the task, provider, validation results, findings, fix cycles, and the final gate.
+A run that terminates for any reason stays inspectable.
+
+### Fix Loop
+
+When review leaves blocking findings, they are sent back to the agent with the
+plan and the current diff; validation and review then run again (regression
+protection). The loop is bounded by `quality.max_fix_cycles`; exhausting the
+budget yields `NEEDS_HUMAN`, never an unbounded agent loop.
 
 ### Command Policy
 
@@ -838,6 +845,7 @@ configuration model + provider selection
 validation runner (config-driven, fail-fast)
 review stage (self | open-code-review)
 deterministic quality gate
+bounded fix loop (review → fix → re-validate)
 command policy
 local model providers (Ollama, llama.cpp)
 task-file loader
@@ -847,7 +855,6 @@ run state and run report
 Remaining:
 
 ```text
-fix loop + regression re-checks
 plan/DAG-driven execution
 provider capability detection
 MCP server; CI review output

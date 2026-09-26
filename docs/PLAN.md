@@ -625,6 +625,47 @@ PRD -> plan -> tasks -> branches -> TDD -> review
 
 works with bounded human intervention.
 
+---
+
+# Stage 24 --- JEV Plan Adoption (Wrap-up)
+
+**Status:** DONE — T024–T032
+
+## Goal
+
+Adopt the forward roadmap in [`PRD-JEV.md`](PRD-JEV.md) and
+[`PLAN-JEV.md`](PLAN-JEV.md) on top of the V1 core, one task at a time, each with
+a spec under [`docs/tasks/`](tasks/) and tests.
+
+## Delivered
+
+```text
+T024 local model providers (Ollama, OpenAI-compatible llama.cpp)
+T025 configuration model (.agent-sdlc/config.yaml)
+T026 configuration-driven agent selection
+T027 Markdown task-file loader (sop plan TASK.md)
+T028 deterministic quality gate (PASS/FAIL/NEEDS_HUMAN)
+T029 command policy (SAFE/REQUIRES_APPROVAL/DENIED)
+T030 validation runner (sop validate)
+T031 review stage (sop review)
+T032 local run lifecycle + run state and report (sop run)
+T033 bounded fix loop (review → fix → re-validate, max_fix_cycles)
+```
+
+The Go module was renamed to `github.com/imhttran/agentic-sop`.
+
+## Remaining
+
+```text
+plan/DAG-driven execution         (sop run over the task graph)
+provider capability detection     (plan T032)
+MCP server; CI review output      (plan T038–T041)
+Jev decision layer (optional)     (plan T033–T037)
+evaluation harness                (plan T045–T046)
+```
+
+---
+
 # Suggested Build Order
 
 ```text
@@ -653,6 +694,7 @@ works with bounded human intervention.
 21 Parallelism              (done)
 22 Documentation            (done)
 23 Dogfood                  (done)
+24+ Wrap-up (JEV)           (done: T024–T032)
 ```
 
 # Definition of Done for V1

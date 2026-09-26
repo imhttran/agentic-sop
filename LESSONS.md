@@ -76,3 +76,36 @@ Automated review reliably suggests nil-guards, error wrapping, and speculative
 generalization. Some of it is worth taking; most of it is not. Decide once, state
 the rationale, and stay consistent — otherwise the codebase fills with checks that
 never fire and options nobody uses.
+
+## Configuration is policy, not state (and never secrets)
+
+A single `.agent-sdlc/config.yaml` describes policy — providers, validation
+commands, review engine, quality thresholds, human gates — and nothing mutable.
+Strict decoding rejects unknown keys, so a secret cannot be committed by accident
+and the schema stays honest about what it supports. Defaults are applied on load,
+and an invalid file fails loudly instead of silently falling back. When a field's
+zero value is also meaningful (an explicit `false`), use a pointer so "omitted"
+and "false" stay distinguishable.
+
+The environment overrides configuration where it matters, so operators can
+override a committed default without editing it.
+
+## One rule decides what blocks
+
+Review and the quality gate must agree on what stops a run. Exporting a single
+`BlockingFindings(fail_on, findings)` and calling it from both kept them from
+drifting: the model produces findings, but the same deterministic rule classifies
+severity in exactly one place.
+
+## Runs are files, not a database row
+
+Persisting a run as a directory of artifacts (`task.md`, `plan.md`, `diff.patch`,
+`validation.json`, `review.json`, `report.md`, `state.json`) means a terminated
+run is still readable without the tool. Durable control state belongs in SQLite;
+the human-inspectable record belongs on disk.
+
+## A document that is a copy should be recognized as one
+
+`PLAN-wrapup.md` was byte-identical to `PLAN-JEV.md`. Diffing before implementing
+saved building the same thing twice and clarified that the two names described
+one roadmap.

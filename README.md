@@ -114,7 +114,7 @@ Implemented:
 - command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
 - configuration-driven validation runner (`sop validate`)
 - review stage (`sop review`) over the working-tree diff, blocking on configured severities
-- local run lifecycle (`sop run TASK.md`) with durable run state and a markdown/JSON run report
+- local run lifecycle (`sop run TASK.md`) with durable run state, a bounded fix loop, and a markdown/JSON run report
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -792,15 +792,19 @@ sop run TASK.md
 
 ```text
 task → plan → implement → detect changes
-     → validate → review → quality gate → report
+     → { validate → review → gate → fix }   (≤ quality.max_fix_cycles)
+     → report
 ```
 
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
-`plan.md`, `implementation.md`, `diff.patch`, `validation.json`, `review.json`,
-`report.md`, `report.json`, `state.json`), so a run stays inspectable. Git is
-the authority on what changed; validation fails fast before review; the quality
-gate is deterministic. `sop run` **stops at the human gate** and never commits,
-pushes, or merges.
+`plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
+`review.json`, `report.md`, `report.json`, `state.json`), so a run stays
+inspectable. Git is the authority on what changed; validation fails fast before
+review; a blocking finding is sent back to the agent and then validation and
+review run again, up to `quality.max_fix_cycles` times — exhausting the budget
+yields `NEEDS_HUMAN` rather than looping forever. The quality gate is
+deterministic. `sop run` **stops at the human gate** and never commits, pushes,
+or merges.
 
 ## `status`
 
@@ -1555,6 +1559,7 @@ Implemented on top of the V1 core (wrap-up work):
 ✓ Validation runner (sop validate)
 ✓ Review stage (sop review)
 ✓ Run lifecycle and run state (sop run)
+✓ Bounded fix loop (review → fix → re-validate)
 ```
 
 Next candidates, in the plan's build order:
