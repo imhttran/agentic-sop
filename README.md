@@ -107,6 +107,11 @@ Implemented:
 - Git adapter (branch and worktree lifecycle; structured arguments, no shell)
 - test runner (build / unit / integration / lint / Docker)
 - provider-independent Agent harness and command adapter
+- local model providers (Ollama, OpenAI-compatible llama.cpp)
+- project configuration (`.agent-sdlc/config.yaml`) with schema validation, defaults, and a generated template; the configuration selects the agent provider (the environment overrides it)
+- Markdown task-file loader (`sop plan TASK.md`)
+- deterministic quality gate (`PASS` / `FAIL` / `NEEDS_HUMAN`) from verification, findings, and the fix-loop budget
+- command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -718,11 +723,15 @@ sop init
 
 ## `plan`
 
-Generate an implementation plan from `PRD.md`:
+Generate an implementation plan from `PRD.md`, or from a Markdown task file:
 
 ```bash
 sop plan
+sop plan TASK.md
 ```
+
+A task file is parsed into ID, title, description, requirements, acceptance
+criteria, and constraints, then normalized before the agent reasons over it.
 
 Produces:
 
