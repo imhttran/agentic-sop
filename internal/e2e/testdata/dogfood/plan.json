@@ -1,0 +1,51 @@
+{
+  "project": "URL Shortener",
+  "summary": "A small URL shortener service with persistence, an HTTP API, tests, Docker, and CI.",
+  "stages": [
+    {
+      "id": "S000",
+      "title": "Development Environment",
+      "objective": "Set up the development environment: Go module, Dockerfile, compose, and test scripts.",
+      "dependencies": [],
+      "deliverables": ["go.mod", "Dockerfile", "docker-compose.yml", ".env.example"],
+      "acceptance_criteria": ["the project builds", "the Docker image builds"],
+      "kind": "environment"
+    },
+    {
+      "id": "S001",
+      "title": "Core URL service",
+      "objective": "Implement short-code generation and resolution as a unit-tested core package.",
+      "dependencies": ["S000"],
+      "deliverables": ["shortener package", "unit tests"],
+      "acceptance_criteria": ["unit tests pass", "a code round-trips to its URL"],
+      "kind": "feature"
+    },
+    {
+      "id": "S002",
+      "title": "Persistence layer",
+      "objective": "Persist URL mappings so they survive a restart.",
+      "dependencies": ["S001"],
+      "deliverables": ["store package", "unit tests"],
+      "acceptance_criteria": ["a mapping survives a reopen", "unit tests pass"],
+      "kind": "feature"
+    },
+    {
+      "id": "S003",
+      "title": "HTTP API",
+      "objective": "Expose create and resolve endpoints over HTTP.",
+      "dependencies": ["S001"],
+      "deliverables": ["http handlers", "unit tests"],
+      "acceptance_criteria": ["POST returns a short code", "GET resolves it"],
+      "kind": "feature"
+    },
+    {
+      "id": "S004",
+      "title": "Integration and packaging",
+      "objective": "Wire persistence and API together, add integration tests, Docker, and CI.",
+      "dependencies": ["S002", "S003"],
+      "deliverables": ["integration tests", "Docker image", "GitHub Actions workflow"],
+      "acceptance_criteria": ["integration tests pass", "CI runs the suite"],
+      "kind": "feature"
+    }
+  ]
+}

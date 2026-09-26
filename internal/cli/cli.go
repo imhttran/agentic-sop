@@ -1,0 +1,136 @@
+// Package cli implements the sop command-line interface. It parses
+// arguments and drives the domain and store layers; workflow/orchestration
+// logic belongs to later tasks.
+package cli
+
+import (
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+
+	"github.com/imhttran/agentic-sdlc/internal/agent"
+	"github.com/imhttran/agentic-sdlc/internal/git"
+	"github.com/imhttran/agentic-sdlc/internal/github"
+	"github.com/imhttran/agentic-sdlc/internal/resume"
+)
+
+// Version is the CLI version reported by the version command.
+const Version = "dev"
+
+const (
+	// stateDirName is the per-project directory holding sop state. The name is
+	// kept deliberately: renaming it would require a persistence migration.
+	stateDirName = ".agent-sdlc"
+	// stateFileName is the SQLite database file name inside stateDirName.
+	stateFileName = "state.db"
+)
+
+// Exit codes returned by Run.
+const (
+	exitOK    = 0
+	exitError = 1
+	exitUsage = 2
+)
+
+// deps holds the external boundaries the CLI depends on so commands can be
+// driven with fakes in tests: the working-directory resolver, the agent
+// constructor, and the resume observer.
+type deps struct {
+	getwd        func() (string, error)
+	newAgent     func() (agent.Agent, error)
+	newResources func(dir string) (resume.Observer, error)
+}
+
+func defaultDeps() deps {
+	return deps{
+		getwd:    os.Getwd,
+		newAgent: agent.NewCommandAgentFromEnv,
+		newResources: func(dir string) (resume.Observer, error) {
+			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil
+		},
+	}
+}
+
+// Run parses args and executes a single command, writing normal output to
+// stdout and diagnostics to stderr. It returns the process exit code.
+func Run(args []string, stdout, stderr io.Writer) int {
+	return run(args, stdout, stderr, defaultDeps())
+}
+
+// run is Run with injectable boundaries.
+func run(args []string, stdout, stderr io.Writer, d deps) int {
+	if len(args) == 0 {
+		writeHelp(stdout)
+		return exitOK
+	}
+
+	command, rest := args[0], args[1:]
+	switch command {
+	case "help", "-h", "--help":
+		writeHelp(stdout)
+		return exitOK
+	case "version":
+		return runVersion(rest, stdout, stderr)
+	case "init":
+		return runInit(rest, stdout, stderr, d.getwd)
+	case "status":
+		return runStatus(rest, stdout, stderr, d.getwd)
+	case "task":
+		return runTask(rest, stdout, stderr, d.getwd)
+	case "plan":
+		return runPlan(rest, stdout, stderr, d)
+	case "tasks":
+		return runTasks(rest, stdout, stderr, d)
+	case "resume":
+		return runResume(rest, stdout, stderr, d)
+	default:
+		fmt.Fprintf(stderr, "unknown command: %s\n", command)
+		fmt.Fprintln(stderr, "run `sop --help` for usage")
+		return exitUsage
+	}
+}
+
+func runVersion(args []string, stdout, stderr io.Writer) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "usage: sop version")
+		return exitUsage
+	}
+	fmt.Fprintf(stdout, "sop %s\n", Version)
+	return exitOK
+}
+
+func writeHelp(w io.Writer) {
+	fmt.Fprint(w, `sop — a standard operating procedure for agentic software development
+
+Usage:
+  sop <command> [arguments]
+
+Commands:
+  init      initialize project state (.agent-sdlc/state.db)
+  status    list persisted tasks
+  task <id> show details for a single task
+  plan      generate PLAN.md from PRD.md using the configured agent
+  tasks     build and persist tasks from .agent-sdlc/plan.json
+  resume    report the next legal action for interrupted work
+  version   print the CLI version
+  help      show this help
+`)
+}
+
+// projectDir resolves the working directory, which T003 treats as the project
+// root. It reports failure through stderr.
+func projectDir(getwd func() (string, error), stderr io.Writer) (string, bool) {
+	dir, err := getwd()
+	if err != nil {
+		fmt.Fprintf(stderr, "error: cannot determine working directory: %v\n", err)
+		return "", false
+	}
+	return dir, true
+}
+
+// statePath returns the SQLite state database path for a project directory.
+// It is the single place that knows the on-disk state layout.
+func statePath(projectDir string) string {
+	return filepath.Join(projectDir, stateDirName, stateFileName)
+}
