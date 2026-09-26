@@ -893,12 +893,103 @@ func TestRunMissingTaskFile(t *testing.T) {
 
 func TestRunBadArgs(t *testing.T) {
 	dir := t.TempDir()
-	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "a.md", "b.md")
 	if code != exitUsage {
 		t.Errorf("code=%d, want %d", code, exitUsage)
 	}
 	if !strings.Contains(stderr, "usage") {
 		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunGraphUninitialized(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "not initialized") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunGraphNoTasks(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "no tasks") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunGraphAllDone(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "already done", Status: domain.DONE, MaxAttempts: 3})
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "all tasks done") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunGraphExecutesReadyTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{
+		ID: "T001", Title: "Add widget", Objective: "Add the widget.",
+		AcceptanceCriteria: "widget works", Status: domain.PLANNED, MaxAttempts: 3,
+	})
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "T001 DONE") {
+		t.Errorf("stdout missing completion: %q", stdout)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+	got, err := st.Get("T001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.DONE {
+		t.Errorf("persisted status = %s, want DONE", got.Status)
+	}
+}
+
+func TestRunGraphBlocksOnGateFailure(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n")
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Add widget", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", fix: "x"}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "T001 BLOCKED") {
+		t.Errorf("stdout = %q", stdout)
+	}
+
+	st, _ := store.Open(statePath(dir))
+	defer st.Close()
+	got, _ := st.Get("T001")
+	if got.Status != domain.BLOCKED {
+		t.Errorf("persisted status = %s, want BLOCKED", got.Status)
 	}
 }
 

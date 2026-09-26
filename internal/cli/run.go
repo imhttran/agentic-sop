@@ -21,18 +21,20 @@ import (
 	"github.com/imhttran/agentic-sop/internal/validate"
 )
 
-// runRun drives one task from a Markdown file through the local lifecycle:
+// runRun drives the local lifecycle. With a task file it runs that one task; with
+// no arguments it drives the persisted task graph in dependency order.
 //
 //	task → plan → implement → detect changes
 //	     → { validate → review → gate → fix } → report
 //
-// The braces are a bounded fix loop: a blocking finding is sent back to the
-// agent, then validation and review run again, at most quality.max_fix_cycles
-// times. Exhausting the budget yields NEEDS_HUMAN, never an unbounded loop. The
-// run stops at the human gate and never commits, pushes, or merges.
+// The braces are a bounded fix loop (≤ quality.max_fix_cycles; exhaustion yields
+// NEEDS_HUMAN). A run never commits, pushes, or merges.
 func runRun(args []string, stdout, stderr io.Writer, d deps) int {
+	if len(args) == 0 {
+		return runGraph(stdout, stderr, d)
+	}
 	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: sop run TASK.md")
+		fmt.Fprintln(stderr, "usage: sop run [TASK.md]")
 		return exitUsage
 	}
 
@@ -47,10 +49,8 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	cfg := config.Default()
-	if loaded, err := config.LoadDir(dir); err == nil {
-		cfg = *loaded
-	} else if !errors.Is(err, config.ErrNotFound) {
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
@@ -62,23 +62,67 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	_ = rn.Write("task.md", spec.Render())
 
-	ctx := context.Background()
 	a, err := d.newAgent(cfg.Agent.Provider)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
 
+	res, err := executeLifecycle(context.Background(), dir, cfg, a, d, spec, rn)
+	if err != nil {
+		return failRun(rn, stderr, err)
+	}
+	return emitRunSummary(stdout, dir, cfg, rn, res)
+}
+
+// lifeResult is the outcome of one local lifecycle.
+type lifeResult struct {
+	gate   quality.Result
+	cycles int
+	stage  runpkg.Stage
+	suite  testrunner.SuiteResult
+	report review.Report
+}
+
+// executeLifecycle runs the lifecycle for spec, writing artifacts (including the
+// report) into rn. It returns an error only for infrastructure failures
+// (planner/agent/validation/review), which the caller records as a failed run; a
+// deterministic gate failure is a normal result.
+func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run) (lifeResult, error) {
+	res, err := runStages(ctx, dir, cfg, a, d, spec, rn)
+	if err != nil {
+		return lifeResult{}, err
+	}
+
+	_ = rn.Write("report.md", buildRunReport(spec, cfg, res.suite, res.report, res.gate, res.stage, res.cycles))
+	writeRunJSON(rn, "report.json", runReportDoc{
+		ID:          rn.State().ID,
+		Stage:       res.stage,
+		Provider:    cfg.Agent.Provider,
+		Engine:      cfg.Review.Engine,
+		Decision:    res.gate.Decision,
+		Reasons:     res.gate.Reasons,
+		FixCycles:   res.cycles,
+		Validation:  res.suite.Results,
+		Findings:    res.report.Findings,
+		GeneratedAt: time.Now().UTC(),
+	})
+	return res, nil
+}
+
+// runStages performs plan → implement → (validate → review → gate → fix)* and
+// returns the final result. It writes the intermediate artifacts.
+func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run) (lifeResult, error) {
 	// Plan (must not mutate the repository).
 	_ = rn.SetStage(runpkg.Planning)
 	plan, err := planner.New(a).Generate(ctx, spec.Render())
 	if err != nil {
-		return failRun(rn, stderr, "plan", err)
+		return lifeResult{}, fmt.Errorf("plan: %w", err)
 	}
 	_ = rn.Write("plan.md", plan.RenderMarkdown())
 
-	// Implement: the agent edits the repository; its returned summary is recorded
-	// but Git remains the authority on what changed.
+	// Implement: the agent edits the repository; its summary is recorded but Git
+	// remains the authority on what changed.
 	_ = rn.SetStage(runpkg.Implementing)
 	impl, err := a.Generate(ctx, agent.Request{
 		Capability:         agent.Implement,
@@ -87,19 +131,18 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 		OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 	})
 	if err != nil {
-		return failRun(rn, stderr, "implement", err)
+		return lifeResult{}, fmt.Errorf("implement: %w", err)
 	}
 	_ = rn.Write("implementation.md", impl.Content)
 
 	diff, err := d.readDiff(ctx, dir)
 	if err != nil {
-		return failRun(rn, stderr, "diff", err)
+		return lifeResult{}, fmt.Errorf("diff: %w", err)
 	}
 	_ = rn.Write("diff.patch", diff)
 	if strings.TrimSpace(diff) == "" {
 		_ = rn.SetStage(runpkg.Failed)
-		fmt.Fprintln(stdout, "run: no changes were produced")
-		return exitError
+		return lifeResult{gate: fail("no changes were produced"), stage: runpkg.Failed}, nil
 	}
 
 	maxCycles := cfg.Quality.MaxFixCycles
@@ -119,16 +162,14 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 			_ = rn.SetStage(runpkg.Reviewing)
 			provider, err := reviewProvider(cfg, d)
 			if err != nil {
-				return failRun(rn, stderr, "review", err)
+				return lifeResult{}, fmt.Errorf("review: %w", err)
 			}
 			report, err = provider.Review(ctx, review.Request{Task: spec.Render(), Diff: diff})
 			if err != nil {
-				return failRun(rn, stderr, "review", err)
+				return lifeResult{}, fmt.Errorf("review: %w", err)
 			}
 		}
 
-		// Deterministic verdict; the fix budget turns an exhausted loop into a
-		// human decision instead of looping forever.
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
 			TestPassed:   categoryPassed(suite, testrunner.UnitTest),
@@ -153,18 +194,17 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 			OutputRequirements: "Fix the blocking findings in the working tree and summarize the changes.",
 		})
 		if err != nil {
-			return failRun(rn, stderr, "fix", err)
+			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 
 		diff, err = d.readDiff(ctx, dir)
 		if err != nil {
-			return failRun(rn, stderr, "diff", err)
+			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
-			fmt.Fprintln(stdout, "run: fixes removed all changes")
-			return exitError
+			return lifeResult{gate: fail("fixes removed all changes"), stage: runpkg.Failed}, nil
 		}
 		_ = rn.Write("diff.patch", diff)
 	}
@@ -180,42 +220,50 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 		stage = runpkg.WaitingForHuman
 	}
 	_ = rn.SetStage(stage)
+	return lifeResult{gate: gate, cycles: cycles, stage: stage, suite: suite, report: report}, nil
+}
 
-	_ = rn.Write("report.md", buildRunReport(spec, cfg, suite, report, gate, stage, cycles))
-	writeRunJSON(rn, "report.json", runReportDoc{
-		ID:          rn.State().ID,
-		Stage:       stage,
-		Provider:    cfg.Agent.Provider,
-		Engine:      cfg.Review.Engine,
-		Decision:    gate.Decision,
-		Reasons:     gate.Reasons,
-		FixCycles:   cycles,
-		Validation:  suite.Results,
-		Findings:    report.Findings,
-		GeneratedAt: time.Now().UTC(),
-	})
-
-	fmt.Fprintf(stdout, "run %s: %s\n", rn.State().ID, gate.Decision)
-	for _, reason := range gate.Reasons {
+// emitRunSummary prints the run's outcome and returns the process exit code.
+func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.Run, res lifeResult) int {
+	fmt.Fprintf(stdout, "run %s: %s\n", rn.State().ID, res.gate.Decision)
+	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
-	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", cycles, maxCycles)
+	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
 	if rel := relDir(dir, rn.Dir()); rel != "" {
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
-	if gate.Decision == quality.Pass {
+	if res.gate.Decision == quality.Pass {
 		fmt.Fprintln(stdout, "awaiting human approval; no commit was performed")
 		return exitOK
 	}
 	return exitError
 }
 
+// fail builds a FAIL result carrying a single reason.
+func fail(reason string) quality.Result {
+	return quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+}
+
 // failRun marks the run failed, reports the stage error, and returns the error
 // exit code.
-func failRun(rn *runpkg.Run, stderr io.Writer, stage string, err error) int {
+func failRun(rn *runpkg.Run, stderr io.Writer, err error) int {
 	_ = rn.SetStage(runpkg.Failed)
-	fmt.Fprintf(stderr, "run: %s: %v\n", stage, err)
+	fmt.Fprintf(stderr, "run: %v\n", err)
 	return exitError
+}
+
+// loadConfigOrDefault returns the project configuration, falling back to the
+// built-in defaults when no configuration file exists.
+func loadConfigOrDefault(dir string) (config.Config, error) {
+	loaded, err := config.LoadDir(dir)
+	if err == nil {
+		return *loaded, nil
+	}
+	if errors.Is(err, config.ErrNotFound) {
+		return config.Default(), nil
+	}
+	return config.Config{}, err
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the blocking
