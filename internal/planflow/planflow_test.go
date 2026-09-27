@@ -153,3 +153,56 @@ func TestPrepareSkipsWhenTasksExist(t *testing.T) {
 		t.Errorf("res = %+v", res)
 	}
 }
+
+func TestPrepareGeneratesPlanDocFromPRD(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, filepath.Join("docs", "PRD.md"), "# PRD\n\nDo it.\n")
+
+	res, err := Prepare(context.Background(), Options{Dir: dir, Agent: fakeAgent{content: generatedPlanJSON}, Store: &fakeStore{}})
+	if err != nil {
+		t.Fatalf("Prepare failed: %v", err)
+	}
+	if res.PlanDoc != filepath.Join("docs", "PLAN.md") {
+		t.Errorf("PlanDoc = %q", res.PlanDoc)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "docs", "PLAN.md")); err != nil {
+		t.Errorf("docs/PLAN.md not written: %v", err)
+	}
+}
+
+func TestPrepareReconcilesChangedPlanWithTasks(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "PLAN.md", planDoc)
+	st := &fakeStore{}
+
+	if _, err := Prepare(context.Background(), Options{Dir: dir, Store: st}); err != nil {
+		t.Fatalf("first Prepare failed: %v", err)
+	}
+	if len(st.tasks) == 0 {
+		t.Fatal("expected tasks to be created")
+	}
+
+	// Change the plan after tasks exist.
+	write(t, dir, "PLAN.md", strings.ReplaceAll(planDoc, "Application skeleton", "Renamed"))
+	_, err := Prepare(context.Background(), Options{Dir: dir, Store: st})
+	if err == nil {
+		t.Fatal("expected a reconciliation error")
+	}
+	if !strings.Contains(err.Error(), "plan changed") {
+		t.Errorf("error = %q, want a reconciliation diagnostic", err)
+	}
+}
+
+func TestPrepareSurfacesUnknownDependency(t *testing.T) {
+	dir := t.TempDir()
+	doc := "# Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — a\n\no\n\n### Dependencies\n\n- S999\n\n### Acceptance Criteria\n\n- x\n"
+	write(t, dir, "PLAN.md", doc)
+
+	_, err := Prepare(context.Background(), Options{Dir: dir, Store: &fakeStore{}})
+	if err == nil {
+		t.Fatal("expected a validation error")
+	}
+	if !strings.Contains(err.Error(), "PLAN validation failed") || !strings.Contains(err.Error(), "unknown dependency") {
+		t.Errorf("error = %q, want an actionable validation diagnostic", err)
+	}
+}

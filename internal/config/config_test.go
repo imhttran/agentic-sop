@@ -97,6 +97,9 @@ func TestParseDefaults(t *testing.T) {
 	if c.Decision.Thresholds.RouteToStrongModel == 0 || c.Decision.Thresholds.RequireHuman == 0 {
 		t.Errorf("decision thresholds not defaulted: %+v", c.Decision.Thresholds)
 	}
+	if c.Workflow.Mode != "local" {
+		t.Errorf("workflow.mode = %q, want local", c.Workflow.Mode)
+	}
 }
 
 func TestParseErrors(t *testing.T) {
@@ -115,6 +118,7 @@ func TestParseErrors(t *testing.T) {
 		{"unknown engine", "project:\n  name: a\nreview:\n  engine: clippy\n", "unknown review.engine"},
 		{"unknown severity", "project:\n  name: a\nquality:\n  fail_on:\n    - blocker\n", "unknown quality.fail_on"},
 		{"unknown decision provider", "project:\n  name: a\ndecision:\n  provider: skynet\n", "unknown decision.provider"},
+		{"unknown workflow mode", "project:\n  name: a\nworkflow:\n  mode: nope\n", "unknown workflow.mode"},
 		{"decision threshold out of range", "project:\n  name: a\ndecision:\n  thresholds:\n    require_human: 2\n", "within [0,1]"},
 		{"negative cycles", "project:\n  name: a\nquality:\n  max_fix_cycles: -1\n", "must not be negative"},
 		{"multiple documents", "project:\n  name: a\n---\nversion: 1\n", "multiple YAML documents"},

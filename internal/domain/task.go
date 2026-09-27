@@ -46,13 +46,14 @@ var transitions = map[TaskStatus][]TaskStatus{
 	IMPLEMENTING:     {LOCAL_TESTS_PASS, FIX_REQUIRED},
 	LOCAL_TESTS_PASS: {REVIEW, FIX_REQUIRED},
 	REVIEW:           {REVIEW_PASS, FIX_REQUIRED},
-	REVIEW_PASS:      {PR_OPEN},
+	REVIEW_PASS:      {PR_OPEN, LOCAL_DONE},
 	PR_OPEN:          {CI_RUNNING},
 	CI_RUNNING:       {CI_PASS, FIX_REQUIRED},
 	CI_PASS:          {MERGED},
 	FIX_REQUIRED:     {IMPLEMENTING},
 	MERGED:           {DONE},
 	DONE:             {},
+	LOCAL_DONE:       {},
 	BLOCKED:          {},
 }
 
@@ -85,7 +86,7 @@ func (t *Task) Block(reason BlockedReason) error {
 	if strings.TrimSpace(string(reason)) == "" {
 		return fmt.Errorf("blocked reason must not be empty")
 	}
-	if t.Status == DONE {
+	if t.Status == DONE || t.Status == LOCAL_DONE {
 		return fmt.Errorf("cannot block a completed task")
 	}
 	t.Status = BLOCKED
@@ -152,8 +153,8 @@ func (t *Task) ResolveDependencies(tasks map[string]*Task) (unmet []Dependency, 
 }
 
 func (t *Task) dependencySatisfied(depTask *Task) bool {
-	// A dependency is complete only once its work is integrated into shared
-	// history: work that has merely passed local tests, review, or CI may still
-	// live on a branch that is not merged.
-	return depTask.Status == MERGED || depTask.Status == DONE
+	// A dependency is complete once its work is finished: locally (LOCAL_DONE) or
+	// integrated into shared history (MERGED/DONE). Work that has merely passed
+	// local tests, review, or CI may still live on an unmerged branch.
+	return depTask.Status == MERGED || depTask.Status == DONE || depTask.Status == LOCAL_DONE
 }

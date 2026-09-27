@@ -6,9 +6,10 @@ package domain
 type TaskStatus string
 
 // Happy path: PLANNED → READY → BRANCH_CREATED → TESTS_WRITTEN → RED_VERIFIED
-// → IMPLEMENTING → LOCAL_TESTS_PASS → REVIEW → REVIEW_PASS → PR_OPEN
-// → CI_RUNNING → CI_PASS → MERGED → DONE. FIX_REQUIRED is the remediation
-// state; BLOCKED is terminal for V1.
+// → IMPLEMENTING → LOCAL_TESTS_PASS → REVIEW → REVIEW_PASS. From REVIEW_PASS the
+// task either completes locally (LOCAL_DONE) or continues through the remote
+// lifecycle (PR_OPEN → CI_RUNNING → CI_PASS → MERGED → DONE). FIX_REQUIRED is the
+// remediation state; BLOCKED is terminal.
 const (
 	PLANNED          TaskStatus = "PLANNED"
 	READY            TaskStatus = "READY"
@@ -25,7 +26,11 @@ const (
 	FIX_REQUIRED     TaskStatus = "FIX_REQUIRED"
 	MERGED           TaskStatus = "MERGED"
 	DONE             TaskStatus = "DONE"
-	BLOCKED          TaskStatus = "BLOCKED"
+	// LOCAL_DONE marks a task completed by a local-only run: it passed the local
+	// lifecycle (through REVIEW_PASS) but no PR was opened, no CI ran, and nothing
+	// was merged. It is distinct from DONE, which follows a real MERGED.
+	LOCAL_DONE TaskStatus = "LOCAL_DONE"
+	BLOCKED    TaskStatus = "BLOCKED"
 )
 
 type BlockedReason string

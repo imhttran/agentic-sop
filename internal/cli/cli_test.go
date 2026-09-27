@@ -932,7 +932,7 @@ func TestRunGraphFromExistingPlanJSON(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "created 2 task(s)") {
+	if !strings.Contains(stdout, "Created task graph (2 task(s)).") {
 		t.Errorf("stdout = %q", stdout)
 	}
 	if !strings.Contains(stdout, "all tasks done") {
@@ -955,7 +955,7 @@ func TestRunAutoCompilesPlanFromMarkdown(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	for _, want := range []string{"source: " + filepath.Join("docs", "PLAN.md"), "created 1 task(s)", "S001 DONE", "all tasks done"} {
+	for _, want := range []string{"Source: " + filepath.Join("docs", "PLAN.md"), "Created task graph (1 task(s)).", "S001 LOCAL_DONE", "all tasks done"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout)
 		}
@@ -978,7 +978,7 @@ func TestRunAutoGeneratesPlanFromPRD(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "source: "+filepath.Join("docs", "PRD.md")) {
+	if !strings.Contains(stdout, "Source: "+filepath.Join("docs", "PRD.md")) {
 		t.Errorf("stdout = %q", stdout)
 	}
 	if !strings.Contains(stdout, "all tasks done") {
@@ -1013,7 +1013,7 @@ func TestRunGraphExecutesReadyTask(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "T001 DONE") {
+	if !strings.Contains(stdout, "T001 LOCAL_DONE") {
 		t.Errorf("stdout missing completion: %q", stdout)
 	}
 
@@ -1026,8 +1026,11 @@ func TestRunGraphExecutesReadyTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("get task: %v", err)
 	}
-	if got.Status != domain.DONE {
-		t.Errorf("persisted status = %s, want DONE", got.Status)
+	if got.Status != domain.LOCAL_DONE {
+		t.Errorf("persisted status = %s, want LOCAL_DONE", got.Status)
+	}
+	if got.Status == domain.DONE || got.Status == domain.MERGED {
+		t.Error("local completion must not claim remote states")
 	}
 }
 
@@ -1307,6 +1310,49 @@ func TestRunEvalBadArgs(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "usage") {
 		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunRepeatedRunIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, out, errs := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitOK {
+		t.Fatalf("first run: code=%d stderr=%s stdout=%s", code, errs, out)
+	} else if !strings.Contains(out, "Created task graph") {
+		t.Errorf("first run should create tasks: %q", out)
+	}
+
+	code, out, errs := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("second run: code=%d stderr=%s stdout=%s", code, errs, out)
+	}
+	if strings.Contains(out, "Created task graph") {
+		t.Errorf("second run must not recreate tasks: %q", out)
+	}
+	if !strings.Contains(out, "all tasks done") {
+		t.Errorf("second run should report completion: %q", out)
+	}
+}
+
+func TestRunValidateSubdirectoryCommand(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "backend"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - cd backend && true\n")
+
+	code, stdout, stderr := runCLI(t, dir, "validate")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "validation: PASS") {
+		t.Errorf("stdout = %q", stdout)
 	}
 }
 

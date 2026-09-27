@@ -1,10 +1,13 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -59,11 +62,37 @@ func ensureProjectInitialized(dir string) (configWritten bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	if present {
-		return false, nil
+	configWritten = false
+	if !present {
+		if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
+			return false, err
+		}
+		configWritten = true
 	}
-	if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
-		return false, err
+
+	// SOP runtime state must not make an otherwise clean source tree dirty.
+	if err := ensureRuntimeIgnored(dir); err != nil {
+		return configWritten, err
 	}
-	return true, nil
+	return configWritten, nil
+}
+
+// ensureRuntimeIgnored adds the state directory to the project's .gitignore when
+// it is not already covered, so SOP-owned runtime state never counts as a source
+// modification. It is idempotent and creates .gitignore when absent.
+func ensureRuntimeIgnored(dir string) error {
+	path := filepath.Join(dir, ".gitignore")
+	data, err := os.ReadFile(path)
+	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	content := string(data)
+	if strings.Contains(content, stateDirName) {
+		return nil
+	}
+	if content != "" && !strings.HasSuffix(content, "\n") {
+		content += "\n"
+	}
+	content += stateDirName + "/\n"
+	return os.WriteFile(path, []byte(content), 0o644)
 }

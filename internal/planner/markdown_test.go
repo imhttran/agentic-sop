@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -111,5 +112,26 @@ func TestCompilePrefersDeterministic(t *testing.T) {
 func TestCompileRequiresAgentForFallback(t *testing.T) {
 	if _, err := New(nil).Compile(context.Background(), "not a plan"); err == nil {
 		t.Error("expected an error when there is no agent to normalize")
+	}
+}
+
+func TestValidateRejectsCycle(t *testing.T) {
+	plan := &Plan{Project: "P", Summary: "S", Stages: []Stage{
+		{ID: "S001", Title: "a", Objective: "o", AcceptanceCriteria: []string{"x"}, Dependencies: []string{"S002"}},
+		{ID: "S002", Title: "b", Objective: "o", AcceptanceCriteria: []string{"x"}, Dependencies: []string{"S001"}},
+	}}
+	err := plan.Validate()
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("Validate() = %v, want a cycle error", err)
+	}
+}
+
+func TestCompileSurfacesInvalidRecognizedPlan(t *testing.T) {
+	// A cyclic document is recognizably a plan, so its structure is authoritative:
+	// the compiler reports the problem instead of asking the agent to replace it.
+	doc := "# Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — a\n\no\n\n### Dependencies\n\n- S002\n\n### Acceptance Criteria\n\n- x\n\n## S002 — b\n\no\n\n### Dependencies\n\n- S001\n\n### Acceptance Criteria\n\n- x\n"
+	_, err := New(fakeAgent{content: "SHOULD NOT BE USED"}).Compile(context.Background(), doc)
+	if err == nil || !strings.Contains(err.Error(), "cycle") {
+		t.Fatalf("Compile() = %v, want a cycle error (no silent agent fallback)", err)
 	}
 }

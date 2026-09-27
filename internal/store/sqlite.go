@@ -464,7 +464,7 @@ func isValidStatus(status domain.TaskStatus) bool {
 		domain.PLANNED, domain.READY, domain.BRANCH_CREATED, domain.TESTS_WRITTEN,
 		domain.RED_VERIFIED, domain.IMPLEMENTING, domain.LOCAL_TESTS_PASS, domain.REVIEW,
 		domain.REVIEW_PASS, domain.PR_OPEN, domain.CI_RUNNING, domain.CI_PASS,
-		domain.FIX_REQUIRED, domain.MERGED, domain.DONE, domain.BLOCKED,
+		domain.FIX_REQUIRED, domain.MERGED, domain.DONE, domain.LOCAL_DONE, domain.BLOCKED,
 	}
 	for _, v := range validStatuses {
 		if status == v {

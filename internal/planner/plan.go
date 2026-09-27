@@ -90,5 +90,50 @@ func (p *Plan) Validate() error {
 		}
 	}
 
+	if err := detectCycle(p.Stages); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// detectCycle reports the first dependency cycle, naming the path so the error
+// is actionable. Dependencies were already checked to reference known stages.
+func detectCycle(stages []Stage) error {
+	const (
+		white = 0
+		grey  = 1
+		black = 2
+	)
+
+	state := make(map[string]int, len(stages))
+	deps := make(map[string][]string, len(stages))
+	for _, stage := range stages {
+		deps[stage.ID] = stage.Dependencies
+	}
+
+	var visit func(id string, path []string) error
+	visit = func(id string, path []string) error {
+		switch state[id] {
+		case grey:
+			return fmt.Errorf("plan: dependency cycle: %s", strings.Join(append(path, id), " -> "))
+		case black:
+			return nil
+		}
+		state[id] = grey
+		for _, dep := range deps[id] {
+			if err := visit(dep, append(path, id)); err != nil {
+				return err
+			}
+		}
+		state[id] = black
+		return nil
+	}
+
+	for _, stage := range stages {
+		if err := visit(stage.ID, nil); err != nil {
+			return err
+		}
+	}
 	return nil
 }

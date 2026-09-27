@@ -20,6 +20,7 @@ func TestLegalTransitions(t *testing.T) {
 		{LOCAL_TESTS_PASS, REVIEW},
 		{REVIEW, REVIEW_PASS},
 		{REVIEW_PASS, PR_OPEN},
+		{REVIEW_PASS, LOCAL_DONE},
 		{PR_OPEN, CI_RUNNING},
 		{CI_RUNNING, CI_PASS},
 		{CI_PASS, MERGED},
@@ -52,6 +53,7 @@ func TestIllegalTransitions(t *testing.T) {
 		{REVIEW, CI_PASS},
 		{CI_RUNNING, MERGED},
 		{DONE, READY},
+		{LOCAL_DONE, READY},
 		{BLOCKED, IMPLEMENTING},
 		// Skipping states on the happy path
 		{LOCAL_TESTS_PASS, REVIEW_PASS},
@@ -79,10 +81,10 @@ func TestTerminalStatesRejectEveryTransition(t *testing.T) {
 	all := []TaskStatus{
 		PLANNED, READY, BRANCH_CREATED, TESTS_WRITTEN, RED_VERIFIED, IMPLEMENTING,
 		LOCAL_TESTS_PASS, REVIEW, REVIEW_PASS, PR_OPEN, CI_RUNNING, CI_PASS,
-		FIX_REQUIRED, MERGED, DONE, BLOCKED,
+		FIX_REQUIRED, MERGED, DONE, LOCAL_DONE, BLOCKED,
 	}
 
-	for _, terminal := range []TaskStatus{BLOCKED, DONE} {
+	for _, terminal := range []TaskStatus{BLOCKED, DONE, LOCAL_DONE} {
 		task := &Task{ID: "T1", Status: terminal}
 		for _, next := range all {
 			if task.CanTransitionTo(next) {
@@ -217,6 +219,7 @@ func TestDependencyRequiresIntegratedWork(t *testing.T) {
 	cases := map[TaskStatus]bool{
 		DONE:             true,
 		MERGED:           true,
+		LOCAL_DONE:       true,
 		CI_PASS:          false,
 		PR_OPEN:          false,
 		REVIEW_PASS:      false,

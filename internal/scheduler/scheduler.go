@@ -132,7 +132,7 @@ func (s *Scheduler) Next(_ context.Context) (Result, error) {
 // from scheduling another task. PLANNED and terminal states are not active.
 func isActive(status domain.TaskStatus) bool {
 	switch status {
-	case domain.PLANNED, domain.MERGED, domain.DONE, domain.BLOCKED:
+	case domain.PLANNED, domain.MERGED, domain.DONE, domain.LOCAL_DONE, domain.BLOCKED:
 		return false
 	default:
 		return true

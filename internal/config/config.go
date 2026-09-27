@@ -62,6 +62,7 @@ type Config struct {
 	Human      Human          `yaml:"human"`
 	Decision   DecisionConfig `yaml:"decision"`
 	Features   Features       `yaml:"features"`
+	Workflow   Workflow       `yaml:"workflow"`
 }
 
 // Project holds project metadata.
@@ -135,6 +136,13 @@ type Features struct {
 	JevDecisions bool `yaml:"jev_decisions"`
 }
 
+// Workflow configures how a task's completion is represented. "local" completes
+// a task at LOCAL_DONE — the local lifecycle ran but no PR, CI, or merge did;
+// "pull-request" is reserved for the remote lifecycle.
+type Workflow struct {
+	Mode string `yaml:"mode"`
+}
+
 // Default returns the built-in configuration, the same values the generated
 // template documents.
 func Default() Config {
@@ -155,6 +163,7 @@ func Default() Config {
 			Provider:   "deterministic",
 			Thresholds: decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4},
 		},
+		Workflow: Workflow{Mode: "local"},
 	}
 }
 
@@ -238,6 +247,9 @@ func (c *Config) applyDefaults() {
 	if c.Decision.Thresholds == (decision.Thresholds{}) {
 		c.Decision.Thresholds = decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4}
 	}
+	if strings.TrimSpace(c.Workflow.Mode) == "" {
+		c.Workflow.Mode = "local"
+	}
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -273,6 +285,11 @@ func (c *Config) Validate() error {
 	t := c.Decision.Thresholds
 	if t.RouteToStrongModel < 0 || t.RouteToStrongModel > 1 || t.RequireHuman < 0 || t.RequireHuman > 1 {
 		return errors.New("config: decision thresholds must be within [0,1]")
+	}
+	switch strings.TrimSpace(c.Workflow.Mode) {
+	case "local", "pull-request":
+	default:
+		return fmt.Errorf("config: unknown workflow.mode %q (want local, pull-request)", c.Workflow.Mode)
 	}
 	return nil
 }

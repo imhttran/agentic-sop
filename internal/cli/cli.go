@@ -154,7 +154,7 @@ Commands:
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine
-  run       run a task file or the task graph through the local lifecycle
+  run       run the project (normal entry point); also runs one TASK.md
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)

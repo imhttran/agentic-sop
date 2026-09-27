@@ -118,18 +118,21 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 	return plan, nil
 }
 
-// Compile returns a validated Plan from a human plan document: it tries the
-// deterministic compiler first, and only if that yields an invalid plan asks the
-// configured agent to normalize the document.
+// Compile returns a validated Plan from a human plan document. When the document
+// is recognizably a plan (it parses into stages), its structure is authoritative:
+// validation errors are surfaced, not silently repaired by the agent. Only when
+// the document is not recognizable as a plan does the configured agent normalize
+// it — and even then the result must pass the same deterministic validation.
 func (p *Planner) Compile(ctx context.Context, markdown string) (*Plan, error) {
 	if strings.TrimSpace(markdown) == "" {
 		return nil, fmt.Errorf("plan document is empty")
 	}
 
-	if plan, err := PlanFromMarkdown(markdown); err == nil {
-		if err := plan.Validate(); err == nil {
-			return plan, nil
+	if parsed, _ := PlanFromMarkdown(markdown); parsed != nil && len(parsed.Stages) > 0 {
+		if err := parsed.Validate(); err != nil {
+			return nil, err
 		}
+		return parsed, nil
 	}
 
 	if p == nil || p.agent == nil {

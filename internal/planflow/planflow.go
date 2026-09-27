@@ -1,8 +1,9 @@
 // Package planflow prepares a project for execution: it discovers the human
 // planning source, keeps the machine plan (.agent-sdlc/plan.json) in step with
 // it, and creates persisted tasks when none exist. It is deterministic except
-// where the configured agent is genuinely needed (generating or normalizing a
-// plan), and it is safe to run repeatedly.
+// where the configured agent is genuinely needed (generating a plan from a PRD,
+// or normalizing a document that is not recognizably a plan), and it is safe to
+// run repeatedly.
 //
 // Source precedence:
 //
@@ -15,8 +16,10 @@
 //
 // A human PLAN is preferred over the PRD: the PRD is only used to generate a plan
 // when no PLAN exists. plan.json never silently overrides a newer human PLAN —
-// the source path and a content fingerprint are recorded so a changed plan
-// document triggers a rebuild.
+// the source path and a content hash (source_sha256) are recorded so a changed
+// plan document is detected. If the source changes after tasks already exist,
+// reconciliation is unsafe and Prepare stops with an actionable NEEDS_HUMAN error
+// rather than discarding task execution history.
 package planflow
 
 import (
@@ -28,6 +31,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -67,99 +71,171 @@ type Options struct {
 type Result struct {
 	Source       string // relative path of the human source; "" when none is used
 	SourceKind   string // KindPlan | KindPRD | KindExisting
-	PlanRebuilt  bool
-	TasksCreated int
+	PlanRebuilt  bool   // the machine plan was (re)built this run
+	PlanDoc      string // human plan document written when generating from a PRD
+	TasksCreated int    // tasks created this run (0 when they already existed)
 }
 
 // Metadata records plan.json's provenance so a changed human source is detected.
 type Metadata struct {
-	Source      string    `json:"source"`
-	SourceKind  string    `json:"source_kind"`
-	Fingerprint string    `json:"fingerprint"`
-	GeneratedAt time.Time `json:"generated_at"`
+	Source       string    `json:"source"`
+	SourceKind   string    `json:"source_kind"`
+	SourceSHA256 string    `json:"source_sha256"`
+	GeneratedAt  time.Time `json:"generated_at"`
 }
 
-// Prepare ensures the machine plan and persisted tasks exist. It is idempotent:
-// with tasks already present it does nothing.
+// Prepare ensures the project is ready to execute: it reconciles existing tasks,
+// or discovers the source, builds the machine plan, validates it, and creates
+// tasks. It is idempotent.
 func Prepare(ctx context.Context, opts Options) (Result, error) {
-	var res Result
+	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
+	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
 
 	tasks, err := opts.Store.List()
 	if err != nil {
-		return res, err
+		return Result{}, err
 	}
 	if len(tasks) > 0 {
-		res.SourceKind = KindExisting
-		return res, nil
+		return reconcileState(opts, planPath, metaPath)
 	}
 
-	stateDir := filepath.Join(opts.Dir, config.DirName)
-	planPath := filepath.Join(stateDir, planFileName)
-	metaPath := filepath.Join(stateDir, metaFileName)
-
-	docPath, docKind := discover(opts.Dir)
-	meta := readMetadata(metaPath)
-
-	var plan *planner.Plan
-	switch {
-	case docPath != "":
-		data, err := os.ReadFile(docPath)
-		if err != nil {
-			return res, fmt.Errorf("planflow: read %s: %w", docPath, err)
-		}
-		rel, err := filepath.Rel(opts.Dir, docPath)
-		if err != nil {
-			rel = docPath
-		}
-		res.Source = rel
-		res.SourceKind = docKind
-
-		// Reuse the machine plan when it was built from this exact source.
-		if meta.Source == rel && meta.Fingerprint == fingerprint(data) {
-			if existing, ok := loadPlan(planPath); ok {
-				plan = existing
-			}
-		}
-
-		if plan == nil {
-			built, err := buildPlan(ctx, opts.Agent, docKind, string(data))
-			if err != nil {
-				return res, err
-			}
-			if err := writePlan(planPath, built); err != nil {
-				return res, err
-			}
-			_ = writeMetadata(metaPath, Metadata{
-				Source:      rel,
-				SourceKind:  docKind,
-				Fingerprint: fingerprint(data),
-				GeneratedAt: time.Now().UTC(),
-			})
-			plan = built
-			res.PlanRebuilt = true
-		}
-
-	default:
-		// No human source: fall back to an existing machine plan.
-		existing, ok := loadPlan(planPath)
-		if !ok {
-			return res, errors.New("planflow: no docs/PLAN.md, PLAN.md, docs/PRD.md, PRD.md, or .agent-sdlc/plan.json found")
-		}
-		plan = existing
+	docPath, docKind := discoverPlanningSource(opts.Dir)
+	res := Result{
+		Source:     relOf(opts.Dir, docPath),
+		SourceKind: docKind,
+	}
+	if docPath == "" {
 		res.SourceKind = KindExisting
 	}
 
-	created, err := taskbuilder.CreateTasksFromPlan(plan, opts.Store.SaveTasks)
+	plan, rebuilt, docWritten, err := ensurePlan(ctx, opts, docPath, docKind, planPath, metaPath)
 	if err != nil {
 		return res, err
 	}
-	res.TasksCreated = len(created)
+	res.PlanRebuilt = rebuilt
+	res.PlanDoc = docWritten
+
+	if err := validatePlan(res.Source, plan); err != nil {
+		return res, err
+	}
+
+	created, err := ensureTasks(res.Source, plan, opts.Store)
+	if err != nil {
+		return res, err
+	}
+	res.TasksCreated = created
 	return res, nil
 }
 
-// discover returns the first human planning document by precedence: a PLAN is
-// preferred over a PRD.
-func discover(dir string) (path, kind string) {
+// reconcileState handles the case where tasks already exist. It resumes when the
+// human source still matches what the machine plan was built from, and otherwise
+// stops with an actionable NEEDS_HUMAN error.
+func reconcileState(opts Options, planPath, metaPath string) (Result, error) {
+	res := Result{SourceKind: KindExisting}
+
+	docPath, docKind := discoverPlanningSource(opts.Dir)
+	if docPath == "" {
+		return res, nil // no human source to reconcile against
+	}
+
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		return res, fmt.Errorf("planflow: read %s: %w", docPath, err)
+	}
+	rel := relOf(opts.Dir, docPath)
+	res.Source = rel
+	res.SourceKind = docKind
+
+	meta := readMetadata(metaPath)
+	// Only a recorded source that no longer matches proves a change; an
+	// unrecorded source (for example after `sop plan` + `sop tasks`) is reused.
+	if meta.Source != "" && (meta.Source != rel || meta.SourceSHA256 != fingerprint(data)) {
+		return res, reconcileError(rel, meta)
+	}
+	return res, nil
+}
+
+// ensurePlan returns the machine plan, rebuilding it when the human source is new
+// or has changed. It reports whether the plan was rebuilt and, when generating
+// from a PRD, the relative path of a human plan document it wrote.
+func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, metaPath string) (*planner.Plan, bool, string, error) {
+	if docPath == "" {
+		existing, ok := loadPlan(planPath)
+		if !ok {
+			return nil, false, "", errors.New("planflow: no docs/PLAN.md, PLAN.md, docs/PRD.md, PRD.md, or .agent-sdlc/plan.json found")
+		}
+		return existing, false, "", nil
+	}
+
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		return nil, false, "", fmt.Errorf("planflow: read %s: %w", docPath, err)
+	}
+	rel := relOf(opts.Dir, docPath)
+
+	// Reuse the machine plan when it was built from this exact source.
+	if meta := readMetadata(metaPath); meta.Source == rel && meta.SourceSHA256 == fingerprint(data) {
+		if existing, ok := loadPlan(planPath); ok {
+			return existing, false, "", nil
+		}
+	}
+
+	plan, err := buildPlan(ctx, opts.Agent, docKind, string(data))
+	if err != nil {
+		return nil, false, "", planError(rel, err)
+	}
+	if err := plan.Validate(); err != nil {
+		return nil, false, "", planError(rel, err)
+	}
+	if err := writePlan(planPath, plan); err != nil {
+		return nil, false, "", err
+	}
+	_ = writeMetadata(metaPath, Metadata{
+		Source:       rel,
+		SourceKind:   docKind,
+		SourceSHA256: fingerprint(data),
+		GeneratedAt:  time.Now().UTC(),
+	})
+
+	docWritten := ""
+	if docKind == KindPRD {
+		docWritten = writeGeneratedPlanDoc(opts.Dir, docPath, plan)
+	}
+	return plan, true, docWritten, nil
+}
+
+// validatePlan re-checks the executable graph deterministically (ids, references,
+// cycles, non-empty) and attaches the source path to any diagnostic.
+func validatePlan(source string, plan *planner.Plan) error {
+	if err := plan.Validate(); err != nil {
+		return planError(source, err)
+	}
+	return nil
+}
+
+// ensureTasks creates the task graph when none exists yet.
+func ensureTasks(source string, plan *planner.Plan, store TaskStore) (int, error) {
+	tasks, err := taskbuilder.CreateTasksFromPlan(plan, store.SaveTasks)
+	if err != nil {
+		return 0, planError(source, err)
+	}
+	return len(tasks), nil
+}
+
+// buildPlan compiles a human PLAN.md or generates a plan from a PRD.
+func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*planner.Plan, error) {
+	if kind == KindPlan {
+		return planner.New(a).Compile(ctx, content)
+	}
+	if a == nil {
+		return nil, errors.New("planflow: no agent available to generate a plan from the PRD")
+	}
+	return planner.New(a).Generate(ctx, content)
+}
+
+// discoverPlanningSource returns the first human planning document by precedence:
+// a PLAN is preferred over a PRD.
+func discoverPlanningSource(dir string) (path, kind string) {
 	for _, candidate := range []string{filepath.Join("docs", "PLAN.md"), "PLAN.md"} {
 		full := filepath.Join(dir, candidate)
 		if fileExists(full) {
@@ -175,15 +251,18 @@ func discover(dir string) (path, kind string) {
 	return "", ""
 }
 
-// buildPlan compiles a human PLAN.md or generates a plan from a PRD.
-func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*planner.Plan, error) {
-	if kind == KindPlan {
-		return planner.New(a).Compile(ctx, content)
+// writeGeneratedPlanDoc writes the human-readable plan generated from a PRD to a
+// sibling PLAN.md (docs/PLAN.md for docs/PRD.md, PLAN.md for PRD.md). It never
+// overwrites an existing PLAN. It returns the relative path written, or "".
+func writeGeneratedPlanDoc(dir, prdPath string, plan *planner.Plan) string {
+	target := filepath.Join(filepath.Dir(prdPath), "PLAN.md")
+	if fileExists(target) {
+		return ""
 	}
-	if a == nil {
-		return nil, errors.New("planflow: no agent available to generate a plan from the PRD")
+	if err := atomicWrite(target, []byte(plan.RenderMarkdown())); err != nil {
+		return ""
 	}
-	return planner.New(a).Generate(ctx, content)
+	return relOf(dir, target)
 }
 
 // loadPlan reads and validates a machine plan; ok is false when it is missing or
@@ -201,6 +280,26 @@ func loadPlan(path string) (*planner.Plan, bool) {
 		return nil, false
 	}
 	return &plan, true
+}
+
+// planError formats a plan-problem diagnostic that names the source and the
+// recovery command.
+func planError(source string, err error) error {
+	name := source
+	if strings.TrimSpace(name) == "" {
+		name = filepath.Join(config.DirName, planFileName)
+	}
+	detail := strings.TrimSpace(strings.TrimPrefix(err.Error(), "plan: "))
+	return fmt.Errorf("PLAN validation failed\n\n%s\n%s\n\nFix %s and rerun:\n\n  sop run", name, detail, name)
+}
+
+// reconcileError explains an unsafe reconciliation.
+func reconcileError(source string, meta Metadata) error {
+	recorded := meta.Source
+	if recorded == "" {
+		recorded = "(not recorded)"
+	}
+	return fmt.Errorf("NEEDS_HUMAN: plan changed since the task graph was created\n\nSource:   %s\nRecorded: %s\n\nSOP will not silently rebuild the machine plan or discard task\nexecution history. Review the change, reconcile explicitly, then rerun:\n\n  sop run", source, recorded)
 }
 
 // writePlan writes the machine plan atomically.
@@ -222,7 +321,7 @@ func writeMetadata(path string, meta Metadata) error {
 }
 
 // readMetadata reads provenance, returning the zero value when it is absent or
-// unreadable (an unreadable metadata file is treated as "unknown source").
+// unreadable (treated as "unknown source").
 func readMetadata(path string) Metadata {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -239,6 +338,18 @@ func readMetadata(path string) Metadata {
 func fingerprint(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// relOf returns target relative to base when possible, else target. An empty
+// target stays empty.
+func relOf(base, target string) string {
+	if target == "" {
+		return ""
+	}
+	if rel, err := filepath.Rel(base, target); err == nil {
+		return rel
+	}
+	return target
 }
 
 // fileExists reports whether path exists and is a regular file.
