@@ -1,25 +1,23 @@
-// Package planflow prepares a project for execution: it discovers the human
-// planning source, keeps the machine plan (.agent-sdlc/plan.json) in step with
-// it, and creates persisted tasks when none exist. It is deterministic except
+// Package planflow prepares a project for execution: it discovers or resolves the
+// human planning source, keeps the machine plan (.agent-sdlc/plan.json) in step
+// with it, and creates persisted tasks when none exist. It is deterministic except
 // where the configured agent is genuinely needed (generating a plan from a PRD,
 // or normalizing a document that is not recognizably a plan), and it is safe to
 // run repeatedly.
 //
-// Source precedence:
+// A project may hold several PLAN files (for example docs/PLAN.md,
+// docs/PLAN-Hardening.md, docs/PLAN-MCP.md). Each has its own identity — source
+// path, content hash, and plan id — recorded beside the machine plan, so SOP
+// never confuses one plan's tasks with another's. When no plan is named, source
+// precedence is:
 //
-//  1. an existing valid .agent-sdlc/plan.json (reused only when the human source
-//     it was built from is unchanged)
+//  1. an existing valid .agent-sdlc/plan.json (reused only when its source is unchanged)
 //  2. docs/PLAN.md
 //  3. PLAN.md
 //  4. docs/PRD.md
 //  5. PRD.md
 //
-// A human PLAN is preferred over the PRD: the PRD is only used to generate a plan
-// when no PLAN exists. plan.json never silently overrides a newer human PLAN —
-// the source path and a content hash (source_sha256) are recorded so a changed
-// plan document is detected. If the source changes after tasks already exist,
-// reconciliation is unsafe and Prepare stops with an actionable NEEDS_HUMAN error
-// rather than discarding task execution history.
+// When a plan is named explicitly it is authoritative for that execution.
 package planflow
 
 import (
@@ -53,39 +51,49 @@ const (
 	KindExisting = "existing"
 )
 
+// errNoAgent is returned when building a plan requires the agent but none is
+// configured. It is actionable on its own and is not wrapped as a validation
+// failure.
+var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed to generate a plan from a PRD, or to normalize a PLAN.md that is not recognizable)")
+
 // TaskStore is the persistence slice Prepare needs.
 type TaskStore interface {
 	List() ([]*domain.Task, error)
 	SaveTasks(tasks []*domain.Task) error
 }
 
-// Options configures Prepare. Agent may be nil when no generation or
-// normalization is required (for example when an up-to-date plan.json is reused).
+// Options configures Prepare. PlanSource, when set, is the resolved absolute path
+// of an explicitly selected PLAN and is authoritative for the execution. Agent
+// may be nil when no generation or normalization is required.
 type Options struct {
-	Dir   string
-	Agent agent.Agent
-	Store TaskStore
+	Dir        string
+	PlanSource string
+	Agent      agent.Agent
+	Store      TaskStore
 }
 
 // Result reports what Prepare did.
 type Result struct {
 	Source       string // relative path of the human source; "" when none is used
 	SourceKind   string // KindPlan | KindPRD | KindExisting
+	PlanID       string // stable identity of the source plan
 	PlanRebuilt  bool   // the machine plan was (re)built this run
 	PlanDoc      string // human plan document written when generating from a PRD
 	TasksCreated int    // tasks created this run (0 when they already existed)
 }
 
-// Metadata records plan.json's provenance so a changed human source is detected.
+// Metadata records plan.json's provenance so a changed or different human source
+// is detected without relying on modification time.
 type Metadata struct {
 	Source       string    `json:"source"`
 	SourceKind   string    `json:"source_kind"`
 	SourceSHA256 string    `json:"source_sha256"`
+	PlanID       string    `json:"plan_id"`
 	GeneratedAt  time.Time `json:"generated_at"`
 }
 
 // Prepare ensures the project is ready to execute: it reconciles existing tasks,
-// or discovers the source, builds the machine plan, validates it, and creates
+// or resolves the source, builds the machine plan, validates it, and creates
 // tasks. It is idempotent.
 func Prepare(ctx context.Context, opts Options) (Result, error) {
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
@@ -96,16 +104,15 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	if len(tasks) > 0 {
-		return reconcileState(opts, planPath, metaPath)
+		return reconcileState(opts, metaPath)
 	}
 
-	docPath, docKind := discoverPlanningSource(opts.Dir)
-	res := Result{
-		Source:     relOf(opts.Dir, docPath),
-		SourceKind: docKind,
-	}
+	docPath, docKind := requestedSource(opts)
+	rel := relOf(opts.Dir, docPath)
+	res := Result{Source: rel, SourceKind: docKind, PlanID: planID(rel)}
 	if docPath == "" {
 		res.SourceKind = KindExisting
+		res.PlanID = ""
 	}
 
 	plan, rebuilt, docWritten, err := ensurePlan(ctx, opts, docPath, docKind, planPath, metaPath)
@@ -127,15 +134,25 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 	return res, nil
 }
 
+// requestedSource returns the plan to execute: the explicit source when one was
+// given, otherwise the discovered source by precedence.
+func requestedSource(opts Options) (path, kind string) {
+	if strings.TrimSpace(opts.PlanSource) != "" {
+		return opts.PlanSource, KindPlan
+	}
+	return discoverPlanningSource(opts.Dir)
+}
+
 // reconcileState handles the case where tasks already exist. It resumes when the
-// human source still matches what the machine plan was built from, and otherwise
-// stops with an actionable NEEDS_HUMAN error.
-func reconcileState(opts Options, planPath, metaPath string) (Result, error) {
+// requested plan matches what the task graph was built from, and otherwise stops
+// with an actionable NEEDS_HUMAN error rather than mixing plans or discarding
+// history.
+func reconcileState(opts Options, metaPath string) (Result, error) {
 	res := Result{SourceKind: KindExisting}
 
-	docPath, docKind := discoverPlanningSource(opts.Dir)
+	docPath, docKind := requestedSource(opts)
 	if docPath == "" {
-		return res, nil // no human source to reconcile against
+		return res, nil // no plan to reconcile against
 	}
 
 	data, err := os.ReadFile(docPath)
@@ -145,14 +162,21 @@ func reconcileState(opts Options, planPath, metaPath string) (Result, error) {
 	rel := relOf(opts.Dir, docPath)
 	res.Source = rel
 	res.SourceKind = docKind
+	res.PlanID = planID(rel)
 
 	meta := readMetadata(metaPath)
-	// Only a recorded source that no longer matches proves a change; an
-	// unrecorded source (for example after `sop plan` + `sop tasks`) is reused.
-	if meta.Source != "" && (meta.Source != rel || meta.SourceSHA256 != fingerprint(data)) {
-		return res, reconcileError(rel, meta)
+	switch {
+	case meta.Source == "":
+		// No recorded provenance (for example after `sop plan` + `sop tasks`):
+		// reuse rather than block.
+		return res, nil
+	case meta.Source == rel && meta.SourceSHA256 == fingerprint(data):
+		return res, nil // same plan, same content
+	case meta.Source == rel:
+		return res, planChangedError(rel)
+	default:
+		return res, differentPlanError(rel, meta.Source, meta.PlanID)
 	}
-	return res, nil
 }
 
 // ensurePlan returns the machine plan, rebuilding it when the human source is new
@@ -173,7 +197,7 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 	}
 	rel := relOf(opts.Dir, docPath)
 
-	// Reuse the machine plan when it was built from this exact source.
+	// Reuse the machine plan only when it was built from this exact source.
 	if meta := readMetadata(metaPath); meta.Source == rel && meta.SourceSHA256 == fingerprint(data) {
 		if existing, ok := loadPlan(planPath); ok {
 			return existing, false, "", nil
@@ -197,6 +221,7 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 		Source:       rel,
 		SourceKind:   docKind,
 		SourceSHA256: fingerprint(data),
+		PlanID:       planID(rel),
 		GeneratedAt:  time.Now().UTC(),
 	})
 
@@ -224,11 +249,6 @@ func ensureTasks(source string, plan *planner.Plan, store TaskStore) (int, error
 	}
 	return len(tasks), nil
 }
-
-// errNoAgent is returned when building a plan requires the agent but none is
-// configured. It is actionable on its own and is not wrapped as a validation
-// failure.
-var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed to generate a plan from a PRD, or to normalize a PLAN.md that is not recognizable)")
 
 // buildPlan compiles a human PLAN.md or generates a plan from a PRD.
 func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*planner.Plan, error) {
@@ -264,6 +284,45 @@ func discoverPlanningSource(dir string) (path, kind string) {
 		}
 	}
 	return "", ""
+}
+
+// ResolvePlanPath resolves a user-supplied plan path relative to the project
+// root, additionally checking docs/ when the bare name is not at the root. When
+// both locations exist the choice is ambiguous and an actionable error is
+// returned rather than a silent pick.
+func ResolvePlanPath(dir, arg string) (string, error) {
+	arg = strings.TrimSpace(arg)
+	if arg == "" {
+		return "", errors.New("plan path is empty")
+	}
+	if filepath.IsAbs(arg) {
+		if !fileExists(arg) {
+			return "", fmt.Errorf("PLAN not found: %s", arg)
+		}
+		return arg, nil
+	}
+
+	root := filepath.Join(dir, filepath.Clean(arg))
+	alt := filepath.Join(dir, "docs", filepath.Base(arg))
+
+	hasRoot := fileExists(root)
+	hasAlt := alt != root && fileExists(alt)
+
+	switch {
+	case hasRoot && hasAlt:
+		return "", fmt.Errorf("multiple plans match %s:\n\n  %s\n  %s\n\nSpecify the plan explicitly:\n\n  sop run %s",
+			arg, displayPath(dir, root), displayPath(dir, alt), displayPath(dir, alt))
+	case hasRoot:
+		return root, nil
+	case hasAlt:
+		return alt, nil
+	default:
+		looked := []string{displayPath(dir, root)}
+		if alt != root {
+			looked = append(looked, displayPath(dir, alt))
+		}
+		return "", fmt.Errorf("PLAN not found: %s\n\nLooked for:\n  %s", arg, strings.Join(looked, "\n  "))
+	}
 }
 
 // writeGeneratedPlanDoc writes the human-readable plan generated from a PRD to a
@@ -305,16 +364,54 @@ func planError(source string, err error) error {
 		name = filepath.Join(config.DirName, planFileName)
 	}
 	detail := strings.TrimSpace(strings.TrimPrefix(err.Error(), "plan: "))
-	return fmt.Errorf("PLAN validation failed\n\n%s\n%s\n\nFix %s and rerun:\n\n  sop run", name, detail, name)
+	return fmt.Errorf("Plan validation failed:\n\n  %s\n\nNo work was executed.\n\nFix %s and rerun:\n\n  sop run %s", detail, name, name)
 }
 
-// reconcileError explains an unsafe reconciliation.
-func reconcileError(source string, meta Metadata) error {
-	recorded := meta.Source
-	if recorded == "" {
-		recorded = "(not recorded)"
+// planChangedError explains that the recorded plan source changed.
+func planChangedError(source string) error {
+	return fmt.Errorf("NEEDS_HUMAN: plan changed since the task graph was created\n\nSource: %s\n\nSOP will not silently rebuild the machine plan or discard task\nexecution history. Review the change, reconcile explicitly, then rerun:\n\n  sop run %s", source, source)
+}
+
+// differentPlanError explains that a different plan is already active.
+func differentPlanError(requested, active, activeID string) error {
+	if activeID == "" {
+		activeID = "(unknown)"
 	}
-	return fmt.Errorf("NEEDS_HUMAN: plan changed since the task graph was created\n\nSource:   %s\nRecorded: %s\n\nSOP will not silently rebuild the machine plan or discard task\nexecution history. Review the change, reconcile explicitly, then rerun:\n\n  sop run", source, recorded)
+	return fmt.Errorf("NEEDS_HUMAN: a different plan is already active\n\nActive:    %s\nRequested: %s\n\nThe existing tasks belong to %s (%s). SOP will not mix two\nplans in one task graph. Finish or reconcile the active plan (for example by\nremoving .agent-sdlc/state.db to start fresh), then rerun:\n\n  sop run %s", active, requested, active, activeID, requested)
+}
+
+// planID derives a stable identity from a plan's relative path: the file name
+// without its extension, lowercased and dash-separated (docs/PLAN-Hardening.md →
+// plan-hardening).
+func planID(rel string) string {
+	if strings.TrimSpace(rel) == "" {
+		return ""
+	}
+	base := strings.TrimSuffix(filepath.Base(rel), filepath.Ext(rel))
+	var b strings.Builder
+	pendingDash := false
+	for _, r := range strings.ToLower(base) {
+		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') {
+			if pendingDash && b.Len() > 0 {
+				b.WriteByte('-')
+			}
+			pendingDash = false
+			b.WriteRune(r)
+			continue
+		}
+		pendingDash = true
+	}
+	return b.String()
+}
+
+// displayPath renders a path for a message: relative to the project root with a
+// leading "./".
+func displayPath(dir, path string) string {
+	rel, err := filepath.Rel(dir, path)
+	if err != nil {
+		rel = path
+	}
+	return "./" + rel
 }
 
 // writePlan writes the machine plan atomically.

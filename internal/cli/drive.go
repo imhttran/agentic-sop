@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -29,17 +28,16 @@ type graphStore interface {
 	Save(task *domain.Task) error
 }
 
-// runGraph is `sop run` with no argument: the one-command workflow. It brings the
-// project up to a runnable state — initializing state, compiling or generating
-// the machine plan from a human PLAN/PRD, and creating tasks — then drives the
-// task graph. Each step is idempotent and safe to repeat.
-func runGraph(stdout, stderr io.Writer, d deps) int {
+// runGraph is `sop run`: the one-command workflow. It brings the project up to a
+// runnable state — initializing state, compiling or generating the machine plan
+// from a human PLAN/PRD, and creating tasks — then drives the task graph. planArg
+// names an execution PLAN; when it is empty the project's normal plan is
+// discovered. Each step is idempotent and safe to repeat.
+func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	dir, ok := projectDir(d.getwd, stderr)
 	if !ok {
 		return exitError
 	}
-
-	stateExisted := stateDirExists(dir)
 
 	// Equivalent to `sop init`: create state and the configuration template.
 	if _, err := ensureProjectInitialized(dir); err != nil {
@@ -69,8 +67,18 @@ func runGraph(stdout, stderr io.Writer, d deps) int {
 	// configured; execution then reports the missing agent clearly.
 	a, agentErr := d.newAgent(cfg.Agent.Provider)
 
+	var planSource string
+	if planArg != "" {
+		resolved, err := planflow.ResolvePlanPath(dir, planArg)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitError
+		}
+		planSource = resolved
+	}
+
 	ctx := context.Background()
-	prepared, err := planflow.Prepare(ctx, planflow.Options{Dir: dir, Agent: a, Store: st})
+	prepared, err := planflow.Prepare(ctx, planflow.Options{Dir: dir, PlanSource: planSource, Agent: a, Store: st})
 	if err != nil {
 		// Prepare errors are actionable blocks (validation, reconciliation);
 		// print them without a prefix so they stand on their own.
@@ -83,22 +91,32 @@ func runGraph(stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	printStartup(stdout, dir, cfg, prepared, tasks, stateExisted)
+	printStartup(stdout, dir, cfg, prepared, tasks)
 
 	if agentErr != nil {
 		fmt.Fprintf(stderr, "run: prepared the plan and tasks, but cannot execute: %v\n", agentErr)
 		return exitError
 	}
 
-	return driveGraph(ctx, dir, cfg, a, d, st, stdout, stderr)
+	code := driveGraph(ctx, dir, cfg, a, d, st, stdout, stderr)
+	if code == exitOK {
+		if final, err := st.List(); err == nil && allComplete(final) {
+			printCompletion(stdout, dir, cfg, prepared, final)
+		}
+	}
+	return code
 }
 
-// printStartup emits a concise summary of what SOP found and did.
-func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.Result, tasks []*domain.Task, stateExisted bool) {
-	name := strings.TrimSpace(cfg.Project.Name)
-	if name == "" {
-		name = filepath.Base(dir)
+// projectName is the configured project name, or the directory's base name.
+func projectName(dir string, cfg config.Config) string {
+	if name := strings.TrimSpace(cfg.Project.Name); name != "" {
+		return name
 	}
+	return filepath.Base(dir)
+}
+
+// printStartup emits a concise summary of the plan being executed.
+func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.Result, tasks []*domain.Task) {
 	source := prepared.Source
 	if source == "" {
 		source = "(existing plan.json)"
@@ -106,21 +124,36 @@ func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.
 
 	fmt.Fprintln(w, "SOP")
 	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Project: %s\n", name)
+	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
 	fmt.Fprintf(w, "Source: %s\n", source)
-	planState := "current"
-	if prepared.PlanRebuilt {
-		planState = "rebuilt"
-	}
-	fmt.Fprintf(w, "Plan: %s\n", planState)
-	state := "existing"
-	if !stateExisted {
-		state = "initialized"
-	}
-	fmt.Fprintf(w, "State: %s\n", state)
-	fmt.Fprintf(w, "Tasks: %d\n", len(tasks))
 
-	var done, ready, blocked, pending int
+	if prepared.PlanRebuilt {
+		if prepared.PlanID != "" {
+			fmt.Fprintf(w, "Plan ID: %s\n", prepared.PlanID)
+		}
+		fmt.Fprintln(w)
+		if prepared.SourceKind == planflow.KindPRD {
+			fmt.Fprintln(w, "Generating plan...")
+		} else {
+			fmt.Fprintln(w, "Compiling plan...")
+		}
+		fmt.Fprintf(w, "Validated %d tasks.\n", len(tasks))
+	} else {
+		fmt.Fprintln(w, "Plan: current")
+		fmt.Fprintln(w)
+		fmt.Fprintf(w, "Tasks: %d\n", len(tasks))
+		done, ready, blocked := statusCounts(tasks)
+		fmt.Fprintf(w, "Done: %d\nReady: %d\nBlocked: %d\n", done, ready, blocked)
+	}
+
+	if prepared.TasksCreated > 0 {
+		fmt.Fprintf(w, "Created %d task(s).\n", prepared.TasksCreated)
+	}
+	fmt.Fprintln(w)
+}
+
+// statusCounts tallies completed, ready, and blocked tasks.
+func statusCounts(tasks []*domain.Task) (done, ready, blocked int) {
 	for _, task := range tasks {
 		switch task.Status {
 		case domain.LOCAL_DONE, domain.DONE, domain.MERGED:
@@ -129,28 +162,57 @@ func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.
 			ready++
 		case domain.BLOCKED:
 			blocked++
-		case domain.PLANNED:
-			pending++
 		}
 	}
-	fmt.Fprintf(w, "Done: %d  Ready: %d  Blocked: %d  Pending: %d\n", done, ready, blocked, pending)
+	return done, ready, blocked
+}
 
-	if prepared.PlanRebuilt {
-		if prepared.SourceKind == planflow.KindPRD {
-			fmt.Fprintln(w, "Generated plan.")
-		} else {
-			fmt.Fprintln(w, "Compiled plan.")
+// allComplete reports whether every task reached a success terminal state.
+func allComplete(tasks []*domain.Task) bool {
+	if len(tasks) == 0 {
+		return false
+	}
+	for _, task := range tasks {
+		switch task.Status {
+		case domain.LOCAL_DONE, domain.DONE, domain.MERGED:
+		default:
+			return false
 		}
 	}
-	if prepared.TasksCreated > 0 {
-		fmt.Fprintf(w, "Created task graph (%d task(s)).\n", prepared.TasksCreated)
+	return true
+}
+
+// printCompletion emits the completion summary once every task is done.
+func printCompletion(w io.Writer, dir string, cfg config.Config, prepared planflow.Result, tasks []*domain.Task) {
+	fmt.Fprintln(w, "SOP COMPLETE")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
+	if prepared.Source != "" {
+		fmt.Fprintf(w, "Source: %s\n", prepared.Source)
+	}
+	fmt.Fprintf(w, "Tasks: %d/%d complete\n", len(tasks), len(tasks))
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Final gate: PASS")
+	if report := latestReportPath(dir); report != "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Report:")
+		fmt.Fprintln(w, report)
 	}
 }
 
-// stateDirExists reports whether the project state directory already exists.
-func stateDirExists(dir string) bool {
-	info, err := os.Stat(filepath.Join(dir, stateDirName))
-	return err == nil && info.IsDir()
+// latestReportPath returns the newest run report path, or "".
+func latestReportPath(dir string) string {
+	runsRoot := filepath.Join(dir, stateDirName, "runs")
+	id, err := latestRun(runsRoot)
+	if err != nil || id == "" {
+		return ""
+	}
+	candidate := filepath.Join(runsRoot, id, "report.md")
+	present, err := exists(candidate)
+	if err != nil || !present {
+		return ""
+	}
+	return filepath.Join(stateDirName, "runs", id, "report.md")
 }
 
 // driveGraph selects ready tasks with the scheduler and runs the local lifecycle
@@ -207,7 +269,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 // persisted state.
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
-	fmt.Fprintf(stdout, "Running: %s\n", task.ID)
+	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
 	rn, err := runpkg.New(dir, task.ID)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)

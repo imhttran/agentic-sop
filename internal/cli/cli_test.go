@@ -813,7 +813,7 @@ func TestRunEndToEndPass(t *testing.T) {
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
 
-	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "TASK.md")
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "--task", "TASK.md")
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
@@ -841,7 +841,7 @@ func TestRunNoChanges(t *testing.T) {
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "nothing"}
 
-	code, stdout, _ := runInjectedCLI(t, dir, "   \n", a, "run", "TASK.md")
+	code, stdout, _ := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -856,7 +856,7 @@ func TestRunValidationFailureFailsGate(t *testing.T) {
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n  test:\n    - \"true\"\n")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
 
-	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -876,7 +876,7 @@ func TestRunBlockingFindingNeedsHuman(t *testing.T) {
 	}
 
 	// A finding that never clears exhausts the fix budget and needs a human.
-	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -887,7 +887,7 @@ func TestRunBlockingFindingNeedsHuman(t *testing.T) {
 
 func TestRunMissingTaskFile(t *testing.T) {
 	dir := t.TempDir()
-	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "NOPE.md")
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "--task", "NOPE.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -932,7 +932,7 @@ func TestRunGraphFromExistingPlanJSON(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "Created task graph (2 task(s)).") {
+	if !strings.Contains(stdout, "Created 2 task(s).") {
 		t.Errorf("stdout = %q", stdout)
 	}
 	if !strings.Contains(stdout, "all tasks done") {
@@ -955,7 +955,7 @@ func TestRunAutoCompilesPlanFromMarkdown(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	for _, want := range []string{"Source: " + filepath.Join("docs", "PLAN.md"), "Created task graph (1 task(s)).", "S001 LOCAL_DONE", "all tasks done"} {
+	for _, want := range []string{"Source: " + filepath.Join("docs", "PLAN.md"), "Created 1 task(s).", "S001 LOCAL_DONE", "all tasks done"} {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("stdout missing %q:\n%s", want, stdout)
 		}
@@ -1069,7 +1069,7 @@ func TestRunFixLoopResolves(t *testing.T) {
 		},
 	}
 
-	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
@@ -1090,7 +1090,7 @@ func TestRunFixLoopExhausted(t *testing.T) {
 		reviews: []string{`{"summary":"issue","findings":[{"severity":"CRITICAL","title":"bug","file":"a.go","line":1}]}`},
 	}
 
-	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "TASK.md")
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
@@ -1324,7 +1324,7 @@ func TestRunRepeatedRunIsIdempotent(t *testing.T) {
 
 	if code, out, errs := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitOK {
 		t.Fatalf("first run: code=%d stderr=%s stdout=%s", code, errs, out)
-	} else if !strings.Contains(out, "Created task graph") {
+	} else if !strings.Contains(out, "Created 1 task(s).") {
 		t.Errorf("first run should create tasks: %q", out)
 	}
 
@@ -1332,7 +1332,7 @@ func TestRunRepeatedRunIsIdempotent(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("second run: code=%d stderr=%s stdout=%s", code, errs, out)
 	}
-	if strings.Contains(out, "Created task graph") {
+	if strings.Contains(out, "Created ") {
 		t.Errorf("second run must not recreate tasks: %q", out)
 	}
 	if !strings.Contains(out, "all tasks done") {
@@ -1373,13 +1373,134 @@ func TestRunBootstrapsWithoutAgent(t *testing.T) {
 	if !stateExists(filepath.Join(dir, stateDirName, "plan.json")) {
 		t.Error("plan.json was not created without an agent")
 	}
-	if !strings.Contains(stdout, "Created task graph") {
+	if !strings.Contains(stdout, "Created 1 task(s).") {
 		t.Errorf("stdout = %q, want a created task graph", stdout)
 	}
 	if !strings.Contains(stderr, "cannot execute") {
 		t.Errorf("stderr = %q, want the missing-agent message", stderr)
 	}
 }
+
+func TestRunNamedPlan(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN-Hardening.md"))
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	for _, want := range []string{
+		"Source: " + filepath.Join("docs", "PLAN-Hardening.md"),
+		"Plan ID: plan-hardening",
+		"Created 1 task(s).",
+		"S001 LOCAL_DONE",
+		"SOP COMPLETE",
+	} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+}
+
+func TestRunNamedPlanResolvesToDocs(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "PLAN-Hardening.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Source: "+filepath.Join("docs", "PLAN-Hardening.md")) {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunNamedPlanAmbiguous(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "PLAN-Hardening.md", autoPlanDoc)
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "PLAN-Hardening.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "multiple plans match") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunNamedPlanMissing(t *testing.T) {
+	dir := t.TempDir()
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run", "NOPE.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "PLAN not found") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunDifferentPlanStops(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc2)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN-Hardening.md")); code != exitOK {
+		t.Fatalf("first plan: code=%d stderr=%s", code, errs)
+	}
+
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN.md"))
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "different plan is already active") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunChangedPlanStops(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plan := filepath.Join("docs", "PLAN-Hardening.md")
+	writeFile(t, dir, plan, autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", plan); code != exitOK {
+		t.Fatalf("first run: code=%d stderr=%s", code, errs)
+	}
+
+	writeFile(t, dir, plan, strings.ReplaceAll(autoPlanDoc, "Application skeleton", "Renamed"))
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", plan)
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "plan changed") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+const autoPlanDoc2 = "# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nOther plan.\n\n## SC-001 — Other work\n\nDo it.\n\n### Acceptance Criteria\n\n- ok\n"
 
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()

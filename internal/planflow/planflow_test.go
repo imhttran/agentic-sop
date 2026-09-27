@@ -202,7 +202,7 @@ func TestPrepareSurfacesUnknownDependency(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected a validation error")
 	}
-	if !strings.Contains(err.Error(), "PLAN validation failed") || !strings.Contains(err.Error(), "unknown dependency") {
+	if !strings.Contains(err.Error(), "Plan validation failed") || !strings.Contains(err.Error(), "unknown dependency") {
 		t.Errorf("error = %q, want an actionable validation diagnostic", err)
 	}
 }
@@ -217,5 +217,47 @@ func TestPrepareRequiresAgentForPRD(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "no agent") {
 		t.Errorf("error = %q, want an actionable no-agent message", err)
+	}
+}
+
+func TestPlanID(t *testing.T) {
+	cases := map[string]string{
+		"docs/PLAN-Hardening.md": "plan-hardening",
+		"PLAN.md":                "plan",
+		"docs/PLAN-Jev.md":       "plan-jev",
+		"":                       "",
+	}
+	for in, want := range cases {
+		if got := planID(in); got != want {
+			t.Errorf("planID(%q) = %q, want %q", in, got, want)
+		}
+	}
+}
+
+func TestResolvePlanPath(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "PLAN-C.md", "x")
+	write(t, dir, filepath.Join("docs", "PLAN-D.md"), "x")
+	write(t, dir, "PLAN-E.md", "x")
+	write(t, dir, filepath.Join("docs", "PLAN-E.md"), "x")
+
+	if p, err := ResolvePlanPath(dir, "PLAN-C.md"); err != nil || p != filepath.Join(dir, "PLAN-C.md") {
+		t.Errorf("root: p=%q err=%v", p, err)
+	}
+	if p, err := ResolvePlanPath(dir, "PLAN-D.md"); err != nil || p != filepath.Join(dir, "docs", "PLAN-D.md") {
+		t.Errorf("docs fallback: p=%q err=%v", p, err)
+	}
+	if p, err := ResolvePlanPath(dir, filepath.Join("docs", "PLAN-D.md")); err != nil || p != filepath.Join(dir, "docs", "PLAN-D.md") {
+		t.Errorf("explicit docs: p=%q err=%v", p, err)
+	}
+	if p, err := ResolvePlanPath(dir, filepath.Join(dir, "PLAN-C.md")); err != nil || p != filepath.Join(dir, "PLAN-C.md") {
+		t.Errorf("absolute: p=%q err=%v", p, err)
+	}
+
+	if _, err := ResolvePlanPath(dir, "PLAN-E.md"); err == nil || !strings.Contains(err.Error(), "multiple plans match") {
+		t.Errorf("ambiguous: err=%v", err)
+	}
+	if _, err := ResolvePlanPath(dir, "NOPE.md"); err == nil || !strings.Contains(err.Error(), "PLAN not found") {
+		t.Errorf("missing: err=%v", err)
 	}
 }

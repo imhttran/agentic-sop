@@ -30,20 +30,60 @@ import (
 // The braces are a bounded fix loop (≤ quality.max_fix_cycles; exhaustion yields
 // NEEDS_HUMAN). A run never commits, pushes, or merges.
 func runRun(args []string, stdout, stderr io.Writer, d deps) int {
-	if len(args) == 0 {
-		return runGraph(stdout, stderr, d)
-	}
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: sop run [TASK.md]")
+	planArg, taskArg, ok := parseRunArgs(args, stderr)
+	if !ok {
 		return exitUsage
 	}
+	if taskArg != "" {
+		return runSingleTask(taskArg, stdout, stderr, d)
+	}
+	return runGraph(planArg, stdout, stderr, d)
+}
 
+// runUsage is the one-line usage for `sop run`.
+const runUsage = "usage: sop run [PLAN.md | --task TASK.md]"
+
+// parseRunArgs parses "sop run [PLAN.md | --task TASK.md]": no arguments
+// discovers the project plan, one argument names an execution PLAN, and --task
+// names a single task file.
+func parseRunArgs(args []string, stderr io.Writer) (planArg, taskArg string, ok bool) {
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--task":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, runUsage)
+				return "", "", false
+			}
+			taskArg = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--task="):
+			taskArg = strings.TrimPrefix(a, "--task=")
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintf(stderr, "unknown flag %s\n%s\n", a, runUsage)
+			return "", "", false
+		default:
+			if planArg != "" {
+				fmt.Fprintln(stderr, runUsage)
+				return "", "", false
+			}
+			planArg = a
+		}
+	}
+	if planArg != "" && taskArg != "" {
+		fmt.Fprintln(stderr, runUsage)
+		return "", "", false
+	}
+	return planArg, taskArg, true
+}
+
+// runSingleTask runs one task file through the local lifecycle.
+func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	dir, ok := projectDir(d.getwd, stderr)
 	if !ok {
 		return exitError
 	}
 
-	spec, err := loadTaskFile(dir, args[0])
+	spec, err := loadTaskFile(dir, file)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
