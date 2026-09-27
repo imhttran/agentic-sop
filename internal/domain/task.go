@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -95,16 +96,25 @@ func (t *Task) Block(reason BlockedReason) error {
 	return nil
 }
 
+// ErrRetryExhausted is returned by Requeue when a task's retry budget
+// (MaxAttempts) is spent, so a requeue loop cannot run forever.
+var ErrRetryExhausted = errors.New("retry budget exhausted")
+
 // Requeue returns a Task to PLANNED so the scheduler may select it again. It is
 // the inverse of Block: a human boundary (NEEDS_HUMAN) is not terminal, so the
 // work is not lost and a later run retries it. Like Block, it is an explicit
-// domain operation rather than a Transition, and a completed Task cannot be
-// requeued.
+// domain operation rather than a Transition. A completed Task cannot be
+// requeued, and a requeue spends one attempt against MaxAttempts; once the
+// budget is spent it returns ErrRetryExhausted.
 func (t *Task) Requeue() error {
 	switch t.Status {
 	case DONE, LOCAL_DONE, MERGED:
 		return fmt.Errorf("cannot requeue a completed task")
 	}
+	if t.MaxAttempts > 0 && t.Attempt >= t.MaxAttempts {
+		return fmt.Errorf("%w (%d/%d)", ErrRetryExhausted, t.Attempt, t.MaxAttempts)
+	}
+	_ = t.AddAttempt(PLANNED, "requeued")
 	t.Status = PLANNED
 	t.BlockedReason = NO_REASON
 	t.UpdatedAt = time.Now()

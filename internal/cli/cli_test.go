@@ -1787,6 +1787,58 @@ func TestRunRetryBadArgs(t *testing.T) {
 	}
 }
 
+func TestRunRetryBudgetExhausted(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.BLOCKED, BlockedReason: domain.RETRIES_EXHAUSTED, Attempt: 3, MaxAttempts: 3})
+
+	code, _, stderr := runCLI(t, dir, "retry", "T001")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "retry budget exhausted") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
+
+	// The retry budget is MaxAttempts (default 3): three requeues, then it blocks.
+	for i := 0; i < 3; i++ {
+		if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
+			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
+		}
+	}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("final run: code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "retry budget exhausted") {
+		t.Errorf("stdout = %q", stdout)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("S001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.BLOCKED {
+		t.Errorf("status = %s, want BLOCKED after the retry budget is spent", got.Status)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

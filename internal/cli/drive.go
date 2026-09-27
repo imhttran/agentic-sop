@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -308,9 +309,18 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if code := emitRunSummary(stdout, dir, cfg, rn, res); code != exitOK {
 		if res.stage == runpkg.WaitingForHuman {
 			// A human boundary is not terminal: return the task to PLANNED so a
-			// later run retries it once the boundary is resolved.
+			// later run retries it. If the retry budget is spent, block instead of
+			// looping forever.
 			if err := requeueTask(saver, task); err != nil {
+				if errors.Is(err, domain.ErrRetryExhausted) {
+					if berr := blockTask(saver, task, domain.RETRIES_EXHAUSTED); berr != nil {
+						fmt.Fprintf(stderr, "run: %v\n", berr)
+					}
+					fmt.Fprintf(stdout, "%s NEEDS_HUMAN (retry budget exhausted; BLOCKED)\n", task.ID)
+					return exitError
+				}
 				fmt.Fprintf(stderr, "run: %v\n", err)
+				return exitError
 			}
 			fmt.Fprintf(stdout, "%s NEEDS_HUMAN (requeued)\n", task.ID)
 			return exitError

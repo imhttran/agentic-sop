@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 
@@ -56,6 +57,10 @@ func runRetry(args []string, stdout, stderr io.Writer, getwd func() (string, err
 	// in-memory state that was never persisted.
 	staged := *task
 	if err := staged.Requeue(); err != nil {
+		if errors.Is(err, domain.ErrRetryExhausted) {
+			fmt.Fprintf(stderr, "retry: task %s %v; raise max_attempts or start fresh\n", id, err)
+			return exitError
+		}
 		fmt.Fprintf(stderr, "retry: %v\n", err)
 		return exitError
 	}

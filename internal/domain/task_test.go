@@ -1,6 +1,7 @@
 package domain
 
 import (
+	"errors"
 	"testing"
 	"time"
 )
@@ -193,6 +194,16 @@ func TestRequeue(t *testing.T) {
 		if task.Status != from {
 			t.Errorf("Requeue from %s mutated status to %s", from, task.Status)
 		}
+	}
+}
+
+func TestRequeueBudgetExhausted(t *testing.T) {
+	task := &Task{ID: "T1", Status: BLOCKED, Attempt: 3, MaxAttempts: 3}
+	if err := task.Requeue(); !errors.Is(err, ErrRetryExhausted) {
+		t.Fatalf("Requeue = %v, want ErrRetryExhausted", err)
+	}
+	if task.Status != BLOCKED || task.Attempt != 3 {
+		t.Errorf("task mutated: status=%s attempt=%d", task.Status, task.Attempt)
 	}
 }
 
