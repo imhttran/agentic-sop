@@ -464,8 +464,8 @@ SOP's response:
 completed + changes_expected true  + a non-empty change set  → validate → review → gate
 completed + changes_expected true  + no changes              → FAIL (claimed changes, produced none)
 completed + changes_expected false + no changes              → proceed (nothing to change)
-needs_human                                                   → stop with NEEDS_HUMAN
-failed                                                        → FAIL
+needs_human                                                   → stop with NEEDS_HUMAN (requeued)
+failed                                                        → FAIL (terminal)
 ```
 
 The outcome is structural: SOP never infers `needs_human` by scanning prose for
@@ -473,6 +473,11 @@ words like “permission” or “would you like”. Any other output (plain pro
 JSON without a recognized `status`) keeps the legacy behaviour, so existing
 harnesses keep working — but they will still be judged by the change they
 produced.
+
+A `needs_human` outcome is **not terminal**: SOP returns the task to `PLANNED`, so
+once the human boundary is resolved the same `sop run …` command retries it
+automatically. A hard `FAIL` (including a claimed change with none produced)
+leaves the task `BLOCKED`.
 
 ---
 

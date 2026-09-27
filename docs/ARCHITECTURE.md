@@ -568,6 +568,10 @@ lifecycle ran; no PR was opened and no CI ran) or continues through the remote
 lifecycle (`PR_OPEN` … `DONE`). A dependency is satisfied by `LOCAL_DONE` (local)
 or `MERGED`/`DONE` (remote). Local runs never fabricate remote states.
 
+A human boundary (`NEEDS_HUMAN`) is not terminal: the task is requeued to
+`PLANNED` so a later run retries it. A hard failure (including a claimed change
+with none produced) leaves the task `BLOCKED`.
+
 Any actionable failure can transition to `FIX_REQUIRED`; exhausted
 retries transition to `BLOCKED`.
 
