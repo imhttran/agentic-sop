@@ -667,6 +667,7 @@ T047 structured command-agent execution outcomes (completed/needs_human/failed)
 T048 a needs_human outcome requeues the task (not terminal BLOCKED); a later run retries
 T049 bundled sop-end-to-end skill template and install script
 T050 explicit `sop retry` for BLOCKED tasks; no-change completions still validate
+T051 bound the requeue loop (a requeue spends one attempt; max_attempts, default 3)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

@@ -259,8 +259,9 @@ structured execution outcome — `completed` with `changes_expected`, `needs_hum
 or `failed`. SOP acts on it directly: a claimed change with none produced is a
 failure, a legitimate no-change completion still runs the configured validation
 before it passes, and a human boundary stops with `NEEDS_HUMAN` (the task is
-requeued so a later run retries it; a `BLOCKED` task can be requeued explicitly
-with `sop retry <task-id>`). The outcome is never inferred from prose.
+requeued — bounded by `max_attempts`, default 3 — so a later run retries it; a
+`BLOCKED` task can be requeued explicitly with `sop retry <task-id>`). The outcome
+is never inferred from prose.
 
 ### Validation Runner
 

@@ -485,10 +485,12 @@ JSON without a recognized `status`) keeps the legacy behaviour, so existing
 harnesses keep working — but they will still be judged by the change they
 produced.
 
-A `needs_human` outcome is **not terminal**: SOP returns the task to `PLANNED`, so
-once the human boundary is resolved the same `sop run …` command retries it
-automatically. A hard `FAIL` (including a claimed change with none produced)
-leaves the task `BLOCKED`; requeue it explicitly with `sop retry <task-id>`.
+A `needs_human` outcome is **not terminal**: SOP requeues the task to `PLANNED`
+(spending one attempt), so the same `sop run …` retries it automatically. The
+retry budget is `max_attempts` (default **3**); once it is spent the task becomes
+`BLOCKED` instead of looping. A hard `FAIL` (including a claimed change with none
+produced) leaves the task `BLOCKED`; requeue it explicitly with `sop retry
+<task-id>`.
 
 A `changes_expected: false` completion still runs the **configured validation**
 (build/test/lint) before it can pass; review is skipped because there is nothing
