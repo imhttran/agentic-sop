@@ -657,6 +657,7 @@ T037 MCP server (sop mcp)
 T038 optional decision layer (deterministic + routing)
 T039 run report command (sop report)
 T040 evaluation harness (sop eval)
+T041 PLAN-first one-command run (sop run; planflow + PLAN.md compiler)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

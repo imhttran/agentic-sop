@@ -233,6 +233,22 @@ You can now run `sop` from another project directory.
 
 ---
 
+# One-Command Run
+
+If the project has a `docs/PLAN.md` (preferred) or a `docs/PRD.md`, you can
+usually just run:
+
+```bash
+sop run
+```
+
+`sop run` discovers the planning source, initializes SOP state if needed,
+compiles or generates the machine plan, creates the tasks, and executes the task
+graph — all idempotently. The explicit steps below remain available when you want
+to inspect or control each stage.
+
+---
+
 # Quick Start
 
 Suppose you want SOP to manage:
@@ -808,12 +824,28 @@ task → plan → implement → detect changes
      → report
 ```
 
-With a file, the task comes from the Markdown. With no argument, the
-**scheduler** selects the next ready task from `.agent-sdlc/plan.json`'s
-persisted graph and the same lifecycle runs for it; a passing gate marks the
-task `DONE` and a failing gate marks it `BLOCKED`, repeating until no runnable
-work remains. Local execution has no remote PR/CI/merge, so a passing lifecycle
-advances the task to `DONE` directly.
+With a file, the task comes from the Markdown. With no argument, `sop run` is the
+**one-command workflow**: it discovers the planning source, initializes state if
+needed, compiles or generates `.agent-sdlc/plan.json`, creates the tasks, then
+drives the graph — each step idempotent. Source precedence:
+
+```text
+1. an existing valid .agent-sdlc/plan.json (reused only if its source is unchanged)
+2. docs/PLAN.md
+3. PLAN.md
+4. docs/PRD.md
+5. PRD.md
+```
+
+A human PLAN is preferred over the PRD, and `plan.json` never silently overrides
+a newer PLAN: the source path and a content fingerprint are recorded, and a
+changed document triggers a rebuild. `sop init`, `sop plan`, and `sop tasks`
+remain the explicit lower-level commands.
+
+The **scheduler** selects the next ready task and the same lifecycle runs for it;
+a passing gate marks the task `DONE` and a failing gate marks it `BLOCKED`,
+repeating until no runnable work remains. Local execution has no remote
+PR/CI/merge, so a passing lifecycle advances the task to `DONE` directly.
 
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,

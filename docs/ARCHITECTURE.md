@@ -133,6 +133,15 @@ dependencies. Plain Markdown stays usable. `sop plan TASK.md` and
 `sop run TASK.md` accept a task file; the loader normalizes it before a model
 sees it.
 
+### Plan Preparation
+
+`sop run` prepares the project before executing: it discovers the planning source
+(PLAN preferred over PRD), keeps `.agent-sdlc/plan.json` in step with it via a
+recorded source path and content fingerprint, and creates tasks when none exist.
+A human `PLAN.md` is compiled deterministically (with an agent-normalization
+fallback); a PRD is used only to generate a plan when no PLAN exists; and a
+changed document triggers a rebuild. Every step is idempotent.
+
 ### Planner
 
 Transforms product intent into implementation intent.
@@ -895,6 +904,7 @@ MCP server (sop mcp)
 optional decision layer (deterministic + routing)
 run report command (sop report)
 evaluation harness (sop eval)
+PLAN-first one-command run (sop run, planflow)
 ```
 
 Remaining:
