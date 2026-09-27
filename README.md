@@ -898,6 +898,12 @@ repeating until no runnable work remains. Local execution has no remote
 PR/CI/merge, so a passing lifecycle advances the task to `LOCAL_DONE` directly (no synthetic PR/CI/merge states;
 controlled by `workflow.mode`).
 
+Change detection includes untracked files (except SOP's own output), so a file the
+agent creates counts even when no tracked file changed. The startup summary also
+prints the effective provider and whether configuration or the environment
+selected it, and a run rejects a provider that cannot `IMPLEMENT` before running
+any task.
+
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
 `review.json`, `report.md`, `report.json`, `state.json`), so a run stays

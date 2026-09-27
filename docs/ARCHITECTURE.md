@@ -218,7 +218,8 @@ Responsibilities include:
 - update from integration branch.
 
 Git implementation should be deterministic shell/process execution
-rather than LLM reasoning.
+rather than LLM reasoning. Working-tree change detection includes untracked files
+(minus SOP's own output), so a new file an agent creates is not missed.
 
 ### Agent Harness Adapter
 
@@ -249,7 +250,9 @@ The provider is selected by `agent.provider` in configuration, overridden by
 provider declares which capabilities it serves; `agent.Checked` wraps the
 resolved provider and rejects a request for an unsupported capability with a
 message naming the supported set, so an unsupported role/provider combination
-fails clearly rather than being sent to a provider that cannot serve it.
+fails clearly rather than being sent to a provider that cannot serve it. A run
+also checks up front that the provider can `IMPLEMENT`, before any task is
+attempted.
 
 ### Validation Runner
 
