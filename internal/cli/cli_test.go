@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -1615,18 +1616,22 @@ func TestRunImplementClaimsChangesButNone(t *testing.T) {
 	}
 }
 
-func TestRunImplementNoChangesExpected(t *testing.T) {
+func TestRunImplementNoChangesStillValidates(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
-	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	marker := filepath.Join(dir, "validated.marker")
+	writeConfig(t, dir, fmt.Sprintf("project:\n  name: x\nvalidation:\n  build:\n    - \"touch %s\"\n", marker))
 	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted, ChangesExpected: false}}
 
 	code, stdout, stderr := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "PASS") || !strings.Contains(stdout, "no changes were required") {
+	if !strings.Contains(stdout, "PASS") {
 		t.Errorf("stdout = %q", stdout)
+	}
+	if !stateExists(marker) {
+		t.Error("configured validation did not run for a no-change completion")
 	}
 }
 
@@ -1698,6 +1703,87 @@ func TestRunGraphFailedBlocks(t *testing.T) {
 	}
 	if got.Status != domain.BLOCKED {
 		t.Errorf("task status = %s, want BLOCKED (a hard failure is terminal)", got.Status)
+	}
+}
+
+func TestRunRetryRequeuesBlocked(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.BLOCKED, BlockedReason: domain.REVIEW_UNRESOLVED, MaxAttempts: 3})
+
+	code, stdout, stderr := runCLI(t, dir, "retry", "T001")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "requeued T001") {
+		t.Errorf("stdout = %q", stdout)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("T001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.PLANNED {
+		t.Errorf("status = %s, want PLANNED", got.Status)
+	}
+}
+
+func TestRunRetryRejectsCompleted(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.DONE, MaxAttempts: 3})
+
+	code, _, stderr := runCLI(t, dir, "retry", "T001")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "nothing to retry") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunRetryRejectsNotBlocked(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.PLANNED, MaxAttempts: 3})
+
+	code, _, stderr := runCLI(t, dir, "retry", "T001")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "not BLOCKED") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunRetryUnknownTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+
+	code, _, stderr := runCLI(t, dir, "retry", "NOPE")
+	if code != exitError {
+		t.Errorf("code=%d, want %d", code, exitError)
+	}
+	if stderr == "" {
+		t.Error("expected an error for an unknown task")
+	}
+}
+
+func TestRunRetryBadArgs(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+
+	code, _, stderr := runCLI(t, dir, "retry")
+	if code != exitUsage {
+		t.Errorf("code=%d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(stderr, "usage") {
+		t.Errorf("stderr = %q", stderr)
 	}
 }
 

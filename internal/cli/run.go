@@ -187,17 +187,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		return lifeResult{}, fmt.Errorf("diff: %w", err)
 	}
 	_ = rn.Write("diff.patch", diff)
-	if strings.TrimSpace(diff) == "" {
-		if impl.Outcome != nil && !impl.Outcome.ChangesExpected {
-			// The agent legitimately produced no changes (for example a
-			// verification or configuration-only task): nothing to validate or
-			// review.
-			_ = rn.SetStage(runpkg.Passed)
-			return lifeResult{
-				gate:  quality.Result{Decision: quality.Pass, Reasons: []string{"no changes were required"}},
-				stage: runpkg.Passed,
-			}, nil
-		}
+
+	// A claimed change with none produced is a failure. A legitimate no-change
+	// completion is allowed, but still runs the configured validation below
+	// before it can pass.
+	changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
+	if strings.TrimSpace(diff) == "" && changesExpected {
 		_ = rn.SetStage(runpkg.Failed)
 		return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
 	}
@@ -213,9 +208,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		_ = rn.SetStage(runpkg.Validating)
 		suite = validate.Run(ctx, dir, cfg.Validation)
 
-		// Review only when validation passed.
+		// Review only when validation passed and there is something to review: a
+		// legitimate no-change completion still runs validation, but nothing is
+		// reviewed.
 		report = review.Report{}
-		if suite.Passed() {
+		if suite.Passed() && strings.TrimSpace(diff) != "" {
 			_ = rn.SetStage(runpkg.Reviewing)
 			provider, err := reviewProvider(cfg, d)
 			if err != nil {

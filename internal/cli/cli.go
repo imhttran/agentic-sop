@@ -127,6 +127,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runEval(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
+	case "retry":
+		return runRetry(rest, stdout, stderr, d.getwd)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", command)
 		fmt.Fprintln(stderr, "run `sop --help` for usage")
@@ -162,6 +164,7 @@ Commands:
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
   report    print a concise summary of the latest run
+  retry     requeue a BLOCKED task so the next run retries it
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   version   print the CLI version
