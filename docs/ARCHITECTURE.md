@@ -140,7 +140,10 @@ sees it.
 recorded source path and content fingerprint, and creates tasks when none exist.
 A human `PLAN.md` is compiled deterministically (with an agent-normalization
 fallback); a PRD is used only to generate a plan when no PLAN exists; and a
-changed document triggers a rebuild. Every step is idempotent.
+changed document triggers a rebuild. Every step is idempotent. Generated
+artifacts stay out of the project root: `.agent-sdlc/` holds machine state and
+run reports (and ignores itself for Git), and a PRD-generated plan is written to
+`docs/reports/<plan-id>.md`.
 
 ### Planner
 
@@ -911,6 +914,7 @@ run report command (sop report)
 evaluation harness (sop eval)
 PLAN-first one-command run (sop run, planflow)
 local vs remote completion (LOCAL_DONE; no synthetic remote states)
+generated artifacts kept out of the project root (docs/reports; .agent-sdlc self-ignores)
 ```
 
 Remaining:

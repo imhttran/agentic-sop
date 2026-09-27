@@ -661,6 +661,7 @@ T041 PLAN-first one-command run (sop run; planflow + PLAN.md compiler)
 T042 local vs remote completion (LOCAL_DONE), plan-graph validation, and reconciliation
 T043 bootstrap independent of the agent (sop run prepares without an agent)
 T044 named plan execution (sop run PLAN.md; --task for a single task)
+T045 keep generated artifacts out of the project root (docs/reports; .agent-sdlc self-ignores)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

@@ -272,6 +272,11 @@ another is active) SOP stops with an actionable `NEEDS_HUMAN` instead of
 discarding history. The explicit steps below remain available when you want to
 inspect or control each stage.
 
+Generated artifacts stay out of the project root: machine state and run reports
+live under `.agent-sdlc/` (which ignores itself for Git, so no root `.gitignore`
+is needed), and a plan generated from a PRD is written to
+`docs/reports/<plan-id>.md`.
+
 ---
 
 # Quick Start
