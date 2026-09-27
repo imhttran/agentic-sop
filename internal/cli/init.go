@@ -23,39 +23,47 @@ func runInit(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 		return exitError
 	}
 
-	if err := os.MkdirAll(filepath.Join(dir, stateDirName), 0o755); err != nil {
-		fmt.Fprintf(stderr, "init: %v\n", err)
-		return exitError
-	}
-
-	// Opening the store runs schema migration; existing data is preserved.
-	st, err := store.Open(statePath(dir))
+	configWritten, err := ensureProjectInitialized(dir)
 	if err != nil {
-		fmt.Fprintf(stderr, "init: %v\n", err)
-		return exitError
-	}
-	if err := st.Close(); err != nil {
 		fmt.Fprintf(stderr, "init: %v\n", err)
 		return exitError
 	}
 
 	fmt.Fprintln(stdout, "initialized .agent-sdlc/state.db")
+	if configWritten {
+		fmt.Fprintln(stdout, "wrote .agent-sdlc/config.yaml")
+	}
+	return exitOK
+}
 
-	// Generate the configuration template when absent; never overwrite a
-	// human-edited configuration.
+// ensureProjectInitialized creates the per-project state directory, migrates the
+// database, and writes the configuration template when absent. It is idempotent
+// and never overwrites existing state or a hand-edited configuration. It reports
+// whether the configuration template was written.
+func ensureProjectInitialized(dir string) (configWritten bool, err error) {
+	if err := os.MkdirAll(filepath.Join(dir, stateDirName), 0o755); err != nil {
+		return false, err
+	}
+
+	// Opening the store runs schema migration; existing data is preserved.
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		return false, err
+	}
+	if err := st.Close(); err != nil {
+		return false, err
+	}
+
 	configPath := config.Path(dir)
 	present, err := exists(configPath)
 	if err != nil {
-		fmt.Fprintf(stderr, "init: %v\n", err)
-		return exitError
+		return false, err
 	}
-	if !present {
-		if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
-			fmt.Fprintf(stderr, "init: write config: %v\n", err)
-			return exitError
-		}
-		fmt.Fprintln(stdout, "wrote .agent-sdlc/config.yaml")
+	if present {
+		return false, nil
 	}
-
-	return exitOK
+	if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
+		return false, err
+	}
+	return true, nil
 }

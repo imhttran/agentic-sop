@@ -9,6 +9,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/planflow"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/scheduler"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -20,39 +21,25 @@ type taskSaver interface {
 	Save(task *domain.Task) error
 }
 
-// runGraph drives the persisted task graph: the scheduler selects the next ready
-// task, the local lifecycle runs for it, and the task is completed (gate passed)
-// or blocked, repeating until no runnable work remains.
-//
-// Completion is local: no remote PR/CI/merge runs, so a passed lifecycle
-// advances the task through the remaining legal transitions to DONE (documented
-// in the command output). Dependents then unblock, which is what lets graph
-// execution progress without a remote.
+// graphStore is the persistence the graph driver reads and writes.
+type graphStore interface {
+	List() ([]*domain.Task, error)
+	Save(task *domain.Task) error
+}
+
+// runGraph is `sop run` with no argument: the one-command workflow. It brings the
+// project up to a runnable state — initializing state, compiling or generating
+// the machine plan from a human PLAN/PRD, and creating tasks — then drives the
+// task graph. Each step is idempotent and safe to repeat.
 func runGraph(stdout, stderr io.Writer, d deps) int {
 	dir, ok := projectDir(d.getwd, stderr)
 	if !ok {
 		return exitError
 	}
 
-	path := statePath(dir)
-	if !requireState(path, stderr) {
-		return exitError
-	}
-
-	st, err := store.Open(path)
-	if err != nil {
+	// Equivalent to `sop init`: create state and the configuration template.
+	if _, err := ensureProjectInitialized(dir); err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
-	}
-	defer st.Close()
-
-	tasks, err := st.List()
-	if err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
-	}
-	if len(tasks) == 0 {
-		fmt.Fprintln(stderr, "run: no tasks; run `sop tasks` first")
 		return exitError
 	}
 
@@ -68,7 +55,50 @@ func runGraph(stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+
 	ctx := context.Background()
+	prepared, err := planflow.Prepare(ctx, planflow.Options{Dir: dir, Agent: a, Store: st})
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	if prepared.Source != "" {
+		fmt.Fprintf(stdout, "source: %s\n", prepared.Source)
+	}
+	if prepared.PlanRebuilt {
+		fmt.Fprintln(stdout, "rebuilt .agent-sdlc/plan.json")
+	}
+	if prepared.TasksCreated > 0 {
+		fmt.Fprintf(stdout, "created %d task(s)\n", prepared.TasksCreated)
+	}
+
+	return driveGraph(ctx, dir, cfg, a, d, st, stdout, stderr)
+}
+
+// driveGraph selects ready tasks with the scheduler and runs the local lifecycle
+// for each, completing a task (gate passed) or blocking it, until no runnable
+// work remains.
+//
+// Completion is local: no remote PR/CI/merge runs, so a passing lifecycle
+// advances the task through the remaining legal transitions to DONE. Dependents
+// then unblock, which is what lets graph execution progress without a remote.
+func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, stdout, stderr io.Writer) int {
+	tasks, err := st.List()
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	if len(tasks) == 0 {
+		fmt.Fprintln(stderr, "run: no tasks to execute")
+		return exitError
+	}
+
 	sch := scheduler.New(st)
 	completed := 0
 

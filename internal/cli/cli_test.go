@@ -907,26 +907,82 @@ func TestRunBadArgs(t *testing.T) {
 	}
 }
 
-func TestRunGraphUninitialized(t *testing.T) {
+func TestRunGraphNoSource(t *testing.T) {
 	dir := t.TempDir()
 	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stderr, "not initialized") {
-		t.Errorf("stderr = %q", stderr)
+	if !strings.Contains(stderr, "PLAN.md") {
+		t.Errorf("stderr should name the missing sources: %q", stderr)
+	}
+	if !stateExists(statePath(dir)) {
+		t.Error("sop run should initialize state")
 	}
 }
 
-func TestRunGraphNoTasks(t *testing.T) {
+func TestRunGraphFromExistingPlanJSON(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
-	code, _, stderr := runInjectedCLI(t, dir, "diff\n", &fakeAgent{content: "{}"}, "run")
-	if code != exitError {
-		t.Errorf("code=%d, want %d", code, exitError)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	writePlanJSON(t, dir, validPlanJSON)
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stderr, "no tasks") {
-		t.Errorf("stderr = %q", stderr)
+	if !strings.Contains(stdout, "created 2 task(s)") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "all tasks done") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+const autoPlanDoc = "# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nAdd a widget.\n\n## S001 — Application skeleton\n\nCreate the skeleton.\n\n### Dependencies\n\nNone\n\n### Deliverables\n\n- Go application\n\n### Acceptance Criteria\n\n- Application starts\n"
+
+func TestRunAutoCompilesPlanFromMarkdown(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	for _, want := range []string{"source: " + filepath.Join("docs", "PLAN.md"), "created 1 task(s)", "S001 DONE", "all tasks done"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+	if !stateExists(filepath.Join(dir, stateDirName, "plan.json")) {
+		t.Error("plan.json not written")
+	}
+}
+
+func TestRunAutoGeneratesPlanFromPRD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PRD.md"), "# Widget\n\nAdd a widget.\n")
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "source: "+filepath.Join("docs", "PRD.md")) {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "all tasks done") {
+		t.Errorf("stdout = %q", stdout)
 	}
 }
 
