@@ -84,5 +84,59 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 		return Response{}, fmt.Errorf("agent %s returned empty output", request.Capability)
 	}
 
-	return Response{Content: content}, nil
+	return Response{Content: content, Outcome: parseOutcome(content)}, nil
+}
+
+// outcomeWire mirrors the structured execution outcome a command agent may return
+// for a mutating capability.
+type outcomeWire struct {
+	Status          string `json:"status"`
+	Summary         string `json:"summary"`
+	Reason          string `json:"reason"`
+	ChangesExpected *bool  `json:"changes_expected"`
+}
+
+// parseOutcome recognizes a structured execution outcome. It returns nil for a
+// legacy prose response, for content that is not JSON, or for JSON without a
+// recognized status, so the protocol change is backward compatible. When
+// changes_expected is omitted for a completed outcome it defaults to true (the
+// agent intended to change the repository), which is the stricter choice.
+func parseOutcome(content string) *Outcome {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" || trimmed[0] != '{' {
+		return nil
+	}
+
+	var wire outcomeWire
+	if err := json.Unmarshal([]byte(trimmed), &wire); err != nil {
+		return nil
+	}
+
+	var status OutcomeStatus
+	switch wire.Status {
+	case string(OutcomeCompleted):
+		status = OutcomeCompleted
+	case string(OutcomeNeedsHuman):
+		status = OutcomeNeedsHuman
+	case string(OutcomeFailed):
+		status = OutcomeFailed
+	default:
+		return nil
+	}
+
+	outcome := &Outcome{
+		Status:  status,
+		Summary: strings.TrimSpace(wire.Summary),
+		Reason:  strings.TrimSpace(wire.Reason),
+	}
+	// ChangesExpected is meaningful only for a completed outcome; a completed
+	// outcome without the field intends to change the repository (the stricter
+	// default). For needs_human and failed it stays false.
+	if status == OutcomeCompleted {
+		outcome.ChangesExpected = true
+		if wire.ChangesExpected != nil {
+			outcome.ChangesExpected = *wire.ChangesExpected
+		}
+	}
+	return outcome
 }

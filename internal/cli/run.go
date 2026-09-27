@@ -178,6 +178,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		return lifeResult{}, fmt.Errorf("implement: %w", err)
 	}
 	_ = rn.Write("implementation.md", impl.Content)
+	if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
+		return outcomeResult(rn, impl.Outcome), nil
+	}
 
 	diff, err := d.readDiff(ctx, dir)
 	if err != nil {
@@ -185,8 +188,18 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	}
 	_ = rn.Write("diff.patch", diff)
 	if strings.TrimSpace(diff) == "" {
+		if impl.Outcome != nil && !impl.Outcome.ChangesExpected {
+			// The agent legitimately produced no changes (for example a
+			// verification or configuration-only task): nothing to validate or
+			// review.
+			_ = rn.SetStage(runpkg.Passed)
+			return lifeResult{
+				gate:  quality.Result{Decision: quality.Pass, Reasons: []string{"no changes were required"}},
+				stage: runpkg.Passed,
+			}, nil
+		}
 		_ = rn.SetStage(runpkg.Failed)
-		return lifeResult{gate: fail("no changes were produced"), stage: runpkg.Failed}, nil
+		return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
 	}
 
 	maxCycles := cfg.Quality.MaxFixCycles
@@ -241,6 +254,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
+		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
+			return outcomeResult(rn, fix.Outcome), nil
+		}
 
 		diff, err = d.readDiff(ctx, dir)
 		if err != nil {
@@ -248,7 +264,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
-			return lifeResult{gate: fail("fixes removed all changes"), stage: runpkg.Failed}, nil
+			return lifeResult{gate: fail("agent reported a fix but produced no repository changes"), stage: runpkg.Failed}, nil
 		}
 		_ = rn.Write("diff.patch", diff)
 	}
@@ -287,6 +303,25 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 // fail builds a FAIL result carrying a single reason.
 func fail(reason string) quality.Result {
 	return quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+}
+
+// outcomeResult maps a non-completed agent outcome to a run result: a human
+// boundary becomes NEEDS_HUMAN, any other reported failure becomes FAIL. A
+// reported outcome is never treated as success.
+func outcomeResult(rn *runpkg.Run, outcome *agent.Outcome) lifeResult {
+	reason := outcome.Reason
+	if reason == "" {
+		reason = outcome.Summary
+	}
+	if reason == "" {
+		reason = string(outcome.Status)
+	}
+	if outcome.Status == agent.OutcomeNeedsHuman {
+		_ = rn.SetStage(runpkg.WaitingForHuman)
+		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman}
+	}
+	_ = rn.SetStage(runpkg.Failed)
+	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed}
 }
 
 // failRun marks the run failed, reports the stage error, and returns the error

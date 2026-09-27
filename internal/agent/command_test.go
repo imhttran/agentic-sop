@@ -168,6 +168,61 @@ func TestNewCommandAgentFromEnvFallsBackToLegacy(t *testing.T) {
 	}
 }
 
+func TestParseOutcome(t *testing.T) {
+	cases := []struct {
+		name    string
+		content string
+		want    *Outcome
+	}{
+		{"prose is not an outcome", "I need permission to proceed. Would you like me to?", nil},
+		{"empty", "", nil},
+		{"not json", "{ not really json", nil},
+		{"unknown status", `{"status":"maybe"}`, nil},
+		{"completed defaults changes_expected true", `{"status":"completed","summary":"done"}`, &Outcome{Status: OutcomeCompleted, Summary: "done", ChangesExpected: true}},
+		{"completed no changes", `{"status":"completed","changes_expected":false}`, &Outcome{Status: OutcomeCompleted, ChangesExpected: false}},
+		{"needs human", `{"status":"needs_human","reason":"needs auth"}`, &Outcome{Status: OutcomeNeedsHuman, Reason: "needs auth"}},
+		{"failed", `{"status":"failed","reason":"boom"}`, &Outcome{Status: OutcomeFailed, Reason: "boom"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := parseOutcome(tc.content)
+			if tc.want == nil {
+				if got != nil {
+					t.Errorf("got %+v, want nil", got)
+				}
+				return
+			}
+			if got == nil {
+				t.Fatalf("got nil, want %+v", tc.want)
+			}
+			if *got != *tc.want {
+				t.Errorf("got %+v, want %+v", *got, *tc.want)
+			}
+		})
+	}
+}
+
+func TestCommandAgentReturnsOutcome(t *testing.T) {
+	harness := NewCommandAgent(`printf '%s' '{"status":"needs_human","reason":"needs auth"}'`)
+	resp, err := harness.Generate(context.Background(), validRequest(Implement))
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	if resp.Outcome == nil || resp.Outcome.Status != OutcomeNeedsHuman || resp.Outcome.Reason != "needs auth" {
+		t.Errorf("Outcome = %+v", resp.Outcome)
+	}
+}
+
+func TestCommandAgentProseHasNoOutcome(t *testing.T) {
+	resp, err := NewCommandAgent(`printf '%s' 'ok'`).Generate(context.Background(), validRequest(Implement))
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	if resp.Outcome != nil {
+		t.Errorf("Outcome = %+v, want nil for prose", resp.Outcome)
+	}
+}
+
 func TestRequestValidate(t *testing.T) {
 	cases := []struct {
 		name    string

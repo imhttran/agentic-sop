@@ -845,7 +845,7 @@ func TestRunNoChanges(t *testing.T) {
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "no changes") {
+	if !strings.Contains(stdout, "no repository changes") {
 		t.Errorf("stdout = %q", stdout)
 	}
 }
@@ -1550,6 +1550,83 @@ func TestRunPrintsEffectiveProvider(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "Provider: ollama (configuration)") {
 		t.Errorf("stdout missing provider line:\n%s", stdout)
+	}
+}
+
+// outcomeAgent returns a structured outcome for IMPLEMENT/FIX and canned output
+// for the other capabilities.
+type outcomeAgent struct{ outcome *agent.Outcome }
+
+func (a outcomeAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	switch r.Capability {
+	case agent.Plan:
+		return agent.Response{Content: validPlanJSON}, nil
+	case agent.Implement, agent.Fix:
+		return agent.Response{Content: "done", Outcome: a.outcome}, nil
+	case agent.Review:
+		return agent.Response{Content: `{"summary":"clean","findings":[]}`}, nil
+	default:
+		return agent.Response{Content: "{}"}, nil
+	}
+}
+
+func TestRunImplementNeedsHuman(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "required operation needs human authorization"}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "NEEDS_HUMAN") || !strings.Contains(stdout, "human authorization") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunImplementFailed(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "unable to complete the operation"}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "FAIL") || !strings.Contains(stdout, "unable to complete") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunImplementClaimsChangesButNone(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted, ChangesExpected: true}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "no repository changes") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+func TestRunImplementNoChangesExpected(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted, ChangesExpected: false}}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "PASS") || !strings.Contains(stdout, "no changes were required") {
+		t.Errorf("stdout = %q", stdout)
 	}
 }
 

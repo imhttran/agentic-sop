@@ -58,9 +58,38 @@ func (r Request) Validate() error {
 	return nil
 }
 
-// Response is the raw content returned by an agent.
+// OutcomeStatus is the explicit result a command agent reports for a mutating
+// capability (IMPLEMENT, FIX).
+type OutcomeStatus string
+
+const (
+	// OutcomeCompleted: the agent finished; ChangesExpected says whether a
+	// repository change was intended.
+	OutcomeCompleted OutcomeStatus = "completed"
+	// OutcomeNeedsHuman: the agent cannot continue without a human decision.
+	OutcomeNeedsHuman OutcomeStatus = "needs_human"
+	// OutcomeFailed: the agent could not complete the operation.
+	OutcomeFailed OutcomeStatus = "failed"
+)
+
+// Outcome is the structured execution outcome a command agent returns for a
+// mutating capability. SOP acts on it directly and never infers it from prose, so
+// a harness must state it structurally.
+type Outcome struct {
+	Status          OutcomeStatus
+	Summary         string
+	Reason          string
+	ChangesExpected bool
+}
+
+// Response is the raw content returned by an agent, plus, when the command agent
+// reported one, a structured execution outcome.
 type Response struct {
 	Content string
+	// Outcome is set when the command agent returned a structured outcome; it is
+	// nil for legacy prose responses and for capabilities that return structured
+	// content (plans, reviews) instead.
+	Outcome *Outcome
 }
 
 // Agent performs a capability request. Implementations must not mutate the
