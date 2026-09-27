@@ -1,4 +1,4 @@
-.PHONY: fmt vet test build check
+.PHONY: fmt vet test build check install
 
 fmt:
 	go fmt ./...
@@ -13,3 +13,6 @@ build:
 	go build ./...
 
 check: fmt vet test build
+
+install:
+	./scripts/install.sh

@@ -231,6 +231,17 @@ sop version
 
 You can now run `sop` from another project directory.
 
+## Install the CLI and the end-to-end skill
+
+```bash
+./scripts/install.sh
+```
+
+This installs the `sop` CLI (via `go install ./cmd/sop`) and links the bundled
+`sop-end-to-end` agent skill ([`.agents/sop-end-to-end`](.agents/sop-end-to-end/SKILL.md))
+into `~/.agents/skills/`, so an agent can drive the workflow end to end in any
+project. Set `SOP_SKILLS_DIR` to install the skill elsewhere, or run `make install`.
+
 ---
 
 # One-Command Run

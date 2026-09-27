@@ -665,6 +665,7 @@ T045 keep generated artifacts out of the project root (docs/reports; .agent-sdlc
 T046 provider resolution visibility, IMPLEMENT capability guard, and untracked-file detection
 T047 structured command-agent execution outcomes (completed/needs_human/failed)
 T048 a needs_human outcome requeues the task (not terminal BLOCKED); a later run retries
+T049 bundled sop-end-to-end skill template and install script
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
