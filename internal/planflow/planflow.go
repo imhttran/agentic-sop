@@ -325,14 +325,19 @@ func ResolvePlanPath(dir, arg string) (string, error) {
 	}
 }
 
-// writeGeneratedPlanDoc writes the human-readable plan generated from a PRD to a
-// sibling PLAN.md (docs/PLAN.md for docs/PRD.md, PLAN.md for PRD.md). It never
-// overwrites an existing PLAN. It returns the relative path written, or "".
+// reportsDir is where SOP writes generated, human-readable artifacts, kept out of
+// the project root.
+const reportsDir = "docs/reports"
+
+// writeGeneratedPlanDoc writes the human-readable plan generated from a PRD to
+// docs/reports/<plan-id>.md and returns the relative path, or "". It never writes
+// to the project root or beside the PRD.
 func writeGeneratedPlanDoc(dir, prdPath string, plan *planner.Plan) string {
-	target := filepath.Join(filepath.Dir(prdPath), "PLAN.md")
-	if fileExists(target) {
-		return ""
+	id := planID(relOf(dir, prdPath))
+	if id == "" {
+		id = "plan"
 	}
+	target := filepath.Join(dir, reportsDir, id+".md")
 	if err := atomicWrite(target, []byte(plan.RenderMarkdown())); err != nil {
 		return ""
 	}

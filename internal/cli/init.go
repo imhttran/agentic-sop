@@ -77,22 +77,17 @@ func ensureProjectInitialized(dir string) (configWritten bool, err error) {
 	return configWritten, nil
 }
 
-// ensureRuntimeIgnored adds the state directory to the project's .gitignore when
-// it is not already covered, so SOP-owned runtime state never counts as a source
-// modification. It is idempotent and creates .gitignore when absent.
+// ensureRuntimeIgnored makes SOP-owned runtime state invisible to Git without
+// touching the project's own .gitignore: a .agent-sdlc/.gitignore containing "*"
+// ignores the whole state directory (including itself). It is idempotent.
 func ensureRuntimeIgnored(dir string) error {
-	path := filepath.Join(dir, ".gitignore")
-	data, err := os.ReadFile(path)
-	if err != nil && !errors.Is(err, fs.ErrNotExist) {
+	path := filepath.Join(dir, stateDirName, ".gitignore")
+	if data, err := os.ReadFile(path); err == nil {
+		if strings.TrimSpace(string(data)) == "*" {
+			return nil
+		}
+	} else if !errors.Is(err, fs.ErrNotExist) {
 		return err
 	}
-	content := string(data)
-	if strings.Contains(content, stateDirName) {
-		return nil
-	}
-	if content != "" && !strings.HasSuffix(content, "\n") {
-		content += "\n"
-	}
-	content += stateDirName + "/\n"
-	return os.WriteFile(path, []byte(content), 0o644)
+	return os.WriteFile(path, []byte("*\n"), 0o644)
 }

@@ -984,6 +984,15 @@ func TestRunAutoGeneratesPlanFromPRD(t *testing.T) {
 	if !strings.Contains(stdout, "all tasks done") {
 		t.Errorf("stdout = %q", stdout)
 	}
+	if !stateExists(filepath.Join(dir, "docs", "reports", "prd.md")) {
+		t.Error("generated plan doc must be written under docs/reports/")
+	}
+	if stateExists(filepath.Join(dir, "PLAN.md")) {
+		t.Error("generated plan must not be written to the project root")
+	}
+	if stateExists(filepath.Join(dir, ".gitignore")) {
+		t.Error("runtime state must not require a root .gitignore")
+	}
 }
 
 func TestRunGraphAllDone(t *testing.T) {

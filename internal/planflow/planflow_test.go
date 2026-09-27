@@ -162,11 +162,14 @@ func TestPrepareGeneratesPlanDocFromPRD(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Prepare failed: %v", err)
 	}
-	if res.PlanDoc != filepath.Join("docs", "PLAN.md") {
+	if res.PlanDoc != filepath.Join("docs", "reports", "prd.md") {
 		t.Errorf("PlanDoc = %q", res.PlanDoc)
 	}
-	if _, err := os.Stat(filepath.Join(dir, "docs", "PLAN.md")); err != nil {
-		t.Errorf("docs/PLAN.md not written: %v", err)
+	if _, err := os.Stat(filepath.Join(dir, "docs", "reports", "prd.md")); err != nil {
+		t.Errorf("docs/reports/prd.md not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "PLAN.md")); !os.IsNotExist(err) {
+		t.Error("generated plan must not be written to the project root")
 	}
 }
 

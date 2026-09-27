@@ -138,6 +138,9 @@ func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.
 			fmt.Fprintln(w, "Compiling plan...")
 		}
 		fmt.Fprintf(w, "Validated %d tasks.\n", len(tasks))
+		if prepared.PlanDoc != "" {
+			fmt.Fprintf(w, "Wrote %s.\n", prepared.PlanDoc)
+		}
 	} else {
 		fmt.Fprintln(w, "Plan: current")
 		fmt.Fprintln(w)
