@@ -445,6 +445,35 @@ SOP
 
 This keeps the core application independent of any specific provider or harness.
 
+### Command agent outcomes
+
+So SOP can act deterministically instead of guessing from prose, a command agent
+may return a **structured execution outcome** for mutating capabilities
+(`IMPLEMENT`, `FIX`):
+
+```json
+{"status": "completed", "summary": "Implemented the changes.", "changes_expected": true}
+{"status": "completed", "summary": "Baseline verification completed.", "changes_expected": false}
+{"status": "needs_human", "reason": "Required operation needs human authorization."}
+{"status": "failed", "reason": "Unable to complete the requested operation."}
+```
+
+SOP's response:
+
+```text
+completed + changes_expected true  + a non-empty change set  → validate → review → gate
+completed + changes_expected true  + no changes              → FAIL (claimed changes, produced none)
+completed + changes_expected false + no changes              → proceed (nothing to change)
+needs_human                                                   → stop with NEEDS_HUMAN
+failed                                                        → FAIL
+```
+
+The outcome is structural: SOP never infers `needs_human` by scanning prose for
+words like “permission” or “would you like”. Any other output (plain prose, or
+JSON without a recognized `status`) keeps the legacy behaviour, so existing
+harnesses keep working — but they will still be judged by the change they
+produced.
+
 ---
 
 # 4. Generate the Implementation Plan (optional)

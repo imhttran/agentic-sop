@@ -254,6 +254,12 @@ fails clearly rather than being sent to a provider that cannot serve it. A run
 also checks up front that the provider can `IMPLEMENT`, before any task is
 attempted.
 
+For mutating capabilities (`IMPLEMENT`, `FIX`) a command agent may return a
+structured execution outcome — `completed` with `changes_expected`, `needs_human`,
+or `failed`. SOP acts on it directly: a claimed change with none produced is a
+failure, a legitimate no-change completion proceeds, and a human boundary stops
+with `NEEDS_HUMAN`. The outcome is never inferred from prose.
+
 ### Validation Runner
 
 Runs the project's configured verification commands and classifies the result
