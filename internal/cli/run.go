@@ -107,6 +107,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := guardCapability(a, agent.Implement); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 
 	res, err := executeLifecycle(context.Background(), dir, cfg, a, d, spec, rn)
 	if err != nil {

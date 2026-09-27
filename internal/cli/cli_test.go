@@ -1511,6 +1511,48 @@ func TestRunChangedPlanStops(t *testing.T) {
 
 const autoPlanDoc2 = "# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nOther plan.\n\n## SC-001 — Other work\n\nDo it.\n\n### Acceptance Criteria\n\n- ok\n"
 
+// restrictedAgent declares a limited capability set.
+type restrictedAgent struct{ caps agent.Capabilities }
+
+func (restrictedAgent) Generate(context.Context, agent.Request) (agent.Response, error) {
+	return agent.Response{Content: "x"}, nil
+}
+func (r restrictedAgent) Capabilities() agent.Capabilities { return r.caps }
+
+func TestRunGuardRejectsProviderWithoutImplement(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := restrictedAgent{caps: agent.NewCapabilities(agent.Plan)}
+
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "cannot IMPLEMENT") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunPrintsEffectiveProvider(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nagent:\n  provider: ollama\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	t.Setenv(agent.EnvAgentProvider, "")
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Provider: ollama (configuration)") {
+		t.Errorf("stdout missing provider line:\n%s", stdout)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

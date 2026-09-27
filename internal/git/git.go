@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -169,6 +171,88 @@ func (a *Adapter) Diff(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("diff: %w", err)
 	}
 	return out, nil
+}
+
+// Untracked returns untracked file paths, excluding any path equal to or under
+// one of the given directory prefixes (for example SOP's own output directories).
+func (a *Adapter) Untracked(ctx context.Context, excludes ...string) ([]string, error) {
+	out, err := run(ctx, a.dir, "status", "--porcelain", "--untracked-files=all")
+	if err != nil {
+		return nil, fmt.Errorf("untracked: %w", err)
+	}
+
+	var files []string
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "?? ") {
+			continue
+		}
+		path := strings.TrimSpace(strings.TrimPrefix(line, "?? "))
+		if path == "" || excluded(path, excludes) {
+			continue
+		}
+		files = append(files, path)
+	}
+	return files, nil
+}
+
+// DiffAll returns the tracked working-tree diff plus a synthetic addition for
+// each untracked file, so a new file the agent created counts as a change. Paths
+// under excludes are omitted. Git output remains authoritative; this only widens
+// it to include files Git has not been told about yet.
+func (a *Adapter) DiffAll(ctx context.Context, excludes ...string) (string, error) {
+	diff, err := a.Diff(ctx)
+	if err != nil {
+		return "", err
+	}
+	files, err := a.Untracked(ctx, excludes...)
+	if err != nil {
+		return "", err
+	}
+	if len(files) == 0 {
+		return diff, nil
+	}
+
+	var b strings.Builder
+	b.WriteString(diff)
+	for _, path := range files {
+		data, err := os.ReadFile(filepath.Join(a.dir, path))
+		if err != nil {
+			continue // unreadable (binary, symlink, permission): skip
+		}
+		b.WriteString(untrackedDiff(path, data))
+	}
+	return b.String(), nil
+}
+
+// excluded reports whether path equals or is under any exclude prefix.
+func excluded(path string, excludes []string) bool {
+	for _, e := range excludes {
+		if e == "" {
+			continue
+		}
+		if path == e || strings.HasPrefix(path, e+"/") {
+			return true
+		}
+	}
+	return false
+}
+
+// untrackedDiff renders a new-file diff for an untracked file.
+func untrackedDiff(path string, data []byte) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n", path, path, path)
+	trimmed := strings.TrimRight(string(data), "\n")
+	if trimmed == "" {
+		return b.String()
+	}
+	lines := strings.Split(trimmed, "\n")
+	fmt.Fprintf(&b, "@@ -0,0 +1,%d @@\n", len(lines))
+	for _, line := range lines {
+		b.WriteString("+")
+		b.WriteString(line)
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // Add stages paths for the next commit. With no paths it stages all changes

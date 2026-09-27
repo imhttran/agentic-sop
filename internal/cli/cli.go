@@ -15,6 +15,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
+	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/resume"
 )
 
@@ -63,7 +64,9 @@ func defaultDeps() deps {
 			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil
 		},
 		readDiff: func(ctx context.Context, dir string) (string, error) {
-			return git.New(dir).Diff(ctx)
+			// Include untracked files (new files the agent created) so change
+			// detection is not blind to them; exclude SOP's own output.
+			return git.New(dir).DiffAll(ctx, config.DirName, planflow.ReportsDir)
 		},
 		commit: func(ctx context.Context, dir, message string) error {
 			g := git.New(dir)

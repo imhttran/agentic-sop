@@ -55,6 +55,8 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	providerName, providerSource := agent.EffectiveProvider(cfg.Agent.Provider)
+
 	st, err := store.Open(statePath(dir))
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
@@ -91,10 +93,14 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	printStartup(stdout, dir, cfg, prepared, tasks)
+	printStartup(stdout, dir, cfg, providerName, string(providerSource), prepared, tasks)
 
 	if agentErr != nil {
 		fmt.Fprintf(stderr, "run: prepared the plan and tasks, but cannot execute: %v\n", agentErr)
+		return exitError
+	}
+	if err := guardCapability(a, agent.Implement); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
 
@@ -116,7 +122,7 @@ func projectName(dir string, cfg config.Config) string {
 }
 
 // printStartup emits a concise summary of the plan being executed.
-func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.Result, tasks []*domain.Task) {
+func printStartup(w io.Writer, dir string, cfg config.Config, providerName, providerSource string, prepared planflow.Result, tasks []*domain.Task) {
 	source := prepared.Source
 	if source == "" {
 		source = "(existing plan.json)"
@@ -125,6 +131,7 @@ func printStartup(w io.Writer, dir string, cfg config.Config, prepared planflow.
 	fmt.Fprintln(w, "SOP")
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
+	fmt.Fprintf(w, "Provider: %s (%s)\n", providerName, providerSource)
 	fmt.Fprintf(w, "Source: %s\n", source)
 
 	if prepared.PlanRebuilt {
@@ -168,6 +175,16 @@ func statusCounts(tasks []*domain.Task) (done, ready, blocked int) {
 		}
 	}
 	return done, ready, blocked
+}
+
+// guardCapability rejects a provider that cannot serve a capability the run
+// needs, before any work is attempted.
+func guardCapability(a agent.Agent, capability agent.Capability) error {
+	caps := agent.CapabilitiesOf(a)
+	if caps.Supports(capability) {
+		return nil
+	}
+	return fmt.Errorf("provider cannot %s (supported: %s); configure a provider that supports it", capability, caps.String())
 }
 
 // allComplete reports whether every task reached a success terminal state.

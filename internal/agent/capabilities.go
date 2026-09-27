@@ -46,6 +46,9 @@ func (c Capabilities) List() []Capability {
 	return out
 }
 
+// String renders the supported capabilities for messages.
+func (c Capabilities) String() string { return joinCapabilities(c.List()) }
+
 // Declarer is implemented by agents that serve a restricted set of capabilities.
 // An agent that does not implement it is assumed to serve every capability.
 type Declarer interface {
@@ -88,7 +91,7 @@ func (c *Checked) Generate(ctx context.Context, request Request) (Response, erro
 	}
 	if !c.caps.Supports(request.Capability) {
 		return Response{}, fmt.Errorf("agent does not support capability %s (supported: %s)",
-			request.Capability, joinCapabilities(c.caps.List()))
+			request.Capability, c.caps.String())
 	}
 	return c.inner.Generate(ctx, request)
 }

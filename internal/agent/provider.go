@@ -47,11 +47,9 @@ func FromEnv() (Agent, error) {
 // command agent as the default. An unsupported name is an error rather than a
 // silent fallback.
 func FromConfig(provider string) (Agent, error) {
-	if env := strings.TrimSpace(os.Getenv(EnvAgentProvider)); env != "" {
-		provider = env
-	}
-	switch name := strings.TrimSpace(provider); name {
-	case "", ProviderCommand:
+	name, _ := EffectiveProvider(provider)
+	switch name {
+	case ProviderCommand:
 		return NewCommandAgentFromEnv()
 	case ProviderOllama:
 		return NewOllamaFromEnv()
@@ -61,6 +59,31 @@ func FromConfig(provider string) (Agent, error) {
 		return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
 			name, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
 	}
+}
+
+// ProviderSource records where the effective provider name came from.
+type ProviderSource string
+
+const (
+	// SourceEnvironment: the SOP_AGENT_PROVIDER environment variable.
+	SourceEnvironment ProviderSource = "environment"
+	// SourceConfiguration: agent.provider in .agent-sdlc/config.yaml.
+	SourceConfiguration ProviderSource = "configuration"
+	// SourceDefault: neither was set, so the historical command agent is used.
+	SourceDefault ProviderSource = "default"
+)
+
+// EffectiveProvider returns the provider name FromConfig would use for a
+// configured provider, and where it came from: SOP_AGENT_PROVIDER (environment)
+// wins over the configured value, which wins over the default command provider.
+func EffectiveProvider(configured string) (string, ProviderSource) {
+	if env := strings.TrimSpace(os.Getenv(EnvAgentProvider)); env != "" {
+		return env, SourceEnvironment
+	}
+	if cfg := strings.TrimSpace(configured); cfg != "" {
+		return cfg, SourceConfiguration
+	}
+	return ProviderCommand, SourceDefault
 }
 
 // renderPrompt renders a Request into the single user message that local text

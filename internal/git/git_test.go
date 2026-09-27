@@ -52,6 +52,42 @@ func initRepo(t *testing.T) string {
 	return dir
 }
 
+func TestDiffAllIncludesUntracked(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "new.txt", "brand new\n")
+
+	diff, err := New(dir).DiffAll(context.Background(), ".agent-sdlc", "docs/reports")
+	if err != nil {
+		t.Fatalf("DiffAll failed: %v", err)
+	}
+	if !strings.Contains(diff, "new.txt") || !strings.Contains(diff, "new file mode") {
+		t.Errorf("DiffAll missing the untracked file header:\n%s", diff)
+	}
+	if !strings.Contains(diff, "+brand new") {
+		t.Errorf("DiffAll missing the untracked content:\n%s", diff)
+	}
+}
+
+func TestDiffAllExcludesSOPOutput(t *testing.T) {
+	dir := initRepo(t)
+	if err := os.MkdirAll(filepath.Join(dir, ".agent-sdlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join(".agent-sdlc", "state.db"), "x")
+	if err := os.MkdirAll(filepath.Join(dir, "docs", "reports"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "reports", "prd.md"), "# plan\n")
+
+	diff, err := New(dir).DiffAll(context.Background(), ".agent-sdlc", "docs/reports")
+	if err != nil {
+		t.Fatalf("DiffAll failed: %v", err)
+	}
+	if strings.Contains(diff, "state.db") || strings.Contains(diff, "docs/reports") {
+		t.Errorf("DiffAll should exclude SOP's own output:\n%s", diff)
+	}
+}
+
 func TestValidateRepository(t *testing.T) {
 	ctx := context.Background()
 

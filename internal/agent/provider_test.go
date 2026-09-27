@@ -359,6 +359,20 @@ func TestFromConfigProvider(t *testing.T) {
 	})
 }
 
+func TestEffectiveProvider(t *testing.T) {
+	t.Setenv(EnvAgentProvider, "")
+	if name, src := EffectiveProvider(""); name != ProviderCommand || src != SourceDefault {
+		t.Errorf("default: (%q, %q), want (%q, %q)", name, src, ProviderCommand, SourceDefault)
+	}
+	if name, src := EffectiveProvider(ProviderOllama); name != ProviderOllama || src != SourceConfiguration {
+		t.Errorf("configuration: (%q, %q), want (%q, %q)", name, src, ProviderOllama, SourceConfiguration)
+	}
+	t.Setenv(EnvAgentProvider, ProviderLlamaCpp)
+	if name, src := EffectiveProvider(ProviderOllama); name != ProviderLlamaCpp || src != SourceEnvironment {
+		t.Errorf("environment override: (%q, %q), want (%q, %q)", name, src, ProviderLlamaCpp, SourceEnvironment)
+	}
+}
+
 func TestNewOllamaFromEnvRequiresModel(t *testing.T) {
 	t.Setenv(EnvOllamaModel, "")
 	if _, err := NewOllamaFromEnv(); err == nil {

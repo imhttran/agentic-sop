@@ -325,9 +325,10 @@ func ResolvePlanPath(dir, arg string) (string, error) {
 	}
 }
 
-// reportsDir is where SOP writes generated, human-readable artifacts, kept out of
-// the project root.
-const reportsDir = "docs/reports"
+// ReportsDir is where SOP writes generated, human-readable artifacts, kept out of
+// the project root. Change-detection excludes it (SOP's own output is not the
+// task's change).
+const ReportsDir = "docs/reports"
 
 // writeGeneratedPlanDoc writes the human-readable plan generated from a PRD to
 // docs/reports/<plan-id>.md and returns the relative path, or "". It never writes
@@ -337,7 +338,7 @@ func writeGeneratedPlanDoc(dir, prdPath string, plan *planner.Plan) string {
 	if id == "" {
 		id = "plan"
 	}
-	target := filepath.Join(dir, reportsDir, id+".md")
+	target := filepath.Join(dir, ReportsDir, id+".md")
 	if err := atomicWrite(target, []byte(plan.RenderMarkdown())); err != nil {
 		return ""
 	}
