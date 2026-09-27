@@ -843,9 +843,10 @@ changed document triggers a rebuild. `sop init`, `sop plan`, and `sop tasks`
 remain the explicit lower-level commands.
 
 The **scheduler** selects the next ready task and the same lifecycle runs for it;
-a passing gate marks the task `DONE` and a failing gate marks it `BLOCKED`,
+a passing gate marks the task `LOCAL_DONE` and a failing gate marks it `BLOCKED`,
 repeating until no runnable work remains. Local execution has no remote
-PR/CI/merge, so a passing lifecycle advances the task to `DONE` directly.
+PR/CI/merge, so a passing lifecycle advances the task to `LOCAL_DONE` directly (no synthetic PR/CI/merge states;
+controlled by `workflow.mode`).
 
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
@@ -974,6 +975,9 @@ quality:
 
 human:
   approval_before_commit: true
+
+workflow:
+  mode: local # local | pull-request
 ```
 
 Omitted fields take safe defaults (documented by the generated template). An

@@ -658,6 +658,7 @@ T038 optional decision layer (deterministic + routing)
 T039 run report command (sop report)
 T040 evaluation harness (sop eval)
 T041 PLAN-first one-command run (sop run; planflow + PLAN.md compiler)
+T042 local vs remote completion (LOCAL_DONE), plan-graph validation, and reconciliation
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

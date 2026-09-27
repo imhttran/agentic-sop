@@ -551,6 +551,11 @@ measured rather than asserted.
                          +------------------+
 ```
 
+From `REVIEW_PASS` a task either completes locally at `LOCAL_DONE` (the local
+lifecycle ran; no PR was opened and no CI ran) or continues through the remote
+lifecycle (`PR_OPEN` … `DONE`). A dependency is satisfied by `LOCAL_DONE` (local)
+or `MERGED`/`DONE` (remote). Local runs never fabricate remote states.
+
 Any actionable failure can transition to `FIX_REQUIRED`; exhausted
 retries transition to `BLOCKED`.
 
@@ -905,6 +910,7 @@ optional decision layer (deterministic + routing)
 run report command (sop report)
 evaluation harness (sop eval)
 PLAN-first one-command run (sop run, planflow)
+local vs remote completion (LOCAL_DONE; no synthetic remote states)
 ```
 
 Remaining:

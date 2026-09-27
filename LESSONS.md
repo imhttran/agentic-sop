@@ -109,3 +109,13 @@ the human-inspectable record belongs on disk.
 `PLAN-wrapup.md` was byte-identical to `PLAN-JEV.md`. Diffing before implementing
 saved building the same thing twice and clarified that the two names described
 one roadmap.
+
+## Persisted state must describe what actually happened
+
+A local-only run never opens a PR or executes CI, so it must not advance a task
+through `PR_OPEN`/`CI_RUNNING`/`CI_PASS`/`MERGED` as if it had. Synthesizing those
+states would make the state store lie to every reader — a dashboard, a resume, or
+a dependency check. The fix was a distinct terminal state (`LOCAL_DONE`) for local
+completion, with the remote path left intact for when a real PR exists. The same
+principle governs plan preparation: a stale machine plan is reconciled explicitly
+(or stopped with `NEEDS_HUMAN`), never silently rebuilt over existing history.
