@@ -842,6 +842,10 @@ a newer PLAN: the source path and a content fingerprint are recorded, and a
 changed document triggers a rebuild. `sop init`, `sop plan`, and `sop tasks`
 remain the explicit lower-level commands.
 
+Preparation does not require an agent: `sop run` compiles a `PLAN.md` and creates
+tasks even when no agent is configured, then reports the missing agent only when
+it needs to execute (or to generate a plan from a PRD).
+
 The **scheduler** selects the next ready task and the same lifecycle runs for it;
 a passing gate marks the task `LOCAL_DONE` and a failing gate marks it `BLOCKED`,
 repeating until no runnable work remains. Local execution has no remote

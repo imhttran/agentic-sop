@@ -659,6 +659,7 @@ T039 run report command (sop report)
 T040 evaluation harness (sop eval)
 T041 PLAN-first one-command run (sop run; planflow + PLAN.md compiler)
 T042 local vs remote completion (LOCAL_DONE), plan-graph validation, and reconciliation
+T043 bootstrap independent of the agent (sop run prepares without an agent)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

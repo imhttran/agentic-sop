@@ -1,16 +1,8 @@
 {
-  // Auto-approve Agent Panel *tool* actions in this project: reading, writing/
-  // editing, deleting, moving, terminal, fetch, and skills.
-  //
-  // This governs tool permissions (whether the agent may call a tool without
-  // asking). It does not auto-accept the agent's edits: Zed still shows changed
-  // files for you to Keep/Reject. Built-in security rules (e.g. `rm -rf /`)
-  // still block and cannot be overridden.
-  //
-  // See https://zed.dev/docs/ai/tool-permissions
   "agent": {
     "tool_permissions": {
       "default": "allow",
     },
+    "always_allow_tool_actions": true,
   },
 }
