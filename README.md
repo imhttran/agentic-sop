@@ -120,7 +120,7 @@ Implemented:
 - command policy (`SAFE` / `REQUIRES_APPROVAL` / `DENIED`) whose project rules can only tighten the defaults
 - configuration-driven validation runner (`sop validate`)
 - review stage (`sop review`) over the working-tree diff, blocking on configured severities
-- local run lifecycle (`sop run [TASK.md]`) with durable run state, a bounded fix loop, a markdown/JSON run report, and dependency-aware graph execution
+- local run lifecycle (`sop run [PLAN.md | --task TASK.md]`) with durable run state, a bounded fix loop, a markdown/JSON run report, and dependency-aware graph execution
 - TDD task runner (RED/GREEN with bounded retries)
 - structured self-review and optional Open Code Review adapter
 - commit and documentation gate
@@ -242,10 +242,35 @@ usually just run:
 sop run
 ```
 
-`sop run` discovers the planning source, initializes SOP state if needed,
-compiles or generates the machine plan, creates the tasks, and executes the task
-graph — all idempotently. The explicit steps below remain available when you want
-to inspect or control each stage.
+`sop run` discovers the planning source, initializes SOP state if needed, compiles
+or generates the machine plan, creates the tasks, and executes the task graph —
+all idempotently. Run it again to resume; completed work is never restarted.
+
+You can also name a specific plan or a single task:
+
+```bash
+sop run docs/PLAN-Hardening.md   # execute a specific PLAN end to end
+sop run PLAN-Hardening.md        # resolves to docs/PLAN-Hardening.md
+sop run --task TASK.md           # run one task through the local lifecycle
+```
+
+Several plans may coexist under `docs/`:
+
+```text
+docs/
+├── PLAN.md
+├── PLAN-Hardening.md
+├── PLAN-Jev.md
+└── PLAN-MCP.md
+```
+
+`sop run docs/PLAN-Jev.md` runs that plan independently and safely: each plan
+carries its own identity (source path + `source_sha256` + plan id), so SOP never
+mixes tasks from two plans. A plan is only rebuilt when its content changes, and
+when it changed after tasks were created (or a different plan is requested while
+another is active) SOP stops with an actionable `NEEDS_HUMAN` instead of
+discarding history. The explicit steps below remain available when you want to
+inspect or control each stage.
 
 ---
 
@@ -263,7 +288,30 @@ Move into that project:
 cd ~/workspace/projects/book-rag
 ```
 
-The basic workflow currently is:
+The normal workflow is a single command:
+
+```bash
+cd ~/workspace/projects/book-rag
+sop run
+```
+
+SOP discovers the plan, prepares state and tasks, and executes the graph.
+Conceptually:
+
+```text
+docs/PLAN.md  (or docs/PRD.md)
+  │
+  ▼
+sop run
+  │
+  ├────────→ .agent-sdlc/plan.json
+  ├────────→ Task DAG (SQLite)
+  └────────→ execute → validate → review → gate
+```
+
+The sections below then walk through the **explicit, lower-level commands**
+(`sop init`, `sop plan`, `sop tasks`, `sop status`). They are useful for debugging
+or when you want to inspect and control each stage:
 
 ```bash
 sop init
@@ -272,36 +320,11 @@ sop tasks
 sop status
 ```
 
-Conceptually:
-
-```text
-PRD.md
-  │
-  ▼
-sop plan
-  │
-  ├────────→ PLAN.md
-  │
-  └────────→ .agent-sdlc/plan.json
-                       │
-                       ▼
-               sop tasks
-                       │
-                       ▼
-                 Task DAG
-                       │
-                       ▼
-                    SQLite
-                       │
-                       ▼
-               sop status
-```
-
-The following sections walk through this process.
-
 ---
 
-# 1. Initialize the Project
+# 1. Initialize the Project (optional)
+
+> `sop run` does this automatically. Run `sop init` only for the explicit path.
 
 From the target project:
 
@@ -309,7 +332,7 @@ From the target project:
 sop init
 ```
 
-This initializes SOP state.
+This initializes SOP state and writes a configuration template.
 
 Your project will contain:
 
@@ -319,7 +342,8 @@ book-rag/
 ├── source...
 │
 └── .agent-sdlc/
-    └── state.db
+    ├── state.db
+    └── config.yaml
 ```
 
 `state.db` contains durable workflow state for the project.
@@ -418,7 +442,11 @@ This keeps the core application independent of any specific provider or harness.
 
 ---
 
-# 4. Generate the Implementation Plan
+# 4. Generate the Implementation Plan (optional)
+
+> `sop run` compiles or generates `plan.json` automatically. Use `sop plan`
+> explicitly to generate a PLAN from a PRD, or `sop run docs/PLAN.md` to compile
+> a human-written PLAN.
 
 Run:
 
@@ -541,7 +569,10 @@ Structured data is used instead.
 
 ---
 
-# 5. Create the Task Graph
+# 5. Create the Task Graph (optional)
+
+> `sop run` creates missing tasks automatically; use `sop tasks` only for the
+> explicit path.
 
 Once the plan exists, run:
 
@@ -730,7 +761,7 @@ sop plan [TASK.md]
 sop tasks
 sop validate
 sop review
-sop run [TASK.md]
+sop run [PLAN.md | --task TASK.md]
 sop report [run-id]
 sop commit [TASK.md] [--yes]
 sop pr TASK.md [--yes]
@@ -814,8 +845,9 @@ When there are no working-tree changes it reports “no changes to review”.
 Run a task file through the local lifecycle, or drive the persisted task graph:
 
 ```bash
-sop run TASK.md   # one task file
-sop run           # the persisted task graph, in dependency order
+sop run                        # the project's normal plan (discovered)
+sop run docs/PLAN-Hardening.md # a specific plan, executed end to end
+sop run --task TASK.md         # one task file
 ```
 
 ```text
@@ -824,10 +856,12 @@ task → plan → implement → detect changes
      → report
 ```
 
-With a file, the task comes from the Markdown. With no argument, `sop run` is the
-**one-command workflow**: it discovers the planning source, initializes state if
-needed, compiles or generates `.agent-sdlc/plan.json`, creates the tasks, then
-drives the graph — each step idempotent. Source precedence:
+`sop run` is the **one-command workflow**: it discovers or resolves the planning
+source, initializes state if needed, compiles or generates
+`.agent-sdlc/plan.json`, creates the tasks, then drives the graph — each step
+idempotent. A file argument names an **execution PLAN** (authoritative for that
+run); `--task TASK.md` runs a single task through the local lifecycle instead.
+Source precedence (when no plan is named):
 
 ```text
 1. an existing valid .agent-sdlc/plan.json (reused only if its source is unchanged)
@@ -845,6 +879,13 @@ remain the explicit lower-level commands.
 Preparation does not require an agent: `sop run` compiles a `PLAN.md` and creates
 tasks even when no agent is configured, then reports the missing agent only when
 it needs to execute (or to generate a plan from a PRD).
+
+Multiple plans may coexist under `docs/` (`PLAN.md`, `PLAN-Hardening.md`,
+`PLAN-Jev.md`, …). Each carries its own identity (source path, `source_sha256`,
+and a plan id), so `sop run docs/PLAN-Jev.md` runs that plan independently. If the
+named plan's content changed after tasks were created, or a different plan is
+requested while another is active, `sop run` stops with an actionable
+`NEEDS_HUMAN` rather than mixing tasks from two plans.
 
 The **scheduler** selects the next ready task and the same lifecycle runs for it;
 a passing gate marks the task `LOCAL_DONE` and a failing gate marks it `BLOCKED`,
@@ -1313,7 +1354,7 @@ The task-file lifecycle is implemented:
 cd my-project
 
 sop init
-sop run TASK.md
+sop run docs/PLAN.md
 ```
 
 `sop run` drives task → plan → implement → detect changes → validate → review →
