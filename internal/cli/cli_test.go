@@ -1630,6 +1630,77 @@ func TestRunImplementNoChangesExpected(t *testing.T) {
 	}
 }
 
+func TestRunGraphNeedsHumanRequeues(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q", stdout)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("S001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.PLANNED {
+		t.Errorf("task status = %s, want PLANNED (requeued, not BLOCKED)", got.Status)
+	}
+
+	// A later run retries it instead of reporting a terminal blocker.
+	code2, stdout2, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code2 != exitError {
+		t.Fatalf("second run code=%d, want %d", code2, exitError)
+	}
+	if !strings.Contains(stdout2, "NEEDS_HUMAN") {
+		t.Errorf("second run did not retry:\n%s", stdout2)
+	}
+	if strings.Contains(stdout2, "no runnable task") {
+		t.Errorf("second run should retry, not report no runnable task:\n%s", stdout2)
+	}
+}
+
+func TestRunGraphFailedBlocks(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "boom"}}
+
+	code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("S001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.BLOCKED {
+		t.Errorf("task status = %s, want BLOCKED (a hard failure is terminal)", got.Status)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

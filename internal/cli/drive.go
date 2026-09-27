@@ -306,6 +306,15 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	if code := emitRunSummary(stdout, dir, cfg, rn, res); code != exitOK {
+		if res.stage == runpkg.WaitingForHuman {
+			// A human boundary is not terminal: return the task to PLANNED so a
+			// later run retries it once the boundary is resolved.
+			if err := requeueTask(saver, task); err != nil {
+				fmt.Fprintf(stderr, "run: %v\n", err)
+			}
+			fmt.Fprintf(stdout, "%s NEEDS_HUMAN (requeued)\n", task.ID)
+			return exitError
+		}
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
 		}
@@ -376,6 +385,23 @@ func completeTask(saver taskSaver, task *domain.Task) error {
 func blockTask(saver taskSaver, task *domain.Task, reason domain.BlockedReason) error {
 	staged := *task
 	if err := staged.Block(reason); err != nil {
+		return err
+	}
+	if err := saver.Save(&staged); err != nil {
+		return err
+	}
+	task.Status = staged.Status
+	task.UpdatedAt = staged.UpdatedAt
+	return nil
+}
+
+// requeueTask returns a task to PLANNED on a copy, saves once, and publishes the
+// change back — so a failed save cannot leave in-memory state that was never
+// persisted. It is used for a human boundary: the work is not lost and a later
+// run retries it.
+func requeueTask(saver taskSaver, task *domain.Task) error {
+	staged := *task
+	if err := staged.Requeue(); err != nil {
 		return err
 	}
 	if err := saver.Save(&staged); err != nil {

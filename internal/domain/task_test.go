@@ -170,6 +170,32 @@ func TestBlockSetsTerminalState(t *testing.T) {
 	}
 }
 
+func TestRequeue(t *testing.T) {
+	for _, from := range []TaskStatus{PLANNED, READY, BRANCH_CREATED, IMPLEMENTING, BLOCKED} {
+		task := &Task{ID: "T1", Status: from, BlockedReason: REVIEW_UNRESOLVED}
+		if err := task.Requeue(); err != nil {
+			t.Errorf("Requeue from %s: %v", from, err)
+			continue
+		}
+		if task.Status != PLANNED {
+			t.Errorf("Requeue from %s: status = %s, want PLANNED", from, task.Status)
+		}
+		if task.BlockedReason != NO_REASON {
+			t.Errorf("Requeue from %s: blocked reason = %q, want empty", from, task.BlockedReason)
+		}
+	}
+
+	for _, from := range []TaskStatus{DONE, LOCAL_DONE, MERGED} {
+		task := &Task{ID: "T1", Status: from}
+		if err := task.Requeue(); err == nil {
+			t.Errorf("Requeue from %s should fail", from)
+		}
+		if task.Status != from {
+			t.Errorf("Requeue from %s mutated status to %s", from, task.Status)
+		}
+	}
+}
+
 func TestBlockRejectsCompletedTask(t *testing.T) {
 	task := &Task{ID: "T1", Status: DONE}
 	if err := task.Block(RETRIES_EXHAUSTED); err == nil {

@@ -95,6 +95,22 @@ func (t *Task) Block(reason BlockedReason) error {
 	return nil
 }
 
+// Requeue returns a Task to PLANNED so the scheduler may select it again. It is
+// the inverse of Block: a human boundary (NEEDS_HUMAN) is not terminal, so the
+// work is not lost and a later run retries it. Like Block, it is an explicit
+// domain operation rather than a Transition, and a completed Task cannot be
+// requeued.
+func (t *Task) Requeue() error {
+	switch t.Status {
+	case DONE, LOCAL_DONE, MERGED:
+		return fmt.Errorf("cannot requeue a completed task")
+	}
+	t.Status = PLANNED
+	t.BlockedReason = NO_REASON
+	t.UpdatedAt = time.Now()
+	return nil
+}
+
 func (t *Task) IsReady() bool {
 	return t.Status == READY
 }
