@@ -474,7 +474,7 @@ SOP's response:
 ```text
 completed + changes_expected true  + a non-empty change set  → validate → review → gate
 completed + changes_expected true  + no changes              → FAIL (claimed changes, produced none)
-completed + changes_expected false + no changes              → proceed (nothing to change)
+completed + changes_expected false + no changes              → run configured validation, then PASS
 needs_human                                                   → stop with NEEDS_HUMAN (requeued)
 failed                                                        → FAIL (terminal)
 ```
@@ -488,7 +488,11 @@ produced.
 A `needs_human` outcome is **not terminal**: SOP returns the task to `PLANNED`, so
 once the human boundary is resolved the same `sop run …` command retries it
 automatically. A hard `FAIL` (including a claimed change with none produced)
-leaves the task `BLOCKED`.
+leaves the task `BLOCKED`; requeue it explicitly with `sop retry <task-id>`.
+
+A `changes_expected: false` completion still runs the **configured validation**
+(build/test/lint) before it can pass; review is skipped because there is nothing
+to review.
 
 ---
 
@@ -820,6 +824,7 @@ sop eval DIR
 sop status
 sop task <id>
 sop resume [task-id]
+sop retry <task-id>
 sop version
 sop help
 ```

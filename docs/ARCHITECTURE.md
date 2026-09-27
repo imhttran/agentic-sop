@@ -257,8 +257,10 @@ attempted.
 For mutating capabilities (`IMPLEMENT`, `FIX`) a command agent may return a
 structured execution outcome — `completed` with `changes_expected`, `needs_human`,
 or `failed`. SOP acts on it directly: a claimed change with none produced is a
-failure, a legitimate no-change completion proceeds, and a human boundary stops
-with `NEEDS_HUMAN`. The outcome is never inferred from prose.
+failure, a legitimate no-change completion still runs the configured validation
+before it passes, and a human boundary stops with `NEEDS_HUMAN` (the task is
+requeued so a later run retries it; a `BLOCKED` task can be requeued explicitly
+with `sop retry <task-id>`). The outcome is never inferred from prose.
 
 ### Validation Runner
 
