@@ -206,3 +206,16 @@ func TestPrepareSurfacesUnknownDependency(t *testing.T) {
 		t.Errorf("error = %q, want an actionable validation diagnostic", err)
 	}
 }
+
+func TestPrepareRequiresAgentForPRD(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, filepath.Join("docs", "PRD.md"), "# PRD\n")
+
+	_, err := Prepare(context.Background(), Options{Dir: dir, Store: &fakeStore{}})
+	if err == nil {
+		t.Fatal("expected an error when no agent is available to generate a plan")
+	}
+	if !strings.Contains(err.Error(), "no agent") {
+		t.Errorf("error = %q, want an actionable no-agent message", err)
+	}
+}

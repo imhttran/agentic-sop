@@ -57,18 +57,17 @@ func runGraph(stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	a, err := d.newAgent(cfg.Agent.Provider)
-	if err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
-	}
-
 	st, err := store.Open(statePath(dir))
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
 	defer st.Close()
+
+	// The agent is required to execute, but not to prepare. Build it lazily so a
+	// PLAN.md can still be compiled and its tasks created when the agent is not
+	// configured; execution then reports the missing agent clearly.
+	a, agentErr := d.newAgent(cfg.Agent.Provider)
 
 	ctx := context.Background()
 	prepared, err := planflow.Prepare(ctx, planflow.Options{Dir: dir, Agent: a, Store: st})
@@ -85,6 +84,11 @@ func runGraph(stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 	printStartup(stdout, dir, cfg, prepared, tasks, stateExisted)
+
+	if agentErr != nil {
+		fmt.Fprintf(stderr, "run: prepared the plan and tasks, but cannot execute: %v\n", agentErr)
+		return exitError
+	}
 
 	return driveGraph(ctx, dir, cfg, a, d, st, stdout, stderr)
 }

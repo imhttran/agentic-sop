@@ -1356,6 +1356,31 @@ func TestRunValidateSubdirectoryCommand(t *testing.T) {
 	}
 }
 
+func TestRunBootstrapsWithoutAgent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+
+	// A nil agent makes newAgent return "no agent configured": preparation must
+	// still discover the PLAN, compile plan.json, and create the tasks.
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", nil, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !stateExists(filepath.Join(dir, stateDirName, "plan.json")) {
+		t.Error("plan.json was not created without an agent")
+	}
+	if !strings.Contains(stdout, "Created task graph") {
+		t.Errorf("stdout = %q, want a created task graph", stdout)
+	}
+	if !strings.Contains(stderr, "cannot execute") {
+		t.Errorf("stderr = %q, want the missing-agent message", stderr)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

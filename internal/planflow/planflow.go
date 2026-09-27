@@ -182,6 +182,9 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 
 	plan, err := buildPlan(ctx, opts.Agent, docKind, string(data))
 	if err != nil {
+		if errors.Is(err, errNoAgent) {
+			return nil, false, "", err
+		}
 		return nil, false, "", planError(rel, err)
 	}
 	if err := plan.Validate(); err != nil {
@@ -222,13 +225,25 @@ func ensureTasks(source string, plan *planner.Plan, store TaskStore) (int, error
 	return len(tasks), nil
 }
 
+// errNoAgent is returned when building a plan requires the agent but none is
+// configured. It is actionable on its own and is not wrapped as a validation
+// failure.
+var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed to generate a plan from a PRD, or to normalize a PLAN.md that is not recognizable)")
+
 // buildPlan compiles a human PLAN.md or generates a plan from a PRD.
 func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*planner.Plan, error) {
 	if kind == KindPlan {
-		return planner.New(a).Compile(ctx, content)
+		plan, err := planner.New(a).Compile(ctx, content)
+		if err != nil {
+			if a == nil && strings.Contains(err.Error(), "no agent is available") {
+				return nil, errNoAgent
+			}
+			return nil, err
+		}
+		return plan, nil
 	}
 	if a == nil {
-		return nil, errors.New("planflow: no agent available to generate a plan from the PRD")
+		return nil, errNoAgent
 	}
 	return planner.New(a).Generate(ctx, content)
 }
