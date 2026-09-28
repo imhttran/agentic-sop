@@ -61,7 +61,7 @@ func TestBuildDeterministicCapsule(t *testing.T) {
 		Summary:      "  added task runner  ",
 		Changes:      []string{" added task runner ", "added task runner", "", "added RED/GREEN"},
 		Decisions:    []string{"only FAIL establishes RED"},
-		Files:        []string{"internal/taskrunner/runner.go"},
+		Files:        []string{"internal/domain/task.go"},
 		Verification: []VerificationSummary{{Check: "unit", Status: "PASS"}, {Check: " unit ", Status: "PASS"}},
 		CarryForward: []string{"process-tree cancellation"},
 	})

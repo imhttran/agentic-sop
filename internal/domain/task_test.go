@@ -306,20 +306,6 @@ func TestDependency_empty(t *testing.T) {
 	}
 }
 
-func TestRetry_task_with_retries_remaining(t *testing.T) {
-	task := &Task{ID: "T1", Attempt: 1, MaxAttempts: 3}
-	if !task.CanRetry() {
-		t.Errorf("Task with attempt=1, max=3 should allow retry")
-	}
-}
-
-func TestRetry_task_exhausted(t *testing.T) {
-	task := &Task{ID: "T1", Attempt: 3, MaxAttempts: 3}
-	if task.CanRetry() {
-		t.Errorf("Task with attempt=3, max=3 should not allow retry")
-	}
-}
-
 func TestRetry_attempt_tracking(t *testing.T) {
 	task := &Task{ID: "T1"}
 	task.AddAttempt(IMPLEMENTING, "first attempt")

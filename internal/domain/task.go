@@ -155,10 +155,6 @@ func (t *Task) IsDone() bool {
 	return t.Status == DONE
 }
 
-func (t *Task) CanRetry() bool {
-	return t.Attempt < t.MaxAttempts
-}
-
 func (t *Task) AddAttempt(status TaskStatus, reason string) error {
 	t.Attempt++
 	attempt := Attempt{
