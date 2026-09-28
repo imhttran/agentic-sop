@@ -67,7 +67,7 @@ func (s *Scheduler) Next(_ context.Context) (Result, error) {
 
 	// V1 runs one task at a time.
 	for _, task := range tasks {
-		if isActive(task.Status) {
+		if IsActive(task.Status) {
 			return Result{Outcome: ActiveTask}, nil
 		}
 	}
@@ -128,9 +128,11 @@ func (s *Scheduler) Next(_ context.Context) (Result, error) {
 	return Result{Outcome: AllDone}, nil
 }
 
-// isActive reports whether a task represents in-flight work that prevents V1
-// from scheduling another task. PLANNED and terminal states are not active.
-func isActive(status domain.TaskStatus) bool {
+// IsActive reports whether a task represents in-flight work that prevents V1
+// from scheduling another task. PLANNED and terminal states are not active. It is
+// the single definition of "occupies the execution slot", shared by the scheduler
+// and by `sop run` when it resumes an interrupted task.
+func IsActive(status domain.TaskStatus) bool {
 	switch status {
 	case domain.PLANNED, domain.MERGED, domain.DONE, domain.LOCAL_DONE, domain.BLOCKED:
 		return false

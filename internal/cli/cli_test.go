@@ -2273,6 +2273,202 @@ func runCLIWithResources(t *testing.T, dir string, res resume.Observer, args ...
 	return code, out.String(), errOut.String()
 }
 
+// seedRunStage writes a persisted run state for id with the given stage, as an
+// interrupted run leaves behind.
+func seedRunStage(t *testing.T, dir, id, stage string) {
+	t.Helper()
+	runDir := filepath.Join(dir, stateDirName, "runs", id)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	content := fmt.Sprintf("{\n  \"id\": %q,\n  \"stage\": %q,\n  \"created_at\": \"2026-09-28T02:38:06Z\",\n  \"updated_at\": \"2026-09-28T02:38:06Z\"\n}\n", id, stage)
+	if err := os.WriteFile(filepath.Join(runDir, "state.json"), []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestRunSelectsPlannedTaskWhenNoActiveTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2001", Title: "Correct Provider Capabilities", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Running: AHV2001") || !strings.Contains(stdout, "AHV2001 LOCAL_DONE") {
+		t.Errorf("stdout = %q, want the planned task selected and completed", stdout)
+	}
+}
+
+func TestRunResumesInterruptedActiveTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2002", Title: "Introduce Harness Abstraction", Status: domain.READY, MaxAttempts: 3})
+	seedRunStage(t, dir, "AHV2002", "PLANNING")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "no runnable task") || strings.Contains(stdout, "ACTIVE_TASK") {
+		t.Errorf("sop run refused the active task:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "Running: AHV2002") || !strings.Contains(stdout, "AHV2002 LOCAL_DONE") {
+		t.Errorf("stdout = %q, want AHV2002 resumed and completed", stdout)
+	}
+}
+
+func TestRunResumesActiveTaskInsteadOfStartingAnother(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2002", Title: "Introduce Harness Abstraction", Status: domain.READY, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "AHV2003", Title: "Extend Configuration", Status: domain.PLANNED, MaxAttempts: 3})
+	seedRunStage(t, dir, "AHV2002", "PLANNING")
+	// The agent needs a human, so the run stops right after resuming AHV2002,
+	// proving AHV2003 was not started instead.
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs a decision"}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "Running: AHV2002") {
+		t.Errorf("AHV2002 was not resumed:\n%s", stdout)
+	}
+	if strings.Contains(stdout, "Running: AHV2003") {
+		t.Errorf("AHV2003 was started instead of resuming AHV2002:\n%s", stdout)
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("AHV2003")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.PLANNED {
+		t.Errorf("AHV2003 status = %s, want PLANNED", got.Status)
+	}
+}
+
+func TestRunCompletesActiveTaskThatAlreadyPassed(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2002", Title: "Introduce Harness Abstraction", Status: domain.READY, MaxAttempts: 3})
+	seedRunStage(t, dir, "AHV2002", "PASSED")
+	a := &countingAgent{} // must not be invoked: the lifecycle already passed
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if a.calls != 0 {
+		t.Errorf("the agent was invoked %d time(s); a passed task must not re-implement", a.calls)
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("AHV2002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.LOCAL_DONE {
+		t.Errorf("status = %s, want LOCAL_DONE", got.Status)
+	}
+}
+
+func TestRunRejectsAmbiguousActiveTasks(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2002", Title: "a", Status: domain.READY, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "AHV2003", Title: "b", Status: domain.READY, MaxAttempts: 3})
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stderr, "2 tasks are in flight") || !strings.Contains(stderr, "AHV2002") || !strings.Contains(stderr, "AHV2003") {
+		t.Errorf("stderr = %q, want an actionable ambiguity error", stderr)
+	}
+}
+
+func TestRunRefusesRemoteParkedActiveTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "AHV2009", Title: "remote", Status: domain.CI_PASS, MaxAttempts: 3})
+	seedRunStage(t, dir, "AHV2009", "REVIEWING")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	for _, want := range []string{"AHV2009", "CI_PASS", "opens no PR and runs no CI"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("stderr missing %q:\n%s", want, stderr)
+		}
+	}
+}
+
+func TestRunResumeIsIdempotent(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	seedTask(t, dir, &domain.Task{ID: "S001", Title: "implement", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitOK {
+		t.Fatalf("first run: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("second run: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "Running:") {
+		t.Errorf("a completed plan must not re-run work:\n%s", stdout)
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	tasks, err := st.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || tasks[0].Status != domain.LOCAL_DONE {
+		t.Errorf("tasks = %d, first status = %s; want exactly 1 LOCAL_DONE", len(tasks), tasks[0].Status)
+	}
+}
+
+func TestRunResumeReportsCreateBranchForReadyTask(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "AHV2002", Title: "Introduce Harness Abstraction", Status: domain.READY, MaxAttempts: 3})
+
+	res := &fakeResources{obs: resume.Observation{BranchExists: false}}
+	code, out, stderr := runCLIWithResources(t, dir, res, "resume")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(out, "AHV2002 CREATE_BRANCH") {
+		t.Errorf("stdout = %q, want AHV2002 CREATE_BRANCH", out)
+	}
+}
+
 func TestRunResumeReportsNextAction(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

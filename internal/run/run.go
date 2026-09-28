@@ -107,6 +107,21 @@ func (r *Run) RecordAttempt(signature string) error {
 	return os.WriteFile(filepath.Join(r.dir, attemptFileName), []byte(signature+"\n"), 0o644)
 }
 
+// Load reads a run's persisted stage without creating or modifying anything.
+// Unlike New it is read-only, so a caller can inspect an interrupted run before
+// deciding whether to resume it.
+func Load(projectDir, id string) (Stage, bool) {
+	data, err := os.ReadFile(filepath.Join(projectDir, config.DirName, runsDirName, id, stateFileName))
+	if err != nil {
+		return "", false
+	}
+	var state State
+	if err := json.Unmarshal(data, &state); err != nil || state.Stage == "" {
+		return "", false
+	}
+	return state.Stage, true
+}
+
 // save writes state.json atomically enough for inspection: the payload is built
 // first, then written.
 func (r *Run) save() error {

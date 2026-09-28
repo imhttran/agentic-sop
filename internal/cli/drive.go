@@ -13,6 +13,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
+	"github.com/imhttran/agentic-sop/internal/resume"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/scheduler"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -266,8 +267,9 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	sch := scheduler.New(st)
 	completed := 0
 
-	// Each iteration either completes a task (→ DONE) or blocks one (→ BLOCKED),
-	// so the loop is bounded by the task count; +1 is defensive.
+	// Each iteration either completes a task (→ LOCAL_DONE), resumes and completes an
+	// interrupted one, or blocks one, so the loop is bounded by the task count;
+	// +1 is defensive.
 	for i := 0; i <= len(tasks); i++ {
 		res, err := sch.Next(ctx)
 		if err != nil {
@@ -278,6 +280,13 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		switch res.Outcome {
 		case scheduler.ReadyTask:
 			if code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, stdout, stderr); code != exitOK {
+				return code
+			}
+			completed++
+		case scheduler.ActiveTask:
+			// A task is mid-lifecycle (typically selected but interrupted). SOP has one
+			// interpretation of that state: resume the same task, never start another.
+			if code := resumeActiveTask(ctx, dir, cfg, a, d, st, stdout, stderr); code != exitOK {
 				return code
 			}
 			completed++
@@ -292,6 +301,97 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 
 	fmt.Fprintf(stdout, "all tasks done (%d completed this run)\n", completed)
 	return exitOK
+}
+
+// resumeActiveTask resumes the single in-flight task instead of refusing to run.
+// It reuses the notions the rest of SOP uses: the scheduler decides which status
+// occupies the execution slot (scheduler.IsActive), and resume decides the next
+// legal action for that status (resume.ActionFor) — the same decision `sop resume`
+// reports. A local run only performs the local lifecycle, so a task parked in the
+// remote lifecycle is reported rather than guessed at.
+func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, stdout, stderr io.Writer) int {
+	tasks, err := st.List()
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+
+	var active []*domain.Task
+	for _, task := range tasks {
+		if scheduler.IsActive(task.Status) {
+			active = append(active, task)
+		}
+	}
+	switch len(active) {
+	case 0:
+		fmt.Fprintln(stderr, "Cannot safely resume: a task was scheduled as active but none was found.\n\nInspect state with:\n\n  sop resume")
+		return exitError
+	case 1:
+	default:
+		ids := make([]string, len(active))
+		for i, t := range active {
+			ids[i] = t.ID
+		}
+		fmt.Fprintf(stderr, "Cannot safely resume: %d tasks are in flight (%s).\n\nResolve them explicitly, for example with `sop resume <task-id>`.\n", len(active), strings.Join(ids, ", "))
+		return exitError
+	}
+
+	task := active[0]
+	stage, hasStage := runpkg.Load(dir, task.ID)
+	action, ok := resume.ActionFor(task.Status)
+	if !ok {
+		printCannotResume(stderr, task, stage, hasStage, "", fmt.Sprintf("status %s has no defined next action", task.Status))
+		return exitError
+	}
+
+	// The run's lifecycle already passed its gates, or the task is parked after the
+	// local gates: finish it without restarting implementation.
+	if (hasStage && stage == runpkg.Passed) || action == resume.Review || action == resume.OpenPR {
+		if err := completeTask(st, task); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "Resumed: %s %s (already past the local gates; completed locally)\n", task.ID, task.Title)
+		return exitOK
+	}
+
+	if action == resume.CreateBranch || action == resume.WriteTests || action == resume.VerifyRed || action == resume.Implement {
+		return runScheduledTask(ctx, dir, cfg, a, d, st, task, stdout, stderr)
+	}
+
+	// The remaining actions (PollCI, Merge, Finish) are the remote lifecycle. From
+	// PR_OPEN/CI_RUNNING/CI_PASS the state machine only reaches a terminal through
+	// MERGED, and a local run opens no PR and runs no CI, so it genuinely cannot
+	// finish such a task. Report it precisely instead of guessing.
+	printRemoteParked(stderr, task, stage, hasStage, action)
+	return exitError
+}
+
+// printRemoteParked explains that an active task is mid remote lifecycle, which a
+// local run cannot complete.
+func printRemoteParked(stderr io.Writer, task *domain.Task, stage runpkg.Stage, hasStage bool, action resume.Action) {
+	fmt.Fprintf(stderr, "Cannot resume active task %s in a local run.\n\n", task.ID)
+	fmt.Fprintf(stderr, "Persisted status: %s\n", task.Status)
+	if hasStage {
+		fmt.Fprintf(stderr, "Persisted stage: %s\n", stage)
+	}
+	fmt.Fprintf(stderr, "Next action: %s (remote: a local run opens no PR and runs no CI)\n", action)
+	fmt.Fprintf(stderr, "\n%s is mid remote lifecycle. From %s the state machine reaches a terminal only\nthrough MERGED, so a local run cannot complete it. Finish it with the remote\n(GitHub/PR) flow, or reconcile it explicitly:\n\n  sop resume %s\n", task.ID, task.Status, task.ID)
+}
+
+// printCannotResume reports an active task that cannot safely be resumed, naming
+// the task, what is known about it, and the recovery command.
+func printCannotResume(stderr io.Writer, task *domain.Task, stage runpkg.Stage, hasStage bool, action resume.Action, reason string) {
+	fmt.Fprintf(stderr, "Cannot safely resume active task %s.\n\n", task.ID)
+	fmt.Fprintf(stderr, "Persisted status: %s\n", task.Status)
+	if hasStage {
+		fmt.Fprintf(stderr, "Persisted stage: %s\n", stage)
+	}
+	fmt.Fprintf(stderr, "Reason: %s.\n", reason)
+	if action != "" {
+		fmt.Fprintf(stderr, "Next action: %s\n", action)
+	}
+	fmt.Fprintf(stderr, "\nInspect and resume explicitly:\n\n  sop resume %s\n", task.ID)
 }
 
 // runScheduledTask runs the lifecycle for one scheduled task and updates its
@@ -398,12 +498,19 @@ var localCompletionPath = []domain.TaskStatus{
 	domain.LOCAL_DONE,
 }
 
-// completeTask advances a task to LOCAL_DONE on a copy, saves once, and publishes
-// the change back — so a failed save cannot leave in-memory state that was never
-// persisted.
+// completeTask advances a task to LOCAL_DONE along the local path on a copy,
+// saved once. It continues from wherever the task already is on that path, so a
+// resumed task that already passed some local steps is not sent backwards.
 func completeTask(saver taskSaver, task *domain.Task) error {
+	start := 0
+	for i, status := range localCompletionPath {
+		if status == task.Status {
+			start = i + 1
+			break
+		}
+	}
 	staged := *task
-	for _, status := range localCompletionPath {
+	for _, status := range localCompletionPath[start:] {
 		if err := staged.Transition(status); err != nil {
 			return err
 		}

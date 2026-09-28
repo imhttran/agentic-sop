@@ -176,6 +176,15 @@ var actionFor = map[domain.TaskStatus]Action{
 	domain.MERGED:           Finish,
 }
 
+// ActionFor returns the next legal action for a task status, and whether the
+// status has one. It is the single interpreted status→action decision, shared by
+// `sop resume` (which also reconciles observed branch/PR resources) and by
+// `sop run` when it resumes an interrupted task.
+func ActionFor(status domain.TaskStatus) (Action, bool) {
+	a, ok := actionFor[status]
+	return a, ok
+}
+
 // needsBranch reports whether a status implies the task branch must already
 // exist. A merged task's branch is normally deleted, so MERGED does not require
 // one.
