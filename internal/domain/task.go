@@ -159,14 +159,6 @@ func (t *Task) CanRetry() bool {
 	return t.Attempt < t.MaxAttempts
 }
 
-func (t *Task) HasRetries() bool {
-	return t.MaxAttempts > 1
-}
-
-func (t *Task) CurrentAttempt() int {
-	return t.Attempt
-}
-
 func (t *Task) AddAttempt(status TaskStatus, reason string) error {
 	t.Attempt++
 	attempt := Attempt{

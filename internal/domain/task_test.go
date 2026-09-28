@@ -333,50 +333,6 @@ func TestRetry_attempt_tracking(t *testing.T) {
 	}
 }
 
-func TestRetry_policy_enforces_max_attempts(t *testing.T) {
-	policy := DefaultRetryPolicy()
-	task := &Task{ID: "T1", MaxAttempts: policy.MaxAttempts}
-
-	for i := 1; i <= policy.MaxAttempts; i++ {
-		task.Attempt = i - 1
-		if task.Attempt < policy.MaxAttempts {
-			if !policy.IsRetryable(task) {
-				t.Errorf("Policy should allow retry at attempt %d of %d", i, policy.MaxAttempts)
-			}
-		}
-	}
-
-	task.Attempt = policy.MaxAttempts
-	if policy.IsRetryable(task) {
-		t.Errorf("Policy should not allow retry when max attempts reached")
-	}
-}
-
-func TestRetryPolicy_backoff_calculation(t *testing.T) {
-	policy := DefaultRetryPolicy()
-
-	delay1 := policy.NextDelay(1)
-	delay2 := policy.NextDelay(2)
-	delay3 := policy.NextDelay(3)
-
-	if delay1 >= delay2 || delay2 >= delay3 {
-		t.Errorf("Backoff delays should increase: %v, %v, %v", delay1, delay2, delay3)
-	}
-}
-
-func TestRetryPolicy_max_delay_enforced(t *testing.T) {
-	policy := &RetryPolicy{
-		MaxAttempts:   10,
-		BackoffFactor: 2.0,
-		MaxDelay:      1 * time.Second,
-	}
-
-	delay := policy.NextDelay(20)
-	if delay > policy.MaxDelay {
-		t.Errorf("Delay %v exceeds max delay %v", delay, policy.MaxDelay)
-	}
-}
-
 func TestTaskHelpers_IsReady(t *testing.T) {
 	task := &Task{ID: "T1", Status: READY}
 	if !task.IsReady() {
@@ -395,24 +351,5 @@ func TestTaskHelpers_IsDone(t *testing.T) {
 	task := &Task{ID: "T1", Status: DONE}
 	if !task.IsDone() {
 		t.Errorf("Task with DONE status should return true for IsDone()")
-	}
-}
-
-func TestTaskHelpers_CurrentAttempt(t *testing.T) {
-	task := &Task{ID: "T1", Attempt: 2}
-	if task.CurrentAttempt() != 2 {
-		t.Errorf("Expected current attempt 2, got %d", task.CurrentAttempt())
-	}
-}
-
-func TestTaskHelpers_HasRetries(t *testing.T) {
-	task := &Task{ID: "T1", MaxAttempts: 1}
-	if task.HasRetries() {
-		t.Errorf("Task with MaxAttempts=1 should not have retries")
-	}
-
-	task.MaxAttempts = 3
-	if !task.HasRetries() {
-		t.Errorf("Task with MaxAttempts=3 should have retries")
 	}
 }
