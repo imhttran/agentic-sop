@@ -96,13 +96,19 @@ Human entry points implemented today:
 
 ```text
 init        create state and the configuration template
+status      list persisted tasks
+task        show one task
 plan        generate PLAN.md from PRD.md or a task file
 tasks       build and persist tasks from .agent-sdlc/plan.json
 validate    run the configured build/test/lint commands
 review      review the working-tree diff with the configured engine
-run         run a task file through the local lifecycle
-status      list persisted tasks
-task        show one task
+run         run [PLAN.md | --task TASK.md]  (the normal one-command entry point)
+commit      commit the current changes (gated by --yes)
+pr          push a task branch and open a pull request (gated by --yes)
+mcp         serve tools over the Model Context Protocol (stdio)
+report      print a summary of a run
+retry       requeue a BLOCKED task (<task-id> or --all)
+eval        run a corpus of task files and report metrics
 resume      report the next legal action for interrupted work
 version     print the CLI version
 help        show usage
@@ -160,12 +166,13 @@ PLAN
 Task DAG
 ```
 
-Outputs structured tasks as well as human-readable `PLAN.md` /
-`TASKS.md`.
+Outputs a structured machine plan (`.agent-sdlc/plan.json`) and its
+human-readable rendering (`PLAN.md`); the task DAG is built from it
+deterministically, without an agent.
 
 ### Scheduler
 
-Finds tasks whose dependencies are satisfied.
+Finds the next task whose dependencies are satisfied.
 
 ```text
 Task A DONE ----+
@@ -173,36 +180,27 @@ Task A DONE ----+
 Task B DONE ----+
 ```
 
-It also enforces concurrency limits and avoids selecting conflicting
-work when detectable.
+It is deterministic and part of the control plane — it never consults a model —
+and selects at most one legally runnable task. V1 runs one task at a time;
+parallelism is bounded separately (see Parallelism).
 
 ### Task Runner
 
-Executes one task lifecycle.
-
-Conceptually:
+Executes one task's **local** lifecycle (`sop run`), writing a run record under
+`.agent-sdlc/runs/<id>/`:
 
 ```text
-branch
- ↓
-test design
- ↓
-red
- ↓
-implementation
- ↓
-green
- ↓
-review
- ↓
-fix
- ↓
-commit/PR
- ↓
-CI
- ↓
-merge
+plan → implement → detect changes → validate → review → quality gate
+                         ▲                                    │
+                         └────────── fix (bounded) ◄──────────┘
 ```
+
+The agent edits the working tree; Git is the authority on what changed. A passing
+gate completes the task locally (`LOCAL_DONE`) and a human boundary stops before
+any commit. A verify-first task runs `validate` before `implement` (see
+[Execution Modes](#execution-modes)). The remote path — commit → PR → CI → merge —
+is driven by the explicit `sop commit`/`sop pr` commands and the GitHub adapter; a
+local run never synthesizes it.
 
 ### Git Adapter
 
@@ -354,7 +352,9 @@ ordinary lifecycle continues, so a verification failure is not automatically
 terminal. A verify-first task with nothing configured to verify falls back to the
 implementation path. The mode is persisted on the task
 (`tasks.execution_mode`); a pre-existing database migrates its rows to the
-implement default.
+implement default. A run still checks up front that the provider can `IMPLEMENT`,
+so a configured agent remains required even for a graph whose tasks are all
+verify-first.
 
 ### Fix Loop
 
@@ -366,11 +366,12 @@ budget yields `NEEDS_HUMAN`, never an unbounded agent loop.
 ### Graph Execution
 
 `sop run` with no task file drives the persisted task graph: the scheduler selects
-the next ready task and the same local lifecycle runs for it, marking it `DONE` on
-a passing gate or `BLOCKED` otherwise, until no runnable work remains. Local
-execution has no remote PR/CI/merge, so a passing lifecycle synthesizes the
-terminal transitions; the dependency rule (a dependency is complete only at
-`DONE`) then holds.
+the next ready task and the same local lifecycle runs for it, until no runnable
+work remains. A passing lifecycle completes the task locally at `LOCAL_DONE`; it
+never fabricates the remote states (`PR_OPEN`, `CI_RUNNING`, `CI_PASS`, `MERGED`),
+because no PR was opened and no CI ran. A dependency is satisfied by `LOCAL_DONE`
+(local) or `MERGED`/`DONE` (remote), so the persisted state describes what
+actually happened.
 
 ### Command Policy
 
@@ -400,33 +401,28 @@ Handles remote lifecycle operations:
 Updates human-readable state:
 
 ```text
-TASKS.md
 PLAN.md
+docs/tasks/TASK-0NN.md
 LESSONS.md
-README/architecture docs when task requires it
+README / architecture docs when the task requires it
 ```
 
 It should not replace durable workflow state.
 
 ### State Store
 
-SQLite is the V1 durable source of operational truth.
+SQLite is the V1 durable source of operational truth. Four tables back it:
 
-It stores:
+```text
+tasks             status, blocked_reason, execution_mode, attempt/max_attempts, timestamps
+task_dependencies task → dependency edges
+task_attempts     one row per attempt (status, reason, output, duration, timestamp)
+handoffs          completed-task capsules and compression metadata
+```
 
-- projects;
-- tasks;
-- dependencies;
-- attempts;
-- state transitions;
-- branches;
-- commits;
-- PR identifiers;
-- CI runs;
-- review results;
-- handoff capsules and compression metadata;
-- timestamps;
-- blocked reasons.
+Run artifacts (validation, review, diffs, reports) live on the filesystem under
+`.agent-sdlc/runs/`; branches, commits, PRs, and CI state live in Git and at the
+remote. Neither is duplicated into SQLite.
 
 ### Commit Gate
 
@@ -783,62 +779,51 @@ lifecycle is reliable.
 
 ## 12. Data Model
 
-Conceptual tables:
+Tables the V1 store creates:
 
 ```text
-projects
-  id
-  repo_path
-  integration_branch
-  status
-
 tasks
   id
-  project_id
   title
   objective
+  acceptance_criteria
+  execution_mode
   status
   blocked_reason
-  execution_mode
-  branch
+  attempt
   max_attempts
   created_at
   updated_at
 
 task_dependencies
   task_id
-  depends_on_task_id
+  dependency_task_id
 
-attempts
-  id
-  task_id
-  phase
-  attempt_number
-  status
-  started_at
-  ended_at
-  failure_summary
-
-reviews
-  id
-  task_id
-  provider
-  status
-  findings
-
-pull_requests
+task_attempts
   task_id
   number
-  url
   status
+  reason
+  output
+  duration
+  timestamp
 
-ci_runs
-  id
+handoffs
   task_id
-  external_id
+  capsule_json
   status
-  conclusion
+  content
+  references_json
+  compression_error
+  created_at
 ```
+
+A schema version (`PRAGMA user_version`, currently 3) drives forward migrations, so
+an existing database gains new columns (for example `execution_mode`) without
+losing data.
+
+Not yet tables: `projects`, `reviews`, `pull_requests`, and `ci_runs`; today review
+results live in run artifacts and PR/CI state lives at the remote.
 
 Runs are stored on the filesystem rather than in SQLite, so they stay readable
 without the tool:
@@ -848,9 +833,6 @@ without the tool:
   task.md  plan.md  implementation.md  diff.patch
   validation.json  review.json  report.md  report.json  state.json
 ```
-
-The exact schema should emerge during implementation, but workflow state
-must be durable.
 
 ## 13. Configuration
 
@@ -889,6 +871,9 @@ quality:
 
 human:
   approval_before_commit: true
+
+workflow:
+  mode: local # local | pull-request
 ```
 
 Omitted fields take safe defaults; an invalid file fails with a clear message.
@@ -965,6 +950,14 @@ evaluation harness (sop eval)
 PLAN-first one-command run (sop run, planflow)
 local vs remote completion (LOCAL_DONE; no synthetic remote states)
 generated artifacts kept out of the project root (docs/reports; .agent-sdlc self-ignores)
+named plan execution (sop run PLAN.md; --task for a single task)
+provider resolution visibility, IMPLEMENT capability guard, untracked-file detection
+structured command-agent outcomes (completed / needs_human / failed)
+retry and requeue (sop retry <id> / --all; a retry carries the prior outcome; a
+  no-progress repeat does not spend the budget)
+verification-first fast path (execution_mode: verify-first; a passing verification
+  needs no agent)
+bundled end-to-end skill and install script
 ```
 
 Remaining:

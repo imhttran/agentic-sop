@@ -1462,10 +1462,11 @@ sop run docs/PLAN.md
 quality gate → report, writing artifacts under `.agent-sdlc/runs/<id>/` and
 stopping at the human gate without committing.
 
-Plan/DAG-driven execution over the persisted task graph still composes the same
-orchestration components (task runner, review, commit gate, GitHub/CI adapters,
-CI remediation, merge gate, completion loop, resume, parallelism); it is the
-remaining CLI wiring.
+With no task file it drives the persisted task graph: the scheduler selects the
+next ready task and the same lifecycle runs for it, completing each task locally at
+`LOCAL_DONE` (never fabricating remote states) until no runnable work remains. A
+verify-first task runs the configured validation before any agent (see
+[Verification-first tasks](#verification-first-tasks)).
 
 ```text
                     Task DAG
