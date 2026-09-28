@@ -671,6 +671,7 @@ T051 bound the requeue loop (a requeue spends one attempt; max_attempts, default
 T052 a no-progress retry does not spend the budget; the task stays PLANNED and is retried
 T053 `sop retry --all` for every retryable BLOCKED task; a retry carries the prior outcome
 T054 verification-first fast path (execution_mode: verify-first); a passing verification needs no agent
+T055 configure the model in config (agent.model); the provider env var overrides it
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

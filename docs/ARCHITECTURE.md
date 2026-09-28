@@ -261,7 +261,9 @@ llamacpp   OpenAI-compatible /v1/chat/completions (llama.cpp llama-server)
 ```
 
 The provider is selected by `agent.provider` in configuration, overridden by
-`SOP_AGENT_PROVIDER`; credentials and endpoints come from the environment. Each
+`SOP_AGENT_PROVIDER`; the model comes from `agent.model` (overridden by the
+provider's own variable, `SOP_OLLAMA_MODEL` or `SOP_LLAMACPP_MODEL`); and
+credentials and endpoints come from the environment. Each
 provider declares which capabilities it serves; `agent.Checked` wraps the
 resolved provider and rejects a request for an unsupported capability with a
 message naming the supported set, so an unsupported role/provider combination
@@ -873,6 +875,7 @@ project:
 
 agent:
   provider: command # command | ollama | llamacpp
+  # model: llama3.2  # ollama / llamacpp; its env var overrides it
 
 validation:
   build:

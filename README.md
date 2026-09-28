@@ -423,21 +423,27 @@ through an Agent interface and ships three adapters:
 | Provider   | Required            | Optional                                                                                      | Endpoint                                                                              |
 | ---------- | ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
 | `command`  | `SOP_AGENT_COMMAND` | —                                                                                             | a subprocess that reads a JSON request on `stdin` and writes the response to `stdout` |
-| `ollama`   | `SOP_OLLAMA_MODEL`  | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_TIMEOUT`                                                   | Ollama `/api/chat`                                                                    |
+| `ollama`   | a model (below)     | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_TIMEOUT`                                                   | Ollama `/api/chat`                                                                    |
 | `llamacpp` | —                   | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | OpenAI-compatible `/v1/chat/completions` (llama.cpp `llama-server`)                   |
 
-Select a provider in `.agent-sdlc/config.yaml`:
+Select a provider and model in `.agent-sdlc/config.yaml`:
 
 ```yaml
 agent:
   provider: ollama
+  model: deepseek-v4.1-flash:cloud # ollama / llamacpp; its env var overrides it
 ```
 
-The environment overrides the configuration for a single run:
+The environment overrides the configuration for a single run (the model too —
+`SOP_OLLAMA_MODEL` beats `agent.model`):
 
 ```bash
 export SOP_AGENT_PROVIDER=ollama
+export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud
 ```
+
+`ollama` needs a model from one of those two sources; with neither set the run
+fails with a message naming both. The `command` provider ignores `model`.
 
 When neither is set, the command agent is used. The pre-rename
 `AGENT_SDLC_AGENT_COMMAND` is still accepted for backward compatibility.
