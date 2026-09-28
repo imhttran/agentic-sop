@@ -417,74 +417,272 @@ What are we building?
 
 # 3. Configure an AI Agent
 
-SOP does not directly depend on a specific model provider. It communicates
-through an Agent interface and ships three adapters:
+## Terminology: Harness, Provider, and Model
 
-| Provider   | Required            | Optional                                                                                      | Endpoint                                                                              |
-| ---------- | ------------------- | --------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `command`  | `SOP_AGENT_COMMAND` | —                                                                                             | a subprocess that reads a JSON request on `stdin` and writes the response to `stdout` |
-| `ollama`   | a model (below)     | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_TIMEOUT`                                                   | Ollama `/api/chat`                                                                    |
-| `llamacpp` | —                   | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | OpenAI-compatible `/v1/chat/completions` (llama.cpp `llama-server`)                   |
+SOP separates three independent concepts: **Harness**, **Provider**, and **Model**. Each serves a specific role.
 
-Select a provider and model in `.agent-sdlc/config.yaml`:
+### Harness
+
+The **harness** is the implementation layer that executes agent logic. It handles:
+- calling the model via the provider
+- managing tool availability and tool-call loops
+- enforcing bounds and timeouts
+- handling structured outcomes
+- safety boundaries (file access, git operations, command execution)
+
+A harness is _not_ a model; it is a framework that makes a model into a coding agent.
+
+**Options:**
+- `tool` — a local tool-calling harness (e.g., `sop-ollama-agent`) that wraps a provider with tools
+- `command` — a subprocess adapter that runs an external command implementing the agent interface
+
+### Provider
+
+The **provider** is the model source — where the language model comes from. A provider:
+- supplies the base language model (text completions or chat)
+- does _not_ provide tool-calling capability on its own
+- does _not_ provide file I/O, git integration, or code mutation by itself
+
+A provider is _not_ a harness; it is the raw model endpoint.
+
+**Options:**
+- `ollama` — local Ollama text-only endpoint
+- `llamacpp` — OpenAI-compatible llama.cpp endpoint
+- `command` — external subprocess endpoint
+
+**Important:** A text-only Ollama endpoint alone is _not_ a coding agent and cannot mutate a repository. The **harness** transforms it into one by adding tools, safety boundaries, and structured logic.
+
+### Model
+
+The **model** is the specific model identifier within a provider (e.g., `deepseek-v4.1-flash:cloud`, `mistral:latest`).
+
+Only required when the provider supplies models (Ollama, llama.cpp). Not required for the command provider (which is already a full agent endpoint).
+
+### Configuration Matrix
+
+| Harness   | Provider   | Config Keys                                    | Environment Variables                            | Model Required? |
+|-----------|------------|------------------------------------------------|--------------------------------------------------|-----------------|
+| `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT` | Yes |
+| `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes |
+| `command` | `command`  | `agent.harness` (optional; defaults to command)   | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                           | No  |
+
+### Tool Harness with Ollama Provider
+
+Uses the `sop-ollama-agent` tool harness to wrap a local Ollama model, adding:
+- file I/O tools (`read_file`, `write_file`, `create_file`, `delete_file`, etc.)
+- git integration tools (`git_status`, `git_diff`)
+- bounded tool loops (prevents runaway exploration)
+- structured outcome reporting
+
+Configuration in `.agent-sdlc/config.yaml`:
 
 ```yaml
 agent:
+  harness: tool
   provider: ollama
-  model: deepseek-v4.1-flash:cloud # ollama / llamacpp; its env var overrides it
+  model: deepseek-v4.1-flash:cloud
 ```
 
-The environment overrides the configuration for a single run (the model too —
-`SOP_OLLAMA_MODEL` beats `agent.model`):
+Environment variable overrides (take precedence):
 
 ```bash
-export SOP_AGENT_PROVIDER=ollama
+export SOP_OLLAMA_BASE_URL=http://localhost:11434
+export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud
+export SOP_OLLAMA_TIMEOUT=300  # seconds (optional)
+```
+
+**What each layer provides:**
+- **Ollama** (provider): the language model (`deepseek-v4.1-flash:cloud`)
+- **sop-ollama-agent** (tool harness): tools, tool-loop bounds, file safety, git integration, structured outcomes
+
+Without the tool harness, Ollama is a text-only model endpoint. The harness makes it a coding agent.
+
+### Tool Harness with llama.cpp Provider
+
+Similar to Ollama, but connects to an OpenAI-compatible llama.cpp endpoint:
+
+```yaml
+agent:
+  harness: tool
+  provider: llamacpp
+  model: my-model
+```
+
+Environment variables:
+
+```bash
+export SOP_LLAMACPP_BASE_URL=http://localhost:8000
+export SOP_LLAMACPP_MODEL=my-model
+export SOP_LLAMACPP_TIMEOUT=300  # seconds (optional)
+export SOP_LLAMACPP_API_KEY=optional-key  # if required (optional)
+```
+
+### Command Harness (Subprocess Agent)
+
+The command harness runs an external subprocess that already implements the full Agent interface. Use this when you have an external command (a CLI, script, or remote service wrapper) that handles planning, implementation, and review.
+
+Configuration in `.agent-sdlc/config.yaml` (optional; command is the default):
+
+```yaml
+agent:
+  harness: command
+```
+
+Or omit the harness section entirely to use the default:
+
+```yaml
+agent: {}
+```
+
+Environment configuration:
+
+```bash
+export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
+export SOP_AGENT_PROVIDER=optional-provider-name  # optional, for identification
+```
+
+The subprocess must:
+1. Read JSON requests from stdin
+2. Write JSON responses to stdout
+3. Implement the Agent interface (plan, design_tests, implement, review, fix, etc.)
+4. Return structured outcomes as JSON
+
+The pre-rename environment variable `AGENT_SDLC_AGENT_COMMAND` is still accepted for backward compatibility.
+
+### Configuration Precedence
+
+Settings are resolved in order, with the first available taking precedence:
+
+```text
+Precedence (highest to lowest):
+  1. Environment variables (SOP_AGENT_PROVIDER, SOP_OLLAMA_MODEL, SOP_AGENT_COMMAND, etc.)
+  2. .agent-sdlc/config.yaml settings
+  3. Hardcoded defaults (command harness if nothing is specified)
+```
+
+**Example 1: Ollama model override**
+
+Config file specifies:
+```yaml
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+```
+
+Environment overrides the model:
+```bash
+export SOP_OLLAMA_MODEL=mistral:latest
+```
+
+Result: Uses Ollama provider with `mistral:latest` model.
+
+**Example 2: Harness override (config to command)**
+
+Config file specifies:
+```yaml
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+```
+
+Environment overrides to command harness:
+```bash
+export SOP_AGENT_COMMAND="my-agent-cli"
+```
+
+Result: Uses command harness, ignoring the config's tool/ollama/model settings.
+
+**Example 3: Command harness with no config**
+
+No config file specified. Environment only:
+```bash
+export SOP_AGENT_COMMAND="my-agent-cli"
+```
+
+Result: Uses command harness (the default).
+
+**Resolution rules:**
+- When using Ollama or llama.cpp (tool harness + provider), a model _must_ be specified (either config or environment); the run fails with a clear message if neither provides one.
+- When using the command harness, `SOP_AGENT_COMMAND` is required; the run fails if it is not set.
+- Environment variables always override config file values.
+
+### Bootstrap: sop-ollama-agent (Layered Configuration)
+
+This repository ships `sop-ollama-agent`, a tool-calling harness that wraps a local Ollama model. The bootstrap approach demonstrates how layers work together:
+
+**Component Stack:**
+1. **SOP Orchestrator** — controls workflow, state, validation, review, retry limits
+2. **Command Harness** (outer layer) — runs sop-ollama-agent as a subprocess
+3. **Tool Harness** (sop-ollama-agent; inner layer) — wraps the model with tools
+4. **Ollama Provider** (model source) — supplies the language model itself
+
+**Configuration:**
+
+The outer layer (command harness) invokes the inner layer (tool harness):
+
+```bash
+# Outer layer: command harness runs the tool harness subprocess
+export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
+
+# Inner layer: tool harness configuration (model and provider endpoint)
+export SOP_OLLAMA_BASE_URL=http://localhost:11434
 export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud
 ```
 
-`ollama` needs a model from one of those two sources; with neither set the run
-fails with a message naming both. The `command` provider ignores `model`.
-
-When neither is set, the command agent is used. The pre-rename
-`AGENT_SDLC_AGENT_COMMAND` is still accepted for backward compatibility.
-
-Conceptually:
-
-```text
-SOP
-      │
-      ▼
-    Agent
-   ├── CommandAgent  → external command
-   ├── Ollama        → local Ollama
-   └── LlamaCpp      → OpenAI-compatible endpoint
-```
-
-This keeps the core application independent of any specific provider or harness.
-
-### Bootstrap harness: a local Ollama coding agent
-
-This repository ships a small, temporary command-agent harness so SOP can drive its
-own plan with a local Ollama model instead of a hosted coding agent:
+To use the bootstrap:
 
 ```bash
-export SOP_AGENT_PROVIDER=command
-export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
-export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud   # the harness default
-
 sop run docs/PLAN-Agent-Harness-V2.md
 ```
 
-`scripts/sop-ollama-agent.sh` builds `cmd/sop-ollama-agent` and runs it with the
-current directory as the repository. The model gets a small set of controlled tools
-(`read_file`, `write_file`, `create_file`, `delete_file`, `restore_file` — a
-scoped undo of its own bad write — `list_files`, `search_files`, an allow-listed
-`run_command`, `git_status`, `git_diff`) and a bounded tool loop; it
-cannot escape the repository, modify `.agent-sdlc` state, or run history-changing
-or destructive commands. It consumes both the JSON tool call in the model's content
-and Ollama's native tool calls, so a tool-capable model works either way. SOP still
-owns validation, review, retries, and human gates — the harness is an implementation
-adapter only. It is expected to be superseded by
+Alternatively, configure in `.agent-sdlc/config.yaml`:
+
+```yaml
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+```
+
+and set the command environment variable:
+
+```bash
+export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
+```
+
+**What each layer provides:**
+
+SOP Orchestrator:
+- Workflow state machine and dependency scheduling
+- Validation runner
+- Review engine
+- Retry limits and human gates
+- Git branch and PR management
+
+Command Harness:
+- Subprocess lifecycle management
+- JSON request/response marshaling
+- Integration between SOP and the tool harness
+
+Tool Harness (sop-ollama-agent):
+- **Tool-calling wrapper:** converts model chat completions into structured tool calls even if the model doesn't support native tool definitions
+- **File tools:** `read_file`, `write_file`, `create_file`, `delete_file`, `restore_file` (scoped undo), `list_files`, `search_files`
+- **Git integration:** `git_status`, `git_diff`
+- **Bounded command execution:** allow-listed `run_command` for build/test
+- **Tool loop bounds:** prevents runaway exploration via interaction limits per capability (read-only discovery, mutation, finalization)
+- **Safety:** cannot escape the repository, modify `.agent-sdlc` state, or run history-changing or destructive commands
+- **Structured outcomes:** reports success/failure/needs_human deterministically
+
+Ollama Provider:
+- **Language model:** supplies the base model (e.g., `deepseek-v4.1-flash:cloud`), typically via local HTTP endpoint
+- **Text completions:** provides chat/completion API compatible with OpenAI's interface
+- **Model management:** handles model downloads, caching, and parameter configuration
+
+The harness runs as a subprocess managed by SOP. SOP retains ownership of
+validation, review, retries, human gates, and workflow state — the harness is an
+implementation adapter only. It is expected to be superseded by
 [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
 
 The loop is bounded per capability, not by one global number: `DESIGN_TESTS` and
@@ -1193,7 +1391,9 @@ project:
   integration_branch: main
 
 agent:
-  provider: command # command | ollama | llamacpp
+  harness: tool              # tool | command (optional; defaults to command)
+  provider: ollama           # ollama | llamacpp | command (required if harness: tool)
+  model: deepseek-v4.1-flash:cloud  # model ID for ollama or llamacpp (required if provider: ollama|llamacpp)
 
 validation: # commands run by the verification stages
   build:
