@@ -26,6 +26,11 @@ const (
 	defaultLlamaCppModel = "local"
 )
 
+// llamacppCapabilities is the set the text-only LlamaCpp provider can
+// actually serve. It generates text for planning, test design, diagnosis and
+// review, but cannot mutate the repository, so IMPLEMENT and FIX are excluded.
+var llamacppCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure, Review)
+
 // LlamaCpp is an Agent backed by an OpenAI-compatible chat completions
 // endpoint, such as llama.cpp's llama-server.
 type LlamaCpp struct {
@@ -110,5 +115,7 @@ func (c *LlamaCpp) Generate(ctx context.Context, request Request) (Response, err
 	return requireNonEmpty("llamacpp", request.Capability, out.Choices[0].Message.Content)
 }
 
-// Capabilities declares that the llama.cpp provider serves every capability.
-func (c *LlamaCpp) Capabilities() Capabilities { return AllCapabilities() }
+// Capabilities declares the text-generation capabilities the LlamaCpp provider
+// serves. It cannot mutate the repository, so IMPLEMENT and FIX are excluded;
+// such requests are rejected rather than silently forwarded.
+func (c *LlamaCpp) Capabilities() Capabilities { return llamacppCapabilities }

@@ -87,6 +87,24 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 	return Response{Content: content, Outcome: parseOutcome(content)}, nil
 }
 
+// CommandHarness adapts a CommandAgent to the Harness interface, enabling the
+// command provider to be used as an engineering-execution layer without blurring
+// the provider/harness separation. It delegates every Execute() call to the
+// wrapped agent's Generate() method and returns the result directly.
+type CommandHarness struct {
+	agent *CommandAgent
+}
+
+// NewCommandHarness returns a CommandHarness wrapping the given agent.
+func NewCommandHarness(agent *CommandAgent) *CommandHarness {
+	return &CommandHarness{agent: agent}
+}
+
+// Execute delegates to the wrapped agent's Generate method.
+func (h *CommandHarness) Execute(ctx context.Context, request Request) (Response, error) {
+	return h.agent.Generate(ctx, request)
+}
+
 // outcomeWire mirrors the structured execution outcome a command agent may return
 // for a mutating capability.
 type outcomeWire struct {

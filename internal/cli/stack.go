@@ -35,23 +35,18 @@ type executionStack struct {
 	Command string
 }
 
-// EnvAgentHarness lets the environment override the configured harness, matching
-// the precedence the provider already uses. When unset the configured harness
-// (or the default) is used.
-const EnvAgentHarness = "SOP_AGENT_HARNESS"
-
 // LegacyEnvAgentCommand is the historical command variable name, accepted so a
 // project that only set the legacy name is reported as it is resolved.
 const LegacyEnvAgentCommand = "AGENT_SDLC_AGENT_COMMAND"
 
 // resolveExecutionStack derives the execution stack from the effective
-// configuration and environment, reusing agent.EffectiveProvider so the summary
-// reports exactly what the run will use. Harness and model sources are resolved
-// with the documented precedence environment -> project configuration ->
-// built-in defaults.
+// configuration and environment, reusing agent.EffectiveProvider and
+// agent.EffectiveHarness so the summary reports exactly what the run will use.
+// Harness and model sources are resolved with the documented precedence:
+// environment -> project configuration -> built-in defaults.
 func resolveExecutionStack(cfg config.Config) executionStack {
 	provider, source := agent.EffectiveProvider(cfg.Agent.Provider)
-	harness, harnessSource := effectiveHarness(cfg.Agent.Harness)
+	harness, harnessSource := agent.EffectiveHarness(cfg.Agent.Harness)
 
 	s := executionStack{
 		Harness:       harness,
@@ -66,24 +61,16 @@ func resolveExecutionStack(cfg config.Config) executionStack {
 	return s
 }
 
-// effectiveHarness resolves the harness the run will use and where it came from:
-// SOP_AGENT_HARNESS (environment) wins over the configured harness, which wins
-// over the default tool harness.
-func effectiveHarness(configured string) (string, StackSource) {
-	if env := strings.TrimSpace(os.Getenv(EnvAgentHarness)); env != "" {
-		return env, agent.SourceEnvironment
-	}
-	if cfg := strings.TrimSpace(configured); cfg != "" {
-		return cfg, agent.SourceConfiguration
-	}
-	return config.DefaultHarness, agent.SourceDefault
-}
-
 // effectiveModel resolves the model the provider will serve and where it came
-// from, mirroring the provider constructors: the provider's environment variable
-// (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) overrides the configured value. The
-// command provider has no model, so it reports none and has no source.
+// from, with precedence: SOP_AGENT_MODEL (unified override) > provider-specific
+// environment variable (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) > configured value.
+// The command provider has no model, so it reports none and has no source.
 func effectiveModel(provider, configured string) (string, StackSource) {
+	// Unified model environment variable has highest precedence for any provider.
+	if unifiedModel := strings.TrimSpace(os.Getenv(agent.EnvAgentModel)); unifiedModel != "" {
+		return unifiedModel, agent.SourceEnvironment
+	}
+
 	switch provider {
 	case agent.ProviderOllama:
 		if env := strings.TrimSpace(os.Getenv(agent.EnvOllamaModel)); env != "" {

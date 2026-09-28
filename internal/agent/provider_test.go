@@ -405,3 +405,180 @@ func TestNewOllamaFromEnvUsesConfiguredModel(t *testing.T) {
 		t.Errorf("model = %q, want the environment to win", c.model)
 	}
 }
+
+func TestHarnessFromConfigLegacyCommand(t *testing.T) {
+	// When harness is empty, it defaults to tool harness (not command harness).
+	// To use the legacy command harness, harness must be explicitly set to "command".
+	t.Setenv(EnvAgentCommand, "printf '%s' 'ok'")
+	t.Setenv(EnvAgentHarness, "")
+	t.Setenv(EnvAgentProvider, "")
+	h, err := HarnessFromConfig(HarnessCommand, ProviderCommand, "")
+	if err != nil {
+		t.Fatalf("HarnessFromConfig failed: %v", err)
+	}
+	if _, ok := h.(*CommandHarness); !ok {
+		t.Errorf("got %T, want *CommandHarness", h)
+	}
+
+	resp, err := h.Execute(context.Background(), validRequest(Implement))
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if resp.Content != "ok" {
+		t.Errorf("Content = %q, want ok", resp.Content)
+	}
+}
+
+func TestEffectiveHarness(t *testing.T) {
+	t.Setenv(EnvAgentHarness, "")
+	if name, src := EffectiveHarness(""); name != HarnessTool || src != SourceDefault {
+		t.Errorf("default: (%q, %q), want (%q, %q)", name, src, HarnessTool, SourceDefault)
+	}
+	if name, src := EffectiveHarness(HarnessCommand); name != HarnessCommand || src != SourceConfiguration {
+		t.Errorf("configuration: (%q, %q), want (%q, %q)", name, src, HarnessCommand, SourceConfiguration)
+	}
+	t.Setenv(EnvAgentHarness, HarnessCommand)
+	if name, src := EffectiveHarness(HarnessTool); name != HarnessCommand || src != SourceEnvironment {
+		t.Errorf("environment override: (%q, %q), want (%q, %q)", name, src, HarnessCommand, SourceEnvironment)
+	}
+}
+
+func TestHarnessFromConfigToolHarness(t *testing.T) {
+	t.Run("tool + command", func(t *testing.T) {
+		t.Setenv(EnvAgentCommand, "printf '%s' 'ok'")
+		h, err := HarnessFromConfig(HarnessTool, ProviderCommand, "")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		var _ Harness = h
+	})
+	t.Run("tool + ollama", func(t *testing.T) {
+		t.Setenv(EnvOllamaModel, "qwen3:8b")
+		h, err := HarnessFromConfig(HarnessTool, ProviderOllama, "")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		var _ Harness = h
+	})
+	t.Run("tool + llamacpp", func(t *testing.T) {
+		h, err := HarnessFromConfig(HarnessTool, ProviderLlamaCpp, "")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		var _ Harness = h
+	})
+}
+
+func TestHarnessFromConfigCommandHarness(t *testing.T) {
+	t.Run("command + command", func(t *testing.T) {
+		t.Setenv(EnvAgentCommand, "printf '%s' 'ok'")
+		h, err := HarnessFromConfig(HarnessCommand, ProviderCommand, "")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		if _, ok := h.(*CommandHarness); !ok {
+			t.Errorf("got %T, want *CommandHarness", h)
+		}
+	})
+}
+
+func TestHarnessFromConfigInvalidHarness(t *testing.T) {
+	t.Setenv(EnvAgentProvider, "")
+	t.Setenv(EnvAgentHarness, "")
+	if _, err := HarnessFromConfig("skynet", ProviderCommand, ""); err == nil {
+		t.Error("expected error for an unknown harness")
+	} else if !strings.Contains(err.Error(), "unknown agent harness") {
+		t.Errorf("error message should mention unknown harness: %v", err)
+	}
+}
+
+func TestHarnessFromEnv(t *testing.T) {
+	t.Setenv(EnvAgentProvider, ProviderCommand)
+	t.Setenv(EnvAgentCommand, "printf '%s' 'ok'")
+	t.Setenv(EnvAgentHarness, HarnessCommand)
+	h, err := HarnessFromEnv()
+	if err != nil {
+		t.Fatalf("HarnessFromEnv failed: %v", err)
+	}
+	if _, ok := h.(*CommandHarness); !ok {
+		t.Errorf("got %T, want *CommandHarness", h)
+	}
+}
+
+func TestEffectiveModel(t *testing.T) {
+	t.Setenv(EnvAgentModel, "")
+	if name, src := EffectiveModel(""); name != "" || src != SourceDefault {
+		t.Errorf("default: (%q, %q), want (\"\", %q)", name, src, SourceDefault)
+	}
+	if name, src := EffectiveModel("deepseek-v4.1-flash:cloud"); name != "deepseek-v4.1-flash:cloud" || src != SourceConfiguration {
+		t.Errorf("configuration: (%q, %q), want (deepseek-v4.1-flash:cloud, %q)", name, src, SourceConfiguration)
+	}
+	t.Setenv(EnvAgentModel, "qwen3:8b")
+	if name, src := EffectiveModel("deepseek-v4.1-flash:cloud"); name != "qwen3:8b" || src != SourceEnvironment {
+		t.Errorf("environment override: (%q, %q), want (qwen3:8b, %q)", name, src, SourceEnvironment)
+	}
+}
+
+func TestFromConfigModel(t *testing.T) {
+	t.Run("unified env overrides config", func(t *testing.T) {
+		t.Setenv(EnvAgentModel, "qwen3:8b")
+		t.Setenv(EnvOllamaModel, "")
+		t.Setenv(EnvAgentProvider, "")
+		a, err := FromConfig(ProviderOllama, "deepseek-v4.1-flash:cloud")
+		if err != nil {
+			t.Fatalf("FromConfig failed: %v", err)
+		}
+		if o, ok := a.(*Ollama); !ok || o.model != "qwen3:8b" {
+			t.Errorf("model = %q, want qwen3:8b (unified env override)", o.model)
+		}
+	})
+	t.Run("provider-specific env overrides config", func(t *testing.T) {
+		t.Setenv(EnvAgentModel, "")
+		t.Setenv(EnvOllamaModel, "qwen3:8b")
+		t.Setenv(EnvAgentProvider, "")
+		a, err := FromConfig(ProviderOllama, "deepseek-v4.1-flash:cloud")
+		if err != nil {
+			t.Fatalf("FromConfig failed: %v", err)
+		}
+		if o, ok := a.(*Ollama); !ok || o.model != "qwen3:8b" {
+			t.Errorf("model = %q, want qwen3:8b (provider-specific env overrides config)", o.model)
+		}
+	})
+	t.Run("unified env has precedence over provider-specific", func(t *testing.T) {
+		t.Setenv(EnvAgentModel, "deepseek:new")
+		t.Setenv(EnvOllamaModel, "qwen3:8b")
+		t.Setenv(EnvAgentProvider, "")
+		a, err := FromConfig(ProviderOllama, "fallback")
+		if err != nil {
+			t.Fatalf("FromConfig failed: %v", err)
+		}
+		if o, ok := a.(*Ollama); !ok || o.model != "deepseek:new" {
+			t.Errorf("model = %q, want deepseek:new (unified env precedence over provider-specific)", o.model)
+		}
+	})
+}
+
+func TestHarnessFromConfigModel(t *testing.T) {
+	t.Run("unified env overrides config", func(t *testing.T) {
+		t.Setenv(EnvAgentModel, "deepseek-v4.1-flash:cloud")
+		t.Setenv(EnvOllamaModel, "")
+		t.Setenv(EnvAgentProvider, "")
+		t.Setenv(EnvAgentHarness, "")
+		h, err := HarnessFromConfig("", ProviderOllama, "deepseek-v4")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		var _ Harness = h
+	})
+	t.Run("config model is used when no unified env", func(t *testing.T) {
+		t.Setenv(EnvAgentModel, "")
+		t.Setenv(EnvOllamaModel, "")
+		t.Setenv(EnvAgentProvider, "")
+		t.Setenv(EnvAgentHarness, "")
+		h, err := HarnessFromConfig("", ProviderOllama, "deepseek-v4.1-flash:cloud")
+		if err != nil {
+			t.Fatalf("HarnessFromConfig failed: %v", err)
+		}
+		var _ Harness = h
+	})
+}

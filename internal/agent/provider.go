@@ -13,10 +13,24 @@ import (
 	"time"
 )
 
+// EnvAgentHarness selects which harness the composition root builds. It is
+// optional: when unset the configuration or default harness is used.
+const EnvAgentHarness = "SOP_AGENT_HARNESS"
+
 // EnvAgentProvider selects which provider the composition root builds. It is
 // optional: when unset the historical subprocess command agent is used, so
 // existing configurations keep working unchanged.
 const EnvAgentProvider = "SOP_AGENT_PROVIDER"
+
+// EnvAgentModel selects which model the composition root builds. It is optional:
+// when unset the configured model or provider-specific environment variable is used.
+const EnvAgentModel = "SOP_AGENT_MODEL"
+
+// Harness names accepted by EnvAgentHarness.
+const (
+	HarnessTool    = "tool"
+	HarnessCommand = "command"
+)
 
 // Provider names accepted by EnvAgentProvider.
 const (
@@ -42,23 +56,162 @@ func FromEnv() (Agent, error) {
 }
 
 // FromConfig builds the Agent for a configured provider name and model, with
-// EnvAgentProvider overriding the configured provider when it is set. A blank
-// provider means "let the environment decide", which keeps the historical command
-// agent as the default. The model applies to ollama/llamacpp and its own
-// environment variable overrides it. An unsupported name is an error rather than a
+// EnvAgentProvider and EnvAgentModel overriding the configured values when set.
+// Precedence for model: SOP_AGENT_MODEL > provider-specific env > configured model.
+// A blank provider means "let the environment decide", which keeps the historical
+// command agent as the default. An unsupported name is an error rather than a
 // silent fallback.
 func FromConfig(provider, model string) (Agent, error) {
-	name, _ := EffectiveProvider(provider)
-	switch name {
+	providerName, _ := EffectiveProvider(provider)
+
+	// Resolve model with full precedence: unified env > provider-specific env > configured.
+	// First check the unified SOP_AGENT_MODEL override.
+	var modelName string
+	if unifiedModel := strings.TrimSpace(os.Getenv(EnvAgentModel)); unifiedModel != "" {
+		modelName = unifiedModel
+	} else {
+		// Unified model not set; check provider-specific env vars
+		switch providerName {
+		case ProviderOllama:
+			modelName = strings.TrimSpace(os.Getenv(EnvOllamaModel))
+		case ProviderLlamaCpp:
+			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+		}
+		// If still empty, fall back to configured model
+		if modelName == "" {
+			modelName = strings.TrimSpace(model)
+		}
+	}
+
+	switch providerName {
 	case ProviderCommand:
 		return NewCommandAgentFromEnv()
 	case ProviderOllama:
-		return NewOllamaFromEnv(model)
+		baseURL := strings.TrimSpace(os.Getenv(EnvOllamaBaseURL))
+		if baseURL == "" {
+			baseURL = defaultOllamaBaseURL
+		}
+		timeout, err := timeoutFromEnv(EnvOllamaTimeout)
+		if err != nil {
+			return nil, err
+		}
+		if modelName == "" {
+			return nil, errNoModel("ollama", EnvAgentModel)
+		}
+		return NewOllama(baseURL, modelName, timeout)
 	case ProviderLlamaCpp:
-		return NewLlamaCppFromEnv(model)
+		baseURL := strings.TrimSpace(os.Getenv(EnvLlamaCppBaseURL))
+		if baseURL == "" {
+			baseURL = defaultLlamaCppBaseURL
+		}
+		timeout, err := timeoutFromEnv(EnvLlamaCppTimeout)
+		if err != nil {
+			return nil, err
+		}
+		if modelName == "" {
+			modelName = defaultLlamaCppModel
+		}
+		return NewLlamaCpp(baseURL, modelName, os.Getenv(EnvLlamaCppAPIKey), timeout)
 	default:
 		return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
-			name, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
+			providerName, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
+	}
+}
+
+// HarnessFromEnv builds a Harness by reading harness, provider, and model
+// from the environment and configuration. It maintains backward compatibility
+// with existing command-provider configurations.
+func HarnessFromEnv() (Harness, error) {
+	return HarnessFromConfig("", "", "")
+}
+
+// HarnessFromConfig builds a Harness for a configured harness, provider, and model,
+// wrapping the provider in an appropriate harness adapter. The harness parameter
+// routes between tool (works with any provider) and command (command provider only)
+// harnesses. The provider and model parameters follow the same rules as FromConfig,
+// with SOP_AGENT_MODEL providing top-level precedence over configured model.
+func HarnessFromConfig(harness, provider, model string) (Harness, error) {
+	harnessName, _ := EffectiveHarness(harness)
+	providerName, _ := EffectiveProvider(provider)
+
+	// Resolve model with full precedence: unified env > provider-specific env > configured.
+	// First check the unified SOP_AGENT_MODEL override.
+	var modelName string
+	if unifiedModel := strings.TrimSpace(os.Getenv(EnvAgentModel)); unifiedModel != "" {
+		modelName = unifiedModel
+	} else {
+		// Unified model not set; check provider-specific env vars
+		switch providerName {
+		case ProviderOllama:
+			modelName = strings.TrimSpace(os.Getenv(EnvOllamaModel))
+		case ProviderLlamaCpp:
+			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+		}
+		// If still empty, fall back to configured model
+		if modelName == "" {
+			modelName = strings.TrimSpace(model)
+		}
+	}
+
+	// Validate harness value.
+	switch harnessName {
+	case HarnessTool:
+		// Tool harness works with any provider.
+		switch providerName {
+		case ProviderCommand:
+			agent, err := NewCommandAgentFromEnv()
+			if err != nil {
+				return nil, err
+			}
+			return HarnessFunc(agent.Generate), nil
+		case ProviderOllama:
+			baseURL := strings.TrimSpace(os.Getenv(EnvOllamaBaseURL))
+			if baseURL == "" {
+				baseURL = defaultOllamaBaseURL
+			}
+			timeout, err := timeoutFromEnv(EnvOllamaTimeout)
+			if err != nil {
+				return nil, err
+			}
+			if modelName == "" {
+				return nil, errNoModel("ollama", EnvAgentModel)
+			}
+			return NewOllamaToolHarnessFromEnv(baseURL, modelName, timeout)
+		case ProviderLlamaCpp:
+			baseURL := strings.TrimSpace(os.Getenv(EnvLlamaCppBaseURL))
+			if baseURL == "" {
+				baseURL = defaultLlamaCppBaseURL
+			}
+			timeout, err := timeoutFromEnv(EnvLlamaCppTimeout)
+			if err != nil {
+				return nil, err
+			}
+			if modelName == "" {
+				modelName = defaultLlamaCppModel
+			}
+			agent, err := NewLlamaCpp(baseURL, modelName, os.Getenv(EnvLlamaCppAPIKey), timeout)
+			if err != nil {
+				return nil, err
+			}
+			return HarnessFunc(agent.Generate), nil
+		default:
+			return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
+				providerName, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
+		}
+	case HarnessCommand:
+		// Command harness only works with command provider.
+		if providerName != ProviderCommand {
+			return nil, fmt.Errorf("command harness only supports command provider, got %q", providerName)
+		}
+		agent, err := NewCommandAgentFromEnv()
+		if err != nil {
+			return nil, err
+		}
+		cmdAgent := agent.(*CommandAgent)
+		return NewCommandHarness(cmdAgent), nil
+	default:
+		return nil, fmt.Errorf("unknown agent harness %q: want %s, %s",
+			harnessName, HarnessTool, HarnessCommand)
 	}
 }
 
@@ -85,6 +238,35 @@ func EffectiveProvider(configured string) (string, ProviderSource) {
 		return cfg, SourceConfiguration
 	}
 	return ProviderCommand, SourceDefault
+}
+
+// EffectiveHarness returns the harness name HarnessFromConfig would use for a
+// configured harness, and where it came from: SOP_AGENT_HARNESS (environment)
+// wins over the configured value, which wins over the default tool harness.
+func EffectiveHarness(configured string) (string, ProviderSource) {
+	if env := strings.TrimSpace(os.Getenv(EnvAgentHarness)); env != "" {
+		return env, SourceEnvironment
+	}
+	if cfg := strings.TrimSpace(configured); cfg != "" {
+		return cfg, SourceConfiguration
+	}
+	return HarnessTool, SourceDefault
+}
+
+// EffectiveModel returns the model name that FromConfig or HarnessFromConfig
+// would use for a configured model, and where it came from: SOP_AGENT_MODEL
+// (environment) wins over the configured value, which wins over no model.
+// When no model is specified anywhere, the provider's own environment variable
+// (SOP_OLLAMA_MODEL, SOP_LLAMACPP_MODEL) may provide a default; this function
+// returns the configured-level override only.
+func EffectiveModel(configured string) (string, ProviderSource) {
+	if env := strings.TrimSpace(os.Getenv(EnvAgentModel)); env != "" {
+		return env, SourceEnvironment
+	}
+	if cfg := strings.TrimSpace(configured); cfg != "" {
+		return cfg, SourceConfiguration
+	}
+	return "", SourceDefault
 }
 
 // renderPrompt renders a Request into the single user message that local text

@@ -244,3 +244,39 @@ func TestRequestValidate(t *testing.T) {
 		})
 	}
 }
+
+func TestCommandHarnessSatisfiesHarnessInterface(t *testing.T) {
+	agent := NewCommandAgent("printf '%s' 'ok'")
+	harness := NewCommandHarness(agent)
+
+	var _ Harness = harness
+}
+
+func TestCommandHarnessExecuteDelegates(t *testing.T) {
+	agent := NewCommandAgent("printf '%s' 'response'")
+	harness := NewCommandHarness(agent)
+
+	resp, err := harness.Execute(context.Background(), validRequest(Implement))
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if resp.Content != "response" {
+		t.Errorf("Content = %q, want response", resp.Content)
+	}
+}
+
+func TestCommandHarnessExecutePreservesOutcome(t *testing.T) {
+	agent := NewCommandAgent(`printf '%s' '{"status":"completed","summary":"done"}'`)
+	harness := NewCommandHarness(agent)
+
+	resp, err := harness.Execute(context.Background(), validRequest(Implement))
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if resp.Outcome == nil || resp.Outcome.Status != OutcomeCompleted {
+		t.Errorf("Outcome = %+v, want completed", resp.Outcome)
+	}
+	if resp.Outcome.Summary != "done" {
+		t.Errorf("Summary = %q, want done", resp.Outcome.Summary)
+	}
+}

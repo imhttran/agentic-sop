@@ -102,6 +102,28 @@ func TestOllamaCapabilities(t *testing.T) {
 	}
 }
 
+func TestLlamaCppCapabilities(t *testing.T) {
+	c, err := NewLlamaCpp("http://127.0.0.1:8080", "local", "", 0)
+	if err != nil {
+		t.Fatalf("NewLlamaCpp failed: %v", err)
+	}
+	caps := CapabilitiesOf(c)
+	if caps.Supports(Implement) {
+		t.Error("LlamaCpp must not advertise IMPLEMENT")
+	}
+	if caps.Supports(Fix) {
+		t.Error("LlamaCpp must not advertise FIX")
+	}
+	for _, want := range []Capability{Plan, DesignTests, DiagnoseFailure, Review} {
+		if !caps.Supports(want) {
+			t.Errorf("LlamaCpp should advertise %s", want)
+		}
+	}
+	if caps.Mutating() {
+		t.Error("LlamaCpp's declared set must not include repository mutation")
+	}
+}
+
 func TestCommandAgentCapabilities(t *testing.T) {
 	a := NewCommandAgent("printf '%s' 'ok'")
 	caps := CapabilitiesOf(a)
@@ -136,6 +158,26 @@ func TestCheckedRejectsMutatingCapabilitiesForOllama(t *testing.T) {
 		t.Fatalf("NewOllama failed: %v", err)
 	}
 	checked := NewChecked(o)
+	for _, capability := range []Capability{Implement, Fix} {
+		_, err := checked.Generate(context.Background(), validRequest(capability))
+		if err == nil {
+			t.Fatalf("expected %s to be rejected", capability)
+		}
+		if !strings.Contains(err.Error(), "does not support capability "+string(capability)) {
+			t.Errorf("error = %q, want it to name %s", err, capability)
+		}
+		if !strings.Contains(err.Error(), "PLAN") {
+			t.Errorf("error = %q, want it to list the supported set", err)
+		}
+	}
+}
+
+func TestCheckedRejectsMutatingCapabilitiesForLlamaCpp(t *testing.T) {
+	c, err := NewLlamaCpp("http://127.0.0.1:8080", "local", "", 0)
+	if err != nil {
+		t.Fatalf("NewLlamaCpp failed: %v", err)
+	}
+	checked := NewChecked(c)
 	for _, capability := range []Capability{Implement, Fix} {
 		_, err := checked.Generate(context.Background(), validRequest(capability))
 		if err == nil {

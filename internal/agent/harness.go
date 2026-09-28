@@ -39,6 +39,8 @@ var (
 	_ Agent = (*CommandAgent)(nil)
 	_ Agent = (*Ollama)(nil)
 	_ Agent = (*LlamaCpp)(nil)
+
+	_ Harness = (*CommandHarness)(nil)
 )
 
 // HarnessFunc adapts a function to the Harness interface, mirroring
