@@ -821,7 +821,7 @@ func TestRunEndToEndPass(t *testing.T) {
 	if !strings.Contains(stdout, "PASS") {
 		t.Errorf("stdout = %q", stdout)
 	}
-	if !strings.Contains(stdout, "awaiting human approval") {
+	if !strings.Contains(stdout, "human approval required before commit") {
 		t.Errorf("stdout missing human-gate message: %q", stdout)
 	}
 

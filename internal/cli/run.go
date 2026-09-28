@@ -297,7 +297,7 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
 	if res.gate.Decision == quality.Pass {
-		fmt.Fprintln(stdout, "awaiting human approval; no commit was performed")
+		fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
 		return exitOK
 	}
 	return exitError
