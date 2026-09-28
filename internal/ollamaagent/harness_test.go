@@ -581,7 +581,7 @@ func TestCapabilityBudgets(t *testing.T) {
 		want int
 	}{
 		{agent.DesignTests, 12},
-		{agent.Implement, 24},
+		{agent.Implement, 32},
 		{agent.Fix, 24},
 		{agent.Review, 8},
 	}

@@ -52,14 +52,20 @@ func (p CapabilityPolicy) ToolList() []string {
 // needs more turns than this has stopped making progress, and the harness reports
 // a diagnostic instead of running on. They are maxima, not targets.
 //
-// PLAN does not use a single budget: it runs two phases (see executePlan) —
-// bounded read-only discovery, then a tool-free synthesis — governed by
-// planDiscoveryTurns and planSynthesisTurns.
+// PLAN and REVIEW do not use a single budget: they run two phases (see
+// executeTwoPhase) — bounded read-only discovery, then a tool-free synthesis —
+// governed by their discovery/synthesis turns.
+//
+// IMPLEMENT gets a larger ceiling than FIX: the observed failure mode is a model
+// that explores for most of the budget and only starts writing once the tools are
+// withdrawn, so a task larger than a couple of edits runs out of turns one or two
+// after it finally begins. The extra turns let that explore-then-write pattern
+// finish instead of dying at the ceiling.
 const (
 	planDiscoveryTurns       = 8
 	planSynthesisTurns       = 2
 	maxIterationsDesignTests = 12
-	maxIterationsImplement   = 24
+	maxIterationsImplement   = 32
 	maxIterationsFix         = 24
 	maxIterationsDiagnose    = 12
 	maxIterationsReview      = 12
