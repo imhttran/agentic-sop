@@ -87,6 +87,26 @@ func (r *Run) Write(name, content string) error {
 	return os.WriteFile(filepath.Join(r.dir, name), []byte(content), 0o644)
 }
 
+// attemptFileName stores the last attempt's outcome signature. Unlike state.json
+// it is not reset by New, so it survives across runs of the same task.
+const attemptFileName = "attempt.txt"
+
+// ReadAttempt returns the outcome signature recorded by the previous attempt, if
+// any.
+func (r *Run) ReadAttempt() (string, bool) {
+	data, err := os.ReadFile(filepath.Join(r.dir, attemptFileName))
+	if err != nil {
+		return "", false
+	}
+	sig := strings.TrimSpace(string(data))
+	return sig, sig != ""
+}
+
+// RecordAttempt stores this attempt's outcome signature for the next run.
+func (r *Run) RecordAttempt(signature string) error {
+	return os.WriteFile(filepath.Join(r.dir, attemptFileName), []byte(signature+"\n"), 0o644)
+}
+
 // save writes state.json atomically enough for inspection: the payload is built
 // first, then written.
 func (r *Run) save() error {

@@ -12,6 +12,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/scheduler"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -188,6 +189,19 @@ func guardCapability(a agent.Agent, capability agent.Capability) error {
 	return fmt.Errorf("provider cannot %s (supported: %s); configure a provider that supports it", capability, caps.String())
 }
 
+// outcomeSignature identifies an attempt's outcome so a repeat can be detected.
+func outcomeSignature(gate quality.Result) string {
+	return string(gate.Decision) + "|" + strings.Join(gate.Reasons, "; ")
+}
+
+// outcomeReason returns the first reason, or the decision.
+func outcomeReason(gate quality.Result) string {
+	if len(gate.Reasons) > 0 {
+		return gate.Reasons[0]
+	}
+	return string(gate.Decision)
+}
+
 // allComplete reports whether every task reached a success terminal state.
 func allComplete(tasks []*domain.Task) bool {
 	if len(tasks) == 0 {
@@ -309,9 +323,22 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if code := emitRunSummary(stdout, dir, cfg, rn, res); code != exitOK {
 		if res.stage == runpkg.WaitingForHuman {
 			// A human boundary is not terminal: return the task to PLANNED so a
-			// later run retries it. If the retry budget is spent, block instead of
-			// looping forever.
-			if err := requeueTask(saver, task); err != nil {
+			// later run retries it. A repeat that changed nothing does not spend
+			// the budget; a progressing attempt does, bounded by max_attempts.
+			sig := outcomeSignature(res.gate)
+			prev, hadPrev := rn.ReadAttempt()
+			_ = rn.RecordAttempt(sig)
+
+			if hadPrev && prev == sig {
+				if err := requeueTask(saver, task, false); err != nil {
+					fmt.Fprintf(stderr, "run: %v\n", err)
+					return exitError
+				}
+				fmt.Fprintf(stdout, "%s NEEDS_HUMAN (no change since the previous attempt: %s)\n", task.ID, outcomeReason(res.gate))
+				return exitError
+			}
+
+			if err := requeueTask(saver, task, true); err != nil {
 				if errors.Is(err, domain.ErrRetryExhausted) {
 					if berr := blockTask(saver, task, domain.RETRIES_EXHAUSTED); berr != nil {
 						fmt.Fprintf(stderr, "run: %v\n", berr)
@@ -407,11 +434,17 @@ func blockTask(saver taskSaver, task *domain.Task, reason domain.BlockedReason) 
 
 // requeueTask returns a task to PLANNED on a copy, saves once, and publishes the
 // change back — so a failed save cannot leave in-memory state that was never
-// persisted. It is used for a human boundary: the work is not lost and a later
-// run retries it.
-func requeueTask(saver taskSaver, task *domain.Task) error {
+// persisted. When spend is true it consumes one attempt (bounded by
+// max_attempts); when false it keeps the budget for a repeat that changed nothing.
+func requeueTask(saver taskSaver, task *domain.Task, spend bool) error {
 	staged := *task
-	if err := staged.Requeue(); err != nil {
+	var err error
+	if spend {
+		err = staged.Requeue()
+	} else {
+		err = staged.RequeueWithoutSpending()
+	}
+	if err != nil {
 		return err
 	}
 	if err := saver.Save(&staged); err != nil {

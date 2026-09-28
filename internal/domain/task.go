@@ -107,9 +107,8 @@ var ErrRetryExhausted = errors.New("retry budget exhausted")
 // requeued, and a requeue spends one attempt against MaxAttempts; once the
 // budget is spent it returns ErrRetryExhausted.
 func (t *Task) Requeue() error {
-	switch t.Status {
-	case DONE, LOCAL_DONE, MERGED:
-		return fmt.Errorf("cannot requeue a completed task")
+	if err := t.canRequeue(); err != nil {
+		return err
 	}
 	if t.MaxAttempts > 0 && t.Attempt >= t.MaxAttempts {
 		return fmt.Errorf("%w (%d/%d)", ErrRetryExhausted, t.Attempt, t.MaxAttempts)
@@ -118,6 +117,28 @@ func (t *Task) Requeue() error {
 	t.Status = PLANNED
 	t.BlockedReason = NO_REASON
 	t.UpdatedAt = time.Now()
+	return nil
+}
+
+// RequeueWithoutSpending returns a Task to PLANNED without spending an attempt.
+// It is used when a retry reproduced the same outcome (no progress): the task
+// stays runnable, but a repeat that changed nothing does not consume the budget.
+func (t *Task) RequeueWithoutSpending() error {
+	if err := t.canRequeue(); err != nil {
+		return err
+	}
+	t.Status = PLANNED
+	t.BlockedReason = NO_REASON
+	t.UpdatedAt = time.Now()
+	return nil
+}
+
+// canRequeue rejects requeuing a completed task.
+func (t *Task) canRequeue() error {
+	switch t.Status {
+	case DONE, LOCAL_DONE, MERGED:
+		return fmt.Errorf("cannot requeue a completed task")
+	}
 	return nil
 }
 

@@ -1808,15 +1808,17 @@ func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
 	}
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
 
-	// The retry budget is MaxAttempts (default 3): three requeues, then it blocks.
+	// Each attempt must make progress (a distinct outcome) to spend the budget;
+	// the budget is MaxAttempts (default 3).
 	for i := 0; i < 3; i++ {
+		a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: fmt.Sprintf("needs auth %d", i)}}
 		if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
 			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
 		}
 	}
 
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth final"}}
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 	if code != exitError {
 		t.Fatalf("final run: code=%d, want %d", code, exitError)
@@ -1836,6 +1838,48 @@ func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
 	}
 	if got.Status != domain.BLOCKED {
 		t.Errorf("status = %s, want BLOCKED after the retry budget is spent", got.Status)
+	}
+}
+
+func TestRunGraphNeedsHumanNoProgressDoesNotSpend(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
+
+	// First attempt makes progress (spends one attempt).
+	if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
+		t.Fatalf("first run: code=%d, want %d", code, exitError)
+	}
+
+	// Repeating the same outcome with nothing changed must not spend the budget.
+	for i := 0; i < 2; i++ {
+		code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+		if code != exitError {
+			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
+		}
+		if !strings.Contains(stdout, "no change since the previous attempt") {
+			t.Errorf("run %d stdout = %q", i, stdout)
+		}
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("S001")
+	if err != nil {
+		t.Fatalf("get task: %v", err)
+	}
+	if got.Status != domain.PLANNED {
+		t.Errorf("status = %s, want PLANNED (stays runnable)", got.Status)
+	}
+	if got.Attempt != 1 {
+		t.Errorf("attempt = %d, want 1 (a no-progress repeat must not spend)", got.Attempt)
 	}
 }
 

@@ -197,6 +197,27 @@ func TestRequeue(t *testing.T) {
 	}
 }
 
+func TestRequeueWithoutSpending(t *testing.T) {
+	task := &Task{ID: "T1", Status: BLOCKED, Attempt: 2, MaxAttempts: 3, BlockedReason: REVIEW_UNRESOLVED}
+	if err := task.RequeueWithoutSpending(); err != nil {
+		t.Fatalf("RequeueWithoutSpending: %v", err)
+	}
+	if task.Status != PLANNED {
+		t.Errorf("status = %s, want PLANNED", task.Status)
+	}
+	if task.Attempt != 2 {
+		t.Errorf("attempt = %d, want 2 (budget must not be spent)", task.Attempt)
+	}
+	if task.BlockedReason != NO_REASON {
+		t.Errorf("blocked reason = %q, want empty", task.BlockedReason)
+	}
+
+	done := &Task{ID: "T2", Status: DONE}
+	if err := done.RequeueWithoutSpending(); err == nil {
+		t.Error("expected refusal for a completed task")
+	}
+}
+
 func TestRequeueBudgetExhausted(t *testing.T) {
 	task := &Task{ID: "T1", Status: BLOCKED, Attempt: 3, MaxAttempts: 3}
 	if err := task.Requeue(); !errors.Is(err, ErrRetryExhausted) {
