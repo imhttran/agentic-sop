@@ -226,3 +226,16 @@ func TestRenderOmitsMissingSections(t *testing.T) {
 		t.Errorf("Render missing heading:\n%s", got)
 	}
 }
+
+func TestParseHierarchicalIDHeading(t *testing.T) {
+	spec, err := Parse([]byte("# PREJEV012-S6 — Repository Reconciliation\n\nbody\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if spec.ID != "PREJEV012-S6" {
+		t.Errorf("ID = %q, want PREJEV012-S6", spec.ID)
+	}
+	if spec.Title != "Repository Reconciliation" {
+		t.Errorf("Title = %q, want Repository Reconciliation", spec.Title)
+	}
+}

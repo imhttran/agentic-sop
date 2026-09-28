@@ -17,7 +17,10 @@
 //  4. docs/PRD.md
 //  5. PRD.md
 //
-// When a plan is named explicitly it is authoritative for that execution.
+// Once tasks exist, the plan that owns them is authoritative while it still has
+// unresolved work: with no plan named, a run reconciles against that plan's
+// recorded source rather than discovering another PLAN file. A named plan is
+// always authoritative, and a completed active plan may hand off.
 package planflow
 
 import (
@@ -29,10 +32,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/bootstrap"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planner"
@@ -42,6 +47,10 @@ import (
 const (
 	planFileName = "plan.json"
 	metaFileName = "plan.meta.json"
+	// archiveDirName holds preserved records of completed plans, under DirName.
+	archiveDirName = "archive"
+	// archivedTasksFile is the task-record snapshot written into a plan archive.
+	archivedTasksFile = "tasks.json"
 )
 
 // Source kinds reported by Prepare.
@@ -60,16 +69,21 @@ var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed 
 type TaskStore interface {
 	List() ([]*domain.Task, error)
 	SaveTasks(tasks []*domain.Task) error
+	// ClearTasks removes every task from the active graph. It is used only
+	// during completed-plan handoff, after the previous records are archived.
+	ClearTasks() error
 }
 
 // Options configures Prepare. PlanSource, when set, is the resolved absolute path
 // of an explicitly selected PLAN and is authoritative for the execution. Agent
-// may be nil when no generation or normalization is required.
+// may be nil when no generation or normalization is required. OnRepair, when set,
+// is notified of each plan-repair attempt so the caller can surface the recovery.
 type Options struct {
 	Dir        string
 	PlanSource string
 	Agent      agent.Agent
 	Store      TaskStore
+	OnRepair   planner.RepairFunc
 }
 
 // Result reports what Prepare did.
@@ -90,11 +104,17 @@ type Metadata struct {
 	SourceSHA256 string    `json:"source_sha256"`
 	PlanID       string    `json:"plan_id"`
 	GeneratedAt  time.Time `json:"generated_at"`
+	// ReconciledTasks records the executed task IDs whose definitions a human
+	// explicitly approved during reconciliation, so the approval is durable
+	// provenance rather than an ephemeral one-line report.
+	ReconciledTasks []string `json:"reconciled_tasks,omitempty"`
 }
 
 // Prepare ensures the project is ready to execute: it reconciles existing tasks,
 // or resolves the source, builds the machine plan, validates it, and creates
-// tasks. It is idempotent.
+// tasks. It is idempotent. When existing tasks belong to a completed plan and a
+// different plan is requested, it hands off: the completed plan is preserved and
+// the requested plan initializes in the same invocation.
 func Prepare(ctx context.Context, opts Options) (Result, error) {
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
@@ -104,9 +124,16 @@ func Prepare(ctx context.Context, opts Options) (Result, error) {
 		return Result{}, err
 	}
 	if len(tasks) > 0 {
-		return reconcileState(opts, metaPath)
+		return reconcileState(ctx, opts, planPath, metaPath, tasks)
 	}
+	return initialize(ctx, opts, planPath, metaPath)
+}
 
+// initialize resolves the requested source, builds and validates the machine
+// plan, and creates the task graph. It is the path taken when no tasks exist,
+// including immediately after a completed-plan handoff has released the
+// previous graph.
+func initialize(ctx context.Context, opts Options, planPath, metaPath string) (Result, error) {
 	docPath, docKind := requestedSource(opts)
 	rel := relOf(opts.Dir, docPath)
 	res := Result{Source: rel, SourceKind: docKind, PlanID: planID(rel)}
@@ -144,13 +171,38 @@ func requestedSource(opts Options) (path, kind string) {
 }
 
 // reconcileState handles the case where tasks already exist. It resumes when the
-// requested plan matches what the task graph was built from, and otherwise stops
-// with an actionable NEEDS_HUMAN error rather than mixing plans or discarding
-// history.
-func reconcileState(opts Options, metaPath string) (Result, error) {
+// requested plan matches what the task graph was built from; it hands off when
+// the active plan is complete and a different plan is requested; and otherwise
+// stops with an actionable NEEDS_HUMAN error rather than mixing plans or
+// discarding history.
+func reconcileState(ctx context.Context, opts Options, planPath, metaPath string, tasks []*domain.Task) (Result, error) {
 	res := Result{SourceKind: KindExisting}
+	meta := readMetadata(metaPath)
 
 	docPath, docKind := requestedSource(opts)
+
+	// A plain `sop run` (no plan named) whose persisted active plan still has
+	// unresolved work owns the run: reconcile against that plan's own source
+	// instead of discovering an unrelated PLAN.md and reporting a spurious
+	// "different plan is active". An explicitly named plan stays authoritative,
+	// and a completed active plan keeps the discovery behavior that permits safe
+	// handoff.
+	if strings.TrimSpace(opts.PlanSource) == "" && meta.Source != "" && !domain.AllSatisfied(tasks) {
+		docPath = filepath.Join(opts.Dir, meta.Source)
+		docKind = meta.SourceKind
+		if docKind == "" {
+			docKind = KindPlan
+		}
+		if !fileExists(docPath) {
+			// The active plan's source is gone; resume the persisted graph rather
+			// than guessing at another plan.
+			res.Source = meta.Source
+			res.SourceKind = docKind
+			res.PlanID = meta.PlanID
+			return res, nil
+		}
+	}
+
 	if docPath == "" {
 		return res, nil // no plan to reconcile against
 	}
@@ -164,7 +216,6 @@ func reconcileState(opts Options, metaPath string) (Result, error) {
 	res.SourceKind = docKind
 	res.PlanID = planID(rel)
 
-	meta := readMetadata(metaPath)
 	switch {
 	case meta.Source == "":
 		// No recorded provenance (for example after `sop plan` + `sop tasks`):
@@ -174,9 +225,579 @@ func reconcileState(opts Options, metaPath string) (Result, error) {
 		return res, nil // same plan, same content
 	case meta.Source == rel:
 		return res, planChangedError(rel)
-	default:
+	case !domain.AllSatisfied(tasks):
+		// A different plan is requested while the active plan still has
+		// unresolved work: keep the safety gate.
 		return res, differentPlanError(rel, meta.Source, meta.PlanID)
+	default:
+		// The active plan is complete: release it and initialize the requested
+		// plan in the same invocation.
+		return handOff(ctx, opts, meta, tasks, data, docPath, docKind, rel, planPath, metaPath)
 	}
+}
+
+// handOff releases a completed active plan so an explicitly requested different
+// plan can initialize in the same invocation. The requested plan is built and
+// validated before anything is mutated, so a plan that cannot initialize leaves
+// the completed plan's record intact.
+func handOff(ctx context.Context, opts Options, meta Metadata, tasks []*domain.Task, data []byte, docPath, docKind, rel, planPath, metaPath string) (Result, error) {
+	res := Result{Source: rel, SourceKind: docKind, PlanID: planID(rel), PlanRebuilt: true}
+
+	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, docKind, string(data))
+	if err != nil {
+		if errors.Is(err, errNoAgent) {
+			return res, err
+		}
+		return res, planError(rel, err)
+	}
+	if err := plan.Validate(); err != nil {
+		return res, planError(rel, err)
+	}
+
+	// The requested plan is viable: preserve the completed plan, then release
+	// its active association so the new graph can be created without mixing.
+	if err := archiveCompletedPlan(opts.Dir, meta, tasks, planPath, metaPath); err != nil {
+		return res, err
+	}
+	if err := opts.Store.ClearTasks(); err != nil {
+		return res, err
+	}
+
+	docWritten, err := persistPlan(opts, plan, docPath, docKind, data, planPath, metaPath)
+	if err != nil {
+		return res, err
+	}
+	res.PlanDoc = docWritten
+
+	created, err := ensureTasks(rel, plan, opts.Store)
+	if err != nil {
+		return res, err
+	}
+	res.TasksCreated = created
+	return res, nil
+}
+
+// archiveCompletedPlan preserves a completed plan's task records and provenance
+// under DirName/archive/<plan-id>/ before its active association is released, so
+// the previous plan's history stays readable after handoff.
+func archiveCompletedPlan(dir string, meta Metadata, tasks []*domain.Task, planPath, metaPath string) error {
+	id := strings.TrimSpace(meta.PlanID)
+	if id == "" {
+		id = "plan"
+	}
+	root := filepath.Join(dir, config.DirName, archiveDirName, id)
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return err
+	}
+
+	for _, file := range []struct{ src, dst string }{
+		{planPath, filepath.Join(root, planFileName)},
+		{metaPath, filepath.Join(root, metaFileName)},
+	} {
+		data, err := os.ReadFile(file.src)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if err := atomicWrite(file.dst, data); err != nil {
+			return err
+		}
+	}
+
+	data, err := json.MarshalIndent(tasks, "", "  ")
+	if err != nil {
+		return fmt.Errorf("planflow: encode archived tasks: %w", err)
+	}
+	return atomicWrite(filepath.Join(root, archivedTasksFile), append(data, '\n'))
+}
+
+// --- Explicit reconciliation ---------------------------------------------
+
+// GraphStore is the persistence Reconcile needs: the active task graph and an
+// atomic operation to apply a reconciled set.
+type GraphStore interface {
+	List() ([]*domain.Task, error)
+	ReplaceGraph(tasks []*domain.Task, remove []string) error
+}
+
+// ReconcileOptions configures Reconcile. PlanSource is the absolute path of the
+// requested PLAN document and is required. Agent may be nil when the requested
+// plan is recognizable without normalization.
+type ReconcileOptions struct {
+	Dir        string
+	PlanSource string
+	Agent      agent.Agent
+	Store      GraphStore
+	OnRepair   planner.RepairFunc
+	// AcceptChanged names executed tasks whose changed definition the human has
+	// explicitly approved for replacement. Their history and lifecycle state are
+	// preserved; only the definition is refreshed. An ID that does not name an
+	// executed task whose definition changed is rejected.
+	AcceptChanged []string
+}
+
+// ReconcileResult reports what an explicit reconciliation did. The slices hold
+// task IDs.
+type ReconcileResult struct {
+	Source      string // relative path of the requested plan
+	PlanID      string
+	PlanChanged bool // the requested plan differs from the recorded machine plan
+	Unchanged   []string
+	Updated     []string
+	Added       []string
+	Removed     []string
+	// Accepted names executed tasks whose changed definition the human approved
+	// with --accept-changed and that were replaced by the requested definition.
+	Accepted []string
+}
+
+// reconcilePlan is the in-memory outcome of diffing a requested plan against the
+// active graph: the tasks to upsert, the IDs to remove, and the classification
+// used for reporting.
+type reconcilePlan struct {
+	unchanged []string
+	updated   []string
+	added     []string
+	removed   []string
+	accepted  []string
+	upserts   []*domain.Task
+}
+
+// Reconcile applies an intentional PLAN change to the persisted active plan. It
+// compiles and validates the requested plan deterministically, diffs its
+// executable task definitions against the active graph, and updates only tasks
+// that have never executed. A task with execution history whose definition
+// changed, or that the requested plan removes, stops with NEEDS_HUMAN: SOP never
+// silently overwrites a task's definition or discards its history. The one
+// exception is a task named in AcceptChanged, which the human has explicitly
+// approved: its definition is refreshed while its lifecycle state, attempts, and
+// history are preserved.
+//
+// It never deletes or recreates state.db and never clears the graph wholesale.
+// The reconciled graph is persisted first; the machine plan and its provenance
+// are written afterwards. A validation or graph-persistence failure therefore
+// leaves the previous active graph and its metadata authoritative. The reverse
+// window, where the graph commits but a later file write fails, cannot be closed
+// without a shared journal across SQLite and the files. The graph-leading order
+// is deliberate: a stale metadata file only makes the next `sop run` re-prompt
+// for a reconciliation, whereas writing the files first could let that guard pass
+// while the graph still held the old definitions. A retry once the file write
+// succeeds completes idempotently.
+func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error) {
+	res := ReconcileResult{}
+	if strings.TrimSpace(opts.PlanSource) == "" {
+		return res, errors.New("reconcile: a plan path is required")
+	}
+
+	data, err := os.ReadFile(opts.PlanSource)
+	if err != nil {
+		return res, fmt.Errorf("reconcile: read %s: %w", opts.PlanSource, err)
+	}
+	rel := relOf(opts.Dir, opts.PlanSource)
+	res.Source = rel
+	res.PlanID = planID(rel)
+
+	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
+	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
+
+	// The comparison baseline is the recorded machine plan, which the active task
+	// graph mirrors. It must exist: an explicit reconciliation only makes sense
+	// against an active plan.
+	recorded, ok := loadPersistedPlan(planPath)
+	if !ok {
+		return res, fmt.Errorf("NEEDS_HUMAN: no persisted plan to reconcile against\n\n%s is missing or unreadable. Run `sop run` to establish the active plan first", filepath.Join(config.DirName, planFileName))
+	}
+
+	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, KindPlan, string(data))
+	if err != nil {
+		if errors.Is(err, errNoAgent) {
+			return res, err
+		}
+		return res, planError(rel, err)
+	}
+	if err := plan.Validate(); err != nil {
+		return res, planError(rel, err)
+	}
+	res.PlanChanged = !plansEquivalent(recorded, plan)
+
+	desired, err := desiredTasks(plan)
+	if err != nil {
+		return res, planError(rel, err)
+	}
+
+	active, err := opts.Store.List()
+	if err != nil {
+		return res, err
+	}
+
+	diff, err := reconcileGraph(rel, active, desired, acceptSet(opts.AcceptChanged))
+	if err != nil {
+		return res, err
+	}
+
+	if len(diff.upserts) > 0 || len(diff.removed) > 0 {
+		if err := opts.Store.ReplaceGraph(diff.upserts, diff.removed); err != nil {
+			return res, err
+		}
+	}
+
+	// Provenance is refreshed only after the reconciled graph is persisted, so a
+	// failed persistence leaves the previous active graph and metadata
+	// authoritative. Any previously recorded reconciliation is carried forward so
+	// the human-approval record survives a later no-op rewrite of this file.
+	if err := writePlan(planPath, plan); err != nil {
+		return res, err
+	}
+	if err := writeMetadata(metaPath, Metadata{
+		Source:          rel,
+		SourceKind:      KindPlan,
+		SourceSHA256:    fingerprint(data),
+		PlanID:          planID(rel),
+		GeneratedAt:     time.Now().UTC(),
+		ReconciledTasks: mergeIDs(readMetadata(metaPath).ReconciledTasks, diff.accepted),
+	}); err != nil {
+		return res, err
+	}
+
+	res.Unchanged = diff.unchanged
+	res.Updated = diff.updated
+	res.Added = diff.added
+	res.Removed = diff.removed
+	res.Accepted = diff.accepted
+	return res, nil
+}
+
+// desiredTasks builds the executable task definitions for a plan, wiring in the
+// environment bootstrap dependency and validating the resulting graph. It is the
+// same deterministic construction used when tasks are first created.
+func desiredTasks(plan *planner.Plan) ([]*domain.Task, error) {
+	tasks, err := taskbuilder.Build(plan)
+	if err != nil {
+		return nil, err
+	}
+	if err := bootstrap.Apply(plan, tasks); err != nil {
+		return nil, err
+	}
+	if err := taskbuilder.ValidateDAG(tasks); err != nil {
+		return nil, err
+	}
+	return tasks, nil
+}
+
+// reconcileGraph diffs the requested task definitions against the active graph.
+// A task that already matches is left untouched. A changed task with execution
+// history stops with NEEDS_HUMAN unless its ID is in accept, in which case only
+// its definition is refreshed and its history is preserved. A removed task with
+// execution history always stops with NEEDS_HUMAN. An accepted ID that does not
+// name an executed task whose definition changed is rejected, as is any changed
+// executed task left unapproved. The reconciled graph is validated as a whole
+// before being returned, so a change that would leave a dangling dependency is
+// rejected up front rather than mid-mutation.
+func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool) (reconcilePlan, error) {
+	var out reconcilePlan
+
+	activeTasks := taskIndex(active)
+	desiredByID := taskIndex(desired)
+	desiredIDs := make(map[string]bool, len(desired))
+	for _, d := range desired {
+		desiredIDs[d.ID] = true
+	}
+
+	// A changed task that already executed is collected here and only replaced
+	// when its ID is in accept; otherwise it is reported after every accepted ID
+	// has been checked, so an unrelated approval is rejected first.
+	changedExecuted := make(map[string]bool)
+	for _, d := range desired {
+		task, ok := activeTasks[d.ID]
+		if !ok {
+			out.upserts = append(out.upserts, d)
+			out.added = append(out.added, d.ID)
+			continue
+		}
+		if sameTaskDefinition(task, d) {
+			out.unchanged = append(out.unchanged, d.ID)
+			continue
+		}
+		if hasExecution(task) {
+			changedExecuted[d.ID] = true
+			if !accept[d.ID] {
+				continue
+			}
+			out.upserts = append(out.upserts, redefineTask(task, d))
+			out.accepted = append(out.accepted, d.ID)
+			continue
+		}
+		out.upserts = append(out.upserts, redefineTask(task, d))
+		out.updated = append(out.updated, d.ID)
+	}
+
+	// Every accepted ID must name an executed task whose definition changed in the
+	// requested plan, so one approval can never silently cover an unrelated task.
+	for _, id := range sortedSet(accept) {
+		if changedExecuted[id] {
+			continue
+		}
+		return reconcilePlan{}, acceptChangedError(id, activeTasks, desiredByID)
+	}
+
+	// Any changed executed task left unapproved needs its own explicit approval:
+	// one approval never covers another task.
+	if unapproved := missingAccept(changedExecuted, accept); len(unapproved) > 0 {
+		cur := unapproved[0]
+		return reconcilePlan{}, changedExecutedError(activeTasks[cur], desiredByID[cur], unapproved[1:])
+	}
+
+	for _, id := range sortedIDs(activeTasks) {
+		if desiredIDs[id] {
+			continue
+		}
+		task := activeTasks[id]
+		if hasExecution(task) {
+			return reconcilePlan{}, removedExecutedError(task)
+		}
+		out.removed = append(out.removed, id)
+	}
+
+	// Validate the reconciled graph before any mutation, catching a surviving task
+	// whose dependency the requested plan drops.
+	final := make([]*domain.Task, 0, len(out.unchanged)+len(out.upserts))
+	for _, id := range out.unchanged {
+		final = append(final, activeTasks[id])
+	}
+	final = append(final, out.upserts...)
+	if err := taskbuilder.ValidateDAG(final); err != nil {
+		return reconcilePlan{}, planError(source, err)
+	}
+
+	return out, nil
+}
+
+// redefineTask returns cur carrying d's definition while preserving everything
+// that records the task's identity and history (its ID, lifecycle state,
+// attempts, budget, and creation time). It backs both the silent update of a
+// task that has never executed and the explicit, human-approved update of an
+// executed task, so neither loses history or changes state.
+func redefineTask(cur, d *domain.Task) *domain.Task {
+	updated := *cur
+	updated.Title = d.Title
+	updated.Objective = d.Objective
+	updated.AcceptanceCriteria = d.AcceptanceCriteria
+	updated.ExecutionMode = d.ExecutionMode
+	updated.DependencyIDs = append([]string{}, d.DependencyIDs...)
+	updated.UpdatedAt = time.Now().UTC()
+	return &updated
+}
+
+// sameTaskDefinition reports whether two tasks carry the same executable
+// definition. Dependencies are compared as sets, since their stored order is not
+// significant (the bootstrap dependency is appended, persistence returns them
+// sorted).
+func sameTaskDefinition(a, b *domain.Task) bool {
+	return a.Title == b.Title &&
+		a.Objective == b.Objective &&
+		a.AcceptanceCriteria == b.AcceptanceCriteria &&
+		a.ExecutionMode == b.ExecutionMode &&
+		sameStringSet(a.DependencyIDs, b.DependencyIDs)
+}
+
+// hasExecution reports whether a task has left the pre-execution state: it has
+// been attempted, or it has progressed beyond PLANNED. Only a task that has never
+// executed may have its definition replaced or be removed.
+func hasExecution(t *domain.Task) bool {
+	return t.Attempt > 0 || len(t.Attempts) > 0 || t.Status != domain.PLANNED
+}
+
+// taskIndex keys tasks by id.
+func taskIndex(tasks []*domain.Task) map[string]*domain.Task {
+	index := make(map[string]*domain.Task, len(tasks))
+	for _, task := range tasks {
+		index[task.ID] = task
+	}
+	return index
+}
+
+// sortedIDs returns the ids in index, sorted for deterministic reporting.
+func sortedIDs(index map[string]*domain.Task) []string {
+	ids := make([]string, 0, len(index))
+	for id := range index {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	return ids
+}
+
+// sameStringSet reports whether a and b contain the same values, order aside.
+func sameStringSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	set := make(map[string]bool, len(a))
+	for _, v := range a {
+		set[v] = true
+	}
+	for _, v := range b {
+		if !set[v] {
+			return false
+		}
+	}
+	return true
+}
+
+// plansEquivalent reports whether a requested plan is identical to the recorded
+// machine plan: same project, summary, and stages (order aside).
+func plansEquivalent(a, b *planner.Plan) bool {
+	if a == nil || b == nil {
+		return a == b
+	}
+	if a.Project != b.Project || a.Summary != b.Summary || len(a.Stages) != len(b.Stages) {
+		return false
+	}
+	stages := make(map[string]planner.Stage, len(a.Stages))
+	for _, s := range a.Stages {
+		stages[s.ID] = s
+	}
+	for _, s := range b.Stages {
+		other, ok := stages[s.ID]
+		if !ok || !sameStage(other, s) {
+			return false
+		}
+	}
+	return true
+}
+
+// sameStage reports whether two plan stages carry the same definition.
+func sameStage(a, b planner.Stage) bool {
+	return a.Title == b.Title &&
+		a.Objective == b.Objective &&
+		a.Kind == b.Kind &&
+		a.ExecutionMode == b.ExecutionMode &&
+		strings.Join(a.AcceptanceCriteria, "\n") == strings.Join(b.AcceptanceCriteria, "\n") &&
+		sameStringSet(a.Dependencies, b.Dependencies) &&
+		strings.Join(a.Deliverables, "\n") == strings.Join(b.Deliverables, "\n")
+}
+
+// loadPersistedPlan reads the recorded machine plan. A missing, unreadable, or
+// empty (no project, no stages) file counts as absent.
+func loadPersistedPlan(path string) (*planner.Plan, bool) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, false
+	}
+	var plan planner.Plan
+	if err := json.Unmarshal(data, &plan); err != nil {
+		return nil, false
+	}
+	if strings.TrimSpace(plan.Project) == "" || len(plan.Stages) == 0 {
+		return nil, false
+	}
+	return &plan, true
+}
+
+// changedExecutedError explains that a task with execution history changed and
+// has not been explicitly approved. others names any further changed executed
+// tasks that also require their own approval.
+func changedExecutedError(cur, desired *domain.Task, others []string) error {
+	msg := fmt.Sprintf("NEEDS_HUMAN: task %s already has execution history and its definition changed\n\n%s\n\nSOP will not silently replace the definition of an executed task.\nReview the change, then approve it explicitly with `sop reconcile <PLAN.md> --accept-changed %s`, or complete %s first", cur.ID, describeTaskDifference(cur, desired), cur.ID, cur.ID)
+	if len(others) > 0 {
+		msg += fmt.Sprintf("\n\nOther changed executed tasks also need their own explicit approval: %s", strings.Join(others, ", "))
+	}
+	return errors.New(msg)
+}
+
+// acceptChangedError explains that an --accept-changed ID does not name an
+// executed task whose definition changed, so approving it would be unrelated to
+// the change being reconciled.
+func acceptChangedError(id string, active, desired map[string]*domain.Task) error {
+	switch {
+	case active[id] == nil && desired[id] == nil:
+		return fmt.Errorf("reconcile: --accept-changed %s does not name a task in the active or requested plan", id)
+	case active[id] == nil:
+		return fmt.Errorf("reconcile: --accept-changed %s names a task that is not in the active plan; only an executed task whose definition changed can be approved", id)
+	case desired[id] == nil:
+		return fmt.Errorf("reconcile: --accept-changed %s names a task the requested plan removes; removing an executed task cannot be approved with --accept-changed", id)
+	default:
+		return fmt.Errorf("reconcile: --accept-changed %s does not name an executed task whose definition changed", id)
+	}
+}
+
+// acceptSet returns the approved IDs as a set, ignoring blanks so a stray
+// separator does not become a task name.
+func acceptSet(ids []string) map[string]bool {
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		if id = strings.TrimSpace(id); id != "" {
+			set[id] = true
+		}
+	}
+	return set
+}
+
+// missingAccept returns, sorted, the changed-executed IDs that accept does not
+// cover.
+func missingAccept(changedExecuted, accept map[string]bool) []string {
+	var missing []string
+	for id := range changedExecuted {
+		if !accept[id] {
+			missing = append(missing, id)
+		}
+	}
+	sort.Strings(missing)
+	return missing
+}
+
+// sortedSet returns the keys of a string set in sorted order.
+func sortedSet(set map[string]bool) []string {
+	keys := make([]string, 0, len(set))
+	for k := range set {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// mergeIDs returns the sorted, de-duplicated union of prior and added, so a
+// recorded human-approval survives a later no-op rewrite of the metadata.
+func mergeIDs(prior, added []string) []string {
+	seen := make(map[string]bool, len(prior)+len(added))
+	for _, id := range prior {
+		seen[id] = true
+	}
+	for _, id := range added {
+		seen[id] = true
+	}
+	return sortedSet(seen)
+}
+
+// removedExecutedError explains that a task with execution history was dropped.
+func removedExecutedError(t *domain.Task) error {
+	return fmt.Errorf("NEEDS_HUMAN: task %s has execution history but is absent from the requested plan\n\nSOP will not discard an executed task's history by removing it.\nComplete or retire %s before reconciling", t.ID, t.ID)
+}
+
+// describeTaskDifference lists the fields that differ between a task's persisted
+// definition and the requested one, so the human sees exactly what changed.
+func describeTaskDifference(cur, desired *domain.Task) string {
+	var lines []string
+	if cur.Title != desired.Title {
+		lines = append(lines, fmt.Sprintf("  title: %q -> %q", cur.Title, desired.Title))
+	}
+	if cur.Objective != desired.Objective {
+		lines = append(lines, "  objective changed")
+	}
+	if cur.AcceptanceCriteria != desired.AcceptanceCriteria {
+		lines = append(lines, "  acceptance criteria changed")
+	}
+	if cur.ExecutionMode != desired.ExecutionMode {
+		lines = append(lines, fmt.Sprintf("  execution mode: %q -> %q", cur.ExecutionMode, desired.ExecutionMode))
+	}
+	if !sameStringSet(cur.DependencyIDs, desired.DependencyIDs) {
+		lines = append(lines, fmt.Sprintf("  dependencies: [%s] -> [%s]", strings.Join(cur.DependencyIDs, ", "), strings.Join(desired.DependencyIDs, ", ")))
+	}
+	if len(lines) == 0 {
+		lines = append(lines, "  definition changed")
+	}
+	return strings.Join(lines, "\n")
 }
 
 // ensurePlan returns the machine plan, rebuilding it when the human source is new
@@ -204,7 +825,7 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 		}
 	}
 
-	plan, err := buildPlan(ctx, opts.Agent, docKind, string(data))
+	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, docKind, string(data))
 	if err != nil {
 		if errors.Is(err, errNoAgent) {
 			return nil, false, "", err
@@ -214,8 +835,20 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 	if err := plan.Validate(); err != nil {
 		return nil, false, "", planError(rel, err)
 	}
-	if err := writePlan(planPath, plan); err != nil {
+	docWritten, err := persistPlan(opts, plan, docPath, docKind, data, planPath, metaPath)
+	if err != nil {
 		return nil, false, "", err
+	}
+	return plan, true, docWritten, nil
+}
+
+// persistPlan writes the machine plan, its provenance, and (when generating from
+// a PRD) the human-readable plan document. It is shared by the initial build and
+// by completed-plan handoff.
+func persistPlan(opts Options, plan *planner.Plan, docPath, docKind string, data []byte, planPath, metaPath string) (string, error) {
+	rel := relOf(opts.Dir, docPath)
+	if err := writePlan(planPath, plan); err != nil {
+		return "", err
 	}
 	_ = writeMetadata(metaPath, Metadata{
 		Source:       rel,
@@ -224,12 +857,10 @@ func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, m
 		PlanID:       planID(rel),
 		GeneratedAt:  time.Now().UTC(),
 	})
-
-	docWritten := ""
 	if docKind == KindPRD {
-		docWritten = writeGeneratedPlanDoc(opts.Dir, docPath, plan)
+		return writeGeneratedPlanDoc(opts.Dir, docPath, plan), nil
 	}
-	return plan, true, docWritten, nil
+	return "", nil
 }
 
 // validatePlan re-checks the executable graph deterministically (ids, references,
@@ -250,10 +881,16 @@ func ensureTasks(source string, plan *planner.Plan, store TaskStore) (int, error
 	return len(tasks), nil
 }
 
-// buildPlan compiles a human PLAN.md or generates a plan from a PRD.
-func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*planner.Plan, error) {
+// buildPlan compiles a human PLAN.md or generates a plan from a PRD. The
+// repair observer is attached to the planner so generated plans that fail
+// deterministic validation are corrected rather than failing the run.
+func buildPlan(ctx context.Context, a agent.Agent, onRepair planner.RepairFunc, kind, content string) (*planner.Plan, error) {
+	p := planner.New(a)
+	if onRepair != nil {
+		p.OnRepair(onRepair)
+	}
 	if kind == KindPlan {
-		plan, err := planner.New(a).Compile(ctx, content)
+		plan, err := p.Compile(ctx, content)
 		if err != nil {
 			if a == nil && strings.Contains(err.Error(), "no agent is available") {
 				return nil, errNoAgent
@@ -265,7 +902,7 @@ func buildPlan(ctx context.Context, a agent.Agent, kind, content string) (*plann
 	if a == nil {
 		return nil, errNoAgent
 	}
-	return planner.New(a).Generate(ctx, content)
+	return p.Generate(ctx, content)
 }
 
 // discoverPlanningSource returns the first human planning document by precedence:
@@ -375,15 +1012,16 @@ func planError(source string, err error) error {
 
 // planChangedError explains that the recorded plan source changed.
 func planChangedError(source string) error {
-	return fmt.Errorf("NEEDS_HUMAN: plan changed since the task graph was created\n\nSource: %s\n\nSOP will not silently rebuild the machine plan or discard task\nexecution history. Review the change, reconcile explicitly, then rerun:\n\n  sop run %s", source, source)
+	return fmt.Errorf("NEEDS_HUMAN: plan changed since the task graph was created\n\nSource: %s\n\nSOP will not silently rebuild the machine plan or discard task\nexecution history. Review the change, reconcile it explicitly, then rerun:\n\n  sop reconcile %s\n  sop run %s", source, source, source)
 }
 
-// differentPlanError explains that a different plan is already active.
+// differentPlanError explains that a different plan is already active and the
+// active plan still has unresolved work, so automatic handoff is refused.
 func differentPlanError(requested, active, activeID string) error {
 	if activeID == "" {
 		activeID = "(unknown)"
 	}
-	return fmt.Errorf("NEEDS_HUMAN: a different plan is already active\n\nActive:    %s\nRequested: %s\n\nThe existing tasks belong to %s (%s). SOP will not mix two\nplans in one task graph. Finish or reconcile the active plan (for example by\nremoving .agent-sdlc/state.db to start fresh), then rerun:\n\n  sop run %s", active, requested, active, activeID, requested)
+	return fmt.Errorf("NEEDS_HUMAN: a different plan is already active\n\nActive:    %s\nRequested: %s\n\nThe existing tasks belong to %s (%s), which still has unresolved\nwork. SOP will not mix two plans in one task graph, and it will not switch\naway from unfinished work. Complete or reconcile the active plan, then\nrerun:\n\n  sop run %s", active, requested, active, activeID, requested)
 }
 
 // planID derives a stable identity from a plan's relative path: the file name

@@ -15,6 +15,8 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
+	"github.com/imhttran/agentic-sop/internal/jev"
+	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/resume"
 )
@@ -39,21 +41,41 @@ const (
 
 // deps holds the external boundaries the CLI depends on so commands can be
 // driven with fakes in tests: the working-directory resolver, the agent
-// constructor (parameterised by the configured provider), the resume observer,
-// and the working-tree diff reader.
+// constructor (parameterised by the configured harness, provider, and model),
+// the resume observer, and the working-tree diff reader.
 type deps struct {
 	getwd        func() (string, error)
-	newAgent     func(provider, model string) (agent.Agent, error)
+	newAgent     func(harness, provider, model string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
 	commit       func(ctx context.Context, dir, message string) error
 	newGitHub    func(dir string) github.Client
+	// newJEVAnalyzer builds the optional JEV analyzer from configuration. It is
+	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
+	// an error) leaves JEV absent, which is never fatal to the lifecycle.
+	newJEVAnalyzer func(cfg config.Config) (jev.Analyzer, error)
 }
 
 func defaultDeps() deps {
 	return deps{
 		getwd: os.Getwd,
-		newAgent: func(provider, model string) (agent.Agent, error) {
+		newAgent: func(harness, provider, model string) (agent.Agent, error) {
+			// This is the composition root: it resolves the effective
+			// harness/provider pair the same way the startup summary does, then
+			// builds the matching agent. Environment keeps the highest precedence.
+			h, _ := agent.EffectiveHarness(harness)
+			p, _ := agent.EffectiveProvider(provider)
+			if h == agent.HarnessTool && p == agent.ProviderOllama {
+				// The native path: the Ollama tool loop runs in-process against
+				// the working tree, with all capabilities (including IMPLEMENT and
+				// FIX). SOP remains the workflow authority; the loop owns only
+				// tool-bounded execution.
+				a, err := ollamaagent.NativeAgentFromEnv(model)
+				if err != nil {
+					return nil, err
+				}
+				return agent.NewChecked(a), nil
+			}
 			a, err := agent.FromConfig(provider, model)
 			if err != nil {
 				return nil, err
@@ -76,6 +98,12 @@ func defaultDeps() deps {
 			return g.Commit(ctx, message)
 		},
 		newGitHub: func(dir string) github.Client { return github.NewCommandClient(dir) },
+		newJEVAnalyzer: func(cfg config.Config) (jev.Analyzer, error) {
+			// The default analyzer drives the existing Ollama provider path. An
+			// absent/misconfigured provider leaves JEV absent, which the caller
+			// treats as non-fatal (never failing the lifecycle).
+			return jev.NewOllamaAnalyzerFromEnv()
+		},
 	}
 }
 
@@ -129,6 +157,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runResume(rest, stdout, stderr, d)
 	case "retry":
 		return runRetry(rest, stdout, stderr, d.getwd)
+	case "reconcile":
+		return runReconcile(rest, stdout, stderr, d)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", command)
 		fmt.Fprintln(stderr, "run `sop --help` for usage")
@@ -165,6 +195,7 @@ Commands:
   mcp       serve tools over the Model Context Protocol (stdio)
   report    print a concise summary of the latest run
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
+  reconcile reconcile an intentional PLAN change with the active plan (--accept-changed <id> to approve a changed executed task)
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   version   print the CLI version
@@ -189,17 +220,17 @@ func statePath(projectDir string) string {
 	return filepath.Join(projectDir, stateDirName, stateFileName)
 }
 
-// configuredAgent returns the agent provider and model named by the project
-// configuration, or ("", "") when there is no configuration (the environment
-// then decides). A present but invalid configuration is an error, not a silent
-// fallback.
-func configuredAgent(projectDir string) (provider, model string, err error) {
+// configuredAgent returns the agent harness, provider and model named by the
+// project configuration, or ("", "", "") when there is no configuration (the
+// environment then decides). A present but invalid configuration is an error,
+// not a silent fallback.
+func configuredAgent(projectDir string) (harness, provider, model string, err error) {
 	cfg, err := config.LoadDir(projectDir)
 	if errors.Is(err, config.ErrNotFound) {
-		return "", "", nil
+		return "", "", "", nil
 	}
 	if err != nil {
-		return "", "", err
+		return "", "", "", err
 	}
-	return cfg.Agent.Provider, cfg.Agent.Model, nil
+	return cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, nil
 }

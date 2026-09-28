@@ -175,3 +175,28 @@ func TestCompileSurfacesInvalidRecognizedPlan(t *testing.T) {
 		t.Fatalf("Compile() = %v, want a cycle error (no silent agent fallback)", err)
 	}
 }
+
+func TestPlanFromMarkdownHierarchicalIDs(t *testing.T) {
+	doc := "# Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n" +
+		"## PREJEV012 — Umbrella\n\nU.\n\n### Dependencies\n\n- PREJEV012-S6\n\n### Acceptance Criteria\n\n- child done\n\n" +
+		"## PREJEV012-S6 — Child\n\nC.\n\n### Acceptance Criteria\n\n- works\n"
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown failed: %v", err)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("hierarchical plan invalid: %v", err)
+	}
+	if len(plan.Stages) != 2 {
+		t.Fatalf("stages = %d, want 2", len(plan.Stages))
+	}
+	if plan.Stages[0].ID != "PREJEV012" {
+		t.Errorf("stage[0].ID = %q, want PREJEV012", plan.Stages[0].ID)
+	}
+	if plan.Stages[1].ID != "PREJEV012-S6" || plan.Stages[1].Title != "Child" {
+		t.Errorf("stage[1] = %+v, want id PREJEV012-S6 title Child", plan.Stages[1])
+	}
+	if !reflect.DeepEqual(plan.Stages[0].Dependencies, []string{"PREJEV012-S6"}) {
+		t.Errorf("umbrella dependencies = %v, want [PREJEV012-S6]", plan.Stages[0].Dependencies)
+	}
+}

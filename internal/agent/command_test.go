@@ -185,7 +185,7 @@ func TestParseOutcome(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := parseOutcome(tc.content)
+			got := ParseOutcome(tc.content)
 			if tc.want == nil {
 				if got != nil {
 					t.Errorf("got %+v, want nil", got)

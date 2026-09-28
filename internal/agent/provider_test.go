@@ -452,13 +452,19 @@ func TestHarnessFromConfigToolHarness(t *testing.T) {
 		}
 		var _ Harness = h
 	})
-	t.Run("tool + ollama", func(t *testing.T) {
+	t.Run("tool + ollama is the native loop, not a single-shot harness", func(t *testing.T) {
+		// The Ollama tool harness is the multi-turn controlled-tool loop in
+		// internal/ollamaagent, built by the CLI composition root; a single-shot
+		// Harness cannot represent it, so the request fails clearly rather than
+		// silently degrading to text-only inference.
 		t.Setenv(EnvOllamaModel, "qwen3:8b")
-		h, err := HarnessFromConfig(HarnessTool, ProviderOllama, "")
-		if err != nil {
-			t.Fatalf("HarnessFromConfig failed: %v", err)
+		t.Setenv(EnvAgentProvider, "")
+		t.Setenv(EnvAgentHarness, "")
+		if _, err := HarnessFromConfig(HarnessTool, ProviderOllama, ""); err == nil {
+			t.Error("expected an explanatory error for tool + ollama")
+		} else if !strings.Contains(err.Error(), "harness tool with provider ollama") {
+			t.Errorf("error should name the native tool loop path: %v", err)
 		}
-		var _ Harness = h
 	})
 	t.Run("tool + llamacpp", func(t *testing.T) {
 		h, err := HarnessFromConfig(HarnessTool, ProviderLlamaCpp, "")
@@ -559,23 +565,23 @@ func TestFromConfigModel(t *testing.T) {
 }
 
 func TestHarnessFromConfigModel(t *testing.T) {
-	t.Run("unified env overrides config", func(t *testing.T) {
+	t.Run("ollama via tool harness is built by the CLI, whatever the model", func(t *testing.T) {
+		// Model identity never decides harness identity: the native loop path is
+		// selected by harness+provider and is explained the same way for any
+		// configured model.
 		t.Setenv(EnvAgentModel, "deepseek-v4.1-flash:cloud")
 		t.Setenv(EnvOllamaModel, "")
 		t.Setenv(EnvAgentProvider, "")
 		t.Setenv(EnvAgentHarness, "")
-		h, err := HarnessFromConfig("", ProviderOllama, "deepseek-v4")
-		if err != nil {
-			t.Fatalf("HarnessFromConfig failed: %v", err)
+		if _, err := HarnessFromConfig("", ProviderOllama, "deepseek-v4"); err == nil {
+			t.Error("expected an explanatory error for tool + ollama")
 		}
-		var _ Harness = h
 	})
-	t.Run("config model is used when no unified env", func(t *testing.T) {
+	t.Run("llamacpp tool harness uses the configured model", func(t *testing.T) {
 		t.Setenv(EnvAgentModel, "")
-		t.Setenv(EnvOllamaModel, "")
-		t.Setenv(EnvAgentProvider, "")
 		t.Setenv(EnvAgentHarness, "")
-		h, err := HarnessFromConfig("", ProviderOllama, "deepseek-v4.1-flash:cloud")
+		t.Setenv(EnvAgentProvider, "")
+		h, err := HarnessFromConfig("", ProviderLlamaCpp, "qwen3:8b")
 		if err != nil {
 			t.Fatalf("HarnessFromConfig failed: %v", err)
 		}

@@ -1,0 +1,9 @@
+# Pinned known-good source revision for the sop-ollama-agent binary.
+#
+# scripts/install-sop-ollama-agent.sh builds the binary from this revision, so
+# the same pinned revision always yields the same installed binary. Update the
+# line below (and re-run the install) when promoting a new known-good agent.
+#
+# format: revision = <git revision>
+
+revision = 0992657d3d4927d7053eb0e7e046fd3713c23fd4

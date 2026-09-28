@@ -206,9 +206,15 @@ func TestNextExistingActiveTask(t *testing.T) {
 	}
 }
 
+// TestNextBlockedDependency asserts that a PLANNED task whose dependency is
+// terminally blocked is not selected, and that the bare Blocked outcome is
+// preserved. The dependency T001 is budget-exhausted (terminally blocked), so it
+// is not a recovery candidate: recovery only requeues a BLOCKED task that still
+// has retry budget left and whose own dependencies are satisfied. The PLANNED
+// task T002 is left untouched because its dependency cannot be satisfied.
 func TestNextBlockedDependency(t *testing.T) {
 	store := &fakeStore{tasks: []*domain.Task{
-		task("T001", domain.BLOCKED),
+		{ID: "T001", Status: domain.BLOCKED, Attempt: 3, MaxAttempts: 3},
 		task("T002", domain.PLANNED, "T001"),
 	}}
 

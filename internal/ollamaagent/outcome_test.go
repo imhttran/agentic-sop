@@ -17,9 +17,13 @@ func TestEnsureStructuredOutcomeWrapsProseAsCompleted(t *testing.T) {
 
 	h := New(testConfig("http://fake"), dir)
 	ctx := context.Background()
+	baseline, err := h.tools.WorkingTreeFingerprint(ctx)
+	if err != nil {
+		t.Fatalf("WorkingTreeFingerprint: %v", err)
+	}
 
 	// Prose input should be wrapped as a completed outcome
-	result := h.ensureStructuredOutcome(ctx, "Implementation complete")
+	result := h.ensureStructuredOutcome(ctx, baseline, &mutationEvidence{}, "Implementation complete")
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -45,7 +49,7 @@ func TestEnsureStructuredOutcomePreservesStructuredOutcome(t *testing.T) {
 
 	// Already-structured JSON should be preserved
 	input := `{"status":"completed","summary":"done","changes_expected":false}`
-	result := h.ensureStructuredOutcome(ctx, input)
+	result := h.ensureStructuredOutcome(ctx, "", &mutationEvidence{}, input)
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -68,7 +72,7 @@ func TestEnsureStructuredOutcomeHandlesNeedsHuman(t *testing.T) {
 
 	// needs_human outcome should be preserved unchanged
 	input := `{"status":"needs_human","reason":"manual intervention required"}`
-	result := h.ensureStructuredOutcome(ctx, input)
+	result := h.ensureStructuredOutcome(ctx, "", &mutationEvidence{}, input)
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -87,7 +91,7 @@ func TestEnsureStructuredOutcomeHandlesEmptyInput(t *testing.T) {
 	ctx := context.Background()
 
 	// Empty input should be wrapped as completed with empty summary
-	result := h.ensureStructuredOutcome(ctx, "")
+	result := h.ensureStructuredOutcome(ctx, "", &mutationEvidence{}, "")
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -108,13 +112,17 @@ func TestEnsureStructuredOutcomeReflectsActualChanges(t *testing.T) {
 
 	h := New(testConfig("http://fake"), dir)
 	ctx := context.Background()
+	baseline, err := h.tools.WorkingTreeFingerprint(ctx)
+	if err != nil {
+		t.Fatalf("WorkingTreeFingerprint: %v", err)
+	}
 
 	// Simulate an actual repository change by modifying the file
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("modified"), 0o644); err != nil {
 		t.Fatalf("modify file: %v", err)
 	}
 
-	result := h.ensureStructuredOutcome(ctx, "Changed the file")
+	result := h.ensureStructuredOutcome(ctx, baseline, &mutationEvidence{}, "Changed the file")
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -135,7 +143,7 @@ func TestReconcileOutcomeHandlesProseAndDoesNotChange(t *testing.T) {
 
 	// Prose input: reconcileOutcome should return it unchanged
 	prose := "This is just prose from the model"
-	result := h.reconcileOutcome(ctx, prose)
+	result, _ := h.reconcileOutcome(ctx, "", &mutationEvidence{}, prose)
 	if result != prose {
 		t.Errorf("reconcileOutcome changed prose input: got %q, want %q", result, prose)
 	}
@@ -151,6 +159,10 @@ func TestReconcileOutcomeGroundsChangesExpected(t *testing.T) {
 
 	h := New(testConfig("http://fake"), dir)
 	ctx := context.Background()
+	baseline, err := h.tools.WorkingTreeFingerprint(ctx)
+	if err != nil {
+		t.Fatalf("WorkingTreeFingerprint: %v", err)
+	}
 
 	// Modify the file to create a repository change
 	if err := os.WriteFile(filepath.Join(dir, "test.txt"), []byte("modified"), 0o644); err != nil {
@@ -159,7 +171,7 @@ func TestReconcileOutcomeGroundsChangesExpected(t *testing.T) {
 
 	// Model claims no changes (false) but we actually changed the file
 	input := `{"status":"completed","summary":"done","changes_expected":false}`
-	result := h.reconcileOutcome(ctx, input)
+	result, mismatch := h.reconcileOutcome(ctx, baseline, &mutationEvidence{}, input)
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {
@@ -170,7 +182,7 @@ func TestReconcileOutcomeGroundsChangesExpected(t *testing.T) {
 		t.Errorf("changes_expected = %v, want true (corrected from model's false)", wire.ChangesExpected)
 	}
 	// The mismatch should be recorded
-	if !h.mismatch {
+	if !mismatch {
 		t.Error("mismatch flag not set, but model's claim disagreed with observation")
 	}
 	// The summary should include a note about the reconciliation
@@ -185,10 +197,14 @@ func TestRetryNoChangeFailureConvertsFailedToNeedsHuman(t *testing.T) {
 
 	h := New(testConfig("http://fake"), dir)
 	ctx := context.Background()
+	baseline, err := h.tools.WorkingTreeFingerprint(ctx)
+	if err != nil {
+		t.Fatalf("WorkingTreeFingerprint: %v", err)
+	}
 
 	// Model reports failed but didn't change the repository
 	input := `{"status":"failed","reason":"could not implement"}`
-	result := h.retryNoChangeFailure(ctx, input)
+	result := h.retryNoChangeFailure(ctx, baseline, &mutationEvidence{}, input)
 
 	var wire outcomeWire
 	if err := json.Unmarshal([]byte(result), &wire); err != nil {

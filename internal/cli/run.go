@@ -10,8 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/imhttran/agentic-sop/internal/activity"
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
@@ -107,7 +109,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 	_ = rn.Write("task.md", spec.Render())
 
-	a, err := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
+	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
@@ -117,7 +119,9 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	res, err := executeLifecycle(context.Background(), dir, cfg, a, d, spec, rn, newRunSession())
+	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), stdout)
+	emitClassificationActivity(ctx, res.classification)
 	if err != nil {
 		return failRun(rn, stderr, err)
 	}
@@ -133,16 +137,36 @@ type lifeResult struct {
 	report        review.Report
 	verifiedFirst bool
 	perf          perf.Task
+	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
+	// JEV did not run. It is diagnostic evidence referenced by the report; it is
+	// never workflow state and never feeds a decision.
+	jevDoc *jevRunDoc
+	// jevPath is the repository-relative path of the persisted JEV artifact, so
+	// the report can point a reader at it. Empty when JEV did not run.
+	jevPath string
+	// classification is the failure-fixability classification for a run that did
+	// not pass. It is zero when the run passed (or before it has been computed).
+	// It is diagnostic: it records WHY the lifecycle stopped and what disposition
+	// it applied, and never overrides the gate's own decision.
+	classification failure.Classification
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
 // report) into rn. It returns an error only for infrastructure failures
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
-func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession) (lifeResult, error) {
-	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess)
+func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, stdout io.Writer) (lifeResult, error) {
+	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
+	// Persist the failure classification beside the other run artifacts before any
+	// early return, so a failure that stopped the lifecycle is still recorded. It
+	// is diagnostic evidence: nothing reads it back to drive a decision.
+	if res.classification.Disposition != "" {
+		writeClassificationArtifact(rn, res.classification)
+	}
 	if err != nil {
-		return lifeResult{}, err
+		// Return the partial result alongside the error so a caller can still act
+		// on any classification the lifecycle attached before it stopped.
+		return res, err
 	}
 
 	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
@@ -158,10 +182,35 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		VerifiedFirst: res.verifiedFirst,
 		Validation:    res.suite.Results,
 		Findings:      res.report.Findings,
-		Performance:   res.perf,
-		GeneratedAt:   time.Now().UTC(),
+		// JEV is diagnostic evidence, reported in its own section and pointing at
+		// the persisted artifact. It is separate from the validation and review
+		// sections, which remain authoritative.
+		JEV:            jevReportSection(res.jevDoc, res.jevPath),
+		Classification: classificationDoc(res.classification),
+		Performance:    res.perf,
+		GeneratedAt:    time.Now().UTC(),
 	})
 	return res, nil
+}
+
+// classificationDoc returns a pointer to the classification for the report, or
+// nil when the run passed (nothing failed to classify). The report omits a nil
+// classification, so an existing PASS report is unchanged.
+func classificationDoc(cls failure.Classification) *failure.Classification {
+	if cls.Disposition == "" {
+		return nil
+	}
+	return &cls
+}
+
+// writeClassificationArtifact persists the failure classification as its own run
+// artifact. It is best-effort: a write failure never changes the run outcome.
+func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification) {
+	data, err := json.MarshalIndent(cls, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = rn.Write("classification.json", string(append(data, '\n')))
 }
 
 // runStages performs the lifecycle for one task. An ordinary task runs plan →
@@ -169,12 +218,17 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 // configured deterministic validation first and invokes the implementation agent
 // only when that validation fails (or when there is nothing configured to
 // verify). It returns the final result and writes the intermediate artifacts.
-func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession) (res lifeResult, err error) {
+func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, stdout io.Writer) (res lifeResult, err error) {
 	rec := perf.NewRecorder(rn.State().ID)
 	defer func() {
 		res.perf = rec.Task()
 		_ = writeMetrics(rn, res.perf)
 	}()
+
+	// ar observes the lifecycle for the activity stream. It is nil when reporting
+	// is disabled (or no consumer is registered), and every emit on it is a no-op,
+	// so it never affects execution.
+	ar := activity.FromContext(ctx)
 
 	var (
 		plan       *planner.Plan
@@ -208,10 +262,17 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	}
 
 	if sealed == nil {
-		// Plan (must not mutate the repository).
+		// Plan (must not mutate the repository). An invalid execution graph is
+		// returned to the agent for correction rather than failing the task; each
+		// repair is a real agent call and is reported in the run metrics.
 		_ = rn.SetStage(runpkg.Planning)
+		ar.Emit(activity.StagePlan, "generating plan", "")
 		stop := rec.Measure(perf.StagePlan)
-		plan, err = planner.New(a).Generate(ctx, spec.Render())
+		plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
+			rec.PlanRepair()
+			rec.AgentCall()
+			fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
+		}).Generate(ctx, spec.Render())
 		stop()
 		rec.AgentCall()
 		if err != nil {
@@ -224,6 +285,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// failure that made the agent necessary, and the previous attempt's outcome,
 		// so it can address the blocker rather than repeat the request that stopped it.
 		_ = rn.SetStage(runpkg.Implementing)
+		ar.Emit(activity.StageImplement, "implementing", "")
 		input := plan.RenderMarkdown()
 		if failureCtx != "" {
 			input = failureCtx + "\n" + input
@@ -245,7 +307,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		_ = rn.Write("implementation.md", impl.Content)
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(rn, impl.Outcome), nil
+			emitOutcomeActivity(ar, impl.Outcome)
+			return outcomeResult(rn, "IMPLEMENT", impl.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -260,6 +323,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
 		if strings.TrimSpace(diff) == "" && changesExpected {
 			_ = rn.SetStage(runpkg.Failed)
+			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
 		}
 	} else {
@@ -278,6 +342,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var suite testrunner.SuiteResult
 	var report review.Report
 	var gate quality.Result
+	var jevEv *jevRunEvidence
+	// jevDoc holds the persisted JEV artifact for the final iteration so the
+	// report can reference it. It is written at the quality seam below, where JEV
+	// evidence is produced, and is always the latest result of the run.
+	var jevDoc *jevRunDoc
 
 	for {
 		if sealed != nil {
@@ -301,6 +370,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				report = cached
 			} else {
 				_ = rn.SetStage(runpkg.Reviewing)
+				ar.Emit(activity.StageReview, "reviewing changes", "")
 				provider, perr := reviewProvider(cfg, d)
 				if perr != nil {
 					return lifeResult{}, fmt.Errorf("review: %w", perr)
@@ -316,6 +386,23 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 
+		// Optional JEV analysis runs at the quality seam: after validation and
+		// review have produced their evidence and before the gate decides. It is
+		// read-only and add-only — with JEV disabled it is a no-op, so the gate
+		// sees exactly what it saw before. A blocking JEV finding fails the gate
+		// and enters the same bounded fix loop below; after a fix, validation,
+		// review, and JEV all rerun before the gate is evaluated again. JEV
+		// invocation metrics are recorded on rec as diagnostics only; they never
+		// influence the gate.
+		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn.State().ID, diff, suite, report, rec)
+
+		// Persist the JEV result as a run artifact beside the other diagnostics,
+		// so results are available after the run. Persistence is best-effort and
+		// never changes the run outcome; the same document is referenced by the
+		// report. It is diagnostic evidence only: nothing here is read back to
+		// drive a decision.
+		jevDoc = persistedJEVDoc(rn, jevEv)
+
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
 			TestPassed:   categoryPassed(suite, testrunner.UnitTest),
@@ -323,28 +410,34 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			LintPassed:   categoryPassed(suite, testrunner.Lint),
 			Unresolved:   report.Findings,
 			FixCycles:    cycles,
+			JEV:          jevEv.gateEvidence(),
 		})
+		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 
 		// A failing check is actionable in its own right: the bounded repair loop must
-		// run for it, not only for blocking review findings. Review is skipped when
-		// validation fails, so without this a broken build or test would never reach a
-		// fix at all. The loop still stops when the gate passes, the fix budget is
-		// spent, or nothing is left to act on.
+		// run for it, not only for blocking review findings. A blocking JEV finding
+		// is actionable the same way and enters this same loop (it is not a second
+		// fix lifecycle: same stage, same budget, same counter). Review is skipped
+		// when validation fails, so without this a broken build or test would never
+		// reach a fix at all. The loop still stops when the gate passes, the fix
+		// budget is spent, or nothing is left to act on.
 		validationFailed := !suite.Passed()
-		actionable := quality.BlockingFindings(cfg.Quality.FailOn, report.Findings)
+		actionable := quality.BlockingFindings(cfg.Quality.FailOn, report.Findings) +
+			quality.JEVBlockingFindings(cfg.Quality.JEVFailOn(), jevEv.gateEvidence())
 		if gate.Decision != quality.Fail || cycles >= maxCycles || (!validationFailed && actionable == 0) {
 			break
 		}
 
 		// Fix, then re-validate and re-review (regression protection).
 		_ = rn.SetStage(runpkg.Fixing)
+		ar.Emit(activity.StageFix, "applying fix", "")
 		cycles++
 		rec.FixCycle()
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
 			Task:               spec.Render(),
-			Input:              fixContext(plan.RenderMarkdown(), report, suite, diff),
+			Input:              fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()),
 			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
 		})
 		fixStop()
@@ -354,7 +447,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(rn, fix.Outcome), nil
+			emitOutcomeActivity(ar, fix.Outcome)
+			return outcomeResult(rn, "FIX", fix.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -363,6 +457,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
+			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return lifeResult{gate: fail("agent reported a fix but produced no repository changes"), stage: runpkg.Failed}, nil
 		}
 		_ = rn.Write("diff.patch", diff)
@@ -375,11 +470,58 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	switch gate.Decision {
 	case quality.Fail:
 		stage = runpkg.Failed
+		ar.Emit(activity.StageFailed, string(gate.Decision), firstReason(gate))
 	case quality.NeedsHuman:
 		stage = runpkg.WaitingForHuman
+		ar.Emit(activity.StageBlocked, string(gate.Decision), firstReason(gate))
+	default:
+		ar.Emit(activity.StageComplete, string(gate.Decision), "")
 	}
 	_ = rn.SetStage(stage)
-	return lifeResult{gate: gate, cycles: cycles, stage: stage, suite: suite, report: report, verifiedFirst: verifiedFirst}, nil
+
+	// Classify the gate failure so the driver's recovery decision (and the run
+	// report) records why the lifecycle stopped and what disposition it applied. A
+	// pass has no failure to classify.
+	var class failure.Classification
+	if gate.Decision != quality.Pass {
+		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles))
+	}
+	return lifeResult{
+		gate:           gate,
+		cycles:         cycles,
+		stage:          stage,
+		suite:          suite,
+		report:         report,
+		verifiedFirst:  verifiedFirst,
+		jevDoc:         jevDoc,
+		jevPath:        jevArtifactRef(dir, rn),
+		classification: class,
+	}, nil
+}
+
+// verificationEvidence builds the structured evidence for a deterministic gate
+// failure: which configured check failed, the blocking findings that remain, and
+// the fix budget, so the classifier can decide whether the failure is safely
+// auto-fixable or has exhausted its bounded budget.
+func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int) failure.Evidence {
+	buildFailed := hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build)
+	testFailed := hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest)
+	lintFailed := hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint)
+	ev := failure.Evidence{
+		Source:           "VALIDATE",
+		BuildFailed:      buildFailed,
+		TestFailed:       testFailed,
+		LintFailed:       lintFailed,
+		BlockingFindings: quality.BlockingFindings(cfg.Quality.FailOn, report.Findings),
+		FixCycles:        cycles,
+		MaxFixCycles:     cfg.Quality.MaxFixCycles,
+	}
+	// Required test coverage is only "missing" when nothing else failed: a build
+	// failure that skipped the tests is a compiler error, not a coverage gap.
+	if cfg.Quality.RequiresTests() && !hasCategory(suite, testrunner.UnitTest) && !buildFailed && !testFailed && !lintFailed {
+		ev.TestsMissing = true
+	}
+	return ev
 }
 
 // emitRunSummary prints the run's outcome and returns the process exit code.
@@ -392,9 +534,19 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
 	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
+	writeClassification(stdout, res.classification)
 	if res.perf.Measured() {
 		fmt.Fprintf(stdout, "performance: %s\n", res.perf.Line())
 	}
+
+	// JEV reporting: a concise read-only projection of the persisted JEV result,
+	// so a user can tell whether JEV executed, see blocking findings with their
+	// severity and source location, reach non-blocking findings, and locate the
+	// report. It renders nothing when JEV did not run (res.jevDoc == nil), so a
+	// disabled/absent JEV leaves the CLI output exactly as it was before. It is
+	// diagnostic output only and never workflow state.
+	writeJEVReport(stdout, res.jevDoc, cfg.Quality.JEVFailOn(), res.jevPath)
+
 	if rel := relDir(dir, rn.Dir()); rel != "" {
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
@@ -405,15 +557,62 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	return exitError
 }
 
+// writeClassification prints the failure classification for a run that did not
+// pass: the disposition SOP applied, the failure kind, the confidence, and the
+// reason. It renders nothing for a passing run (an empty classification), so a
+// PASS leaves the CLI output unchanged. It is diagnostic output: the disposition
+// describes what the lifecycle already decided, it never decides anything.
+func writeClassification(w io.Writer, cls failure.Classification) {
+	if cls.Disposition == "" {
+		return
+	}
+	fmt.Fprintf(w, "classification: %s (%s, %s)\n", cls.Disposition, cls.Kind, cls.Confidence)
+	if reason := strings.TrimSpace(cls.Reason); reason != "" {
+		fmt.Fprintf(w, "  reason: %s\n", reason)
+	}
+}
+
 // fail builds a FAIL result carrying a single reason.
 func fail(reason string) quality.Result {
 	return quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
 }
 
+// firstReason returns the gate's first reason, or "" when there is none. It is
+// the short, single-line detail the activity stream attaches to a terminal
+// event; the full reasons remain in the run report.
+func firstReason(gate quality.Result) string {
+	if len(gate.Reasons) == 0 {
+		return ""
+	}
+	return gate.Reasons[0]
+}
+
+// emitOutcomeActivity reports a non-completed agent outcome (the failure or human
+// boundary the model chose to return) on the activity stream.
+func emitOutcomeActivity(ar *activity.Recorder, outcome *agent.Outcome) {
+	if outcome.Status == agent.OutcomeNeedsHuman {
+		ar.Emit(activity.StageBlocked, string(outcome.Status), "")
+		return
+	}
+	ar.Emit(activity.StageFailed, string(outcome.Status), "")
+}
+
+// emitClassificationActivity reports a non-empty failure classification on the
+// activity stream carried by ctx. It is a no-op when reporting is disabled or the
+// run passed (an empty classification).
+func emitClassificationActivity(ctx context.Context, cls failure.Classification) {
+	if cls.Disposition == "" {
+		return
+	}
+	activity.FromContext(ctx).Emit(activity.StageClassify, string(cls.Disposition), string(cls.Kind))
+}
+
 // outcomeResult maps a non-completed agent outcome to a run result: a human
 // boundary becomes NEEDS_HUMAN, any other reported failure becomes FAIL. A
-// reported outcome is never treated as success.
-func outcomeResult(rn *runpkg.Run, outcome *agent.Outcome) lifeResult {
+// reported outcome is never treated as success. It also attaches the
+// failure-fixability classification, so the driver can apply the same
+// disposition logic it applies to a deterministic gate failure.
+func outcomeResult(rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
 	reason := outcome.Reason
 	if reason == "" {
 		reason = outcome.Summary
@@ -421,12 +620,13 @@ func outcomeResult(rn *runpkg.Run, outcome *agent.Outcome) lifeResult {
 	if reason == "" {
 		reason = string(outcome.Status)
 	}
+	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome})
 	if outcome.Status == agent.OutcomeNeedsHuman {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
-		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman}
+		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman, classification: class}
 	}
 	_ = rn.SetStage(runpkg.Failed)
-	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed}
+	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class}
 }
 
 // failRun marks the run failed, reports the stage error, and returns the error
@@ -472,8 +672,10 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 
 // fixContext renders the bounded context a fix is given: the plan, the
 // deterministic validation failure that still stands (when a check failed), the
-// blocking review findings, and the current diff.
-func fixContext(plan string, report review.Report, suite testrunner.SuiteResult, diff string) string {
+// blocking review findings, the actionable JEV findings (when JEV ran), and the
+// current diff. The existing sections keep their order; the JEV section is a
+// distinct block appended after the failure/review evidence and before the diff.
+func fixContext(plan string, report review.Report, suite testrunner.SuiteResult, diff string, jev *jevRunEvidence, jevFailOn []string) string {
 	var b strings.Builder
 	b.WriteString("# Plan\n\n")
 	b.WriteString(strings.TrimSpace(plan))
@@ -488,6 +690,10 @@ func fixContext(plan string, report review.Report, suite testrunner.SuiteResult,
 			location = fmt.Sprintf("%s:%d", f.File, f.Line)
 		}
 		fmt.Fprintf(&b, "- %s %s — %s: %s\n", f.Severity, location, f.Title, f.Detail)
+	}
+	if section := jev.findingsSection(jevFailOn); section != "" {
+		b.WriteString("\n")
+		b.WriteString(section)
 	}
 	b.WriteString("\n# Current diff\n\n")
 	b.WriteString(diff)
@@ -539,6 +745,12 @@ func hasCategory(suite testrunner.SuiteResult, category testrunner.Category) boo
 // per-category durations, and one validation execution. It is the single place a
 // suite is measured, so counts and timings cannot drift from where validation runs.
 func timedValidation(ctx context.Context, dir string, cfg config.Config, rec *perf.Recorder) testrunner.SuiteResult {
+	// Announce the validation commands before running them, so a slow suite is
+	// visible as it runs rather than only after it returns.
+	ar := activity.FromContext(ctx)
+	for _, check := range validate.Checks(cfg.Validation) {
+		ar.Emit(activity.StageValidate, check.Command, "")
+	}
 	stop := rec.Measure(perf.StageValidation)
 	suite := validate.Run(ctx, dir, cfg.Validation)
 	stop()
@@ -617,10 +829,19 @@ type runReportDoc struct {
 	VerifiedFirst bool                `json:"verified_first"`
 	Validation    []testrunner.Result `json:"validation"`
 	Findings      []review.Finding    `json:"findings"`
+	// JEV is the JEV diagnostic evidence section: a distinct, attributed summary
+	// of the JEV result that points at the persisted artifact. It is separate
+	// from Validation and Findings, which remain authoritative, and is omitted
+	// when JEV did not run.
+	JEV *jevReportDoc `json:"jev,omitempty"`
 	// Performance is the task's timing/count record: diagnostic metadata only,
 	// never an input to a decision.
 	Performance perf.Task `json:"performance"`
-	GeneratedAt time.Time `json:"generated_at"`
+	// Classification is the failure-fixability classification for a run that did
+	// not pass: the kind, the disposition SOP applied, and the reason. It is
+	// omitted for a passing run, so an existing PASS report is unchanged.
+	Classification *failure.Classification `json:"classification,omitempty"`
+	GeneratedAt    time.Time               `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
@@ -666,9 +887,34 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 		}
 	}
 
+	// JEV is reported in its own section, after Review and before Gate, so a
+	// reader can tell the JEV diagnostic evidence apart from validation and
+	// review. It is rendered only when JEV ran.
+	if section := renderJEVSection(res.jevDoc, res.jevPath); section != "" {
+		b.WriteString("\n")
+		b.WriteString(section)
+	}
+
 	b.WriteString("\n## Gate\n\n")
 	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(&b, "- %s\n", reason)
 	}
+	writeClassificationReport(&b, res.classification)
 	return b.String()
+}
+
+// writeClassificationReport renders the failure classification in the run report,
+// so the reason the lifecycle stopped and the disposition it applied are durable
+// and auditable. It renders nothing for a passing run.
+func writeClassificationReport(b *strings.Builder, cls failure.Classification) {
+	if cls.Disposition == "" {
+		return
+	}
+	b.WriteString("\n## Classification\n\n")
+	fmt.Fprintf(b, "- Kind: `%s`\n", cls.Kind)
+	fmt.Fprintf(b, "- Disposition: `%s`\n", cls.Disposition)
+	fmt.Fprintf(b, "- Confidence: `%s`\n", cls.Confidence)
+	if reason := strings.TrimSpace(cls.Reason); reason != "" {
+		fmt.Fprintf(b, "- Reason: %s\n", reason)
+	}
 }

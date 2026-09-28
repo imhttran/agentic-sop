@@ -26,7 +26,7 @@ func runBench(t *testing.T, dir string, a *benchAgent, args ...string) (int, str
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd:    func() (string, error) { return dir, nil },
-		newAgent: func(string, string) (agent.Agent, error) { return a, nil },
+		newAgent: func(string, string, string) (agent.Agent, error) { return a, nil },
 		readDiff: func(context.Context, string) (string, error) {
 			if a.implement == 0 {
 				return "", nil // nothing has been implemented yet
@@ -205,6 +205,51 @@ func TestReportShowsPerformance(t *testing.T) {
 		if !strings.Contains(stdout, want) {
 			t.Errorf("report missing %q:\n%s", want, stdout)
 		}
+	}
+}
+
+// invalidPlanAgent always returns an invalid PLAN document, so plan generation
+// exhausts its bounded repair budget and the task fails.
+type invalidPlanAgent struct{ plan int }
+
+func (a *invalidPlanAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	if r.Capability == agent.Plan {
+		a.plan++
+		return agent.Response{Content: `{"project":"p","summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"],"dependencies":["S1"]}]}`}, nil
+	}
+	return agent.Response{Content: "done"}, nil
+}
+
+// TestPlanRepairAccountingOnExhaustion proves the run's metrics count every PLAN
+// agent call, including the initial one, when the bounded repair budget is
+// exhausted and the task fails. It asserts the invariant counted == actually
+// invoked rather than a fixed bound, so it catches an undercount on the failure
+// path wherever the bound moves.
+func TestPlanRepairAccountingOnExhaustion(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, "docs/PLAN.md", "# Plan\n\n## S001 — Do the thing\n")
+	seedTask(t, dir, &domain.Task{ID: "S001", Title: "Do the thing", Status: domain.PLANNED, MaxAttempts: 1})
+
+	a := &invalidPlanAgent{}
+	code, stdout, stderr := runInjectedCLI(t, dir, "", a, "run")
+	if code == exitOK {
+		t.Fatalf("expected the run to fail for a persistently invalid plan; stdout=%s", stdout)
+	}
+	if !strings.Contains(stderr, "depends on itself") {
+		t.Errorf("stderr = %q, want the deterministic validation error", stderr)
+	}
+
+	m := mustTaskMetrics(t, dir, "S001")
+	if m.Counts.AgentCalls != a.plan {
+		t.Errorf("agent calls = %d, want %d (every PLAN invocation counted, including the initial one on failure)", m.Counts.AgentCalls, a.plan)
+	}
+	if a.plan < 2 || m.Counts.PlanRepairs != a.plan-1 {
+		t.Errorf("agent invocations = %d, plan repairs = %d, want one repair per correction after the first", a.plan, m.Counts.PlanRepairs)
 	}
 }
 

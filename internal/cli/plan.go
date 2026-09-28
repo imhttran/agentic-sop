@@ -76,19 +76,21 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 		input = spec.Render()
 	}
 
-	provider, model, err := configuredAgent(dir)
+	harness, provider, model, err := configuredAgent(dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
 	}
 
-	a, err := d.newAgent(provider, model)
+	a, err := d.newAgent(harness, provider, model)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
 	}
 
-	plan, err := planner.New(a).Generate(context.Background(), input)
+	plan, err := planner.New(a).OnRepair(func(attempt int, cause error) {
+		fmt.Fprintf(stderr, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
+	}).Generate(context.Background(), input)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError

@@ -2,7 +2,6 @@ package planner
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -13,7 +12,7 @@ import (
 
 var (
 	mdHeading  = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
-	mdIDToken  = regexp.MustCompile(`^([A-Za-z]+[-_]?\d+[A-Za-z]?)\b`)
+	mdIDToken  = regexp.MustCompile(`^([A-Za-z]+[-_]?\d+(?:-[A-Za-z]+\d+)?[A-Za-z]?)\b`)
 	mdBullet   = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+`)
 	mdCheckbox = regexp.MustCompile(`^\[[ xX]\]\s*`)
 )
@@ -144,24 +143,12 @@ func (p *Planner) Compile(ctx context.Context, markdown string) (*Plan, error) {
 		return nil, fmt.Errorf("cannot compile plan document and no agent is available to normalize it")
 	}
 
-	response, err := p.agent.Generate(ctx, agent.Request{
+	return p.generateValid(ctx, agent.Request{
 		Capability:         agent.Plan,
 		Task:               compileTaskPrompt,
 		Input:              markdown,
 		OutputRequirements: planOutputRequirements,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("agent: %w", err)
-	}
-
-	var plan Plan
-	if err := json.Unmarshal([]byte(response.Content), &plan); err != nil {
-		return nil, fmt.Errorf("parse agent response: %w", err)
-	}
-	if err := plan.Validate(); err != nil {
-		return nil, err
-	}
-	return &plan, nil
 }
 
 // normalizeHeading lowercases a heading and collapses whitespace for lookup.
@@ -171,7 +158,9 @@ func normalizeHeading(s string) string {
 	return strings.Join(strings.Fields(s), " ")
 }
 
-// splitStageHeading separates a leading stage id from the rest of a heading.
+// splitStageHeading separates a leading stage id from the rest of a heading. An
+// id may carry one hierarchical sub-id segment (for example "PREJEV012-S6"), so
+// an umbrella stage and its sub-stages can be named in one flat plan.
 func splitStageHeading(text string) (id, title string) {
 	m := mdIDToken.FindStringSubmatch(text)
 	if m == nil {

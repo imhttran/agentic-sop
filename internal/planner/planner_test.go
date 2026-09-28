@@ -48,6 +48,32 @@ const validJSON = `{
   ]
 }`
 
+// Invalid generated plans used by the repair tests.
+const (
+	selfDepJSON     = `{"project":"p","summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"],"dependencies":["S1"]}]}`
+	cyclicJSON      = `{"project":"p","summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"],"dependencies":["S2"]},{"id":"S2","title":"t","objective":"o","acceptance_criteria":["a"],"dependencies":["S1"]}]}`
+	unknownDepJSON  = `{"project":"p","summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"],"dependencies":["S9"]}]}`
+	duplicateIDJSON = `{"project":"p","summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"]},{"id":"S1","title":"t2","objective":"o2","acceptance_criteria":["a"]}]}`
+	malformedJSON   = `{"project":`
+)
+
+// scriptedAgent returns a canned response per call, in order, and records every
+// request so a test can assert how many generation and repair calls were made.
+type scriptedAgent struct {
+	responses []string
+	requests  []agent.Request
+}
+
+func (s *scriptedAgent) Generate(_ context.Context, request agent.Request) (agent.Response, error) {
+	s.requests = append(s.requests, request)
+	if len(s.responses) == 0 {
+		return agent.Response{}, errors.New("scriptedAgent: no scripted response left")
+	}
+	content := s.responses[0]
+	s.responses = s.responses[1:]
+	return agent.Response{Content: content}, nil
+}
+
 func TestGenerateHappyPath(t *testing.T) {
 	stub := &stubAgent{content: validJSON}
 	plan, err := New(stub).Generate(context.Background(), "A PRD about books.")
@@ -112,6 +138,135 @@ func TestGenerateRejectsInvalidOutput(t *testing.T) {
 				t.Errorf("error = %q, want containing %q", err.Error(), tc.wantErr)
 			}
 		})
+	}
+}
+
+// TestGenerateRepairsInvalidPlan proves that a generated plan which is not a
+// valid execution graph is returned to the agent for correction. Each case
+// scripts one invalid response followed by a valid one, and asserts the
+// deterministic error was fed back in the repair request.
+func TestGenerateRepairsInvalidPlan(t *testing.T) {
+	cases := []struct {
+		name     string
+		rejected string
+		wantErr  string
+	}{
+		{
+			"self dependency",
+			selfDepJSON,
+			"depends on itself",
+		},
+		{
+			"cyclic dependency",
+			cyclicJSON,
+			"dependency cycle",
+		},
+		{
+			"nonexistent dependency",
+			unknownDepJSON,
+			"unknown dependency",
+		},
+		{
+			"duplicate stage id",
+			duplicateIDJSON,
+			"duplicate stage id",
+		},
+		{
+			"malformed json",
+			malformedJSON,
+			"parse agent response",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			stub := &scriptedAgent{responses: []string{tc.rejected, validJSON}}
+			plan, err := New(stub).Generate(context.Background(), "a prd")
+			if err != nil {
+				t.Fatalf("Generate failed to repair an invalid plan: %v", err)
+			}
+			if len(plan.Stages) != 2 {
+				t.Fatalf("repaired plan has %d stages, want the 2 from the valid response", len(plan.Stages))
+			}
+			if len(stub.requests) != 2 {
+				t.Fatalf("agent calls = %d, want 2 (generation + one repair)", len(stub.requests))
+			}
+			if got := stub.requests[1].Input; !strings.Contains(got, tc.wantErr) {
+				t.Errorf("repair request did not carry the validation error %q:\n%s", tc.wantErr, got)
+			}
+			if got := stub.requests[1].Capability; got != agent.Plan {
+				t.Errorf("repair capability = %q, want PLAN", got)
+			}
+		})
+	}
+}
+
+// TestGenerateValidPlanMakesNoRepairCall proves a valid first response is used
+// as-is: no repair call is made.
+func TestGenerateValidPlanMakesNoRepairCall(t *testing.T) {
+	stub := &scriptedAgent{responses: []string{validJSON, "SHOULD NOT BE USED"}}
+	plan, err := New(stub).Generate(context.Background(), "a prd")
+	if err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	if plan == nil {
+		t.Fatal("nil plan")
+	}
+	if len(stub.requests) != 1 {
+		t.Errorf("agent calls = %d, want 1 (a valid plan needs no repair)", len(stub.requests))
+	}
+}
+
+// TestGenerateGivesUpAfterBoundedRepairs proves a plan that never becomes valid
+// is corrected at most maxPlanRepairs times, then generation fails cleanly with
+// the deterministic error.
+func TestGenerateGivesUpAfterBoundedRepairs(t *testing.T) {
+	stub := &scriptedAgent{responses: []string{selfDepJSON, selfDepJSON, selfDepJSON, selfDepJSON}}
+	_, err := New(stub).Generate(context.Background(), "a prd")
+	if err == nil {
+		t.Fatal("expected a bounded failure for a persistently invalid plan")
+	}
+	if !strings.Contains(err.Error(), "depends on itself") {
+		t.Errorf("error = %q, want the deterministic validation error", err)
+	}
+	if want := 1 + maxPlanRepairs; len(stub.requests) != want {
+		t.Errorf("agent calls = %d, want %d (initial + bounded repairs)", len(stub.requests), want)
+	}
+}
+
+// TestGenerateNotifiesOnRepair proves the observer fires once per repair with
+// the 1-based attempt number and the deterministic cause, so a caller can trace
+// and count the recovery.
+func TestGenerateNotifiesOnRepair(t *testing.T) {
+	var attempts []int
+	var causes []string
+	stub := &scriptedAgent{responses: []string{selfDepJSON, validJSON}}
+	p := New(stub).OnRepair(func(attempt int, cause error) {
+		attempts = append(attempts, attempt)
+		causes = append(causes, cause.Error())
+	})
+	if _, err := p.Generate(context.Background(), "a prd"); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	if len(attempts) != 1 || attempts[0] != 1 {
+		t.Errorf("attempts = %v, want [1]", attempts)
+	}
+	if len(causes) != 1 || !strings.Contains(causes[0], "depends on itself") {
+		t.Errorf("causes = %v, want the deterministic validation error", causes)
+	}
+}
+
+// TestGenerateValidPlanDoesNotNotify proves a valid plan never fires the
+// repair observer.
+func TestGenerateValidPlanDoesNotNotify(t *testing.T) {
+	called := 0
+	stub := &scriptedAgent{responses: []string{validJSON}}
+	p := New(stub).OnRepair(func(int, error) { called++ })
+	if _, err := p.Generate(context.Background(), "a prd"); err != nil {
+		t.Fatalf("Generate failed: %v", err)
+	}
+	if called != 0 {
+		t.Errorf("observer called %d times for a valid plan, want 0", called)
 	}
 }
 

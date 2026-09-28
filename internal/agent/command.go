@@ -84,7 +84,7 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 		return Response{}, fmt.Errorf("agent %s returned empty output", request.Capability)
 	}
 
-	return Response{Content: content, Outcome: parseOutcome(content)}, nil
+	return Response{Content: content, Outcome: ParseOutcome(content)}, nil
 }
 
 // CommandHarness adapts a CommandAgent to the Harness interface, enabling the
@@ -114,12 +114,14 @@ type outcomeWire struct {
 	ChangesExpected *bool  `json:"changes_expected"`
 }
 
-// parseOutcome recognizes a structured execution outcome. It returns nil for a
-// legacy prose response, for content that is not JSON, or for JSON without a
-// recognized status, so the protocol change is backward compatible. When
-// changes_expected is omitted for a completed outcome it defaults to true (the
-// agent intended to change the repository), which is the stricter choice.
-func parseOutcome(content string) *Outcome {
+// ParseOutcome recognizes a structured execution outcome in content. It returns
+// nil for a legacy prose response, for content that is not JSON, or for JSON
+// without a recognized status, so the protocol change is backward compatible.
+// When changes_expected is omitted for a completed outcome it defaults to true
+// (the agent intended to change the repository), which is the stricter choice.
+// It is exported so the native in-process harness path parses outcomes with
+// exactly the same rules as the command provider.
+func ParseOutcome(content string) *Outcome {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" || trimmed[0] != '{' {
 		return nil

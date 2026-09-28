@@ -161,10 +161,20 @@ func (s *Store) Save(task *domain.Task) error {
 	}
 	defer tx.Rollback()
 
-	// Upsert task. A true upsert (ON CONFLICT DO UPDATE) updates the row in
-	// place; INSERT OR REPLACE would delete the row first, cascade-deleting the
-	// dependency edges other tasks hold on this one.
-	_, err = tx.Exec(`
+	if err := upsertTask(tx, task); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+// upsertTask writes a task row and its child collections (dependencies and
+// attempts) into an open transaction. A true upsert (ON CONFLICT DO UPDATE)
+// updates the row in place; INSERT OR REPLACE would delete the row first,
+// cascade-deleting the dependency edges other tasks hold on this one. Child
+// collections are replaced from the value, so a full task round-trips its
+// history rather than losing it.
+func upsertTask(tx *sql.Tx, task *domain.Task) error {
+	if _, err := tx.Exec(`
 		INSERT INTO tasks
 		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -181,27 +191,47 @@ func (s *Store) Save(task *domain.Task) error {
 			updated_at = excluded.updated_at
 	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
-		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
+		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano)); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM task_dependencies WHERE task_id = ?", task.ID); err != nil {
+		return err
+	}
+	if err := insertDependencies(tx, task); err != nil {
+		return err
+	}
+
+	if _, err := tx.Exec("DELETE FROM task_attempts WHERE task_id = ?", task.ID); err != nil {
+		return err
+	}
+	return insertAttempts(tx, task)
+}
+
+// ReplaceGraph applies a reconciled task set in a single transaction: each task
+// is upserted (preserving the dependencies and attempts carried on the value)
+// and the listed task IDs are removed. Deletions cascade to a removed task's
+// dependency edges, attempts, and handoffs; no other row is touched. It is the
+// persistence primitive for explicit reconciliation, so a failure rolls the
+// whole change back and leaves the previous graph authoritative. Callers must
+// have validated the resulting graph first (see planflow.Reconcile).
+func (s *Store) ReplaceGraph(tasks []*domain.Task, remove []string) error {
+	tx, err := s.db.Begin()
 	if err != nil {
 		return err
 	}
+	defer tx.Rollback()
 
-	// Delete and re-insert dependencies
-	if _, err = tx.Exec("DELETE FROM task_dependencies WHERE task_id = ?", task.ID); err != nil {
-		return err
+	for _, id := range remove {
+		if _, err := tx.Exec("DELETE FROM tasks WHERE id = ?", id); err != nil {
+			return err
+		}
 	}
-	if err = insertDependencies(tx, task); err != nil {
-		return err
+	for _, task := range tasks {
+		if err := upsertTask(tx, task); err != nil {
+			return err
+		}
 	}
-
-	// Delete and re-insert attempts
-	if _, err = tx.Exec("DELETE FROM task_attempts WHERE task_id = ?", task.ID); err != nil {
-		return err
-	}
-	if err = insertAttempts(tx, task); err != nil {
-		return err
-	}
-
 	return tx.Commit()
 }
 
@@ -258,6 +288,25 @@ func (s *Store) SaveTasks(tasks []*domain.Task) error {
 		}
 	}
 
+	return tx.Commit()
+}
+
+// ClearTasks removes every task from the active task graph in a single
+// transaction. It is the completed-plan handoff primitive: the task graph is the
+// active-plan association, so releasing it lets a different plan initialize
+// without deleting the database or rewriting history. Child rows (dependencies,
+// attempts, handoffs) cascade away with their task. Callers must preserve the
+// records first (see planflow's archive); ClearTasks itself keeps no copy.
+func (s *Store) ClearTasks() error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.Exec("DELETE FROM tasks"); err != nil {
+		return err
+	}
 	return tx.Commit()
 }
 

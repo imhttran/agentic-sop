@@ -14,6 +14,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
@@ -78,7 +79,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	// The agent is required to execute, but not to prepare. Build it lazily so a
 	// PLAN.md can still be compiled and its tasks created when the agent is not
 	// configured; execution then reports the missing agent clearly.
-	a, agentErr := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
+	a, agentErr := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
 
 	var planSource string
 	if planArg != "" {
@@ -91,7 +92,15 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	ctx := context.Background()
-	prepared, err := planflow.Prepare(ctx, planflow.Options{Dir: dir, PlanSource: planSource, Agent: a, Store: st})
+	prepared, err := planflow.Prepare(ctx, planflow.Options{
+		Dir:        dir,
+		PlanSource: planSource,
+		Agent:      a,
+		Store:      st,
+		OnRepair: func(attempt int, cause error) {
+			fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
+		},
+	})
 	if err != nil {
 		// Prepare errors are actionable blocks (validation, reconciliation);
 		// print them without a prefix so they stand on their own.
@@ -118,7 +127,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	sess := newRunSession()
 	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, stdout, stderr)
 	if code == exitOK {
-		if final, err := st.List(); err == nil && allComplete(final) {
+		if final, err := st.List(); err == nil && domain.AllSatisfied(final) {
 			printCompletion(stdout, dir, cfg, prepared, final)
 		}
 	}
@@ -203,21 +212,6 @@ func outcomeSignature(gate quality.Result) string {
 	return string(gate.Decision) + ": " + strings.Join(gate.Reasons, "; ")
 }
 
-// allComplete reports whether every task reached a success terminal state.
-func allComplete(tasks []*domain.Task) bool {
-	if len(tasks) == 0 {
-		return false
-	}
-	for _, task := range tasks {
-		switch task.Status {
-		case domain.LOCAL_DONE, domain.DONE, domain.MERGED:
-		default:
-			return false
-		}
-	}
-	return true
-}
-
 // printCompletion emits the completion summary once every task is done.
 func printCompletion(w io.Writer, dir string, cfg config.Config, prepared planflow.Result, tasks []*domain.Task) {
 	fmt.Fprintln(w, "SOP COMPLETE")
@@ -230,6 +224,37 @@ func printCompletion(w io.Writer, dir string, cfg config.Config, prepared planfl
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Final gate: PASS")
 	if report := latestReportPath(dir); report != "" {
+		fmt.Fprintln(w)
+		fmt.Fprintln(w, "Report:")
+		fmt.Fprintln(w, report)
+	}
+}
+
+// printFailedRecovery reports that a blocked task could not be recovered and the
+// run has stopped. It names the task and its original failure diagnostic
+// (BlockedReason), and points at the run report when one exists — never claiming
+// a report location that is not present. It performs no cleanup or state reset.
+func printFailedRecovery(w io.Writer, dir string, task *domain.Task) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "SOP STOPPED: automatic recovery failed")
+	fmt.Fprintln(w)
+	if task == nil {
+		fmt.Fprintln(w, "A task that was automatically recovered is blocked again.")
+	} else {
+		fmt.Fprintf(w, "Task: %s", task.ID)
+		if task.Title != "" {
+			fmt.Fprintf(w, " %s", task.Title)
+		}
+		fmt.Fprintln(w)
+		if task.BlockedReason != domain.NO_REASON {
+			fmt.Fprintf(w, "Reason: %s\n", task.BlockedReason)
+		}
+		fmt.Fprintf(w, "Status: %s\n", task.Status)
+	}
+	fmt.Fprintln(w, "No later task was executed.")
+
+	report := latestReportPath(dir)
+	if report != "" {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Report:")
 		fmt.Fprintln(w, report)
@@ -253,7 +278,18 @@ func latestReportPath(dir string) string {
 
 // driveGraph selects ready tasks with the scheduler and runs the local lifecycle
 // for each, completing a task (gate passed) or blocking it, until no runnable
-// work remains.
+// work remains. When no runnable work remains but a recoverable BLOCKED task
+// exists, the scheduler requeues it (the same legal transition an explicit
+// `sop retry` performs) and the driver re-selects it as runnable work, so the
+// blocked task is automatically re-evaluated inside one invocation. The
+// scheduler recovers each blocked task at most once per invocation, and its
+// recovery guard lives only as long as this invocation, so no unbounded retry
+// loop is possible and no recovery state leaks between runs.
+//
+// Recovery is fail-closed: when a task the scheduler already recovered is BLOCKED
+// again, the scheduler reports FailedRecovery and the driver stops the run with a
+// non-zero status, naming the failed task and its original failure diagnostic.
+// No later task is executed, and nothing is cleaned up or reset.
 //
 // Completion is local: it records LOCAL_DONE through the local lifecycle
 // (BRANCH_CREATED … REVIEW_PASS → LOCAL_DONE). It never fabricates PR_OPEN,
@@ -278,13 +314,25 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		writeRunMetrics(dir, planID, run)
 	}()
 
+	// The scheduler carries this invocation's automatic-recovery guard: it is
+	// created here, used only here, and discarded when driveGraph returns.
 	sch := scheduler.New(st)
 	completed := 0
 
-	// Each iteration either completes a task (→ LOCAL_DONE), resumes and completes an
-	// interrupted one, or blocks one, so the loop is bounded by the task count;
-	// +1 is defensive.
-	for i := 0; i <= len(tasks); i++ {
+	// Each iteration either completes a task (→ LOCAL_DONE), resumes and completes
+	// an interrupted one, blocks one, or requeues one blocked task for recovery
+	// (which the next iteration then selects as runnable work). The driver does not
+	// keep a parallel recovery set: whether a task was already recovered is asked
+	// of the scheduler (sch.RecoveredAlready), so the driver's re-selection is gated
+	// on exactly the same guard the scheduler uses to fail closed. The scheduler
+	// recovers each task at most once, and the driver's re-selection after a
+	// recovered task re-blocks consumes the scheduler's guard, so each task
+	// contributes a bounded number of iterations. The hard bound below is a backstop
+	// that fails closed rather than silently reporting success.
+	const iterationsPerTask = 3
+	maxIterations := iterationsPerTask*len(tasks) + 2
+
+	for i := 0; i < maxIterations; i++ {
 		res, err := sch.Next(ctx)
 		if err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -293,12 +341,38 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 
 		switch res.Outcome {
 		case scheduler.ReadyTask:
+			id := res.Task.ID
 			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
 			addTaskMetrics(run, dir, res.Task.ID)
 			if code != exitOK {
+				if sch.RecoveredAlready(id) {
+					// The task was auto-recovered earlier in this invocation and is
+					// BLOCKED again: re-select so the scheduler reports the failed
+					// recovery fail-closed, naming the task. Because the scheduler
+					// has already recovered this task, the next Next call cannot
+					// recover it again; it must return FailedRecovery (or another
+					// terminal outcome), so this re-selection happens at most once
+					// per recovered task. A normal task that blocks is not
+					// re-selected, so no later work runs after any block.
+					continue
+				}
 				return code
 			}
 			completed++
+		case scheduler.RecoveredTask:
+			// The scheduler requeued a BLOCKED task to PLANNED via the existing
+			// retry transition (the same one `sop retry` uses). Report it and
+			// re-select so it is picked up as ordinary runnable work; the
+			// scheduler never recovers it again in this invocation.
+			fmt.Fprintf(stdout, "Recovering: %s was blocked; re-evaluating it (automatic recovery)\n", res.Task.ID)
+			continue
+		case scheduler.FailedRecovery:
+			// A task already recovered in this invocation is BLOCKED again: the
+			// automatic recovery failed. Stop the run, name the task and its
+			// original failure diagnostic, and point at the run report if one
+			// exists. Nothing is cleaned up or reset.
+			printFailedRecovery(stderr, dir, res.Task)
+			return exitError
 		case scheduler.ActiveTask:
 			// A task is mid-lifecycle (typically selected but interrupted). SOP has one
 			// interpretation of that state: resume the same task, never start another.
@@ -319,8 +393,11 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		}
 	}
 
-	fmt.Fprintf(stdout, "all tasks done (%d completed this run)\n", completed)
-	return exitOK
+	// The bound is a backstop: if the driver ever exhausts it without a terminal
+	// scheduler outcome, fail closed instead of claiming success, so an unbounded
+	// or mis-bounded loop can never be reported as a completed run.
+	fmt.Fprintf(stderr, "run: made no progress after %d scheduling steps; stopping without reporting success\n", maxIterations)
+	return exitError
 }
 
 // addTaskMetrics folds a task's persisted performance record into the run
@@ -462,47 +539,48 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// Attach this task's activity stream (a no-op when reporting is disabled) so
+	// the lifecycle and the in-process agent report what they are doing while it
+	// runs. The recorder carries the task id, so events stay attributed even
+	// though the agent is shared across tasks.
+	ctx = taskActivityContext(ctx, rn.Dir(), stdout, task.ID, task.Title)
 	_ = rn.Write("task.md", spec.Render())
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
+	emitClassificationActivity(ctx, res.classification)
+
+	// An error is an agent/infrastructure failure. Classify it (the lifecycle may
+	// not have had enough evidence) and apply the same disposition logic: a
+	// transient failure retries (bounded), anything else is a hard block.
 	if err != nil {
+		cls := res.classification
+		if cls.Disposition == "" {
+			cls = failure.Classify(failure.Evidence{Source: "run", Err: err})
+			writeClassificationArtifact(rn, cls)
+			emitClassificationActivity(ctx, cls)
+		}
+		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
+		if cls.Retryable() {
+			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), err.Error(), stdout, stderr)
+		}
 		_ = rn.SetStage(runpkg.Failed)
 		_ = blockTask(saver, task, domain.RETRIES_EXHAUSTED)
-		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
 		return exitError
 	}
 
 	if code := emitRunSummary(stdout, dir, cfg, rn, res); code != exitOK {
+		// A retryable disposition (CONTINUE/RETRY) means required work remains and
+		// no human decision is required, so it uses the same bounded requeue path a
+		// needs_human boundary already used rather than blocking the task.
+		if res.classification.Retryable() {
+			disposition := string(res.classification.Disposition)
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+disposition, disposition, firstReason(res.gate), stdout, stderr)
+		}
 		if res.stage == runpkg.WaitingForHuman {
 			// A human boundary is not terminal: return the task to PLANNED so a
 			// later run retries it. A repeat that changed nothing does not spend
 			// the budget; a progressing attempt does, bounded by max_attempts.
-			sig := outcomeSignature(res.gate)
-			prev, hadPrev := rn.ReadAttempt()
-			_ = rn.RecordAttempt(sig)
-
-			if hadPrev && prev == sig {
-				if err := requeueTask(saver, task, false); err != nil {
-					fmt.Fprintf(stderr, "run: %v\n", err)
-					return exitError
-				}
-				fmt.Fprintf(stdout, "%s NEEDS_HUMAN (no change since the previous attempt: %s)\n", task.ID, res.gate.Reasons[0])
-				return exitError
-			}
-
-			if err := requeueTask(saver, task, true); err != nil {
-				if errors.Is(err, domain.ErrRetryExhausted) {
-					if berr := blockTask(saver, task, domain.RETRIES_EXHAUSTED); berr != nil {
-						fmt.Fprintf(stderr, "run: %v\n", berr)
-					}
-					fmt.Fprintf(stdout, "%s NEEDS_HUMAN (retry budget exhausted; BLOCKED)\n", task.ID)
-					return exitError
-				}
-				fmt.Fprintf(stderr, "run: %v\n", err)
-				return exitError
-			}
-			fmt.Fprintf(stdout, "%s NEEDS_HUMAN (requeued)\n", task.ID)
-			return exitError
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", firstReason(res.gate), stdout, stderr)
 		}
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -520,6 +598,40 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 	fmt.Fprintf(stdout, "%s %s\n", task.ID, task.Status)
 	return exitOK
+}
+
+// recoverTask returns a task to PLANNED through the existing bounded requeue
+// path so a later run continues from where it stopped. It is the same mechanism
+// the needs_human boundary already used: a repeat that produced the same outcome
+// (signature) does not spend the attempt budget, and once max_attempts is spent
+// the task is terminally BLOCKED rather than looping. label names the disposal
+// for the operator; reason is a short diagnostic for the no-progress message.
+func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, label, reason string, stdout, stderr io.Writer) int {
+	prev, hadPrev := rn.ReadAttempt()
+	_ = rn.RecordAttempt(signature)
+
+	if hadPrev && prev == signature {
+		if err := requeueTask(saver, task, false); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "%s %s (no change since the previous attempt: %s)\n", task.ID, label, reason)
+		return exitError
+	}
+
+	if err := requeueTask(saver, task, true); err != nil {
+		if errors.Is(err, domain.ErrRetryExhausted) {
+			if berr := blockTask(saver, task, domain.RETRIES_EXHAUSTED); berr != nil {
+				fmt.Fprintf(stderr, "run: %v\n", berr)
+			}
+			fmt.Fprintf(stdout, "%s %s (retry budget exhausted; BLOCKED)\n", task.ID, label)
+			return exitError
+		}
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	fmt.Fprintf(stdout, "%s %s (requeued)\n", task.ID, label)
+	return exitError
 }
 
 // specFromTask builds a task-file spec from a persisted task; acceptance criteria

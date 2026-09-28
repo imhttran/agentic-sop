@@ -36,14 +36,29 @@ const CurrentVersion = 1
 // DefaultMaxFixCycles bounds the review/fix loop when none is configured.
 const DefaultMaxFixCycles = 3
 
-// Default agent settings for new projects (plan AHV2008).
+// Default agent settings for new projects (plan AHV2008, PREJEV013).
+//
+// These are the stabilized native Agent Harness path: a tool-enabled
+// coding-agent harness (harness: tool) driving an Ollama provider
+// (provider: ollama) and an operator-supplied model (model). A controller such
+// as sop-controller consumes exactly this block: it delegates execution to SOP
+// through the native tool harness rather than running its own model tool loop,
+// and SOP remains the workflow authority.
+//
+// The model is a configurable model id, never a harness identity: DeepSeek is
+// not the harness, it is one model the Ollama provider can serve. Provider and
+// model stay configurable, and the environment overrides both (see
+// internal/agent.EnvAgentHarness / EnvAgentProvider / EnvAgentModel and the
+// provider-specific SOP_OLLAMA_MODEL).
 const (
 	// DefaultHarness is the harness new projects start with: the tool-enabled
 	// coding-agent path.
 	DefaultHarness = "tool"
 	// DefaultProvider is the model provider new projects start with.
 	DefaultProvider = "ollama"
-	// DefaultModel is the model new projects start with.
+	// DefaultModel is the model new projects start with. It is an
+	// operator-supplied model id, not a harness identity; set agent.model (or
+	// the SOP_AGENT_MODEL / SOP_OLLAMA_MODEL environment variables) to change it.
 	DefaultModel = "deepseek-v4.1-flash:cloud"
 	// LegacyHarness is the harness implied by the legacy command path. A
 	// project that only sets provider: command keeps behaving as before.
@@ -60,6 +75,10 @@ var (
 		"critical": true, "high": true, "medium": true, "low": true, "info": true,
 	}
 )
+
+// JEV modes: the only execution forms the initial JEV capability runs in. JEV is
+// read-only analysis (docs/JEV-BOUNDARY.md), so "review" is the sole mode today.
+var supportedJEVModes = map[string]bool{"review": true}
 
 // ErrNotFound is returned by Load when no configuration file exists. Callers
 // treat a missing configuration as "use defaults", not as a failure.
@@ -97,7 +116,8 @@ type Agent struct {
 	Provider string `yaml:"provider"`
 	// Model names the model for the selected provider (ollama or llamacpp). It is
 	// ignored by the command provider, and the provider's environment variable
-	// (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) overrides it when set.
+	// (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) overrides it when set. It is an
+	// operator-supplied model id, not a harness identity.
 	Model string `yaml:"model"`
 }
 
@@ -121,6 +141,42 @@ type Quality struct {
 	RequireTests *bool    `yaml:"require_tests"`
 	MaxFixCycles int      `yaml:"max_fix_cycles"`
 	FailOn       []string `yaml:"fail_on"`
+	JEV          JEV      `yaml:"jev"`
+}
+
+// JEV is the JEV feature flag (conceptually quality.jev.enabled).
+//
+// JEV is an optional, read-only engineering-analysis capability (see
+// docs/JEV-BOUNDARY.md and docs/PLAN-JEV.md). It is DISABLED BY DEFAULT: the
+// flag is a pointer so an omitted value is distinguishable from an explicit
+// false, and both resolve to disabled. Enabling JEV requires explicit
+// configuration — there is no inference that turns it on. A project that
+// already has a configuration file without this block keeps working unchanged
+// (the field is optional, and the YAML key is additive).
+//
+// Mode selects the execution form. Only "review" is implemented today; an
+// unknown mode is a focused load-time error rather than a silent fallback.
+// FailOn names the finding severities that block; when empty it is defaulted
+// to the quality.fail_on severities. It is policy only and never a state path.
+type JEV struct {
+	Enabled *bool    `yaml:"enabled"`
+	Mode    string   `yaml:"mode"`
+	FailOn  []string `yaml:"fail_on"`
+}
+
+// JEVEnabled reports whether JEV is explicitly enabled. An omitted flag and an
+// explicit false both resolve to disabled, so the default path is unchanged.
+func (q Quality) JEVEnabled() bool {
+	return q.JEV.Enabled != nil && *q.JEV.Enabled
+}
+
+// JEVFailOn returns the severities that block a JEV result, defaulting to the
+// quality gate's own blocking severities when JEV names none.
+func (q Quality) JEVFailOn() []string {
+	if len(q.JEV.FailOn) > 0 {
+		return q.JEV.FailOn
+	}
+	return q.FailOn
 }
 
 // RequiresTests reports whether tests are required, defaulting to true.
@@ -168,11 +224,14 @@ type Workflow struct {
 }
 
 // Default returns the built-in configuration, the same values the generated
-// template documents. New projects start on the tool harness with Ollama and
-// deepseek-v4.1-flash:cloud (plan AHV2008).
+// template documents. New projects — and controllers such as sop-controller
+// that consume this block — start on the stabilized native Agent Harness path:
+// the tool harness with the Ollama provider and the deepseek-v4.1-flash:cloud
+// model (plans AHV2008, PREJEV013).
 func Default() Config {
 	requireTests := true
 	approval := true
+	jevEnabled := false
 	return Config{
 		Version: CurrentVersion,
 		Project: Project{IntegrationBranch: "main"},
@@ -186,6 +245,7 @@ func Default() Config {
 			RequireTests: &requireTests,
 			MaxFixCycles: DefaultMaxFixCycles,
 			FailOn:       []string{"critical", "high"},
+			JEV:          JEV{Enabled: &jevEnabled, Mode: "review"},
 		},
 		Human: Human{ApprovalBeforeCommit: &approval},
 		Decision: DecisionConfig{
@@ -249,13 +309,17 @@ func Parse(data []byte) (*Config, error) {
 }
 
 // applyDefaults fills omitted settings. A field whose zero value is also a
-// valid explicit value uses a pointer (RequireTests, ApprovalBeforeCommit);
-// the others use their zero value as "unset".
+// valid explicit value uses a pointer (RequireTests, ApprovalBeforeCommit,
+// JEV.Enabled); the others use their zero value as "unset".
 //
 // Precedence is defaults < explicit config file values: an explicitly
 // configured value is never overwritten. In particular a project that sets
 // agent.provider: command is never coerced onto the tool/Ollama defaults, so
 // legacy command projects keep the command path (plan AHV2008).
+//
+// JEV is never enabled by a default: an omitted flag stays disabled. The JEV
+// mode is only defaulted when JEV is enabled, so a disabled stub is never
+// mutated and is never blocked by its own optional settings.
 func (c *Config) applyDefaults() {
 	if c.Version == 0 {
 		c.Version = CurrentVersion
@@ -298,6 +362,13 @@ func (c *Config) applyDefaults() {
 	if len(c.Quality.FailOn) == 0 {
 		c.Quality.FailOn = []string{"critical", "high"}
 	}
+	// JEV.Enabled is deliberately left nil/untouched: JEV stays disabled unless
+	// the configuration explicitly enables it. The mode is defaulted only when
+	// JEV is enabled, so a disabled stub keeps its zero value and is never
+	// blocked by its own optional settings.
+	if c.Quality.JEVEnabled() && strings.TrimSpace(c.Quality.JEV.Mode) == "" {
+		c.Quality.JEV.Mode = "review"
+	}
 	if strings.TrimSpace(c.Decision.Provider) == "" {
 		c.Decision.Provider = "deterministic"
 	}
@@ -338,6 +409,9 @@ func (c *Config) Validate() error {
 				sev, strings.Join(sortedKeys(supportedSeverity), ", "))
 		}
 	}
+	if err := c.validateJEV(); err != nil {
+		return err
+	}
 	switch strings.TrimSpace(c.Decision.Provider) {
 	case "deterministic", "jev":
 	default:
@@ -353,6 +427,50 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: unknown workflow.mode %q (want local, pull-request)", c.Workflow.Mode)
 	}
 	return nil
+}
+
+// validateJEV validates the JEV feature flag. Invalid JEV configuration fails at
+// load time with a focused error naming the offending setting, so a bad block is
+// never deferred to first use.
+//
+// An unknown JEV mode or fail_on severity is always rejected, whether JEV is
+// enabled or not: an explicitly written value must be well-formed so a later
+// enable cannot silently carry a bad setting. A JEV block that is omitted
+// entirely (the default) has nothing to reject and stays disabled.
+func (c *Config) validateJEV() error {
+	jev := c.Quality.JEV
+	if mode := strings.TrimSpace(jev.Mode); mode != "" && !supportedJEVModes[mode] {
+		return fmt.Errorf("config: unknown quality.jev.mode %q (want %s)",
+			jev.Mode, strings.Join(sortedKeys(supportedJEVModes), ", "))
+	}
+	for _, sev := range jev.FailOn {
+		if !supportedSeverity[strings.TrimSpace(sev)] {
+			return fmt.Errorf("config: unknown quality.jev.fail_on severity %q (want %s)",
+				sev, strings.Join(sortedKeys(supportedSeverity), ", "))
+		}
+	}
+	// Enabling JEV is explicit: a project that turns JEV on must name the
+	// read-only review mode (applyDefaults fills it in when omitted, so this only
+	// trips when an explicit empty mode was written alongside enabled: true).
+	if jev.Enabled != nil && *jev.Enabled {
+		if mode := strings.TrimSpace(jev.Mode); mode == "" {
+			return errors.New("config: quality.jev.enabled requires quality.jev.mode (want review)")
+		}
+	}
+	return nil
+}
+
+// JEVActive reports whether JEV is enabled for this configuration. It is the
+// single source of truth for the JEV enabled state: JEV is active only when the
+// new quality.jev.enabled flag is explicitly set. Nothing is enabled by default.
+//
+// The pre-existing decision-layer signals (features.jev_decisions and
+// decision.provider: jev) are NOT consulted here and cannot turn JEV on by
+// themselves. Those signals select or describe the decision layer, which is a
+// separate capability (plan T033–T046); enabling them does not enable JEV, and
+// a project that wants JEV must set quality.jev.enabled: true explicitly.
+func (c *Config) JEVActive() bool {
+	return c.Quality.JEVEnabled()
 }
 
 // Template renders the documented default configuration for `sop init`.
@@ -376,11 +494,18 @@ agent:
   # tool: the tool-enabled coding agent that edits the repository through
   # controlled tools. command: the legacy externally-invoked command agent
   # (for example scripts/sop-agent.sh).
+  #
+  # harness: tool with provider: ollama is the stabilized native Agent Harness
+  # path: SOP owns the workflow, and this harness performs the controlled
+  # model/tool execution. A controller (for example sop-controller) delegates to
+  # SOP through this path instead of running its own model tool loop.
   harness: %s
   # command | ollama | llamacpp
   provider: %s
   # model names the model for ollama/llamacpp; the provider's env var
-  # (for example SOP_OLLAMA_MODEL) overrides it.
+  # (for example SOP_OLLAMA_MODEL) or SOP_AGENT_MODEL overrides it. The model is
+  # an operator-supplied model id, not a harness identity: DeepSeek is a model
+  # served by the Ollama provider, not the harness itself.
   model: %s
 
 validation:
@@ -402,6 +527,20 @@ quality:
   fail_on:
     - critical
     - high
+  # JEV is SOP's optional read-only engineering-analysis capability.
+  # JEV analyzes; SOP decides; IMPLEMENT/FIX changes code.
+  # It is DISABLED by default and only runs when explicitly enabled here.
+  # Existing configurations without this block keep working unchanged, and
+  # enabling or disabling JEV needs no state deletion or recreation.
+  jev:
+    enabled: false
+    # review is the only implemented mode (read-only analysis).
+    mode: review
+    # fail_on names the JEV severities that block; omit it to reuse the
+    # quality.fail_on severities above.
+    fail_on:
+      - critical
+      - high
 
 human:
   approval_before_commit: true

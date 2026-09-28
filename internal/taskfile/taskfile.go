@@ -34,7 +34,7 @@ type Spec struct {
 
 var (
 	headingRE  = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
-	idTokenRE  = regexp.MustCompile(`^([A-Za-z]+[-_]?\d+[A-Za-z]?)\b`)
+	idTokenRE  = regexp.MustCompile(`^([A-Za-z]+[-_]?\d+(?:-[A-Za-z]+\d+)?[A-Za-z]?)\b`)
 	bulletRE   = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+`)
 	checkboxRE = regexp.MustCompile(`^\[[ xX]\]\s*`)
 )
@@ -166,7 +166,8 @@ func normalize(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }
 
-// splitID separates a leading task ID token from the rest of a heading.
+// splitID separates a leading task ID token from the rest of a heading. An id may
+// carry one hierarchical sub-id segment (for example "PREJEV012-S6").
 func splitID(s string) (id, title string) {
 	m := idTokenRE.FindStringSubmatch(s)
 	if m == nil {

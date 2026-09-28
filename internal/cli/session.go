@@ -20,6 +20,11 @@ import (
 //
 // Only passing validation and clean review are cached. A failure is always
 // re-run, so a transient or flaky failure is never replayed onto another task.
+//
+// The session is created once per `sop run` invocation and discarded when it
+// ends. Automatic-recovery state does not live here: it is the scheduler's
+// per-invocation guard, created per `sop run` invocation and discarded with it,
+// so no recovery state leaks between separate invocations.
 type runSession struct {
 	validation map[string]testrunner.SuiteResult
 	review     map[string]review.Report

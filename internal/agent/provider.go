@@ -156,7 +156,17 @@ func HarnessFromConfig(harness, provider, model string) (Harness, error) {
 	// Validate harness value.
 	switch harnessName {
 	case HarnessTool:
-		// Tool harness works with any provider.
+		// A tool-harness request with the Ollama provider is the native tool
+		// loop (multi-turn, controlled tools) implemented in
+		// internal/ollamaagent. That package imports this one for the
+		// Request/Outcome vocabulary, so it cannot be constructed here without an
+		// import cycle; the CLI composition root builds it
+		// (ollamaagent.NativeAgent). The single-shot providers below keep their
+		// historical passthrough behavior.
+		if providerName == ProviderOllama {
+			return nil, errors.New("harness tool with provider ollama runs in-process as the Ollama tool loop; select it through configuration (harness: tool, provider: ollama), not through HarnessFromConfig")
+		}
+		// Tool harness works with any other provider.
 		switch providerName {
 		case ProviderCommand:
 			agent, err := NewCommandAgentFromEnv()
@@ -176,7 +186,11 @@ func HarnessFromConfig(harness, provider, model string) (Harness, error) {
 			if modelName == "" {
 				return nil, errNoModel("ollama", EnvAgentModel)
 			}
-			return NewOllamaToolHarnessFromEnv(baseURL, modelName, timeout)
+			agent, err := NewOllama(baseURL, modelName, timeout)
+			if err != nil {
+				return nil, err
+			}
+			return HarnessFunc(agent.Generate), nil
 		case ProviderLlamaCpp:
 			baseURL := strings.TrimSpace(os.Getenv(EnvLlamaCppBaseURL))
 			if baseURL == "" {

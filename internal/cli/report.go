@@ -10,6 +10,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/review"
 )
@@ -179,6 +180,51 @@ func writeReport(w io.Writer, doc runReportDoc) {
 			fmt.Fprintf(w, "  %-8s %d\n", severity, counts[severity])
 		}
 	}
+
+	writeJEVSummary(w, doc.JEV)
+	writeClassificationSummary(w, doc.Classification)
+}
+
+// writeClassificationSummary renders the failure classification of a run that did
+// not pass, so `sop report` shows the kind, the disposition SOP applied, and the
+// reason. It renders nothing for a passing run (a nil classification).
+func writeClassificationSummary(w io.Writer, cls *failure.Classification) {
+	if cls == nil {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Classification:")
+	fmt.Fprintf(w, "  %-12s %s\n", "Kind:", cls.Kind)
+	fmt.Fprintf(w, "  %-12s %s\n", "Disposition:", cls.Disposition)
+	fmt.Fprintf(w, "  %-12s %s\n", "Confidence:", cls.Confidence)
+	if reason := strings.TrimSpace(cls.Reason); reason != "" {
+		fmt.Fprintf(w, "  %-12s %s\n", "Reason:", reason)
+	}
+}
+
+// writeJEVSummary renders the JEV section of `sop report`, reusing the single
+// JEV section renderer (renderJEVSection) so the report and the run's report.md
+// can never drift. It renders nothing when JEV did not run. The JEV evidence is
+// diagnostic and read-only; it never restates validation or review findings as
+// JEV and never feeds a decision.
+func writeJEVSummary(w io.Writer, jev *jevReportDoc) {
+	if jev == nil {
+		return
+	}
+	section := renderJEVSection(&jevRunDoc{
+		TaskID:     jev.TaskID,
+		RunID:      jev.RunID,
+		Status:     jev.Status,
+		FailClosed: jev.FailClosed,
+		Reason:     jev.Reason,
+		Findings:   jev.Findings,
+		Metrics:    jev.Metrics,
+	}, jev.ArtifactPath)
+	if section == "" {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprint(w, section)
 }
 
 // findingsBySeverity counts findings per severity.

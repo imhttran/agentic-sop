@@ -155,6 +155,65 @@ func (t *Task) IsDone() bool {
 	return t.Status == DONE
 }
 
+// IsSatisfied reports whether the task has reached a satisfied terminal state:
+// its work is finished locally (LOCAL_DONE), integrated into shared history
+// (MERGED), or fully done (DONE). It is the single definition of "complete",
+// shared by dependency resolution, the run summary, and completed-plan handoff.
+func (t *Task) IsSatisfied() bool {
+	switch t.Status {
+	case MERGED, DONE, LOCAL_DONE:
+		return true
+	}
+	return false
+}
+
+// IsRunnable reports whether the task is in the one state `sop run` may pick up
+// and execute: PLANNED. A PLANNED task still has to satisfy its dependencies
+// (see ResolveDependencies) before the scheduler will promote it. Every other
+// status is either complete, in-flight elsewhere, or BLOCKED, and so is not
+// runnable. It is the single definition of "may be selected for execution".
+func (t *Task) IsRunnable() bool {
+	return t.Status == PLANNED
+}
+
+// IsBlockedRecoverable reports whether a BLOCKED task may be returned to PLANNED
+// by the existing requeue path rather than being terminally stuck. It is the
+// single definition of "BLOCKED is not permanent": a task is recoverable while
+// it is BLOCKED, is not completed, and still has retry budget left. Once the
+// budget is spent the task is terminally exhausted and Requeue returns
+// ErrRetryExhausted. A task that is not BLOCKED is not recoverable in this sense.
+func (t *Task) IsBlockedRecoverable() bool {
+	if t.Status != BLOCKED {
+		return false
+	}
+	if t.MaxAttempts > 0 && t.Attempt >= t.MaxAttempts {
+		return false
+	}
+	return true
+}
+
+// IsTerminalBlocked reports whether a BLOCKED task has spent its retry budget, so
+// it can no longer be returned to PLANNED by requeue. It is the complement of
+// IsBlockedRecoverable for BLOCKED tasks.
+func (t *Task) IsTerminalBlocked() bool {
+	return t.Status == BLOCKED && !t.IsBlockedRecoverable()
+}
+
+// AllSatisfied reports whether tasks is non-empty and every task has reached a
+// satisfied terminal state. It is the plan-completion predicate: an empty plan
+// is not complete, and so is not eligible for completed-plan handoff.
+func AllSatisfied(tasks []*Task) bool {
+	if len(tasks) == 0 {
+		return false
+	}
+	for _, task := range tasks {
+		if !task.IsSatisfied() {
+			return false
+		}
+	}
+	return true
+}
+
 func (t *Task) AddAttempt(status TaskStatus, reason string) error {
 	t.Attempt++
 	attempt := Attempt{
@@ -191,6 +250,7 @@ func (t *Task) ResolveDependencies(tasks map[string]*Task) (unmet []Dependency, 
 func (t *Task) dependencySatisfied(depTask *Task) bool {
 	// A dependency is complete once its work is finished: locally (LOCAL_DONE) or
 	// integrated into shared history (MERGED/DONE). Work that has merely passed
-	// local tests, review, or CI may still live on an unmerged branch.
-	return depTask.Status == MERGED || depTask.Status == DONE || depTask.Status == LOCAL_DONE
+	// local tests, review, or CI may still live on an unmerged branch. BLOCKED and
+	// in-flight work never satisfy a dependency.
+	return depTask.IsSatisfied()
 }

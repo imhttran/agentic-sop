@@ -321,11 +321,16 @@ func TestRunNoChangeFailureIsRetryable(t *testing.T) {
 func TestRunChangedTreeKeepsFailure(t *testing.T) {
 	dir := t.TempDir()
 	gitInit(t, dir)
-	writeFile(t, dir, "changed.txt", "an existing change")
 	t.Setenv(agent.EnvOllamaBaseURL, "")
 	t.Setenv(agent.EnvOllamaModel, "")
 	t.Setenv(agent.EnvOllamaTimeout, "")
-	_, srv := newFakeOllama(t, `{"status":"failed","reason":"could not finish"}`)
+	// The mutation happens during the invocation (after the baseline is
+	// captured), so it is attributed to this run, not treated as pre-existing
+	// dirty work.
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"changed.txt","content":"an existing change"}}`,
+		`{"status":"failed","reason":"could not finish"}`,
+	)
 	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
 
 	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
@@ -614,7 +619,7 @@ func TestCapabilityBudgets(t *testing.T) {
 		{agent.DesignTests, 12},
 		{agent.Implement, 32},
 		{agent.Fix, 24},
-		{agent.Review, 8},
+		{agent.Review, 10},
 	}
 	for _, tc := range cases {
 		if got := PolicyFor(tc.cap).MaxIterations; got != tc.want {
@@ -743,7 +748,7 @@ func TestPlanEarlyFinalCompletesImmediately(t *testing.T) {
 	if len(records) != 1 || records[0].Phase != "DISCOVERY" || records[0].Tool != "final" {
 		t.Errorf("trace = %+v, want one DISCOVERY final turn", records)
 	}
-	if hasEvent(records, synthesisTransitionEvent) {
+	if hasEvent(records, "→ "+planTwoPhase.synthLabel) {
 		t.Errorf("early final must not enter synthesis: %+v", records)
 	}
 }
@@ -778,7 +783,7 @@ func TestPlanForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	if got := countPhase(records, "DISCOVERY"); got != planDiscoveryTurns {
 		t.Errorf("discovery turns = %d, want %d", got, planDiscoveryTurns)
 	}
-	if !hasEvent(records, synthesisTransitionEvent) {
+	if !hasEvent(records, "→ "+planTwoPhase.synthLabel) {
 		t.Errorf("trace does not record the synthesis transition: %+v", records)
 	}
 	if got := countPhase(records, "SYNTHESIS"); got != 1 {
@@ -796,9 +801,10 @@ func TestPlanSynthesisDeniesTools(t *testing.T) {
 		responses = append(responses, readToolCall(i))
 	}
 	// During synthesis the model requests a read-only tool; it must be denied.
+	// On the next synthesis turn it returns the required final PLAN.
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`,
-		`{"project":"p","summary":"s","stages":[]}`,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"project":"p","summary":"plan complete","stages":[{"id":"stage-1","title":"Implement change"}]}`,
 	)
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -891,7 +897,7 @@ func TestPlanAHV2006ShapeFixture(t *testing.T) {
 		t.Errorf("chat calls = %d, want %d discovery + 1 synthesis", fake.count(), planDiscoveryTurns)
 	}
 	records := h.TraceRecords()
-	if !hasEvent(records, synthesisTransitionEvent) {
+	if !hasEvent(records, "→ "+planTwoPhase.synthLabel) {
 		t.Errorf("trace does not record the transition: %+v", records)
 	}
 	// The safe trace never carries file contents or prompts.
@@ -987,16 +993,16 @@ func TestImplementNormalCompletion(t *testing.T) {
 // AHV2010 failure).
 func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	dir := t.TempDir()
-	seedToolFiles(t, dir, "pkg", reviewDiscoveryTurns)
-	responses := make([]string, 0, reviewDiscoveryTurns+2)
-	for i := 0; i < reviewDiscoveryTurns; i++ {
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
+	responses := make([]string, 0, reviewInspectTurns+2)
+	for i := 0; i < reviewInspectTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
 		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`, // refused: synthesis has no tools
 		`{"summary":"clean","findings":[]}`,
 	)
-	_, srv := newFakeOllama(t, responses...)
+	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
 
@@ -1008,8 +1014,15 @@ func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	if !strings.Contains(content, "findings") {
 		t.Errorf("content = %q", content)
 	}
-	if !hasEvent(h.TraceRecords(), synthesisTransitionEvent) {
-		t.Errorf("REVIEW did not enter synthesis: %+v", h.TraceRecords())
+	records := h.TraceRecords()
+	if !hasEvent(records, "→ "+reviewTwoPhase.synthLabel) {
+		t.Errorf("REVIEW did not enter synthesis: %+v", records)
+	}
+	if got := countPhase(records, "INSPECT"); got != reviewInspectTurns {
+		t.Errorf("inspect turns = %d, want %d", got, reviewInspectTurns)
+	}
+	if got := countPhase(records, "SYNTHESIZE"); got != 2 {
+		t.Errorf("synthesize turns = %d, want 2 (the denied tool call plus the final response)", got)
 	}
 	denied := 0
 	for _, r := range h.AuditRecords() {
@@ -1019,6 +1032,212 @@ func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	}
 	if denied != 1 {
 		t.Errorf("denied tools = %d, want 1 (synthesis has no tools)", denied)
+	}
+	if !strings.Contains(messageText(fake.request(reviewInspectTurns)), "Inspection is complete") {
+		t.Error("the forced-synthesis instruction was not sent")
+	}
+	if !strings.Contains(messageText(fake.request(fake.count()-1)), "No additional tools are available") {
+		t.Error("the synthesis correction was not sent")
+	}
+}
+
+func TestReviewCannotMutateRepository(t *testing.T) {
+	dir := t.TempDir()
+	fake, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"should-not-exist.txt","content":"nope"}}`,
+		`{"summary":"clean","findings":[]}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), reviewRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "should-not-exist.txt")); statErr == nil {
+		t.Error("REVIEW wrote a file: the read-only policy was bypassed")
+	}
+	if !strings.Contains(messageText(fake.request(1)), "not available for REVIEW") {
+		t.Errorf("the refusal was not reported to the model:\n%s", messageText(fake.request(1)))
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied audit records = %d, want 1", denied)
+	}
+	if !strings.Contains(content, "findings") {
+		t.Errorf("content = %q, want the review document", content)
+	}
+}
+
+func TestReviewEarlyFinalCompletesImmediately(t *testing.T) {
+	dir := t.TempDir()
+	fake, srv := newFakeOllama(t, `{"summary":"clean","findings":[]}`)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), reviewRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "findings") {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != 1 {
+		t.Errorf("chat calls = %d, want 1 (early final, no inspection)", fake.count())
+	}
+	records := h.TraceRecords()
+	if len(records) != 1 || records[0].Phase != "INSPECT" || records[0].Tool != "final" {
+		t.Errorf("trace = %+v, want one INSPECT final turn", records)
+	}
+	if hasEvent(records, "→ "+reviewTwoPhase.synthLabel) {
+		t.Errorf("early final must not enter synthesis: %+v", records)
+	}
+}
+
+func TestReviewInspectNudgeAtSixthCall(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
+	responses := make([]string, 0, reviewInspectTurns+1)
+	for i := 0; i < reviewInspectTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses, `{"summary":"clean","findings":[]}`)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), reviewRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "findings") {
+		t.Errorf("content = %q", content)
+	}
+
+	// Messages accumulate across turns, so the nudge stays in every later
+	// request's history once sent; only the newly appended (last) message of
+	// each request shows when it was actually attached.
+	nudgeCount, nudgeIndex := 0, -1
+	for i := 0; i < fake.count(); i++ {
+		msgs := fake.request(i).Messages
+		if len(msgs) == 0 {
+			continue
+		}
+		if strings.Contains(msgs[len(msgs)-1].Content, reviewTwoPhase.nudge) {
+			nudgeCount++
+			nudgeIndex = i
+		}
+	}
+	if nudgeCount != 1 {
+		t.Errorf("nudge appeared %d times, want exactly 1", nudgeCount)
+	}
+	if nudgeIndex != reviewInspectNudgeAfter {
+		t.Errorf("nudge appeared at request %d, want %d (attached to inspection call 6's result)", nudgeIndex, reviewInspectNudgeAfter)
+	}
+
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 0 {
+		t.Errorf("denied tools = %d, want 0: the nudge must not deny or withdraw any tool", denied)
+	}
+	if got := len(h.AuditRecords()); got != reviewInspectTurns {
+		t.Errorf("executed tools = %d, want %d (calls 7 and 8 still execute)", got, reviewInspectTurns)
+	}
+}
+
+func TestReviewSynthesisExhaustion(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns+2)
+	responses := make([]string, 0, reviewInspectTurns+reviewSynthesizeTurns)
+	for i := 0; i < reviewInspectTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/extra1.go"}}`,
+		`{"tool":"read_file","args":{"path":"pkg/extra2.go"}}`,
+	)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	_, err := New(cfg, dir).Execute(context.Background(), reviewRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=synthesis_limit") {
+		t.Fatalf("err = %v, want a synthesis_limit termination", err)
+	}
+	if strings.Contains(err.Error(), "iteration_limit") {
+		t.Errorf("err = %v, must not masquerade as the generic iteration limit", err)
+	}
+	if !strings.Contains(err.Error(), "during synthesize") ||
+		!strings.Contains(err.Error(), "inspect_tool_calls=8") ||
+		!strings.Contains(err.Error(), "synthesize_turns=2") {
+		t.Errorf("err = %v, want phase and counts", err)
+	}
+	if fake.count() != reviewInspectTurns+reviewSynthesizeTurns {
+		t.Errorf("chat calls = %d, want %d", fake.count(), reviewInspectTurns+reviewSynthesizeTurns)
+	}
+}
+
+func TestReviewTraceRendering(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
+	responses := make([]string, 0, reviewInspectTurns+1)
+	for i := 0; i < reviewInspectTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses, `{"summary":"clean","findings":[]}`)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), reviewRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	out := b.String()
+	t.Logf("trace:\n%s", out)
+	for _, want := range []string{
+		"REVIEW INSPECT #1 read_file path=pkg/f0.go [ok]",
+		"REVIEW INSPECT #8 read_file path=pkg/f7.go [ok]",
+		"REVIEW → SYNTHESIZE",
+		"REVIEW SYNTHESIZE #1 final [ok]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trace missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestReviewTraceShowsSynthesisTermination(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns+2)
+	responses := make([]string, 0, reviewInspectTurns+reviewSynthesizeTurns)
+	for i := 0; i < reviewInspectTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/extra1.go"}}`,
+		`{"tool":"read_file","args":{"path":"pkg/extra2.go"}}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), reviewRequest()); err == nil {
+		t.Fatal("expected a synthesis-limit failure")
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	if !strings.Contains(b.String(), "termination=synthesis_limit") {
+		t.Errorf("trace does not show the termination reason:\n%s", b.String())
 	}
 }
 
@@ -1288,6 +1507,7 @@ func TestImplementFinalizationExhaustionAfterMutation(t *testing.T) {
 	responses = append(responses,
 		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
 		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
 	)
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -1297,14 +1517,12 @@ func TestImplementFinalizationExhaustionAfterMutation(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "termination=finalization_limit") {
 		t.Fatalf("err = %v, want a finalization_limit termination", err)
 	}
-	if !strings.Contains(err.Error(), "mutation_observed=true") || !strings.Contains(err.Error(), "finalization_turns=2") {
+	if !strings.Contains(err.Error(), "mutation_observed=true") ||
+		!strings.Contains(err.Error(), "finalization_turns=3") {
 		t.Errorf("err = %v, want the mutation and finalization counts", err)
 	}
 }
 
-// TestImplementNonCompletedOutcomesNeedNoMutation verifies that truthful
-// escalation or failure outcomes are accepted without any repository change: the
-// mutation requirement applies to claiming success, not to honest non-completion.
 // TestImplementWritingPastThresholdIsNotFinalized covers the AHV2009 shape: a model
 // that keeps writing a multi-file change past the finalize threshold must keep its
 // tools, because an invocation that is still mutating has not finished. It is only
@@ -1345,48 +1563,67 @@ func TestImplementWritingPastThresholdIsNotFinalized(t *testing.T) {
 	}
 }
 
-// TestImplementMutationDuringFinalizationResumesChange covers the other half: once
-// finalized, a model that still needs to write is not refused. The write is
-// honoured and the invocation returns to CHANGE.
-func TestImplementMutationDuringFinalizationResumesChange(t *testing.T) {
+// TestImplementMutationDuringFinalizationIsDenied covers the other half: once the
+// run has been finalized its tools are withdrawn, so a mutation requested during
+// FINALIZE is denied rather than honoured, and the invocation does not resume
+// CHANGE. The model still returns its structured outcome.
+func TestImplementMutationDuringFinalizationIsDenied(t *testing.T) {
 	dir := t.TempDir()
-	responses := []string{`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`} // 1 -> mutated
-	responses = append(responses, distinctToolCalls(17)...)                                // 2..18 -> finalize
+
+	responses := []string{
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+	}
+	responses = append(responses, distinctToolCalls(17)...)
 	responses = append(responses,
-		`{"tool":"write_file","args":{"path":"more.txt","content":"y"}}`, // in FINALIZE, but a mutation
+		`{"tool":"write_file","args":{"path":"more.txt","content":"y"}}`,
 		`{"status":"completed","summary":"finished the change","changes_expected":true}`,
 	)
+
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
 
 	h := New(cfg, dir)
-	content, err := h.Execute(context.Background(), implementRequest())
+
+	content, err := h.Execute(
+		context.Background(),
+		implementRequest(),
+	)
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
+
 	if !strings.Contains(content, `"status":"completed"`) {
 		t.Errorf("content = %q", content)
 	}
+
+	denied := false
 	for _, r := range h.AuditRecords() {
-		if r.Action == toolharness.ActionDeny {
-			t.Errorf("a write must never be denied during finalization: %+v", r)
+		if r.Action == toolharness.ActionDeny &&
+			r.Tool == toolharness.ToolWriteFile {
+			denied = true
 		}
 	}
-	resumed := false
+
+	if !denied {
+		t.Error("write_file during FINALIZE was not denied")
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "more.txt")); !os.IsNotExist(err) {
+		t.Errorf("more.txt should not have been created during FINALIZE")
+	}
+
 	for _, r := range h.TraceRecords() {
-		if r.Event == implementChangeEvent && r.Detail == "resumed for a further mutation" {
-			resumed = true
+		if r.Event == implementChangeEvent &&
+			r.Detail == "resumed for a further mutation" {
+			t.Error("FINALIZE must not transition back to CHANGE")
 		}
-	}
-	if !resumed {
-		t.Error("the trace does not show CHANGE resumed for the honoured mutation")
-	}
-	if got, _ := os.ReadFile(filepath.Join(dir, "more.txt")); string(got) != "y" {
-		t.Errorf("more.txt = %q, want the honoured write applied", got)
 	}
 }
 
+// TestImplementNonCompletedOutcomesNeedNoMutation verifies that truthful
+// escalation or failure outcomes are accepted without any repository change: the
+// mutation requirement applies to claiming success, not to honest non-completion.
 func TestImplementNonCompletedOutcomesNeedNoMutation(t *testing.T) {
 	for _, tc := range []struct{ name, response string }{
 		{"needs_human", `{"status":"needs_human","reason":"needs authorization"}`},
@@ -1559,6 +1796,73 @@ func TestFixUsesPhasedCompletion(t *testing.T) {
 	}
 	if !hasEvent(records, implementFinalizeEvent) {
 		t.Errorf("FIX must finalize before the ceiling: %+v", records)
+	}
+}
+
+func TestFixForceFinalizesBeforeIterationLimit(t *testing.T) {
+	dir := t.TempDir()
+
+	// Keep FIX actively mutating so normal completion-window finalization
+	// never becomes eligible. The capability-specific force-finalize threshold
+	// must still withdraw tools before maxIterationsFix is reached.
+	responses := make([]string, 0, fixForceFinalizeAfter+3)
+
+	for i := 0; i < fixForceFinalizeAfter; i++ {
+		responses = append(responses, fmt.Sprintf(
+			`{"tool":"write_file","args":{"path":"fix-%d.txt","content":"mutation-%d"}}`,
+			i,
+			i,
+		))
+	}
+
+	// Once forced into FINALIZE, mutation tools must be denied.
+	responses = append(responses,
+		`{"tool":"write_file","args":{"path":"too-late.txt","content":"must not be written"}}`,
+		`{"status":"completed","summary":"fix complete","changes_expected":true}`,
+	)
+
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), fixRequest())
+	if err != nil {
+		t.Fatalf("FIX did not return control before iteration limit: %v", err)
+	}
+
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q, want completed outcome", content)
+	}
+
+	if fake.count() >= maxIterationsFix {
+		t.Errorf(
+			"FIX used %d model turns, want fewer than maxIterationsFix=%d",
+			fake.count(),
+			maxIterationsFix,
+		)
+	}
+
+	records := h.TraceRecords()
+	if !hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("FIX never entered FINALIZE: %+v", records)
+	}
+
+	denied := false
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny &&
+			r.Tool == toolharness.ToolWriteFile {
+			denied = true
+			break
+		}
+	}
+
+	if !denied {
+		t.Error("write_file requested during FIX FINALIZE was not denied")
+	}
+
+	if _, err := os.Stat(filepath.Join(dir, "too-late.txt")); !os.IsNotExist(err) {
+		t.Error("too-late.txt should not exist; mutation during FINALIZE must be denied")
 	}
 }
 
@@ -1911,7 +2215,16 @@ func TestRunWrapsProseInOutcomeWithNoChanges(t *testing.T) {
 // (used to reconcile a claimed change) has something to inspect.
 func gitInit(t *testing.T, dir string) {
 	t.Helper()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v (%s)", args, err, out)
+		}
+	}
 	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
 		t.Fatalf("git init: %v (%s)", err, out)
 	}
+	run("-c", "user.email=test@example.com", "-c", "user.name=test", "commit", "--allow-empty", "-q", "-m", "initial")
 }

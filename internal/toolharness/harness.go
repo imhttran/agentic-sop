@@ -14,8 +14,11 @@ package toolharness
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -240,6 +243,11 @@ func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string,
 // the source tree the model actually touched rather than trusting a claim the
 // model makes about its own work. A failure to inspect (for example outside a git
 // repository) is returned as an error, so a caller can decline to act on it.
+//
+// WorkingTreeChanged compares against HEAD only, so in a pre-dirty working tree
+// it reports true even when this invocation changed nothing. Callers that need
+// to attribute a change to one invocation use WorkingTreeFingerprint/ChangedSince
+// instead.
 func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
@@ -251,6 +259,100 @@ func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("git status: %w", err)
 	}
 	return hasSourceChange(string(out)), nil
+}
+
+// maxFingerprintFileBytes bounds how much of an untracked file's content feeds
+// the working-tree fingerprint; the file size is recorded alongside the digest,
+// so a change past the cap still changes the fingerprint.
+const maxFingerprintFileBytes = 8 << 20
+
+// WorkingTreeFingerprint returns a content-sensitive identity of the working
+// tree's divergence from HEAD: tracked modifications (content hash of the diff),
+// untracked paths (content hash of their files), staged or renamed work — all
+// excluding SOP's state directory. Capturing it at the start of one invocation
+// and comparing with ChangedSince afterwards attributes repository changes to
+// that invocation instead of to pre-existing (pre-dirty) work.
+func (h *Harness) WorkingTreeFingerprint(ctx context.Context) (string, error) {
+	porcelain, err := h.execFingerprintCmd(ctx, "status", "--porcelain")
+	if err != nil {
+		return "", err
+	}
+	diff, err := h.execFingerprintCmd(ctx, "diff", "HEAD", "--", ".", ":(exclude)"+stateDirRel+"/")
+	if err != nil {
+		return "", err
+	}
+
+	sum := sha256.New()
+	io.WriteString(sum, "porcelain\x00")
+	io.WriteString(sum, porcelain)
+	io.WriteString(sum, "\x00diff\x00")
+	io.WriteString(sum, diff)
+	// Untracked files appear in porcelain by name only; hash a bounded prefix of
+	// their content plus the size so edits to an already-untracked file still
+	// change the fingerprint.
+	for _, line := range strings.Split(porcelain, "\n") {
+		path := porcelainPath(line)
+		if path == "" || !strings.HasPrefix(strings.TrimRight(line, "\r"), "??") {
+			continue
+		}
+		if path == stateDirRel || strings.HasPrefix(path, stateDirRel+"/") {
+			continue
+		}
+		hashUntracked(sum, filepath.Join(h.root, path))
+	}
+	return fmt.Sprintf("%x", sum.Sum(nil)), nil
+}
+
+// ChangedSince reports whether the working tree's divergence from HEAD differs
+// from baseline, i.e. whether the repository changed after the baseline
+// fingerprint was taken. Pre-existing changes captured in baseline are not
+// attributed to the intervening work; an identical tree reports false. A blank
+// baseline (no fingerprint could be taken) is treated as "unknown" and reports
+// true, the stricter choice for a mutating capability's completed outcome.
+func (h *Harness) ChangedSince(ctx context.Context, baseline string) (bool, error) {
+	if strings.TrimSpace(baseline) == "" {
+		return true, nil
+	}
+	now, err := h.WorkingTreeFingerprint(ctx)
+	if err != nil {
+		return false, err
+	}
+	return now != baseline, nil
+}
+
+// execFingerprintCmd runs a fixed read-only git subcommand and returns its
+// output for fingerprinting. The arguments are allow-listed by construction.
+func (h *Harness) execFingerprintCmd(ctx context.Context, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd.Dir = h.root
+	var buf bytes.Buffer
+	cmd.Stdout = &buf
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("git %s: %w", strings.Join(args, " "), err)
+	}
+	return buf.String(), nil
+}
+
+// hashUntracked folds one untracked path's size and bounded content prefix into
+// sum. A path that cannot be read (deleted between status and read, or a
+// directory) contributes its name only.
+func hashUntracked(sum io.Writer, abs string) {
+	io.WriteString(sum, "\x00untracked\x00")
+	io.WriteString(sum, abs)
+	info, err := os.Stat(abs)
+	if err != nil || info.IsDir() {
+		return
+	}
+	fmt.Fprintf(sum, "\x00%d\x00", info.Size())
+	f, err := os.Open(abs)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = io.Copy(sum, io.LimitReader(f, maxFingerprintFileBytes))
 }
 
 // hasSourceChange reports whether porcelain output names any path outside SOP's

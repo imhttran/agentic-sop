@@ -39,6 +39,3 @@ func newToolbox(root string, cfg Config) *toolbox {
 func (t *toolbox) run(ctx context.Context, name string, args map[string]any) (string, error) {
 	return t.h.Run(ctx, name, args)
 }
-
-// records returns the in-memory audit trail collected so far.
-func (t *toolbox) records() []toolharness.AuditRecord { return t.audit.Records() }

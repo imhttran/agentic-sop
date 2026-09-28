@@ -49,7 +49,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "eval: %v\n", err)
 		return exitError
 	}
-	a, err := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
+	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
 	if err != nil {
 		fmt.Fprintf(stderr, "eval: %v\n", err)
 		return exitError
@@ -78,7 +78,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 		_ = rn.Write("task.md", spec.Render())
 
-		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession())
+		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), stdout)
 		out := eval.Outcome{
 			Case:     c,
 			Duration: time.Since(start),

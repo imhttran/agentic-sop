@@ -41,7 +41,7 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_, _ string) (agent.Agent, error) {
+		newAgent: func(_, _, _ string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}
@@ -426,7 +426,7 @@ func TestRunPlanUsesConfiguredProvider(t *testing.T) {
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(provider, model string) (agent.Agent, error) {
+		newAgent: func(_, provider, model string) (agent.Agent, error) {
 			gotProvider, gotModel = provider, model
 			return &fakeAgent{content: validPlanJSON}, nil
 		},
@@ -701,7 +701,7 @@ func runInjectedCLI(t *testing.T, dir, diff string, a agent.Agent, args ...strin
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string, string) (agent.Agent, error) {
+		newAgent: func(string, string, string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}
@@ -1519,7 +1519,7 @@ func TestRunNamedPlanMissing(t *testing.T) {
 	}
 }
 
-func TestRunDifferentPlanStops(t *testing.T) {
+func TestRunCompletedPlanHandsOff(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
 		t.Fatal(err)
@@ -1533,12 +1533,186 @@ func TestRunDifferentPlanStops(t *testing.T) {
 		t.Fatalf("first plan: code=%d stderr=%s", code, errs)
 	}
 
+	// The first plan is now complete; requesting a different plan must hand off
+	// in the same invocation rather than block.
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN.md"))
+	if code != exitOK {
+		t.Fatalf("handoff: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	for _, want := range []string{"Source: " + filepath.Join("docs", "PLAN.md"), "Created 1 task(s).", "all tasks done"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+
+	// The database is preserved, not deleted, and the completed plan's record is
+	// archived for later inspection.
+	if !stateExists(statePath(dir)) {
+		t.Error("state.db must be preserved across handoff")
+	}
+	archive := filepath.Join(dir, stateDirName, "archive", "plan-hardening")
+	for _, name := range []string{"plan.meta.json", "tasks.json"} {
+		if !stateExists(filepath.Join(archive, name)) {
+			t.Errorf("completed plan not archived: missing %s under %s", name, archive)
+		}
+	}
+
+	// Only the requested plan's tasks remain: two plans are never mixed.
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+	tasks, err := st.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(tasks) != 1 || tasks[0].ID != "SC-001" {
+		t.Errorf("tasks = %+v, want only SC-001", tasks)
+	}
+}
+
+func TestRunUnfinishedPlanStops(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc2)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN-Hardening.md")); code != exitOK {
+		t.Fatalf("first plan: code=%d stderr=%s", code, errs)
+	}
+
+	// Regress the active plan to unresolved work; it must keep its safety gate.
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	task, err := st.Get("S001")
+	if err != nil {
+		st.Close()
+		t.Fatalf("get S001: %v", err)
+	}
+	task.Status = domain.BLOCKED
+	task.BlockedReason = domain.RETRIES_EXHAUSTED
+	if err := st.Save(task); err != nil {
+		st.Close()
+		t.Fatalf("save S001: %v", err)
+	}
+	st.Close()
+
 	code, _, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN.md"))
 	if code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
 	if !strings.Contains(stderr, "different plan is already active") {
 		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunPlainRunResumesActivePlan(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	active := filepath.Join("docs", "PLAN-Hardening.md")
+	writeFile(t, dir, active, autoPlanDoc)
+	// An unrelated plan that discovery would otherwise prefer by precedence.
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc2)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", active); code != exitOK {
+		t.Fatalf("first plan: code=%d stderr=%s", code, errs)
+	}
+
+	// Return the active plan to unresolved work so it must be resumed.
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	task, err := st.Get("S001")
+	if err != nil {
+		st.Close()
+		t.Fatalf("get S001: %v", err)
+	}
+	task.Status = domain.PLANNED
+	if err := st.Save(task); err != nil {
+		st.Close()
+		t.Fatalf("save S001: %v", err)
+	}
+	st.Close()
+
+	// A plain run must resume the persisted active plan rather than discover the
+	// unrelated docs/PLAN.md and report a different plan is active.
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("plain run: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Source: "+active) {
+		t.Errorf("stdout = %q, want it to resume %s", stdout, active)
+	}
+	if strings.Contains(stderr, "different plan is already active") {
+		t.Errorf("stderr = %q", stderr)
+	}
+}
+
+func TestRunPlainRunHandsOffCompletedPlan(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN-Hardening.md"), autoPlanDoc)
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc2)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", filepath.Join("docs", "PLAN-Hardening.md")); code != exitOK {
+		t.Fatalf("first plan: code=%d stderr=%s", code, errs)
+	}
+
+	// The first plan is complete. A plain run discovers docs/PLAN.md and hands off
+	// in the same invocation, preserving the database.
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("handoff: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Source: "+filepath.Join("docs", "PLAN.md")) {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !stateExists(statePath(dir)) {
+		t.Error("state.db must be preserved across handoff")
+	}
+}
+
+func TestRunSamePlanContinuesAfterCompletion(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	plan := filepath.Join("docs", "PLAN-Hardening.md")
+	writeFile(t, dir, plan, autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, errs := runInjectedCLI(t, dir, "diff\n", a, "run", plan); code != exitOK {
+		t.Fatalf("first run: code=%d stderr=%s", code, errs)
+	}
+
+	// Re-requesting the same completed plan resumes it unchanged: no rebuild, no
+	// archive, no handoff.
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", plan)
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "Plan: current") || !strings.Contains(stdout, "all tasks done") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if stateExists(filepath.Join(dir, stateDirName, "archive")) {
+		t.Error("same-plan request must not create an archive")
 	}
 }
 
@@ -1692,6 +1866,24 @@ func TestRunImplementNoChangesStillValidates(t *testing.T) {
 	}
 	if !stateExists(marker) {
 		t.Error("configured validation did not run for a no-change completion")
+	}
+}
+
+func TestRunImplementNoChangesFailingValidationStops(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n")
+	// The agent claims a legitimate no-change completion, but its acceptance
+	// criteria are not proven: the configured validation fails. The task must not
+	// be accepted, so a no-change report is not an automatic success.
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted, ChangesExpected: false}}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d (stderr=%s stdout=%s)", code, exitError, stderr, stdout)
+	}
+	if strings.Contains(stdout, "verified first") {
+		t.Errorf("a failing no-change task must not be reported as verified: %q", stdout)
 	}
 }
 

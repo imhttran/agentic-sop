@@ -104,6 +104,34 @@ func TestWriteTaskRendersStagesAndCounts(t *testing.T) {
 	}
 }
 
+func TestPlanRepairsAreCountedAndRendered(t *testing.T) {
+	r := NewRecorder("T1")
+	r.AgentCall()
+	r.PlanRepair()
+	r.PlanRepair()
+	task := r.Task()
+	if task.Counts.PlanRepairs != 2 {
+		t.Fatalf("plan repairs = %d, want 2", task.Counts.PlanRepairs)
+	}
+	if line := task.Line(); !strings.Contains(line, "plan repairs 2") {
+		t.Errorf("Line() = %q, want it to report plan repairs", line)
+	}
+
+	var b bytes.Buffer
+	WriteTask(&b, task)
+	if out := b.String(); !strings.Contains(out, "Plan repairs: 2") {
+		t.Errorf("WriteTask output missing plan repairs:\n%s", out)
+	}
+
+	run := NewRun(time.Unix(0, 0))
+	run.Add(task)
+	var rb bytes.Buffer
+	WriteRun(&rb, *run)
+	if out := rb.String(); !strings.Contains(out, "Plan repairs:           2") {
+		t.Errorf("WriteRun output missing plan repairs:\n%s", out)
+	}
+}
+
 func TestHumanMS(t *testing.T) {
 	cases := map[int64]string{
 		0:       "0ms",

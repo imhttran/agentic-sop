@@ -22,7 +22,8 @@ const (
 	Waiting Outcome = "WAITING"
 	// AllDone: every task is complete.
 	AllDone Outcome = "ALL_DONE"
-	// Blocked: progress cannot continue (a task is terminally blocked).
+	// Blocked: progress cannot continue (a task is terminally blocked, or an
+	// automatic recovery failed and the run stopped).
 	Blocked Outcome = "BLOCKED"
 )
 
@@ -97,25 +98,32 @@ func (l *Loop) WithHandoff(h Handoff) *Loop {
 // Advance performs one task's lifecycle: select, execute, merge, refresh, and
 // mark DONE. It returns Progressed when a task completed, or a terminal/waiting
 // outcome when none could. Errors and cancellation propagate.
+//
+// Selection runs in the scheduler's precedence: normal runnable work first, then
+// recovery of the earliest recoverable BLOCKED task. A recovery selection requeues
+// the task to PLANNED without executing it; Advance re-runs selection so the
+// requeued task is picked up as ordinary runnable work, keeping recovery a
+// re-evaluation pass rather than a bypass of the PLANNED -> READY promotion. When
+// a task the scheduler already recovered is BLOCKED again, the recovery failed:
+// the scheduler reports FailedRecovery and Advance stops with the terminal
+// Blocked outcome, naming the task, so no later task is executed.
 func (l *Loop) Advance(ctx context.Context) (Result, error) {
 	if err := ctx.Err(); err != nil {
 		return Result{}, err
 	}
 
-	scheduled, err := l.schedule.Next(ctx)
+	// Select the next task to execute. Recovery selections (RecoveredTask) only
+	// requeue a blocked task to PLANNED, so selection is repeated until it yields
+	// runnable work or a terminal/waiting outcome. Each recovery is recorded by the
+	// scheduler, which recovers any task at most once per invocation, so this loop
+	// terminates: a task that re-blocks after its one recovery makes the scheduler
+	// report FailedRecovery instead of a second RecoveredTask.
+	scheduled, result, done, err := l.selectTask(ctx)
 	if err != nil {
 		return Result{}, err
 	}
-
-	switch scheduled.Outcome {
-	case scheduler.ReadyTask:
-		// Continue below with the selected task.
-	case scheduler.ActiveTask, scheduler.WaitingOnDependencies:
-		return Result{Outcome: Waiting}, nil
-	case scheduler.AllDone:
-		return Result{Outcome: AllDone}, nil
-	default: // scheduler.Blocked
-		return Result{Outcome: Blocked}, nil
+	if done {
+		return result, nil
 	}
 
 	task := scheduled.Task
@@ -161,6 +169,54 @@ func (l *Loop) Advance(ctx context.Context) (Result, error) {
 	}
 
 	return Result{Outcome: Progressed, TaskID: current.ID}, nil
+}
+
+// selectTask repeatedly asks the scheduler for work until it yields a READY task
+// or a terminal/waiting outcome. A RecoveredTask only requeues a blocked task to
+// PLANNED, so selection is retried; a FailedRecovery stops the loop with the
+// terminal Blocked outcome, naming the task, so no later task is executed. When
+// the third return is true, selection is finished and result is the outcome to
+// return verbatim; otherwise scheduled names the READY task to execute.
+//
+// The loop is bounded by the scheduler's per-invocation recovery guard: the
+// scheduler recovers each task at most once, so the number of RecoveredTask
+// iterations is at most the number of tasks, after which the scheduler reports a
+// terminal outcome. Cancellation is honored on every iteration.
+func (l *Loop) selectTask(ctx context.Context) (scheduled scheduler.Result, result Result, done bool, err error) {
+	for {
+		if err := ctx.Err(); err != nil {
+			return scheduler.Result{}, Result{}, false, err
+		}
+
+		scheduled, err = l.schedule.Next(ctx)
+		if err != nil {
+			return scheduler.Result{}, Result{}, false, err
+		}
+
+		switch scheduled.Outcome {
+		case scheduler.ReadyTask:
+			// Selected runnable work: return it for execution.
+			return scheduled, Result{}, false, nil
+		case scheduler.RecoveredTask:
+			// A recoverable BLOCKED task was requeued to PLANNED; re-select so it
+			// is promoted to READY through the normal path.
+			continue
+		case scheduler.FailedRecovery:
+			// A recovered task is BLOCKED again: the recovery failed. Stop with the
+			// terminal Blocked outcome, naming the task; do not select later work.
+			id := ""
+			if scheduled.Task != nil {
+				id = scheduled.Task.ID
+			}
+			return scheduler.Result{}, Result{Outcome: Blocked, TaskID: id}, true, nil
+		case scheduler.ActiveTask, scheduler.WaitingOnDependencies:
+			return scheduler.Result{}, Result{Outcome: Waiting}, true, nil
+		case scheduler.AllDone:
+			return scheduler.Result{}, Result{Outcome: AllDone}, true, nil
+		default: // scheduler.Blocked
+			return scheduler.Result{}, Result{Outcome: Blocked}, true, nil
+		}
+	}
 }
 
 // Run advances until the plan is done, blocked, or waiting, counting completed

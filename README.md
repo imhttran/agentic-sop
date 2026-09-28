@@ -179,6 +179,12 @@ The target project remains a normal Git repository.
 
 SOP adds orchestration around it.
 
+## Track and Control a Run from a Browser
+
+A companion web dashboard observes a run and drives SOP commands (run / resume / validate / review / retry) — locally, or from your phone on the same Wi-Fi. SOP stays the workflow authority; the dashboard keeps no second source of truth. The dashboard lives outside this repo, by default at `~/agentic-workspace/projects/sop-controller`.
+
+See [docs/HOWTO-SOP-Controller-Dashboard.md](docs/HOWTO-SOP-Controller-Dashboard.md) for step-by-step setup, including iPhone access.
+
 ---
 
 # Installation
@@ -277,11 +283,38 @@ docs/
 
 `sop run docs/PLAN-Jev.md` runs that plan independently and safely: each plan
 carries its own identity (source path + `source_sha256` + plan id), so SOP never
-mixes tasks from two plans. A plan is only rebuilt when its content changes, and
-when it changed after tasks were created (or a different plan is requested while
-another is active) SOP stops with an actionable `NEEDS_HUMAN` instead of
-discarding history. The explicit steps below remain available when you want to
-inspect or control each stage.
+mixes tasks from two plans. A plan is only rebuilt when its content changes. When
+a different plan is requested, SOP hands off automatically once every task in
+the active plan is complete, archiving the completed plan's records; if the
+active plan still has unresolved work, SOP stops with an actionable `NEEDS_HUMAN`
+instead of discarding history. The explicit steps below remain available when you
+want to inspect or control each stage.
+
+If the active plan's _own_ PLAN file changes after its task graph was created,
+`sop run` stops with `NEEDS_HUMAN: plan changed …` rather than silently rebuilding
+the graph. Apply the intentional change with the explicit reconciliation command:
+
+```text
+sop reconcile docs/PLAN.md
+```
+
+Reconciliation preserves every unchanged task and its history, updates only tasks
+that have never executed, adds and removes unexecuted tasks, and stops with
+`NEEDS_HUMAN` (naming the task and the difference) when an executed task's
+definition changed or it was removed. It never deletes `.agent-sdlc/state.db` or
+discards run history.
+
+When an executed task's definition genuinely needs to change, approve it
+explicitly instead of deleting state:
+
+```text
+sop reconcile docs/PLAN.md --accept-changed S003
+```
+
+The approval replaces that task's definition while preserving its lifecycle
+state, attempts, and history, and is recorded in `plan.meta.json`. The flag is
+repeatable, and every executed task whose definition changed must be named, so
+one approval never silently covers another task.
 
 Generated artifacts stay out of the project root: machine state and run reports
 live under `.agent-sdlc/` (which ignores itself for Git, so no root `.gitignore`
@@ -493,7 +526,7 @@ Environment variable overrides (take precedence):
 ```bash
 export SOP_OLLAMA_BASE_URL=http://localhost:11434
 export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud
-export SOP_OLLAMA_TIMEOUT=300  # seconds (optional)
+export SOP_OLLAMA_TIMEOUT=2m  # Go duration, e.g. 300s / 2m (optional)
 ```
 
 **What each layer provides:**
@@ -1147,6 +1180,7 @@ sop status
 sop task <id>
 sop resume [task-id]
 sop retry <task-id> | --all [--force]
+sop reconcile <PLAN.md> [--accept-changed <TASK_ID>]...
 sop version
 sop help
 ```
@@ -1260,9 +1294,12 @@ it needs to execute (or to generate a plan from a PRD).
 Multiple plans may coexist under `docs/` (`PLAN.md`, `PLAN-Hardening.md`,
 `PLAN-Jev.md`, …). Each carries its own identity (source path, `source_sha256`,
 and a plan id), so `sop run docs/PLAN-Jev.md` runs that plan independently. If the
-named plan's content changed after tasks were created, or a different plan is
-requested while another is active, `sop run` stops with an actionable
-`NEEDS_HUMAN` rather than mixing tasks from two plans.
+named plan's content changed after tasks were created, `sop run` stops with an
+actionable `NEEDS_HUMAN`. If a different plan is requested while another is
+active, `sop run` hands off automatically when every task in the active plan is
+complete (archiving its records under `.agent-sdlc/archive/<plan-id>/`);
+otherwise it stops with `NEEDS_HUMAN`, never mixing tasks from two plans or
+silently switching away from unfinished work.
 
 The **scheduler** selects the next ready task and the same lifecycle runs for it;
 a passing gate marks the task `LOCAL_DONE` and a failing gate marks it `BLOCKED`,
@@ -1298,6 +1335,12 @@ Each task ends with a concise performance line, and `sop report` summarises wher
 run spent its time. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the
 measurement model, the verify-first savings, and the safety rules for reusing
 validation and review.
+
+When JEV is enabled (`quality.jev.enabled: true`), an optional read-only analysis
+stage runs after validation and review and feeds the same quality gate and fix
+loop; it is disabled by default. See
+[docs/JEV-OPERATIONS.md](docs/JEV-OPERATIONS.md) for enabling, provider
+configuration, severity policy, and safety boundaries.
 
 ## `report`
 

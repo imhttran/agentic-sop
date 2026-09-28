@@ -154,6 +154,45 @@ func TestSaveTasksRejectsDuplicateIDsInBatch(t *testing.T) {
 	}
 }
 
+func TestClearTasksRemovesGraphAndChildren(t *testing.T) {
+	s, err := Open(testDB(t))
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	defer s.Close()
+
+	saveDependency(t, s, "S001")
+	s002 := batchTask("S002", "S001")
+	s002.Attempts = []domain.Attempt{{Number: 1, Status: domain.PLANNED, Reason: "queued", Timestamp: fixedTime()}}
+	if err := s.Save(s002); err != nil {
+		t.Fatalf("Save S002 failed: %v", err)
+	}
+
+	if err := s.ClearTasks(); err != nil {
+		t.Fatalf("ClearTasks failed: %v", err)
+	}
+
+	tasks, err := s.List()
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(tasks) != 0 {
+		t.Errorf("ClearTasks left %d task(s), want 0", len(tasks))
+	}
+
+	// Child rows cascade away: an id can be re-used with no stale children.
+	if err := s.Save(batchTask("S001")); err != nil {
+		t.Fatalf("re-save S001 failed: %v", err)
+	}
+	got, err := s.Get("S001")
+	if err != nil {
+		t.Fatalf("Get S001 failed: %v", err)
+	}
+	if len(got.DependencyIDs) != 0 || len(got.Attempts) != 0 {
+		t.Errorf("S001 children = deps %v attempts %v, want empty", got.DependencyIDs, got.Attempts)
+	}
+}
+
 func TestSaveTasksEmptyIsNoOp(t *testing.T) {
 	s, err := Open(testDB(t))
 	if err != nil {

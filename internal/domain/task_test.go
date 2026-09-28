@@ -339,3 +339,33 @@ func TestTaskHelpers_IsDone(t *testing.T) {
 		t.Errorf("Task with DONE status should return true for IsDone()")
 	}
 }
+
+func TestTaskIsSatisfied(t *testing.T) {
+	satisfied := []TaskStatus{MERGED, DONE, LOCAL_DONE}
+	unsatisfied := []TaskStatus{PLANNED, READY, BRANCH_CREATED, TESTS_WRITTEN, RED_VERIFIED,
+		IMPLEMENTING, LOCAL_TESTS_PASS, REVIEW, REVIEW_PASS, PR_OPEN, CI_RUNNING, CI_PASS,
+		FIX_REQUIRED, BLOCKED}
+
+	for _, status := range satisfied {
+		if !(&Task{Status: status}).IsSatisfied() {
+			t.Errorf("%s should be satisfied", status)
+		}
+	}
+	for _, status := range unsatisfied {
+		if (&Task{Status: status}).IsSatisfied() {
+			t.Errorf("%s should not be satisfied", status)
+		}
+	}
+}
+
+func TestAllSatisfied(t *testing.T) {
+	if AllSatisfied(nil) {
+		t.Error("an empty task set is not a completed plan")
+	}
+	if !AllSatisfied([]*Task{{Status: LOCAL_DONE}, {Status: DONE}, {Status: MERGED}}) {
+		t.Error("all satisfied states should be complete")
+	}
+	if AllSatisfied([]*Task{{Status: LOCAL_DONE}, {Status: BLOCKED}}) {
+		t.Error("one unresolved task must make the plan incomplete")
+	}
+}

@@ -51,6 +51,39 @@ type Counts struct {
 	ReviewReused int `json:"review_reused"`
 	// FixCycles is the number of fix iterations taken.
 	FixCycles int `json:"fix_cycles"`
+	// PlanRepairs is the number of times an invalid generated plan was returned
+	// to the PLAN agent for correction before generation succeeded or failed.
+	PlanRepairs int `json:"plan_repairs"`
+}
+
+// JEV is the diagnostic record of the optional JEV analysis invoked at the
+// quality seam. It captures the JEV invocation count, duration, provider/model,
+// tool calls, finding count, and blocking finding count, so the cost/time of JEV
+// is distinguishable from PLAN, IMPLEMENT, FIX, validation, and review (which
+// are accounted for separately in StagesMS/Counts).
+//
+// Like every other value in this package it is diagnostic metadata only: it is
+// never read back to drive a decision, and a missing or zero JEV record never
+// implies PASS or FAIL. A task where JEV did not run simply carries no JEV
+// record.
+type JEV struct {
+	// Invocations is the number of JEV invocations for the task. JEV reruns
+	// after a fix, so this can exceed one.
+	Invocations int `json:"invocations"`
+	// TotalMS is the time spent across all of the task's JEV invocations, in
+	// milliseconds.
+	TotalMS int64 `json:"total_ms"`
+	// Provider and Model identify what performed the analysis. They are empty
+	// when the analyzer did not name them, which is not an error.
+	Provider string `json:"provider,omitempty"`
+	Model    string `json:"model,omitempty"`
+	// ToolCalls is the number of tool/provider calls JEV made.
+	ToolCalls int `json:"tool_calls"`
+	// Findings is the finding count of the most recent JEV invocation.
+	Findings int `json:"findings"`
+	// BlockingFindings is the count of the most recent invocation's findings
+	// that are blocking under the configured JEV policy.
+	BlockingFindings int `json:"blocking_findings"`
 }
 
 // Task is the persisted performance record for one task lifecycle.
@@ -64,6 +97,9 @@ type Task struct {
 	// sum to StagesMS[validation]).
 	ValidationMS map[string]int64 `json:"validation_ms,omitempty"`
 	Counts       Counts           `json:"counts"`
+	// JEV is the task's JEV diagnostic record. It is omitted entirely when JEV
+	// did not run, so an existing report without JEV metrics stays compatible.
+	JEV *JEV `json:"jev,omitempty"`
 }
 
 // Run aggregates the tasks of one sop invocation.
@@ -72,6 +108,9 @@ type Run struct {
 	TotalMS   int64     `json:"total_ms"`
 	Tasks     []Task    `json:"tasks"`
 	Counts    Counts    `json:"counts"`
+	// JEV is the run's JEV diagnostic record, aggregated from its tasks. It is
+	// omitted when no task ran JEV.
+	JEV *JEV `json:"jev,omitempty"`
 }
 
 // Recorder accumulates timing and counts for one task lifecycle. Its clock is
@@ -83,6 +122,7 @@ type Recorder struct {
 	stages map[string]int64
 	perCat map[string]int64
 	counts Counts
+	jev    *JEV
 }
 
 // NewRecorder returns a Recorder for the task, measuring with the monotonic clock.
@@ -136,6 +176,28 @@ func (r *Recorder) ValidationReused() { r.counts.ValidationReused++ }
 func (r *Recorder) ReviewRun()        { r.counts.ReviewRuns++ }
 func (r *Recorder) ReviewReused()     { r.counts.ReviewReused++ }
 func (r *Recorder) FixCycle()         { r.counts.FixCycles++ }
+func (r *Recorder) PlanRepair()       { r.counts.PlanRepairs++ }
+
+// JEVInvocation records one JEV invocation's diagnostics. Invocations, duration,
+// and tool calls accumulate across a task's fix loop; the finding counts reflect
+// the most recent invocation. It records metadata only — it performs no decision
+// and a missing/zero value never implies PASS or FAIL.
+func (r *Recorder) JEVInvocation(inv JEV) {
+	if r.jev == nil {
+		r.jev = &JEV{}
+	}
+	r.jev.Invocations++
+	r.jev.TotalMS += inv.TotalMS
+	if inv.Provider != "" {
+		r.jev.Provider = inv.Provider
+	}
+	if inv.Model != "" {
+		r.jev.Model = inv.Model
+	}
+	r.jev.ToolCalls += inv.ToolCalls
+	r.jev.Findings = inv.Findings
+	r.jev.BlockingFindings = inv.BlockingFindings
+}
 
 // Task snapshots the recorder into a persistable record.
 func (r *Recorder) Task() Task {
@@ -145,6 +207,7 @@ func (r *Recorder) Task() Task {
 		StagesMS:     copyMap(r.stages),
 		ValidationMS: copyMap(r.perCat),
 		Counts:       r.counts,
+		JEV:          r.jev,
 	}
 }
 
@@ -155,6 +218,7 @@ func NewRun(start time.Time) *Run { return &Run{StartedAt: start} }
 func (r *Run) Add(t Task) {
 	r.Tasks = append(r.Tasks, t)
 	r.Counts = addCounts(r.Counts, t.Counts)
+	r.JEV = addJEV(r.JEV, t.JEV)
 }
 
 // Finish records the run's total wall-clock duration.
@@ -195,6 +259,10 @@ func WriteTask(w io.Writer, t Task) {
 		fmt.Fprintf(w, "Review reused: %d\n", t.Counts.ReviewReused)
 	}
 	fmt.Fprintf(w, "Fix cycles: %d\n", t.Counts.FixCycles)
+	if t.Counts.PlanRepairs > 0 {
+		fmt.Fprintf(w, "Plan repairs: %d\n", t.Counts.PlanRepairs)
+	}
+	WriteJEV(w, t.JEV)
 }
 
 // WriteRun renders a run-level performance summary. Percentages are derived from
@@ -220,6 +288,30 @@ func WriteRun(w io.Writer, r Run) {
 	fmt.Fprintf(w, "Review runs:            %d\n", r.Counts.ReviewRuns)
 	fmt.Fprintf(w, "Review reused:          %d\n", r.Counts.ReviewReused)
 	fmt.Fprintf(w, "Fix cycles:             %d\n", r.Counts.FixCycles)
+	if r.Counts.PlanRepairs > 0 {
+		fmt.Fprintf(w, "Plan repairs:           %d\n", r.Counts.PlanRepairs)
+	}
+	WriteJEV(w, r.JEV)
+}
+
+// WriteJEV renders a JEV diagnostic record, kept separate from the
+// PLAN/IMPLEMENT/FIX and validation/review accounting so JEV cost/time is
+// distinguishable from them. Nothing is printed when JEV did not run, so a
+// report without JEV is unchanged. The values are diagnostics: they never assert
+// PASS or FAIL.
+func WriteJEV(w io.Writer, j *JEV) {
+	if j == nil {
+		return
+	}
+	fmt.Fprintf(w, "\nJEV (diagnostic)\n")
+	fmt.Fprintf(w, "  Invocations: %d\n", j.Invocations)
+	fmt.Fprintf(w, "  Duration: %s\n", humanMS(j.TotalMS))
+	if line := strings.TrimSpace(j.Provider + " " + j.Model); line != "" {
+		fmt.Fprintf(w, "  Provider/model: %s\n", line)
+	}
+	fmt.Fprintf(w, "  Tool calls: %d\n", j.ToolCalls)
+	fmt.Fprintf(w, "  Findings: %d\n", j.Findings)
+	fmt.Fprintf(w, "  Blocking findings: %d\n", j.BlockingFindings)
 }
 
 type row struct {
@@ -292,7 +384,32 @@ func addCounts(a, b Counts) Counts {
 		ReviewRuns:        a.ReviewRuns + b.ReviewRuns,
 		ReviewReused:      a.ReviewReused + b.ReviewReused,
 		FixCycles:         a.FixCycles + b.FixCycles,
+		PlanRepairs:       a.PlanRepairs + b.PlanRepairs,
 	}
+}
+
+// addJEV folds a task's JEV record into a run aggregate. A task with no JEV
+// record (nil) leaves the aggregate unchanged, so a run where JEV never ran
+// carries no JEV record.
+func addJEV(a, b *JEV) *JEV {
+	if b == nil {
+		return a
+	}
+	if a == nil {
+		a = &JEV{}
+	}
+	a.Invocations += b.Invocations
+	a.TotalMS += b.TotalMS
+	if b.Provider != "" {
+		a.Provider = b.Provider
+	}
+	if b.Model != "" {
+		a.Model = b.Model
+	}
+	a.ToolCalls += b.ToolCalls
+	a.Findings += b.Findings
+	a.BlockingFindings += b.BlockingFindings
+	return a
 }
 
 // SortedStageNames returns the recorded stage names in a stable order.
@@ -308,13 +425,20 @@ func (t Task) SortedStageNames() []string {
 // Measured reports whether any timing or count was recorded, so a caller can
 // avoid printing an empty summary.
 func (t Task) Measured() bool {
-	return t.TotalMS > 0 || len(t.StagesMS) > 0 || t.Counts != (Counts{})
+	return t.TotalMS > 0 || len(t.StagesMS) > 0 || t.Counts != (Counts{}) || t.JEV != nil
 }
 
 // Line renders a one-line task summary for concise run output.
 func (t Task) Line() string {
 	agent, validation, review := Run{Tasks: []Task{t}}.CategoryMS()
-	return fmt.Sprintf("%s total (agent %s, validation %s, review %s) | agent calls %d, validation runs %d, fix cycles %d",
+	line := fmt.Sprintf("%s total (agent %s, validation %s, review %s) | agent calls %d, validation runs %d, fix cycles %d",
 		humanMS(t.TotalMS), humanMS(agent), humanMS(validation), humanMS(review),
 		t.Counts.AgentCalls, t.Counts.ValidationRuns, t.Counts.FixCycles)
+	if t.Counts.PlanRepairs > 0 {
+		line += fmt.Sprintf(", plan repairs %d", t.Counts.PlanRepairs)
+	}
+	if t.JEV != nil {
+		line += fmt.Sprintf(", JEV invocations %d (%s)", t.JEV.Invocations, humanMS(t.JEV.TotalMS))
+	}
+	return line
 }
