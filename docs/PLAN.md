@@ -682,6 +682,8 @@ T062 IMPLEMENT discovery → change → finalize phases (bounded implementation 
 T063 mutation-aware IMPLEMENT finalization (threshold alone cannot withdraw the tools)
 T064 IMPLEMENT finalization waits for a stopped writer (never refuse a write mid-change)
 T065 enter the bounded fix loop on a failing validation, not only on review findings
+T066 run FIX through the phased completion loop (share it with IMPLEMENT)
+T067 persist a failed run's per-turn trace to an operator sink
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

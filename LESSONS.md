@@ -199,6 +199,24 @@ gate already knew how to escalate an exhausted, still-failing check -- the loop
 simply never fed it one. A loop's trigger has to cover every failure the lifecycle
 documents, not just the one that was easiest to wire.
 
+## A capability that acts needs the same ending as the one it repairs
+
+IMPLEMENT got a completion path (T063/T064); FIX did not, because FIX was not the
+problem yet -- and the earlier brief said not to touch it. When AHV2009's repair
+finally ran, FIX made the change and then ran the build and tests itself until the
+ceiling: the identical failure, one capability over. The completion discipline
+belongs to every capability that mutates the repository, not just the one that
+failed first. When a fix is proven for one role, assume its siblings need it too.
+
+## A failure you cannot see is a failure you cannot diagnose
+
+The harness kept a per-turn trace, but it went to stderr -- and the command
+provider discards stderr, so every failure arrived as a one-line reason and the
+turns that produced it were gone. Diagnosing AHV2009 meant re-running by hand with
+a shell redirect. A diagnostic has to survive the boundary it crosses: when the
+layer that consumes your output drops the channel it is on, give the trace a sink
+the operator selects, exactly as the audit trail already had.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding

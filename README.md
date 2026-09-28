@@ -487,18 +487,21 @@ adapter only. It is expected to be superseded by
 [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
 
 The loop is bounded per capability, not by one global number: `REVIEW`,
-`DESIGN_TESTS`, and `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), and
-`FIX` 24 with the mutation tools. Two capabilities run in phases instead of one
-flat loop:
+`DESIGN_TESTS`, and `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), while
+the phased mutating capabilities `IMPLEMENT` and `FIX` get 24. Two kinds of
+capability run in phases instead of one flat loop:
 
 - `PLAN` — bounded read-only _discovery_ (8 turns), then a tool-free _synthesis_
   (2 turns) that must produce the document. When discovery is exhausted the model
   is told exploration is over and may no longer use tools, so a PLAN can no longer
   fail by exploring forever. An early final response still completes the plan
   immediately.
-- `IMPLEMENT` — _discover_ enough context, _change_ (the first successful
-  `write_file`/`create_file` and any targeted checks), then _finalize_. Around six
-  tool interactions the model is nudged to start implementing. Finalization is
+- `IMPLEMENT` / `FIX` — _discover_ enough context, _change_ (the first successful
+  `write_file`/`create_file` and any targeted checks), then _finalize_. The two
+  mutating capabilities share this loop, so a FIX that has written its repair is
+  nudged to hand back instead of running the build and tests itself until the
+  ceiling. Around six tool
+  interactions the model is nudged to start implementing. Finalization is
   **mutation-aware and waits for a stopped writer**: crossing eighteen interactions
   only withdraws the tools once a repository change has been observed _and_ the
   model has stopped writing for a short completion window — a model still writing a
@@ -514,11 +517,14 @@ flat loop:
   or being cut off mid-change.
 
 A capability that repeats a non-progressing action is told once to conclude, then
-stopped early with a diagnostic. Neither PLAN nor IMPLEMENT owns final validation
-— SOP performs independent validation and review after it returns. A failed run
-also writes a safe per-turn diagnostic trail to stderr (capability, phase,
-iteration, tool, request, progress, recovery); it never contains prompts, file
-contents, or secrets.
+stopped early with a diagnostic. Neither PLAN nor the phased capabilities own
+final validation — SOP performs independent validation and review after they
+return. A failed run also writes a safe per-turn diagnostic trail to stderr
+(capability, phase, iteration, tool, request, progress, recovery); it never
+contains prompts, file contents, or secrets. SOP's command provider discards that
+stderr, so set `SOP_OLLAMA_TRACE_LOG` to a file to keep the trace of every failed
+run, and `SOP_TOOL_AUDIT_LOG` to keep the tool audit. Both are operator-set
+sinks; neither is SOP's state database.
 
 ### Command agent outcomes
 
