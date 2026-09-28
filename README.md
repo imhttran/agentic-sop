@@ -462,6 +462,28 @@ SOP
 
 This keeps the core application independent of any specific provider or harness.
 
+### Bootstrap harness: a local DeepSeek coding agent
+
+This repository ships a small, temporary command-agent harness so SOP can drive its
+own plan with a local Ollama model instead of a hosted coding agent:
+
+```bash
+export SOP_AGENT_PROVIDER=command
+export SOP_AGENT_COMMAND="sh scripts/sop-deepseek-agent.sh"
+export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud   # the harness default
+
+sop run docs/PLAN-Agent-Harness-V2.md
+```
+
+`scripts/sop-deepseek-agent.sh` builds `cmd/sop-deepseek-agent` and runs it with the
+current directory as the repository. The model gets a small set of controlled tools
+(`read_file`, `write_file`, `create_file`, `list_files`, `search_files`, an
+allow-listed `run_command`, `git_status`, `git_diff`) and a bounded tool loop; it
+cannot escape the repository, modify `.agent-sdlc` state, or run history-changing
+or destructive commands. SOP still owns validation, review, retries, and human
+gates — the harness is an implementation adapter only. It is expected to be
+superseded by [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
+
 ### Command agent outcomes
 
 So SOP can act deterministically instead of guessing from prose, a command agent

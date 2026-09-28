@@ -152,3 +152,16 @@ validation pass, and the agent is invoked only when the validation actually fail
 -- handed the failure instead of rediscovering it. The optimisation is safe because
 it reorders work, it does not skip a gate: the task still passes only when its
 configured checks pass.
+
+## A bootstrap tool is an adapter, not a second engine
+
+When SOP needed to drive a plan with a local model instead of a hosted coding
+agent, the tempting shape was a new runner. Keeping it an _adapter_ — the same
+command-agent protocol, SOP still the only authority — meant it could borrow the
+request/response contract and the shared command policy, add nothing to the
+workflow, and be deleted once the real harness lands. The boundary that made it
+safe was small and testable: canonicalize every path so a symlink cannot leave the
+repository, refuse writes to the state directory, tokenize commands instead of
+trusting a shell, and bound the loop. One real-run surprise was worth keeping:
+cloud models occasionally answer with reasoning and no content, so an empty turn
+is re-requested a bounded number of times rather than treated as a hard failure.
