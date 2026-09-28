@@ -677,6 +677,7 @@ T057 resume the active task in `sop run` (one persisted-state→action rule shar
 T058 make the Ollama agent capability-aware (per-capability loop bounds, tool policy, no-progress stop)
 T059 two-phase PLAN (bounded read-only discovery → tool-free synthesis)
 T060 ground a completed IMPLEMENT/FIX outcome's changes_expected in the working tree
+T061 SOP performance measurement (stage timing + counts) and safe validation/review reuse
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

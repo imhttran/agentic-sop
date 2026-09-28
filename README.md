@@ -1032,13 +1032,18 @@ any task.
 
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
-`review.json`, `report.md`, `report.json`, `state.json`), so a run stays
-inspectable. Git is the authority on what changed; validation fails fast before
-review; a blocking finding is sent back to the agent and then validation and
+`review.json`, `report.md`, `report.json`, `metrics.json`, `state.json`), so a run
+stays inspectable. Git is the authority on what changed; validation fails fast
+before review; a blocking finding is sent back to the agent and then validation and
 review run again, up to `quality.max_fix_cycles` times — exhausting the budget
 yields `NEEDS_HUMAN` rather than looping forever. The quality gate is
 deterministic. `sop run` **stops at the human gate** and never commits, pushes,
 or merges.
+
+Each task ends with a concise performance line, and `sop report` summarises where a
+run spent its time. See [docs/PERFORMANCE.md](docs/PERFORMANCE.md) for the
+measurement model, the verify-first savings, and the safety rules for reusing
+validation and review.
 
 ## `report`
 
