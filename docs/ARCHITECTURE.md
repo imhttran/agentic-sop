@@ -260,8 +260,10 @@ or `failed`. SOP acts on it directly: a claimed change with none produced is a
 failure, a legitimate no-change completion still runs the configured validation
 before it passes, and a human boundary stops with `NEEDS_HUMAN` (the task is
 requeued — bounded by `max_attempts`, default 3 — so a later run retries it; a
-`BLOCKED` task can be requeued explicitly with `sop retry <task-id>`). The outcome
-is never inferred from prose.
+retry that reproduces the same outcome is “no progress” and spends no attempt,
+while a retry that changes its outcome spends one; a `BLOCKED` task can be
+requeued explicitly with `sop retry <task-id>`). The outcome is never inferred
+from prose.
 
 ### Validation Runner
 
@@ -572,8 +574,11 @@ lifecycle (`PR_OPEN` … `DONE`). A dependency is satisfied by `LOCAL_DONE` (loc
 or `MERGED`/`DONE` (remote). Local runs never fabricate remote states.
 
 A human boundary (`NEEDS_HUMAN`) is not terminal: the task is requeued to
-`PLANNED` so a later run retries it. A hard failure (including a claimed change
-with none produced) leaves the task `BLOCKED`.
+`PLANNED` so a later run retries it. A retry that changes its outcome spends one
+attempt against `max_attempts`; a retry that reproduces the same outcome is “no
+progress” and spends nothing, so the task stays runnable rather than burning its
+budget. A hard failure (including a claimed change with none produced) leaves the
+task `BLOCKED`.
 
 Any actionable failure can transition to `FIX_REQUIRED`; exhausted
 retries transition to `BLOCKED`.

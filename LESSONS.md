@@ -119,3 +119,14 @@ a dependency check. The fix was a distinct terminal state (`LOCAL_DONE`) for loc
 completion, with the remote path left intact for when a real PR exists. The same
 principle governs plan preparation: a stale machine plan is reconciled explicitly
 (or stopped with `NEEDS_HUMAN`), never silently rebuilt over existing history.
+
+## A retry budget measures progress, not attempts
+
+Bounding a `needs_human` requeue by `max_attempts` stopped an infinite loop but
+still counted retries that changed nothing — a harness that kept asking for the
+same authorization burned the budget and blocked a task no human had even been
+given the chance to fix. The budget should measure progress: a retry that
+reproduces the previous outcome spends no attempt and leaves the task runnable,
+while a retry that moves the outcome forward spends one. That required comparing
+the outcome (its decisive reasons) against the previous attempt, persisted beside
+the run so it survives a restart — a durable signature, not a timestamp.
