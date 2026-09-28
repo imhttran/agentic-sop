@@ -1,6 +1,18 @@
 # AI Development Harness — Implementation Plan
 
-**Status:** Draft v1  
+> **Two editions of one roadmap.** This file is the **fuller** edition. Its sibling
+> [`PLAN-wrapup.md`](PLAN-wrapup.md) is a **condensed** edition: both share T001–T032
+> (identical numbers and the same work), then diverge — this file expands the
+> decision layer (T033–T046) before the operational tasks, while the wrap-up file
+> condenses it and continues straight through (for example "Command Policy" is T052
+> here but T043 there). A `T0NN` reference elsewhere is only meaningful against the
+> file it names: `docs/tasks/TASK-030..040` cite this file, `TASK-024..029` cite the
+> wrap-up file.
+>
+> Neither is actively maintained. The roadmap of record is [`PLAN.md`](PLAN.md)
+> (Stage 24), and the executed task sequence is `docs/tasks/TASK-0NN.md`.
+
+**Status:** Draft v1
 **Companion:** `PRD.md`
 
 ---
