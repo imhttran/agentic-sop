@@ -30,6 +30,8 @@ type TraceRecord struct {
 const (
 	progressOK     = "ok"
 	progressRepeat = "repeat"
+	// progressDenied marks a turn whose tool call was refused without executing.
+	progressDenied = "denied"
 )
 
 // TraceLog is a bounded, inspectable per-turn diagnostic trail. It is

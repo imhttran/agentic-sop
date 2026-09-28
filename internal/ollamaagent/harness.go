@@ -159,12 +159,17 @@ func (h *Harness) FlushAudit(w io.Writer) {
 
 // Execute runs the request's capability and returns the model's final JSON object
 // as canonical JSON, ready for SOP to parse. PLAN runs a two-phase discovery →
-// synthesis loop; every other capability runs the generic bounded loop.
+// synthesis loop, IMPLEMENT runs a three-phase discover → change → finalize loop,
+// and every other capability runs the generic bounded loop.
 func (h *Harness) Execute(ctx context.Context, req agent.Request) (string, error) {
-	if req.Capability == agent.Plan {
+	switch req.Capability {
+	case agent.Plan:
 		return h.executePlan(ctx, req)
+	case agent.Implement:
+		return h.executeImplement(ctx, req)
+	default:
+		return h.executeLoop(ctx, req)
 	}
-	return h.executeLoop(ctx, req)
 }
 
 // executeLoop is the generic single-phase tool loop. It is bounded by the
@@ -266,9 +271,10 @@ const noProgressThreshold = 3
 
 // Termination reasons, reported in both the error and the trace.
 const (
-	terminationIteration  = "iteration_limit"
-	terminationNoProgress = "no_progress"
-	terminationSynthesis  = "synthesis_limit"
+	terminationIteration    = "iteration_limit"
+	terminationNoProgress   = "no_progress"
+	terminationSynthesis    = "synthesis_limit"
+	terminationFinalization = "finalization_limit"
 )
 
 // turnProgress tracks consecutive identical turns so the loop can tell a
@@ -561,6 +567,291 @@ func (h *Harness) recordPlanTransition(req agent.Request) {
 func (h *Harness) planSynthesisLimitError(req agent.Request, discovered, synthesis int) error {
 	return fmt.Errorf("Ollama agent %s failed during synthesis (model=%s, discovery_tool_calls=%d, synthesis_turns=%d, termination=%s)",
 		req.Capability, h.cfg.Model, discovered, synthesis, terminationSynthesis)
+}
+
+// IMPLEMENT runs a three-phase loop: bounded DISCOVERY (read the repository just
+// enough to make the change), CHANGE (make the change and targeted checks), then
+// FINALIZE (no repository tools; return the structured SOP outcome). Phase state
+// is scoped to a single executeImplement call — it is not SOP workflow state and
+// is never persisted.
+type implementPhase int
+
+const (
+	implDiscover implementPhase = iota
+	implChange
+	implFinalize
+)
+
+// label renders the phase for the trace and diagnostics.
+func (p implementPhase) label() string {
+	switch p {
+	case implChange:
+		return "CHANGE"
+	case implFinalize:
+		return "FINALIZE"
+	default:
+		return "DISCOVER"
+	}
+}
+
+// IMPLEMENT phase bounds. They are interaction ceilings, not targets: a
+// productive run finishes well before them. The finalize threshold sits below the
+// capability's hard ceiling (maxIterationsImplement) so the normal completion
+// mechanism is finalization, not exhausting the iteration budget.
+const (
+	// implementNudgeAfter is how many tool interactions of discovery are allowed
+	// before the model is nudged to begin implementing. It is a soft transition:
+	// the read/search tools stay available.
+	implementNudgeAfter = 6
+	// implementFinalizeAfter is the tool-interaction count at which repository
+	// tools are withdrawn and the model must return its outcome.
+	implementFinalizeAfter = 18
+	// implementFinalizeTurns is how many model turns are allowed in FINALIZE before
+	// the invocation fails with a finalization diagnostic.
+	implementFinalizeTurns = 2
+)
+
+// IMPLEMENT phase instructions. They are injected as suffixes on a tool result so
+// the transcript keeps alternating assistant/user turns.
+const (
+	implementChangeInstruction = `The requested implementation has begun.
+
+Focus only on completing the change.
+
+You may inspect relevant files, inspect the diff, or run targeted checks when
+necessary. Do not resume broad repository exploration.
+
+Once the requested change is implemented, return the required structured
+execution outcome immediately. SOP will perform independent validation after you
+return.`
+
+	implementNudge = `You have gathered substantial repository context.
+
+Begin implementing the requested change now.
+
+Only inspect additional files when they are directly necessary to complete the
+implementation. Do not continue broad repository exploration.`
+
+	implementFinalizeInstruction = `Implementation work is complete for this invocation.
+
+Do not request additional tools.
+
+Return the required structured execution outcome now using the work and
+repository context already available.
+
+SOP will independently run build, test, lint, review, and quality gates after
+you return. Do not continue trying to prove the implementation yourself.`
+
+	implementFinalizeCorrection = `Implementation tool execution is complete for this invocation.
+
+No additional tools are available.
+
+Return the required structured execution outcome now. SOP will perform
+independent validation.`
+
+	implementChangeEvent   = "→ CHANGE"
+	implementFinalizeEvent = "→ FINALIZE"
+)
+
+// implementState is the invocation-scoped phase state of one IMPLEMENT run. It is
+// never stored on the shared Harness, so one invocation cannot leak mutation or
+// phase state into another.
+type implementState struct {
+	phase         implementPhase
+	mutated       bool // a controlled mutation succeeded during this invocation
+	interactions  int  // tool interactions executed this invocation
+	nudged        bool // the discovery nudge has been sent
+	finalizeTurns int  // model turns consumed in FINALIZE
+}
+
+// isMutationTool reports whether a successful call to name changes the
+// repository, which moves IMPLEMENT from discovery into change.
+func isMutationTool(name string) bool {
+	return name == toolharness.ToolWriteFile || name == toolharness.ToolCreateFile
+}
+
+// executeImplement runs the three-phase IMPLEMENT loop. Discovery and change may
+// use the controlled tools; at the finalize threshold those tools are withdrawn
+// and the model must return the structured outcome. A final response ends the
+// invocation in any phase, so early completion is preserved, and the capability's
+// MaxIterations stays the hard safety ceiling.
+func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (string, error) {
+	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
+	messages := []chatMessage{
+		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "user", Content: userPrompt(req)},
+	}
+
+	st := &implementState{phase: implDiscover}
+	var (
+		progress  turnProgress
+		toolCalls int
+		lastTool  string
+		lastReq   string
+	)
+
+	for iteration := 1; iteration <= policy.MaxIterations; iteration++ {
+		// FINALIZE has a small turn allowance: a model that keeps asking for tools
+		// after implementation is complete is stopped with a phase-specific reason
+		// rather than the generic iteration limit.
+		if st.phase == implFinalize && st.finalizeTurns >= implementFinalizeTurns {
+			h.trace.Record(TraceRecord{
+				Capability:  string(req.Capability),
+				Phase:       st.phase.label(),
+				Iteration:   iteration,
+				Termination: terminationFinalization,
+			})
+			return "", h.finalizeLimitError(req, st, lastTool, lastReq)
+		}
+
+		raw, calls, err := h.chat(ctx, messages)
+		if err != nil {
+			return "", err
+		}
+		name, args, isTool, final, err := turnToolCall(raw, calls)
+		if err != nil {
+			if !errors.Is(err, errNarrate) {
+				return "", err
+			}
+			if st.phase == implFinalize {
+				st.finalizeTurns++
+			}
+			recovery, terminate := progress.observe(narrationFingerprint(req.Capability))
+			h.recordImplementTurn(req, st.phase, iteration, "narrate", "", progress.label(), recovery, terminate)
+			if terminate {
+				return "", h.noProgressError(req, iteration, "narrate", "")
+			}
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: raw},
+				chatMessage{Role: "user", Content: nudgeText(recovery)},
+			)
+			continue
+		}
+		if !isTool {
+			h.recordImplementTurn(req, st.phase, iteration, "outcome", "", progressOK, false, false)
+			encoded, err := json.Marshal(final)
+			if err != nil {
+				return "", fmt.Errorf("encode final response: %w", err)
+			}
+			return string(encoded), nil
+		}
+
+		// No repository tools during FINALIZE: refuse, correct, and count the turn
+		// against the finalization allowance rather than executing it.
+		if st.phase == implFinalize {
+			st.finalizeTurns++
+			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+			h.tools.RecordDenied(name, args, "tools are unavailable during IMPLEMENT finalization")
+			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progressDenied, false, false)
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: implementFinalizeCorrection},
+			)
+			continue
+		}
+
+		// Capability policy: keep the invariant that a capability only reaches the
+		// tools its policy allows, even though IMPLEMENT currently allows them all.
+		if !policy.Allows(name) {
+			detail := fmt.Sprintf("tool %q is not available for %s; allowed tools: %s", name, req.Capability, describeTools(policy))
+			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+			h.tools.RecordDenied(name, args, detail)
+			recovery, terminate := progress.observe(actionFingerprint(name, args, detail, nil))
+			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progress.label(), recovery, terminate)
+			if terminate {
+				return "", h.noProgressError(req, iteration, lastTool, lastReq)
+			}
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + recoverySuffix(recovery)},
+			)
+			continue
+		}
+
+		if toolCalls >= h.cfg.MaxToolCalls {
+			return "", fmt.Errorf("tool-call limit reached (%d tool calls); the model did not finish", h.cfg.MaxToolCalls)
+		}
+		toolCalls++
+		st.interactions++
+
+		result, toolErr := h.tools.Run(ctx, name, args)
+		lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+
+		// A successful controlled mutation is what moves the invocation out of
+		// discovery; a failed or denied write never counts.
+		justMutated := toolErr == nil && isMutationTool(name)
+		if justMutated {
+			st.mutated = true
+		}
+
+		recovery, terminate := progress.observe(actionFingerprint(name, args, result, toolErr))
+		if justMutated && st.phase == implDiscover {
+			st.phase = implChange
+			h.recordImplementTransition(req, implementChangeEvent)
+		}
+		h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progress.label(), recovery, terminate)
+		if terminate {
+			return "", h.noProgressError(req, iteration, lastTool, lastReq)
+		}
+
+		// Phase guidance rides on the tool result so turns keep alternating.
+		var advice []string
+		if recovery {
+			advice = append(advice, progressReminder)
+		}
+		switch {
+		case justMutated:
+			advice = append(advice, implementChangeInstruction)
+		case st.phase == implDiscover && !st.nudged && st.interactions >= implementNudgeAfter:
+			st.nudged = true
+			advice = append(advice, implementNudge)
+		}
+		if st.phase != implFinalize && st.interactions >= implementFinalizeAfter {
+			st.phase = implFinalize
+			advice = append(advice, implementFinalizeInstruction)
+			h.recordImplementTransition(req, implementFinalizeEvent)
+		}
+
+		content := toolResultMessage(name, result, toolErr)
+		for _, a := range advice {
+			content += "\n\n" + a
+		}
+		messages = append(messages,
+			chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+			chatMessage{Role: "user", Content: content},
+		)
+	}
+	return "", h.limitError(req, policy, lastTool, lastReq)
+}
+
+// recordImplementTurn appends one safe trace entry for an IMPLEMENT turn.
+func (h *Harness) recordImplementTurn(req agent.Request, phase implementPhase, iteration int, tool, request, progress string, recovery, terminate bool) {
+	rec := TraceRecord{
+		Capability: string(req.Capability),
+		Phase:      phase.label(),
+		Iteration:  iteration,
+		Tool:       tool,
+		Request:    request,
+		Progress:   progress,
+		Recovery:   recovery,
+	}
+	if terminate {
+		rec.Termination = terminationNoProgress
+	}
+	h.trace.Record(rec)
+}
+
+// recordImplementTransition marks a phase change in the trace.
+func (h *Harness) recordImplementTransition(req agent.Request, event string) {
+	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: event})
+}
+
+// finalizeLimitError reports that IMPLEMENT kept asking for tools after its
+// finalization allowance without returning an outcome. It is deliberately
+// phase-specific rather than the generic iteration-limit message.
+func (h *Harness) finalizeLimitError(req agent.Request, st *implementState, lastTool, lastRequest string) error {
+	return fmt.Errorf("Ollama agent %s did not finalize (model=%s, mutation_observed=%t, tool_calls=%d, finalization_turns=%d, termination=%s%s)",
+		req.Capability, h.cfg.Model, st.mutated, st.interactions, st.finalizeTurns, terminationFinalization, actionSuffix(lastTool, lastRequest))
 }
 
 // maxEmptyRetries bounds how many times an empty model turn is re-requested

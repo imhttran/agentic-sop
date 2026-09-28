@@ -403,18 +403,23 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 	}
 }
 
-func TestImplementStopsAtCapabilityBudget(t *testing.T) {
+// TestImplementStopsAtFinalizationLimit covers a model that keeps making
+// distinct tool calls without returning an outcome. IMPLEMENT must not run to its
+// 24-iteration hard ceiling: at the finalization threshold its tools are
+// withdrawn and a model that still refuses to finalize is stopped, well before
+// the ceiling, with a phase-specific reason.
+func TestImplementStopsAtFinalizationLimit(t *testing.T) {
 	dir := t.TempDir()
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
 
 	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
-		t.Fatalf("err = %v, want an iteration_limit termination", err)
+	if err == nil || !strings.Contains(err.Error(), "termination=finalization_limit") {
+		t.Fatalf("err = %v, want a finalization_limit termination", err)
 	}
-	if !strings.Contains(err.Error(), "after 24 iterations") {
-		t.Errorf("err = %v, want IMPLEMENT capped at 24, not the old universal 48", err)
+	if !strings.Contains(err.Error(), "tool_calls=18") || !strings.Contains(err.Error(), "finalization_turns=2") {
+		t.Errorf("err = %v, want the observed tool and finalization counts", err)
 	}
 }
 
@@ -810,6 +815,302 @@ func TestImplementNormalCompletion(t *testing.T) {
 	}
 }
 
+// --- IMPLEMENT phases: DISCOVER → CHANGE → FINALIZE ---
+
+// seedToolFiles creates n distinct files so the harness's read calls succeed,
+// making a discovery fixture representative rather than error-driven.
+func seedToolFiles(t *testing.T, dir, prefix string, n int) {
+	t.Helper()
+	for i := 0; i < n; i++ {
+		writeFile(t, dir, fmt.Sprintf("%s/f%d.go", prefix, i), "package pkg\n")
+	}
+}
+
+func TestImplementEarlyCompletionSkipsFinalization(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	_, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"status":"completed","summary":"done","changes_expected":true}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	records := h.TraceRecords()
+	if hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("an early completion must not force finalization: %+v", records)
+	}
+	if got := countPhase(records, "FINALIZE"); got != 0 {
+		t.Errorf("finalize turns = %d, want 0", got)
+	}
+	if got := countPhase(records, "CHANGE"); got != 2 {
+		t.Errorf("change turns = %d, want 2 (write then outcome)", got)
+	}
+}
+
+func TestImplementDiscoveryNudge(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", implementNudgeAfter)
+	responses := distinctToolCalls(implementNudgeAfter)
+	responses = append(responses, `{"status":"completed","summary":"done","changes_expected":false}`)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+
+	// The nudge is appended to the sixth tool result, so it reaches the model on
+	// the seventh turn's request.
+	if text := messageText(fake.request(implementNudgeAfter)); !strings.Contains(text, "Begin implementing the requested change now") {
+		t.Errorf("the discovery nudge was not sent:\n%s", text)
+	}
+	if hasEvent(h.TraceRecords(), implementChangeEvent) {
+		t.Error("plain discovery is not a mutation and must not enter CHANGE")
+	}
+}
+
+func TestImplementMutationTransitionsToChange(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	fake, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"status":"completed","summary":"done","changes_expected":true}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	records := h.TraceRecords()
+	if !hasEvent(records, implementChangeEvent) {
+		t.Errorf("a successful write must move to CHANGE: %+v", records)
+	}
+	if got := countPhase(records, "DISCOVER"); got != 1 {
+		t.Errorf("discovery turns = %d, want 1", got)
+	}
+	if text := messageText(fake.request(2)); !strings.Contains(text, "The requested implementation has begun") {
+		t.Errorf("the change guidance was not sent:\n%s", text)
+	}
+}
+
+func TestImplementFailedMutationNotCounted(t *testing.T) {
+	dir := t.TempDir()
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"../escape.txt","content":"x"}}`,
+		`{"status":"completed","summary":"nothing written","changes_expected":false}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if hasEvent(h.TraceRecords(), implementChangeEvent) {
+		t.Error("a failed write is not a mutation")
+	}
+}
+
+func TestImplementDeniedMutationNotCounted(t *testing.T) {
+	dir := t.TempDir()
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":".agent-sdlc/state.db","content":"x"}}`,
+		`{"status":"completed","summary":"denied","changes_expected":false}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if hasEvent(h.TraceRecords(), implementChangeEvent) {
+		t.Error("a denied write is not a mutation")
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied audit records = %d, want 1", denied)
+	}
+}
+
+func TestImplementForcedFinalization(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", implementFinalizeAfter)
+	responses := distinctToolCalls(implementFinalizeAfter)
+	responses = append(responses, `{"status":"completed","summary":"done","changes_expected":false}`)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	records := h.TraceRecords()
+	if !hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("finalization was not entered: %+v", records)
+	}
+	if got := countPhase(records, "FINALIZE"); got != 1 {
+		t.Errorf("finalize turns = %d, want 1 (the outcome)", got)
+	}
+	if text := messageText(fake.request(implementFinalizeAfter)); !strings.Contains(text, "Implementation work is complete for this invocation") {
+		t.Errorf("the finalize instruction was not sent:\n%s", text)
+	}
+	if got := len(h.AuditRecords()); got != implementFinalizeAfter {
+		t.Errorf("executed tools = %d, want %d (tools withdrawn during FINALIZE)", got, implementFinalizeAfter)
+	}
+}
+
+func TestImplementToolRequestDuringFinalizationIsDenied(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", implementFinalizeAfter)
+	responses := distinctToolCalls(implementFinalizeAfter)
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,
+		`{"status":"completed","summary":"done","changes_expected":false}`,
+	)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied records = %d, want 1 (the finalize tool request)", denied)
+	}
+	if got := len(h.AuditRecords()); got != implementFinalizeAfter+1 {
+		t.Errorf("audit records = %d, want %d executed + 1 denied", got, implementFinalizeAfter)
+	}
+	if text := messageText(fake.request(implementFinalizeAfter + 1)); !strings.Contains(text, "No additional tools are available") {
+		t.Errorf("the finalize correction was not sent:\n%s", text)
+	}
+	sawDenied := false
+	for _, r := range h.TraceRecords() {
+		if r.Progress == progressDenied {
+			sawDenied = true
+		}
+	}
+	if !sawDenied {
+		t.Error("the trace does not show a denied finalize turn")
+	}
+}
+
+func TestImplementInvocationIsolation(t *testing.T) {
+	dir := t.TempDir()
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"status":"completed","summary":"mutated","changes_expected":true}`,
+		`{"tool":"read_file","args":{"path":"out.txt"}}`,
+		`{"status":"completed","summary":"no change","changes_expected":false}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("first Execute failed: %v", err)
+	}
+	first := h.TraceRecords()
+	if !hasEvent(first, implementChangeEvent) {
+		t.Error("the first invocation mutated and should enter CHANGE")
+	}
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("second Execute failed: %v", err)
+	}
+	second := h.TraceRecords()[len(first):]
+	if hasEvent(second, implementChangeEvent) {
+		t.Error("the second invocation inherited mutation state from the first")
+	}
+}
+
+func TestImplementTraceRendering(t *testing.T) {
+	dir := t.TempDir()
+	responses := []string{readToolCall(0), readToolCall(1)}
+	responses = append(responses, `{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`)
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-3)...)
+	responses = append(responses, `{"status":"completed","summary":"done","changes_expected":true}`)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	out := b.String()
+	t.Logf("trace:\n%s", out)
+	for _, want := range []string{
+		"IMPLEMENT DISCOVER #1 read_file path=pkg/f0.go [ok]",
+		"IMPLEMENT → CHANGE",
+		"IMPLEMENT CHANGE #3 write_file path=out.txt [ok]",
+		"IMPLEMENT → FINALIZE",
+		"IMPLEMENT FINALIZE #19 outcome [ok]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trace missing %q:\n%s", want, out)
+		}
+	}
+}
+
+// TestImplementAHV2008ShapeFixture approximates AHV2008: IMPLEMENT inspects the
+// repository, makes a change, keeps doing targeted inspection, enters FINALIZE,
+// and returns a structured outcome — so SOP regains control instead of receiving
+// "IMPLEMENT did not complete after 24 iterations". No live provider is used and
+// real SOP state is never touched.
+func TestImplementAHV2008ShapeFixture(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "internal/cli/cli.go", "package cli\n// DefaultAgent\n")
+	writeFile(t, dir, "internal/agent/agent.go", "package agent\n// Capability\n")
+	responses := []string{
+		`{"tool":"list_files","args":{"path":"."}}`,
+		`{"tool":"search_files","args":{"pattern":"DefaultAgent"}}`,
+		`{"tool":"read_file","args":{"path":"internal/cli/cli.go"}}`,
+		`{"tool":"read_file","args":{"path":"internal/agent/agent.go"}}`,
+		`{"tool":"git_status","args":{}}`,
+		`{"tool":"write_file","args":{"path":"internal/cli/cli.go","content":"package cli\n// DefaultAgent selected\n"}}`,
+	}
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-6)...)
+	responses = append(responses, `{"status":"completed","summary":"Implemented default agent selection.","changes_expected":true}`)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("IMPLEMENT did not return control to SOP: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q, want a completed outcome", content)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "internal/cli/cli.go")); !strings.Contains(string(got), "DefaultAgent selected") {
+		t.Errorf("cli.go = %q, want the mutation applied", got)
+	}
+	records := h.TraceRecords()
+	if !hasEvent(records, implementChangeEvent) || !hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("trace missing phase transitions: %+v", records)
+	}
+}
+
 // --- No-progress detection ---
 
 func TestRepeatedToolActionStopsEarly(t *testing.T) {
@@ -870,11 +1171,24 @@ func TestTraceIsSafeAndRecordsTurns(t *testing.T) {
 		t.Fatalf("Execute failed: %v", err)
 	}
 	records := h.TraceRecords()
-	if len(records) != 1 {
-		t.Fatalf("trace records = %d, want 1", len(records))
+	if len(records) != 3 {
+		t.Fatalf("trace records = %d, want 3 (change transition, write, outcome): %+v", len(records), records)
 	}
-	if records[0].Tool != toolharness.ToolWriteFile || records[0].Iteration != 1 || records[0].Progress != progressOK {
-		t.Errorf("trace record = %+v", records[0])
+	if !hasEvent(records, implementChangeEvent) {
+		t.Errorf("trace missing the change transition: %+v", records)
+	}
+	var write *TraceRecord
+	for i := range records {
+		if records[i].Tool == toolharness.ToolWriteFile {
+			write = &records[i]
+		}
+	}
+	if write == nil || write.Phase != "CHANGE" || write.Iteration != 1 || write.Progress != progressOK {
+		t.Errorf("write trace record = %+v", write)
+	}
+	last := records[len(records)-1]
+	if last.Tool != "outcome" || last.Phase != "CHANGE" {
+		t.Errorf("final trace record = %+v, want the outcome under CHANGE", last)
 	}
 	for _, r := range records {
 		if strings.Contains(r.Request, secret) {
