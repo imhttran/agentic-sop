@@ -166,12 +166,18 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	_ = rn.Write("plan.md", plan.RenderMarkdown())
 
 	// Implement: the agent edits the repository; its summary is recorded but Git
-	// remains the authority on what changed.
+	// remains the authority on what changed. If a previous attempt stopped (a human
+	// boundary or a failure), give the agent that outcome so it can address the
+	// blocker rather than repeat the request that stopped it.
 	_ = rn.SetStage(runpkg.Implementing)
+	input := plan.RenderMarkdown()
+	if sig, had := rn.ReadAttempt(); had {
+		input = priorAttemptNote(sig) + "\n" + input
+	}
 	impl, err := a.Generate(ctx, agent.Request{
 		Capability:         agent.Implement,
 		Task:               spec.Render(),
-		Input:              plan.RenderMarkdown(),
+		Input:              input,
 		OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 	})
 	if err != nil {
@@ -340,6 +346,13 @@ func loadConfigOrDefault(dir string) (config.Config, error) {
 		return config.Default(), nil
 	}
 	return config.Config{}, err
+}
+
+// priorAttemptNote renders the context a retried task is given: why the previous
+// attempt stopped, so the agent can address the blocker instead of repeating the
+// request that stopped it.
+func priorAttemptNote(signature string) string {
+	return "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + signature + "\n"
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the blocking

@@ -190,8 +190,13 @@ func guardCapability(a agent.Agent, capability agent.Capability) error {
 }
 
 // outcomeSignature identifies an attempt's outcome so a repeat can be detected.
+// It is human-readable, because the recorded signature also becomes the context a
+// retried task is given for why the previous attempt stopped.
 func outcomeSignature(gate quality.Result) string {
-	return string(gate.Decision) + "|" + strings.Join(gate.Reasons, "; ")
+	if len(gate.Reasons) == 0 {
+		return string(gate.Decision)
+	}
+	return string(gate.Decision) + ": " + strings.Join(gate.Reasons, "; ")
 }
 
 // outcomeReason returns the first reason, or the decision.
@@ -355,6 +360,9 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
 		}
+		// Record why the attempt failed so an explicit `sop retry` gives the next
+		// attempt that context instead of a stale or missing note.
+		_ = rn.RecordAttempt(outcomeSignature(res.gate))
 		fmt.Fprintf(stdout, "%s BLOCKED\n", task.ID)
 		return exitError
 	}

@@ -164,7 +164,7 @@ Commands:
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
   report    print a concise summary of the latest run
-  retry     requeue a BLOCKED task so the next run retries it
+  retry     requeue a BLOCKED task so the next run retries it (--all for every task)
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   version   print the CLI version

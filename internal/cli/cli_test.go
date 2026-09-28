@@ -1801,6 +1801,65 @@ func TestRunRetryBudgetExhausted(t *testing.T) {
 	}
 }
 
+func TestRunRetryAll(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "a", Status: domain.BLOCKED, BlockedReason: domain.REVIEW_UNRESOLVED, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "T002", Title: "b", Status: domain.BLOCKED, BlockedReason: domain.REVIEW_UNRESOLVED, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "T003", Title: "c", Status: domain.BLOCKED, BlockedReason: domain.RETRIES_EXHAUSTED, Attempt: 3, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "T004", Title: "d", Status: domain.PLANNED, MaxAttempts: 3})
+
+	code, stdout, stderr := runCLI(t, dir, "retry", "--all")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	for _, id := range []string{"T001", "T002"} {
+		if !strings.Contains(stdout, "requeued "+id) {
+			t.Errorf("stdout missing %s: %q", id, stdout)
+		}
+	}
+	if !strings.Contains(stdout, "requeued 2 task(s)") {
+		t.Errorf("stdout missing the summary: %q", stdout)
+	}
+	if !strings.Contains(stderr, "retry budget exhausted") {
+		t.Errorf("stderr should report the exhausted task, not skip it silently: %q", stderr)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	for id, want := range map[string]domain.TaskStatus{
+		"T001": domain.PLANNED,
+		"T002": domain.PLANNED,
+		"T003": domain.BLOCKED, // budget spent: left for the human to raise max_attempts
+		"T004": domain.PLANNED, // was not BLOCKED: untouched
+	} {
+		got, err := st.Get(id)
+		if err != nil {
+			t.Fatalf("get %s: %v", id, err)
+		}
+		if got.Status != want {
+			t.Errorf("%s status = %s, want %s", id, got.Status, want)
+		}
+	}
+}
+
+func TestRunRetryAllNothingBlocked(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "a", Status: domain.PLANNED, MaxAttempts: 3})
+
+	code, stdout, stderr := runCLI(t, dir, "retry", "--all")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "no BLOCKED tasks") {
+		t.Errorf("stdout = %q", stdout)
+	}
+}
+
 func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
@@ -1880,6 +1939,58 @@ func TestRunGraphNeedsHumanNoProgressDoesNotSpend(t *testing.T) {
 	}
 	if got.Attempt != 1 {
 		t.Errorf("attempt = %d, want 1 (a no-progress repeat must not spend)", got.Attempt)
+	}
+}
+
+// recordingAgent records every IMPLEMENT input it is given, so a test can assert
+// what context a retried task received.
+type recordingAgent struct {
+	outcome *agent.Outcome
+	inputs  []string
+}
+
+func (a *recordingAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	switch r.Capability {
+	case agent.Plan:
+		return agent.Response{Content: validPlanJSON}, nil
+	case agent.Implement:
+		a.inputs = append(a.inputs, r.Input)
+		return agent.Response{Content: "done", Outcome: a.outcome}, nil
+	case agent.Review:
+		return agent.Response{Content: `{"summary":"clean","findings":[]}`}, nil
+	default:
+		return agent.Response{Content: "{}"}, nil
+	}
+}
+
+func TestRunGraphCarriesPreviousOutcome(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+
+	// First attempt stops at a human boundary.
+	first := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs authorization"}}
+	if code, _, _ := runInjectedCLI(t, dir, "diff\n", first, "run"); code != exitError {
+		t.Fatalf("first run: code=%d, want %d", code, exitError)
+	}
+
+	// The retry is told why the previous attempt stopped, so the agent can address
+	// the blocker rather than repeat the request.
+	second := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs authorization"}}
+	if code, _, _ := runInjectedCLI(t, dir, "diff\n", second, "run"); code != exitError {
+		t.Fatalf("second run: code=%d, want %d", code, exitError)
+	}
+	if len(second.inputs) == 0 {
+		t.Fatal("no implement request recorded on the retry")
+	}
+	if input := second.inputs[0]; !strings.Contains(input, "Previous attempt") || !strings.Contains(input, "needs authorization") {
+		t.Errorf("retry context missing the previous outcome:\n%s", input)
+	}
+	if len(first.inputs) == 0 || strings.Contains(first.inputs[0], "Previous attempt") {
+		t.Errorf("the first attempt must not claim a previous outcome:\n%s", first.inputs)
 	}
 }
 
