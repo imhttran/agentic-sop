@@ -376,10 +376,15 @@ verify-first.
 
 ### Fix Loop
 
-When review leaves blocking findings, they are sent back to the agent with the
-plan and the current diff; validation and review then run again (regression
-protection). The loop is bounded by `quality.max_fix_cycles`; exhausting the
-budget yields `NEEDS_HUMAN`, never an unbounded agent loop.
+When validation fails, or when review leaves blocking findings, the failure is
+sent back to the agent with the plan, the deterministic validation failure (when
+a check failed), the blocking findings, and the current diff; validation and
+review then run again (regression protection). A failing build/test/lint is
+actionable in its own right — review is skipped when validation fails, so without
+this a broken check would never reach a fix. The loop is bounded by
+`quality.max_fix_cycles`; exhausting the budget yields `NEEDS_HUMAN`, never an
+unbounded agent loop. In graph execution a `NEEDS_HUMAN` result requeues the task
+for a later run (bounded by `max_attempts`) rather than blocking it outright.
 
 ### Graph Execution
 

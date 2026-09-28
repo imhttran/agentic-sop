@@ -189,6 +189,16 @@ finalization waits for the writer to stop, and a write offered during finalizati
 resumes the change instead of being refused. A state that was true once is not the
 state you are in now.
 
+## A repair loop must trigger on every failure it claims to repair
+
+The documented lifecycle was `(validate → review → gate → fix)*`, but the loop only
+entered FIX on a _review_ finding. Review is skipped when validation fails, so a
+broken build or a failing test was actionable nowhere: the task exited as a hard
+failure with `fix cycles: 0` while the agent was never asked to repair it. The
+gate already knew how to escalate an exhausted, still-failing check -- the loop
+simply never fed it one. A loop's trigger has to cover every failure the lifecycle
+documents, not just the one that was easiest to wire.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding

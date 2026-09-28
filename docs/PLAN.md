@@ -681,6 +681,7 @@ T061 SOP performance measurement (stage timing + counts) and safe validation/rev
 T062 IMPLEMENT discovery → change → finalize phases (bounded implementation returns to SOP)
 T063 mutation-aware IMPLEMENT finalization (threshold alone cannot withdraw the tools)
 T064 IMPLEMENT finalization waits for a stopped writer (never refuse a write mid-change)
+T065 enter the bounded fix loop on a failing validation, not only on review findings
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
