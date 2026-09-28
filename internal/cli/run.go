@@ -172,7 +172,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	_ = rn.SetStage(runpkg.Implementing)
 	input := plan.RenderMarkdown()
 	if sig, had := rn.ReadAttempt(); had {
-		input = priorAttemptNote(sig) + "\n" + input
+		input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
 	}
 	impl, err := a.Generate(ctx, agent.Request{
 		Capability:         agent.Implement,
@@ -346,13 +346,6 @@ func loadConfigOrDefault(dir string) (config.Config, error) {
 		return config.Default(), nil
 	}
 	return config.Config{}, err
-}
-
-// priorAttemptNote renders the context a retried task is given: why the previous
-// attempt stopped, so the agent can address the blocker instead of repeating the
-// request that stopped it.
-func priorAttemptNote(signature string) string {
-	return "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + signature + "\n"
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the blocking

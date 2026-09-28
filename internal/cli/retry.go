@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -16,10 +15,11 @@ import (
 // touches a completed task, only acts on BLOCKED tasks, and preserves each task's
 // history so a retry resumes the same task.
 func runRetry(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
-	all, id, ok := parseRetryArgs(args, stderr)
-	if !ok {
+	if len(args) != 1 {
+		fmt.Fprintln(stderr, "usage: sop retry <task-id> | sop retry --all")
 		return exitUsage
 	}
+	id := args[0]
 
 	dir, ok := projectDir(getwd, stderr)
 	if !ok {
@@ -38,26 +38,10 @@ func runRetry(args []string, stdout, stderr io.Writer, getwd func() (string, err
 	}
 	defer st.Close()
 
-	if all {
+	if id == "--all" {
 		return retryAll(st, stdout, stderr)
 	}
 	return retryOne(st, id, stdout, stderr)
-}
-
-// retryUsage is the one-line usage for `sop retry`.
-const retryUsage = "usage: sop retry <task-id> | sop retry --all"
-
-// parseRetryArgs accepts either a single task id or --all.
-func parseRetryArgs(args []string, stderr io.Writer) (all bool, id string, ok bool) {
-	switch {
-	case len(args) == 1 && args[0] == "--all":
-		return true, "", true
-	case len(args) == 1 && !strings.HasPrefix(args[0], "-"):
-		return false, args[0], true
-	default:
-		fmt.Fprintln(stderr, retryUsage)
-		return false, "", false
-	}
 }
 
 // retryOne requeues a single BLOCKED task.

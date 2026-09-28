@@ -193,18 +193,7 @@ func guardCapability(a agent.Agent, capability agent.Capability) error {
 // It is human-readable, because the recorded signature also becomes the context a
 // retried task is given for why the previous attempt stopped.
 func outcomeSignature(gate quality.Result) string {
-	if len(gate.Reasons) == 0 {
-		return string(gate.Decision)
-	}
 	return string(gate.Decision) + ": " + strings.Join(gate.Reasons, "; ")
-}
-
-// outcomeReason returns the first reason, or the decision.
-func outcomeReason(gate quality.Result) string {
-	if len(gate.Reasons) > 0 {
-		return gate.Reasons[0]
-	}
-	return string(gate.Decision)
 }
 
 // allComplete reports whether every task reached a success terminal state.
@@ -339,7 +328,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 					fmt.Fprintf(stderr, "run: %v\n", err)
 					return exitError
 				}
-				fmt.Fprintf(stdout, "%s NEEDS_HUMAN (no change since the previous attempt: %s)\n", task.ID, outcomeReason(res.gate))
+				fmt.Fprintf(stdout, "%s NEEDS_HUMAN (no change since the previous attempt: %s)\n", task.ID, res.gate.Reasons[0])
 				return exitError
 			}
 
