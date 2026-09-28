@@ -679,6 +679,7 @@ T059 two-phase PLAN (bounded read-only discovery → tool-free synthesis)
 T060 ground a completed IMPLEMENT/FIX outcome's changes_expected in the working tree
 T061 SOP performance measurement (stage timing + counts) and safe validation/review reuse
 T062 IMPLEMENT discovery → change → finalize phases (bounded implementation returns to SOP)
+T063 mutation-aware IMPLEMENT finalization (threshold alone cannot withdraw the tools)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

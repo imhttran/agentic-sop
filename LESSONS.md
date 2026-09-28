@@ -167,6 +167,19 @@ own validation -- SOP runs the deterministic gates after it returns -- so a
 capability needs a way to _hand back control_, and a ceiling alone never provides
 one.
 
+## A phase transition needs a precondition, not just a counter
+
+The first IMPLEMENT phases had the same failure in a new shape. A model gathered
+enough context to know exactly what to change, crossed the finalize threshold with
+no repository change yet, and was forced to finalize -- so it returned "no
+repository changes were made" about work it had never been allowed to do. The
+threshold was being treated as _sufficient reason_ to finish when it was only a
+_maximum_. The fix was to give the transition a precondition: finalization also
+requires an observed mutation. Below it the tools stay enabled and the model is
+told to implement; a no-mutation run ends truthfully (`mutation_observed=false`)
+rather than claiming success. When a counter drives a one-way transition, ask what
+else must be true -- a count is a bound, not a decision.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding

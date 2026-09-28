@@ -498,13 +498,18 @@ flat loop:
   immediately.
 - `IMPLEMENT` — _discover_ enough context, _change_ (the first successful
   `write_file`/`create_file` and any targeted checks), then _finalize_. Around six
-  tool interactions the model is nudged to start implementing; at eighteen the
-  repository tools are withdrawn and the model must return its structured outcome,
-  with a two-turn finalization allowance before the invocation fails with
-  `termination=finalization_limit`. Twenty-four stays the hard safety ceiling, but
-  the normal completion mechanism is finalization, not exhausting the budget — so a
-  productive implementation returns before SOP can validate, rather than exploring
-  to the last turn.
+  tool interactions the model is nudged to start implementing. Finalization is
+  **mutation-aware**: crossing eighteen interactions only withdraws the tools once
+  a repository change has actually been observed (plus a short completion window),
+  so a run is never finalized before it has changed anything. If the threshold is
+  reached with no change, the tools stay enabled and the model is told to implement
+  now — and at twenty-two, to either implement or return a truthful
+  `needs_human`/`failed` outcome. Once finalizing, the model has a two-turn
+  allowance before the invocation fails with `termination=finalization_limit`.
+  Twenty-four stays the hard safety ceiling, and a run that never changes the
+  repository stops there with `mutation_observed=false` rather than claiming
+  success. A productive implementation therefore returns control to SOP well
+  before the ceiling, instead of being cut off mid-discovery.
 
 A capability that repeats a non-progressing action is told once to conclude, then
 stopped early with a diagnostic. Neither PLAN nor IMPLEMENT owns final validation
