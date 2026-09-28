@@ -60,6 +60,21 @@ func TestBuildMapsStagesToTasks(t *testing.T) {
 	}
 }
 
+func TestBuildCarriesExecutionMode(t *testing.T) {
+	plan := validPlan()
+	plan.Stages[1].ExecutionMode = domain.ExecutionVerifyFirst
+	tasks, err := Build(plan)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if tasks[0].ExecutionMode != "" {
+		t.Errorf("S001 execution mode = %q, want empty (implement)", tasks[0].ExecutionMode)
+	}
+	if tasks[1].ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("S002 execution mode = %q, want %q", tasks[1].ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+}
+
 func TestBuildInitializesWorkflowFields(t *testing.T) {
 	tasks, err := Build(validPlan())
 	if err != nil {

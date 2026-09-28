@@ -121,11 +121,12 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 
 // lifeResult is the outcome of one local lifecycle.
 type lifeResult struct {
-	gate   quality.Result
-	cycles int
-	stage  runpkg.Stage
-	suite  testrunner.SuiteResult
-	report review.Report
+	gate          quality.Result
+	cycles        int
+	stage         runpkg.Stage
+	suite         testrunner.SuiteResult
+	report        review.Report
+	verifiedFirst bool
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -138,70 +139,117 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		return lifeResult{}, err
 	}
 
-	_ = rn.Write("report.md", buildRunReport(spec, cfg, res.suite, res.report, res.gate, res.stage, res.cycles))
+	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
 	writeRunJSON(rn, "report.json", runReportDoc{
-		ID:          rn.State().ID,
-		Stage:       res.stage,
-		Provider:    cfg.Agent.Provider,
-		Engine:      cfg.Review.Engine,
-		Decision:    res.gate.Decision,
-		Reasons:     res.gate.Reasons,
-		FixCycles:   res.cycles,
-		Validation:  res.suite.Results,
-		Findings:    res.report.Findings,
-		GeneratedAt: time.Now().UTC(),
+		ID:            rn.State().ID,
+		Stage:         res.stage,
+		Provider:      cfg.Agent.Provider,
+		Engine:        cfg.Review.Engine,
+		Decision:      res.gate.Decision,
+		Reasons:       res.gate.Reasons,
+		FixCycles:     res.cycles,
+		ExecutionMode: string(spec.ExecutionMode),
+		VerifiedFirst: res.verifiedFirst,
+		Validation:    res.suite.Results,
+		Findings:      res.report.Findings,
+		GeneratedAt:   time.Now().UTC(),
 	})
 	return res, nil
 }
 
-// runStages performs plan → implement → (validate → review → gate → fix)* and
-// returns the final result. It writes the intermediate artifacts.
+// runStages performs the lifecycle for one task. An ordinary task runs plan →
+// implement → (validate → review → gate → fix)*. A verify-first task runs the
+// configured deterministic validation first and invokes the implementation agent
+// only when that validation fails (or when there is nothing configured to
+// verify). It returns the final result and writes the intermediate artifacts.
 func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run) (lifeResult, error) {
-	// Plan (must not mutate the repository).
-	_ = rn.SetStage(runpkg.Planning)
-	plan, err := planner.New(a).Generate(ctx, spec.Render())
-	if err != nil {
-		return lifeResult{}, fmt.Errorf("plan: %w", err)
-	}
-	_ = rn.Write("plan.md", plan.RenderMarkdown())
+	var (
+		plan       *planner.Plan
+		diff       string
+		sealed     *testrunner.SuiteResult // validation already run for a verify-first task
+		failureCtx string
+	)
 
-	// Implement: the agent edits the repository; its summary is recorded but Git
-	// remains the authority on what changed. If a previous attempt stopped (a human
-	// boundary or a failure), give the agent that outcome so it can address the
-	// blocker rather than repeat the request that stopped it.
-	_ = rn.SetStage(runpkg.Implementing)
-	input := plan.RenderMarkdown()
-	if sig, had := rn.ReadAttempt(); had {
-		input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
-	}
-	impl, err := a.Generate(ctx, agent.Request{
-		Capability:         agent.Implement,
-		Task:               spec.Render(),
-		Input:              input,
-		OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
-	})
-	if err != nil {
-		return lifeResult{}, fmt.Errorf("implement: %w", err)
-	}
-	_ = rn.Write("implementation.md", impl.Content)
-	if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-		return outcomeResult(rn, impl.Outcome), nil
+	// Verification-first: run the configured deterministic validation before any
+	// agent is invoked. A pass needs no agent at all; a failure is handed to the
+	// implementation agent below; with nothing configured to run there is nothing
+	// to verify, so the task takes the ordinary implementation path.
+	if spec.ExecutionMode.VerifyFirst() {
+		_ = rn.SetStage(runpkg.Validating)
+		suite := validate.Run(ctx, dir, cfg.Validation)
+		switch {
+		case len(suite.Results) == 0:
+		case suite.Passed():
+			sealed = &suite
+		default:
+			failureCtx = validationFailureContext(suite)
+		}
 	}
 
-	diff, err := d.readDiff(ctx, dir)
-	if err != nil {
-		return lifeResult{}, fmt.Errorf("diff: %w", err)
-	}
-	_ = rn.Write("diff.patch", diff)
+	if sealed == nil {
+		// Plan (must not mutate the repository).
+		_ = rn.SetStage(runpkg.Planning)
+		var err error
+		plan, err = planner.New(a).Generate(ctx, spec.Render())
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("plan: %w", err)
+		}
+		_ = rn.Write("plan.md", plan.RenderMarkdown())
 
-	// A claimed change with none produced is a failure. A legitimate no-change
-	// completion is allowed, but still runs the configured validation below
-	// before it can pass.
-	changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
-	if strings.TrimSpace(diff) == "" && changesExpected {
-		_ = rn.SetStage(runpkg.Failed)
-		return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
+		// Implement: the agent edits the repository; its summary is recorded but Git
+		// remains the authority on what changed. The input carries the deterministic
+		// failure that made the agent necessary, and the previous attempt's outcome,
+		// so it can address the blocker rather than repeat the request that stopped it.
+		_ = rn.SetStage(runpkg.Implementing)
+		input := plan.RenderMarkdown()
+		if failureCtx != "" {
+			input = failureCtx + "\n" + input
+		}
+		if sig, had := rn.ReadAttempt(); had {
+			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
+		}
+		impl, err := a.Generate(ctx, agent.Request{
+			Capability:         agent.Implement,
+			Task:               spec.Render(),
+			Input:              input,
+			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
+		})
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("implement: %w", err)
+		}
+		_ = rn.Write("implementation.md", impl.Content)
+		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
+			return outcomeResult(rn, impl.Outcome), nil
+		}
+
+		diff, err = d.readDiff(ctx, dir)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("diff: %w", err)
+		}
+		_ = rn.Write("diff.patch", diff)
+
+		// A claimed change with none produced is a failure. A legitimate no-change
+		// completion is allowed, but still runs the configured validation below
+		// before it can pass.
+		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
+		if strings.TrimSpace(diff) == "" && changesExpected {
+			_ = rn.SetStage(runpkg.Failed)
+			return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
+		}
+	} else {
+		// Verification-first pass: no agent produced a change, so there is nothing
+		// for this task to review. Record the working tree for the report.
+		var err error
+		diff, err = d.readDiff(ctx, dir)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("diff: %w", err)
+		}
+		_ = rn.Write("diff.patch", diff)
 	}
+
+	// verifiedFirst marks the fast path: the deterministic validation passed and no
+	// implementation agent ran.
+	verifiedFirst := sealed != nil
 
 	maxCycles := cfg.Quality.MaxFixCycles
 	cycles := 0
@@ -210,15 +258,21 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var gate quality.Result
 
 	for {
-		// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
-		_ = rn.SetStage(runpkg.Validating)
-		suite = validate.Run(ctx, dir, cfg.Validation)
+		if sealed != nil {
+			// The verification-first pre-check already ran the validation.
+			suite = *sealed
+			sealed = nil
+		} else {
+			// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
+			_ = rn.SetStage(runpkg.Validating)
+			suite = validate.Run(ctx, dir, cfg.Validation)
+		}
 
-		// Review only when validation passed and there is something to review: a
-		// legitimate no-change completion still runs validation, but nothing is
-		// reviewed.
+		// Review only when validation passed, there is something to review, and the
+		// change came from an implementation: a verify-first pass made no change of
+		// its own, so there is nothing for this task to review.
 		report = review.Report{}
-		if suite.Passed() && strings.TrimSpace(diff) != "" {
+		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
 			_ = rn.SetStage(runpkg.Reviewing)
 			provider, err := reviewProvider(cfg, d)
 			if err != nil {
@@ -283,12 +337,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		stage = runpkg.WaitingForHuman
 	}
 	_ = rn.SetStage(stage)
-	return lifeResult{gate: gate, cycles: cycles, stage: stage, suite: suite, report: report}, nil
+	return lifeResult{gate: gate, cycles: cycles, stage: stage, suite: suite, report: report, verifiedFirst: verifiedFirst}, nil
 }
 
 // emitRunSummary prints the run's outcome and returns the process exit code.
 func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.Run, res lifeResult) int {
 	fmt.Fprintf(stdout, "run %s: %s\n", rn.State().ID, res.gate.Decision)
+	if res.verifiedFirst {
+		fmt.Fprintln(stdout, "verified first: the configured validation passed; no implementation agent was invoked")
+	}
 	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
@@ -346,6 +403,26 @@ func loadConfigOrDefault(dir string) (config.Config, error) {
 		return config.Default(), nil
 	}
 	return config.Config{}, err
+}
+
+// validationFailureContext renders the deterministic validation failure that made
+// an implementation agent necessary, so a verify-first task's agent starts from
+// the actual failure instead of rediscovering it.
+func validationFailureContext(suite testrunner.SuiteResult) string {
+	var b strings.Builder
+	b.WriteString("# Validation failed\n\nThe configured validation did not pass, so an implementation is required.\n")
+	for _, r := range suite.Results {
+		if r.Status == testrunner.Pass {
+			continue
+		}
+		fmt.Fprintf(&b, "\n- %s %s `%s`\n", r.Status, r.Category, r.Command)
+		for _, stream := range []string{r.Stdout, r.Stderr} {
+			if out := strings.TrimSpace(stream); out != "" {
+				fmt.Fprintf(&b, "\n```\n%s\n```\n", out)
+			}
+		}
+	}
+	return b.String()
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the blocking
@@ -428,41 +505,47 @@ func relDir(base, target string) string {
 
 // runReportDoc is the machine-readable run report.
 type runReportDoc struct {
-	ID          string              `json:"id"`
-	Stage       runpkg.Stage        `json:"stage"`
-	Provider    string              `json:"provider"`
-	Engine      string              `json:"review_engine"`
-	Decision    quality.Decision    `json:"decision"`
-	Reasons     []string            `json:"reasons"`
-	FixCycles   int                 `json:"fix_cycles"`
-	Validation  []testrunner.Result `json:"validation"`
-	Findings    []review.Finding    `json:"findings"`
-	GeneratedAt time.Time           `json:"generated_at"`
+	ID            string              `json:"id"`
+	Stage         runpkg.Stage        `json:"stage"`
+	Provider      string              `json:"provider"`
+	Engine        string              `json:"review_engine"`
+	Decision      quality.Decision    `json:"decision"`
+	Reasons       []string            `json:"reasons"`
+	FixCycles     int                 `json:"fix_cycles"`
+	ExecutionMode string              `json:"execution_mode"`
+	VerifiedFirst bool                `json:"verified_first"`
+	Validation    []testrunner.Result `json:"validation"`
+	Findings      []review.Finding    `json:"findings"`
+	GeneratedAt   time.Time           `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
-func buildRunReport(spec *taskfile.Spec, cfg config.Config, suite testrunner.SuiteResult, report review.Report, gate quality.Result, stage runpkg.Stage, cycles int) string {
+func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) string {
 	var b strings.Builder
-	heading := strings.TrimSpace(strings.Trim(strings.Join([]string{spec.ID, spec.Title}, " — "), " —"))
+	heading := strings.TrimSpace(strings.Trim(strings.Join([]string{spec.ID, spec.Title}, " — "), " — "))
 	fmt.Fprintf(&b, "# Run: %s\n\n", heading)
 	fmt.Fprintf(&b, "- Provider: `%s`\n", cfg.Agent.Provider)
 	fmt.Fprintf(&b, "- Review engine: `%s`\n", cfg.Review.Engine)
-	fmt.Fprintf(&b, "- Stage: `%s`\n", stage)
-	fmt.Fprintf(&b, "- Fix cycles: %d/%d\n", cycles, cfg.Quality.MaxFixCycles)
-	fmt.Fprintf(&b, "- Gate: `%s`\n\n", gate.Decision)
+	fmt.Fprintf(&b, "- Stage: `%s`\n", res.stage)
+	fmt.Fprintf(&b, "- Fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
+	if res.verifiedFirst {
+		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
+	}
+	fmt.Fprintf(&b, "- Gate: `%s`\n\n", res.gate.Decision)
 
 	b.WriteString("## Task\n\n")
 	b.WriteString(strings.TrimSpace(spec.Render()))
 	b.WriteString("\n\n## Validation\n\n")
-	if len(suite.Results) == 0 {
+	if len(res.suite.Results) == 0 {
 		b.WriteString("No validation commands configured.\n")
 	} else {
-		for _, r := range suite.Results {
+		for _, r := range res.suite.Results {
 			fmt.Fprintf(&b, "- %s %s `%s`\n", r.Status, r.Category, r.Command)
 		}
 	}
 
 	b.WriteString("\n## Review\n\n")
+	report := res.report
 	if len(report.Findings) == 0 {
 		if s := strings.TrimSpace(report.Summary); s != "" {
 			b.WriteString(s + "\n")
@@ -480,7 +563,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, suite testrunner.Sui
 	}
 
 	b.WriteString("\n## Gate\n\n")
-	for _, reason := range gate.Reasons {
+	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(&b, "- %s\n", reason)
 	}
 	return b.String()

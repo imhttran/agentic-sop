@@ -378,6 +378,7 @@ func specFromTask(task *domain.Task) *taskfile.Spec {
 		Title:              task.Title,
 		Description:        task.Objective,
 		AcceptanceCriteria: criteria,
+		ExecutionMode:      task.ExecutionMode,
 	}
 }
 

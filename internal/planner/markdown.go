@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 var (
@@ -21,7 +22,7 @@ var (
 // machine plan. It is only used when deterministic compilation fails.
 const compileTaskPrompt = `Convert the provided human PLAN.md into the machine plan JSON.
 Preserve the stages, their ids, titles, objectives, dependencies, deliverables,
-and acceptance criteria; do not invent or drop work.`
+acceptance criteria, and execution mode; do not invent or drop work.`
 
 // PlanFromMarkdown deterministically compiles a human PLAN.md into a Plan. It
 // understands the rendering produced by RenderMarkdown and close human variants:
@@ -102,6 +103,10 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 				cur.stage.Deliverables = append(cur.stage.Deliverables, item)
 			case "acceptance criteria", "acceptance", "acceptance criterion", "tests":
 				cur.stage.AcceptanceCriteria = append(cur.stage.AcceptanceCriteria, item)
+			case "execution", "execution mode":
+				if mode, ok := domain.ParseExecutionMode(item); ok {
+					cur.stage.ExecutionMode = mode
+				}
 			default:
 				// Only prose between the stage heading and its first sub-section is the
 				// objective; an unrecognized sub-section is ignored rather than merged in.

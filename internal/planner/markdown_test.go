@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // fakeAgent returns fixed content for any request.
@@ -30,8 +31,13 @@ func TestPlanFromMarkdownRoundTrip(t *testing.T) {
 				ID: "S002", Title: "Health endpoint", Objective: "Add /health.",
 				Dependencies: []string{"S001"}, Deliverables: []string{"GET /health"},
 				AcceptanceCriteria: []string{"GET /health returns 200"},
+				ExecutionMode:      domain.ExecutionVerifyFirst,
 			},
 		},
+	}
+
+	if !strings.Contains(original.RenderMarkdown(), "### Execution") {
+		t.Errorf("rendered plan should carry the execution section:\n%s", original.RenderMarkdown())
 	}
 
 	got, err := PlanFromMarkdown(original.RenderMarkdown())
@@ -55,6 +61,12 @@ func TestPlanFromMarkdownRoundTrip(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got.Stages[0].AcceptanceCriteria, []string{"Application starts"}) {
 		t.Errorf("criteria = %v", got.Stages[0].AcceptanceCriteria)
+	}
+	if got.Stages[1].ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("execution mode = %q, want %q", got.Stages[1].ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+	if got.Stages[0].ExecutionMode != "" {
+		t.Errorf("a stage without the setting must stay implement mode, got %q", got.Stages[0].ExecutionMode)
 	}
 }
 
@@ -85,6 +97,20 @@ func TestPlanFromMarkdownVariants(t *testing.T) {
 	}
 }
 
+func TestPlanFromMarkdownExecutionMode(t *testing.T) {
+	doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — Verify boundary\n\nCheck it.\n\n### Dependencies\n\nNone\n\n### Acceptance Criteria\n\n- boundary holds\n\n### Execution\n\n- verify first\n"
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown failed: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	if plan.Stages[0].ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("execution mode = %q, want %q (normalized)", plan.Stages[0].ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+}
+
 func TestCompileFallsBackToAgent(t *testing.T) {
 	// A document with no usable stages cannot be compiled deterministically.
 	const planJSON = `{"project":"P","summary":"S","stages":[{"id":"S001","title":"One","objective":"o","dependencies":[],"deliverables":["d"],"acceptance_criteria":["a"]}]}`
@@ -112,6 +138,20 @@ func TestCompilePrefersDeterministic(t *testing.T) {
 func TestCompileRequiresAgentForFallback(t *testing.T) {
 	if _, err := New(nil).Compile(context.Background(), "not a plan"); err == nil {
 		t.Error("expected an error when there is no agent to normalize")
+	}
+}
+
+func TestValidateRejectsUnknownExecutionMode(t *testing.T) {
+	plan := &Plan{
+		Project: "P", Summary: "S",
+		Stages: []Stage{{
+			ID: "S001", Title: "One", Objective: "o",
+			AcceptanceCriteria: []string{"a"}, ExecutionMode: "verify-soon",
+		}},
+	}
+	err := plan.Validate()
+	if err == nil || !strings.Contains(err.Error(), "execution_mode") {
+		t.Errorf("err = %v, want an unknown execution_mode error", err)
 	}
 }
 

@@ -47,6 +47,7 @@ func TestListHydratesCompleteTasks(t *testing.T) {
 		AcceptanceCriteria: "List hydrates children",
 		Status:             domain.FIX_REQUIRED,
 		BlockedReason:      domain.NO_REASON,
+		ExecutionMode:      domain.ExecutionVerifyFirst,
 		Attempt:            2,
 		MaxAttempts:        3,
 		DependencyIDs:      []string{"T001"},
@@ -98,6 +99,9 @@ func TestListHydratesCompleteTasks(t *testing.T) {
 	}
 	if got.BlockedReason != t002.BlockedReason {
 		t.Errorf("blocked reason mismatch: got %s, want %s", got.BlockedReason, t002.BlockedReason)
+	}
+	if got.ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("execution mode mismatch: got %q, want %q", got.ExecutionMode, domain.ExecutionVerifyFirst)
 	}
 	if got.Attempt != t002.Attempt || got.MaxAttempts != t002.MaxAttempts {
 		t.Errorf("attempt counters mismatch: got (%d, %d), want (%d, %d)",
@@ -226,8 +230,8 @@ func TestMigrationSetsUserVersion(t *testing.T) {
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatalf("reading user_version failed: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("expected schema version 2 for a new database, got %d", version)
+	if version != schemaVersion {
+		t.Errorf("expected schema version %d for a new database, got %d", schemaVersion, version)
 	}
 
 	saveDependency(t, s, "T001")
@@ -245,12 +249,55 @@ func TestMigrationSetsUserVersion(t *testing.T) {
 	if err := s2.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
 		t.Fatalf("reading user_version after reopen failed: %v", err)
 	}
-	if version != 2 {
-		t.Errorf("expected schema version 2 after reopen, got %d", version)
+	if version != schemaVersion {
+		t.Errorf("expected schema version %d after reopen, got %d", schemaVersion, version)
 	}
 
 	if _, err := s2.Get("T001"); err != nil {
 		t.Errorf("expected T001 to survive reopen, got err=%v", err)
+	}
+}
+
+func TestMigrationAddsExecutionModeToExistingDatabase(t *testing.T) {
+	dbPath := testDB(t)
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	saveDependency(t, s, "T001")
+
+	// Simulate a pre-v3 database: drop the column and lower the recorded version,
+	// so reopening must migrate it back rather than fail.
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN execution_mode"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("PRAGMA user_version = 2"); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	s2, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen (migrate) failed: %v", err)
+	}
+	defer s2.Close()
+
+	var version int
+	if err := s2.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("reading user_version failed: %v", err)
+	}
+	if version != schemaVersion {
+		t.Errorf("expected schema version %d after migration, got %d", schemaVersion, version)
+	}
+
+	got, err := s2.Get("T001")
+	if err != nil {
+		t.Fatalf("expected T001 to survive migration: %v", err)
+	}
+	if got.ExecutionMode != "" {
+		t.Errorf("a migrated task must default to the implement mode, got %q", got.ExecutionMode)
 	}
 }
 

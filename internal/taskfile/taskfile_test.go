@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 const fullDoc = `# T023 --- End-to-End Dogfood
@@ -176,9 +178,48 @@ func TestRenderRoundTrips(t *testing.T) {
 	}
 }
 
+func TestParseExecutionMode(t *testing.T) {
+	doc := "# T001 — Verify\n\n## Objective\n\nCheck the boundary.\n\n## Execution\n\n- verify-first\n"
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if spec.ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("ExecutionMode = %q, want %q", spec.ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+}
+
+func TestParseIgnoresUnknownExecutionMode(t *testing.T) {
+	// An unrelated "Execution" section must not break the task or be mistaken for
+	// a mode; the task stays implement-mode.
+	doc := "# T001 — Do work\n\n## Execution\n\nRun the build with `make`.\n"
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if spec.ExecutionMode != "" {
+		t.Errorf("ExecutionMode = %q, want empty (unrecognized value ignored)", spec.ExecutionMode)
+	}
+}
+
+func TestRenderExecutionModeRoundTrips(t *testing.T) {
+	spec := &Spec{Title: "Verify boundary", ExecutionMode: domain.ExecutionVerifyFirst}
+	rendered := spec.Render()
+	if !strings.Contains(rendered, "## Execution") {
+		t.Fatalf("Render missing the execution section:\n%s", rendered)
+	}
+	got, err := Parse([]byte(rendered))
+	if err != nil {
+		t.Fatalf("Parse(Render) failed: %v", err)
+	}
+	if got.ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("ExecutionMode = %q after round-trip", got.ExecutionMode)
+	}
+}
+
 func TestRenderOmitsMissingSections(t *testing.T) {
 	got := (&Spec{Title: "Only title"}).Render()
-	if strings.Contains(got, "Requirements") || strings.Contains(got, "Constraints") {
+	if strings.Contains(got, "Requirements") || strings.Contains(got, "Constraints") || strings.Contains(got, "Execution") {
 		t.Errorf("Render should omit empty sections:\n%s", got)
 	}
 	if !strings.Contains(got, "# Only title") {

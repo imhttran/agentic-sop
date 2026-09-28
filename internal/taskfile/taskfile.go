@@ -13,6 +13,8 @@ import (
 	"os"
 	"regexp"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // Spec is the structured form of a Markdown task file.
@@ -24,6 +26,10 @@ type Spec struct {
 	AcceptanceCriteria []string
 	Constraints        []string
 	Dependencies       []string
+	// ExecutionMode is the optional execution mode ("" is the implement
+	// default). An unrecognized value is ignored rather than failing, so an
+	// unrelated "Execution" section cannot break a task file.
+	ExecutionMode domain.ExecutionMode
 }
 
 var (
@@ -106,6 +112,12 @@ func Parse(data []byte) (*Spec, error) {
 			spec.Constraints = append(spec.Constraints, listItems(sec.lines)...)
 		case "dependencies", "dependency", "depends on":
 			spec.Dependencies = append(spec.Dependencies, listItems(sec.lines)...)
+		case "execution", "execution mode":
+			if items := listItems(sec.lines); len(items) > 0 {
+				if mode, ok := domain.ParseExecutionMode(items[0]); ok {
+					spec.ExecutionMode = mode
+				}
+			}
 		}
 	}
 
@@ -143,6 +155,9 @@ func (s *Spec) Render() string {
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
 	writeList(&b, "Constraints", s.Constraints)
 	writeList(&b, "Dependencies", s.Dependencies)
+	if s.ExecutionMode != "" {
+		fmt.Fprintf(&b, "\n## Execution\n\n- %s\n", s.ExecutionMode)
+	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }
 

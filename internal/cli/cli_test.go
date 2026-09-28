@@ -1994,6 +1994,115 @@ func TestRunGraphCarriesPreviousOutcome(t *testing.T) {
 	}
 }
 
+// countingAgent records whether it was invoked at all, to prove a verify-first
+// task never reaches the agent.
+type countingAgent struct{ calls int }
+
+func (a *countingAgent) Generate(context.Context, agent.Request) (agent.Response, error) {
+	a.calls++
+	return agent.Response{Content: validPlanJSON}, nil
+}
+
+// seedVerifyFirstTask initializes the project and seeds one verify-first task in
+// PLANNED, the state a plan-built task graph would hold.
+func seedVerifyFirstTask(t *testing.T, dir string) {
+	t.Helper()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{
+		ID:            "S001",
+		Title:         "Verify boundary",
+		Status:        domain.PLANNED,
+		MaxAttempts:   3,
+		ExecutionMode: domain.ExecutionVerifyFirst,
+	})
+}
+
+func TestVerifyFirstPassesWithoutAgent(t *testing.T) {
+	dir := t.TempDir()
+	seedVerifyFirstTask(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &countingAgent{}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if a.calls != 0 {
+		t.Errorf("a passing verify-first task must not invoke the agent; got %d call(s)", a.calls)
+	}
+	for _, want := range []string{"verified first", "S001 LOCAL_DONE", "human approval required before commit"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
+	}
+
+	report, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", "S001", "report.json"))
+	if err != nil {
+		t.Fatalf("read report: %v", err)
+	}
+	if !strings.Contains(string(report), `"verified_first": true`) {
+		t.Errorf("report should record the fast path:\n%s", report)
+	}
+}
+
+func TestVerifyFirstFailureInvokesAgentWithContext(t *testing.T) {
+	dir := t.TempDir()
+	seedVerifyFirstTask(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"exit 1\"\n")
+	a := &recordingAgent{}
+
+	// The configured validation keeps failing, so the run does not pass, but the
+	// agent must have been invoked with the deterministic failure as context.
+	code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if len(a.inputs) == 0 {
+		t.Fatal("a failing verify-first task must invoke the implementation agent")
+	}
+	if !strings.Contains(a.inputs[0], "Validation failed") || !strings.Contains(a.inputs[0], "BUILD") {
+		t.Errorf("implement context should carry the validation failure:\n%s", a.inputs[0])
+	}
+}
+
+func TestNormalTaskStillInvokesImplement(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	// No execution mode: the ordinary implementation path.
+	seedTask(t, dir, &domain.Task{ID: "S001", Title: "Implement", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &recordingAgent{}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if len(a.inputs) == 0 {
+		t.Fatal("an implement task must still invoke the implementation agent")
+	}
+	if strings.Contains(stdout, "verified first") {
+		t.Errorf("an ordinary task must not take the verify-first path:\n%s", stdout)
+	}
+}
+
+func TestVerifyFirstWithoutConfiguredValidationUsesAgent(t *testing.T) {
+	dir := t.TempDir()
+	seedVerifyFirstTask(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\n") // no validation configured
+	a := &recordingAgent{}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if len(a.inputs) == 0 {
+		t.Fatal("with nothing configured to verify, the task must take the implementation path")
+	}
+	if strings.Contains(stdout, "verified first") {
+		t.Errorf("a task with nothing to verify must not claim the fast path:\n%s", stdout)
+	}
+}
+
 func TestRunTasksBuildsFromPlan(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)

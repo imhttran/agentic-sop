@@ -12,7 +12,7 @@ import (
 
 const driverName = "sqlite"
 
-const taskColumns = `id, title, objective, acceptance_criteria, status, blocked_reason,
+const taskColumns = `id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason,
 	       attempt, max_attempts, created_at, updated_at`
 
 type Store struct {
@@ -50,7 +50,7 @@ func (s *Store) Close() error {
 }
 
 // schemaVersion is the current on-disk schema version.
-const schemaVersion = 2
+const schemaVersion = 3
 
 func (s *Store) migrate() error {
 	var version int
@@ -66,6 +66,7 @@ func (s *Store) migrate() error {
 	migrations := map[int]func() error{
 		0: s.createSchema,
 		1: s.migrateHandoffs,
+		2: s.migrateExecutionMode,
 	}
 	for version < schemaVersion {
 		migrate, ok := migrations[version]
@@ -142,6 +143,17 @@ func (s *Store) migrateHandoffs() error {
 	return err
 }
 
+// migrateExecutionMode adds the per-task execution_mode column (schema version 3)
+// so a verify-first task survives a restart. Existing rows default to the
+// implement mode.
+func (s *Store) migrateExecutionMode() error {
+	if _, err := s.db.Exec(`ALTER TABLE tasks ADD COLUMN execution_mode TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("PRAGMA user_version = 3")
+	return err
+}
+
 func (s *Store) Save(task *domain.Task) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -154,19 +166,20 @@ func (s *Store) Save(task *domain.Task) error {
 	// dependency edges other tasks hold on this one.
 	_, err = tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			objective = excluded.objective,
 			acceptance_criteria = excluded.acceptance_criteria,
+			execution_mode = excluded.execution_mode,
 			status = excluded.status,
 			blocked_reason = excluded.blocked_reason,
 			attempt = excluded.attempt,
 			max_attempts = excluded.max_attempts,
 			created_at = excluded.created_at,
 			updated_at = excluded.updated_at
-	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria,
+	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	if err != nil {
@@ -251,9 +264,9 @@ func (s *Store) SaveTasks(tasks []*domain.Task) error {
 func insertTaskRow(tx *sql.Tx, task *domain.Task) error {
 	_, err := tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria,
+		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
@@ -335,11 +348,11 @@ type rowScanner interface {
 // tasks table. Child collections are loaded separately by loadTaskChildren.
 func scanTask(sc rowScanner) (*domain.Task, error) {
 	task := &domain.Task{}
-	var status, blockedReason string
+	var status, blockedReason, executionMode string
 	var createdAtStr, updatedAtStr string
 
 	err := sc.Scan(&task.ID, &task.Title, &task.Objective, &task.AcceptanceCriteria,
-		&status, &blockedReason, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
+		&executionMode, &status, &blockedReason, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, err
 	}
@@ -350,6 +363,7 @@ func scanTask(sc rowScanner) (*domain.Task, error) {
 	}
 	task.Status = taskStatus
 	task.BlockedReason = domain.BlockedReason(blockedReason)
+	task.ExecutionMode = domain.ExecutionMode(executionMode)
 
 	if task.CreatedAt, err = parseTimestamp(createdAtStr); err != nil {
 		return nil, fmt.Errorf("parse created_at: %w", err)

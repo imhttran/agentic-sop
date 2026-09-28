@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
 // Plan is the machine representation of an implementation plan. PLAN.md is a
@@ -35,6 +37,10 @@ type Stage struct {
 	// Kind is optional: "" and "feature" are ordinary stages; "environment"
 	// marks a bootstrap stage feature work depends on.
 	Kind string `json:"kind,omitempty"`
+	// ExecutionMode is optional: "" and "implement" run the implementation agent
+	// first; "verify-first" runs deterministic validation before any agent and only
+	// invokes one when that validation fails.
+	ExecutionMode domain.ExecutionMode `json:"execution_mode,omitempty"`
 }
 
 // Validate performs deterministic structural validation of a Plan. It is the
@@ -76,6 +82,9 @@ func (p *Plan) Validate() error {
 		case "", KindFeature, KindEnvironment:
 		default:
 			return fmt.Errorf("plan: stage %s has unknown kind %q", stage.ID, stage.Kind)
+		}
+		if !domain.KnownExecutionMode(stage.ExecutionMode) {
+			return fmt.Errorf("plan: stage %s has unknown execution_mode %q", stage.ID, stage.ExecutionMode)
 		}
 	}
 

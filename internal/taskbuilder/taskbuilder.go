@@ -39,6 +39,7 @@ func Build(plan *planner.Plan) ([]*domain.Task, error) {
 			Title:              stage.Title,
 			Objective:          stage.Objective,
 			AcceptanceCriteria: SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
+			ExecutionMode:      stage.ExecutionMode,
 			Status:             domain.PLANNED,
 			BlockedReason:      domain.NO_REASON,
 			Attempt:            0,

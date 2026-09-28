@@ -28,6 +28,7 @@ type Task struct {
 	AcceptanceCriteria string
 	Status             TaskStatus
 	BlockedReason      BlockedReason
+	ExecutionMode      ExecutionMode
 	Attempt            int
 	MaxAttempts        int
 	DependencyIDs      []string
