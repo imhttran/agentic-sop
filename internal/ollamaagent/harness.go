@@ -41,6 +41,7 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 	}
 
 	h := New(cfg, root)
+	h.ShowRuntimeVisibility(errOut)
 	content, err := h.Execute(ctx, req)
 	// Surface the audit trail even when the run fails: a failed task still has
 	// tool activity worth reviewing, and a durable sink is chosen by the
@@ -73,6 +74,9 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 		// A failure that changed nothing did not attempt the work: surface it as a
 		// retryable boundary so SOP requeues instead of blocking.
 		content = h.retryNoChangeFailure(ctx, content)
+		// IMPLEMENT/FIX results must be structured outcomes: wrap prose responses
+		// in a completed outcome with changes_expected derived from repository reality.
+		content = h.ensureStructuredOutcome(ctx, content)
 	}
 	// A model that reports a failure or a human boundary still produced a turn
 	// history worth keeping, so its trace is written as well — otherwise only
@@ -160,6 +164,15 @@ func New(cfg Config, root string) *Harness {
 		trace:     newTraceLog(defaultMaxTraceRecords),
 		tracePath: strings.TrimSpace(lookupEnv(envToolTraceLog)),
 	}
+}
+
+// ShowRuntimeVisibility writes the execution stack (harness, provider, model, source) to w.
+func (h *Harness) ShowRuntimeVisibility(w io.Writer) {
+	source := configSource(agent.EnvOllamaModel)
+	fmt.Fprintf(w, "Harness: tool\n")
+	fmt.Fprintf(w, "Provider: ollama\n")
+	fmt.Fprintf(w, "Model: %s\n", h.cfg.Model)
+	fmt.Fprintf(w, "Provider source: %s\n", source)
 }
 
 // AuditRecords returns the in-memory audit trail for this run, for review and

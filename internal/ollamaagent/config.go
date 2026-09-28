@@ -107,3 +107,12 @@ func ConfigFromEnv() (Config, error) {
 	}
 	return cfg, nil
 }
+
+// configSource determines whether a configuration value came from an environment
+// variable or is a hardcoded default.
+func configSource(envVar string) string {
+	if strings.TrimSpace(os.Getenv(envVar)) != "" {
+		return "environment"
+	}
+	return "configuration"
+}

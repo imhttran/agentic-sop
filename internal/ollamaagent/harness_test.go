@@ -149,6 +149,37 @@ func TestRunParsesRequestAndWritesOutcome(t *testing.T) {
 	}
 }
 
+func TestRunShowsRuntimeVisibilityAtStartup(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	// Just a simple model response to pass
+	_, srv := newFakeOllama(t, `{"status":"completed","summary":"done","changes_expected":false}`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+	t.Setenv(agent.EnvOllamaModel, "test-model:8b")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx","output_requirements":"out"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	stderr := errOut.String()
+	// Verify runtime visibility output appears in stderr
+	if !strings.Contains(stderr, "Harness: tool") {
+		t.Errorf("stderr missing 'Harness: tool': %q", stderr)
+	}
+	if !strings.Contains(stderr, "Provider: ollama") {
+		t.Errorf("stderr missing 'Provider: ollama': %q", stderr)
+	}
+	if !strings.Contains(stderr, "Model: test-model:8b") {
+		t.Errorf("stderr missing 'Model: test-model:8b': %q", stderr)
+	}
+	if !strings.Contains(stderr, "Provider source: environment") {
+		t.Errorf("stderr missing 'Provider source: environment': %q", stderr)
+	}
+}
+
 func TestRunReconcilesClaimedChangeWithNoChange(t *testing.T) {
 	dir := t.TempDir()
 	gitInit(t, dir)
@@ -1822,6 +1853,57 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestRunEnsuresProseBecomeStructuredOutcome(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	writeFile(t, dir, "file.txt", "initial")
+	// The model returns JSON that is not an outcome (not recognized), which looks like prose.
+	// ensureStructuredOutcome should wrap it in a completed outcome.
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"file.txt","content":"changed"}}`,
+		`{"plan":"Step 1: Modify the file"}`,
+	)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	// Non-outcome JSON (or prose) should be wrapped as a structured outcome
+	outStr := out.String()
+	if !strings.Contains(outStr, `"status":"completed"`) {
+		t.Errorf("out = %q, want status=completed", outStr)
+	}
+}
+
+func TestRunWrapsProseInOutcomeWithNoChanges(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	// The model returns prose but makes no changes: wraps as completed with changes_expected=false
+	_, srv := newFakeOllama(t, `Nothing needed to be changed.`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	outStr := out.String()
+	if !strings.Contains(outStr, `"status":"completed"`) {
+		t.Errorf("out = %q, want status=completed", outStr)
+	}
+	if !strings.Contains(outStr, `"changes_expected":false`) {
+		t.Errorf("out = %q, want changes_expected=false since no change was made", outStr)
 	}
 }
 

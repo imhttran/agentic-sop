@@ -18,6 +18,9 @@ import (
 // the model's changes_expected claim with the repository change the harness
 // actually observed, so a run cannot claim to have changed the repository when it
 // did not (nor deny a change it made).
+//
+// IMPLEMENT/FIX results MUST be emitted as structured outcomes; prose responses
+// are wrapped in a completed outcome so SOP can act on them deterministically.
 
 // reconcileOutcome grounds a completed IMPLEMENT/FIX outcome in observable
 // repository reality. The model's reported changes_expected is compared with
@@ -103,6 +106,53 @@ func (h *Harness) retryNoChangeFailure(ctx context.Context, content string) stri
 	data, err := json.Marshal(wire)
 	if err != nil {
 		return content
+	}
+	return string(data)
+}
+
+// ensureStructuredOutcome ensures IMPLEMENT/FIX results are emitted as structured
+// outcomes by wrapping prose responses in a completed outcome. This enforces that
+// SOP receives a deterministic JSON shape it can parse and act on, and that
+// changes_expected is derived from actual repository state, not model claims.
+func (h *Harness) ensureStructuredOutcome(ctx context.Context, content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		trimmed = "{}"
+	}
+
+	// If the content is already a recognized structured outcome, return it
+	// (after reconciliation, which was already done upstream).
+	if trimmed[0] == '{' {
+		var wire outcomeWire
+		if err := json.Unmarshal([]byte(trimmed), &wire); err == nil {
+			switch wire.Status {
+			case string(agent.OutcomeCompleted), string(agent.OutcomeNeedsHuman), string(agent.OutcomeFailed):
+				return content
+			}
+		}
+	}
+
+	// Prose response: wrap it in a completed outcome.
+	// The summary captures what the model reported; changes_expected is set
+	// from actual repository state so the harness report is always truthful.
+	observed, err := h.tools.WorkingTreeChanged(ctx)
+	if err != nil {
+		// If we cannot inspect the repository, conservatively assume a change was
+		// intended (the stricter choice, and the default when the model omits the field).
+		observed = true
+	}
+
+	wire := outcomeWire{
+		Status:          string(agent.OutcomeCompleted),
+		Summary:         trimmed,
+		ChangesExpected: &observed,
+	}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		// Should never happen for a simple struct with basic types.
+		// Fallback: emit the prose as the summary of a completed outcome.
+		wire.Summary = content
+		data, _ = json.Marshal(wire)
 	}
 	return string(data)
 }
