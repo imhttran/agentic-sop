@@ -1,5 +1,11 @@
 # SOP --- Architecture
 
+> **Implemented vs planned.** This document describes the system as built. Where a
+> section, diagram box, or component is designed but not yet reachable from the CLI
+> it carries a **Partial** or **Planned** status note; everything else is
+> implemented. The e2e dogfood test (`internal/e2e`) composes some components the
+> CLI does not yet drive, faking only the external boundaries (model, Git, GitHub).
+
 ## 1. Architectural Goal
 
 The system separates **deterministic workflow control** from **agentic
@@ -88,6 +94,9 @@ The core rule is:
 +------------------------------------------------------+
 ```
 
+_(The "Time Budget" box is **planned**, not implemented: no request timeout is
+enforced today, and `IMPLEMENTATION_TIMEOUT` is a reserved, unused blocked reason.)_
+
 ## 4. Component Responsibilities
 
 ### CLI
@@ -118,7 +127,14 @@ It remains thin and delegates behavior to application services.
 
 ### Orchestrator
 
-The central workflow controller.
+The central workflow controller. Its state, transition, gate, retry, and
+stop-condition responsibilities are implemented for the **local** lifecycle.
+
+> **Partial.** The _remote_ path (commit → PR → CI → merge) and the handoff capsule
+> exist as components (`internal/commitgate`, `internal/ciremediation`,
+> `internal/mergegate`, `internal/completion`, `internal/handoff`) that the e2e
+> dogfood test composes; the CLI does not yet drive a project through them end to
+> end.
 
 Responsibilities:
 
@@ -484,6 +500,10 @@ project-scoped tools exist.
 
 ### Decision Layer (optional)
 
+> **Partial.** Only the deterministic provider exists (`internal/decision`), it is
+> wired through configuration but not yet consulted by the run, and no alternative
+> provider or tier routing is implemented.
+
 A bounded decision boundary: a provider proposes a choice with a confidence, and
 policy (configuration thresholds) routes it to a model tier or a human. The
 default provider is deterministic and the layer is disabled by default.
@@ -641,6 +661,10 @@ Each attempt should record:
 
 ## 7. TDD Architecture
 
+> **Planned.** No test-design stage runs today. The state machine reserves
+> `TESTS_WRITTEN` and `RED_VERIFIED`, and the local lifecycle walks them as
+> transitions, but the runner does not yet design (or verify a failing) test first.
+
 The task runner should distinguish test creation from implementation.
 
 ```text
@@ -695,6 +719,12 @@ blocking. The orchestrator should never blindly implement every review
 suggestion.
 
 ## 9. CI Architecture
+
+> **Partial.** `sop commit` and `sop pr` are implemented (explicit and gated), and
+> CI workflow generation (`internal/ci`), the bounded remediation loop
+> (`internal/ciremediation`), and the merge gate (`internal/mergegate`) exist as
+> components. The CLI does not yet run the push → PR → CI → merge loop for a whole
+> project; the e2e dogfood test composes it.
 
 ```text
 Local Pass
@@ -754,15 +784,12 @@ until T000 is complete.
 
 ## 11. Parallelism
 
-V1 default:
+> **Partial.** A worktree-based parallel runner exists (`internal/parallel`) and is
+> exercised by the e2e dogfood test; `sop run` itself drives the graph one task at a
+> time, and `max_parallel_tasks` is not yet a configuration key.
 
-```text
-max_parallel_tasks = 2
-```
-
-Only dependency-independent tasks may run concurrently.
-
-A later implementation may use Git worktrees:
+Only dependency-independent tasks may run concurrently, each in its own Git
+worktree so no two tasks share a working directory:
 
 ```text
 repo/
@@ -771,11 +798,8 @@ worktrees/
   T003/
 ```
 
-This is safer for true local parallelism than repeatedly switching one
-working tree between branches.
-
-V1 may begin sequentially and introduce worktrees after the basic
-lifecycle is reliable.
+Worktrees are safer for true local parallelism than repeatedly switching one working
+tree between branches. Wiring it to `sop run` (with a bound) is what remains.
 
 ## 12. Data Model
 
@@ -963,6 +987,10 @@ bundled end-to-end skill and install script
 Remaining:
 
 ```text
+drive the remote lifecycle (push → PR → CI → merge) from the CLI
+per-task time budgets / timeouts
+TDD test-design stage (design and verify a failing test first)
+parallel graph execution as a CLI option (max_parallel_tasks)
 local network service (team mode)
 small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation
