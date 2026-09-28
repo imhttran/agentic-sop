@@ -57,15 +57,18 @@ func NewLlamaCpp(baseURL, model, apiKey string, timeout time.Duration) (*LlamaCp
 	}, nil
 }
 
-// NewLlamaCppFromEnv builds an OpenAI-compatible provider from the environment.
-// Only the base URL and model have defaults; the timeout and API key are
-// optional.
-func NewLlamaCppFromEnv() (Agent, error) {
+// NewLlamaCppFromEnv builds an OpenAI-compatible provider from the environment,
+// using configuredModel when SOP_LLAMACPP_MODEL is unset. Only the base URL and
+// model have defaults; the timeout and API key are optional.
+func NewLlamaCppFromEnv(configuredModel string) (Agent, error) {
 	baseURL := strings.TrimSpace(os.Getenv(EnvLlamaCppBaseURL))
 	if baseURL == "" {
 		baseURL = defaultLlamaCppBaseURL
 	}
 	model := strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+	if model == "" {
+		model = strings.TrimSpace(configuredModel)
+	}
 	if model == "" {
 		model = defaultLlamaCppModel
 	}

@@ -76,13 +76,13 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 		input = spec.Render()
 	}
 
-	provider, err := configuredProvider(dir)
+	provider, model, err := configuredAgent(dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
 	}
 
-	a, err := d.newAgent(provider)
+	a, err := d.newAgent(provider, model)
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError

@@ -45,13 +45,17 @@ func NewOllama(baseURL, model string, timeout time.Duration) (*Ollama, error) {
 	return &Ollama{baseURL: baseURL, model: model, client: &http.Client{Timeout: timeout}}, nil
 }
 
-// NewOllamaFromEnv builds an Ollama provider from the environment. The model is
-// required; the base URL and timeout fall back to Ollama's default address and
-// the shared default timeout.
-func NewOllamaFromEnv() (Agent, error) {
+// NewOllamaFromEnv builds an Ollama provider from the environment, using
+// configuredModel when SOP_OLLAMA_MODEL is unset. The model is required from one
+// of the two sources; the base URL and timeout fall back to Ollama's default
+// address and the shared default timeout.
+func NewOllamaFromEnv(configuredModel string) (Agent, error) {
 	model := strings.TrimSpace(os.Getenv(EnvOllamaModel))
 	if model == "" {
-		return nil, errMissingEnv("ollama", EnvOllamaModel)
+		model = strings.TrimSpace(configuredModel)
+	}
+	if model == "" {
+		return nil, errNoModel("ollama", EnvOllamaModel)
 	}
 	baseURL := strings.TrimSpace(os.Getenv(EnvOllamaBaseURL))
 	if baseURL == "" {

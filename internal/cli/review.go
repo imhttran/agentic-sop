@@ -91,7 +91,7 @@ func reviewProvider(cfg config.Config, d deps) (review.Provider, error) {
 		return provider, nil
 	}
 
-	a, err := d.newAgent(cfg.Agent.Provider)
+	a, err := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
 	if err != nil {
 		return nil, err
 	}

@@ -41,7 +41,7 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_ string) (agent.Agent, error) {
+		newAgent: func(_, _ string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}
@@ -417,25 +417,28 @@ func TestRunPlanUsesConfiguredProvider(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "PRD.md", "# Book RAG\n")
 	initProject(t, dir)
-	if err := os.WriteFile(config.Path(dir), []byte("project:\n  name: x\nagent:\n  provider: ollama\n"), 0o644); err != nil {
+	if err := os.WriteFile(config.Path(dir), []byte("project:\n  name: x\nagent:\n  provider: ollama\n  model: deepseek-v4.1-flash:cloud\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv(agent.EnvAgentProvider, "")
 
-	var got string
+	var gotProvider, gotModel string
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(provider string) (agent.Agent, error) {
-			got = provider
+		newAgent: func(provider, model string) (agent.Agent, error) {
+			gotProvider, gotModel = provider, model
 			return &fakeAgent{content: validPlanJSON}, nil
 		},
 	}
 	if code := run([]string{"plan"}, &out, &errOut, d); code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, errOut.String())
 	}
-	if got != "ollama" {
-		t.Errorf("provider = %q, want ollama", got)
+	if gotProvider != "ollama" {
+		t.Errorf("provider = %q, want ollama", gotProvider)
+	}
+	if gotModel != "deepseek-v4.1-flash:cloud" {
+		t.Errorf("model = %q, want the configured model", gotModel)
 	}
 }
 
@@ -698,7 +701,7 @@ func runInjectedCLI(t *testing.T, dir, diff string, a agent.Agent, args ...strin
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string) (agent.Agent, error) {
+		newAgent: func(string, string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}

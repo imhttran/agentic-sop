@@ -69,7 +69,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	// The agent is required to execute, but not to prepare. Build it lazily so a
 	// PLAN.md can still be compiled and its tasks created when the agent is not
 	// configured; execution then reports the missing agent clearly.
-	a, agentErr := d.newAgent(cfg.Agent.Provider)
+	a, agentErr := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
 
 	var planSource string
 	if planArg != "" {

@@ -71,10 +71,14 @@ type Project struct {
 	IntegrationBranch string `yaml:"integration_branch"`
 }
 
-// Agent selects the model provider. Credentials and endpoints stay in the
-// environment.
+// Agent selects the model provider and, optionally, the model it serves.
+// Credentials and endpoints stay in the environment.
 type Agent struct {
 	Provider string `yaml:"provider"`
+	// Model names the model for the selected provider (ollama or llamacpp). It is
+	// ignored by the command provider, and the provider's environment variable
+	// (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) overrides it when set.
+	Model string `yaml:"model"`
 }
 
 // Validation holds the deterministic verification commands, run in order.
@@ -313,6 +317,8 @@ project:
 agent:
   # command | ollama | llamacpp
   provider: command
+  # model names the model for ollama/llamacpp (the provider's env var overrides it).
+  # model: llama3.2
 
 validation:
   build:

@@ -38,23 +38,24 @@ const (
 // FromEnv builds the Agent named by EnvAgentProvider, or the default command
 // agent when it is unset.
 func FromEnv() (Agent, error) {
-	return FromConfig("")
+	return FromConfig("", "")
 }
 
-// FromConfig builds the Agent for a configured provider name, with
-// EnvAgentProvider overriding the configured value when it is set. A blank
-// provider means "let the environment decide", which keeps the historical
-// command agent as the default. An unsupported name is an error rather than a
+// FromConfig builds the Agent for a configured provider name and model, with
+// EnvAgentProvider overriding the configured provider when it is set. A blank
+// provider means "let the environment decide", which keeps the historical command
+// agent as the default. The model applies to ollama/llamacpp and its own
+// environment variable overrides it. An unsupported name is an error rather than a
 // silent fallback.
-func FromConfig(provider string) (Agent, error) {
+func FromConfig(provider, model string) (Agent, error) {
 	name, _ := EffectiveProvider(provider)
 	switch name {
 	case ProviderCommand:
 		return NewCommandAgentFromEnv()
 	case ProviderOllama:
-		return NewOllamaFromEnv()
+		return NewOllamaFromEnv(model)
 	case ProviderLlamaCpp:
-		return NewLlamaCppFromEnv()
+		return NewLlamaCppFromEnv(model)
 	default:
 		return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
 			name, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
@@ -211,9 +212,9 @@ func normalizeBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
-// errMissingEnv is the shared "set this variable" error for provider settings.
-func errMissingEnv(provider, key string) error {
-	return fmt.Errorf("%s: set %s", provider, key)
+// errNoModel reports a provider with no model, naming both ways to set one.
+func errNoModel(provider, envKey string) error {
+	return fmt.Errorf("%s: no model configured (set agent.model in the project config or %s)", provider, envKey)
 }
 
 var errBaseURLRequired = errors.New("base URL is required")

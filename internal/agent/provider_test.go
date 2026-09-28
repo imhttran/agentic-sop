@@ -305,7 +305,7 @@ func TestLlamaCppFromEnvDefaults(t *testing.T) {
 	t.Setenv(EnvLlamaCppBaseURL, "")
 	t.Setenv(EnvLlamaCppModel, "")
 	t.Setenv(EnvLlamaCppAPIKey, "")
-	a, err := NewLlamaCppFromEnv()
+	a, err := NewLlamaCppFromEnv("")
 	if err != nil {
 		t.Fatalf("NewLlamaCppFromEnv failed: %v", err)
 	}
@@ -322,7 +322,7 @@ func TestFromConfigProvider(t *testing.T) {
 	t.Run("configured provider", func(t *testing.T) {
 		t.Setenv(EnvAgentProvider, "")
 		t.Setenv(EnvOllamaModel, "qwen3:8b")
-		a, err := FromConfig(ProviderOllama)
+		a, err := FromConfig(ProviderOllama, "")
 		if err != nil {
 			t.Fatalf("FromConfig failed: %v", err)
 		}
@@ -332,7 +332,7 @@ func TestFromConfigProvider(t *testing.T) {
 	})
 	t.Run("env overrides config", func(t *testing.T) {
 		t.Setenv(EnvAgentProvider, ProviderLlamaCpp)
-		a, err := FromConfig(ProviderOllama)
+		a, err := FromConfig(ProviderOllama, "")
 		if err != nil {
 			t.Fatalf("FromConfig failed: %v", err)
 		}
@@ -342,14 +342,14 @@ func TestFromConfigProvider(t *testing.T) {
 	})
 	t.Run("unknown configured provider", func(t *testing.T) {
 		t.Setenv(EnvAgentProvider, "")
-		if _, err := FromConfig("skynet"); err == nil {
+		if _, err := FromConfig("skynet", ""); err == nil {
 			t.Error("expected error for an unknown configured provider")
 		}
 	})
 	t.Run("blank provider falls back to command", func(t *testing.T) {
 		t.Setenv(EnvAgentProvider, "")
 		t.Setenv(EnvAgentCommand, "printf '%s' 'ok'")
-		a, err := FromConfig("")
+		a, err := FromConfig("", "")
 		if err != nil {
 			t.Fatalf("FromConfig failed: %v", err)
 		}
@@ -375,7 +375,28 @@ func TestEffectiveProvider(t *testing.T) {
 
 func TestNewOllamaFromEnvRequiresModel(t *testing.T) {
 	t.Setenv(EnvOllamaModel, "")
-	if _, err := NewOllamaFromEnv(); err == nil {
+	if _, err := NewOllamaFromEnv(""); err == nil {
 		t.Error("expected error when the Ollama model is unset")
+	}
+}
+
+func TestNewOllamaFromEnvUsesConfiguredModel(t *testing.T) {
+	t.Setenv(EnvOllamaModel, "")
+	a, err := NewOllamaFromEnv("deepseek-v4.1-flash:cloud")
+	if err != nil {
+		t.Fatalf("NewOllamaFromEnv failed: %v", err)
+	}
+	if c, ok := a.(*Ollama); !ok || c.model != "deepseek-v4.1-flash:cloud" {
+		t.Errorf("model = %q, want the configured model", c.model)
+	}
+
+	// The provider's environment variable overrides the configured model.
+	t.Setenv(EnvOllamaModel, "qwen3:8b")
+	a, err = NewOllamaFromEnv("deepseek-v4.1-flash:cloud")
+	if err != nil {
+		t.Fatalf("NewOllamaFromEnv failed: %v", err)
+	}
+	if c, ok := a.(*Ollama); !ok || c.model != "qwen3:8b" {
+		t.Errorf("model = %q, want the environment to win", c.model)
 	}
 }

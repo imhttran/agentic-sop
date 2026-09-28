@@ -43,7 +43,7 @@ const (
 // and the working-tree diff reader.
 type deps struct {
 	getwd        func() (string, error)
-	newAgent     func(provider string) (agent.Agent, error)
+	newAgent     func(provider, model string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
 	commit       func(ctx context.Context, dir, message string) error
@@ -53,8 +53,8 @@ type deps struct {
 func defaultDeps() deps {
 	return deps{
 		getwd: os.Getwd,
-		newAgent: func(provider string) (agent.Agent, error) {
-			a, err := agent.FromConfig(provider)
+		newAgent: func(provider, model string) (agent.Agent, error) {
+			a, err := agent.FromConfig(provider, model)
 			if err != nil {
 				return nil, err
 			}
@@ -189,17 +189,17 @@ func statePath(projectDir string) string {
 	return filepath.Join(projectDir, stateDirName, stateFileName)
 }
 
-// configuredProvider returns the agent provider named by the project
-// configuration, or "" when there is no configuration (the environment then
-// decides). A present but invalid configuration is an error, not a silent
+// configuredAgent returns the agent provider and model named by the project
+// configuration, or ("", "") when there is no configuration (the environment
+// then decides). A present but invalid configuration is an error, not a silent
 // fallback.
-func configuredProvider(projectDir string) (string, error) {
+func configuredAgent(projectDir string) (provider, model string, err error) {
 	cfg, err := config.LoadDir(projectDir)
 	if errors.Is(err, config.ErrNotFound) {
-		return "", nil
+		return "", "", nil
 	}
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return cfg.Agent.Provider, nil
+	return cfg.Agent.Provider, cfg.Agent.Model, nil
 }

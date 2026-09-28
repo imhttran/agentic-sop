@@ -49,7 +49,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "eval: %v\n", err)
 		return exitError
 	}
-	a, err := d.newAgent(cfg.Agent.Provider)
+	a, err := d.newAgent(cfg.Agent.Provider, cfg.Agent.Model)
 	if err != nil {
 		fmt.Fprintf(stderr, "eval: %v\n", err)
 		return exitError

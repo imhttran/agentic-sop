@@ -14,6 +14,7 @@ project:
   integration_branch: trunk
 agent:
   provider: ollama
+  model: deepseek-v4.1-flash:cloud
 validation:
   build:
     - go build ./...
@@ -41,6 +42,9 @@ func TestParseValid(t *testing.T) {
 	}
 	if c.Agent.Provider != "ollama" {
 		t.Errorf("provider = %q", c.Agent.Provider)
+	}
+	if c.Agent.Model != "deepseek-v4.1-flash:cloud" {
+		t.Errorf("model = %q", c.Agent.Model)
 	}
 	if len(c.Validation.Test) != 1 || c.Validation.Test[0] != "go test ./..." {
 		t.Errorf("validation.test = %v", c.Validation.Test)
