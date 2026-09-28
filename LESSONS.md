@@ -180,6 +180,15 @@ told to implement; a no-mutation run ends truthfully (`mutation_observed=false`)
 rather than claiming success. When a counter drives a one-way transition, ask what
 else must be true -- a count is a bound, not a decision.
 
+The precondition also has to be _current_, not merely ever-true. Requiring _a_
+mutation still finalized a model that had written once and then kept writing: an
+earlier change was read as a finished change, the tools were withdrawn mid-edit,
+and the run died with `validation_runs: 0` all over again. The predicate that
+matters is not "has this invocation mutated" but "is it still mutating" -- so
+finalization waits for the writer to stop, and a write offered during finalization
+resumes the change instead of being refused. A state that was true once is not the
+state you are in now.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding
