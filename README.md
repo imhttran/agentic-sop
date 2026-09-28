@@ -604,6 +604,18 @@ None
 - application starts successfully
 ```
 
+A stage may also declare how it executes:
+
+```markdown
+### Execution
+
+- verify-first
+```
+
+`verify-first` runs the configured validation before any agent (see
+[Verification-first tasks](#verification-first-tasks)). Omit the section for the
+ordinary implement-first behaviour.
+
 ## `.agent-sdlc/plan.json`
 
 Intended for the orchestrator.
@@ -630,6 +642,10 @@ Example:
 SOP does not parse `PLAN.md` to determine executable workflow state.
 
 Structured data is used instead.
+
+A stage may add `"execution_mode": "verify-first"` to run the configured
+validation before any agent (see [Verification-first
+tasks](#verification-first-tasks)); it is omitted for the implement default.
 
 ---
 
@@ -1505,6 +1521,34 @@ remaining CLI wiring.
           ▼
      Next Ready Task
 ```
+
+## Verification-first tasks
+
+A plan stage may declare `execution_mode: verify-first` (in PLAN.md, an
+`### Execution` sub-section with `- verify-first`; in a task file, a
+`## Execution` section). Such a task runs the configured validation **before** any
+agent is invoked:
+
+```text
+verify-first
+     │
+     ▼
+  validate ── pass ──→ quality gate → complete locally   (no agent invoked)
+     │
+    fail
+     ▼
+  implement (input: the validation failure) → validate → review → gate → fix*
+```
+
+A pass invokes no agent at all — not the micro-planner, not IMPLEMENT, not FIX —
+and the task passes only because its configured checks passed. A failure hands the
+deterministic failure to the implementation agent as context and the ordinary
+lifecycle continues, so a verification failure is not automatically terminal. A
+verify-first task with no configured check falls back to the ordinary
+implementation path: a fast path that verifies nothing is not a verification.
+
+The mode is explicit plan/task metadata, never inferred from a task's title.
+Without it a task keeps the implement-first behaviour.
 
 ---
 

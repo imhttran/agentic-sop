@@ -670,6 +670,7 @@ T050 explicit `sop retry` for BLOCKED tasks; no-change completions still validat
 T051 bound the requeue loop (a requeue spends one attempt; max_attempts, default 3)
 T052 a no-progress retry does not spend the budget; the task stays PLANNED and is retried
 T053 `sop retry --all` for every retryable BLOCKED task; a retry carries the prior outcome
+T054 verification-first fast path (execution_mode: verify-first); a passing verification needs no agent
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

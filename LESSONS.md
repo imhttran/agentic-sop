@@ -140,3 +140,15 @@ detects a no-progress repeat doubles as the retry's context, so budgeting retrie
 and explaining them stay one artifact. Recovery also has to be one command: making
 the operator requeue blocked tasks one id at a time turns a bounded step into a
 manual chore, which is why `sop retry --all` exists.
+
+## Spend the agent only where intelligence is required
+
+The command agent is the most expensive component, so the workflow should not
+reach for it by default. A verification-only task was paying for an implementation
+agent before SOP ran its own validation, on work that needed no repository change.
+Making the deterministic validation _first_ for a task that opts into it (through
+explicit plan metadata, never by guessing from the title) turns that task into a
+validation pass, and the agent is invoked only when the validation actually fails
+-- handed the failure instead of rediscovering it. The optimisation is safe because
+it reorders work, it does not skip a gate: the task still passes only when its
+configured checks pass.

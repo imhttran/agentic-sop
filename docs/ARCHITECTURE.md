@@ -131,7 +131,7 @@ Reads a single task from a Markdown file (or plain Markdown), extracting ID,
 title, description, requirements, acceptance criteria, constraints, and
 dependencies. Plain Markdown stays usable. `sop plan TASK.md` and
 `sop run TASK.md` accept a task file; the loader normalizes it before a model
-sees it.
+sees it. An optional `## Execution` section names the task's execution mode.
 
 ### Plan Preparation
 
@@ -140,7 +140,8 @@ sees it.
 recorded source path and content fingerprint, and creates tasks when none exist.
 A human `PLAN.md` is compiled deterministically (with an agent-normalization
 fallback); a PRD is used only to generate a plan when no PLAN exists; and a
-changed document triggers a rebuild. Every step is idempotent. Generated
+changed document triggers a rebuild. Every step is idempotent. A compiled stage
+carries its optional `execution_mode` onto the task. Generated
 artifacts stay out of the project root: `.agent-sdlc/` holds machine state and
 run reports (and ignores itself for Git), and a PRD-generated plan is written to
 `docs/reports/<plan-id>.md`.
@@ -328,7 +329,32 @@ validation.json  review.json  report.md  report.json  state.json
 
 `state.json` records the lifecycle stage (`CREATED`…`FAILED`); the report records
 the task, provider, validation results, findings, fix cycles, and the final gate.
-A run that terminates for any reason stays inspectable.
+A run that terminates for any reason stays inspectable. A verify-first run records
+`verified_first: true` (the deterministic validation passed without invoking an
+implementation agent).
+
+### Execution Modes
+
+A task's `execution_mode` is explicit plan/task metadata — never inferred from a
+title or prose. The default, `implement` (the zero value), is the full lifecycle
+below. `verify-first` runs the configured validation before any agent:
+
+```text
+verify-first → validate ── pass ──→ quality gate → complete locally (no agent)
+                   │
+                  fail
+                   ▼
+        implement (input: the failure) → validate → review → gate → fix*
+```
+
+A pass invokes no agent at all (not the micro-planner, IMPLEMENT, or FIX) and the
+task passes only when its configured checks pass, so SOP stays the authority. A
+failure hands the deterministic failure to the implementation agent and the
+ordinary lifecycle continues, so a verification failure is not automatically
+terminal. A verify-first task with nothing configured to verify falls back to the
+implementation path. The mode is persisted on the task
+(`tasks.execution_mode`); a pre-existing database migrates its rows to the
+implement default.
 
 ### Fix Loop
 
@@ -772,6 +798,8 @@ tasks
   title
   objective
   status
+  blocked_reason
+  execution_mode
   branch
   max_attempts
   created_at
