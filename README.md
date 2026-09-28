@@ -488,16 +488,30 @@ adapter only. It is expected to be superseded by
 
 The loop is bounded per capability, not by one global number: `REVIEW`,
 `DESIGN_TESTS`, and `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), and
-`IMPLEMENT`/`FIX` 24 with the mutation tools. `PLAN` runs in two phases — bounded
-read-only _discovery_ (8 turns), then a tool-free _synthesis_ (2 turns) that must
-produce the document. When discovery is exhausted the model is told exploration is
-over and may no longer use tools, so a PLAN can no longer fail by exploring forever;
-an early final response still completes the plan immediately. A capability that
-repeats a non-progressing action is told once to conclude, then stopped early with a
-diagnostic. PLAN does not own final validation — SOP performs independent validation
-and review after it returns. A failed run also writes a safe per-turn diagnostic
-trail to stderr (capability, phase, iteration, tool, request, progress, recovery);
-it never contains prompts, file contents, or secrets.
+`FIX` 24 with the mutation tools. Two capabilities run in phases instead of one
+flat loop:
+
+- `PLAN` — bounded read-only _discovery_ (8 turns), then a tool-free _synthesis_
+  (2 turns) that must produce the document. When discovery is exhausted the model
+  is told exploration is over and may no longer use tools, so a PLAN can no longer
+  fail by exploring forever. An early final response still completes the plan
+  immediately.
+- `IMPLEMENT` — _discover_ enough context, _change_ (the first successful
+  `write_file`/`create_file` and any targeted checks), then _finalize_. Around six
+  tool interactions the model is nudged to start implementing; at eighteen the
+  repository tools are withdrawn and the model must return its structured outcome,
+  with a two-turn finalization allowance before the invocation fails with
+  `termination=finalization_limit`. Twenty-four stays the hard safety ceiling, but
+  the normal completion mechanism is finalization, not exhausting the budget — so a
+  productive implementation returns before SOP can validate, rather than exploring
+  to the last turn.
+
+A capability that repeats a non-progressing action is told once to conclude, then
+stopped early with a diagnostic. Neither PLAN nor IMPLEMENT owns final validation
+— SOP performs independent validation and review after it returns. A failed run
+also writes a safe per-turn diagnostic trail to stderr (capability, phase,
+iteration, tool, request, progress, recovery); it never contains prompts, file
+contents, or secrets.
 
 ### Command agent outcomes
 

@@ -153,6 +153,20 @@ validation pass, and the agent is invoked only when the validation actually fail
 it reorders work, it does not skip a gate: the task still passes only when its
 configured checks pass.
 
+## A budget is not a completion path
+
+A bounded loop can still have no way to finish. IMPLEMENT was capped at 24 turns,
+but a productive model read and searched for all of them and then failed with
+`iteration_limit` -- SOP validation never ran, and raising the number would only
+have deferred the same ending. The cap was doing the job of a _safety bound_, not a
+_completion mechanism_. Giving the capability explicit phases fixed it: a few
+turns of discovery, a soft nudge to start implementing, a hard transition that
+withdraws the repository tools before the ceiling, then a small finalization
+allowance in which the model must return the structured outcome. The agent does not
+own validation -- SOP runs the deterministic gates after it returns -- so a
+capability needs a way to _hand back control_, and a ceiling alone never provides
+one.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding
