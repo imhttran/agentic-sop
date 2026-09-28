@@ -14,12 +14,27 @@ import (
 // safe counterpart to the automatic requeue on a needs_human outcome: it never
 // touches a completed task, only acts on BLOCKED tasks, and preserves each task's
 // history so a retry resumes the same task.
+//
+// --force raises an exhausted retry budget so a task that hit its max_attempts can
+// be retried again, without hand-editing state or starting fresh.
 func runRetry(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
-	if len(args) != 1 {
-		fmt.Fprintln(stderr, "usage: sop retry <task-id> | sop retry --all")
+	id := ""
+	force := false
+	for _, a := range args {
+		switch {
+		case a == "--force" || a == "-f":
+			force = true
+		case id == "":
+			id = a
+		default:
+			fmt.Fprintln(stderr, "usage: sop retry <task-id> | sop retry --all [--force]")
+			return exitUsage
+		}
+	}
+	if id == "" {
+		fmt.Fprintln(stderr, "usage: sop retry <task-id> | sop retry --all [--force]")
 		return exitUsage
 	}
-	id := args[0]
 
 	dir, ok := projectDir(getwd, stderr)
 	if !ok {
@@ -39,13 +54,13 @@ func runRetry(args []string, stdout, stderr io.Writer, getwd func() (string, err
 	defer st.Close()
 
 	if id == "--all" {
-		return retryAll(st, stdout, stderr)
+		return retryAll(st, stdout, stderr, force)
 	}
-	return retryOne(st, id, stdout, stderr)
+	return retryOne(st, id, stdout, stderr, force)
 }
 
 // retryOne requeues a single BLOCKED task.
-func retryOne(st *store.Store, id string, stdout, stderr io.Writer) int {
+func retryOne(st *store.Store, id string, stdout, stderr io.Writer, force bool) int {
 	task, err := st.Get(id)
 	if err != nil {
 		fmt.Fprintf(stderr, "retry: %v\n", err)
@@ -62,9 +77,9 @@ func retryOne(st *store.Store, id string, stdout, stderr io.Writer) int {
 		return exitError
 	}
 
-	if err := requeuePersisted(st, task); err != nil {
+	if err := requeuePersisted(st, task, force); err != nil {
 		if errors.Is(err, domain.ErrRetryExhausted) {
-			fmt.Fprintf(stderr, "retry: task %s %v; raise max_attempts or start fresh\n", id, err)
+			fmt.Fprintf(stderr, "retry: task %s %v; raise max_attempts with --force or start fresh\n", id, err)
 			return exitError
 		}
 		fmt.Fprintf(stderr, "retry: %v\n", err)
@@ -77,7 +92,7 @@ func retryOne(st *store.Store, id string, stdout, stderr io.Writer) int {
 
 // retryAll requeues every BLOCKED task with retry budget remaining. A task whose
 // budget is spent is reported and left BLOCKED rather than silently skipped.
-func retryAll(st *store.Store, stdout, stderr io.Writer) int {
+func retryAll(st *store.Store, stdout, stderr io.Writer, force bool) int {
 	tasks, err := st.List()
 	if err != nil {
 		fmt.Fprintf(stderr, "retry: %v\n", err)
@@ -89,9 +104,9 @@ func retryAll(st *store.Store, stdout, stderr io.Writer) int {
 		if task.Status != domain.BLOCKED {
 			continue
 		}
-		if err := requeuePersisted(st, task); err != nil {
+		if err := requeuePersisted(st, task, force); err != nil {
 			if errors.Is(err, domain.ErrRetryExhausted) {
-				fmt.Fprintf(stderr, "retry: task %s %v; raise max_attempts or start fresh\n", task.ID, err)
+				fmt.Fprintf(stderr, "retry: task %s %v; raise max_attempts with --force or start fresh\n", task.ID, err)
 				continue
 			}
 			fmt.Fprintf(stderr, "retry: %v\n", err)
@@ -112,10 +127,18 @@ func retryAll(st *store.Store, stdout, stderr io.Writer) int {
 // requeuePersisted returns a BLOCKED task to PLANNED on a copy and saves once, so
 // a failed save cannot leave in-memory state that was never persisted. It returns
 // the task's requeue error (including ErrRetryExhausted) so callers can report it.
-func requeuePersisted(st *store.Store, task *domain.Task) error {
+// When force is set and the retry budget is spent, the budget is raised before the
+// requeue, so an operator can deliberately retry past max_attempts.
+func requeuePersisted(st *store.Store, task *domain.Task, force bool) error {
 	staged := *task
 	if err := staged.Requeue(); err != nil {
-		return err
+		if !force || !errors.Is(err, domain.ErrRetryExhausted) {
+			return err
+		}
+		staged.MaxAttempts = staged.Attempt + domain.DefaultRetryPolicy().MaxAttempts
+		if err := staged.Requeue(); err != nil {
+			return err
+		}
 	}
 	return st.Save(&staged)
 }

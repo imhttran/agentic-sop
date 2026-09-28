@@ -1861,6 +1861,30 @@ func TestRunRetryBudgetExhausted(t *testing.T) {
 	}
 }
 
+func TestRunRetryForceRaisesBudget(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.BLOCKED, BlockedReason: domain.RETRIES_EXHAUSTED, Attempt: 3, MaxAttempts: 3})
+
+	code, stdout, stderr := runCLI(t, dir, "retry", "T001", "--force")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(stdout, "requeued T001") {
+		t.Errorf("stdout = %q", stdout)
+	}
+
+	st, _ := store.Open(statePath(dir))
+	defer st.Close()
+	got, _ := st.Get("T001")
+	if got.Status != domain.PLANNED {
+		t.Errorf("status = %s, want PLANNED", got.Status)
+	}
+	if got.MaxAttempts <= 3 {
+		t.Errorf("max_attempts = %d, want it raised above 3", got.MaxAttempts)
+	}
+}
+
 func TestRunRetryAll(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
