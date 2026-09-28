@@ -70,6 +70,9 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 		if h.mismatch {
 			fmt.Fprintf(errOut, "sop-ollama-agent: changes_expected disagreed with the observed repository change; reconciled\n")
 		}
+		// A failure that changed nothing did not attempt the work: surface it as a
+		// retryable boundary so SOP requeues instead of blocking.
+		content = h.retryNoChangeFailure(ctx, content)
 	}
 	// A model that reports a failure or a human boundary still produced a turn
 	// history worth keeping, so its trace is written as well — otherwise only

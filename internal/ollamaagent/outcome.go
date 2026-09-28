@@ -74,6 +74,39 @@ func (h *Harness) reconcileOutcome(ctx context.Context, content string) string {
 	return string(data)
 }
 
+// retryNoChangeFailure rewrites a model-reported `failed` outcome into a
+// retryable `needs_human` one when the working tree did not change. A mutating
+// capability that changed nothing did not actually attempt the work, so a retry
+// is warranted (bounded by max_attempts) rather than a hard failure — the same
+// classification the harness gives its own no-change exhaustion. A `failed`
+// outcome with an observed change is a real failure and is left as reported; so is
+// a non-failed outcome or one that cannot be inspected.
+func (h *Harness) retryNoChangeFailure(ctx context.Context, content string) string {
+	var wire outcomeWire
+	if err := json.Unmarshal([]byte(strings.TrimSpace(content)), &wire); err != nil {
+		return content
+	}
+	if wire.Status != string(agent.OutcomeFailed) {
+		return content
+	}
+	changed, err := h.tools.WorkingTreeChanged(ctx)
+	if err != nil || changed {
+		return content
+	}
+	wire.Status = string(agent.OutcomeNeedsHuman)
+	const note = "no repository change was made; retrying"
+	if strings.TrimSpace(wire.Reason) == "" {
+		wire.Reason = note
+	} else {
+		wire.Reason = strings.TrimSpace(wire.Reason) + " [" + note + "]"
+	}
+	data, err := json.Marshal(wire)
+	if err != nil {
+		return content
+	}
+	return string(data)
+}
+
 // appendMismatchNote records the disagreement between the model's claim and the
 // observed repository change in the summary, so it is surfaced to the operator
 // instead of being silently corrected.

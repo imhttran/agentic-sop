@@ -263,6 +263,50 @@ func TestRunTracesModelReportedFailure(t *testing.T) {
 	}
 }
 
+// TestRunNoChangeFailureIsRetryable proves a model-reported failure that changed
+// nothing is surfaced as a retryable needs_human, so SOP requeues instead of
+// blocking a flaky "explored and gave up" attempt.
+func TestRunNoChangeFailureIsRetryable(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	t.Setenv(agent.EnvOllamaBaseURL, "")
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+	_, srv := newFakeOllama(t, `{"status":"failed","reason":"exploration consumed the budget"}`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"status":"needs_human"`) {
+		t.Errorf("outcome = %q, want needs_human (retryable)", out.String())
+	}
+}
+
+// TestRunChangedTreeKeepsFailure proves a failure that did change the repository is
+// left as a hard failure, not silently made retryable.
+func TestRunChangedTreeKeepsFailure(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	writeFile(t, dir, "changed.txt", "an existing change")
+	t.Setenv(agent.EnvOllamaBaseURL, "")
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+	_, srv := newFakeOllama(t, `{"status":"failed","reason":"could not finish"}`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"status":"failed"`) {
+		t.Errorf("outcome = %q, want failed", out.String())
+	}
+}
+
 // TestRunPersistsFailedTraceToSink proves a failed run's per-turn trace reaches the
 // operator-selected file, so it survives the command provider discarding stderr.
 func TestRunPersistsFailedTraceToSink(t *testing.T) {
