@@ -607,13 +607,15 @@ const (
 	// invocation becomes eligible to finalize. Crossing it without a mutation does
 	// not finalize: a threshold is not evidence that the work is done.
 	implementFinalizeAfter = 18
-	// implementCompletionWindow is how many further tool interactions are allowed
-	// after a mutation once the finalize threshold is crossed, so a multi-file
-	// change can be completed before the tools are withdrawn.
+	// implementCompletionWindow is how many non-mutating tool interactions after a
+	// mutation indicate the model has stopped writing and is wrapping up. It is
+	// what makes finalization safe: a model still writing resets the count, so it is
+	// never finalized mid-change.
 	implementCompletionWindow = 2
-	// implementLateStageAfter is the late-stage decision point. A mutated
-	// invocation finalizes here regardless of the completion window; a still
-	// unmutated one gets one final instruction to implement or report truthfully.
+	// implementLateStageAfter is the late-stage decision point for a run that has
+	// not changed the repository: it gets one final instruction to implement or
+	// report truthfully. A mutated run is never forced to finalize here — only once
+	// it stops writing — so a productive implementation is not cut off.
 	implementLateStageAfter = 22
 	// implementFinalizeTurns is how many model turns are allowed in FINALIZE before
 	// the invocation fails with a finalization diagnostic.
@@ -705,16 +707,15 @@ type implementState struct {
 	finalizeTurns       int  // model turns consumed in FINALIZE
 }
 
-// finalizeEligible reports whether the threshold for withdrawing the tools has
-// been reached *and* this invocation has actually changed the repository. A
-// threshold crossed without a mutation keeps the invocation in CHANGE, because
-// finalization must not cut off a productive implementation before it changes
-// anything.
+// finalizeEligible reports whether IMPLEMENT may withdraw its tools. Withdrawing
+// requires an observed mutation — a count alone is not evidence the work is done —
+// and that the model has stopped mutating: a model that is still writing has not
+// finished, and finalizing it would refuse the very write it still needs.
 func (st implementState) finalizeEligible() bool {
 	if !st.mutated || st.interactions < implementFinalizeAfter {
 		return false
 	}
-	return st.interactions >= implementLateStageAfter || st.sinceMutation >= implementCompletionWindow
+	return st.sinceMutation >= implementCompletionWindow
 }
 
 // isMutationTool reports whether a successful call to name changes the
@@ -724,13 +725,14 @@ func isMutationTool(name string) bool {
 }
 
 // executeImplement runs the three-phase IMPLEMENT loop. Discovery and change may
-// use the controlled tools; once the finalize threshold is crossed *with* an
-// observed mutation those tools are withdrawn and the model must return the
-// structured outcome. A threshold crossed without a mutation does not finalize:
-// the model is told to implement and keeps its tools, so a productive
-// implementation is never cut off before it changes anything. A final response
-// ends the invocation in any phase, so early completion is preserved, and the
-// capability's MaxIterations stays the hard safety ceiling.
+// use the controlled tools; once the model has changed the repository and then
+// stopped writing for the completion window those tools are withdrawn and the
+// model must return the structured outcome. A model that is still writing keeps
+// its tools — finalization must not truncate a multi-file change — and a mutation
+// requested during FINALIZE resumes CHANGE. A threshold crossed without a
+// mutation does not finalize: the model is told to implement and keeps its tools.
+// A final response ends the invocation in any phase, so early completion is
+// preserved, and the capability's MaxIterations stays the hard safety ceiling.
 func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
@@ -793,17 +795,25 @@ func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (stri
 		}
 
 		// No repository tools during FINALIZE: refuse, correct, and count the turn
-		// against the finalization allowance rather than executing it.
+		// against the finalization allowance rather than executing it. A mutation is
+		// the exception: a model that still needs to write has not finished, so honour
+		// the write and resume CHANGE instead of refusing it. FINALIZE stops
+		// exploration; it must not truncate a multi-file change mid-write.
 		if st.phase == implFinalize {
-			st.finalizeTurns++
-			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
-			h.tools.RecordDenied(name, args, "tools are unavailable during IMPLEMENT finalization")
-			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progressDenied, false, false)
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: implementFinalizeCorrection},
-			)
-			continue
+			if !isMutationTool(name) || !policy.Allows(name) {
+				st.finalizeTurns++
+				lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+				h.tools.RecordDenied(name, args, "tools are unavailable during IMPLEMENT finalization")
+				h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progressDenied, false, false)
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+					chatMessage{Role: "user", Content: implementFinalizeCorrection},
+				)
+				continue
+			}
+			st.phase = implChange
+			st.finalizeTurns = 0
+			h.recordImplementEvent(req, implementChangeEvent, "resumed for a further mutation")
 		}
 
 		// Capability policy: keep the invariant that a capability only reaches the

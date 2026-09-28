@@ -1102,6 +1102,88 @@ func TestImplementFinalizationExhaustionAfterMutation(t *testing.T) {
 // TestImplementNonCompletedOutcomesNeedNoMutation verifies that truthful
 // escalation or failure outcomes are accepted without any repository change: the
 // mutation requirement applies to claiming success, not to honest non-completion.
+// TestImplementWritingPastThresholdIsNotFinalized covers the AHV2009 shape: a model
+// that keeps writing a multi-file change past the finalize threshold must keep its
+// tools, because an invocation that is still mutating has not finished. It is only
+// finalized once it stops writing (here, by returning its outcome).
+func TestImplementWritingPastThresholdIsNotFinalized(t *testing.T) {
+	dir := t.TempDir()
+	responses := distinctToolCalls(17) // interactions 1..17, no mutation yet
+	responses = append(responses,
+		`{"tool":"write_file","args":{"path":"a.txt","content":"a"}}`, // 18 -> mutated
+		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,            // 19
+		`{"tool":"write_file","args":{"path":"b.txt","content":"b"}}`, // 20
+		`{"tool":"read_file","args":{"path":"pkg/f1.go"}}`,            // 21
+		`{"tool":"write_file","args":{"path":"c.txt","content":"c"}}`, // 22 -> still writing past late-stage
+		`{"status":"completed","summary":"implemented it all","changes_expected":true}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	records := h.TraceRecords()
+	if hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("a model still writing must not be finalized: %+v", records)
+	}
+	// Every write executed; none was refused as a finalize turn.
+	if got := len(h.AuditRecords()); got != 22 {
+		t.Errorf("executed tools = %d, want 22", got)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "c.txt")); string(got) != "c" {
+		t.Errorf("c.txt = %q, want the final write applied", got)
+	}
+}
+
+// TestImplementMutationDuringFinalizationResumesChange covers the other half: once
+// finalized, a model that still needs to write is not refused. The write is
+// honoured and the invocation returns to CHANGE.
+func TestImplementMutationDuringFinalizationResumesChange(t *testing.T) {
+	dir := t.TempDir()
+	responses := []string{`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`} // 1 -> mutated
+	responses = append(responses, distinctToolCalls(17)...)                                // 2..18 -> finalize
+	responses = append(responses,
+		`{"tool":"write_file","args":{"path":"more.txt","content":"y"}}`, // in FINALIZE, but a mutation
+		`{"status":"completed","summary":"finished the change","changes_expected":true}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			t.Errorf("a write must never be denied during finalization: %+v", r)
+		}
+	}
+	resumed := false
+	for _, r := range h.TraceRecords() {
+		if r.Event == implementChangeEvent && r.Detail == "resumed for a further mutation" {
+			resumed = true
+		}
+	}
+	if !resumed {
+		t.Error("the trace does not show CHANGE resumed for the honoured mutation")
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "more.txt")); string(got) != "y" {
+		t.Errorf("more.txt = %q, want the honoured write applied", got)
+	}
+}
+
 func TestImplementNonCompletedOutcomesNeedNoMutation(t *testing.T) {
 	for _, tc := range []struct{ name, response string }{
 		{"needs_human", `{"status":"needs_human","reason":"needs authorization"}`},
