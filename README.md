@@ -462,27 +462,38 @@ SOP
 
 This keeps the core application independent of any specific provider or harness.
 
-### Bootstrap harness: a local DeepSeek coding agent
+### Bootstrap harness: a local Ollama coding agent
 
 This repository ships a small, temporary command-agent harness so SOP can drive its
 own plan with a local Ollama model instead of a hosted coding agent:
 
 ```bash
 export SOP_AGENT_PROVIDER=command
-export SOP_AGENT_COMMAND="sh scripts/sop-deepseek-agent.sh"
+export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
 export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud   # the harness default
 
 sop run docs/PLAN-Agent-Harness-V2.md
 ```
 
-`scripts/sop-deepseek-agent.sh` builds `cmd/sop-deepseek-agent` and runs it with the
+`scripts/sop-ollama-agent.sh` builds `cmd/sop-ollama-agent` and runs it with the
 current directory as the repository. The model gets a small set of controlled tools
 (`read_file`, `write_file`, `create_file`, `list_files`, `search_files`, an
 allow-listed `run_command`, `git_status`, `git_diff`) and a bounded tool loop; it
 cannot escape the repository, modify `.agent-sdlc` state, or run history-changing
-or destructive commands. SOP still owns validation, review, retries, and human
-gates — the harness is an implementation adapter only. It is expected to be
-superseded by [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
+or destructive commands. It consumes both the JSON tool call in the model's content
+and Ollama's native tool calls, so a tool-capable model works either way. SOP still
+owns validation, review, retries, and human gates — the harness is an implementation
+adapter only. It is expected to be superseded by
+[Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
+
+The loop is bounded per capability, not by one global number: `PLAN` gets 8 model
+turns (read-only tools), `REVIEW`/`DESIGN_TESTS`/`DIAGNOSE_FAILURE` 12, and
+`IMPLEMENT`/`FIX` 24 with the mutation tools. A capability that repeats a
+non-progressing action is told once to conclude, then stopped early with a
+diagnostic. Set `SOP_AGENT_TRACE_LOG=/path/to/trace.jsonl` to persist the safe
+per-turn diagnostic trail (capability, iteration, tool, request, progress, recovery);
+it never contains prompts, file contents, or secrets. The trail is also written to
+stderr when a run fails.
 
 ### Command agent outcomes
 
