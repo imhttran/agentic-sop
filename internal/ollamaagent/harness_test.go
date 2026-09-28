@@ -210,6 +210,27 @@ func TestRunRejectsUnknownCapability(t *testing.T) {
 	}
 }
 
+// TestRunNoChangeCeilingReturnsNeedsHuman proves a phased run that never changes
+// the repository surfaces as a retryable needs_human outcome, so SOP requeues it
+// instead of blocking it.
+func TestRunNoChangeCeilingReturnsNeedsHuman(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv(agent.EnvOllamaBaseURL, "")
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"status":"needs_human"`) {
+		t.Errorf("outcome = %q, want needs_human (retryable)", out.String())
+	}
+}
+
 // TestRunPersistsFailedTraceToSink proves a failed run's per-turn trace reaches the
 // operator-selected file, so it survives the command provider discarding stderr.
 func TestRunPersistsFailedTraceToSink(t *testing.T) {
@@ -438,10 +459,10 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 }
 
 // TestImplementWithoutMutationStopsAtHardCeiling covers a model that keeps making
-// distinct tool calls without ever changing the repository. IMPLEMENT must not
-// finalize (there is nothing to finalize) and must not claim success: it stops at
-// the capability's hard ceiling with a diagnostic recording the missing mutation,
-// so "changed nothing" and "changed things but would not stop" stay distinct.
+// distinct tool calls without ever changing the repository. It must not claim
+// success: at the late stage it is finalized (tools withdrawn), and a run that
+// still never changes anything ends as a retryable "no change" rather than a hard
+// failure.
 func TestImplementWithoutMutationStopsAtHardCeiling(t *testing.T) {
 	dir := t.TempDir()
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
@@ -450,14 +471,14 @@ func TestImplementWithoutMutationStopsAtHardCeiling(t *testing.T) {
 
 	h := New(cfg, dir)
 	_, err := h.Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
-		t.Fatalf("err = %v, want an iteration_limit termination", err)
+	if err == nil || !strings.Contains(err.Error(), "made no repository change") {
+		t.Fatalf("err = %v, want a no-change termination", err)
 	}
-	if !strings.Contains(err.Error(), "mutation_observed=false") || !strings.Contains(err.Error(), "tool_calls=24") {
-		t.Errorf("err = %v, want the missing-mutation diagnostic", err)
+	if !strings.Contains(err.Error(), "termination=no_change") {
+		t.Errorf("err = %v, want termination=no_change", err)
 	}
-	if hasEvent(h.TraceRecords(), implementFinalizeEvent) {
-		t.Error("a run with no mutation must not be forced to finalize")
+	if !hasEvent(h.TraceRecords(), implementFinalizeEvent) {
+		t.Error("an unmutated run must be finalized at the late stage, not run to the ceiling")
 	}
 }
 

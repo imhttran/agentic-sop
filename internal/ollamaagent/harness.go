@@ -52,7 +52,13 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 		h.FlushTrace(errOut)
 		if wantsOutcome(req.Capability) {
 			fmt.Fprintf(errOut, "sop-ollama-agent: %v\n", err)
-			return writeJSON(out, outcomeWire{Status: string(agent.OutcomeFailed), Reason: err.Error()})
+			status := agent.OutcomeFailed
+			var incomplete *changeIncompleteError
+			if errors.As(err, &incomplete) {
+				// The agent never changed the repository: retry, don't block.
+				status = agent.OutcomeNeedsHuman
+			}
+			return writeJSON(out, outcomeWire{Status: string(status), Reason: err.Error()})
 		}
 		return err
 	}
@@ -711,7 +717,6 @@ repository changes. SOP will independently validate the repository.`
 	implementChangeEvent   = "→ CHANGE"
 	implementFinalizeEvent = "→ FINALIZE"
 	implementContinueEvent = "→ CHANGE_CONTINUE"
-	implementFinalEvent    = "→ CHANGE_FINAL"
 )
 
 // implementState is the invocation-scoped phase state of one phased run
@@ -724,19 +729,24 @@ type implementState struct {
 	sinceMutation       int  // tool interactions since the last successful mutation
 	nudged              bool // the discovery nudge has been sent
 	implementInstructed bool // the implement-now instruction has been sent
-	finalInstructed     bool // the late-stage final instruction has been sent
 	finalizeTurns       int  // model turns consumed in FINALIZE
 }
 
-// finalizeEligible reports whether IMPLEMENT may withdraw its tools. Withdrawing
-// requires an observed mutation — a count alone is not evidence the work is done —
-// and that the model has stopped mutating: a model that is still writing has not
-// finished, and finalizing it would refuse the very write it still needs.
+// finalizeEligible reports whether the phased loop may withdraw its tools.
+// Withdrawing requires an observed mutation — a count alone is not evidence the
+// work is done — and that the model has stopped mutating: a model that is still
+// writing has not finished, and finalizing it would refuse the very write it
+// still needs. A run that never changes the repository has no writer to wait for,
+// so it is finalized at the late stage: the model is pushed to conclude (a write
+// is still honoured and resumes CHANGE) rather than exploring to the ceiling.
 func (st implementState) finalizeEligible() bool {
-	if !st.mutated || st.interactions < implementFinalizeAfter {
+	if st.interactions < implementFinalizeAfter {
 		return false
 	}
-	return st.sinceMutation >= implementCompletionWindow
+	if st.mutated {
+		return st.sinceMutation >= implementCompletionWindow
+	}
+	return st.interactions >= implementLateStageAfter
 }
 
 // isMutationTool reports whether a successful call to name changes the
@@ -781,6 +791,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request) (string,
 				Iteration:   iteration,
 				Termination: terminationFinalization,
 			})
+			if !st.mutated {
+				return "", h.noChangeError(req, policy, st, lastTool, lastReq)
+			}
 			return "", h.finalizeLimitError(req, st, lastTool, lastReq)
 		}
 
@@ -904,12 +917,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request) (string,
 			switch {
 			case st.finalizeEligible():
 				st.phase = implFinalize
-				advice = append(advice, implementFinalizeInstruction)
+				if st.mutated {
+					advice = append(advice, implementFinalizeInstruction)
+				} else {
+					advice = append(advice, implementFinalInstruction)
+				}
 				h.recordImplementEvent(req, implementFinalizeEvent, "")
-			case !st.mutated && st.interactions >= implementLateStageAfter && !st.finalInstructed:
-				st.finalInstructed = true
-				advice = append(advice, implementFinalInstruction)
-				h.recordImplementEvent(req, implementFinalEvent, "no repository change yet; implement or report truthfully")
 			case !st.mutated && st.interactions >= implementFinalizeAfter && !st.implementInstructed:
 				st.implementInstructed = true
 				advice = append(advice, implementNowInstruction)
@@ -925,6 +938,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request) (string,
 			chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
 			chatMessage{Role: "user", Content: content},
 		)
+	}
+	if !st.mutated {
+		return "", h.noChangeError(req, policy, st, lastTool, lastReq)
 	}
 	return "", h.implementExhaustedError(req, policy, st, lastTool, lastReq)
 }
@@ -951,6 +967,23 @@ func (h *Harness) recordImplementTurn(req agent.Request, phase implementPhase, i
 // be understood after the fact.
 func (h *Harness) recordImplementEvent(req agent.Request, event, detail string) {
 	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: event, Detail: detail})
+}
+
+// terminationNoChange marks a phased run that ended without changing the
+// repository.
+const terminationNoChange = "no_change"
+
+// changeIncompleteError reports that a phased mutating capability ended without
+// changing the repository: the agent never acted, so the right response is to try
+// again (a retryable human boundary), not to record the work as failed.
+type changeIncompleteError struct{ msg string }
+
+func (e *changeIncompleteError) Error() string { return e.msg }
+
+// noChangeError builds the retryable "made no repository change" diagnostic.
+func (h *Harness) noChangeError(req agent.Request, policy CapabilityPolicy, st *implementState, lastTool, lastRequest string) error {
+	return &changeIncompleteError{fmt.Sprintf("Ollama agent %s made no repository change after %d iterations (model=%s, tool_calls=%d, termination=%s%s); a retry may succeed",
+		req.Capability, policy.MaxIterations, h.cfg.Model, st.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))}
 }
 
 // implementExhaustedError reports that IMPLEMENT consumed its hard iteration
