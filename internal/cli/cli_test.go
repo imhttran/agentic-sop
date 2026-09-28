@@ -854,17 +854,23 @@ func TestRunNoChanges(t *testing.T) {
 	}
 }
 
-func TestRunValidationFailureFailsGate(t *testing.T) {
+func TestRunValidationFailureEntersFixLoop(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n  test:\n    - \"true\"\n")
-	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", review: `{"summary":"clean","findings":[]}`}
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", fix: "x", review: `{"summary":"clean","findings":[]}`}
 
+	// A failing check is actionable on its own: review is skipped when validation
+	// fails, so the bounded fix loop must run for it. An unrepairable failure
+	// exhausts the budget into a human decision, not a silent hard failure.
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "FAIL") {
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if !strings.Contains(stdout, "fix cycles: 3/3") {
 		t.Errorf("stdout = %q", stdout)
 	}
 }
@@ -1047,26 +1053,29 @@ func TestRunGraphExecutesReadyTask(t *testing.T) {
 	}
 }
 
-func TestRunGraphBlocksOnGateFailure(t *testing.T) {
+func TestRunGraphValidationFailureRequeues(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"false\"\n")
 	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Add widget", Status: domain.PLANNED, MaxAttempts: 3})
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "x", fix: "x"}
 
+	// An unrepairable check failure escalates to NEEDS_HUMAN, which the graph
+	// requeues rather than blocking, so a later run retries it with the failure as
+	// context (bounded by max_attempts).
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 	if code != exitError {
 		t.Errorf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "T001 BLOCKED") {
+	if !strings.Contains(stdout, "T001 NEEDS_HUMAN") {
 		t.Errorf("stdout = %q", stdout)
 	}
 
 	st, _ := store.Open(statePath(dir))
 	defer st.Close()
 	got, _ := st.Get("T001")
-	if got.Status != domain.BLOCKED {
-		t.Errorf("persisted status = %s, want BLOCKED", got.Status)
+	if got.Status != domain.PLANNED {
+		t.Errorf("persisted status = %s, want PLANNED (requeued for retry)", got.Status)
 	}
 }
 
@@ -1112,6 +1121,50 @@ func TestRunFixLoopExhausted(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "fix cycles: 3/3") {
 		t.Errorf("stdout = %q", stdout)
+	}
+}
+
+// repairingAgent writes a marker on its first fix, so a validation that fails on
+// the initial tree passes after the bounded repair. It exercises the fix loop
+// being driven by a check failure rather than a review finding.
+type repairingAgent struct {
+	dir   string
+	fixes int
+}
+
+func (a *repairingAgent) Generate(_ context.Context, r agent.Request) (agent.Response, error) {
+	switch r.Capability {
+	case agent.Plan:
+		return agent.Response{Content: validPlanJSON}, nil
+	case agent.Implement:
+		return agent.Response{Content: "impl"}, nil
+	case agent.Fix:
+		a.fixes++
+		if err := os.WriteFile(filepath.Join(a.dir, "fixed.marker"), []byte("ok"), 0o644); err != nil {
+			return agent.Response{}, err
+		}
+		return agent.Response{Content: "fixed"}, nil
+	default:
+		return agent.Response{Content: `{"summary":"clean","findings":[]}`}, nil
+	}
+}
+
+func TestRunFixLoopRepairsFailingValidation(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	// The check fails until the fix writes the marker.
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  test:\n    - \"test -f fixed.marker\"\n")
+	a := &repairingAgent{dir: dir}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "fix cycles: 1/3") {
+		t.Errorf("stdout = %q", stdout)
+	}
+	if a.fixes != 1 {
+		t.Errorf("fix invocations = %d, want 1", a.fixes)
 	}
 }
 

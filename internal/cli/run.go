@@ -321,8 +321,14 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			FixCycles:    cycles,
 		})
 
+		// A failing check is actionable in its own right: the bounded repair loop must
+		// run for it, not only for blocking review findings. Review is skipped when
+		// validation fails, so without this a broken build or test would never reach a
+		// fix at all. The loop still stops when the gate passes, the fix budget is
+		// spent, or nothing is left to act on.
+		validationFailed := !suite.Passed()
 		actionable := quality.BlockingFindings(cfg.Quality.FailOn, report.Findings)
-		if gate.Decision != quality.Fail || actionable == 0 || cycles >= maxCycles {
+		if gate.Decision != quality.Fail || cycles >= maxCycles || (!validationFailed && actionable == 0) {
 			break
 		}
 
@@ -334,8 +340,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
 			Task:               spec.Render(),
-			Input:              fixContext(plan.RenderMarkdown(), report, diff),
-			OutputRequirements: "Fix the blocking findings in the working tree and summarize the changes.",
+			Input:              fixContext(plan.RenderMarkdown(), report, suite, diff),
+			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
 		})
 		fixStop()
 		rec.AgentCall()
@@ -460,12 +466,17 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 	return b.String()
 }
 
-// fixContext renders the bounded context a fix is given: the plan, the blocking
-// findings, and the current diff.
-func fixContext(plan string, report review.Report, diff string) string {
+// fixContext renders the bounded context a fix is given: the plan, the
+// deterministic validation failure that still stands (when a check failed), the
+// blocking review findings, and the current diff.
+func fixContext(plan string, report review.Report, suite testrunner.SuiteResult, diff string) string {
 	var b strings.Builder
 	b.WriteString("# Plan\n\n")
 	b.WriteString(strings.TrimSpace(plan))
+	if !suite.Passed() {
+		b.WriteString("\n\n")
+		b.WriteString(validationFailureContext(suite))
+	}
 	b.WriteString("\n\n# Blocking findings\n\n")
 	for _, f := range report.Findings {
 		location := f.File
