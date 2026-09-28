@@ -494,7 +494,11 @@ repeat that reproduces the _same_ outcome is “no progress” and spends **noth
 resolve later is picked up without a manual unlock. That case is reported as
 `NEEDS_HUMAN (no change since the previous attempt: …)`. A hard `FAIL` (including
 a claimed change with none produced) leaves the task `BLOCKED`; requeue it
-explicitly with `sop retry <task-id>`.
+explicitly with `sop retry <task-id>`, or requeue every `BLOCKED` task that still
+has budget with `sop retry --all`. A retried task is handed the previous
+attempt's outcome as context (a `# Previous attempt` section in the implement
+request), so the agent can address the blocker instead of repeating the request
+that stopped it.
 
 A `changes_expected: false` completion still runs the **configured validation**
 (build/test/lint) before it can pass; review is skipped because there is nothing
@@ -830,7 +834,7 @@ sop eval DIR
 sop status
 sop task <id>
 sop resume [task-id]
-sop retry <task-id>
+sop retry <task-id> | --all
 sop version
 sop help
 ```
@@ -1046,6 +1050,20 @@ single in-flight task:
 sop resume
 sop resume S001
 ```
+
+## `retry`
+
+Requeue a `BLOCKED` task to `PLANNED` so the next `sop run` retries it, or requeue
+every `BLOCKED` task that still has retry budget at once:
+
+```bash
+sop retry S001
+sop retry --all
+```
+
+A requeue spends one attempt against `max_attempts`; a task whose budget is spent
+is reported and left `BLOCKED`. The retry resumes the same task and is given the
+previous attempt's outcome as context.
 
 ---
 

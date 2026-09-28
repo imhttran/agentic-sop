@@ -130,3 +130,13 @@ reproduces the previous outcome spends no attempt and leaves the task runnable,
 while a retry that moves the outcome forward spends one. That required comparing
 the outcome (its decisive reasons) against the previous attempt, persisted beside
 the run so it survives a restart — a durable signature, not a timestamp.
+
+## Recovery reuses the reason it already recorded
+
+When a task stopped at a human boundary, the cheapest way to help the retry was
+to hand it the outcome SOP had already persisted — decision and reasons — rather
+than re-derive intent from run logs or prose. The same recorded signature that
+detects a no-progress repeat doubles as the retry's context, so budgeting retries
+and explaining them stay one artifact. Recovery also has to be one command: making
+the operator requeue blocked tasks one id at a time turns a bounded step into a
+manual chore, which is why `sop retry --all` exists.

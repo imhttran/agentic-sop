@@ -262,8 +262,9 @@ before it passes, and a human boundary stops with `NEEDS_HUMAN` (the task is
 requeued — bounded by `max_attempts`, default 3 — so a later run retries it; a
 retry that reproduces the same outcome is “no progress” and spends no attempt,
 while a retry that changes its outcome spends one; a `BLOCKED` task can be
-requeued explicitly with `sop retry <task-id>`). The outcome is never inferred
-from prose.
+requeued explicitly with `sop retry <task-id>` or `sop retry --all`, and a retry
+is given the previous attempt's outcome as context). The outcome is never
+inferred from prose.
 
 ### Validation Runner
 
