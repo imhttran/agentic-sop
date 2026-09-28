@@ -226,6 +226,16 @@ closes it. The resulting "changed nothing" is a _retryable_ boundary, not a hard
 failure: a flaky sample that simply did not act should be sent back around, not
 blocked for a human. Distinguish "the work failed" from "the agent never tried".
 
+## An agent that can overwrite must be able to undo
+
+The harness let the model overwrite `README.md` and then had no way to recover it:
+`write_file` clobbers in place, and the command policy (rightly) refuses
+`git checkout`. One bad write ended the task and needed a human. A tool surface
+that grants a destructive capability has to grant its inverse -- a scoped
+`restore_file` (one path, from HEAD, no history change) -- or the agent is one
+mistake away from being stuck. And a failure the _model_ reports, not just one the
+harness raises, is still a failure to diagnose, so its trace must be kept too.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding

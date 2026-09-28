@@ -685,6 +685,7 @@ T065 enter the bounded fix loop on a failing validation, not only on review find
 T066 run FIX through the phased completion loop (share it with IMPLEMENT)
 T067 persist a failed run's per-turn trace to an operator sink
 T068 bound the unmutated run (force a conclusion at the late stage; retry a no-op)
+T069 scoped delete/restore tools; trace a model-reported failure
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

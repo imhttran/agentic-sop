@@ -477,8 +477,9 @@ sop run docs/PLAN-Agent-Harness-V2.md
 
 `scripts/sop-ollama-agent.sh` builds `cmd/sop-ollama-agent` and runs it with the
 current directory as the repository. The model gets a small set of controlled tools
-(`read_file`, `write_file`, `create_file`, `list_files`, `search_files`, an
-allow-listed `run_command`, `git_status`, `git_diff`) and a bounded tool loop; it
+(`read_file`, `write_file`, `create_file`, `delete_file`, `restore_file` — a
+scoped undo of its own bad write — `list_files`, `search_files`, an allow-listed
+`run_command`, `git_status`, `git_diff`) and a bounded tool loop; it
 cannot escape the repository, modify `.agent-sdlc` state, or run history-changing
 or destructive commands. It consumes both the JSON tool call in the model's content
 and Ollama's native tool calls, so a tool-capable model works either way. SOP still
@@ -520,12 +521,12 @@ capability run in phases instead of one flat loop:
 A capability that repeats a non-progressing action is told once to conclude, then
 stopped early with a diagnostic. Neither PLAN nor the phased capabilities own
 final validation — SOP performs independent validation and review after they
-return. A failed run also writes a safe per-turn diagnostic trail to stderr
-(capability, phase, iteration, tool, request, progress, recovery); it never
-contains prompts, file contents, or secrets. SOP's command provider discards that
-stderr, so set `SOP_OLLAMA_TRACE_LOG` to a file to keep the trace of every failed
-run, and `SOP_TOOL_AUDIT_LOG` to keep the tool audit. Both are operator-set
-sinks; neither is SOP's state database.
+return. A failed run — or one in which the model itself reports a failure or a
+human boundary — writes a safe per-turn diagnostic trail to stderr (capability,
+phase, iteration, tool, request, progress, recovery); it never contains prompts,
+file contents, or secrets. SOP's command provider discards that stderr, so set
+`SOP_OLLAMA_TRACE_LOG` to a file to keep the trace, and `SOP_TOOL_AUDIT_LOG` to
+keep the tool audit. Both are operator-set sinks; neither is SOP's state database.
 
 ### Command agent outcomes
 
