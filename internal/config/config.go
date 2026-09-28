@@ -36,9 +36,24 @@ const CurrentVersion = 1
 // DefaultMaxFixCycles bounds the review/fix loop when none is configured.
 const DefaultMaxFixCycles = 3
 
-// Supported agent providers and review engines, kept here so a bad value fails
-// at load time with a clear message instead of at first use.
+// Default agent settings for new projects (plan AHV2008).
+const (
+	// DefaultHarness is the harness new projects start with: the tool-enabled
+	// coding-agent path.
+	DefaultHarness = "tool"
+	// DefaultProvider is the model provider new projects start with.
+	DefaultProvider = "ollama"
+	// DefaultModel is the model new projects start with.
+	DefaultModel = "deepseek-v4.1-flash:cloud"
+	// LegacyHarness is the harness implied by the legacy command path. A
+	// project that only sets provider: command keeps behaving as before.
+	LegacyHarness = "command"
+)
+
+// Supported agent harnesses, providers, and review engines, kept here so a bad
+// value fails at load time with a clear message instead of at first use.
 var (
+	supportedHarnesses = map[string]bool{"tool": true, "command": true}
 	supportedProviders = map[string]bool{"command": true, "ollama": true, "llamacpp": true}
 	supportedEngines   = map[string]bool{"self": true, "open-code-review": true}
 	supportedSeverity  = map[string]bool{
@@ -71,9 +86,14 @@ type Project struct {
 	IntegrationBranch string `yaml:"integration_branch"`
 }
 
-// Agent selects the model provider and, optionally, the model it serves.
-// Credentials and endpoints stay in the environment.
+// Agent selects the execution harness, the model provider it drives, and,
+// optionally, the model the provider serves. Credentials and endpoints stay in
+// the environment.
 type Agent struct {
+	// Harness selects the execution layer. "tool" is the tool-enabled coding
+	// agent that reads and modifies the repository through controlled tools;
+	// "command" is the legacy externally-invoked command agent.
+	Harness  string `yaml:"harness"`
 	Provider string `yaml:"provider"`
 	// Model names the model for the selected provider (ollama or llamacpp). It is
 	// ignored by the command provider, and the provider's environment variable
@@ -148,15 +168,20 @@ type Workflow struct {
 }
 
 // Default returns the built-in configuration, the same values the generated
-// template documents.
+// template documents. New projects start on the tool harness with Ollama and
+// deepseek-v4.1-flash:cloud (plan AHV2008).
 func Default() Config {
 	requireTests := true
 	approval := true
 	return Config{
 		Version: CurrentVersion,
 		Project: Project{IntegrationBranch: "main"},
-		Agent:   Agent{Provider: "command"},
-		Review:  Review{Engine: "self"},
+		Agent: Agent{
+			Harness:  DefaultHarness,
+			Provider: DefaultProvider,
+			Model:    DefaultModel,
+		},
+		Review: Review{Engine: "self"},
 		Quality: Quality{
 			RequireTests: &requireTests,
 			MaxFixCycles: DefaultMaxFixCycles,
@@ -226,6 +251,11 @@ func Parse(data []byte) (*Config, error) {
 // applyDefaults fills omitted settings. A field whose zero value is also a
 // valid explicit value uses a pointer (RequireTests, ApprovalBeforeCommit);
 // the others use their zero value as "unset".
+//
+// Precedence is defaults < explicit config file values: an explicitly
+// configured value is never overwritten. In particular a project that sets
+// agent.provider: command is never coerced onto the tool/Ollama defaults, so
+// legacy command projects keep the command path (plan AHV2008).
 func (c *Config) applyDefaults() {
 	if c.Version == 0 {
 		c.Version = CurrentVersion
@@ -233,9 +263,32 @@ func (c *Config) applyDefaults() {
 	if strings.TrimSpace(c.Project.IntegrationBranch) == "" {
 		c.Project.IntegrationBranch = "main"
 	}
-	if strings.TrimSpace(c.Agent.Provider) == "" {
-		c.Agent.Provider = "command"
+
+	// Agent defaults: fill only what the project omitted. A harness is inferred
+	// from an explicit provider only when the harness itself is unset and the
+	// provider is the legacy command provider, otherwise the harness default is
+	// the tool harness.
+	provider := strings.TrimSpace(c.Agent.Provider)
+	if provider == "" {
+		c.Agent.Provider = DefaultProvider
+		provider = DefaultProvider
 	}
+	if strings.TrimSpace(c.Agent.Harness) == "" {
+		if provider == "command" {
+			c.Agent.Harness = LegacyHarness
+		} else {
+			c.Agent.Harness = DefaultHarness
+		}
+	}
+	if strings.TrimSpace(c.Agent.Model) == "" {
+		// The model is only meaningful for model-serving providers. Leaving it
+		// unset for the command provider avoids asserting a model the command
+		// path ignores (and keeps the command path's behavior unchanged).
+		if provider != "command" {
+			c.Agent.Model = DefaultModel
+		}
+	}
+
 	if strings.TrimSpace(c.Review.Engine) == "" {
 		c.Review.Engine = "self"
 	}
@@ -263,6 +316,10 @@ func (c *Config) Validate() error {
 	}
 	if strings.TrimSpace(c.Project.Name) == "" {
 		return errors.New("config: project.name is required")
+	}
+	if !supportedHarnesses[strings.TrimSpace(c.Agent.Harness)] {
+		return fmt.Errorf("config: unknown agent.harness %q (want %s)",
+			c.Agent.Harness, strings.Join(sortedKeys(supportedHarnesses), ", "))
 	}
 	if !supportedProviders[strings.TrimSpace(c.Agent.Provider)] {
 		return fmt.Errorf("config: unknown agent.provider %q (want %s)",
@@ -315,10 +372,16 @@ project:
   integration_branch: main
 
 agent:
+  # tool | command
+  # tool: the tool-enabled coding agent that edits the repository through
+  # controlled tools. command: the legacy externally-invoked command agent
+  # (for example scripts/sop-agent.sh).
+  harness: %s
   # command | ollama | llamacpp
-  provider: command
-  # model names the model for ollama/llamacpp (the provider's env var overrides it).
-  # model: llama3.2
+  provider: %s
+  # model names the model for ollama/llamacpp; the provider's env var
+  # (for example SOP_OLLAMA_MODEL) overrides it.
+  model: %s
 
 validation:
   build:
@@ -346,7 +409,7 @@ human:
 workflow:
   # local | pull-request
   mode: local
-`, CurrentVersion, name, DefaultMaxFixCycles)
+`, CurrentVersion, name, DefaultHarness, DefaultProvider, DefaultModel, DefaultMaxFixCycles)
 }
 
 // sortedKeys returns a map's keys in a stable order for error messages.
