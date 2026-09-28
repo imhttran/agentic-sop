@@ -75,8 +75,9 @@ func capabilityGuidance(c agent.Capability) string {
 
 For IMPLEMENT, work in three phases: discover enough context to make the change,
 make the change, then finalize. You will be told when to stop exploring and
-return your outcome; do not keep working to prove every acceptance criterion
-yourself.
+return your outcome; if you have gathered context but not yet made the change,
+you will be told to implement and keep your tools. Do not keep working to prove
+every acceptance criterion yourself.
 
 When the implementation is complete, return the required final response immediately.
 

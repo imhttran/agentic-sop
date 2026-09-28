@@ -603,9 +603,18 @@ const (
 	// before the model is nudged to begin implementing. It is a soft transition:
 	// the read/search tools stay available.
 	implementNudgeAfter = 6
-	// implementFinalizeAfter is the tool-interaction count at which repository
-	// tools are withdrawn and the model must return its outcome.
+	// implementFinalizeAfter is the tool-interaction count at which a mutated
+	// invocation becomes eligible to finalize. Crossing it without a mutation does
+	// not finalize: a threshold is not evidence that the work is done.
 	implementFinalizeAfter = 18
+	// implementCompletionWindow is how many further tool interactions are allowed
+	// after a mutation once the finalize threshold is crossed, so a multi-file
+	// change can be completed before the tools are withdrawn.
+	implementCompletionWindow = 2
+	// implementLateStageAfter is the late-stage decision point. A mutated
+	// invocation finalizes here regardless of the completion window; a still
+	// unmutated one gets one final instruction to implement or report truthfully.
+	implementLateStageAfter = 22
 	// implementFinalizeTurns is how many model turns are allowed in FINALIZE before
 	// the invocation fails with a finalization diagnostic.
 	implementFinalizeTurns = 2
@@ -649,19 +658,63 @@ No additional tools are available.
 Return the required structured execution outcome now. SOP will perform
 independent validation.`
 
+	implementNowInstruction = `You have gathered enough repository context, but you have not yet made the
+required repository change.
+
+Stop broad exploration and implement the requested change now.
+
+Repository tools remain available for implementation.
+
+Use additional reads only when directly necessary to make the change.
+
+Do not return a completed outcome until the required implementation has
+actually been performed.
+
+Once the implementation is complete, return the required structured outcome.
+SOP will perform independent validation afterward.`
+
+	implementFinalInstruction = `You have not yet performed the required repository change.
+
+Do not continue repository exploration.
+
+Either:
+- perform the required implementation now using the available tools, or
+- return a truthful structured outcome (needs_human or failed) explaining why
+  the implementation could not be performed.
+
+Do not claim completion without making the required change. Do not invent
+repository changes. SOP will independently validate the repository.`
+
 	implementChangeEvent   = "→ CHANGE"
 	implementFinalizeEvent = "→ FINALIZE"
+	implementContinueEvent = "→ CHANGE_CONTINUE"
+	implementFinalEvent    = "→ CHANGE_FINAL"
 )
 
 // implementState is the invocation-scoped phase state of one IMPLEMENT run. It is
 // never stored on the shared Harness, so one invocation cannot leak mutation or
 // phase state into another.
 type implementState struct {
-	phase         implementPhase
-	mutated       bool // a controlled mutation succeeded during this invocation
-	interactions  int  // tool interactions executed this invocation
-	nudged        bool // the discovery nudge has been sent
-	finalizeTurns int  // model turns consumed in FINALIZE
+	phase               implementPhase
+	mutated             bool // a controlled mutation succeeded during this invocation
+	interactions        int  // tool interactions executed this invocation
+	sinceMutation       int  // tool interactions since the last successful mutation
+	nudged              bool // the discovery nudge has been sent
+	implementInstructed bool // the implement-now instruction has been sent
+	finalInstructed     bool // the late-stage final instruction has been sent
+	finalizeTurns       int  // model turns consumed in FINALIZE
+}
+
+// finalizeEligible reports whether the threshold for withdrawing the tools has
+// been reached *and* this invocation has actually changed the repository. A
+// threshold crossed without a mutation keeps the invocation in CHANGE, because
+// finalization must not cut off a productive implementation before it changes
+// anything.
+func (st implementState) finalizeEligible() bool {
+	if !st.mutated || st.interactions < implementFinalizeAfter {
+		return false
+	}
+	return st.interactions >= implementLateStageAfter || st.sinceMutation >= implementCompletionWindow
 }
 
 // isMutationTool reports whether a successful call to name changes the
@@ -671,10 +724,13 @@ func isMutationTool(name string) bool {
 }
 
 // executeImplement runs the three-phase IMPLEMENT loop. Discovery and change may
-// use the controlled tools; at the finalize threshold those tools are withdrawn
-// and the model must return the structured outcome. A final response ends the
-// invocation in any phase, so early completion is preserved, and the capability's
-// MaxIterations stays the hard safety ceiling.
+// use the controlled tools; once the finalize threshold is crossed *with* an
+// observed mutation those tools are withdrawn and the model must return the
+// structured outcome. A threshold crossed without a mutation does not finalize:
+// the model is told to implement and keeps its tools, so a productive
+// implementation is never cut off before it changes anything. A final response
+// ends the invocation in any phase, so early completion is preserved, and the
+// capability's MaxIterations stays the hard safety ceiling.
 func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
@@ -782,12 +838,15 @@ func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (stri
 		justMutated := toolErr == nil && isMutationTool(name)
 		if justMutated {
 			st.mutated = true
+			st.sinceMutation = 0
+		} else if st.mutated {
+			st.sinceMutation++
 		}
 
 		recovery, terminate := progress.observe(actionFingerprint(name, args, result, toolErr))
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange
-			h.recordImplementTransition(req, implementChangeEvent)
+			h.recordImplementEvent(req, implementChangeEvent, "")
 		}
 		h.recordImplementTurn(req, st.phase, iteration, name, lastReq, progress.label(), recovery, terminate)
 		if terminate {
@@ -806,10 +865,24 @@ func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (stri
 			st.nudged = true
 			advice = append(advice, implementNudge)
 		}
-		if st.phase != implFinalize && st.interactions >= implementFinalizeAfter {
-			st.phase = implFinalize
-			advice = append(advice, implementFinalizeInstruction)
-			h.recordImplementTransition(req, implementFinalizeEvent)
+		// Finalization is mutation-aware: crossing the threshold alone is not enough.
+		// Without a mutation the tools stay enabled and the model is pushed to
+		// implement, so a run is never finalized before it has changed anything.
+		if st.phase != implFinalize {
+			switch {
+			case st.finalizeEligible():
+				st.phase = implFinalize
+				advice = append(advice, implementFinalizeInstruction)
+				h.recordImplementEvent(req, implementFinalizeEvent, "")
+			case !st.mutated && st.interactions >= implementLateStageAfter && !st.finalInstructed:
+				st.finalInstructed = true
+				advice = append(advice, implementFinalInstruction)
+				h.recordImplementEvent(req, implementFinalEvent, "no repository change yet; implement or report truthfully")
+			case !st.mutated && st.interactions >= implementFinalizeAfter && !st.implementInstructed:
+				st.implementInstructed = true
+				advice = append(advice, implementNowInstruction)
+				h.recordImplementEvent(req, implementContinueEvent, "implementation required before finalization")
+			}
 		}
 
 		content := toolResultMessage(name, result, toolErr)
@@ -821,7 +894,7 @@ func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (stri
 			chatMessage{Role: "user", Content: content},
 		)
 	}
-	return "", h.limitError(req, policy, lastTool, lastReq)
+	return "", h.implementExhaustedError(req, policy, st, lastTool, lastReq)
 }
 
 // recordImplementTurn appends one safe trace entry for an IMPLEMENT turn.
@@ -841,9 +914,20 @@ func (h *Harness) recordImplementTurn(req agent.Request, phase implementPhase, i
 	h.trace.Record(rec)
 }
 
-// recordImplementTransition marks a phase change in the trace.
-func (h *Harness) recordImplementTransition(req agent.Request, event string) {
-	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: event})
+// recordImplementEvent marks a phase transition or a completion-policy decision in
+// the trace. A non-empty detail carries a short, secret-free reason so a run can
+// be understood after the fact.
+func (h *Harness) recordImplementEvent(req agent.Request, event, detail string) {
+	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: event, Detail: detail})
+}
+
+// implementExhaustedError reports that IMPLEMENT consumed its hard iteration
+// ceiling without finalizing. It records whether a mutation was observed, so the
+// two very different failures — changed nothing, and changed things but would not
+// stop — are distinguishable.
+func (h *Harness) implementExhaustedError(req agent.Request, policy CapabilityPolicy, st *implementState, lastTool, lastRequest string) error {
+	return fmt.Errorf("Ollama agent %s did not complete after %d iterations (model=%s, mutation_observed=%t, tool_calls=%d, termination=%s%s)",
+		req.Capability, policy.MaxIterations, h.cfg.Model, st.mutated, st.interactions, terminationIteration, actionSuffix(lastTool, lastRequest))
 }
 
 // finalizeLimitError reports that IMPLEMENT kept asking for tools after its

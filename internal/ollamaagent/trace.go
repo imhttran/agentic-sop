@@ -17,7 +17,10 @@ type TraceRecord struct {
 	Phase string
 	// Event is a phase transition marker with no turn of its own, such as
 	// PLAN's discovery-to-synthesis transition.
-	Event       string
+	Event string
+	// Detail is an optional short, secret-free reason attached to an Event (for
+	// example why IMPLEMENT stayed in CHANGE instead of finalizing).
+	Detail      string
 	Iteration   int
 	Tool        string
 	Request     string
@@ -72,7 +75,11 @@ func (l *TraceLog) Flush(w io.Writer) {
 	fmt.Fprintf(w, "sop-ollama-agent: trace: %d turns\n", len(records))
 	for _, r := range records {
 		if r.Event != "" {
-			fmt.Fprintf(w, "  %s %s\n", r.Capability, r.Event)
+			line := "  " + r.Capability + " " + r.Event
+			if r.Detail != "" {
+				line += " (" + r.Detail + ")"
+			}
+			fmt.Fprintln(w, line)
 			continue
 		}
 		line := "  " + r.Capability

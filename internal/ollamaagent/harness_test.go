@@ -403,23 +403,27 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 	}
 }
 
-// TestImplementStopsAtFinalizationLimit covers a model that keeps making
-// distinct tool calls without returning an outcome. IMPLEMENT must not run to its
-// 24-iteration hard ceiling: at the finalization threshold its tools are
-// withdrawn and a model that still refuses to finalize is stopped, well before
-// the ceiling, with a phase-specific reason.
-func TestImplementStopsAtFinalizationLimit(t *testing.T) {
+// TestImplementWithoutMutationStopsAtHardCeiling covers a model that keeps making
+// distinct tool calls without ever changing the repository. IMPLEMENT must not
+// finalize (there is nothing to finalize) and must not claim success: it stops at
+// the capability's hard ceiling with a diagnostic recording the missing mutation,
+// so "changed nothing" and "changed things but would not stop" stay distinct.
+func TestImplementWithoutMutationStopsAtHardCeiling(t *testing.T) {
 	dir := t.TempDir()
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
 
-	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "termination=finalization_limit") {
-		t.Fatalf("err = %v, want a finalization_limit termination", err)
+	h := New(cfg, dir)
+	_, err := h.Execute(context.Background(), implementRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
+		t.Fatalf("err = %v, want an iteration_limit termination", err)
 	}
-	if !strings.Contains(err.Error(), "tool_calls=18") || !strings.Contains(err.Error(), "finalization_turns=2") {
-		t.Errorf("err = %v, want the observed tool and finalization counts", err)
+	if !strings.Contains(err.Error(), "mutation_observed=false") || !strings.Contains(err.Error(), "tool_calls=24") {
+		t.Errorf("err = %v, want the missing-mutation diagnostic", err)
+	}
+	if hasEvent(h.TraceRecords(), implementFinalizeEvent) {
+		t.Error("a run with no mutation must not be forced to finalize")
 	}
 }
 
@@ -943,9 +947,11 @@ func TestImplementDeniedMutationNotCounted(t *testing.T) {
 
 func TestImplementForcedFinalization(t *testing.T) {
 	dir := t.TempDir()
-	seedToolFiles(t, dir, "pkg", implementFinalizeAfter)
-	responses := distinctToolCalls(implementFinalizeAfter)
-	responses = append(responses, `{"status":"completed","summary":"done","changes_expected":false}`)
+	// A mutation must be observed before the threshold withdraws the tools, so the
+	// fixture writes once, then continues targeted reads to the threshold.
+	responses := []string{`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`}
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-1)...)
+	responses = append(responses, `{"status":"completed","summary":"done","changes_expected":true}`)
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
@@ -971,11 +977,12 @@ func TestImplementForcedFinalization(t *testing.T) {
 
 func TestImplementToolRequestDuringFinalizationIsDenied(t *testing.T) {
 	dir := t.TempDir()
-	seedToolFiles(t, dir, "pkg", implementFinalizeAfter)
-	responses := distinctToolCalls(implementFinalizeAfter)
+	writeFile(t, dir, "notes.txt", "hello")
+	responses := []string{`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`}
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-1)...)
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,
-		`{"status":"completed","summary":"done","changes_expected":false}`,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"status":"completed","summary":"done","changes_expected":true}`,
 	)
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -1012,6 +1019,130 @@ func TestImplementToolRequestDuringFinalizationIsDenied(t *testing.T) {
 	}
 	if !sawDenied {
 		t.Error("the trace does not show a denied finalize turn")
+	}
+}
+
+// TestImplementThresholdWithoutMutationKeepsToolsAndPushesImplementation is the
+// AHV2008 shape: substantial discovery with no change yet reaches the finalize
+// threshold. The threshold alone must not withdraw the tools or finalize — the
+// model is pushed to implement, keeps its tools, mutates, and only then finalizes.
+func TestImplementThresholdWithoutMutationKeepsToolsAndPushesImplementation(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", implementFinalizeAfter+2)
+	responses := distinctToolCalls(implementFinalizeAfter) // 18 discovery reads, no mutation
+	responses = append(responses,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"tool":"git_diff","args":{}}`,
+		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,
+		`{"status":"completed","summary":"implemented","changes_expected":true}`,
+	)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	records := h.TraceRecords()
+	if !hasEvent(records, implementContinueEvent) {
+		t.Errorf("the implement-now decision was not traced: %+v", records)
+	}
+	if !hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("finalization was not entered after the mutation: %+v", records)
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	if out := b.String(); !strings.Contains(out, "→ CHANGE_CONTINUE (implementation required before finalization)") {
+		t.Errorf("the continue decision was not rendered in the trace:\n%s", out)
+	}
+	// The implement-now instruction reached the model before it mutated.
+	if text := messageText(fake.request(implementFinalizeAfter)); !strings.Contains(text, "you have not yet made the") {
+		t.Errorf("the implement-now instruction was not sent:\n%s", text)
+	}
+	// Tools stayed enabled until the mutation-triggered finalization: the write and
+	// both targeted follow-ups executed rather than being withdrawn at the threshold.
+	if got := len(h.AuditRecords()); got != implementFinalizeAfter+3 {
+		t.Errorf("executed tools = %d, want %d (no early tool withdrawal)", got, implementFinalizeAfter+3)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(got) != "x" {
+		t.Errorf("out.txt = %q, want the mutation applied", got)
+	}
+}
+
+// TestImplementFinalizationExhaustionAfterMutation covers a model that mutates,
+// reaches the threshold, then keeps asking for tools during FINALIZE: it is
+// stopped with a phase-specific reason rather than the generic iteration limit.
+func TestImplementFinalizationExhaustionAfterMutation(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	responses := []string{`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`}
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-1)...)
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=finalization_limit") {
+		t.Fatalf("err = %v, want a finalization_limit termination", err)
+	}
+	if !strings.Contains(err.Error(), "mutation_observed=true") || !strings.Contains(err.Error(), "finalization_turns=2") {
+		t.Errorf("err = %v, want the mutation and finalization counts", err)
+	}
+}
+
+// TestImplementNonCompletedOutcomesNeedNoMutation verifies that truthful
+// escalation or failure outcomes are accepted without any repository change: the
+// mutation requirement applies to claiming success, not to honest non-completion.
+func TestImplementNonCompletedOutcomesNeedNoMutation(t *testing.T) {
+	for _, tc := range []struct{ name, response string }{
+		{"needs_human", `{"status":"needs_human","reason":"needs authorization"}`},
+		{"failed", `{"status":"failed","reason":"cannot complete"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			_, srv := newFakeOllama(t, tc.response)
+			content, err := New(testConfig(srv.URL), dir).Execute(context.Background(), implementRequest())
+			if err != nil {
+				t.Fatalf("Execute failed: %v", err)
+			}
+			if !strings.Contains(content, `"status":"`+tc.name+`"`) {
+				t.Errorf("content = %q, want a %s outcome", content, tc.name)
+			}
+		})
+	}
+}
+
+// TestImplementEarlyMutationBeforeThresholdSucceeds covers a model that changes
+// the repository well before the finalize threshold and then returns an outcome:
+// the threshold is a maximum, not a minimum amount of work.
+func TestImplementEarlyMutationBeforeThresholdSucceeds(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	_, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"tool":"git_diff","args":{}}`,
+		`{"status":"completed","summary":"done","changes_expected":true}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	if hasEvent(h.TraceRecords(), implementFinalizeEvent) {
+		t.Error("an early completion must not be forced to finalize")
 	}
 }
 
