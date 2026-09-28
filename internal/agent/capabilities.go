@@ -9,6 +9,20 @@ import (
 // capabilityOrder is the canonical, stable order used when listing capabilities.
 var capabilityOrder = []Capability{Plan, DesignTests, Implement, DiagnoseFailure, Fix, Review}
 
+// mutatingCapabilities is the canonical set of capabilities that mutate the
+// repository. It is the single source of truth for the text-generation versus
+// repository-mutation distinction: a provider that can only generate text must
+// not declare any of these.
+var mutatingCapabilities = map[Capability]bool{
+	Implement: true,
+	Fix:       true,
+}
+
+// IsRepositoryMutation reports whether capability requires mutating the
+// repository rather than only generating text. IMPLEMENT and FIX mutate;
+// PLAN, DESIGN_TESTS, DIAGNOSE_FAILURE and REVIEW do not.
+func IsRepositoryMutation(capability Capability) bool { return mutatingCapabilities[capability] }
+
 // Capabilities is the set of capabilities an agent declares it can serve. It is
 // the routing vocabulary: the workflow asks for a capability, and a provider
 // that cannot serve it is rejected clearly instead of being sent the request.
@@ -34,6 +48,16 @@ func NewCapabilities(caps ...Capability) Capabilities {
 
 // Supports reports whether the set contains capability.
 func (c Capabilities) Supports(capability Capability) bool { return c[capability] }
+
+// Mutating reports whether the set contains any repository-mutating capability.
+func (c Capabilities) Mutating() bool {
+	for capability := range c {
+		if IsRepositoryMutation(capability) {
+			return true
+		}
+	}
+	return false
+}
 
 // List returns the supported capabilities in a stable order.
 func (c Capabilities) List() []Capability {
@@ -85,6 +109,8 @@ func (c *Checked) Capabilities() Capabilities { return c.caps }
 
 // Generate rejects an unsupported capability and otherwise delegates. The
 // request is validated first, so an invalid request never reaches the provider.
+// An unsupported capability is rejected outright: no substitution provider or
+// model is invoked.
 func (c *Checked) Generate(ctx context.Context, request Request) (Response, error) {
 	if err := request.Validate(); err != nil {
 		return Response{}, err

@@ -20,6 +20,11 @@ const (
 // defaultOllamaBaseURL is Ollama's default local address.
 const defaultOllamaBaseURL = "http://127.0.0.1:11434"
 
+// ollamaCapabilities is the set the native text-only Ollama provider can
+// actually serve. It generates text for planning, test design, diagnosis and
+// review, but cannot mutate the repository, so IMPLEMENT and FIX are excluded.
+var ollamaCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure, Review)
+
 // Ollama is an Agent backed by a local Ollama server's chat API.
 type Ollama struct {
 	baseURL string
@@ -94,5 +99,7 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	return requireNonEmpty("ollama", request.Capability, out.Message.Content)
 }
 
-// Capabilities declares that the Ollama provider serves every capability.
-func (o *Ollama) Capabilities() Capabilities { return AllCapabilities() }
+// Capabilities declares the text-generation capabilities the Ollama provider
+// serves. It cannot mutate the repository, so IMPLEMENT and FIX are excluded;
+// such requests are rejected rather than silently forwarded.
+func (o *Ollama) Capabilities() Capabilities { return ollamaCapabilities }

@@ -47,6 +47,28 @@ func TestAllCapabilities(t *testing.T) {
 	}
 }
 
+func TestIsRepositoryMutation(t *testing.T) {
+	mutating := map[Capability]bool{Implement: true, Fix: true}
+	for _, capability := range capabilityOrder {
+		want := mutating[capability]
+		if got := IsRepositoryMutation(capability); got != want {
+			t.Errorf("IsRepositoryMutation(%s) = %v, want %v", capability, got, want)
+		}
+	}
+}
+
+func TestCapabilitiesMutating(t *testing.T) {
+	if AllCapabilities().Mutating() != true {
+		t.Error("AllCapabilities should report a mutating capability")
+	}
+	if NewCapabilities(Plan, DesignTests, DiagnoseFailure, Review).Mutating() {
+		t.Error("text-only capabilities should not report mutation")
+	}
+	if !NewCapabilities(Plan, Fix).Mutating() {
+		t.Error("a set containing Fix should report mutation")
+	}
+}
+
 func TestCapabilitiesOf(t *testing.T) {
 	declared := NewCapabilities(Plan)
 	if got := CapabilitiesOf(restrictedAgent{caps: declared}); !got.Supports(Plan) || got.Supports(Fix) {
@@ -55,6 +77,41 @@ func TestCapabilitiesOf(t *testing.T) {
 	// An agent that declares nothing is assumed to serve everything.
 	if got := CapabilitiesOf(plainAgent{}); len(got.List()) != len(capabilityOrder) {
 		t.Errorf("CapabilitiesOf(plain) = %v, want all", got.List())
+	}
+}
+
+func TestOllamaCapabilities(t *testing.T) {
+	o, err := NewOllama("http://127.0.0.1:11434", "qwen3:8b", 0)
+	if err != nil {
+		t.Fatalf("NewOllama failed: %v", err)
+	}
+	caps := CapabilitiesOf(o)
+	if caps.Supports(Implement) {
+		t.Error("Ollama must not advertise IMPLEMENT")
+	}
+	if caps.Supports(Fix) {
+		t.Error("Ollama must not advertise FIX")
+	}
+	for _, want := range []Capability{Plan, DesignTests, DiagnoseFailure, Review} {
+		if !caps.Supports(want) {
+			t.Errorf("Ollama should advertise %s", want)
+		}
+	}
+	if caps.Mutating() {
+		t.Error("Ollama's declared set must not include repository mutation")
+	}
+}
+
+func TestCommandAgentCapabilities(t *testing.T) {
+	a := NewCommandAgent("printf '%s' 'ok'")
+	caps := CapabilitiesOf(a)
+	for _, capability := range capabilityOrder {
+		if !caps.Supports(capability) {
+			t.Errorf("command agent must support %s", capability)
+		}
+	}
+	if !caps.Supports(Implement) || !caps.Supports(Fix) {
+		t.Error("command agent must keep supporting IMPLEMENT and FIX")
 	}
 }
 
@@ -70,6 +127,26 @@ func TestCheckedRejectsUnsupportedCapability(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "PLAN") {
 		t.Errorf("error = %q, want it to list the supported set", err)
+	}
+}
+
+func TestCheckedRejectsMutatingCapabilitiesForOllama(t *testing.T) {
+	o, err := NewOllama("http://127.0.0.1:11434", "qwen3:8b", 0)
+	if err != nil {
+		t.Fatalf("NewOllama failed: %v", err)
+	}
+	checked := NewChecked(o)
+	for _, capability := range []Capability{Implement, Fix} {
+		_, err := checked.Generate(context.Background(), validRequest(capability))
+		if err == nil {
+			t.Fatalf("expected %s to be rejected", capability)
+		}
+		if !strings.Contains(err.Error(), "does not support capability "+string(capability)) {
+			t.Errorf("error = %q, want it to name %s", err, capability)
+		}
+		if !strings.Contains(err.Error(), "PLAN") {
+			t.Errorf("error = %q, want it to list the supported set", err)
+		}
 	}
 }
 
