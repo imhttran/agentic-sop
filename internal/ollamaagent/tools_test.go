@@ -1,4 +1,4 @@
-package deepseekagent
+package ollamaagent
 
 import (
 	"context"
@@ -24,6 +24,7 @@ func TestResolveRejectsEscapes(t *testing.T) {
 		t.Fatal(err)
 	}
 	tb := newTestToolbox(t, root)
+	ctx := context.Background()
 
 	for _, bad := range []string{
 		"../outside.txt",
@@ -31,39 +32,77 @@ func TestResolveRejectsEscapes(t *testing.T) {
 		"/etc/passwd",
 		"escape/secret.txt", // symlink that leaves the repository
 	} {
-		if _, err := tb.resolve(bad, false); err == nil {
-			t.Errorf("resolve(%q) = nil error, want rejection", bad)
+		if out, err := tb.run(ctx, "read_file", map[string]any{"path": bad}); err == nil {
+			t.Errorf("read_file(%q) = (%q, nil), want rejection", bad, out)
 		}
 	}
-	if _, err := tb.resolve("inside.txt", false); err != nil {
-		t.Errorf("resolve(inside.txt) = %v, want success", err)
-	}
 }
 
-func TestResolveRejectsStateWritesButAllowsReads(t *testing.T) {
+// TestStateDBIsProtectedForEveryTool is the regression for the blocking finding:
+// the state database must be refused for reads and listings, not only writes.
+func TestStateDBIsProtectedForEveryTool(t *testing.T) {
 	root := t.TempDir()
+	stateDir := filepath.Join(root, ".agent-sdlc")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "state.db"), []byte("workflow state"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(stateDir, "config.yaml"), []byte("project:\n  name: x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	tb := newTestToolbox(t, root)
+	ctx := context.Background()
 
-	if _, err := tb.resolve(filepath.Join(".agent-sdlc", "state.db"), true); err == nil {
-		t.Error("writing .agent-sdlc/state.db was allowed")
+	// Direct and path-variant reads must be refused.
+	for _, path := range []string{
+		filepath.Join(".agent-sdlc", "state.db"),
+		".agent-sdlc/state.db",
+		"./.agent-sdlc/state.db",
+		filepath.Join(root, ".agent-sdlc", "state.db"),
+	} {
+		if out, err := tb.run(ctx, "read_file", map[string]any{"path": path}); err == nil {
+			t.Errorf("read_file(%q) succeeded: %q", path, out)
+		}
 	}
-	if _, err := tb.resolve(filepath.Join(".agent-sdlc", "config.yaml"), false); err != nil {
-		t.Errorf("reading .agent-sdlc/config.yaml was refused: %v", err)
-	}
-}
 
-func TestToolWriteToStateIsRefused(t *testing.T) {
-	root := t.TempDir()
-	tb := newTestToolbox(t, root)
-	_, err := tb.run(context.Background(), "write_file", map[string]any{
-		"path":    filepath.Join(".agent-sdlc", "state.db"),
-		"content": "tampered",
-	})
-	if err == nil || !strings.Contains(err.Error(), "refusing to modify SOP state") {
-		t.Fatalf("err = %v, want a state-write refusal", err)
+	// Writes and creates must be refused.
+	for _, tool := range []string{"write_file", "create_file"} {
+		if _, err := tb.run(ctx, tool, map[string]any{"path": ".agent-sdlc/state.db", "content": "tampered"}); err == nil {
+			t.Errorf("%s of .agent-sdlc/state.db was allowed", tool)
+		}
 	}
-	if _, statErr := os.Stat(filepath.Join(root, ".agent-sdlc", "state.db")); statErr == nil {
-		t.Error("the state file was created")
+	if got, err := os.ReadFile(filepath.Join(stateDir, "state.db")); err != nil || string(got) != "workflow state" {
+		t.Errorf("state.db changed: %q, %v", got, err)
+	}
+
+	// list_files on the state directory must not reveal the database name.
+	out, err := tb.run(ctx, "list_files", map[string]any{"path": ".agent-sdlc"})
+	if err != nil {
+		t.Fatalf("list_files: %v", err)
+	}
+	if strings.Contains(out, "state.db") {
+		t.Errorf("list_files exposed state.db:\n%s", out)
+	}
+
+	// search_files must not surface the database contents.
+	out, err = tb.run(ctx, "search_files", map[string]any{"pattern": "workflow"})
+	if err != nil {
+		t.Fatalf("search_files: %v", err)
+	}
+	if strings.Contains(out, "workflow state") || strings.Contains(out, "state.db") {
+		t.Errorf("search_files exposed the state database:\n%s", out)
+	}
+
+	// A command naming the database must be refused.
+	if _, err := tb.run(ctx, "run_command", map[string]any{"command": "cat .agent-sdlc/state.db"}); err == nil {
+		t.Error("run_command accessing .agent-sdlc/state.db was allowed")
+	}
+
+	// The configuration file stays readable: only the database is protected.
+	if out, err := tb.run(ctx, "read_file", map[string]any{"path": ".agent-sdlc/config.yaml"}); err != nil || !strings.Contains(out, "project") {
+		t.Errorf("read_file(.agent-sdlc/config.yaml) = (%q, %v), want the config", out, err)
 	}
 }
 
@@ -107,69 +146,7 @@ func TestCreateFileRefusesExistingTool(t *testing.T) {
 	}
 }
 
-// --- command policy ---
-
-func TestCommandPolicyAllowsSafeCommands(t *testing.T) {
-	tb := newTestToolbox(t, t.TempDir())
-	for _, argv := range [][]string{
-		{"git", "status"},
-		{"git", "diff"},
-		{"git", "log", "--oneline", "-5"},
-		{"go", "test", "./..."},
-		{"go", "build", "./..."},
-		{"go", "vet", "./..."},
-		{"gofmt", "-l", "."},
-	} {
-		if err := tb.allowCommand(argv); err != nil {
-			t.Errorf("allowCommand(%v) = %v, want allowed", argv, err)
-		}
-	}
-}
-
-func TestCommandPolicyRejectsDestructiveCommands(t *testing.T) {
-	tb := newTestToolbox(t, t.TempDir())
-	for _, argv := range [][]string{
-		{"git", "commit", "-m", "x"},
-		{"git", "push"},
-		{"git", "merge", "main"},
-		{"git", "rebase", "main"},
-		{"git", "reset", "--hard"},
-		{"git", "clean", "-fd"},
-		{"git", "checkout", "--", "."},
-		{"git", "restore", "."},
-		{"rm", "-rf", "/"},
-		{"go", "run", "./..."},
-		{"git", "-C", "/tmp", "status"}, // directory override escapes the repo
-	} {
-		if err := tb.allowCommand(argv); err == nil {
-			t.Errorf("allowCommand(%v) = nil, want rejection", argv)
-		}
-	}
-}
-
-func TestSplitCommandRejectsShellMetacharacters(t *testing.T) {
-	for _, bad := range []string{
-		"go test ./...; rm -rf /",
-		"go build ./... && echo hi",
-		"go test $(whoami)",
-		"cat file | mail",
-		"ls *",
-		"echo hi > out.txt",
-	} {
-		if _, err := splitCommand(bad); err == nil {
-			t.Errorf("splitCommand(%q) = nil, want rejection", bad)
-		}
-	}
-
-	argv, err := splitCommand(`go test -run 'TestThing' ./internal/...`)
-	if err != nil {
-		t.Fatalf("splitCommand failed on a safe command: %v", err)
-	}
-	want := []string{"go", "test", "-run", "TestThing", "./internal/..."}
-	if strings.Join(argv, "\x00") != strings.Join(want, "\x00") {
-		t.Errorf("argv = %v, want %v", argv, want)
-	}
-}
+// --- command policy through the shared harness ---
 
 func TestRunCommandRejectsDestructiveCall(t *testing.T) {
 	tb := newTestToolbox(t, t.TempDir())

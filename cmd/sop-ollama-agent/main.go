@@ -1,4 +1,4 @@
-// Command sop-deepseek-agent is the bootstrap DeepSeek coding-agent harness. SOP's
+// Command sop-ollama-agent is the bootstrap Ollama coding-agent harness. SOP's
 // command provider runs it with a JSON request on stdin and reads the response
 // content from stdout, exactly like any other command agent.
 //
@@ -13,12 +13,12 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/imhttran/agentic-sop/internal/deepseekagent"
+	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 )
 
 func main() {
-	if err := deepseekagent.Run(context.Background(), os.Stdin, os.Stdout, os.Stderr, os.Getwd); err != nil {
-		fmt.Fprintf(os.Stderr, "sop-deepseek-agent: %v\n", err)
+	if err := ollamaagent.Run(context.Background(), os.Stdin, os.Stdout, os.Stderr, os.Getwd); err != nil {
+		fmt.Fprintf(os.Stderr, "sop-ollama-agent: %v\n", err)
 		os.Exit(1)
 	}
 }

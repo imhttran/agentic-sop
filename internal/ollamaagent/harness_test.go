@@ -1,9 +1,10 @@
-package deepseekagent
+package ollamaagent
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // fakeOllama is a scripted /api/chat server: each call returns the next scripted
@@ -89,7 +91,6 @@ func testConfig(baseURL string) Config {
 		BaseURL:        baseURL,
 		Model:          DefaultModel,
 		Timeout:        5 * time.Second,
-		MaxIterations:  6,
 		MaxToolCalls:   4,
 		CommandTimeout: 10 * time.Second,
 		MaxOutputBytes: 1 << 20,
@@ -98,6 +99,20 @@ func testConfig(baseURL string) Config {
 
 func implementRequest() agent.Request {
 	return agent.Request{Capability: agent.Implement, Task: "do it", Input: "context", OutputRequirements: "summarize"}
+}
+
+func planRequest() agent.Request {
+	return agent.Request{Capability: agent.Plan, Task: "make a plan", Input: "prd", OutputRequirements: "json"}
+}
+
+// distinctToolCalls returns n distinct read_file calls, so a model that never
+// finishes performs genuinely different actions rather than a detected loop.
+func distinctToolCalls(n int) []string {
+	out := make([]string, n)
+	for i := range out {
+		out[i] = fmt.Sprintf(`{"tool":"read_file","args":{"path":"pkg/f%d.go"}}`, i)
+	}
+	return out
 }
 
 // --- Run: the stdin contract ---
@@ -155,6 +170,9 @@ func TestChatSendsModelJSONFormatAndNoStream(t *testing.T) {
 	if req.Stream {
 		t.Error("stream = true, want false")
 	}
+	if req.Think == nil || *req.Think {
+		t.Errorf("think = %v, want an explicit false to disable reasoning turns", req.Think)
+	}
 	if len(req.Messages) == 0 || req.Messages[0].Role != "system" {
 		t.Errorf("messages = %+v, want a system prompt first", req.Messages)
 	}
@@ -196,6 +214,45 @@ func TestConfigRejectsBadTimeout(t *testing.T) {
 
 // --- Tool loop ---
 
+func TestNativeToolCallIsExecuted(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello from the repo")
+
+	var calls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls++
+		if calls == 1 {
+			// Native Ollama tool call: empty content, the call in tool_calls.
+			_, _ = io.WriteString(w, `{"message":{"role":"assistant","content":"","tool_calls":[{"id":"call_1","function":{"name":"read_file","arguments":{"args":{"path":"notes.txt"}}}}]}}`)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(ollamaChatResponse{Message: chatMessage{Role: "assistant", Content: `{"status":"completed","summary":"read it","changes_expected":false}`}})
+	}))
+	defer srv.Close()
+
+	content, err := New(testConfig(srv.URL), dir).Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"changes_expected":false`) {
+		t.Errorf("content = %q", content)
+	}
+	if calls != 2 {
+		t.Errorf("chat calls = %d, want 2 (the native call was executed, not treated as empty)", calls)
+	}
+}
+
+func TestToolArgumentsUnwrapsArgsWrapper(t *testing.T) {
+	wrapped := toolArguments(json.RawMessage(`{"args":{"path":"a.go"}}`))
+	if wrapped["path"] != "a.go" {
+		t.Errorf("wrapped args = %v, want path=a.go", wrapped)
+	}
+	direct := toolArguments(json.RawMessage(`{"command":"go test ./..."}`))
+	if direct["command"] != "go test ./..." {
+		t.Errorf("direct args = %v, want command", direct)
+	}
+}
+
 func TestToolCallReadsFile(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "notes.txt", "hello from the repo")
@@ -216,6 +273,27 @@ func TestToolCallReadsFile(t *testing.T) {
 	}
 	if !strings.Contains(messageText(fake.request(1)), "hello from the repo") {
 		t.Errorf("the tool result was not fed back to the model:\n%s", messageText(fake.request(1)))
+	}
+}
+
+func TestToolCallWithRawControlCharactersIsParsed(t *testing.T) {
+	dir := t.TempDir()
+	// A tool call whose "content" holds literal newlines and tabs — invalid strict
+	// JSON, as a model emits when writing a multi-line file body.
+	call := "{\"tool\": \"write_file\", \"args\": {\"path\": \"pkg/new.go\", \"content\": \"package pkg\n\nfunc F() {}\n\"}}"
+	_, srv := newFakeOllama(t,
+		call,
+		`{"status":"completed","summary":"wrote it","changes_expected":true}`,
+	)
+	if _, err := New(testConfig(srv.URL), dir).Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, "pkg", "new.go"))
+	if err != nil {
+		t.Fatalf("file not written: %v", err)
+	}
+	if string(got) != "package pkg\n\nfunc F() {}\n" {
+		t.Errorf("content = %q", got)
 	}
 }
 
@@ -270,16 +348,33 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 	}
 }
 
-func TestIterationLimitIsBounded(t *testing.T) {
+func TestPlanStopsAtCapabilityBudget(t *testing.T) {
 	dir := t.TempDir()
-	tool := `{"tool":"git_status","args":{}}`
-	_, srv := newFakeOllama(t, tool, tool, tool, tool, tool, tool)
+	_, srv := newFakeOllama(t, distinctToolCalls(12)...)
 	cfg := testConfig(srv.URL)
-	cfg.MaxIterations = 3
+	cfg.MaxToolCalls = 100
+
+	_, err := New(cfg, dir).Execute(context.Background(), planRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
+		t.Fatalf("err = %v, want an iteration_limit termination", err)
+	}
+	if !strings.Contains(err.Error(), "after 8 iterations") {
+		t.Errorf("err = %v, want PLAN capped at its 8-iteration budget", err)
+	}
+}
+
+func TestImplementStopsAtCapabilityBudget(t *testing.T) {
+	dir := t.TempDir()
+	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
 
 	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "iteration limit") {
-		t.Fatalf("err = %v, want an iteration-limit error", err)
+	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
+		t.Fatalf("err = %v, want an iteration_limit termination", err)
+	}
+	if !strings.Contains(err.Error(), "after 24 iterations") {
+		t.Errorf("err = %v, want IMPLEMENT capped at 24, not the old universal 48", err)
 	}
 }
 
@@ -293,6 +388,200 @@ func TestToolCallLimitIsBounded(t *testing.T) {
 	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
 	if err == nil || !strings.Contains(err.Error(), "tool-call limit") {
 		t.Fatalf("err = %v, want a tool-call-limit error", err)
+	}
+}
+
+// --- Capability policy ---
+
+func TestCapabilityBudgets(t *testing.T) {
+	cases := []struct {
+		cap  agent.Capability
+		want int
+	}{
+		{agent.Plan, 8},
+		{agent.DesignTests, 12},
+		{agent.Implement, 24},
+		{agent.Fix, 24},
+		{agent.Review, 12},
+	}
+	for _, tc := range cases {
+		if got := PolicyFor(tc.cap).MaxIterations; got != tc.want {
+			t.Errorf("PolicyFor(%s).MaxIterations = %d, want %d", tc.cap, got, tc.want)
+		}
+	}
+}
+
+func TestCapabilityToolRestrictions(t *testing.T) {
+	plan := PolicyFor(agent.Plan)
+	if !plan.ReadOnly {
+		t.Error("PLAN should be read-only")
+	}
+	for _, tool := range []string{toolharness.ToolWriteFile, toolharness.ToolCreateFile, toolharness.ToolRunCommand} {
+		if plan.Allows(tool) {
+			t.Errorf("PLAN allows %s, want a read-only surface", tool)
+		}
+	}
+	for _, tool := range []string{toolharness.ToolReadFile, toolharness.ToolListFiles, toolharness.ToolSearchFiles, toolharness.ToolGitStatus, toolharness.ToolGitDiff} {
+		if !plan.Allows(tool) {
+			t.Errorf("PLAN should allow %s", tool)
+		}
+	}
+	impl := PolicyFor(agent.Implement)
+	if impl.ReadOnly {
+		t.Error("IMPLEMENT should not be read-only")
+	}
+	if !impl.Allows(toolharness.ToolWriteFile) || !impl.Allows(toolharness.ToolRunCommand) {
+		t.Error("IMPLEMENT should allow the mutation tools")
+	}
+}
+
+func TestPlanNormalCompletion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "context")
+	fake, srv := newFakeOllama(t,
+		`{"tool":"list_files","args":{"path":"."}}`,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"project":"p","summary":"s","stages":[]}`,
+	)
+	content, err := New(testConfig(srv.URL), dir).Execute(context.Background(), planRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "stages") {
+		t.Errorf("content = %q, want the plan document", content)
+	}
+	if fake.count() != 3 {
+		t.Errorf("chat calls = %d, want 3 (finished well before the 8-iteration budget)", fake.count())
+	}
+}
+
+func TestPlanCannotMutateRepository(t *testing.T) {
+	dir := t.TempDir()
+	fake, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"should-not-exist.txt","content":"nope"}}`,
+		`{"project":"p","summary":"s","stages":[]}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), planRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if _, statErr := os.Stat(filepath.Join(dir, "should-not-exist.txt")); statErr == nil {
+		t.Error("PLAN wrote a file: the read-only policy was bypassed")
+	}
+	if !strings.Contains(messageText(fake.request(1)), "not available for PLAN") {
+		t.Errorf("the refusal was not reported to the model:\n%s", messageText(fake.request(1)))
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied audit records = %d, want 1", denied)
+	}
+	if !strings.Contains(content, "stages") {
+		t.Errorf("content = %q, want the plan document", content)
+	}
+}
+
+func TestImplementNormalCompletion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	_, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"written"}}`,
+		`{"tool":"run_command","args":{"command":"go vet ./..."}}`,
+		`{"status":"completed","summary":"did it","changes_expected":true}`,
+	)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 10
+	content, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"changes_expected":true`) {
+		t.Errorf("content = %q", content)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(got) != "written" {
+		t.Errorf("out.txt = %q", got)
+	}
+}
+
+// --- No-progress detection ---
+
+func TestRepeatedToolActionStopsEarly(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "stable")
+	repeat := `{"tool":"read_file","args":{"path":"notes.txt"}}`
+	fake, srv := newFakeOllama(t, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	_, err := h.Execute(context.Background(), implementRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=no_progress") {
+		t.Fatalf("err = %v, want a no-progress termination", err)
+	}
+	if fake.count() >= maxIterationsImplement {
+		t.Errorf("chat calls = %d, want an early stop well under the 24-iteration budget", fake.count())
+	}
+	// The recovery instruction reached the model before it was stopped.
+	if last := fake.request(fake.count() - 1); !strings.Contains(messageText(last), "repeating actions without making progress") {
+		t.Errorf("the recovery instruction was not sent:\n%s", messageText(last))
+	}
+}
+
+func TestProgressAfterRepetitionContinues(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.txt", "one")
+	writeFile(t, dir, "b.txt", "two")
+	fake, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"a.txt"}}`,
+		`{"tool":"read_file","args":{"path":"a.txt"}}`,
+		`{"tool":"read_file","args":{"path":"b.txt"}}`,
+		`{"status":"completed","summary":"done","changes_expected":false}`,
+	)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 10
+	content, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "completed") {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != 4 {
+		t.Errorf("chat calls = %d, want 4 (a single repeat is not a loop)", fake.count())
+	}
+}
+
+func TestTraceIsSafeAndRecordsTurns(t *testing.T) {
+	dir := t.TempDir()
+	secret := "SUPER_SECRET_VALUE"
+	_, srv := newFakeOllama(t,
+		fmt.Sprintf(`{"tool":"write_file","args":{"path":"out.txt","content":%q}}`, secret),
+		`{"status":"completed","summary":"done","changes_expected":true}`,
+	)
+	h := New(testConfig(srv.URL), dir)
+	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	records := h.TraceRecords()
+	if len(records) != 1 {
+		t.Fatalf("trace records = %d, want 1", len(records))
+	}
+	if records[0].Tool != toolharness.ToolWriteFile || records[0].Iteration != 1 || records[0].Progress != progressOK {
+		t.Errorf("trace record = %+v", records[0])
+	}
+	for _, r := range records {
+		if strings.Contains(r.Request, secret) {
+			t.Errorf("trace leaked file content: %+v", r)
+		}
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(got) != secret {
+		t.Errorf("out.txt = %q", got)
 	}
 }
 
@@ -353,12 +642,34 @@ func TestOutcomesPassThrough(t *testing.T) {
 	}
 }
 
-func TestMalformedModelResponse(t *testing.T) {
+func TestNarrationIsNudgedNotFatal(t *testing.T) {
 	dir := t.TempDir()
-	_, srv := newFakeOllama(t, "I am not JSON at all")
-	_, err := New(testConfig(srv.URL), dir).Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "malformed model response") {
-		t.Fatalf("err = %v, want a malformed-response error", err)
+	fake, srv := newFakeOllama(t,
+		"I am not JSON at all",
+		`{"status":"completed","summary":"ok","changes_expected":false}`,
+	)
+	content, err := New(testConfig(srv.URL), dir).Execute(context.Background(), implementRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != 2 {
+		t.Errorf("chat calls = %d, want 2 (the narration was nudged)", fake.count())
+	}
+}
+
+func TestRepeatedNarrationStopsEarly(t *testing.T) {
+	dir := t.TempDir()
+	narration := "I will think about this some more."
+	_, srv := newFakeOllama(t, narration, narration, narration, narration, narration, narration, narration, narration)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=no_progress") {
+		t.Fatalf("err = %v, want an early no-progress termination", err)
 	}
 }
 

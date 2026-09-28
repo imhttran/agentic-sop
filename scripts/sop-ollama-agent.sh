@@ -3,7 +3,7 @@
 #
 # SOP invokes this as:
 #   export SOP_AGENT_PROVIDER=command
-#   export SOP_AGENT_COMMAND="sh scripts/sop-deepseek-agent.sh"
+#   export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
 #   sop run docs/PLAN-Agent-Harness-V2.md
 #
 # It reads the JSON agent request on stdin and writes the response on stdout,
@@ -23,10 +23,10 @@ set -u
 export SOP_OLLAMA_MODEL
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-bin="${TMPDIR:-/tmp}/sop-deepseek-agent.$$.bin"
+bin="${TMPDIR:-/tmp}/sop-ollama-agent.$$.bin"
 
-if ! ( cd "$here" && go build -o "$bin" ./cmd/sop-deepseek-agent ); then
-    echo "sop-deepseek-agent: build failed (is Go installed?)" >&2
+if ! ( cd "$here" && go build -o "$bin" ./cmd/sop-ollama-agent ); then
+    echo "sop-ollama-agent: build failed (is Go installed?)" >&2
     exit 1
 fi
 
