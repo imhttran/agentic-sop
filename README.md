@@ -998,9 +998,16 @@ requested while another is active, `sop run` stops with an actionable
 
 The **scheduler** selects the next ready task and the same lifecycle runs for it;
 a passing gate marks the task `LOCAL_DONE` and a failing gate marks it `BLOCKED`,
-repeating until no runnable work remains. Local execution has no remote
-PR/CI/merge, so a passing lifecycle advances the task to `LOCAL_DONE` directly (no synthetic PR/CI/merge states;
-controlled by `workflow.mode`).
+repeating until no runnable work remains. When a task is already in flight (for
+example a run was interrupted), `sop run` **resumes that task** — from the same
+persisted state → next-action rule that `sop resume` reports — instead of stopping
+with `ACTIVE_TASK`; a task whose gates already passed is completed locally without
+re-invoking the agent. `ACTIVE_TASK` still prevents starting a _different_ task: if
+two tasks are in flight, or the active task cannot be safely resumed, `sop run`
+stops with an actionable error naming the task and the recovery command. Local
+execution has no remote PR/CI/merge, so a passing lifecycle advances the task to
+`LOCAL_DONE` directly (no synthetic PR/CI/merge states; controlled by
+`workflow.mode`).
 
 Change detection includes untracked files (except SOP's own output), so a file the
 agent creates counts even when no tracked file changed. The startup summary also
@@ -1094,6 +1101,10 @@ single in-flight task:
 sop resume
 sop resume S001
 ```
+
+The same action rule drives `sop run`: when a task is in flight, `sop run` resumes
+it (completing it locally if its gates already passed, running the normal lifecycle
+if it is still before them) rather than refusing to continue.
 
 ## `retry`
 

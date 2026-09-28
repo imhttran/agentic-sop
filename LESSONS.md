@@ -165,3 +165,17 @@ repository, refuse writes to the state directory, tokenize commands instead of
 trusting a shell, and bound the loop. One real-run surprise was worth keeping:
 cloud models occasionally answer with reasoning and no content, so an empty turn
 is re-requested a bounded number of times rather than treated as a hard failure.
+
+## One question, one answer — even for "is a task in flight"
+
+`sop run` refused to continue an interrupted task, printing `no runnable task
+(ACTIVE_TASK)`, while `sop resume` answered the same state correctly with
+`CREATE_BRANCH`. The two commands had grown separate opinions: the scheduler treated
+`READY` as "in flight" (it sets that status for the task it just selected), and the
+run loop had no case for it, so it fell to the default and stopped; the resumption
+rule lived only in `resume`. The fix was not a second state machine but exporting
+the two rules that already existed — `scheduler.IsActive` for "occupies the
+execution slot" and `resume.ActionFor` for "next legal action" — and having `sop
+run` consult them. A guard that blocks (`ACTIVE_TASK`) should ask the _same_
+question as the command that recovers from it, or the two will disagree at exactly
+the moment they must agree.

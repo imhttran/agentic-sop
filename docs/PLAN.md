@@ -673,6 +673,7 @@ T053 `sop retry --all` for every retryable BLOCKED task; a retry carries the pri
 T054 verification-first fast path (execution_mode: verify-first); a passing verification needs no agent
 T055 configure the model in config (agent.model); the provider env var overrides it
 T056 bootstrap DeepSeek coding-agent harness (command provider → Ollama deepseek-v4.1-flash:cloud, controlled tools)
+T057 resume the active task in `sop run` (one persisted-state→action rule shared with `sop resume`)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

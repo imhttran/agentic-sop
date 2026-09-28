@@ -391,6 +391,17 @@ because no PR was opened and no CI ran. A dependency is satisfied by `LOCAL_DONE
 (local) or `MERGED`/`DONE` (remote), so the persisted state describes what
 actually happened.
 
+When the scheduler reports an in-flight (`ActiveTask`) task, `sop run` resumes
+_that_ task rather than refusing to run. `scheduler.IsActive` is the single
+definition of which status occupies the execution slot, and `resume.ActionFor` is
+the single persisted-state → next-action rule; the same rule `sop resume` reports.
+A task whose run already passed its gates is completed locally without re-invoking
+the agent, a task before the local gates is run through the normal lifecycle, and a
+task parked in the remote lifecycle is reported precisely (a local run can reach no
+terminal from `PR_OPEN`/`CI_RUNNING`/`CI_PASS`). `ACTIVE_TASK` still prevents
+selecting a _different_ task; zero or multiple in-flight tasks is an actionable
+error, never a guess.
+
 ### Command Policy
 
 Before a command runs, it is classified deterministically:
@@ -469,7 +480,10 @@ never change task state.
 
 Reconciles a task's persisted status with the resources that actually exist and
 reports the next legal action, recovering a lost state write without duplicating
-a branch or pull request (`sop resume`).
+a branch or pull request (`sop resume`). The status → action decision is shared:
+`resume.ActionFor` is the one interpretation, so `sop resume` (which also
+reconciles observed branch/PR resources) and `sop run` (which resumes the in-flight
+task) can never disagree about what comes next.
 
 ### Environment Bootstrap
 
