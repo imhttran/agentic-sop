@@ -46,7 +46,7 @@ case "$cap" in
     ;;
   REVIEW)
     want='{"summary":"<one line>","findings":[{"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","title":"<title>","detail":"<detail>","file":"<path>","line":0,"suggestion":"<optional>"}]}'
-    instruction="Review the change below and report findings. Your final response must be JSON of exactly this shape: $want"
+    instruction="Review the change below and report findings. Before reporting a missing symbol, undefined type, or compile error, use your tools to confirm it is actually absent from the whole package: sibling files in the same package may define it, and the test suite already passing is evidence it compiles. Report only real problems. Your final response must be JSON of exactly this shape: $want"
     ;;
   *)
     instruction='Do the requested work now by editing files. When you are finished your final response must be JSON of exactly this shape: {"status":"completed","summary":"<one line>","changes_expected":true}. If you could not complete it use {"status":"failed","reason":"<why>"}, or {"status":"needs_human","reason":"<why>"} if a human decision is required.'
