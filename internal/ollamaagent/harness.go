@@ -694,6 +694,12 @@ const (
 	// before the model is nudged to begin implementing. It is a soft transition:
 	// the read/search tools stay available.
 	implementNudgeAfter = 6
+	// implementNowAfter is the tool-interaction count at which an unmutated run is
+	// told, strongly, to implement now (the "implement now" instruction). It sits
+	// below implementFinalizeAfter so a model that only starts writing when told to
+	// still has budget left to make the change and return, rather than starting at
+	// the finalize floor and running out of turns. Reads remain available.
+	implementNowAfter = 12
 	// implementFinalizeAfter is the tool-interaction count at which a mutated
 	// invocation becomes eligible to finalize. Crossing it without a mutation does
 	// not finalize: a threshold is not evidence that the work is done.
@@ -987,7 +993,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request) (string,
 					advice = append(advice, implementFinalInstruction)
 				}
 				h.recordImplementEvent(req, implementFinalizeEvent, "")
-			case !st.mutated && st.interactions >= implementFinalizeAfter && !st.implementInstructed:
+			case !st.mutated && st.interactions >= implementNowAfter && !st.implementInstructed:
 				st.implementInstructed = true
 				advice = append(advice, implementNowInstruction)
 				h.recordImplementEvent(req, implementContinueEvent, "implementation required before finalization")
