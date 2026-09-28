@@ -14,6 +14,16 @@ Install (and run) a pinned, prebuilt known-good `sop-ollama-agent` binary — ou
 the tree under edit — so a broken working copy can still be repaired by the agent.
 Recovery must not depend on the tool the change is allowed to break.
 
+## Default config cannot IMPLEMENT (provider/harness split unfinished)
+
+AHV2008 flipped new-project defaults to `harness: tool, provider: ollama`, and
+AHV2002 narrowed the native Ollama provider to text-only capabilities. Until the
+`tool` harness is actually wired beneath the provider, a project on the default
+config fails the up-front `guardCapability(a, IMPLEMENT)` check ("provider cannot
+IMPLEMENT") because the native Ollama provider has no tools. Either wire the tool
+harness end to end, or keep the default `provider: command` until then, so a fresh
+`sop init` project can run a task.
+
 ## Local network service (team mode)
 
 Share SOP state and control across a team on the local network.

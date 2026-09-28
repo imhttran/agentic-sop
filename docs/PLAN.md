@@ -684,6 +684,7 @@ T064 IMPLEMENT finalization waits for a stopped writer (never refuse a write mid
 T065 enter the bounded fix loop on a failing validation, not only on review findings
 T066 run FIX through the phased completion loop (share it with IMPLEMENT)
 T067 persist a failed run's per-turn trace to an operator sink
+T068 bound the unmutated run (force a conclusion at the late stage; retry a no-op)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

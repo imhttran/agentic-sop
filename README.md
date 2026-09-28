@@ -507,14 +507,15 @@ capability run in phases instead of one flat loop:
   model has stopped writing for a short completion window — a model still writing a
   multi-file change keeps its tools, because a run that is still mutating has not
   finished. A write requested during FINALIZE is never refused; it resumes CHANGE.
-  If the threshold is reached with no change, the tools stay enabled and the model
-  is told to implement now — and at twenty-two, to either implement or return a
-  truthful `needs_human`/`failed` outcome. Once finalizing, the model has a
-  two-turn allowance before the invocation fails with `termination=finalization_limit`.
-  Twenty-four stays the hard safety ceiling; a run that never changes the
-  repository stops there with `mutation_observed=false`, and one that is still
-  writing stops with `mutation_observed=true`, rather than either claiming success
-  or being cut off mid-change.
+  If the threshold is reached with no change, the model is told to implement now
+  and keeps its tools; at the late stage an unmutated run is finalized too — the
+  tools are withdrawn, but a write is still honoured and resumes CHANGE — so it
+  cannot read its way to the ceiling. Once finalizing, the model has a two-turn
+  allowance before the invocation fails with `termination=finalization_limit`.
+  Twenty-four stays the hard safety ceiling. A run that never changes the
+  repository ends with `termination=no_change` and a **retryable** `needs_human`
+  outcome (SOP requeues it) rather than claiming success or blocking; a run that is
+  still writing stops with `mutation_observed=true`.
 
 A capability that repeats a non-progressing action is told once to conclude, then
 stopped early with a diagnostic. Neither PLAN nor the phased capabilities own

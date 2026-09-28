@@ -217,6 +217,15 @@ a shell redirect. A diagnostic has to survive the boundary it crosses: when the
 layer that consumes your output drops the channel it is on, give the trace a sink
 the operator selects, exactly as the audit trail already had.
 
+## A loop that never acts still needs a deadline, and a no-op is not a failure
+
+The completion discipline had one more hole: a run that never changed the
+repository had nothing to wait for, so finalization -- which required a mutation --
+never fired and the model read until the ceiling. Finalizing at the late stage
+closes it. The resulting "changed nothing" is a _retryable_ boundary, not a hard
+failure: a flaky sample that simply did not act should be sent back around, not
+blocked for a human. Distinguish "the work failed" from "the agent never tried".
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding
