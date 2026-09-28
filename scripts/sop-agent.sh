@@ -70,15 +70,25 @@ model_args=''
 [ -n "${SOP_CLAUDE_MODEL:-}" ] && model_args="--model $SOP_CLAUDE_MODEL"
 
 # shellcheck disable=SC2086
+errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")
 out=$(printf '%s' "$prompt" | claude -p \
   --output-format json \
   --allowedTools "$allowed" \
-  $model_args 2>/dev/null) || die "claude invocation failed"
+  $model_args 2>"$errlog") || true
+errtail=$(tail -n 3 "$errlog" 2>/dev/null | tr '\n' ' ' || true)
+rm -f "$errlog"
+
+if [ -z "$out" ]; then
+  die "claude produced no output${errtail:+: $errtail}"
+fi
 
 if [ "$(printf '%s' "$out" | jq -r '.is_error // false')" = "true" ]; then
-  reason=$(printf '%s' "$out" | jq -r '.result // "claude reported an error"')
-  jq -cn --arg r "$reason" '{status:"failed",reason:$r}'
-  exit 0
+  reason=$(printf '%s' "$out" | jq -r '.result // empty')
+  [ -n "$reason" ] || reason="claude reported an error${errtail:+: $errtail}"
+  case "$cap" in
+    PLAN|REVIEW) die "$reason" ;;
+    *) jq -cn --arg r "$reason" '{status:"failed",reason:$r}'; exit 0 ;;
+  esac
 fi
 
 result=$(printf '%s' "$out" | jq -r '.result // empty')
