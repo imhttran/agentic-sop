@@ -72,6 +72,26 @@ func (h *Harness) writeFile(args map[string]any, mustNotExist bool) (string, err
 	return fmt.Sprintf("wrote %d bytes to %s", len(content), p.rel), nil
 }
 
+// deleteFile removes a file. It refuses a directory — a recursive delete is not a
+// controlled operation — and, like every tool, SOP's state database.
+func (h *Harness) deleteFile(args map[string]any) (string, error) {
+	p, err := h.resolveArg(args, "path", true, accessWrite)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Lstat(p.abs)
+	if err != nil {
+		return "", fmt.Errorf("delete_file: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("delete_file: %s is a directory", p.rel)
+	}
+	if err := os.Remove(p.abs); err != nil {
+		return "", fmt.Errorf("delete_file: %w", err)
+	}
+	return fmt.Sprintf("deleted %s", p.rel), nil
+}
+
 // listFiles lists a directory's immediate entries.
 func (h *Harness) listFiles(args map[string]any) (string, error) {
 	p, err := h.resolveArg(args, "path", false, accessRead)

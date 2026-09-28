@@ -29,6 +29,8 @@ const (
 	ToolReadFile    = "read_file"
 	ToolWriteFile   = "write_file"
 	ToolCreateFile  = "create_file"
+	ToolDeleteFile  = "delete_file"
+	ToolRestoreFile = "restore_file"
 	ToolListFiles   = "list_files"
 	ToolSearchFiles = "search_files"
 	ToolRunCommand  = "run_command"
@@ -40,8 +42,8 @@ const (
 // advertised surface; a request for any other tool is refused.
 func Tools() []string {
 	return []string{
-		ToolReadFile, ToolWriteFile, ToolCreateFile, ToolListFiles,
-		ToolSearchFiles, ToolRunCommand, ToolGitStatus, ToolGitDiff,
+		ToolReadFile, ToolWriteFile, ToolCreateFile, ToolDeleteFile, ToolRestoreFile,
+		ToolListFiles, ToolSearchFiles, ToolRunCommand, ToolGitStatus, ToolGitDiff,
 	}
 }
 
@@ -124,6 +126,10 @@ func (h *Harness) dispatch(ctx context.Context, name string, args map[string]any
 		return h.writeFile(args, false)
 	case ToolCreateFile:
 		return h.writeFile(args, true)
+	case ToolDeleteFile:
+		return h.deleteFile(args)
+	case ToolRestoreFile:
+		return h.restoreFile(ctx, args)
 	case ToolListFiles:
 		return h.listFiles(args)
 	case ToolSearchFiles:
@@ -208,6 +214,24 @@ func SummarizeRequest(name string, args map[string]any) string {
 // construction, so git inspection cannot be turned into a destructive operation.
 func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
 	return h.exec(ctx, append([]string{"git"}, args...))
+}
+
+// restoreFile restores one tracked file to its committed (HEAD) content, so the
+// model can undo a mistaken edit instead of being stuck with an unrecoverable
+// working copy. It is deliberately narrow — a single path, from HEAD, worktree
+// only — so it changes no history, branch, or commit and cannot touch another
+// path. It runs the fixed argv directly rather than through the command policy,
+// which (correctly) refuses the mass-discarding `git restore`/`git checkout -- .`
+// forms; this tool is the scoped, safe subset.
+func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string, error) {
+	p, err := h.resolveArg(args, "path", true, accessWrite)
+	if err != nil {
+		return "", err
+	}
+	if _, err := h.exec(ctx, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel}); err != nil {
+		return "", fmt.Errorf("restore_file: %w", err)
+	}
+	return fmt.Sprintf("restored %s from HEAD", p.rel), nil
 }
 
 // WorkingTreeChanged reports whether the repository working tree differs from

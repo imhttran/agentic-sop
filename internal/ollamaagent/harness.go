@@ -71,10 +71,31 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 			fmt.Fprintf(errOut, "sop-ollama-agent: changes_expected disagreed with the observed repository change; reconciled\n")
 		}
 	}
+	// A model that reports a failure or a human boundary still produced a turn
+	// history worth keeping, so its trace is written as well — otherwise only
+	// infrastructure errors, and not the failures the model chose to report, are
+	// diagnosable.
+	if wantsOutcome(req.Capability) && nonCompletedOutcome(content) {
+		h.FlushTrace(errOut)
+	}
 	if _, err := io.WriteString(out, content); err != nil {
 		return err
 	}
 	return nil
+}
+
+// nonCompletedOutcome reports whether content is a structured outcome that is not
+// "completed" (the failed or needs_human report a model chose to return).
+func nonCompletedOutcome(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if !strings.HasPrefix(trimmed, "{") {
+		return false
+	}
+	var w outcomeWire
+	if err := json.Unmarshal([]byte(trimmed), &w); err != nil {
+		return false
+	}
+	return w.Status == string(agent.OutcomeFailed) || w.Status == string(agent.OutcomeNeedsHuman)
 }
 
 // wantsOutcome reports whether a capability's expected response is a structured

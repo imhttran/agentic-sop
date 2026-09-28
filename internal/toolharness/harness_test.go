@@ -30,8 +30,8 @@ func writeRepoFile(t *testing.T, root, name, content string) {
 
 func TestToolsListsExactlyTheInitialTools(t *testing.T) {
 	want := []string{
-		"read_file", "write_file", "create_file", "list_files",
-		"search_files", "run_command", "git_status", "git_diff",
+		"read_file", "write_file", "create_file", "delete_file", "restore_file",
+		"list_files", "search_files", "run_command", "git_status", "git_diff",
 	}
 	got := Tools()
 	if strings.Join(got, ",") != strings.Join(want, ",") {
@@ -354,6 +354,76 @@ func TestToolExecutionIsAudited(t *testing.T) {
 	deniedGit := records[2]
 	if deniedGit.Tool != ToolRunCommand || deniedGit.Action != ActionDeny || deniedGit.Outcome != OutcomeDenied {
 		t.Errorf("record[2] = %+v, want a denied command", deniedGit)
+	}
+}
+
+// --- delete and restore ---
+
+func TestDeleteFileRemovesFileAndRefusesDirectory(t *testing.T) {
+	root := t.TempDir()
+	writeRepoFile(t, root, "scratch.tmp", "junk")
+	writeRepoFile(t, root, "pkg/a.go", "package pkg\n")
+	h := newTestHarness(t, root, nil)
+	ctx := context.Background()
+
+	if _, err := h.Run(ctx, ToolDeleteFile, map[string]any{"path": "scratch.tmp"}); err != nil {
+		t.Fatalf("delete_file: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "scratch.tmp")); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("scratch.tmp still present: %v", err)
+	}
+	if _, err := h.Run(ctx, ToolDeleteFile, map[string]any{"path": "pkg"}); err == nil {
+		t.Error("delete_file removed a directory")
+	}
+	if _, err := h.Run(ctx, ToolDeleteFile, map[string]any{"path": ".agent-sdlc/state.db"}); !errors.Is(err, ErrProtectedPath) {
+		t.Errorf("delete_file(state.db) err = %v, want ErrProtectedPath", err)
+	}
+}
+
+func TestRestoreFileRecoversCommittedContent(t *testing.T) {
+	root := t.TempDir()
+	gitInitRepo(t, root)
+	writeRepoFile(t, root, "README.md", "# Real readme\n")
+	runGit(t, root, "add", "README.md")
+	runGit(t, root, "commit", "-q", "-m", "init")
+
+	h := newTestHarness(t, root, nil)
+	ctx := context.Background()
+
+	// A mistaken clobber, then recovery from HEAD.
+	writeRepoFile(t, root, "README.md", "PLACEHOLDER")
+	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": "README.md"}); err != nil {
+		t.Fatalf("restore_file: %v", err)
+	}
+	got, err := os.ReadFile(filepath.Join(root, "README.md"))
+	if err != nil || string(got) != "# Real readme\n" {
+		t.Errorf("README.md = %q, err=%v, want the committed content", got, err)
+	}
+
+	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": ".agent-sdlc/state.db"}); !errors.Is(err, ErrProtectedPath) {
+		t.Errorf("restore_file(state.db) err = %v, want ErrProtectedPath", err)
+	}
+}
+
+// gitInitRepo initialises a repository with a deterministic identity so a commit
+// works without relying on the machine's git config.
+func gitInitRepo(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	cmd.Env = append(os.Environ(),
+		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
+		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
+	)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %v: %v (%s)", args, err, out)
 	}
 }
 

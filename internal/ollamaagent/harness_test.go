@@ -231,6 +231,34 @@ func TestRunNoChangeCeilingReturnsNeedsHuman(t *testing.T) {
 	}
 }
 
+// TestRunTracesModelReportedFailure proves the trace is kept for a failure the
+// model chose to report, not only for an infrastructure error — otherwise the
+// turns that led to an AHV2010-style incident are lost.
+func TestRunTracesModelReportedFailure(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	traceFile := filepath.Join(t.TempDir(), "trace.log")
+	t.Setenv(agent.EnvOllamaBaseURL, "")
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+	t.Setenv("SOP_OLLAMA_TRACE_LOG", traceFile)
+	_, srv := newFakeOllama(t, `{"status":"needs_human","reason":"stuck"}`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	got, err := os.ReadFile(traceFile)
+	if err != nil {
+		t.Fatalf("trace file not written: %v", err)
+	}
+	if !strings.Contains(string(got), "IMPLEMENT") {
+		t.Errorf("trace = %q, want the turn history", got)
+	}
+}
+
 // TestRunPersistsFailedTraceToSink proves a failed run's per-turn trace reaches the
 // operator-selected file, so it survives the command provider discarding stderr.
 func TestRunPersistsFailedTraceToSink(t *testing.T) {
