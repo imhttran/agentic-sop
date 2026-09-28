@@ -55,6 +55,15 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 		}
 		return err
 	}
+	// Ground a mutating capability's completed outcome in the repository change the
+	// harness actually observed, so a run cannot claim a change it did not make (nor
+	// deny one it did). The model's own claim is preserved in the summary note.
+	if req.Capability == agent.Implement || req.Capability == agent.Fix {
+		content = h.reconcileOutcome(ctx, content)
+		if h.mismatch {
+			fmt.Fprintf(errOut, "sop-ollama-agent: changes_expected disagreed with the observed repository change; reconciled\n")
+		}
+	}
 	if _, err := io.WriteString(out, content); err != nil {
 		return err
 	}
@@ -88,6 +97,10 @@ type Harness struct {
 	tools  *toolharness.Harness
 	audit  *toolharness.AuditLog
 	trace  *TraceLog
+
+	// mismatch records whether reconcileOutcome overrode the model's
+	// changes_expected claim with the repository change actually observed.
+	mismatch bool
 }
 
 // New returns a Harness working inside root. All repository access goes through
@@ -109,7 +122,7 @@ func New(cfg Config, root string) *Harness {
 		client: newOllamaClient(cfg),
 		tools:  tools,
 		audit:  audit,
-		trace:  newTraceLog(defaultMaxTraceRecords, strings.TrimSpace(lookupEnv(envTraceLog))),
+		trace:  newTraceLog(defaultMaxTraceRecords),
 	}
 }
 
@@ -144,14 +157,21 @@ func (h *Harness) FlushAudit(w io.Writer) {
 	fmt.Fprintf(w, "sop-ollama-agent: tools: %d calls, %d allowed, %d denied\n", len(records), allowed, denied)
 }
 
-// Execute runs the bounded tool loop for the request's capability and returns the
-// model's final JSON object as canonical JSON, ready for SOP to parse.
-//
-// The loop is bounded by the capability's policy: a per-capability iteration
-// budget and an allowed tool set. It also detects a model that repeats
-// non-progressing turns, gives it one recovery instruction, and then stops with a
-// diagnostic rather than burning the whole budget.
+// Execute runs the request's capability and returns the model's final JSON object
+// as canonical JSON, ready for SOP to parse. PLAN runs a two-phase discovery →
+// synthesis loop; every other capability runs the generic bounded loop.
 func (h *Harness) Execute(ctx context.Context, req agent.Request) (string, error) {
+	if req.Capability == agent.Plan {
+		return h.executePlan(ctx, req)
+	}
+	return h.executeLoop(ctx, req)
+}
+
+// executeLoop is the generic single-phase tool loop. It is bounded by the
+// capability's policy — an iteration budget and an allowed tool set — and detects
+// a model that repeats non-progressing turns, gives it one recovery instruction,
+// and then stops with a diagnostic rather than burning the whole budget.
+func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability)
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy)},
@@ -248,6 +268,7 @@ const noProgressThreshold = 3
 const (
 	terminationIteration  = "iteration_limit"
 	terminationNoProgress = "no_progress"
+	terminationSynthesis  = "synthesis_limit"
 )
 
 // turnProgress tracks consecutive identical turns so the loop can tell a
@@ -367,6 +388,179 @@ func actionSuffix(tool, request string) string {
 		return ""
 	}
 	return fmt.Sprintf(", last_action=%q", strings.TrimSpace(tool+" "+request))
+}
+
+// planPhase is one phase of a PLAN invocation: bounded read-only discovery, then
+// a tool-free synthesis. Phase state is scoped to a single executePlan call; it
+// is not SOP workflow state.
+type planPhase int
+
+const (
+	phaseDiscovery planPhase = iota
+	phaseSynthesis
+)
+
+// label renders the phase for the trace and diagnostics.
+func (p planPhase) label() string {
+	if p == phaseSynthesis {
+		return "SYNTHESIS"
+	}
+	return "DISCOVERY"
+}
+
+// PLAN phase instructions. When discovery is exhausted the model is told
+// exploration is over; a tool request during synthesis is corrected, not executed.
+const (
+	planSynthesisInstruction = `Exploration is complete.
+Do not request any more tools.
+Using only the repository context already gathered, produce the required PLAN response now.
+Do not continue exploring.
+Do not implement anything.
+Return the exact structured PLAN response expected by SOP.`
+
+	planSynthesisCorrection = `Repository discovery is complete.
+No additional tools are available.
+Produce the required PLAN response using the context already gathered.`
+
+	planSynthesisTransitionEvent = "→ SYNTHESIS"
+)
+
+// executePlan runs the two-phase PLAN loop. Discovery permits at most
+// planDiscoveryTurns turns (so at most that many tool executions) with the
+// centralized read-only tool policy. When discovery is exhausted without a final
+// response, tools are withdrawn and the model is told to synthesize; synthesis
+// permits at most planSynthesisTurns model turns. A final response ends the
+// invocation immediately, in either phase, so early completion is preserved.
+func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, error) {
+	policy := PolicyFor(req.Capability) // read-only tools
+	messages := []chatMessage{
+		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "user", Content: userPrompt(req)},
+	}
+
+	var (
+		phase      = phaseDiscovery
+		discovery  int // discovery turns taken (each executes at most one tool)
+		discovered int // discovery tools actually executed
+		synthesis  int // synthesis turns taken
+	)
+
+	for {
+		if phase == phaseSynthesis && synthesis >= planSynthesisTurns {
+			h.trace.Record(TraceRecord{
+				Capability:  string(req.Capability),
+				Phase:       phaseSynthesis.label(),
+				Iteration:   synthesis,
+				Termination: terminationSynthesis,
+			})
+			return "", h.planSynthesisLimitError(req, discovered, synthesis)
+		}
+
+		raw, calls, err := h.chat(ctx, messages)
+		if err != nil {
+			return "", err
+		}
+		name, args, isTool, final, err := turnToolCall(raw, calls)
+		if err != nil && !errors.Is(err, errNarrate) {
+			return "", err
+		}
+
+		switch {
+		case err != nil: // narration: no tool call and no final object
+			if phase == phaseDiscovery {
+				discovery++
+				h.recordPlanTurn(req, phase, discovery, "narrate", "")
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: raw},
+					chatMessage{Role: "user", Content: turnReminder},
+				)
+				if discovery >= planDiscoveryTurns {
+					phase = phaseSynthesis
+					messages = append(messages, chatMessage{Role: "user", Content: planSynthesisInstruction})
+					h.recordPlanTransition(req)
+				}
+			} else {
+				synthesis++
+				h.recordPlanTurn(req, phase, synthesis, "narrate", "")
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: raw},
+					chatMessage{Role: "user", Content: turnReminder},
+				)
+			}
+
+		case !isTool: // a final response ends the invocation immediately
+			index := discovery + 1
+			if phase == phaseSynthesis {
+				index = synthesis + 1
+			}
+			h.recordPlanTurn(req, phase, index, "final", "")
+			encoded, mErr := json.Marshal(final)
+			if mErr != nil {
+				return "", fmt.Errorf("encode final response: %w", mErr)
+			}
+			return string(encoded), nil
+
+		case phase == phaseSynthesis: // no tools during synthesis: deny and correct
+			synthesis++
+			h.recordPlanTurn(req, phase, synthesis, name, toolharness.SummarizeRequest(name, args))
+			h.tools.RecordDenied(name, args, "tools are unavailable during PLAN synthesis")
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: planSynthesisCorrection},
+			)
+
+		default: // discovery
+			discovery++
+			summary := toolharness.SummarizeRequest(name, args)
+			if !policy.Allows(name) {
+				detail := fmt.Sprintf("tool %q is not available for %s; allowed tools: %s", name, req.Capability, describeTools(policy))
+				h.tools.RecordDenied(name, args, detail)
+				h.recordPlanTurn(req, phase, discovery, name, summary)
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+					chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail))},
+				)
+			} else {
+				result, toolErr := h.tools.Run(ctx, name, args)
+				discovered++
+				h.recordPlanTurn(req, phase, discovery, name, summary)
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+					chatMessage{Role: "user", Content: toolResultMessage(name, result, toolErr)},
+				)
+			}
+			if discovery >= planDiscoveryTurns {
+				phase = phaseSynthesis
+				messages = append(messages, chatMessage{Role: "user", Content: planSynthesisInstruction})
+				h.recordPlanTransition(req)
+			}
+		}
+	}
+}
+
+// recordPlanTurn appends one safe trace entry for a PLAN turn.
+func (h *Harness) recordPlanTurn(req agent.Request, phase planPhase, index int, tool, request string) {
+	h.trace.Record(TraceRecord{
+		Capability: string(req.Capability),
+		Phase:      phase.label(),
+		Iteration:  index,
+		Tool:       tool,
+		Request:    request,
+		Progress:   progressOK,
+	})
+}
+
+// recordPlanTransition marks the discovery-to-synthesis transition in the trace.
+func (h *Harness) recordPlanTransition(req agent.Request) {
+	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: planSynthesisTransitionEvent})
+}
+
+// planSynthesisLimitError reports that PLAN exhausted its tool-free synthesis
+// turns without producing a document. It is deliberately phase-specific rather
+// than the generic iteration-limit message.
+func (h *Harness) planSynthesisLimitError(req agent.Request, discovered, synthesis int) error {
+	return fmt.Errorf("Ollama agent %s failed during synthesis (model=%s, discovery_tool_calls=%d, synthesis_turns=%d, termination=%s)",
+		req.Capability, h.cfg.Model, discovered, synthesis, terminationSynthesis)
 }
 
 // maxEmptyRetries bounds how many times an empty model turn is re-requested

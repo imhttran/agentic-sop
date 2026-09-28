@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -110,7 +111,7 @@ func planRequest() agent.Request {
 func distinctToolCalls(n int) []string {
 	out := make([]string, n)
 	for i := range out {
-		out[i] = fmt.Sprintf(`{"tool":"read_file","args":{"path":"pkg/f%d.go"}}`, i)
+		out[i] = readToolCall(i)
 	}
 	return out
 }
@@ -119,7 +120,13 @@ func distinctToolCalls(n int) []string {
 
 func TestRunParsesRequestAndWritesOutcome(t *testing.T) {
 	dir := t.TempDir()
-	_, srv := newFakeOllama(t, `{"status":"completed","summary":"did it","changes_expected":true}`)
+	gitInit(t, dir)
+	// The model changes a file, so its completed/changes_expected=true outcome is
+	// consistent with the observed repository change and passes through unchanged.
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"status":"completed","summary":"did it","changes_expected":true}`,
+	)
 	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
 	t.Setenv(agent.EnvOllamaModel, "")
 	t.Setenv(agent.EnvOllamaTimeout, "")
@@ -131,6 +138,54 @@ func TestRunParsesRequestAndWritesOutcome(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), `"status":"completed"`) || !strings.Contains(out.String(), `"changes_expected":true`) {
 		t.Errorf("out = %q", out.String())
+	}
+}
+
+func TestRunReconcilesClaimedChangeWithNoChange(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	// The model claims a change but the working tree is clean: observed reality wins.
+	_, srv := newFakeOllama(t, `{"status":"completed","summary":"did it","changes_expected":true}`)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"changes_expected":false`) {
+		t.Errorf("out = %q, want changes_expected reconciled to false", out.String())
+	}
+	if !strings.Contains(out.String(), "reconciled to repository reality") {
+		t.Errorf("out = %q, want the disagreement surfaced in the summary", out.String())
+	}
+	if !strings.Contains(errOut.String(), "reconciled") {
+		t.Errorf("errOut = %q, want the mismatch surfaced", errOut.String())
+	}
+}
+
+func TestRunReconcilesSilentChange(t *testing.T) {
+	dir := t.TempDir()
+	gitInit(t, dir)
+	// The model changed a file but reported changes_expected=false: observed reality
+	// still wins, so the outcome is corrected to true.
+	_, srv := newFakeOllama(t,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+		`{"status":"completed","summary":"no change needed","changes_expected":false}`,
+	)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+
+	body := `{"capability":"IMPLEMENT","task":"do it"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+	if !strings.Contains(out.String(), `"changes_expected":true`) {
+		t.Errorf("out = %q, want changes_expected reconciled to true", out.String())
 	}
 }
 
@@ -348,21 +403,6 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 	}
 }
 
-func TestPlanStopsAtCapabilityBudget(t *testing.T) {
-	dir := t.TempDir()
-	_, srv := newFakeOllama(t, distinctToolCalls(12)...)
-	cfg := testConfig(srv.URL)
-	cfg.MaxToolCalls = 100
-
-	_, err := New(cfg, dir).Execute(context.Background(), planRequest())
-	if err == nil || !strings.Contains(err.Error(), "termination=iteration_limit") {
-		t.Fatalf("err = %v, want an iteration_limit termination", err)
-	}
-	if !strings.Contains(err.Error(), "after 8 iterations") {
-		t.Errorf("err = %v, want PLAN capped at its 8-iteration budget", err)
-	}
-}
-
 func TestImplementStopsAtCapabilityBudget(t *testing.T) {
 	dir := t.TempDir()
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
@@ -394,11 +434,12 @@ func TestToolCallLimitIsBounded(t *testing.T) {
 // --- Capability policy ---
 
 func TestCapabilityBudgets(t *testing.T) {
+	// PLAN is two-phase (see the PLAN phase tests); its MaxIterations is only a
+	// total ceiling, so it is covered separately.
 	cases := []struct {
 		cap  agent.Capability
 		want int
 	}{
-		{agent.Plan, 8},
 		{agent.DesignTests, 12},
 		{agent.Implement, 24},
 		{agent.Fix, 24},
@@ -483,6 +524,266 @@ func TestPlanCannotMutateRepository(t *testing.T) {
 	}
 	if !strings.Contains(content, "stages") {
 		t.Errorf("content = %q, want the plan document", content)
+	}
+}
+
+// --- PLAN phases: DISCOVERY → SYNTHESIS ---
+
+// readToolCall builds a distinct read_file tool call, so discovery turns are not
+// detected as a repeated no-progress action.
+func readToolCall(i int) string {
+	return fmt.Sprintf(`{"tool":"read_file","args":{"path":"pkg/f%d.go"}}`, i)
+}
+
+func countPhase(records []TraceRecord, phase string) int {
+	n := 0
+	for _, r := range records {
+		if r.Phase == phase {
+			n++
+		}
+	}
+	return n
+}
+
+func hasEvent(records []TraceRecord, event string) bool {
+	for _, r := range records {
+		if r.Event == event {
+			return true
+		}
+	}
+	return false
+}
+
+func TestPlanEarlyFinalCompletesImmediately(t *testing.T) {
+	dir := t.TempDir()
+	fake, srv := newFakeOllama(t, `{"project":"p","summary":"s","stages":[]}`)
+	h := New(testConfig(srv.URL), dir)
+	content, err := h.Execute(context.Background(), planRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "stages") {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != 1 {
+		t.Errorf("chat calls = %d, want 1 (early final, no discovery)", fake.count())
+	}
+	records := h.TraceRecords()
+	if len(records) != 1 || records[0].Phase != "DISCOVERY" || records[0].Tool != "final" {
+		t.Errorf("trace = %+v, want one DISCOVERY final turn", records)
+	}
+	if hasEvent(records, planSynthesisTransitionEvent) {
+		t.Errorf("early final must not enter synthesis: %+v", records)
+	}
+}
+
+func TestPlanForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
+	dir := t.TempDir()
+	responses := make([]string, 0, planDiscoveryTurns+1)
+	for i := 0; i < planDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses, `{"project":"p","summary":"s","stages":[]}`)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), planRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "stages") {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != planDiscoveryTurns+1 {
+		t.Errorf("chat calls = %d, want %d discovery + 1 synthesis", fake.count(), planDiscoveryTurns)
+	}
+	if got := len(h.AuditRecords()); got != planDiscoveryTurns {
+		t.Errorf("executed tools = %d, want %d", got, planDiscoveryTurns)
+	}
+
+	records := h.TraceRecords()
+	if got := countPhase(records, "DISCOVERY"); got != planDiscoveryTurns {
+		t.Errorf("discovery turns = %d, want %d", got, planDiscoveryTurns)
+	}
+	if !hasEvent(records, planSynthesisTransitionEvent) {
+		t.Errorf("trace does not record the synthesis transition: %+v", records)
+	}
+	if got := countPhase(records, "SYNTHESIS"); got != 1 {
+		t.Errorf("synthesis turns = %d, want 1", got)
+	}
+	if !strings.Contains(messageText(fake.request(fake.count()-1)), "Exploration is complete") {
+		t.Error("the forced-synthesis instruction was not sent")
+	}
+}
+
+func TestPlanSynthesisDeniesTools(t *testing.T) {
+	dir := t.TempDir()
+	responses := make([]string, 0, planDiscoveryTurns+2)
+	for i := 0; i < planDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	// During synthesis the model requests a read-only tool; it must be denied.
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`,
+		`{"project":"p","summary":"s","stages":[]}`,
+	)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), planRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied records = %d, want 1 (the synthesis tool request)", denied)
+	}
+	if got := len(h.AuditRecords()); got != planDiscoveryTurns+1 {
+		t.Errorf("audit records = %d, want %d executed + 1 denied", got, planDiscoveryTurns)
+	}
+	if !strings.Contains(messageText(fake.request(fake.count()-1)), "No additional tools are available") {
+		t.Error("the synthesis correction was not sent")
+	}
+}
+
+func TestPlanSynthesisExhaustion(t *testing.T) {
+	dir := t.TempDir()
+	responses := make([]string, 0, planDiscoveryTurns+planSynthesisTurns)
+	for i := 0; i < planDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/a.go"}}`,
+		`{"tool":"read_file","args":{"path":"pkg/b.go"}}`,
+	)
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	_, err := New(cfg, dir).Execute(context.Background(), planRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=synthesis_limit") {
+		t.Fatalf("err = %v, want a synthesis_limit termination", err)
+	}
+	if strings.Contains(err.Error(), "iteration_limit") {
+		t.Errorf("err = %v, must not masquerade as the generic iteration limit", err)
+	}
+	if !strings.Contains(err.Error(), "during synthesis") ||
+		!strings.Contains(err.Error(), "discovery_tool_calls=8") ||
+		!strings.Contains(err.Error(), "synthesis_turns=2") {
+		t.Errorf("err = %v, want phase and counts", err)
+	}
+	if fake.count() != planDiscoveryTurns+planSynthesisTurns {
+		t.Errorf("chat calls = %d, want %d", fake.count(), planDiscoveryTurns+planSynthesisTurns)
+	}
+}
+
+// TestPlanAHV2006ShapeFixture approximates AHV2006: several useful discovery
+// reads/searches consume the discovery budget, then the model synthesizes the
+// document instead of continuing to explore. It uses no live provider and never
+// touches real SOP state.
+func TestPlanAHV2006ShapeFixture(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "internal/agent/agent.go", "package agent\n// Capability marker\n")
+	writeFile(t, dir, "internal/ollamaagent/policy.go", "package ollamaagent\nfunc PolicyFor() {}\n")
+	responses := []string{
+		`{"tool":"list_files","args":{"path":"."}}`,
+		`{"tool":"search_files","args":{"pattern":"Capability"}}`,
+		`{"tool":"read_file","args":{"path":"internal/agent/agent.go"}}`,
+		`{"tool":"search_files","args":{"pattern":"PolicyFor"}}`,
+		`{"tool":"read_file","args":{"path":"internal/ollamaagent/policy.go"}}`,
+		`{"tool":"list_files","args":{"path":"internal"}}`,
+		`{"tool":"read_file","args":{"path":"internal/agent/agent.go"}}`,
+		`{"tool":"git_status","args":{}}`,
+		`{"project":"sop","summary":"discovered then synthesized","stages":[{"id":"S1","title":"t"}]}`,
+	}
+	fake, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), planRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "discovered then synthesized") {
+		t.Errorf("content = %q", content)
+	}
+	if fake.count() != planDiscoveryTurns+1 {
+		t.Errorf("chat calls = %d, want %d discovery + 1 synthesis", fake.count(), planDiscoveryTurns)
+	}
+	records := h.TraceRecords()
+	if !hasEvent(records, planSynthesisTransitionEvent) {
+		t.Errorf("trace does not record the transition: %+v", records)
+	}
+	// The safe trace never carries file contents or prompts.
+	for _, r := range records {
+		if strings.Contains(r.Request, "Capability marker") || strings.Contains(r.Request, "package ") {
+			t.Errorf("trace leaked file content: %+v", r)
+		}
+	}
+}
+
+func TestPlanTraceRendering(t *testing.T) {
+	dir := t.TempDir()
+	responses := make([]string, 0, planDiscoveryTurns+1)
+	for i := 0; i < planDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses, `{"project":"p","summary":"s","stages":[]}`)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), planRequest()); err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	out := b.String()
+	t.Logf("trace:\n%s", out)
+	for _, want := range []string{
+		"PLAN DISCOVERY #1 read_file path=pkg/f0.go [ok]",
+		"PLAN DISCOVERY #8 read_file path=pkg/f7.go [ok]",
+		"PLAN → SYNTHESIS",
+		"PLAN SYNTHESIS #1 final [ok]",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("trace missing %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestPlanTraceShowsSynthesisTermination(t *testing.T) {
+	dir := t.TempDir()
+	responses := make([]string, 0, planDiscoveryTurns+planSynthesisTurns)
+	for i := 0; i < planDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/a.go"}}`,
+		`{"tool":"read_file","args":{"path":"pkg/b.go"}}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	if _, err := h.Execute(context.Background(), planRequest()); err == nil {
+		t.Fatal("expected a synthesis-limit failure")
+	}
+	var b strings.Builder
+	h.FlushTrace(&b)
+	if !strings.Contains(b.String(), "termination=synthesis_limit") {
+		t.Errorf("trace does not show the termination reason:\n%s", b.String())
 	}
 }
 
@@ -787,5 +1088,14 @@ func writeFile(t *testing.T, dir, name, content string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// gitInit makes dir a git repository, so the harness's working-tree observation
+// (used to reconcile a claimed change) has something to inspect.
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	if out, err := exec.Command("git", "init", "-q", dir).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
 	}
 }

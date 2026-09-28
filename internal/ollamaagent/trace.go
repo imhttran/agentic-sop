@@ -1,31 +1,29 @@
 package ollamaagent
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
-	"os"
-	"sync"
 )
-
-// envTraceLog optionally names a file to append the per-turn diagnostic trace to.
-// Like SOP_TOOL_AUDIT_LOG it is chosen by the operator and must never be SOP's
-// state database; inspecting the trace never touches .agent-sdlc/state.db.
-const envTraceLog = "SOP_AGENT_TRACE_LOG"
 
 // TraceRecord is one safe, per-turn diagnostic of the agent loop. It exists so a
 // failed or slow run can be understood turn by turn without exposing secrets: it
-// carries only the capability, iteration, tool, a content-free request summary,
-// progress, and termination — never model prompts, file contents, credentials, or
-// API keys.
+// carries only the capability, phase, iteration, tool, a content-free request
+// summary, progress, and termination — never model prompts, file contents,
+// credentials, or API keys.
 type TraceRecord struct {
-	Capability  string `json:"capability"`
-	Iteration   int    `json:"iteration"`
-	Tool        string `json:"tool,omitempty"`
-	Request     string `json:"request,omitempty"`
-	Progress    string `json:"progress,omitempty"`
-	Recovery    bool   `json:"recovery,omitempty"`
-	Termination string `json:"termination,omitempty"`
+	Capability string
+	// Phase names the capability phase (for example PLAN's DISCOVERY or
+	// SYNTHESIS). It is empty for single-phase capabilities.
+	Phase string
+	// Event is a phase transition marker with no turn of its own, such as
+	// PLAN's discovery-to-synthesis transition.
+	Event       string
+	Iteration   int
+	Tool        string
+	Request     string
+	Progress    string
+	Recovery    bool
+	Termination string
 }
 
 // Progress labels recorded in a TraceRecord.
@@ -34,59 +32,36 @@ const (
 	progressRepeat = "repeat"
 )
 
-// TraceLog is a bounded, inspectable per-turn diagnostic trail with an optional
-// durable sink. It is informational only and never affects execution.
+// TraceLog is a bounded, inspectable per-turn diagnostic trail. It is
+// informational only and never affects execution.
 type TraceLog struct {
-	mu      sync.Mutex
 	max     int
-	path    string
 	records []TraceRecord
 }
 
 // newTraceLog returns a trace retaining at most max records (a non-positive max
-// keeps all) and, when path is non-empty, appending each record as a JSON line.
-func newTraceLog(max int, path string) *TraceLog {
-	return &TraceLog{max: max, path: path}
+// keeps all).
+func newTraceLog(max int) *TraceLog {
+	return &TraceLog{max: max}
 }
 
-// Record appends a record, dropping the oldest when the in-memory bound is
-// reached, and best-effort appends it to the durable sink.
+// Record appends a record, dropping the oldest when the bound is reached.
 func (l *TraceLog) Record(r TraceRecord) {
-	l.mu.Lock()
 	l.records = append(l.records, r)
 	if l.max > 0 && len(l.records) > l.max {
 		l.records = l.records[len(l.records)-l.max:]
 	}
-	path := l.path
-	l.mu.Unlock()
-
-	if path == "" {
-		return
-	}
-	line, err := json.Marshal(r)
-	if err != nil {
-		return
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return
-	}
-	defer f.Close()
-	_, _ = f.Write(append(line, '\n'))
 }
 
 // Records returns a copy of the recorded events in order.
 func (l *TraceLog) Records() []TraceRecord {
-	l.mu.Lock()
-	defer l.mu.Unlock()
 	out := make([]TraceRecord, len(l.records))
 	copy(out, l.records)
 	return out
 }
 
 // Flush writes a compact human-readable trace to w so an operator can see the
-// turn-by-turn history of a failed run without reading the durable sink. A nil or
-// empty trail writes nothing.
+// turn-by-turn history of a failed run. A nil or empty trail writes nothing.
 func (l *TraceLog) Flush(w io.Writer) {
 	records := l.Records()
 	if len(records) == 0 {
@@ -94,7 +69,15 @@ func (l *TraceLog) Flush(w io.Writer) {
 	}
 	fmt.Fprintf(w, "sop-ollama-agent: trace: %d turns\n", len(records))
 	for _, r := range records {
-		line := fmt.Sprintf("  %s #%d", r.Capability, r.Iteration)
+		if r.Event != "" {
+			fmt.Fprintf(w, "  %s %s\n", r.Capability, r.Event)
+			continue
+		}
+		line := "  " + r.Capability
+		if r.Phase != "" {
+			line += " " + r.Phase
+		}
+		line += fmt.Sprintf(" #%d", r.Iteration)
 		if r.Tool != "" {
 			line += " " + r.Tool
 			if r.Request != "" {

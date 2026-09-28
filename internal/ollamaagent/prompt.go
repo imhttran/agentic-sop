@@ -82,11 +82,12 @@ targeted edits, and run focused validation (for example "go test ./...").`
 	case agent.Plan:
 		return `This is PLAN, not IMPLEMENT.
 
-Read only enough repository context to formulate the requested plan; the task Input
-usually already contains the material you need. Do not modify files.
-
-Once enough information is available, immediately return the required structured
-PLAN response.`
+Explore the repository with the read-only tools only as far as you need to formulate
+the plan; the task Input usually already contains the material you need. Discovery
+is bounded, and when it ends you will be told to synthesize — so return the
+required structured PLAN response as soon as the context is sufficient rather than
+continuing optional exploration. Do not modify files. SOP performs independent
+validation and review after you return.`
 	case agent.Review:
 		return `This is REVIEW. The change under review is summarised in the Input; inspect the
 repository only if the Input is insufficient. Do not modify files. Return the

@@ -210,6 +210,55 @@ func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
 	return h.exec(ctx, append([]string{"git"}, args...))
 }
 
+// WorkingTreeChanged reports whether the repository working tree differs from
+// HEAD — a modified, staged, deleted, or untracked path — ignoring SOP's own state
+// directory. It runs a fixed, read-only `git status --porcelain`, so it reports
+// the source tree the model actually touched rather than trusting a claim the
+// model makes about its own work. A failure to inspect (for example outside a git
+// repository) is returned as an error, so a caller can decline to act on it.
+func (h *Harness) WorkingTreeChanged(ctx context.Context) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(ctx, "git", "status", "--porcelain")
+	cmd.Dir = h.root
+	out, err := cmd.Output()
+	if err != nil {
+		return false, fmt.Errorf("git status: %w", err)
+	}
+	return hasSourceChange(string(out)), nil
+}
+
+// hasSourceChange reports whether porcelain output names any path outside SOP's
+// state directory.
+func hasSourceChange(porcelain string) bool {
+	for _, line := range strings.Split(porcelain, "\n") {
+		path := porcelainPath(line)
+		if path == "" {
+			continue
+		}
+		if path == stateDirRel || strings.HasPrefix(path, stateDirRel+"/") {
+			continue
+		}
+		return true
+	}
+	return false
+}
+
+// porcelainPath extracts the path from one `git status --porcelain` line, or ""
+// for a blank line. A rename entry ("R  old -> new") reports its new path.
+func porcelainPath(line string) string {
+	line = strings.TrimRight(line, "\r")
+	if len(line) < 4 {
+		return ""
+	}
+	rest := line[3:] // two status columns and the separating space
+	if i := strings.Index(rest, " -> "); i >= 0 {
+		rest = rest[i+len(" -> "):]
+	}
+	return strings.Trim(rest, `"`)
+}
+
 // runCommand tokenizes and policy-checks a command before executing it.
 func (h *Harness) runCommand(ctx context.Context, args map[string]any) (string, error) {
 	command, _ := args["command"].(string)

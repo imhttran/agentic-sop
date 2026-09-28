@@ -263,6 +263,56 @@ func TestGitInspectionToolsAreReadOnly(t *testing.T) {
 	}
 }
 
+// --- working tree observation ---
+
+func TestWorkingTreeChanged(t *testing.T) {
+	root := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", root).CombinedOutput(); err != nil {
+		t.Fatalf("git init: %v (%s)", err, out)
+	}
+	h := newTestHarness(t, root, nil)
+	ctx := context.Background()
+
+	if changed, err := h.WorkingTreeChanged(ctx); err != nil || changed {
+		t.Fatalf("clean tree: changed=%v err=%v, want false", changed, err)
+	}
+
+	// SOP's own state directory is not a source change.
+	writeRepoFile(t, root, ".agent-sdlc/state.db", "state")
+	if changed, err := h.WorkingTreeChanged(ctx); err != nil || changed {
+		t.Errorf("state directory only: changed=%v err=%v, want false", changed, err)
+	}
+
+	// A new source file is.
+	writeRepoFile(t, root, "a.go", "package a\n")
+	if changed, err := h.WorkingTreeChanged(ctx); err != nil || !changed {
+		t.Errorf("untracked source: changed=%v err=%v, want true", changed, err)
+	}
+}
+
+func TestWorkingTreeChangedOutsideRepo(t *testing.T) {
+	h := newTestHarness(t, t.TempDir(), nil)
+	if _, err := h.WorkingTreeChanged(context.Background()); err == nil {
+		t.Error("want an error outside a git repository")
+	}
+}
+
+func TestPorcelainPath(t *testing.T) {
+	cases := map[string]string{
+		"":                    "",
+		" M pkg/a.go":         "pkg/a.go",
+		"?? .agent-sdlc/":     ".agent-sdlc/",
+		"A  new.txt":          "new.txt",
+		"R  old.go -> new.go": "new.go",
+		`?? "a b.txt"`:        "a b.txt",
+	}
+	for line, want := range cases {
+		if got := porcelainPath(line); got != want {
+			t.Errorf("porcelainPath(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
 // --- auditability ---
 
 func TestToolExecutionIsAudited(t *testing.T) {

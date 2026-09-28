@@ -51,8 +51,13 @@ func (p CapabilityPolicy) ToolList() []string {
 // Capability iteration budgets. They are deliberately modest: a capability that
 // needs more turns than this has stopped making progress, and the harness reports
 // a diagnostic instead of running on. They are maxima, not targets.
+//
+// PLAN does not use a single budget: it runs two phases (see executePlan) —
+// bounded read-only discovery, then a tool-free synthesis — governed by
+// planDiscoveryTurns and planSynthesisTurns.
 const (
-	maxIterationsPlan        = 8
+	planDiscoveryTurns       = 8
+	planSynthesisTurns       = 2
 	maxIterationsDesignTests = 12
 	maxIterationsImplement   = 24
 	maxIterationsFix         = 24
@@ -76,8 +81,6 @@ var (
 		toolharness.ToolReadFile, toolharness.ToolListFiles, toolharness.ToolSearchFiles,
 		toolharness.ToolRunCommand, toolharness.ToolGitStatus, toolharness.ToolGitDiff,
 	)
-	// mutationTools is the full controlled surface.
-	mutationTools = allTools
 )
 
 // toolset builds a tool-name set.
@@ -95,7 +98,10 @@ func toolset(names ...string) map[string]bool {
 func PolicyFor(c agent.Capability) CapabilityPolicy {
 	switch c {
 	case agent.Plan:
-		return CapabilityPolicy{MaxIterations: maxIterationsPlan, ReadOnly: true, AllowedTools: readTools}
+		// PLAN runs two phases (executePlan), not the generic loop: bounded
+		// read-only discovery, then tool-free synthesis. MaxIterations is the total
+		// turn ceiling for reference; the phase limits are authoritative.
+		return CapabilityPolicy{MaxIterations: planDiscoveryTurns + planSynthesisTurns, ReadOnly: true, AllowedTools: readTools}
 	case agent.Review:
 		return CapabilityPolicy{MaxIterations: maxIterationsReview, ReadOnly: true, AllowedTools: readTools}
 	case agent.DesignTests:
@@ -103,9 +109,9 @@ func PolicyFor(c agent.Capability) CapabilityPolicy {
 	case agent.DiagnoseFailure:
 		return CapabilityPolicy{MaxIterations: maxIterationsDiagnose, ReadOnly: true, AllowedTools: inspectTools}
 	case agent.Implement:
-		return CapabilityPolicy{MaxIterations: maxIterationsImplement, AllowedTools: mutationTools}
+		return CapabilityPolicy{MaxIterations: maxIterationsImplement, AllowedTools: allTools}
 	case agent.Fix:
-		return CapabilityPolicy{MaxIterations: maxIterationsFix, AllowedTools: mutationTools}
+		return CapabilityPolicy{MaxIterations: maxIterationsFix, AllowedTools: allTools}
 	default:
 		return CapabilityPolicy{MaxIterations: maxIterationsReview, ReadOnly: true, AllowedTools: readTools}
 	}
