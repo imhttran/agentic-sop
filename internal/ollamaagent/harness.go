@@ -211,8 +211,8 @@ func (h *Harness) FlushAudit(w io.Writer) {
 // generic bounded loop.
 func (h *Harness) Execute(ctx context.Context, req agent.Request) (string, error) {
 	switch req.Capability {
-	case agent.Plan:
-		return h.executePlan(ctx, req)
+	case agent.Plan, agent.Review:
+		return h.executeTwoPhase(ctx, req)
 	case agent.Implement, agent.Fix:
 		return h.executePhased(ctx, req)
 	default:
@@ -464,6 +464,34 @@ func (p planPhase) label() string {
 
 // PLAN phase instructions. When discovery is exhausted the model is told
 // exploration is over; a tool request during synthesis is corrected, not executed.
+// twoPhase bounds one document-producing capability's loop: a bounded read-only
+// discovery, then a tool-free synthesis that must produce the document. PLAN and
+// REVIEW share the machinery and differ only in these values.
+type twoPhase struct {
+	discoveryTurns int
+	synthesisTurns int
+	instruction    string
+	correction     string
+}
+
+// twoPhaseFor returns the two-phase bounds and synthesis wording for a capability.
+func twoPhaseFor(c agent.Capability) twoPhase {
+	if c == agent.Review {
+		return twoPhase{
+			discoveryTurns: reviewDiscoveryTurns,
+			synthesisTurns: reviewSynthesisTurns,
+			instruction:    reviewSynthesisInstruction,
+			correction:     reviewSynthesisCorrection,
+		}
+	}
+	return twoPhase{
+		discoveryTurns: planDiscoveryTurns,
+		synthesisTurns: planSynthesisTurns,
+		instruction:    planSynthesisInstruction,
+		correction:     planSynthesisCorrection,
+	}
+}
+
 const (
 	planSynthesisInstruction = `Exploration is complete.
 Do not request any more tools.
@@ -476,16 +504,28 @@ Return the exact structured PLAN response expected by SOP.`
 No additional tools are available.
 Produce the required PLAN response using the context already gathered.`
 
-	planSynthesisTransitionEvent = "→ SYNTHESIS"
+	reviewSynthesisInstruction = `Exploration is complete.
+Do not request any more tools.
+Using only the repository context already gathered, produce the required REVIEW response now.
+Do not continue exploring.`
+
+	reviewSynthesisCorrection = `Repository discovery is complete.
+No additional tools are available.
+Produce the required REVIEW response using the context already gathered.`
+
+	synthesisTransitionEvent = "→ SYNTHESIS"
 )
 
-// executePlan runs the two-phase PLAN loop. Discovery permits at most
-// planDiscoveryTurns turns (so at most that many tool executions) with the
+// executeTwoPhase runs the bounded discovery → tool-free synthesis loop shared by
+// the document-producing capabilities (PLAN and REVIEW). Discovery permits at most
+// the capability's discovery budget of turns (each at most one tool) with the
 // centralized read-only tool policy. When discovery is exhausted without a final
 // response, tools are withdrawn and the model is told to synthesize; synthesis
-// permits at most planSynthesisTurns model turns. A final response ends the
-// invocation immediately, in either phase, so early completion is preserved.
-func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, error) {
+// permits at most the capability's synthesis budget of model turns. A final
+// response ends the invocation immediately, in either phase, so early completion
+// is preserved.
+func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request) (string, error) {
+	tp := twoPhaseFor(req.Capability)
 	policy := PolicyFor(req.Capability) // read-only tools
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy)},
@@ -500,14 +540,14 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 	)
 
 	for {
-		if phase == phaseSynthesis && synthesis >= planSynthesisTurns {
+		if phase == phaseSynthesis && synthesis >= tp.synthesisTurns {
 			h.trace.Record(TraceRecord{
 				Capability:  string(req.Capability),
 				Phase:       phaseSynthesis.label(),
 				Iteration:   synthesis,
 				Termination: terminationSynthesis,
 			})
-			return "", h.planSynthesisLimitError(req, discovered, synthesis)
+			return "", h.synthesisLimitError(req, discovered, synthesis)
 		}
 
 		raw, calls, err := h.chat(ctx, messages)
@@ -523,19 +563,19 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 		case err != nil: // narration: no tool call and no final object
 			if phase == phaseDiscovery {
 				discovery++
-				h.recordPlanTurn(req, phase, discovery, "narrate", "")
+				h.recordTwoPhaseTurn(req, phase, discovery, "narrate", "")
 				messages = append(messages,
 					chatMessage{Role: "assistant", Content: raw},
 					chatMessage{Role: "user", Content: turnReminder},
 				)
-				if discovery >= planDiscoveryTurns {
+				if discovery >= tp.discoveryTurns {
 					phase = phaseSynthesis
-					messages = append(messages, chatMessage{Role: "user", Content: planSynthesisInstruction})
-					h.recordPlanTransition(req)
+					messages = append(messages, chatMessage{Role: "user", Content: tp.instruction})
+					h.recordSynthesisTransition(req)
 				}
 			} else {
 				synthesis++
-				h.recordPlanTurn(req, phase, synthesis, "narrate", "")
+				h.recordTwoPhaseTurn(req, phase, synthesis, "narrate", "")
 				messages = append(messages,
 					chatMessage{Role: "assistant", Content: raw},
 					chatMessage{Role: "user", Content: turnReminder},
@@ -547,7 +587,7 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 			if phase == phaseSynthesis {
 				index = synthesis + 1
 			}
-			h.recordPlanTurn(req, phase, index, "final", "")
+			h.recordTwoPhaseTurn(req, phase, index, "final", "")
 			encoded, mErr := json.Marshal(final)
 			if mErr != nil {
 				return "", fmt.Errorf("encode final response: %w", mErr)
@@ -556,11 +596,11 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 
 		case phase == phaseSynthesis: // no tools during synthesis: deny and correct
 			synthesis++
-			h.recordPlanTurn(req, phase, synthesis, name, toolharness.SummarizeRequest(name, args))
-			h.tools.RecordDenied(name, args, "tools are unavailable during PLAN synthesis")
+			h.recordTwoPhaseTurn(req, phase, synthesis, name, toolharness.SummarizeRequest(name, args))
+			h.tools.RecordDenied(name, args, "tools are unavailable during synthesis")
 			messages = append(messages,
 				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: planSynthesisCorrection},
+				chatMessage{Role: "user", Content: tp.correction},
 			)
 
 		default: // discovery
@@ -569,7 +609,7 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 			if !policy.Allows(name) {
 				detail := fmt.Sprintf("tool %q is not available for %s; allowed tools: %s", name, req.Capability, describeTools(policy))
 				h.tools.RecordDenied(name, args, detail)
-				h.recordPlanTurn(req, phase, discovery, name, summary)
+				h.recordTwoPhaseTurn(req, phase, discovery, name, summary)
 				messages = append(messages,
 					chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
 					chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail))},
@@ -577,23 +617,23 @@ func (h *Harness) executePlan(ctx context.Context, req agent.Request) (string, e
 			} else {
 				result, toolErr := h.tools.Run(ctx, name, args)
 				discovered++
-				h.recordPlanTurn(req, phase, discovery, name, summary)
+				h.recordTwoPhaseTurn(req, phase, discovery, name, summary)
 				messages = append(messages,
 					chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
 					chatMessage{Role: "user", Content: toolResultMessage(name, result, toolErr)},
 				)
 			}
-			if discovery >= planDiscoveryTurns {
+			if discovery >= tp.discoveryTurns {
 				phase = phaseSynthesis
-				messages = append(messages, chatMessage{Role: "user", Content: planSynthesisInstruction})
-				h.recordPlanTransition(req)
+				messages = append(messages, chatMessage{Role: "user", Content: tp.instruction})
+				h.recordSynthesisTransition(req)
 			}
 		}
 	}
 }
 
-// recordPlanTurn appends one safe trace entry for a PLAN turn.
-func (h *Harness) recordPlanTurn(req agent.Request, phase planPhase, index int, tool, request string) {
+// recordTwoPhaseTurn appends one safe trace entry for a two-phase turn.
+func (h *Harness) recordTwoPhaseTurn(req agent.Request, phase planPhase, index int, tool, request string) {
 	h.trace.Record(TraceRecord{
 		Capability: string(req.Capability),
 		Phase:      phase.label(),
@@ -604,15 +644,15 @@ func (h *Harness) recordPlanTurn(req agent.Request, phase planPhase, index int, 
 	})
 }
 
-// recordPlanTransition marks the discovery-to-synthesis transition in the trace.
-func (h *Harness) recordPlanTransition(req agent.Request) {
-	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: planSynthesisTransitionEvent})
+// recordSynthesisTransition marks the discovery-to-synthesis transition in the trace.
+func (h *Harness) recordSynthesisTransition(req agent.Request) {
+	h.trace.Record(TraceRecord{Capability: string(req.Capability), Event: synthesisTransitionEvent})
 }
 
-// planSynthesisLimitError reports that PLAN exhausted its tool-free synthesis
-// turns without producing a document. It is deliberately phase-specific rather
-// than the generic iteration-limit message.
-func (h *Harness) planSynthesisLimitError(req agent.Request, discovered, synthesis int) error {
+// synthesisLimitError reports that a document-producing capability exhausted its
+// tool-free synthesis turns without producing a document. It is deliberately
+// phase-specific rather than the generic iteration-limit message.
+func (h *Harness) synthesisLimitError(req agent.Request, discovered, synthesis int) error {
 	return fmt.Errorf("Ollama agent %s failed during synthesis (model=%s, discovery_tool_calls=%d, synthesis_turns=%d, termination=%s)",
 		req.Capability, h.cfg.Model, discovered, synthesis, terminationSynthesis)
 }

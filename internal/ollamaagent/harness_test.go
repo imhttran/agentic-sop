@@ -106,6 +106,10 @@ func fixRequest() agent.Request {
 	return agent.Request{Capability: agent.Fix, Task: "fix it", Input: "validation failed", OutputRequirements: "summarize"}
 }
 
+func reviewRequest() agent.Request {
+	return agent.Request{Capability: agent.Review, Task: "review it", Input: "diff", OutputRequirements: "json"}
+}
+
 func planRequest() agent.Request {
 	return agent.Request{Capability: agent.Plan, Task: "make a plan", Input: "prd", OutputRequirements: "json"}
 }
@@ -535,7 +539,7 @@ func TestCapabilityBudgets(t *testing.T) {
 		{agent.DesignTests, 12},
 		{agent.Implement, 24},
 		{agent.Fix, 24},
-		{agent.Review, 12},
+		{agent.Review, 8},
 	}
 	for _, tc := range cases {
 		if got := PolicyFor(tc.cap).MaxIterations; got != tc.want {
@@ -664,7 +668,7 @@ func TestPlanEarlyFinalCompletesImmediately(t *testing.T) {
 	if len(records) != 1 || records[0].Phase != "DISCOVERY" || records[0].Tool != "final" {
 		t.Errorf("trace = %+v, want one DISCOVERY final turn", records)
 	}
-	if hasEvent(records, planSynthesisTransitionEvent) {
+	if hasEvent(records, synthesisTransitionEvent) {
 		t.Errorf("early final must not enter synthesis: %+v", records)
 	}
 }
@@ -699,7 +703,7 @@ func TestPlanForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	if got := countPhase(records, "DISCOVERY"); got != planDiscoveryTurns {
 		t.Errorf("discovery turns = %d, want %d", got, planDiscoveryTurns)
 	}
-	if !hasEvent(records, planSynthesisTransitionEvent) {
+	if !hasEvent(records, synthesisTransitionEvent) {
 		t.Errorf("trace does not record the synthesis transition: %+v", records)
 	}
 	if got := countPhase(records, "SYNTHESIS"); got != 1 {
@@ -812,7 +816,7 @@ func TestPlanAHV2006ShapeFixture(t *testing.T) {
 		t.Errorf("chat calls = %d, want %d discovery + 1 synthesis", fake.count(), planDiscoveryTurns)
 	}
 	records := h.TraceRecords()
-	if !hasEvent(records, planSynthesisTransitionEvent) {
+	if !hasEvent(records, synthesisTransitionEvent) {
 		t.Errorf("trace does not record the transition: %+v", records)
 	}
 	// The safe trace never carries file contents or prompts.
@@ -899,6 +903,47 @@ func TestImplementNormalCompletion(t *testing.T) {
 	}
 	if got, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(got) != "written" {
 		t.Errorf("out.txt = %q", got)
+	}
+}
+
+// TestReviewForcedSynthesisAfterDiscoveryLimit proves REVIEW is bounded like PLAN:
+// after its short discovery budget it must synthesize the verdict with no tools,
+// rather than reading until the iteration limit and erroring the whole run (the
+// AHV2010 failure).
+func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", reviewDiscoveryTurns)
+	responses := make([]string, 0, reviewDiscoveryTurns+2)
+	for i := 0; i < reviewDiscoveryTurns; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	responses = append(responses,
+		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`, // refused: synthesis has no tools
+		`{"summary":"clean","findings":[]}`,
+	)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), reviewRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, "findings") {
+		t.Errorf("content = %q", content)
+	}
+	if !hasEvent(h.TraceRecords(), synthesisTransitionEvent) {
+		t.Errorf("REVIEW did not enter synthesis: %+v", h.TraceRecords())
+	}
+	denied := 0
+	for _, r := range h.AuditRecords() {
+		if r.Action == toolharness.ActionDeny {
+			denied++
+		}
+	}
+	if denied != 1 {
+		t.Errorf("denied tools = %d, want 1 (synthesis has no tools)", denied)
 	}
 }
 

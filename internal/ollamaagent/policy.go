@@ -63,6 +63,12 @@ const (
 	maxIterationsFix         = 24
 	maxIterationsDiagnose    = 12
 	maxIterationsReview      = 12
+
+	// reviewDiscoveryTurns and reviewSynthesisTurns bound REVIEW's two-phase loop.
+	// The change under review is in the request, so discovery is short; synthesis is
+	// tool-free and must produce the review verdict.
+	reviewDiscoveryTurns = 6
+	reviewSynthesisTurns = 2
 )
 
 // allTools is every tool the shared harness implements, so a capability policy
@@ -103,7 +109,9 @@ func PolicyFor(c agent.Capability) CapabilityPolicy {
 		// turn ceiling for reference; the phase limits are authoritative.
 		return CapabilityPolicy{MaxIterations: planDiscoveryTurns + planSynthesisTurns, ReadOnly: true, AllowedTools: readTools}
 	case agent.Review:
-		return CapabilityPolicy{MaxIterations: maxIterationsReview, ReadOnly: true, AllowedTools: readTools}
+		// REVIEW runs two phases (executeTwoPhase), like PLAN: bounded read-only
+		// discovery, then tool-free synthesis. MaxIterations is the reference total.
+		return CapabilityPolicy{MaxIterations: reviewDiscoveryTurns + reviewSynthesisTurns, ReadOnly: true, AllowedTools: readTools}
 	case agent.DesignTests:
 		return CapabilityPolicy{MaxIterations: maxIterationsDesignTests, ReadOnly: true, AllowedTools: readTools}
 	case agent.DiagnoseFailure:
