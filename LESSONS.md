@@ -225,6 +225,9 @@ never fired and the model read until the ceiling. Finalizing at the late stage
 closes it. The resulting "changed nothing" is a _retryable_ boundary, not a hard
 failure: a flaky sample that simply did not act should be sent back around, not
 blocked for a human. Distinguish "the work failed" from "the agent never tried".
+That distinction has to hold when the model reports the failure itself, too: a
+`failed` outcome with an unchanged tree is still "the agent never tried", so it is
+classified retryable rather than blocked.
 
 ## An agent that can overwrite must be able to undo
 

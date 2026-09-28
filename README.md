@@ -516,7 +516,9 @@ instead of one flat loop:
   Twenty-four stays the hard safety ceiling. A run that never changes the
   repository ends with `termination=no_change` and a **retryable** `needs_human`
   outcome (SOP requeues it) rather than claiming success or blocking; a run that is
-  still writing stops with `mutation_observed=true`.
+  still writing stops with `mutation_observed=true`. The same applies when the model
+  itself reports `failed` after changing nothing: a no-op is retryable, not a hard
+  failure.
 
 A capability that repeats a non-progressing action is told once to conclude, then
 stopped early with a diagnostic. Neither PLAN nor the phased capabilities own
