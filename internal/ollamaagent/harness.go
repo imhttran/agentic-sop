@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -98,6 +99,10 @@ type Harness struct {
 	audit  *toolharness.AuditLog
 	trace  *TraceLog
 
+	// tracePath is an optional durable sink (SOP_OLLAMA_TRACE_LOG) the failed-run
+	// trace is appended to, so it survives the command provider discarding stderr.
+	tracePath string
+
 	// mismatch records whether reconcileOutcome overrode the model's
 	// changes_expected claim with the repository change actually observed.
 	mismatch bool
@@ -118,11 +123,12 @@ func New(cfg Config, root string) *Harness {
 		MaxOutputBytes: cfg.MaxOutputBytes,
 	}, sink)
 	return &Harness{
-		cfg:    cfg,
-		client: newOllamaClient(cfg),
-		tools:  tools,
-		audit:  audit,
-		trace:  newTraceLog(defaultMaxTraceRecords),
+		cfg:       cfg,
+		client:    newOllamaClient(cfg),
+		tools:     tools,
+		audit:     audit,
+		trace:     newTraceLog(defaultMaxTraceRecords),
+		tracePath: strings.TrimSpace(lookupEnv(envToolTraceLog)),
 	}
 }
 
@@ -135,8 +141,22 @@ func (h *Harness) AuditRecords() []toolharness.AuditRecord { return h.audit.Reco
 func (h *Harness) TraceRecords() []TraceRecord { return h.trace.Records() }
 
 // FlushTrace writes a compact per-turn trace to w. It is called on a failed run so
-// the turn history that led to the failure is visible without reading a sink.
-func (h *Harness) FlushTrace(w io.Writer) { h.trace.Flush(w) }
+// the turn history that led to the failure is visible without reading a sink. When
+// SOP_OLLAMA_TRACE_LOG names a file, the trace is also appended there, so it
+// survives the command provider discarding the harness's stderr.
+func (h *Harness) FlushTrace(w io.Writer) {
+	h.trace.Flush(w)
+	if h.tracePath == "" {
+		return
+	}
+	f, err := os.OpenFile(h.tracePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+	if err != nil {
+		fmt.Fprintf(w, "sop-ollama-agent: cannot open %s: %v\n", h.tracePath, err)
+		return
+	}
+	defer f.Close()
+	h.trace.Flush(f)
+}
 
 // FlushAudit writes a one-line audit summary to w so an operator sees what was
 // executed and denied without reading a separate file. A nil or empty trail
@@ -159,14 +179,15 @@ func (h *Harness) FlushAudit(w io.Writer) {
 
 // Execute runs the request's capability and returns the model's final JSON object
 // as canonical JSON, ready for SOP to parse. PLAN runs a two-phase discovery →
-// synthesis loop, IMPLEMENT runs a three-phase discover → change → finalize loop,
-// and every other capability runs the generic bounded loop.
+// synthesis loop; the phased mutating capabilities (IMPLEMENT and FIX) share the
+// three-phase discover → change → finalize loop; every other capability runs the
+// generic bounded loop.
 func (h *Harness) Execute(ctx context.Context, req agent.Request) (string, error) {
 	switch req.Capability {
 	case agent.Plan:
 		return h.executePlan(ctx, req)
-	case agent.Implement:
-		return h.executeImplement(ctx, req)
+	case agent.Implement, agent.Fix:
+		return h.executePhased(ctx, req)
 	default:
 		return h.executeLoop(ctx, req)
 	}
@@ -569,11 +590,11 @@ func (h *Harness) planSynthesisLimitError(req agent.Request, discovered, synthes
 		req.Capability, h.cfg.Model, discovered, synthesis, terminationSynthesis)
 }
 
-// IMPLEMENT runs a three-phase loop: bounded DISCOVERY (read the repository just
-// enough to make the change), CHANGE (make the change and targeted checks), then
-// FINALIZE (no repository tools; return the structured SOP outcome). Phase state
-// is scoped to a single executeImplement call — it is not SOP workflow state and
-// is never persisted.
+// IMPLEMENT and FIX share a three-phase loop: bounded DISCOVERY (read the
+// repository just enough to make the change), CHANGE (make the change and
+// targeted checks), then FINALIZE (no repository tools; return the structured SOP
+// outcome). Phase state is scoped to a single executePhased call — it is not SOP
+// workflow state and is never persisted.
 type implementPhase int
 
 const (
@@ -625,7 +646,7 @@ const (
 // IMPLEMENT phase instructions. They are injected as suffixes on a tool result so
 // the transcript keeps alternating assistant/user turns.
 const (
-	implementChangeInstruction = `The requested implementation has begun.
+	implementChangeInstruction = `The requested change has begun.
 
 Focus only on completing the change.
 
@@ -638,12 +659,12 @@ return.`
 
 	implementNudge = `You have gathered substantial repository context.
 
-Begin implementing the requested change now.
+Begin making the requested change now.
 
 Only inspect additional files when they are directly necessary to complete the
 implementation. Do not continue broad repository exploration.`
 
-	implementFinalizeInstruction = `Implementation work is complete for this invocation.
+	implementFinalizeInstruction = `Work on the requested change is complete for this invocation.
 
 Do not request additional tools.
 
@@ -653,7 +674,7 @@ repository context already available.
 SOP will independently run build, test, lint, review, and quality gates after
 you return. Do not continue trying to prove the implementation yourself.`
 
-	implementFinalizeCorrection = `Implementation tool execution is complete for this invocation.
+	implementFinalizeCorrection = `Tool execution is complete for this invocation.
 
 No additional tools are available.
 
@@ -669,7 +690,7 @@ Repository tools remain available for implementation.
 
 Use additional reads only when directly necessary to make the change.
 
-Do not return a completed outcome until the required implementation has
+Do not return a completed outcome until the required change has
 actually been performed.
 
 Once the implementation is complete, return the required structured outcome.
@@ -693,9 +714,9 @@ repository changes. SOP will independently validate the repository.`
 	implementFinalEvent    = "→ CHANGE_FINAL"
 )
 
-// implementState is the invocation-scoped phase state of one IMPLEMENT run. It is
-// never stored on the shared Harness, so one invocation cannot leak mutation or
-// phase state into another.
+// implementState is the invocation-scoped phase state of one phased run
+// (IMPLEMENT or FIX). It is never stored on the shared Harness, so one invocation
+// cannot leak mutation or phase state into another.
 type implementState struct {
 	phase               implementPhase
 	mutated             bool // a controlled mutation succeeded during this invocation
@@ -724,16 +745,17 @@ func isMutationTool(name string) bool {
 	return name == toolharness.ToolWriteFile || name == toolharness.ToolCreateFile
 }
 
-// executeImplement runs the three-phase IMPLEMENT loop. Discovery and change may
-// use the controlled tools; once the model has changed the repository and then
-// stopped writing for the completion window those tools are withdrawn and the
-// model must return the structured outcome. A model that is still writing keeps
-// its tools — finalization must not truncate a multi-file change — and a mutation
-// requested during FINALIZE resumes CHANGE. A threshold crossed without a
-// mutation does not finalize: the model is told to implement and keeps its tools.
-// A final response ends the invocation in any phase, so early completion is
-// preserved, and the capability's MaxIterations stays the hard safety ceiling.
-func (h *Harness) executeImplement(ctx context.Context, req agent.Request) (string, error) {
+// executePhased runs the three-phase loop shared by the phased mutating
+// capabilities (IMPLEMENT and FIX). Discovery and change may use the controlled
+// tools; once the model has changed the repository and then stopped writing for
+// the completion window those tools are withdrawn and the model must return the
+// structured outcome. A model that is still writing keeps its tools —
+// finalization must not truncate a multi-file change — and a mutation requested
+// during FINALIZE resumes CHANGE. A threshold crossed without a mutation does not
+// finalize: the model is told to implement and keeps its tools. A final response
+// ends the invocation in any phase, so early completion is preserved, and the
+// capability's MaxIterations stays the hard safety ceiling.
+func (h *Harness) executePhased(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy)},

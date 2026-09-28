@@ -102,6 +102,10 @@ func implementRequest() agent.Request {
 	return agent.Request{Capability: agent.Implement, Task: "do it", Input: "context", OutputRequirements: "summarize"}
 }
 
+func fixRequest() agent.Request {
+	return agent.Request{Capability: agent.Fix, Task: "fix it", Input: "validation failed", OutputRequirements: "summarize"}
+}
+
 func planRequest() agent.Request {
 	return agent.Request{Capability: agent.Plan, Task: "make a plan", Input: "prd", OutputRequirements: "json"}
 }
@@ -203,6 +207,36 @@ func TestRunRejectsUnknownCapability(t *testing.T) {
 	err := Run(context.Background(), strings.NewReader(body), &out, &errOut, os.Getwd)
 	if err == nil || !strings.Contains(err.Error(), "capability") {
 		t.Fatalf("err = %v, want a capability error", err)
+	}
+}
+
+// TestRunPersistsFailedTraceToSink proves a failed run's per-turn trace reaches the
+// operator-selected file, so it survives the command provider discarding stderr.
+func TestRunPersistsFailedTraceToSink(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "stable")
+	traceFile := filepath.Join(t.TempDir(), "trace.log")
+	t.Setenv(agent.EnvOllamaBaseURL, "")
+	t.Setenv(agent.EnvOllamaModel, "")
+	t.Setenv(agent.EnvOllamaTimeout, "")
+	t.Setenv("SOP_OLLAMA_TRACE_LOG", traceFile)
+
+	repeat := `{"tool":"read_file","args":{"path":"notes.txt"}}`
+	_, srv := newFakeOllama(t, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat)
+	t.Setenv(agent.EnvOllamaBaseURL, srv.URL)
+
+	body := `{"capability":"IMPLEMENT","task":"do it","input":"ctx"}`
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), strings.NewReader(body), &out, &errOut, func() (string, error) { return dir, nil }); err != nil {
+		t.Fatalf("Run failed: %v", err)
+	}
+
+	got, err := os.ReadFile(traceFile)
+	if err != nil {
+		t.Fatalf("trace file not written: %v", err)
+	}
+	if !strings.Contains(string(got), "IMPLEMENT") {
+		t.Errorf("trace = %q, want the per-turn trail", got)
 	}
 }
 
@@ -874,7 +908,7 @@ func TestImplementDiscoveryNudge(t *testing.T) {
 
 	// The nudge is appended to the sixth tool result, so it reaches the model on
 	// the seventh turn's request.
-	if text := messageText(fake.request(implementNudgeAfter)); !strings.Contains(text, "Begin implementing the requested change now") {
+	if text := messageText(fake.request(implementNudgeAfter)); !strings.Contains(text, "Begin making the requested change now") {
 		t.Errorf("the discovery nudge was not sent:\n%s", text)
 	}
 	if hasEvent(h.TraceRecords(), implementChangeEvent) {
@@ -901,7 +935,7 @@ func TestImplementMutationTransitionsToChange(t *testing.T) {
 	if got := countPhase(records, "DISCOVER"); got != 1 {
 		t.Errorf("discovery turns = %d, want 1", got)
 	}
-	if text := messageText(fake.request(2)); !strings.Contains(text, "The requested implementation has begun") {
+	if text := messageText(fake.request(2)); !strings.Contains(text, "The requested change has begun") {
 		t.Errorf("the change guidance was not sent:\n%s", text)
 	}
 }
@@ -967,7 +1001,7 @@ func TestImplementForcedFinalization(t *testing.T) {
 	if got := countPhase(records, "FINALIZE"); got != 1 {
 		t.Errorf("finalize turns = %d, want 1 (the outcome)", got)
 	}
-	if text := messageText(fake.request(implementFinalizeAfter)); !strings.Contains(text, "Implementation work is complete for this invocation") {
+	if text := messageText(fake.request(implementFinalizeAfter)); !strings.Contains(text, "Work on the requested change is complete for this invocation") {
 		t.Errorf("the finalize instruction was not sent:\n%s", text)
 	}
 	if got := len(h.AuditRecords()); got != implementFinalizeAfter {
@@ -1321,6 +1355,41 @@ func TestImplementAHV2008ShapeFixture(t *testing.T) {
 	records := h.TraceRecords()
 	if !hasEvent(records, implementChangeEvent) || !hasEvent(records, implementFinalizeEvent) {
 		t.Errorf("trace missing phase transitions: %+v", records)
+	}
+}
+
+// TestFixUsesPhasedCompletion proves FIX shares the phased loop: a fix that makes
+// the change and then keeps verifying must still finalize and hand back before the
+// ceiling, instead of running to iteration_limit (the AHV2009 fix failure).
+func TestFixUsesPhasedCompletion(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "notes.txt", "hello")
+	responses := []string{
+		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
+		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
+	}
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-2)...)
+	responses = append(responses, `{"status":"completed","summary":"fixed it","changes_expected":true}`)
+	_, srv := newFakeOllama(t, responses...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 100
+
+	h := New(cfg, dir)
+	content, err := h.Execute(context.Background(), fixRequest())
+	if err != nil {
+		t.Fatalf("Execute failed: %v", err)
+	}
+	if !strings.Contains(content, `"status":"completed"`) {
+		t.Errorf("content = %q", content)
+	}
+	records := h.TraceRecords()
+	for _, r := range records {
+		if r.Capability != string(agent.Fix) {
+			t.Errorf("trace record capability = %q, want FIX", r.Capability)
+		}
+	}
+	if !hasEvent(records, implementFinalizeEvent) {
+		t.Errorf("FIX must finalize before the ceiling: %+v", records)
 	}
 }
 

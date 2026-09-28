@@ -53,6 +53,12 @@ const (
 	// the file is opened separately, so inspecting the audit never touches
 	// .agent-sdlc/state.db.
 	envToolAuditLog = "SOP_TOOL_AUDIT_LOG"
+	// envToolTraceLog optionally names a file to append the per-turn trace to on a
+	// failed run. SOP's command provider discards the harness's stderr, so without
+	// this the turn history that explains a failure is lost; setting it gives every
+	// failure a durable, inspectable trail. Like the audit sink it is operator-set
+	// and never SOP's state database.
+	envToolTraceLog = "SOP_OLLAMA_TRACE_LOG"
 )
 
 // lookupEnv is indirected so tests can supply environment values without
