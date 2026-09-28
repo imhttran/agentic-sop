@@ -487,16 +487,16 @@ owns validation, review, retries, and human gates — the harness is an implemen
 adapter only. It is expected to be superseded by
 [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
 
-The loop is bounded per capability, not by one global number: `REVIEW`,
-`DESIGN_TESTS`, and `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), while
-the phased mutating capabilities `IMPLEMENT` and `FIX` get 24. Two kinds of
-capability run in phases instead of one flat loop:
+The loop is bounded per capability, not by one global number: `DESIGN_TESTS` and
+`DIAGNOSE_FAILURE` get 12 model turns (read-only tools), while the phased mutating
+capabilities `IMPLEMENT` and `FIX` get 24. Three capabilities run in phases
+instead of one flat loop:
 
-- `PLAN` — bounded read-only _discovery_ (8 turns), then a tool-free _synthesis_
-  (2 turns) that must produce the document. When discovery is exhausted the model
-  is told exploration is over and may no longer use tools, so a PLAN can no longer
-  fail by exploring forever. An early final response still completes the plan
-  immediately.
+- `PLAN` and `REVIEW` — bounded read-only _discovery_ (8 turns for PLAN, 6 for
+  REVIEW), then a tool-free _synthesis_ (2 turns) that must produce the document.
+  When discovery is exhausted the model is told exploration is over and may no
+  longer use tools, so neither can fail by exploring forever; an early final
+  response still completes immediately.
 - `IMPLEMENT` / `FIX` — _discover_ enough context, _change_ (the first successful
   `write_file`/`create_file` and any targeted checks), then _finalize_. The two
   mutating capabilities share this loop, so a FIX that has written its repair is

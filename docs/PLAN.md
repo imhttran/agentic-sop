@@ -686,6 +686,7 @@ T066 run FIX through the phased completion loop (share it with IMPLEMENT)
 T067 persist a failed run's per-turn trace to an operator sink
 T068 bound the unmutated run (force a conclusion at the late stage; retry a no-op)
 T069 scoped delete/restore tools; trace a model-reported failure
+T070 run REVIEW through the phased discovery → synthesis loop
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

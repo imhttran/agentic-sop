@@ -236,6 +236,16 @@ that grants a destructive capability has to grant its inverse -- a scoped
 mistake away from being stuck. And a failure the _model_ reports, not just one the
 harness raises, is still a failure to diagnose, so its trace must be kept too.
 
+## A capability that owes a document needs a forced synthesis
+
+PLAN could fail by exploring forever; a bounded discovery followed by a tool-free
+synthesis fixed it. REVIEW could fail the same way -- it read until the iteration
+ceiling and never returned a verdict, erroring the run one stage after AHV2010's
+IMPLEMENT had succeeded. The lesson is not "fix REVIEW"; it is that _every_
+capability whose job is to return a structured document needs the same shape: bound
+the exploration, then withdraw the tools and require the answer. A capability with
+no synthesis phase has no way to finish.
+
 ## A bootstrap tool is an adapter, not a second engine
 
 When SOP needed to drive a plan with a local model instead of a hosted coding
