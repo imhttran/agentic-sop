@@ -336,6 +336,10 @@ quality:
 
 human:
   approval_before_commit: true
+
+workflow:
+  # local | pull-request
+  mode: local
 `, CurrentVersion, name, DefaultMaxFixCycles)
 }
 
