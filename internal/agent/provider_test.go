@@ -367,6 +367,11 @@ func TestEffectiveProvider(t *testing.T) {
 	if name, src := EffectiveProvider(ProviderOllama); name != ProviderOllama || src != SourceConfiguration {
 		t.Errorf("configuration: (%q, %q), want (%q, %q)", name, src, ProviderOllama, SourceConfiguration)
 	}
+	// An explicit command provider is the configuration source too, so the
+	// historical subprocess path stays selectable and is not the default only.
+	if name, src := EffectiveProvider(ProviderCommand); name != ProviderCommand || src != SourceConfiguration {
+		t.Errorf("command configuration: (%q, %q), want (%q, %q)", name, src, ProviderCommand, SourceConfiguration)
+	}
 	t.Setenv(EnvAgentProvider, ProviderLlamaCpp)
 	if name, src := EffectiveProvider(ProviderOllama); name != ProviderLlamaCpp || src != SourceEnvironment {
 		t.Errorf("environment override: (%q, %q), want (%q, %q)", name, src, ProviderLlamaCpp, SourceEnvironment)
