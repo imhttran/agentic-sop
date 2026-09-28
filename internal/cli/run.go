@@ -96,6 +96,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	stack := resolveExecutionStack(cfg)
+	printExecutionStack(stdout, dir, cfg, stack)
+	fmt.Fprintln(stdout)
+
 	rn, err := runpkg.New(dir, runID(spec))
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)

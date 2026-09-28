@@ -63,6 +63,10 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	stack := resolveExecutionStack(cfg)
+	fmt.Fprintln(stdout, "SOP")
+	fmt.Fprintln(stdout)
+	printExecutionStack(stdout, dir, cfg, stack)
+	fmt.Fprintln(stdout)
 
 	st, err := store.Open(statePath(dir))
 	if err != nil {
@@ -129,34 +133,14 @@ func projectName(dir string, cfg config.Config) string {
 	return filepath.Base(dir)
 }
 
-// printStartup emits a concise summary of the plan being executed, including the
-// resolved execution stack: harness, provider, model when applicable, the command
-// when the command harness runs, and the source of the effective configuration
-// for each of harness, provider, and model.
+// printStartup emits a concise summary of the plan being executed. The execution
+// stack is printed earlier before plan preparation.
 func printStartup(w io.Writer, dir string, cfg config.Config, stack executionStack, prepared planflow.Result, tasks []*domain.Task) {
 	source := prepared.Source
 	if source == "" {
 		source = "(existing plan.json)"
 	}
 
-	fmt.Fprintln(w, "SOP")
-	fmt.Fprintln(w)
-	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
-	fmt.Fprintf(w, "Harness: %s\n", stack.Harness)
-	if stack.HarnessSource != "" {
-		fmt.Fprintf(w, "Harness source: %s\n", stack.HarnessSource)
-	}
-	fmt.Fprintf(w, "Provider: %s\n", stack.Provider)
-	if stack.Model != "" {
-		fmt.Fprintf(w, "Model: %s\n", stack.Model)
-		if stack.ModelSource != "" {
-			fmt.Fprintf(w, "Model source: %s\n", stack.ModelSource)
-		}
-	}
-	fmt.Fprintf(w, "Provider source: %s\n", stack.Source)
-	if stack.Command != "" {
-		fmt.Fprintf(w, "Command: %s\n", stack.Command)
-	}
 	fmt.Fprintf(w, "Source: %s\n", source)
 
 	if prepared.PlanRebuilt {

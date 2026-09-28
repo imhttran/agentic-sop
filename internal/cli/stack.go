@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"fmt"
+	"io"
 	"os"
 	"strings"
 
@@ -101,4 +103,19 @@ func effectiveCommand() string {
 		return command
 	}
 	return strings.TrimSpace(os.Getenv(LegacyEnvAgentCommand))
+}
+
+// printExecutionStack formats and prints the execution stack to stdout: the
+// harness, provider, model when applicable, and configuration sources.
+func printExecutionStack(w io.Writer, dir string, cfg config.Config, stack executionStack) {
+	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
+	fmt.Fprintf(w, "Harness: %s\n", stack.Harness)
+	fmt.Fprintf(w, "Provider: %s\n", stack.Provider)
+	if stack.Model != "" {
+		fmt.Fprintf(w, "Model: %s\n", stack.Model)
+	}
+	fmt.Fprintf(w, "Provider source: %s\n", stack.Source)
+	if stack.Command != "" {
+		fmt.Fprintf(w, "Command: %s\n", stack.Command)
+	}
 }
