@@ -489,7 +489,7 @@ adapter only. It is expected to be superseded by
 
 The loop is bounded per capability, not by one global number: `DESIGN_TESTS` and
 `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), while the phased mutating
-capabilities `IMPLEMENT` and `FIX` get 24. Three capabilities run in phases
+capabilities get 32 (`IMPLEMENT`) and 24 (`FIX`). Three capabilities run in phases
 instead of one flat loop:
 
 - `PLAN` and `REVIEW` — bounded read-only _discovery_ (8 turns for PLAN, 6 for
@@ -515,7 +515,9 @@ instead of one flat loop:
   tools are withdrawn, but a write is still honoured and resumes CHANGE — so it
   cannot read its way to the ceiling. Once finalizing, the model has a two-turn
   allowance before the invocation fails with `termination=finalization_limit`.
-  Twenty-four stays the hard safety ceiling. A run that never changes the
+  The hard safety ceiling is `IMPLEMENT`'s 32 turns — a model that explores for
+  most of the budget and writes only once the tools are withdrawn needs the room to
+  finish. A run that never changes the
   repository ends with `termination=no_change` and a **retryable** `needs_human`
   outcome (SOP requeues it) rather than claiming success or blocking; a run that is
   still writing stops with `mutation_observed=true`. The same applies when the model

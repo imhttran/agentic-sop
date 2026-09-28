@@ -689,6 +689,7 @@ T069 scoped delete/restore tools; trace a model-reported failure
 T070 run REVIEW through the phased discovery → synthesis loop
 T071 a no-change IMPLEMENT/FIX failure is retryable
 T072 bring the implement-now nudge forward (12, so there is budget to finish)
+T073 raise IMPLEMENT's iteration ceiling to 32 (room for explore-then-write)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
