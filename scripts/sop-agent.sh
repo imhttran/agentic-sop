@@ -45,7 +45,7 @@ case "$cap" in
     instruction="Produce the implementation plan. Your final response must be JSON of exactly this shape: $want"
     ;;
   REVIEW)
-    want='{"summary":"<one line>","findings":[{"severity":"critical|high|medium|low|info","title":"<title>","detail":"<detail>","file":"<path>","line":0,"suggestion":"<optional>"}]}'
+    want='{"summary":"<one line>","findings":[{"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","title":"<title>","detail":"<detail>","file":"<path>","line":0,"suggestion":"<optional>"}]}'
     instruction="Review the change below and report findings. Your final response must be JSON of exactly this shape: $want"
     ;;
   *)
