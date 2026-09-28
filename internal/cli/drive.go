@@ -2,15 +2,19 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/resume"
@@ -107,7 +111,8 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	code := driveGraph(ctx, dir, cfg, a, d, st, stdout, stderr)
+	sess := newRunSession()
+	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, stdout, stderr)
 	if code == exitOK {
 		if final, err := st.List(); err == nil && allComplete(final) {
 			printCompletion(stdout, dir, cfg, prepared, final)
@@ -253,7 +258,7 @@ func latestReportPath(dir string) string {
 // (BRANCH_CREATED … REVIEW_PASS → LOCAL_DONE). It never fabricates PR_OPEN,
 // CI_RUNNING, CI_PASS, or MERGED, because no PR was opened and no CI ran. The
 // persisted state therefore describes what actually happened.
-func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, stdout, stderr io.Writer) int {
+func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, planID string, sess *runSession, stdout, stderr io.Writer) int {
 	tasks, err := st.List()
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
@@ -263,6 +268,14 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		fmt.Fprintln(stderr, "run: no tasks to execute")
 		return exitError
 	}
+
+	// The run's performance aggregate. It is diagnostic metadata only: it is
+	// written beside the task runs and never read back to drive a decision.
+	run := perf.NewRun(time.Now())
+	defer func() {
+		run.Finish(time.Now())
+		writeRunMetrics(dir, planID, run)
+	}()
 
 	sch := scheduler.New(st)
 	completed := 0
@@ -279,14 +292,20 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 
 		switch res.Outcome {
 		case scheduler.ReadyTask:
-			if code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, stdout, stderr); code != exitOK {
+			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
+			addTaskMetrics(run, dir, res.Task.ID)
+			if code != exitOK {
 				return code
 			}
 			completed++
 		case scheduler.ActiveTask:
 			// A task is mid-lifecycle (typically selected but interrupted). SOP has one
 			// interpretation of that state: resume the same task, never start another.
-			if code := resumeActiveTask(ctx, dir, cfg, a, d, st, stdout, stderr); code != exitOK {
+			code, id := resumeActiveTask(ctx, dir, cfg, a, d, st, sess, stdout, stderr)
+			if id != "" {
+				addTaskMetrics(run, dir, id)
+			}
+			if code != exitOK {
 				return code
 			}
 			completed++
@@ -303,17 +322,55 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	return exitOK
 }
 
+// addTaskMetrics folds a task's persisted performance record into the run
+// aggregate. Metrics are diagnostic only; a missing record is skipped.
+func addTaskMetrics(run *perf.Run, dir, taskID string) {
+	if t, ok := loadTaskMetrics(dir, taskID); ok {
+		run.Add(t)
+	}
+}
+
+// loadTaskMetrics reads a task's persisted performance record, if any.
+func loadTaskMetrics(dir, taskID string) (perf.Task, bool) {
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", taskID, "metrics.json"))
+	if err != nil {
+		return perf.Task{}, false
+	}
+	var t perf.Task
+	if err := json.Unmarshal(data, &t); err != nil {
+		return perf.Task{}, false
+	}
+	return t, true
+}
+
+// writeRunMetrics persists the run-level aggregate beside the task runs, under the
+// plan's identity. It is a diagnostic artifact, never workflow state.
+func writeRunMetrics(dir, planID string, run *perf.Run) {
+	if strings.TrimSpace(planID) == "" || len(run.Tasks) == 0 {
+		return
+	}
+	runDir := filepath.Join(dir, stateDirName, "runs", planID)
+	if err := os.MkdirAll(runDir, 0o755); err != nil {
+		return
+	}
+	data, err := json.MarshalIndent(run, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(filepath.Join(runDir, "metrics.json"), append(data, '\n'), 0o644)
+}
+
 // resumeActiveTask resumes the single in-flight task instead of refusing to run.
 // It reuses the notions the rest of SOP uses: the scheduler decides which status
 // occupies the execution slot (scheduler.IsActive), and resume decides the next
 // legal action for that status (resume.ActionFor) — the same decision `sop resume`
 // reports. A local run only performs the local lifecycle, so a task parked in the
 // remote lifecycle is reported rather than guessed at.
-func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, stdout, stderr io.Writer) int {
+func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, sess *runSession, stdout, stderr io.Writer) (int, string) {
 	tasks, err := st.List()
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
+		return exitError, ""
 	}
 
 	var active []*domain.Task
@@ -325,7 +382,7 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	switch len(active) {
 	case 0:
 		fmt.Fprintln(stderr, "Cannot safely resume: a task was scheduled as active but none was found.\n\nInspect state with:\n\n  sop resume")
-		return exitError
+		return exitError, ""
 	case 1:
 	default:
 		ids := make([]string, len(active))
@@ -333,7 +390,7 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 			ids[i] = t.ID
 		}
 		fmt.Fprintf(stderr, "Cannot safely resume: %d tasks are in flight (%s).\n\nResolve them explicitly, for example with `sop resume <task-id>`.\n", len(active), strings.Join(ids, ", "))
-		return exitError
+		return exitError, ""
 	}
 
 	task := active[0]
@@ -341,7 +398,7 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	action, ok := resume.ActionFor(task.Status)
 	if !ok {
 		printCannotResume(stderr, task, stage, hasStage, "", fmt.Sprintf("status %s has no defined next action", task.Status))
-		return exitError
+		return exitError, task.ID
 	}
 
 	// The run's lifecycle already passed its gates, or the task is parked after the
@@ -349,14 +406,14 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if (hasStage && stage == runpkg.Passed) || action == resume.Review || action == resume.OpenPR {
 		if err := completeTask(st, task); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
-			return exitError
+			return exitError, task.ID
 		}
 		fmt.Fprintf(stdout, "Resumed: %s %s (already past the local gates; completed locally)\n", task.ID, task.Title)
-		return exitOK
+		return exitOK, task.ID
 	}
 
 	if action == resume.CreateBranch || action == resume.WriteTests || action == resume.VerifyRed || action == resume.Implement {
-		return runScheduledTask(ctx, dir, cfg, a, d, st, task, stdout, stderr)
+		return runScheduledTask(ctx, dir, cfg, a, d, st, task, sess, stdout, stderr), task.ID
 	}
 
 	// The remaining actions (PollCI, Merge, Finish) are the remote lifecycle. From
@@ -364,7 +421,7 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// MERGED, and a local run opens no PR and runs no CI, so it genuinely cannot
 	// finish such a task. Report it precisely instead of guessing.
 	printRemoteParked(stderr, task, stage, hasStage, action)
-	return exitError
+	return exitError, task.ID
 }
 
 // printRemoteParked explains that an active task is mid remote lifecycle, which a
@@ -396,7 +453,7 @@ func printCannotResume(stderr io.Writer, task *domain.Task, stage runpkg.Stage, 
 
 // runScheduledTask runs the lifecycle for one scheduled task and updates its
 // persisted state.
-func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, stdout, stderr io.Writer) int {
+func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
 	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
 	rn, err := runpkg.New(dir, task.ID)
@@ -406,7 +463,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 	_ = rn.Write("task.md", spec.Render())
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess)
 	if err != nil {
 		_ = rn.SetStage(runpkg.Failed)
 		_ = blockTask(saver, task, domain.RETRIES_EXHAUSTED)

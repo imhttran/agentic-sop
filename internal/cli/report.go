@@ -8,7 +8,9 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/review"
 )
 
@@ -61,7 +63,59 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	}
 
 	writeReport(stdout, doc)
+	writePerformance(stdout, dir, doc)
 	return exitOK
+}
+
+// writePerformance renders where time was spent: the plan-level run summary when
+// one is available, otherwise the reported task's own record, otherwise a clear
+// "unavailable" line rather than a fabricated value.
+func writePerformance(w io.Writer, dir string, doc runReportDoc) {
+	fmt.Fprintln(w)
+	if run, ok := loadRunMetrics(dir, activePlanID(dir)); ok {
+		perf.WriteRun(w, run)
+		return
+	}
+	if doc.Performance.Measured() {
+		fmt.Fprintf(w, "Performance (task %s)\n\n", doc.ID)
+		perf.WriteTask(w, doc.Performance)
+		return
+	}
+	fmt.Fprintln(w, "Performance")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "No timing was recorded for this run.")
+}
+
+// activePlanID reads the plan identity SOP is currently executing, or "" when
+// none is recorded.
+func activePlanID(dir string) string {
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "plan.meta.json"))
+	if err != nil {
+		return ""
+	}
+	var meta struct {
+		PlanID string `json:"plan_id"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(meta.PlanID)
+}
+
+// loadRunMetrics reads the plan-level run aggregate, if any.
+func loadRunMetrics(dir, planID string) (perf.Run, bool) {
+	if planID == "" {
+		return perf.Run{}, false
+	}
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", planID, "metrics.json"))
+	if err != nil {
+		return perf.Run{}, false
+	}
+	var run perf.Run
+	if err := json.Unmarshal(data, &run); err != nil {
+		return perf.Run{}, false
+	}
+	return run, true
 }
 
 // latestRun returns the run id whose report.json was written most recently.

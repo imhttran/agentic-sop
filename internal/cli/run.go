@@ -12,6 +12,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
@@ -112,7 +113,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	res, err := executeLifecycle(context.Background(), dir, cfg, a, d, spec, rn)
+	res, err := executeLifecycle(context.Background(), dir, cfg, a, d, spec, rn, newRunSession())
 	if err != nil {
 		return failRun(rn, stderr, err)
 	}
@@ -127,14 +128,15 @@ type lifeResult struct {
 	suite         testrunner.SuiteResult
 	report        review.Report
 	verifiedFirst bool
+	perf          perf.Task
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
 // report) into rn. It returns an error only for infrastructure failures
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
-func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run) (lifeResult, error) {
-	res, err := runStages(ctx, dir, cfg, a, d, spec, rn)
+func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession) (lifeResult, error) {
+	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess)
 	if err != nil {
 		return lifeResult{}, err
 	}
@@ -152,6 +154,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		VerifiedFirst: res.verifiedFirst,
 		Validation:    res.suite.Results,
 		Findings:      res.report.Findings,
+		Performance:   res.perf,
 		GeneratedAt:   time.Now().UTC(),
 	})
 	return res, nil
@@ -162,7 +165,13 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 // configured deterministic validation first and invokes the implementation agent
 // only when that validation fails (or when there is nothing configured to
 // verify). It returns the final result and writes the intermediate artifacts.
-func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run) (lifeResult, error) {
+func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession) (res lifeResult, err error) {
+	rec := perf.NewRecorder(rn.State().ID)
+	defer func() {
+		res.perf = rec.Task()
+		_ = writeMetrics(rn, res.perf)
+	}()
+
 	var (
 		plan       *planner.Plan
 		diff       string
@@ -176,11 +185,19 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// to verify, so the task takes the ordinary implementation path.
 	if spec.ExecutionMode.VerifyFirst() {
 		_ = rn.SetStage(runpkg.Validating)
-		suite := validate.Run(ctx, dir, cfg.Validation)
+		// The working-tree change identifies the validation inputs, so it is read
+		// before validation: a reuse hit is then decided against the same tree the
+		// suite would run against.
+		diff, err = d.readDiff(ctx, dir)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("diff: %w", err)
+		}
+		suite := sessionValidation(ctx, dir, cfg, diff, rec, sess)
 		switch {
 		case len(suite.Results) == 0:
 		case suite.Passed():
 			sealed = &suite
+			rec.AgentCallAvoided()
 		default:
 			failureCtx = validationFailureContext(suite)
 		}
@@ -189,8 +206,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	if sealed == nil {
 		// Plan (must not mutate the repository).
 		_ = rn.SetStage(runpkg.Planning)
-		var err error
+		stop := rec.Measure(perf.StagePlan)
 		plan, err = planner.New(a).Generate(ctx, spec.Render())
+		stop()
+		rec.AgentCall()
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("plan: %w", err)
 		}
@@ -208,12 +227,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if sig, had := rn.ReadAttempt(); had {
 			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
 		}
+		implStop := rec.Measure(perf.StageImplement)
 		impl, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Implement,
 			Task:               spec.Render(),
 			Input:              input,
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
+		implStop()
+		rec.AgentCall()
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("implement: %w", err)
 		}
@@ -238,12 +260,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 	} else {
 		// Verification-first pass: no agent produced a change, so there is nothing
-		// for this task to review. Record the working tree for the report.
-		var err error
-		diff, err = d.readDiff(ctx, dir)
-		if err != nil {
-			return lifeResult{}, fmt.Errorf("diff: %w", err)
-		}
+		// for this task to review. The working tree was already read for the
+		// validation identity; record it for the report.
 		_ = rn.Write("diff.patch", diff)
 	}
 
@@ -265,7 +283,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		} else {
 			// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
 			_ = rn.SetStage(runpkg.Validating)
-			suite = validate.Run(ctx, dir, cfg.Validation)
+			suite = sessionValidation(ctx, dir, cfg, diff, rec, sess)
 		}
 
 		// Review only when validation passed, there is something to review, and the
@@ -273,14 +291,24 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// its own, so there is nothing for this task to review.
 		report = review.Report{}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
-			_ = rn.SetStage(runpkg.Reviewing)
-			provider, err := reviewProvider(cfg, d)
-			if err != nil {
-				return lifeResult{}, fmt.Errorf("review: %w", err)
-			}
-			report, err = provider.Review(ctx, review.Request{Task: spec.Render(), Diff: diff})
-			if err != nil {
-				return lifeResult{}, fmt.Errorf("review: %w", err)
+			reviewKey := reviewIdentity(cfg.Review.Engine, spec.Render(), diff)
+			if cached, ok := sess.cachedReview(reviewKey); ok {
+				rec.ReviewReused()
+				report = cached
+			} else {
+				_ = rn.SetStage(runpkg.Reviewing)
+				provider, perr := reviewProvider(cfg, d)
+				if perr != nil {
+					return lifeResult{}, fmt.Errorf("review: %w", perr)
+				}
+				revStop := rec.Measure(perf.StageReview)
+				report, err = provider.Review(ctx, review.Request{Task: spec.Render(), Diff: diff})
+				revStop()
+				rec.ReviewRun()
+				if err != nil {
+					return lifeResult{}, fmt.Errorf("review: %w", err)
+				}
+				sess.cacheReview(reviewKey, report)
 			}
 		}
 
@@ -301,12 +329,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// Fix, then re-validate and re-review (regression protection).
 		_ = rn.SetStage(runpkg.Fixing)
 		cycles++
+		rec.FixCycle()
+		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
 			Task:               spec.Render(),
 			Input:              fixContext(plan.RenderMarkdown(), report, diff),
 			OutputRequirements: "Fix the blocking findings in the working tree and summarize the changes.",
 		})
+		fixStop()
+		rec.AgentCall()
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
@@ -350,6 +382,9 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
 	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
+	if res.perf.Measured() {
+		fmt.Fprintf(stdout, "performance: %s\n", res.perf.Line())
+	}
 	if rel := relDir(dir, rn.Dir()); rel != "" {
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
@@ -485,6 +520,57 @@ func hasCategory(suite testrunner.SuiteResult, category testrunner.Category) boo
 	return false
 }
 
+// timedValidation runs the configured validation and records its stage time, its
+// per-category durations, and one validation execution. It is the single place a
+// suite is measured, so counts and timings cannot drift from where validation runs.
+func timedValidation(ctx context.Context, dir string, cfg config.Config, rec *perf.Recorder) testrunner.SuiteResult {
+	stop := rec.Measure(perf.StageValidation)
+	suite := validate.Run(ctx, dir, cfg.Validation)
+	stop()
+	rec.ValidationRun()
+	for _, r := range suite.Results {
+		rec.AddValidation(validationCategory(r.Category), r.Duration)
+	}
+	return suite
+}
+
+// sessionValidation runs the configured validation, reusing a prior passing result
+// when the command set and working-tree change are unchanged. It is the single
+// place the reuse decision is made, so the cache and the run cannot drift.
+func sessionValidation(ctx context.Context, dir string, cfg config.Config, diff string, rec *perf.Recorder, sess *runSession) testrunner.SuiteResult {
+	key := validationIdentity(cfg.Validation, diff)
+	if suite, ok := sess.cachedValidation(key); ok {
+		rec.ValidationReused()
+		return suite
+	}
+	suite := timedValidation(ctx, dir, cfg, rec)
+	sess.cacheValidation(key, suite)
+	return suite
+}
+
+// validationCategory maps a runner category to the performance model's categories.
+func validationCategory(c testrunner.Category) string {
+	switch c {
+	case testrunner.UnitTest, testrunner.IntegrationTest:
+		return perf.CategoryTest
+	case testrunner.Lint:
+		return perf.CategoryLint
+	default:
+		return perf.CategoryBuild
+	}
+}
+
+// writeMetrics persists a task's performance record beside its other run
+// artifacts. Metrics are diagnostic only and are never read back to drive a
+// decision.
+func writeMetrics(rn *runpkg.Run, t perf.Task) error {
+	data, err := json.MarshalIndent(t, "", "  ")
+	if err != nil {
+		return err
+	}
+	return rn.Write("metrics.json", string(append(data, '\n')))
+}
+
 // writeRunJSON writes a JSON artifact best-effort; artifacts never change the
 // run's outcome.
 func writeRunJSON(rn *runpkg.Run, name string, v any) {
@@ -516,7 +602,10 @@ type runReportDoc struct {
 	VerifiedFirst bool                `json:"verified_first"`
 	Validation    []testrunner.Result `json:"validation"`
 	Findings      []review.Finding    `json:"findings"`
-	GeneratedAt   time.Time           `json:"generated_at"`
+	// Performance is the task's timing/count record: diagnostic metadata only,
+	// never an input to a decision.
+	Performance perf.Task `json:"performance"`
+	GeneratedAt time.Time `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
