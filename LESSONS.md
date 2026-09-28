@@ -179,3 +179,16 @@ execution slot" and `resume.ActionFor` for "next legal action" — and having `s
 run` consult them. A guard that blocks (`ACTIVE_TASK`) should ask the _same_
 question as the command that recovers from it, or the two will disagree at exactly
 the moment they must agree.
+
+## A tool that can break itself needs a pinned fallback
+
+The bootstrap agent edits the same repository that builds it. When a change to
+`internal/ollamaagent` leaves a compile error, SOP cannot build the harness from the
+broken tree — so the agent needed to repair it cannot start, and recovery falls to
+hand-editing the tool or to another agent entirely.
+
+Self-hosting is worth it, but the way back must not run from the working copy. A
+tool allowed to modify its own implementation should be installable and runnable as
+a pinned, prebuilt known-good binary, outside the tree under edit, so a broken
+change is always recoverable. "The agent can fix anything" holds only while the
+agent can start.

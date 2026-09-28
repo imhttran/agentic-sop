@@ -486,14 +486,18 @@ owns validation, review, retries, and human gates — the harness is an implemen
 adapter only. It is expected to be superseded by
 [Agent Harness V2](docs/PLAN-Agent-Harness-V2.md).
 
-The loop is bounded per capability, not by one global number: `PLAN` gets 8 model
-turns (read-only tools), `REVIEW`/`DESIGN_TESTS`/`DIAGNOSE_FAILURE` 12, and
-`IMPLEMENT`/`FIX` 24 with the mutation tools. A capability that repeats a
-non-progressing action is told once to conclude, then stopped early with a
-diagnostic. Set `SOP_AGENT_TRACE_LOG=/path/to/trace.jsonl` to persist the safe
-per-turn diagnostic trail (capability, iteration, tool, request, progress, recovery);
-it never contains prompts, file contents, or secrets. The trail is also written to
-stderr when a run fails.
+The loop is bounded per capability, not by one global number: `REVIEW`,
+`DESIGN_TESTS`, and `DIAGNOSE_FAILURE` get 12 model turns (read-only tools), and
+`IMPLEMENT`/`FIX` 24 with the mutation tools. `PLAN` runs in two phases — bounded
+read-only _discovery_ (8 turns), then a tool-free _synthesis_ (2 turns) that must
+produce the document. When discovery is exhausted the model is told exploration is
+over and may no longer use tools, so a PLAN can no longer fail by exploring forever;
+an early final response still completes the plan immediately. A capability that
+repeats a non-progressing action is told once to conclude, then stopped early with a
+diagnostic. PLAN does not own final validation — SOP performs independent validation
+and review after it returns. A failed run also writes a safe per-turn diagnostic
+trail to stderr (capability, phase, iteration, tool, request, progress, recovery);
+it never contains prompts, file contents, or secrets.
 
 ### Command agent outcomes
 

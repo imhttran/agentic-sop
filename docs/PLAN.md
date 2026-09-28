@@ -674,17 +674,17 @@ T054 verification-first fast path (execution_mode: verify-first); a passing veri
 T055 configure the model in config (agent.model); the provider env var overrides it
 T056 bootstrap DeepSeek coding-agent harness (command provider → Ollama deepseek-v4.1-flash:cloud, controlled tools)
 T057 resume the active task in `sop run` (one persisted-state→action rule shared with `sop resume`)
+T058 make the Ollama agent capability-aware (per-capability loop bounds, tool policy, no-progress stop)
+T059 two-phase PLAN (bounded read-only discovery → tool-free synthesis)
+T060 ground a completed IMPLEMENT/FIX outcome's changes_expected in the working tree
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.
 
 ## Remaining
 
-```text
-local network service (team mode)         (plan T047)
-small-device dashboard                    (plan T048)
-Jev adapter + Jev-vs-deterministic eval   (plan T037)
-```
+See [BACKLOG.md](BACKLOG.md) for future work that is not yet scheduled into a
+numbered task.
 
 ---
 
