@@ -62,7 +62,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	providerName, providerSource := agent.EffectiveProvider(cfg.Agent.Provider)
+	stack := resolveExecutionStack(cfg)
 
 	st, err := store.Open(statePath(dir))
 	if err != nil {
@@ -100,7 +100,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	printStartup(stdout, dir, cfg, providerName, string(providerSource), prepared, tasks)
+	printStartup(stdout, dir, cfg, stack, prepared, tasks)
 
 	if agentErr != nil {
 		fmt.Fprintf(stderr, "run: prepared the plan and tasks, but cannot execute: %v\n", agentErr)
@@ -129,8 +129,11 @@ func projectName(dir string, cfg config.Config) string {
 	return filepath.Base(dir)
 }
 
-// printStartup emits a concise summary of the plan being executed.
-func printStartup(w io.Writer, dir string, cfg config.Config, providerName, providerSource string, prepared planflow.Result, tasks []*domain.Task) {
+// printStartup emits a concise summary of the plan being executed, including the
+// resolved execution stack: harness, provider, model when applicable, the command
+// when the command harness runs, and the source of the effective configuration
+// for each of harness, provider, and model.
+func printStartup(w io.Writer, dir string, cfg config.Config, stack executionStack, prepared planflow.Result, tasks []*domain.Task) {
 	source := prepared.Source
 	if source == "" {
 		source = "(existing plan.json)"
@@ -139,7 +142,21 @@ func printStartup(w io.Writer, dir string, cfg config.Config, providerName, prov
 	fmt.Fprintln(w, "SOP")
 	fmt.Fprintln(w)
 	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
-	fmt.Fprintf(w, "Provider: %s (%s)\n", providerName, providerSource)
+	fmt.Fprintf(w, "Harness: %s\n", stack.Harness)
+	if stack.HarnessSource != "" {
+		fmt.Fprintf(w, "Harness source: %s\n", stack.HarnessSource)
+	}
+	fmt.Fprintf(w, "Provider: %s\n", stack.Provider)
+	if stack.Model != "" {
+		fmt.Fprintf(w, "Model: %s\n", stack.Model)
+		if stack.ModelSource != "" {
+			fmt.Fprintf(w, "Model source: %s\n", stack.ModelSource)
+		}
+	}
+	fmt.Fprintf(w, "Provider source: %s\n", stack.Source)
+	if stack.Command != "" {
+		fmt.Fprintf(w, "Command: %s\n", stack.Command)
+	}
 	fmt.Fprintf(w, "Source: %s\n", source)
 
 	if prepared.PlanRebuilt {

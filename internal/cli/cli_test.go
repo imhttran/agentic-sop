@@ -1605,8 +1605,12 @@ func TestRunPrintsEffectiveProvider(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "Provider: ollama (configuration)") {
-		t.Errorf("stdout missing provider line:\n%s", stdout)
+	// The execution stack is reported one field per line, each naming the source
+	// of the effective configuration.
+	for _, want := range []string{"Provider: ollama", "Provider source: configuration"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("stdout missing %q:\n%s", want, stdout)
+		}
 	}
 }
 
