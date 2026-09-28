@@ -688,6 +688,7 @@ T068 bound the unmutated run (force a conclusion at the late stage; retry a no-o
 T069 scoped delete/restore tools; trace a model-reported failure
 T070 run REVIEW through the phased discovery → synthesis loop
 T071 a no-change IMPLEMENT/FIX failure is retryable
+T072 bring the implement-now nudge forward (12, so there is budget to finish)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

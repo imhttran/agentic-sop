@@ -509,7 +509,9 @@ instead of one flat loop:
   multi-file change keeps its tools, because a run that is still mutating has not
   finished. A write requested during FINALIZE is never refused; it resumes CHANGE.
   If the threshold is reached with no change, the model is told to implement now
-  and keeps its tools; at the late stage an unmutated run is finalized too — the
+  (around twelve interactions) and keeps its tools — early enough that a model which
+  only starts writing when told to still has budget to make the change and return;
+  at the late stage an unmutated run is finalized too — the
   tools are withdrawn, but a write is still honoured and resumes CHANGE — so it
   cannot read its way to the ceiling. Once finalizing, the model has a two-turn
   allowance before the invocation fails with `termination=finalization_limit`.
