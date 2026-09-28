@@ -424,6 +424,7 @@ SOP separates three independent concepts: **Harness**, **Provider**, and **Model
 ### Harness
 
 The **harness** is the implementation layer that executes agent logic. It handles:
+
 - calling the model via the provider
 - managing tool availability and tool-call loops
 - enforcing bounds and timeouts
@@ -433,12 +434,14 @@ The **harness** is the implementation layer that executes agent logic. It handle
 A harness is _not_ a model; it is a framework that makes a model into a coding agent.
 
 **Options:**
+
 - `tool` — a local tool-calling harness (e.g., `sop-ollama-agent`) that wraps a provider with tools
 - `command` — a subprocess adapter that runs an external command implementing the agent interface
 
 ### Provider
 
 The **provider** is the model source — where the language model comes from. A provider:
+
 - supplies the base language model (text completions or chat)
 - does _not_ provide tool-calling capability on its own
 - does _not_ provide file I/O, git integration, or code mutation by itself
@@ -446,6 +449,7 @@ The **provider** is the model source — where the language model comes from. A 
 A provider is _not_ a harness; it is the raw model endpoint.
 
 **Options:**
+
 - `ollama` — local Ollama text-only endpoint
 - `llamacpp` — OpenAI-compatible llama.cpp endpoint
 - `command` — external subprocess endpoint
@@ -460,15 +464,16 @@ Only required when the provider supplies models (Ollama, llama.cpp). Not require
 
 ### Configuration Matrix
 
-| Harness   | Provider   | Config Keys                                    | Environment Variables                            | Model Required? |
-|-----------|------------|------------------------------------------------|--------------------------------------------------|-----------------|
-| `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT` | Yes |
-| `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes |
-| `command` | `command`  | `agent.harness` (optional; defaults to command)   | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                           | No  |
+| Harness   | Provider   | Config Keys                                      | Environment Variables                                                                         | Model Required? |
+| --------- | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------- |
+| `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT`                               | Yes             |
+| `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes             |
+| `command` | `command`  | `agent.harness` (optional; defaults to command)  | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                               | No              |
 
 ### Tool Harness with Ollama Provider
 
 Uses the `sop-ollama-agent` tool harness to wrap a local Ollama model, adding:
+
 - file I/O tools (`read_file`, `write_file`, `create_file`, `delete_file`, etc.)
 - git integration tools (`git_status`, `git_diff`)
 - bounded tool loops (prevents runaway exploration)
@@ -492,6 +497,7 @@ export SOP_OLLAMA_TIMEOUT=300  # seconds (optional)
 ```
 
 **What each layer provides:**
+
 - **Ollama** (provider): the language model (`deepseek-v4.1-flash:cloud`)
 - **sop-ollama-agent** (tool harness): tools, tool-loop bounds, file safety, git integration, structured outcomes
 
@@ -542,6 +548,7 @@ export SOP_AGENT_PROVIDER=optional-provider-name  # optional, for identification
 ```
 
 The subprocess must:
+
 1. Read JSON requests from stdin
 2. Write JSON responses to stdout
 3. Implement the Agent interface (plan, design_tests, implement, review, fix, etc.)
@@ -563,6 +570,7 @@ Precedence (highest to lowest):
 **Example 1: Ollama model override**
 
 Config file specifies:
+
 ```yaml
 agent:
   harness: tool
@@ -571,6 +579,7 @@ agent:
 ```
 
 Environment overrides the model:
+
 ```bash
 export SOP_OLLAMA_MODEL=mistral:latest
 ```
@@ -580,6 +589,7 @@ Result: Uses Ollama provider with `mistral:latest` model.
 **Example 2: Harness override (config to command)**
 
 Config file specifies:
+
 ```yaml
 agent:
   harness: tool
@@ -588,6 +598,7 @@ agent:
 ```
 
 Environment overrides to command harness:
+
 ```bash
 export SOP_AGENT_COMMAND="my-agent-cli"
 ```
@@ -597,6 +608,7 @@ Result: Uses command harness, ignoring the config's tool/ollama/model settings.
 **Example 3: Command harness with no config**
 
 No config file specified. Environment only:
+
 ```bash
 export SOP_AGENT_COMMAND="my-agent-cli"
 ```
@@ -604,6 +616,7 @@ export SOP_AGENT_COMMAND="my-agent-cli"
 Result: Uses command harness (the default).
 
 **Resolution rules:**
+
 - When using Ollama or llama.cpp (tool harness + provider), a model _must_ be specified (either config or environment); the run fails with a clear message if neither provides one.
 - When using the command harness, `SOP_AGENT_COMMAND` is required; the run fails if it is not set.
 - Environment variables always override config file values.
@@ -613,6 +626,7 @@ Result: Uses command harness (the default).
 This repository ships `sop-ollama-agent`, a tool-calling harness that wraps a local Ollama model. The bootstrap approach demonstrates how layers work together:
 
 **Component Stack:**
+
 1. **SOP Orchestrator** — controls workflow, state, validation, review, retry limits
 2. **Command Harness** (outer layer) — runs sop-ollama-agent as a subprocess
 3. **Tool Harness** (sop-ollama-agent; inner layer) — wraps the model with tools
@@ -655,6 +669,7 @@ export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
 **What each layer provides:**
 
 SOP Orchestrator:
+
 - Workflow state machine and dependency scheduling
 - Validation runner
 - Review engine
@@ -662,11 +677,13 @@ SOP Orchestrator:
 - Git branch and PR management
 
 Command Harness:
+
 - Subprocess lifecycle management
 - JSON request/response marshaling
 - Integration between SOP and the tool harness
 
 Tool Harness (sop-ollama-agent):
+
 - **Tool-calling wrapper:** converts model chat completions into structured tool calls even if the model doesn't support native tool definitions
 - **File tools:** `read_file`, `write_file`, `create_file`, `delete_file`, `restore_file` (scoped undo), `list_files`, `search_files`
 - **Git integration:** `git_status`, `git_diff`
@@ -676,6 +693,7 @@ Tool Harness (sop-ollama-agent):
 - **Structured outcomes:** reports success/failure/needs_human deterministically
 
 Ollama Provider:
+
 - **Language model:** supplies the base model (e.g., `deepseek-v4.1-flash:cloud`), typically via local HTTP endpoint
 - **Text completions:** provides chat/completion API compatible with OpenAI's interface
 - **Model management:** handles model downloads, caching, and parameter configuration
@@ -771,7 +789,9 @@ resolve later is picked up without a manual unlock. That case is reported as
 `NEEDS_HUMAN (no change since the previous attempt: …)`. A hard `FAIL` (including
 a claimed change with none produced) leaves the task `BLOCKED`; requeue it
 explicitly with `sop retry <task-id>`, or requeue every `BLOCKED` task that still
-has budget with `sop retry --all`. A retried task is handed the previous
+has budget with `sop retry --all`. A task whose retry budget is spent is requeued
+with `sop retry <task-id> --force`, which raises `max_attempts` rather than
+requiring `state.db` surgery or a fresh start. A retried task is handed the previous
 attempt's outcome as context (a `# Previous attempt` section in the implement
 request), so the agent can address the blocker instead of repeating the request
 that stopped it.
@@ -1126,7 +1146,7 @@ sop eval DIR
 sop status
 sop task <id>
 sop resume [task-id]
-sop retry <task-id> | --all
+sop retry <task-id> | --all [--force]
 sop version
 sop help
 ```
@@ -1363,11 +1383,13 @@ if it is still before them) rather than refusing to continue.
 ## `retry`
 
 Requeue a `BLOCKED` task to `PLANNED` so the next `sop run` retries it, or requeue
-every `BLOCKED` task that still has retry budget at once:
+every `BLOCKED` task that still has retry budget at once. `--force` also requeues a
+task whose `max_attempts` is spent, raising the budget:
 
 ```bash
 sop retry S001
 sop retry --all
+sop retry S001 --force
 ```
 
 A requeue spends one attempt against `max_attempts`; a task whose budget is spent
@@ -1391,9 +1413,9 @@ project:
   integration_branch: main
 
 agent:
-  harness: tool              # tool | command (optional; defaults to command)
-  provider: ollama           # ollama | llamacpp | command (required if harness: tool)
-  model: deepseek-v4.1-flash:cloud  # model ID for ollama or llamacpp (required if provider: ollama|llamacpp)
+  harness: tool # tool | command (optional; defaults to command)
+  provider: ollama # ollama | llamacpp | command (required if harness: tool)
+  model: deepseek-v4.1-flash:cloud # model ID for ollama or llamacpp (required if provider: ollama|llamacpp)
 
 validation: # commands run by the verification stages
   build:
