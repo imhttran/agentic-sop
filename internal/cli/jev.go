@@ -37,11 +37,11 @@ import (
 // evidence. Those metrics are diagnostic only — they never affect the verdict,
 // and a missing value never implies PASS or FAIL.
 //
-// taskFiles are the repository paths the task changed across all of its
-// invocations (the run directory's accumulated change evidence), and dir is the
+// rn is the task's run, whose accumulated change evidence (bootstrapped from the
+// activity stream for a legacy task) is the task's changed files; dir is the
 // repository root used to supply bounded file context when the current diff is
 // empty. Both widen JEV's view from the current invocation to the whole task.
-func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, runID, diff string, suite testrunner.SuiteResult, report review.Report, taskFiles []string, dir string, rec *perf.Recorder) *jevRunEvidence {
+func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, rn *runpkg.Run, diff string, suite testrunner.SuiteResult, report review.Report, dir string, rec *perf.Recorder) *jevRunEvidence {
 	if !cfg.JEVActive() {
 		return nil
 	}
@@ -56,6 +56,12 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 		// nothing rather than failing the run.
 		return nil
 	}
+
+	// JEV will run: assemble its task-scoped change evidence. A task whose
+	// implementation predates changed-file persistence bootstraps it here from the
+	// run's activity stream, so the whole task is visible to JEV instead of only the
+	// (possibly empty) current invocation.
+	taskFiles := taskChangeEvidence(rn)
 
 	activity.FromContext(ctx).Emit(activity.StageJEV, "analyzing changes", "")
 	outcome := runpkg.RunJEV(ctx, analyzer, buildJEVInvocation(spec, diff, suite, report, taskFiles, dir))
@@ -80,7 +86,7 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 		rec.JEVInvocation(metrics)
 	}
 
-	return &jevRunEvidence{TaskID: spec.ID, RunID: runID, Evidence: ev, Result: outcome.Result, Metrics: &metrics}
+	return &jevRunEvidence{TaskID: spec.ID, RunID: rn.State().ID, Evidence: ev, Result: outcome.Result, Metrics: &metrics}
 }
 
 // jevRunEvidence is a JEV result stamped with the task and run that produced it.
@@ -441,6 +447,30 @@ func recordTaskChanges(rn *runpkg.Run, paths []string) {
 		return
 	}
 	_ = rn.RecordChangedFiles(changed)
+}
+
+// taskChangeEvidence returns the task's accumulated changed files, bootstrapping
+// legacy evidence first when none has been recorded. A nil run yields none.
+func taskChangeEvidence(rn *runpkg.Run) []string {
+	if rn == nil {
+		return nil
+	}
+	bootstrapTaskChangeEvidence(rn)
+	return rn.ChangedFiles()
+}
+
+// bootstrapTaskChangeEvidence recovers a legacy task's changed files from the run's
+// persisted activity stream when no change evidence has been recorded yet. It is a
+// no-op when evidence already exists (the normal path is untouched) and attributes
+// nothing when the stream carries no reliable mutation evidence, so ambiguity is
+// never turned into claimed ownership. The recovered paths are filtered and
+// persisted exactly like live evidence, so they become normal provenance for
+// future invocations.
+func bootstrapTaskChangeEvidence(rn *runpkg.Run) {
+	if rn == nil || len(rn.ChangedFiles()) > 0 {
+		return
+	}
+	recordTaskChanges(rn, rn.ActivityChangePaths())
 }
 
 // taskChangedFiles drops the paths SOP owns from a task's change set, so SOP's own

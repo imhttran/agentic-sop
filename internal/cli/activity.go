@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
 
 // activityArtifactName is the run artifact holding the task's activity stream. It
 // lives beside the run's other artifacts so a controller/API can read the same
-// events the CLI rendered, without parsing CLI text.
-const activityArtifactName = "activity.jsonl"
+// events the CLI rendered, without parsing CLI text. The name is owned by the run
+// package, so the writer and the legacy-evidence reader agree.
+const activityArtifactName = runpkg.ActivityArtifactName
 
 // envActivity overrides activity-stream enablement. Its values are on/off words;
 // any other value (or unset) falls back to interactive-terminal detection, so the

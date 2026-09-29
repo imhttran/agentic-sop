@@ -405,7 +405,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// The task-scoped change evidence accumulated across this task's invocations
 		// (not only this one) is handed to JEV, so a no-change final invocation still
 		// reviews the implementation the task produced earlier.
-		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn.State().ID, diff, suite, report, rn.ChangedFiles(), dir, rec)
+		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn, diff, suite, report, dir, rec)
 
 		// Persist the JEV result as a run artifact beside the other diagnostics,
 		// so results are available after the run. Persistence is best-effort and
