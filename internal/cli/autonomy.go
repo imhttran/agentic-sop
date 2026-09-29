@@ -19,7 +19,7 @@ func decideAutonomy(cfg config.Config, cls failure.Classification) autonomy.Deci
 	if cls.Disposition == "" {
 		return autonomy.Decision{}
 	}
-	return autonomy.Decide(cls, autonomy.Context{}, cfg.AutonomyPolicy())
+	return autonomy.Decide(cls, cfg.AutonomyPolicy())
 }
 
 // policyForcesHuman reports whether the autonomy policy turned an otherwise

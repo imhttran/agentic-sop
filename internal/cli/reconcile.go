@@ -94,7 +94,7 @@ func reconcileAutoAccept(policy autonomy.Policy) func(planflow.ExecutedChange) a
 		if change.Equivalent {
 			kind = autonomy.PlanChangeExecutedEquivalent
 		}
-		return autonomy.DecidePlanChange(autonomy.PlanChange{Kind: kind, Tasks: []string{change.TaskID}}, policy)
+		return autonomy.DecidePlanChange(kind, policy)
 	}
 }
 

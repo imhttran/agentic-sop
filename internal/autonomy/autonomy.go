@@ -79,31 +79,6 @@ const (
 	RiskIrreversible ApprovalRisk = "IRREVERSIBLE"
 )
 
-// RiskCategory names a kind of risk a policy can reserve for humans. The values
-// are the configuration vocabulary for `autonomy.require_human`.
-type RiskCategory string
-
-const (
-	CategoryDestructive           RiskCategory = "destructive"
-	CategoryIrreversible          RiskCategory = "irreversible"
-	CategorySecuritySensitive     RiskCategory = "security_sensitive"
-	CategoryAmbiguousRequirements RiskCategory = "ambiguous_requirements"
-	CategoryExternalPublish       RiskCategory = "external_publish"
-	CategoryPlanSemantics         RiskCategory = "plan_semantics"
-)
-
-// Categories returns the standard risk categories, for configuration validation.
-func Categories() []RiskCategory {
-	return []RiskCategory{
-		CategoryDestructive,
-		CategoryIrreversible,
-		CategorySecuritySensitive,
-		CategoryAmbiguousRequirements,
-		CategoryExternalPublish,
-		CategoryPlanSemantics,
-	}
-}
-
 // Action is the lifecycle action the policy selected. It maps onto SOP's existing
 // machinery: the AUTO_* actions use the bounded requeue path or the existing fix
 // loop, TERMINAL blocks the task as an automation failure, and HUMAN_APPROVAL is
@@ -136,8 +111,6 @@ type Policy struct {
 	// AutoReconcileSafeChanges permits automatic reconciliation of semantically
 	// safe plan changes (for example a descriptive-only change to an executed task).
 	AutoReconcileSafeChanges bool
-	// RequireHuman lists the risk categories that always wait for a human.
-	RequireHuman []RiskCategory
 }
 
 // DefaultLevel is the conservative, backward-compatible default: an omitted
@@ -148,7 +121,7 @@ const DefaultLevel = Balanced
 // PolicyFor returns the built-in policy for a level. An unknown level resolves to
 // the conservative default.
 func PolicyFor(level Level) Policy {
-	p := Policy{Level: normalize(level), RequireHuman: DefaultRequireHuman()}
+	p := Policy{Level: normalize(level)}
 	switch p.Level {
 	case Low:
 		p.AutoRetry, p.AutoContinue, p.AutoFix, p.AutoReconcileSafeChanges = true, true, false, false
@@ -160,36 +133,6 @@ func PolicyFor(level Level) Policy {
 	return p
 }
 
-// DefaultRequireHuman is the risk categories that always require approval. They
-// are the authority boundaries; a level never removes them.
-func DefaultRequireHuman() []RiskCategory {
-	return []RiskCategory{
-		CategoryDestructive,
-		CategoryIrreversible,
-		CategorySecuritySensitive,
-		CategoryAmbiguousRequirements,
-		CategoryExternalPublish,
-	}
-}
-
-// requires reports whether the policy reserves category for humans.
-func (p Policy) requires(category RiskCategory) bool {
-	for _, c := range p.RequireHuman {
-		if c == category {
-			return true
-		}
-	}
-	return false
-}
-
-// Context carries the extra risk the failure classification cannot express (for
-// example a requested external publication).
-type Context struct {
-	// ExternalPublish marks an action that publishes, deploys, releases, or merges
-	// externally. It is a human decision when the policy says so.
-	ExternalPublish bool
-}
-
 // Decision is the policy's verdict: the lifecycle action, the risk it carries,
 // whether a human is required, and why. Classification is the effective
 // classification the lifecycle should act on (its disposition is adjusted when the
@@ -199,147 +142,113 @@ type Decision struct {
 	Level          Level
 	Risk           ApprovalRisk
 	RequiresHuman  bool
-	Category       RiskCategory
 	Reason         string
 	Classification failure.Classification
 }
 
 // Decide applies the policy to a failure classification. It is pure and
 // deterministic.
-func Decide(c failure.Classification, ctx Context, p Policy) Decision {
+func Decide(c failure.Classification, p Policy) Decision {
 	// 1. Authority boundaries the classifier already recognized: destructive,
 	//    irreversible, security-sensitive, or ambiguous. These are human decisions
 	//    at every level.
-	if category, risk, ok := boundaryRisk(c); ok {
-		return humanDecision(c, p, risk, category, reasonOr(c.Reason, "the failure crosses an authority boundary that requires a human"))
+	if risk, ok := boundaryRisk(c); ok {
+		return humanDecision(c, p, risk, reasonOr(c.Reason, "the failure crosses an authority boundary that requires a human"))
 	}
 
-	// 2. Risk the classification cannot see, declared by the caller (for example a
-	//    requested external publication).
-	if ctx.ExternalPublish && p.requires(CategoryExternalPublish) {
-		return humanDecision(c, p, RiskHigh, CategoryExternalPublish, "an external publication/release requires approval")
-	}
-
-	// 3. Bounded automation exhaustion. Under the high level it is a terminal
+	// 2. Bounded automation exhaustion. Under the high level it is a terminal
 	//    automation state — SOP tried and stopped; no human decision exists. The
 	//    conservative levels keep the human boundary, so an operator who never opted
 	//    into high autonomy keeps the previous behavior.
 	if c.Kind == failure.AutoFixExhausted {
 		if p.Level == High {
-			return terminalDecision(c, p, RiskMedium, "bounded automatic recovery was exhausted; SOP stopped without a human decision")
+			return auto(ActionTerminal, c, p, RiskMedium, "bounded automatic recovery was exhausted; SOP stopped without a human decision")
 		}
-		return humanDecision(c, p, RiskMedium, "", reasonOr(c.Reason, "bounded automatic recovery was exhausted"))
+		return humanDecision(c, p, RiskMedium, reasonOr(c.Reason, "bounded automatic recovery was exhausted"))
 	}
 
-	// 4. A recoverable automation the level permits is applied automatically; one it
+	// 3. A recoverable automation the level permits is applied automatically; one it
 	//    forbids becomes a human boundary.
 	switch c.Disposition {
 	case failure.Retry:
 		if p.AutoRetry {
-			return autoDecision(ActionAutoRetry, c, p, RiskLow, "a transient failure is retried automatically within its bound")
+			return auto(ActionAutoRetry, c, p, RiskLow, "a transient failure is retried automatically within its bound")
 		}
 	case failure.Continue:
 		if p.AutoContinue {
-			return autoDecision(ActionAutoContinue, c, p, RiskLow, "productive incomplete work continues automatically")
+			return auto(ActionAutoContinue, c, p, RiskLow, "productive incomplete work continues automatically")
 		}
 	case failure.AutoFix:
 		if p.AutoFix {
-			return autoDecision(ActionAutoFix, c, p, RiskMedium, "a deterministic failure is fixed automatically")
+			return auto(ActionAutoFix, c, p, RiskMedium, "a deterministic failure is fixed automatically")
 		}
 	case failure.Replan:
-		return humanDecision(c, p, RiskMedium, CategoryAmbiguousRequirements, reasonOr(c.Reason, "the plan assumptions are invalid and require a human decision"))
+		return humanDecision(c, p, RiskMedium, reasonOr(c.Reason, "the plan assumptions are invalid and require a human decision"))
 	}
 
-	// 5. A needs_human classification, an automation the level disallows, or an
+	// 4. A needs_human classification, an automation the level disallows, or an
 	//    unknown disposition: fail closed to a human.
-	return humanDecision(c, p, riskOf(c.Kind), "", reasonOr(c.Reason, "the configured autonomy level requires human approval for this failure"))
+	return humanDecision(c, p, riskOf(c.Kind), reasonOr(c.Reason, "the configured autonomy level requires human approval for this failure"))
 }
 
-// PlanChangeKind classifies a requested plan change for reconciliation. It is
-// deterministic and derived from the plan diff, never from model output.
+// PlanChangeKind classifies a requested change to an executed task for
+// reconciliation. It is deterministic and derived from the plan diff, never from
+// model output.
 type PlanChangeKind string
 
 const (
-	// PlanChangeCosmetic: nothing executable changed (metadata only, or an
-	// equivalent plan). There is nothing to reconcile.
-	PlanChangeCosmetic PlanChangeKind = "COSMETIC"
-	// PlanChangeUnexecuted: the changed tasks have no execution history.
-	PlanChangeUnexecuted PlanChangeKind = "UNEXECUTED"
 	// PlanChangeExecutedEquivalent: executed tasks changed only in descriptive
 	// text; their executable semantics are unchanged.
 	PlanChangeExecutedEquivalent PlanChangeKind = "EXECUTED_EQUIVALENT"
 	// PlanChangeExecutedMaterial: an executed task's executable semantics changed.
 	PlanChangeExecutedMaterial PlanChangeKind = "EXECUTED_MATERIAL"
-	// PlanChangeAmbiguous: the change's intent cannot be determined from the plan.
-	PlanChangeAmbiguous PlanChangeKind = "AMBIGUOUS"
-	// PlanChangeDestructive: the change removes or destroys executed work.
-	PlanChangeDestructive PlanChangeKind = "DESTRUCTIVE"
-	// PlanChangeSecurity: the change crosses a security boundary.
-	PlanChangeSecurity PlanChangeKind = "SECURITY"
 )
 
-// PlanChange describes a reconcile decision's inputs. Tasks names the affected
-// task IDs for provenance.
-type PlanChange struct {
-	Kind  PlanChangeKind
-	Tasks []string
-}
-
-// DecidePlanChange applies the policy to a plan change. It is pure and
-// deterministic. Reconciliation decisions carry no failure classification.
-func DecidePlanChange(pc PlanChange, p Policy) Decision {
-	switch pc.Kind {
-	case PlanChangeCosmetic:
-		return planDecision(ActionAutoReconcile, p, RiskNone, "", "the plan change is cosmetic; nothing executable changed")
-	case PlanChangeUnexecuted:
-		return planDecision(ActionAutoReconcile, p, RiskLow, "", "the changed tasks have no execution history")
-	case PlanChangeExecutedEquivalent:
-		if p.AutoReconcileSafeChanges {
-			return planDecision(ActionAutoReconcile, p, RiskMedium, "", "executed tasks changed only in descriptive text; their semantics are unchanged")
+// DecidePlanChange applies the policy to a change to an executed task. It is pure
+// and deterministic. Reconciliation decisions carry no failure classification.
+func DecidePlanChange(kind PlanChangeKind, p Policy) Decision {
+	if kind == PlanChangeExecutedEquivalent && p.AutoReconcileSafeChanges {
+		return Decision{
+			Action: ActionAutoReconcile,
+			Level:  p.Level,
+			Risk:   RiskMedium,
+			Reason: "executed tasks changed only in descriptive text; their semantics are unchanged",
 		}
-		return planHumanDecision(p, RiskMedium, CategoryPlanSemantics, "an executed task's definition changed and the autonomy level requires approval")
-	case PlanChangeExecutedMaterial:
-		// A material change to executed behavior requires authorization at every
-		// level: the intent cannot be established deterministically, which is exactly
-		// the human-decision case.
-		return planHumanDecision(p, RiskHigh, CategoryPlanSemantics, "an executed task's executable semantics changed; explicit approval is required")
-	case PlanChangeAmbiguous:
-		return planHumanDecision(p, RiskHigh, CategoryAmbiguousRequirements, "the plan change's intent is ambiguous")
-	case PlanChangeDestructive:
-		return planHumanDecision(p, RiskIrreversible, CategoryDestructive, "the plan change is destructive or irreversible")
-	case PlanChangeSecurity:
-		return planHumanDecision(p, RiskHigh, CategorySecuritySensitive, "the plan change crosses a security boundary")
-	default:
-		return planHumanDecision(p, RiskMedium, "", "unclassified plan change")
 	}
+	// A material change to executed behavior requires authorization at every level:
+	// the intent cannot be established deterministically, which is exactly the
+	// human-decision case. An equivalent change is the same under a level that does
+	// not permit safe reconciliation.
+	reason := "an executed task's executable semantics changed; explicit approval is required"
+	risk := RiskHigh
+	if kind == PlanChangeExecutedEquivalent {
+		reason = "an executed task's definition changed and the autonomy level requires approval"
+		risk = RiskMedium
+	}
+	return Decision{Action: ActionHumanApproval, Level: p.Level, Risk: risk, RequiresHuman: true, Reason: reason}
 }
 
 // boundaryRisk reports whether a classification is an authority boundary, and its
-// risk category and severity. These are human decisions at every level.
-func boundaryRisk(c failure.Classification) (RiskCategory, ApprovalRisk, bool) {
+// risk severity. These are human decisions at every level.
+func boundaryRisk(c failure.Classification) (ApprovalRisk, bool) {
 	switch c.Kind {
 	case failure.DestructiveOperation:
-		return CategoryDestructive, RiskIrreversible, true
-	case failure.SecurityBoundary:
-		return CategorySecuritySensitive, RiskHigh, true
-	case failure.ApprovalRequired:
-		return CategoryAmbiguousRequirements, RiskHigh, true
-	case failure.AmbiguousContract:
-		return CategoryAmbiguousRequirements, RiskHigh, true
+		return RiskIrreversible, true
+	case failure.SecurityBoundary, failure.ApprovalRequired, failure.AmbiguousContract:
+		return RiskHigh, true
 	default:
-		return "", RiskNone, false
+		return RiskNone, false
 	}
 }
 
 // riskOf maps a failure kind to the risk it carries when the policy does not
-// otherwise classify it.
+// otherwise classify it. The authority-boundary kinds are handled by boundaryRisk
+// before this is reached.
 func riskOf(kind failure.Kind) ApprovalRisk {
 	switch kind {
-	case failure.DestructiveOperation:
-		return RiskIrreversible
-	case failure.SecurityBoundary, failure.ApprovalRequired, failure.AmbiguousContract, failure.ReplanRequired:
+	case failure.ReplanRequired:
 		return RiskHigh
-	case failure.AutoFixExhausted, failure.Unknown,
+	case failure.Unknown,
 		failure.CompilerError, failure.TestFailure, failure.LintFailure, failure.StaleTest,
 		failure.IntegrationWiring, failure.Regression, failure.MissingTestCoverage,
 		failure.BlockingFindings:
@@ -351,9 +260,8 @@ func riskOf(kind failure.Kind) ApprovalRisk {
 	}
 }
 
-// autoDecision builds an automated decision that keeps the classification's
-// disposition.
-func autoDecision(a Action, c failure.Classification, p Policy, risk ApprovalRisk, reason string) Decision {
+// auto builds an automated decision that keeps the classification's disposition.
+func auto(a Action, c failure.Classification, p Policy, risk ApprovalRisk, reason string) Decision {
 	return Decision{
 		Action:         a,
 		Level:          p.Level,
@@ -363,40 +271,18 @@ func autoDecision(a Action, c failure.Classification, p Policy, risk ApprovalRis
 	}
 }
 
-// terminalDecision builds a terminal, non-human decision.
-func terminalDecision(c failure.Classification, p Policy, risk ApprovalRisk, reason string) Decision {
-	return Decision{
-		Action:         ActionTerminal,
-		Level:          p.Level,
-		Risk:           risk,
-		Reason:         reason,
-		Classification: c,
-	}
-}
-
 // humanDecision builds a human-approval decision and overrides the effective
 // classification's disposition so the lifecycle treats it as a human boundary.
-func humanDecision(c failure.Classification, p Policy, risk ApprovalRisk, category RiskCategory, reason string) Decision {
+func humanDecision(c failure.Classification, p Policy, risk ApprovalRisk, reason string) Decision {
 	c.Disposition = failure.NeedsHuman
 	return Decision{
 		Action:         ActionHumanApproval,
 		Level:          p.Level,
 		Risk:           risk,
 		RequiresHuman:  true,
-		Category:       category,
 		Reason:         reason,
 		Classification: c,
 	}
-}
-
-// planDecision builds an automatic reconciliation decision.
-func planDecision(a Action, p Policy, risk ApprovalRisk, category RiskCategory, reason string) Decision {
-	return Decision{Action: a, Level: p.Level, Risk: risk, Category: category, Reason: reason}
-}
-
-// planHumanDecision builds a human reconciliation decision.
-func planHumanDecision(p Policy, risk ApprovalRisk, category RiskCategory, reason string) Decision {
-	return Decision{Action: ActionHumanApproval, Level: p.Level, Risk: risk, RequiresHuman: true, Category: category, Reason: reason}
 }
 
 // reasonOr returns reason when it carries text, otherwise fallback.

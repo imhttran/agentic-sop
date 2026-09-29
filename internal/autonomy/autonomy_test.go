@@ -13,7 +13,7 @@ import (
 // composes the two layers.
 func riskDecision(t *testing.T, ev failure.Evidence, level Level) Decision {
 	t.Helper()
-	return Decide(failure.Classify(ev), Context{}, PolicyFor(level))
+	return Decide(failure.Classify(ev), PolicyFor(level))
 }
 
 // TestRecoverableFailuresAreAutomaticUnderHigh pins the core invariant for the
@@ -68,15 +68,14 @@ func TestRecoverableFailuresAreAutomaticUnderHigh(t *testing.T) {
 // human at every level, including the most autonomous.
 func TestHumanBoundariesAreNeverAutomatic(t *testing.T) {
 	cases := []struct {
-		name     string
-		ev       failure.Evidence
-		category RiskCategory
+		name string
+		ev   failure.Evidence
 	}{
-		{"conflicting authoritative requirements", failure.Evidence{Source: "PLAN", RequirementsConflict: true}, CategoryAmbiguousRequirements},
-		{"destructive operation", failure.Evidence{Source: "IMPLEMENT", DestructiveOperation: true}, CategoryDestructive},
-		{"security boundary", failure.Evidence{Source: "IMPLEMENT", SecurityBoundary: true}, CategorySecuritySensitive},
-		{"explicit approval gate", failure.Evidence{Source: "IMPLEMENT", ApprovalRequired: true}, CategoryAmbiguousRequirements},
-		{"invalid plan assumptions", failure.Evidence{Source: "PLAN", PlanInvalid: true}, CategoryAmbiguousRequirements},
+		{"conflicting authoritative requirements", failure.Evidence{Source: "PLAN", RequirementsConflict: true}},
+		{"destructive operation", failure.Evidence{Source: "IMPLEMENT", DestructiveOperation: true}},
+		{"security boundary", failure.Evidence{Source: "IMPLEMENT", SecurityBoundary: true}},
+		{"explicit approval gate", failure.Evidence{Source: "IMPLEMENT", ApprovalRequired: true}},
+		{"invalid plan assumptions", failure.Evidence{Source: "PLAN", PlanInvalid: true}},
 	}
 	for _, tc := range cases {
 		for _, level := range []Level{Low, Balanced, High} {
@@ -84,9 +83,6 @@ func TestHumanBoundariesAreNeverAutomatic(t *testing.T) {
 				d := riskDecision(t, tc.ev, level)
 				if !d.RequiresHuman || d.Action != ActionHumanApproval {
 					t.Fatalf("action = %s requiresHuman = %v, want human at %s", d.Action, d.RequiresHuman, level)
-				}
-				if d.Category != tc.category {
-					t.Errorf("category = %s, want %s", d.Category, tc.category)
 				}
 				if d.Classification.Disposition != failure.NeedsHuman {
 					t.Errorf("classification disposition = %s, want NEEDS_HUMAN", d.Classification.Disposition)
@@ -96,16 +92,6 @@ func TestHumanBoundariesAreNeverAutomatic(t *testing.T) {
 				}
 			})
 		}
-	}
-}
-
-// TestExternalPublishRequiresHuman proves risk the classifier cannot see is
-// honored from the decision context.
-func TestExternalPublishRequiresHuman(t *testing.T) {
-	c := failure.Classification{Kind: failure.Unknown, Disposition: failure.NeedsHuman, Confidence: failure.Low}
-	d := Decide(c, Context{ExternalPublish: true}, PolicyFor(High))
-	if !d.RequiresHuman || d.Category != CategoryExternalPublish {
-		t.Fatalf("decision = %+v, want a human external-publish boundary", d)
 	}
 }
 
@@ -152,14 +138,13 @@ func TestLevelsSelectDifferentDecisions(t *testing.T) {
 	}
 
 	// A semantically-equivalent change to an executed task.
-	pc := PlanChange{Kind: PlanChangeExecutedEquivalent, Tasks: []string{"S001"}}
-	if d := DecidePlanChange(pc, PolicyFor(Low)); !d.RequiresHuman {
+	if d := DecidePlanChange(PlanChangeExecutedEquivalent, PolicyFor(Low)); !d.RequiresHuman {
 		t.Errorf("low: equivalent executed change must require approval, got %s", d.Action)
 	}
-	if d := DecidePlanChange(pc, PolicyFor(Balanced)); !d.RequiresHuman {
+	if d := DecidePlanChange(PlanChangeExecutedEquivalent, PolicyFor(Balanced)); !d.RequiresHuman {
 		t.Errorf("balanced: equivalent executed change must require approval, got %s", d.Action)
 	}
-	if d := DecidePlanChange(pc, PolicyFor(High)); d.RequiresHuman || d.Action != ActionAutoReconcile {
+	if d := DecidePlanChange(PlanChangeExecutedEquivalent, PolicyFor(High)); d.RequiresHuman || d.Action != ActionAutoReconcile {
 		t.Errorf("high: decision = %+v, want AUTO_RECONCILE", d)
 	}
 }
@@ -182,12 +167,12 @@ func TestPolicyOverridesRespectExplicitFlags(t *testing.T) {
 	p := PolicyFor(High)
 	p.AutoFix = false
 	c := failure.Classification{Kind: failure.TestFailure, Disposition: failure.AutoFix, Confidence: failure.High}
-	if d := Decide(c, Context{}, p); !d.RequiresHuman {
+	if d := Decide(c, p); !d.RequiresHuman {
 		t.Errorf("an explicit auto_fix: false must require a human, got %s", d.Action)
 	}
 }
 
-// TestPlanChangeDecisions pins every reconciliation classification.
+// TestPlanChangeDecisions pins both reconciliation classifications.
 func TestPlanChangeDecisions(t *testing.T) {
 	high := PolicyFor(High)
 	cases := []struct {
@@ -196,17 +181,12 @@ func TestPlanChangeDecisions(t *testing.T) {
 		requires    bool
 		wantRiskMin ApprovalRisk
 	}{
-		{PlanChangeCosmetic, ActionAutoReconcile, false, RiskNone},
-		{PlanChangeUnexecuted, ActionAutoReconcile, false, RiskLow},
 		{PlanChangeExecutedEquivalent, ActionAutoReconcile, false, RiskMedium},
 		{PlanChangeExecutedMaterial, ActionHumanApproval, true, RiskHigh},
-		{PlanChangeAmbiguous, ActionHumanApproval, true, RiskHigh},
-		{PlanChangeDestructive, ActionHumanApproval, true, RiskIrreversible},
-		{PlanChangeSecurity, ActionHumanApproval, true, RiskHigh},
 	}
 	for _, tc := range cases {
 		t.Run(string(tc.kind), func(t *testing.T) {
-			d := DecidePlanChange(PlanChange{Kind: tc.kind}, high)
+			d := DecidePlanChange(tc.kind, high)
 			if d.Action != tc.action || d.RequiresHuman != tc.requires {
 				t.Fatalf("decision = %+v, want action %s requiresHuman %v", d, tc.action, tc.requires)
 			}

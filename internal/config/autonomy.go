@@ -29,9 +29,6 @@ type Autonomy struct {
 	// AutoReconcileSafeChanges permits automatic reconciliation of semantically
 	// safe plan changes.
 	AutoReconcileSafeChanges *bool `yaml:"auto_reconcile_safe_changes"`
-	// RequireHuman lists the risk categories that always wait for a human. When
-	// empty it defaults to the standard authority boundaries.
-	RequireHuman []string `yaml:"require_human"`
 }
 
 // AutonomyPolicy resolves the configured autonomy block into the deterministic
@@ -51,9 +48,6 @@ func (c Config) AutonomyPolicy() autonomy.Policy {
 	if c.Autonomy.AutoReconcileSafeChanges != nil {
 		p.AutoReconcileSafeChanges = *c.Autonomy.AutoReconcileSafeChanges
 	}
-	if len(c.Autonomy.RequireHuman) > 0 {
-		p.RequireHuman = normalizeCategories(c.Autonomy.RequireHuman)
-	}
 	return p
 }
 
@@ -62,17 +56,11 @@ func (c Config) AutonomyLevel() autonomy.Level {
 	return autonomy.Level(normalizeLevel(c.Autonomy.Level))
 }
 
-// validateAutonomy rejects an unknown level or risk category at load time, so a
-// bad policy is never deferred to first use.
+// validateAutonomy rejects an unknown level at load time, so a bad policy is
+// never deferred to first use.
 func (c *Config) validateAutonomy() error {
 	if level := strings.TrimSpace(c.Autonomy.Level); level != "" && !autonomy.Level(strings.ToLower(level)).Valid() {
 		return fmt.Errorf("config: unknown autonomy.level %q (want low, balanced, high)", c.Autonomy.Level)
-	}
-	for _, cat := range c.Autonomy.RequireHuman {
-		if !validCategory(cat) {
-			return fmt.Errorf("config: unknown autonomy.require_human category %q (want %s)",
-				cat, strings.Join(categoryNames(), ", "))
-		}
 	}
 	return nil
 }
@@ -80,41 +68,4 @@ func (c *Config) validateAutonomy() error {
 // normalizeLevel lowercases and trims an autonomy level for resolution.
 func normalizeLevel(level string) string {
 	return strings.ToLower(strings.TrimSpace(level))
-}
-
-// normalizeCategories maps configured category names to the risk-category values,
-// trimming and lowercasing, and de-duplicating while preserving order.
-func normalizeCategories(in []string) []autonomy.RiskCategory {
-	seen := make(map[autonomy.RiskCategory]bool, len(in))
-	out := make([]autonomy.RiskCategory, 0, len(in))
-	for _, c := range in {
-		cat := autonomy.RiskCategory(strings.ToLower(strings.TrimSpace(c)))
-		if cat == "" || seen[cat] {
-			continue
-		}
-		seen[cat] = true
-		out = append(out, cat)
-	}
-	return out
-}
-
-// validCategory reports whether name is a known risk category.
-func validCategory(name string) bool {
-	cat := autonomy.RiskCategory(strings.ToLower(strings.TrimSpace(name)))
-	for _, known := range autonomy.Categories() {
-		if cat == known {
-			return true
-		}
-	}
-	return false
-}
-
-// categoryNames returns the known risk categories as strings, for error messages.
-func categoryNames() []string {
-	cats := autonomy.Categories()
-	out := make([]string, 0, len(cats))
-	for _, c := range cats {
-		out = append(out, string(c))
-	}
-	return out
 }

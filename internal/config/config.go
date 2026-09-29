@@ -578,14 +578,6 @@ autonomy:
   #   auto_fix: true
   #   auto_reconcile_safe_changes: true
 
-  # Risk categories that always wait for a human. Omit to use these defaults:
-  #   require_human:
-  #     - destructive
-  #     - irreversible
-  #     - security_sensitive
-  #     - ambiguous_requirements
-  #     - external_publish
-
 workflow:
   # local | pull-request
   mode: local

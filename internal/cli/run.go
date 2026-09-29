@@ -194,7 +194,6 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// sections, which remain authoritative.
 		JEV:            jevReportSection(res.jevDoc, res.jevPath),
 		Classification: classificationDoc(res.classification),
-		Autonomy:       autonomyDoc(res.decision),
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
 	})
@@ -974,11 +973,7 @@ type runReportDoc struct {
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
 	Classification *failure.Classification `json:"classification,omitempty"`
-	// Autonomy is the risk-based autonomy decision applied to the classification:
-	// the action (automatic or human), the risk, the level, and the reason. It is
-	// omitted for a passing run.
-	Autonomy    *autonomy.Decision `json:"autonomy,omitempty"`
-	GeneratedAt time.Time          `json:"generated_at"`
+	GeneratedAt    time.Time               `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
