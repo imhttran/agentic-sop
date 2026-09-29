@@ -304,6 +304,33 @@ func TestMissingOrigin(t *testing.T) {
 	}
 }
 
+func TestDiffAllExcludesTrackedSOPConfig(t *testing.T) {
+	dir := initRepo(t)
+	// A user-owned config file inside SOP's own directory, tracked on purpose (as
+	// sop-controller does). A dirty edit to it must never appear as a task change.
+	if err := os.MkdirAll(filepath.Join(dir, ".agent-sdlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join(".agent-sdlc", "config.yaml"), "provider: command\n")
+	runGit(t, dir, "add", ".agent-sdlc/config.yaml")
+	runGit(t, dir, "commit", "-m", "track config")
+
+	// The pre-existing user edit and a same-run task change coexist.
+	writeFile(t, dir, filepath.Join(".agent-sdlc", "config.yaml"), "provider: ollama\n")
+	writeFile(t, dir, "feature.go", "package feature\n")
+
+	diff, err := New(dir).DiffAll(context.Background(), ".agent-sdlc", "docs/reports")
+	if err != nil {
+		t.Fatalf("DiffAll failed: %v", err)
+	}
+	if strings.Contains(diff, "config.yaml") {
+		t.Errorf("DiffAll included the user-owned SOP config change:\n%s", diff)
+	}
+	if !strings.Contains(diff, "feature.go") {
+		t.Errorf("DiffAll dropped the task change:\n%s", diff)
+	}
+}
+
 func TestDiff(t *testing.T) {
 	dir := initRepo(t)
 	writeFile(t, dir, "README.md", "changed\n")

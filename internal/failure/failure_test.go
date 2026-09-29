@@ -156,6 +156,50 @@ func TestClassifyDispositions(t *testing.T) {
 	}
 }
 
+// ctrl002NoChangeReason is the real outcome reason from the CTRL002 dogfood run:
+// the model exhausted its tool budget during discovery, made no repository change,
+// and described the credential/secret work it never got to do. The harness then
+// appended its deterministic no-change note. The incidental "credential"/"secret"
+// words must not turn this resumable run into a human decision.
+const ctrl002NoChangeReason = "No repository change could be performed in this invocation: the tool budget was exhausted by required discovery (reading internal/sopclient/activity.go, run.go, service.go, types.go, store.go, tests, web handlers/server, cmd, templates, README) before any write tool could be executed. The CTRL002 fixes (replacing the leaky substring denylist in sanitizeDetail with structural credential/secret/JWT/URL-credential redaction and full-blob redaction instead of trusting truncation, adding ordering/timestamp guarantee tests, adding a CLI activity output path, and reverting the unrelated .agent-sdlc/config.yaml provider/model change that caused the scope-mismatch blocking finding) have not been applied to the working tree. Since no file was modified, I cannot truthfully report completion. [no repository change was made; retrying]"
+
+// TestToolBudgetExhaustionIsNotAHumanBoundary pins the fix for the CTRL002
+// dogfood failure: an invocation that exhausted its budget without changing the
+// repository is CONTINUE, even when the model's explanation mentions words that
+// would otherwise look like a human boundary (here "credential"/"secret").
+func TestToolBudgetExhaustionIsNotAHumanBoundary(t *testing.T) {
+	ev := Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{
+		Status: agent.OutcomeNeedsHuman,
+		Reason: ctrl002NoChangeReason,
+	}}
+	got := Classify(ev)
+	if got.Disposition != Continue {
+		t.Fatalf("disposition = %s (kind=%s), want CONTINUE", got.Disposition, got.Kind)
+	}
+	if got.Kind != IncompleteImplementation {
+		t.Errorf("kind = %s, want %s", got.Kind, IncompleteImplementation)
+	}
+}
+
+// TestHarnessBudgetSignalsAreContinue proves the deterministic budget-exhaustion
+// phrasings SOP's own harness emits are CONTINUE regardless of surrounding prose.
+func TestHarnessBudgetSignalsAreContinue(t *testing.T) {
+	reasons := []string{
+		"the Ollama agent IMPLEMENT made no repository change after 24 iterations; a retry may succeed [no repository change was made; retrying]",
+		"the Ollama agent FIX did not complete after 24 iterations (termination=iteration_limit)",
+		"tool-call limit reached (80 tool calls); the model did not finish",
+		"the Ollama agent IMPLEMENT did not finalize (termination=finalization_limit)",
+	}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: reason}})
+			if got.Disposition != Continue {
+				t.Errorf("disposition = %s (kind=%s), want CONTINUE", got.Disposition, got.Kind)
+			}
+		})
+	}
+}
+
 // TestAutoFixRespectsBoundedFixBudget proves a repeatedly failing AUTO_FIX is
 // bounded: once the configured fix budget is spent the disposition escalates to a
 // human rather than looping forever.

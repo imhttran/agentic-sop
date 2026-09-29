@@ -139,6 +139,10 @@ func (h *Harness) retryNoChangeFailure(ctx context.Context, baseline string, ev 
 		return content
 	}
 	wire.Status = string(agent.OutcomeNeedsHuman)
+	// This note is a deterministic, machine-recognizable marker: failure.Classify
+	// keys on it (see harnessIncompleteMarkers) so a no-change outcome is classified
+	// CONTINUE even when the model's own explanation mentions a human-boundary word.
+	// Keep the two in sync.
 	const note = "no repository change was made; retrying"
 	if strings.TrimSpace(wire.Reason) == "" {
 		wire.Reason = note

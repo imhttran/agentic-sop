@@ -21,6 +21,11 @@ whether your work passes; your job is to do the engineering work.
 You may inspect and modify repository files only through the tools below. You must
 not commit, push, merge, reset, clean, or modify SOP state (.agent-sdlc). You must
 never invent repository contents: inspect with tools before assuming.
+
+The working tree may already contain changes that are not part of this task. Treat
+them as user-owned: preserve them, do not revert, discard, or "fix" them merely
+because they look unrelated, and do not report them as blocking. Only touch files
+that the task actually requires.
 `)
 
 	b.WriteString("\n## Tool protocol\n")

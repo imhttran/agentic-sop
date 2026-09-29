@@ -164,13 +164,37 @@ func (a *Adapter) Checkout(ctx context.Context, branch string) error {
 	return nil
 }
 
-// Diff returns the read-only working-tree diff.
-func (a *Adapter) Diff(ctx context.Context) (string, error) {
-	out, err := run(ctx, a.dir, "diff")
+// Diff returns the read-only working-tree diff. Paths under excludes are omitted
+// with Git pathspec negation, so SOP's own state and output directories (for
+// example .agent-sdlc, docs/reports) never appear as part of a task's change —
+// including a user-owned config file tracked there. Without excludes the command
+// is exactly the plain working-tree diff.
+func (a *Adapter) Diff(ctx context.Context, excludes ...string) (string, error) {
+	args := []string{"diff"}
+	if hasExclude(excludes) {
+		args = append(args, "--", ".")
+		for _, e := range excludes {
+			if e == "" {
+				continue
+			}
+			args = append(args, ":(exclude)"+e)
+		}
+	}
+	out, err := run(ctx, a.dir, args...)
 	if err != nil {
 		return "", fmt.Errorf("diff: %w", err)
 	}
 	return out, nil
+}
+
+// hasExclude reports whether any non-empty exclude prefix was given.
+func hasExclude(excludes []string) bool {
+	for _, e := range excludes {
+		if e != "" {
+			return true
+		}
+	}
+	return false
 }
 
 // Untracked returns untracked file paths, excluding any path equal to or under
@@ -197,10 +221,11 @@ func (a *Adapter) Untracked(ctx context.Context, excludes ...string) ([]string, 
 
 // DiffAll returns the tracked working-tree diff plus a synthetic addition for
 // each untracked file, so a new file the agent created counts as a change. Paths
-// under excludes are omitted. Git output remains authoritative; this only widens
-// it to include files Git has not been told about yet.
+// under excludes are omitted from both the tracked diff and the untracked files.
+// Git output remains authoritative; this only widens it to include files Git has
+// not been told about yet.
 func (a *Adapter) DiffAll(ctx context.Context, excludes ...string) (string, error) {
-	diff, err := a.Diff(ctx)
+	diff, err := a.Diff(ctx, excludes...)
 	if err != nil {
 		return "", err
 	}

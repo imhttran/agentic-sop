@@ -191,6 +191,17 @@ func fromOutcome(ev Evidence) (Classification, bool) {
 	reason := strings.TrimSpace(firstNonEmpty(ev.Outcome.Reason, ev.Outcome.Summary))
 	text := strings.ToLower(reason)
 
+	// SOP's own deterministic budget-exhaustion / no-change signal wins over the
+	// model's surrounding prose. The harness appends this marker when an invocation
+	// stopped short of changing the repository; because SOP generated it, a
+	// human-boundary keyword the model happens to use while describing the work it
+	// never got to do (for example "credential"/"secret") must not turn a
+	// resumable run into a human decision.
+	if harnessIncomplete(text) {
+		return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: High,
+			Reason: describe(reason, "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
+	}
+
 	if kind, ok := humanKind(text); ok {
 		return human(kind, describe(reason, "the agent reported a boundary that requires a human")), true
 	}
@@ -214,6 +225,13 @@ func fromError(ev Evidence) (Classification, bool) {
 		return Classification{}, false
 	}
 	text := strings.ToLower(ev.Err.Error())
+
+	// As in fromOutcome: a deterministic harness budget/no-change signal is
+	// authoritative over incidental human-boundary keywords.
+	if harnessIncomplete(text) {
+		return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: Medium,
+			Reason: describe(ev.Err.Error(), "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
+	}
 
 	if kind, ok := humanKind(text); ok {
 		return human(kind, ev.Err.Error()), true
@@ -298,6 +316,28 @@ func firstNonEmpty(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// harnessIncompleteMarkers are phrases SOP's own agent harness (and the outcome
+// reconciler) emit deterministically when an invocation stopped short of changing
+// the repository: iteration/tool-budget exhaustion, a no-change finalization, or a
+// no-change failure surfaced as a retryable boundary. Because SOP generated them,
+// they are authoritative evidence that the work is merely unfinished, so they take
+// precedence over any human-boundary keyword in the model's own explanation. A
+// genuine human decision (approval, safety, ambiguity) is reported without these
+// markers and still reaches NEEDS_HUMAN.
+var harnessIncompleteMarkers = []string{
+	"no repository change was made; retrying",
+	"made no repository change after",
+	"tool-call limit reached",
+	"did not complete after",
+	"did not finalize",
+}
+
+// harnessIncomplete reports whether text carries a deterministic harness
+// budget/no-change signal.
+func harnessIncomplete(text string) bool {
+	return matchesAny(text, harnessIncompleteMarkers)
 }
 
 // Boundary markers: an explicit human decision/approval/safety boundary.
