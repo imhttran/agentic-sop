@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -256,6 +257,17 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		diff       string
 		sealed     *testrunner.SuiteResult // validation already run for a verify-first task
 		failureCtx string
+
+		// cycles counts the bounded fix cycles taken in this invocation. The gate,
+		// the report, and the performance record read the same counter, so
+		// "fix cycles: n/max" can never disagree with the recorded FIX count.
+		cycles int
+		// pendingOutcome is a non-completed mutating (IMPLEMENT/FIX) outcome whose
+		// disposition is deferred until SOP's own deterministic validation has run,
+		// so structured build/test evidence outranks the agent's free-form summary.
+		// It is cleared once the evidence is consumed.
+		pendingOutcome *agent.Outcome
+		pendingSource  string
 	)
 
 	// Verification-first: run the configured deterministic validation before any
@@ -335,16 +347,30 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// it did not complete, so the next bounded invocation (and JEV) keeps the
 		// implementation the task already produced.
 		recordTaskChanges(rn, impl.ChangedFiles)
-		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(ctx, cfg, rn, "IMPLEMENT", impl.Outcome), nil
-		}
 
+		// The working tree is read before a non-completed outcome is classified. SOP's
+		// own deterministic validation runs against it below, and a structured build
+		// or test result outranks the agent's free-form summary: an in-progress edit
+		// that broke the build is a compiler error, not an unexplained human boundary.
 		diff, err = d.readDiff(ctx, dir)
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
 		recordTaskChanges(rn, taskInvocationChanges(impl.ChangedFiles, diff))
 		_ = rn.Write("diff.patch", diff)
+
+		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
+			if strings.TrimSpace(diff) != "" {
+				// Changes were left behind: defer the disposition until the configured
+				// validation has run, so a broken build the invocation introduced is
+				// classified from evidence rather than from prose.
+				pendingOutcome, pendingSource = impl.Outcome, "IMPLEMENT"
+			} else {
+				// Nothing changed, so there is nothing to validate: the outcome's own
+				// signal stands (a budget/no-change exhaustion is a continuation).
+				return outcomeResult(ctx, cfg, rn, "IMPLEMENT", impl.Outcome, cycles), nil
+			}
+		}
 
 		// A claimed change with none produced is a failure. A legitimate no-change
 		// completion is allowed, but still runs the configured validation below
@@ -371,7 +397,6 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// conservative level that withholds automatic fixes hands the failure to the
 	// driver (which applies the same policy) instead of mutating the repository.
 	autoPolicy := cfg.AutonomyPolicy()
-	cycles := 0
 	var suite testrunner.SuiteResult
 	var report review.Report
 	var gate quality.Result
@@ -390,6 +415,22 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
 			_ = rn.SetStage(runpkg.Validating)
 			suite = sessionValidation(ctx, dir, cfg, diff, rec, sess)
+		}
+
+		// A non-completed mutating outcome is classified on the deterministic
+		// validation evidence just produced, never on the agent's prose alone. When
+		// SOP's own build/test result confirms a fixable failure, the ambiguous
+		// outcome is dropped and the existing fix loop repairs it (the gate below is
+		// red, so the loop runs and review/JEV are skipped). Otherwise the outcome's
+		// disposition — a continuation, a retry, or a genuine human boundary — is
+		// reported, with the deterministic evidence folded in.
+		if pendingOutcome != nil {
+			class := pendingClassification(cfg, suite, pendingSource, pendingOutcome, cycles)
+			if class.Disposition == failure.AutoFix {
+				pendingOutcome = nil
+			} else {
+				return pendingResult(ctx, cfg, rn, pendingOutcome, class, cycles), nil
+			}
 		}
 
 		// Review only when validation passed, there is something to review, and the
@@ -421,23 +462,34 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 
 		// Optional JEV analysis runs at the quality seam: after validation and
 		// review have produced their evidence and before the gate decides. It is
-		// read-only and add-only — with JEV disabled it is a no-op, so the gate
-		// sees exactly what it saw before. A blocking JEV finding fails the gate
-		// and enters the same bounded fix loop below; after a fix, validation,
-		// review, and JEV all rerun before the gate is evaluated again. JEV
-		// invocation metrics are recorded on rec as diagnostics only; they never
-		// influence the gate.
+		// read-only and add-only — with JEV disabled it is a no-op, so the gate sees
+		// exactly what it saw before. A blocking JEV finding fails the gate and enters
+		// the same bounded fix loop below; after a fix, validation, review, and JEV
+		// all rerun before the gate is evaluated again. JEV invocation metrics are
+		// recorded on rec as diagnostics only; they never influence the gate.
+		//
+		// JEV is a POST-validation engineering review: it runs only once the
+		// deterministic basic validation is green. While a build/test/lint check is
+		// red, the failure is deterministic and auto-fixable; running the (expensive)
+		// model analysis against a known-broken tree would only add latency and noise,
+		// and the pending fix would invalidate it. After the fix reruns validation,
+		// JEV runs then. The evidence is cleared each iteration so a red validation
+		// never leaves the gate weighing a stale JEV result.
+		//
 		// The task-scoped change evidence accumulated across this task's invocations
 		// (not only this one) is handed to JEV, so a no-change final invocation still
 		// reviews the implementation the task produced earlier.
-		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn, diff, suite, report, dir, rec)
+		jevEv = nil
+		if suite.Passed() {
+			jevEv = runOptionalJEV(ctx, cfg, d, spec, rn, diff, suite, report, dir, rec)
 
-		// Persist the JEV result as a run artifact beside the other diagnostics,
-		// so results are available after the run. Persistence is best-effort and
-		// never changes the run outcome; the same document is referenced by the
-		// report. It is diagnostic evidence only: nothing here is read back to
-		// drive a decision.
-		jevDoc = persistedJEVDoc(rn, jevEv)
+			// Persist the JEV result as a run artifact beside the other diagnostics,
+			// so results are available after the run. Persistence is best-effort and
+			// never changes the run outcome; the same document is referenced by the
+			// report. It is diagnostic evidence only: nothing here is read back to
+			// drive a decision.
+			jevDoc = persistedJEVDoc(rn, jevEv)
+		}
 
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
@@ -488,15 +540,27 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 		recordTaskChanges(rn, fix.ChangedFiles)
-		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome), nil
-		}
 
+		// Re-read the working tree after the fix so the next classification sees what
+		// the fix actually produced.
 		diff, err = d.readDiff(ctx, dir)
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
 		recordTaskChanges(rn, taskInvocationChanges(fix.ChangedFiles, diff))
+
+		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
+			if strings.TrimSpace(diff) != "" {
+				// A fix that did not complete is not trusted on its own prose: re-validate
+				// the tree and let structured evidence decide. The pending check at the top
+				// of the loop then either continues the deterministic repair or reports the
+				// outcome's disposition (a tool-budget exhaustion is a continuation).
+				pendingOutcome, pendingSource = fix.Outcome, "FIX"
+				continue
+			}
+			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles), nil
+		}
+
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
@@ -575,6 +639,7 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 		BuildFailed:      buildFailed,
 		TestFailed:       testFailed,
 		LintFailed:       lintFailed,
+		Detail:           verificationDetail(suite),
 		BlockingFindings: quality.BlockingFindings(cfg.Quality.FailOn, report.Findings),
 		FixCycles:        cycles,
 		MaxFixCycles:     cfg.Quality.MaxFixCycles,
@@ -596,6 +661,66 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 	// handled above as an analysis failure, not a finding.
 	ev.BlockingFindings += quality.JEVBlockingFindings(cfg.Quality.JEVFailOn(), jevEv.gateEvidence())
 	return ev
+}
+
+// pendingClassification classifies a non-completed mutating (IMPLEMENT/FIX)
+// outcome against SOP's own deterministic validation result, so a structured build
+// or test failure outranks the agent's free-form summary. It reuses the classifier's
+// fixed evidence precedence: a red `go build` is a compiler error even when the
+// agent's summary is empty, and the bounded fix budget still applies.
+func pendingClassification(cfg config.Config, suite testrunner.SuiteResult, source string, outcome *agent.Outcome, cycles int) failure.Classification {
+	return failure.Classify(failure.Evidence{
+		Source:       source,
+		Outcome:      outcome,
+		BuildFailed:  hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build),
+		TestFailed:   hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest),
+		LintFailed:   hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint),
+		Detail:       verificationDetail(suite),
+		FixCycles:    cycles,
+		MaxFixCycles: cfg.Quality.MaxFixCycles,
+	})
+}
+
+// verificationDetail returns a short, bounded diagnostic for the first failing
+// validation check (for example the compiler error line from a red `go build`), so
+// a report states the concrete failure instead of relying on the agent's summary.
+// It returns "" when every check passed or produced no output.
+func verificationDetail(suite testrunner.SuiteResult) string {
+	for _, r := range suite.Results {
+		if r.Status == testrunner.Pass {
+			continue
+		}
+		if out := strings.TrimSpace(firstNonBlank(r.Stderr, r.Stdout)); out != "" {
+			return fmt.Sprintf("%s `%s`: %s", r.Category, r.Command, boundedDetail(out))
+		}
+		return fmt.Sprintf("%s `%s`: %s", r.Category, r.Command, r.Status)
+	}
+	return ""
+}
+
+// boundedDetail keeps a validation diagnostic short enough for a one-line reason.
+func boundedDetail(out string) string {
+	const maxLen = 400
+	out = strings.Join(strings.Fields(out), " ")
+	if len(out) <= maxLen {
+		return out
+	}
+	// Trim to a rune boundary so the diagnostic never ends mid-character.
+	cut := maxLen
+	for cut > 0 && !utf8.RuneStart(out[cut]) {
+		cut--
+	}
+	return out[:cut] + "…"
+}
+
+// firstNonBlank returns the first argument that carries non-whitespace text.
+func firstNonBlank(values ...string) string {
+	for _, v := range values {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // emitRunSummary prints the run's outcome and returns the process exit code.
@@ -717,19 +842,23 @@ func emitClassificationActivity(ctx context.Context, cls failure.Classification,
 	emitAutonomyActivity(ctx, decision)
 }
 
-// outcomeResult maps a non-completed agent outcome to a run result and reports it
-// on the activity stream. SOP owns the lifecycle, so the failure classifier's
-// evidence decides the disposition rather than the status label alone: an outcome
-// that is a resumable continuation (budget/no-change exhaustion, a transient
-// provider failure) is NOT a human boundary even though the harness labels it
-// needs_human to request a requeue. Such an outcome is reported as CONTINUE so the
-// operator sees SOP will continue on its own, and the driver requeues it through
-// the existing bounded recovery path. Only a genuine human boundary (approval,
-// safety, ambiguity) becomes NEEDS_HUMAN; any other reported failure becomes FAIL.
-// A reported outcome is never treated as success. It also attaches the
-// classification, so the driver applies the same disposition logic it applies to a
-// deterministic gate failure.
-func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
+// The outcome-result helpers map a non-completed agent outcome to a run result and
+// report it on the activity stream. SOP owns the lifecycle, so the failure
+// classifier's evidence decides the disposition rather than the status label alone:
+// an outcome that is a resumable continuation (budget/no-change exhaustion, a
+// transient provider failure) is NOT a human boundary even though the harness
+// labels it needs_human to request a requeue. Such an outcome is reported as
+// CONTINUE so the operator sees SOP will continue on its own, and the driver
+// requeues it through the existing bounded recovery path. Only a genuine human
+// boundary (approval, safety, ambiguity) becomes NEEDS_HUMAN; any other reported
+// failure becomes FAIL. A reported outcome is never treated as success. The
+// classification is attached to the result, so the driver applies the same
+// disposition logic it applies to a deterministic gate failure.
+
+// outcomeReason is the short human-readable reason for a non-completed outcome:
+// its explicit reason, then its summary, then its status label, so a report always
+// explains why the invocation stopped.
+func outcomeReason(outcome *agent.Outcome) string {
 	reason := outcome.Reason
 	if reason == "" {
 		reason = outcome.Summary
@@ -737,13 +866,49 @@ func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, sourc
 	if reason == "" {
 		reason = string(outcome.Status)
 	}
+	return reason
+}
+
+// outcomeResult classifies a non-completed agent outcome from its own evidence
+// alone and maps it to a run result. Use it when no deterministic validation
+// evidence exists (for example a no-change invocation).
+func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, source string, outcome *agent.Outcome, cycles int) lifeResult {
 	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome})
 	emitOutcomeActivity(activity.FromContext(ctx), outcome, class)
+	return classifiedOutcome(cfg, rn, outcome, class, cycles)
+}
 
-	// The autonomy policy — not the raw disposition or the harness's status label —
-	// decides whether a human is required. Its decision is recorded on the result so
-	// the driver applies the same rule it applies to a gate failure; the driver's
-	// classification-activity emission reports it.
+// pendingResult maps a non-completed mutating outcome that SOP has re-classified
+// with its own deterministic validation evidence. A structured, exhausted
+// deterministic failure is a genuine boundary regardless of the agent's own status
+// label, so it takes the same stage the gate-failure path uses; every other
+// disposition keeps the outcome's own status mapping (a continuation, a retry, or
+// a hard failure).
+func pendingResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, outcome *agent.Outcome, class failure.Classification, cycles int) lifeResult {
+	emitOutcomeActivity(activity.FromContext(ctx), outcome, class)
+	if class.Kind == failure.AutoFixExhausted {
+		decision := decideAutonomy(cfg, class)
+		reason := outcomeReason(outcome)
+		stage := runpkg.WaitingForHuman
+		gate := quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}
+		if decision.Action == autonomy.ActionTerminal {
+			stage = runpkg.Failed
+			gate = quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+		}
+		_ = rn.SetStage(stage)
+		return lifeResult{gate: gate, cycles: cycles, stage: stage, classification: class, decision: decision}
+	}
+	return classifiedOutcome(cfg, rn, outcome, class, cycles)
+}
+
+// classifiedOutcome maps an already-classified non-completed outcome to a run
+// result. The autonomy policy — not the raw disposition or the harness's status
+// label — decides whether a human is required, so the classification carries the
+// disposition the driver acts on. A resumable continuation of a needs_human
+// outcome is reported as CONTINUE (never NEEDS_HUMAN); a genuine human boundary is
+// NEEDS_HUMAN; any other reported failure becomes FAIL.
+func classifiedOutcome(cfg config.Config, rn *runpkg.Run, outcome *agent.Outcome, class failure.Classification, cycles int) lifeResult {
+	reason := outcomeReason(outcome)
 	decision := decideAutonomy(cfg, class)
 
 	if outcome.Status == agent.OutcomeNeedsHuman && class.Retryable() {
@@ -751,14 +916,14 @@ func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, sourc
 		// decision is required. Report CONTINUE (never NEEDS_HUMAN), mirroring the
 		// gate-failure path where a retryable disposition is a non-pass result.
 		_ = rn.SetStage(runpkg.Failed)
-		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class, decision: decision}
+		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.Failed, classification: class, decision: decision}
 	}
 	if outcome.Status == agent.OutcomeNeedsHuman {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
-		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman, classification: class, decision: decision}
+		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.WaitingForHuman, classification: class, decision: decision}
 	}
 	_ = rn.SetStage(runpkg.Failed)
-	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class, decision: decision}
+	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.Failed, classification: class, decision: decision}
 }
 
 // failRun marks the run failed, reports the stage error, and returns the error

@@ -257,6 +257,122 @@ func TestLowLevelRetainsCorrectClassification(t *testing.T) {
 	}
 }
 
+// ctrl010CompileError is the CTRL010 dogfood compiler error: a dangling reference
+// left by an in-progress edit.
+const ctrl010CompileError = "internal/sopclient/checkpoint_read.go:100:16: undefined: checkpointFromDetail"
+
+// TestBuildFailureIsAutoFixLowRisk pins the CTRL010 dogfood decision: a deterministic
+// build failure with fix budget remaining is AUTO_FIX with LOW risk under the
+// automatic levels, and it is never UNKNOWN or a human decision merely because the
+// agent's own status was failed.
+func TestBuildFailureIsAutoFixLowRisk(t *testing.T) {
+	ev := failure.Evidence{
+		Source:       "FIX",
+		BuildFailed:  true,
+		Detail:       ctrl010CompileError,
+		Outcome:      &agent.Outcome{Status: agent.OutcomeFailed},
+		FixCycles:    0,
+		MaxFixCycles: 3,
+	}
+	for _, level := range []Level{Balanced, High} {
+		d := riskDecision(t, ev, level)
+		if d.RequiresHuman || d.Action != ActionAutoFix {
+			t.Fatalf("%s: decision = %+v, want AUTO_FIX without a human", level, d)
+		}
+		if d.Risk != RiskLow {
+			t.Errorf("%s: risk = %s, want LOW", level, d.Risk)
+		}
+		if d.Classification.Kind != failure.CompilerError {
+			t.Errorf("%s: kind = %s, want COMPILER_ERROR", level, d.Classification.Kind)
+		}
+	}
+
+	// Under LOW the fix is withheld for a human, but the classification and risk stay
+	// correct: the level never changes what happened.
+	low := riskDecision(t, ev, Low)
+	if !low.RequiresHuman || low.Action != ActionHumanApproval {
+		t.Errorf("low: decision = %+v, want HUMAN_APPROVAL_REQUIRED", low)
+	}
+	if low.Classification.Kind != failure.CompilerError || low.Risk != RiskLow {
+		t.Errorf("low: classification = %+v risk = %s, want COMPILER_ERROR/LOW", low.Classification, low.Risk)
+	}
+}
+
+// TestStructuredProviderFailuresRetryEveryLevel proves provider evidence yields a
+// bounded RETRY at every level, never UNKNOWN and never a human decision.
+func TestStructuredProviderFailuresRetryEveryLevel(t *testing.T) {
+	errs := []error{
+		errors.New("request failed: http 500 internal server error"),
+		errors.New("request failed: i/o timeout"),
+		errors.New("ollama returned an empty response"),
+	}
+	for _, err := range errs {
+		for _, level := range []Level{Low, Balanced, High} {
+			d := riskDecision(t, failure.Evidence{Source: "IMPLEMENT", Err: err}, level)
+			if d.RequiresHuman || d.Action != ActionAutoRetry {
+				t.Errorf("%s %v: decision = %+v, want AUTO_RETRY", level, err, d)
+			}
+			if d.Classification.Kind == failure.Unknown {
+				t.Errorf("%s %v: classified as UNKNOWN", level, err)
+			}
+		}
+	}
+}
+
+// TestExhaustedBuildFixIsBoundedNotUnknown proves a build failure that survives its
+// bounded fix budget terminates as AUTO_FIX_EXHAUSTED (a terminal/human boundary by
+// policy), never as the misleading UNKNOWN.
+func TestExhaustedBuildFixIsBoundedNotUnknown(t *testing.T) {
+	ev := failure.Evidence{Source: "VALIDATE", BuildFailed: true, FixCycles: 3, MaxFixCycles: 3}
+	high := riskDecision(t, ev, High)
+	if high.Classification.Kind != failure.AutoFixExhausted || high.Action != ActionTerminal {
+		t.Errorf("high: decision = %+v, want AUTO_FIX_EXHAUSTED/TERMINAL", high)
+	}
+	balanced := riskDecision(t, ev, Balanced)
+	if balanced.Classification.Kind != failure.AutoFixExhausted {
+		t.Errorf("balanced: kind = %s, want AUTO_FIX_EXHAUSTED", balanced.Classification.Kind)
+	}
+}
+
+// ctrl011Outcome is the CTRL011 dogfood outcome: productive discovery of an
+// approval feature with the bounded budget spent before any mutation. The prose is
+// saturated with approval vocabulary, but it describes the work being implemented.
+var ctrl011Outcome = &agent.Outcome{
+	Status: agent.OutcomeNeedsHuman,
+	Reason: "No repository change was made this invocation: the bounded turn budget was exhausted by required discovery. " +
+		"Remaining implementation for the Human Approval Controls task: add approval.go, render an approve/decline control only " +
+		"for a NEEDS_HUMAN/WAITING_FOR_HUMAN boundary, and add tests for the approval gate.",
+}
+
+// TestCTRL011ApprovalSubjectIsLowRiskContinue pins the CTRL011 dogfood decision at
+// the autonomy level: implementing approval controls is low-risk, deterministic
+// work, so the automatic levels continue it instead of requiring approval.
+func TestCTRL011ApprovalSubjectIsLowRiskContinue(t *testing.T) {
+	ev := failure.Evidence{Source: "IMPLEMENT", Outcome: ctrl011Outcome}
+	for _, level := range []Level{Balanced, High} {
+		d := riskDecision(t, ev, level)
+		if d.RequiresHuman || d.Action != ActionAutoContinue {
+			t.Fatalf("%s: decision = %+v, want AUTO_CONTINUE without a human", level, d)
+		}
+		if d.Risk != RiskLow {
+			t.Errorf("%s: risk = %s, want LOW", level, d.Risk)
+		}
+		if d.Classification.Kind != failure.IncompleteImplementation {
+			t.Errorf("%s: kind = %s, want INCOMPLETE_IMPLEMENTATION", level, d.Classification.Kind)
+		}
+	}
+
+	// LOW may stop for a human per its conservative policy, but the factual
+	// classification and risk stay correct — never APPROVAL_REQUIRED/HIGH.
+	low := riskDecision(t, ev, Low)
+	if low.Classification.Kind == failure.ApprovalRequired {
+		t.Errorf("low: kind = APPROVAL_REQUIRED, want the approval subject not to be an approval request")
+	}
+	if low.Risk != RiskLow {
+		t.Errorf("low: risk = %s, want LOW", low.Risk)
+	}
+}
+
 // TestSecurityDecisionRequiresHumanAtEveryLevel proves a genuine security DECISION
 // (an action that changes a trust boundary) is a human boundary at every level,
 // while ordinary security-related implementation prose is not.

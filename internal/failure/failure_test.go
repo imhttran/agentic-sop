@@ -2,6 +2,7 @@ package failure
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -414,6 +415,317 @@ func TestCTRL008ExactReasonContinues(t *testing.T) {
 	}})
 	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
 		t.Fatalf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", got)
+	}
+}
+
+// ctrl010CompilerError is the verbatim compiler error from the CTRL010 dogfood
+// run: an in-progress edit left a dangling reference and the build went red.
+const ctrl010CompilerError = "internal/sopclient/checkpoint_read.go:100:16: undefined: checkpointFromDetail"
+
+// TestBuildFailureOutranksAgentProse pins the CTRL010 fix: structured deterministic
+// evidence (a red build) classifies as a compiler error even when the agent's own
+// outcome is empty, says only that it could not complete, or literally reports no
+// authoritative signal. The agent is never asked to classify its own failure, and a
+// deterministic build failure is never UNKNOWN.
+func TestBuildFailureOutranksAgentProse(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   Evidence
+	}{
+		{
+			name: "no agent outcome at all",
+			ev:   Evidence{Source: "VALIDATE", BuildFailed: true, Detail: ctrl010CompilerError},
+		},
+		{
+			name: "agent says only it could not complete",
+			ev: Evidence{Source: "FIX", BuildFailed: true, Detail: ctrl010CompilerError,
+				Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "could not complete"}},
+		},
+		{
+			name: "agent reports no authoritative signal",
+			ev: Evidence{Source: "FIX", BuildFailed: true, Detail: ctrl010CompilerError,
+				Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "the agent reported a failure without an authoritative signal"}},
+		},
+		{
+			name: "agent outcome is a bare failed with no reason",
+			ev:   Evidence{Source: "FIX", BuildFailed: true, Detail: ctrl010CompilerError, Outcome: &agent.Outcome{Status: agent.OutcomeFailed}},
+		},
+		{
+			name: "agent outcome is needs_human with no boundary",
+			ev:   Evidence{Source: "FIX", BuildFailed: true, Detail: ctrl010CompilerError, Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "stopped"}},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Classify(tc.ev)
+			if got.Kind != CompilerError {
+				t.Errorf("kind = %s, want %s (structured build evidence must win)", got.Kind, CompilerError)
+			}
+			if got.Disposition != AutoFix {
+				t.Errorf("disposition = %s, want AUTO_FIX", got.Disposition)
+			}
+			if got.Confidence != High {
+				t.Errorf("confidence = %s, want HIGH", got.Confidence)
+			}
+			if !strings.Contains(got.Reason, "checkpointFromDetail") {
+				t.Errorf("reason = %q, want it to preserve the compiler diagnostic", got.Reason)
+			}
+		})
+	}
+}
+
+// TestDeterministicVerificationKinds pins the distinct deterministic failure kinds:
+// a failing test is a TEST_FAILURE, and a red build (which includes a test binary
+// that does not compile) is a COMPILER_ERROR.
+func TestDeterministicVerificationKinds(t *testing.T) {
+	cases := []struct {
+		name string
+		ev   Evidence
+		kind Kind
+	}{
+		{"deterministic unit assertion failure", Evidence{Source: "VALIDATE", TestFailed: true}, TestFailure},
+		{"test binary compile failure", Evidence{Source: "VALIDATE", BuildFailed: true}, CompilerError},
+		{"validation command failure", Evidence{Source: "VALIDATE", LintFailed: true}, LintFailure},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := Classify(tc.ev)
+			if got.Kind != tc.kind || got.Disposition != AutoFix {
+				t.Errorf("classification = %+v, want AUTO_FIX/%s", got, tc.kind)
+			}
+		})
+	}
+}
+
+// TestStructuredProviderFailuresAreNotUnknown proves provider evidence classifies
+// directly (RETRY) and never falls through to UNKNOWN.
+func TestStructuredProviderFailuresAreNotUnknown(t *testing.T) {
+	reasons := map[string]Kind{
+		"request failed: http 500 internal server error": TransientProvider,
+		"request failed: i/o timeout after 30s":          TransientProvider,
+		"ollama returned an empty response":              EmptyResponse,
+	}
+	for reason, want := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Err: errors.New(reason)})
+			if got.Disposition != Retry || got.Kind != want {
+				t.Errorf("classification = %+v, want RETRY/%s", got, want)
+			}
+		})
+	}
+}
+
+// TestStructuredEvidencePrecludesUnknown proves UNKNOWN is reached only with no
+// authoritative evidence at all: any structured signal above it classifies
+// directly.
+func TestStructuredEvidencePrecludesUnknown(t *testing.T) {
+	structured := []Evidence{
+		{Source: "VALIDATE", BuildFailed: true},
+		{Source: "VALIDATE", TestFailed: true},
+		{Source: "IMPLEMENT", Err: errors.New("request failed: http 500")},
+		{Source: "VALIDATE", JEVFailed: true},
+		{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "did not complete after 24 iterations"}},
+	}
+	for _, ev := range structured {
+		if got := Classify(ev); got.Kind == Unknown {
+			t.Errorf("evidence %+v classified as UNKNOWN; structured evidence must decide", ev.Source)
+		}
+	}
+
+	// With nothing structured, UNKNOWN is the honest answer.
+	got := Classify(Evidence{})
+	if got.Kind != Unknown || got.Confidence != Low {
+		t.Errorf("empty evidence = %+v, want UNKNOWN/LOW", got)
+	}
+}
+
+// TestUnknownIsNotABoundary proves UNKNOWN is not promoted to an authority
+// boundary: it is not one of the boundary kinds, so the autonomy policy (not the
+// classifier) decides what to do with it. It never carries a boundary risk on its
+// own.
+func TestUnknownIsNotABoundary(t *testing.T) {
+	got := Classify(Evidence{})
+	switch got.Kind {
+	case SecurityBoundary, ApprovalRequired, DestructiveOperation, AmbiguousContract:
+		t.Errorf("empty evidence classified as boundary kind %s; UNKNOWN must stay unclassified", got.Kind)
+	}
+	if got.Kind != Unknown {
+		t.Errorf("kind = %s, want UNKNOWN", got.Kind)
+	}
+}
+
+// TestHarnessNoChangeSignalOutranksVerification pins the precedence between a
+// deterministic build failure and SOP's OWN harness budget/no-change signal: when
+// the harness reports the invocation stopped short of changing the repository, the
+// red tree is red because the work is not done yet, so the disposition is a bounded
+// CONTINUE, not a fix cycle or an escalation.
+func TestHarnessNoChangeSignalOutranksVerification(t *testing.T) {
+	got := Classify(Evidence{
+		Source:      "FIX",
+		BuildFailed: true,
+		Outcome: &agent.Outcome{
+			Status: agent.OutcomeNeedsHuman,
+			Reason: "the Ollama agent FIX made no repository change after 24 iterations; a retry may succeed [no repository change was made; retrying]",
+		},
+	})
+	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
+		t.Fatalf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", got)
+	}
+}
+
+// TestUnclassifiedOutcomeStillFailsClosed guards the tightened UNKNOWN semantics:
+// an agent outcome with no structured evidence and no recognized signal still fails
+// closed rather than being guessed at.
+func TestUnclassifiedOutcomeStillFailsClosed(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "boom"}})
+	if got.Disposition != NeedsHuman || got.Kind != Unknown {
+		t.Errorf("classification = %+v, want NEEDS_HUMAN/UNKNOWN", got)
+	}
+}
+
+// ctrl011ApprovalTopicReason models the CTRL011 dogfood invocation: productive
+// discovery of an approval feature, exhausted turn budget, no mutation. It is
+// saturated with approval TOPIC words (approval, approve, ApproveTask, decline,
+// NEEDS_HUMAN, WAITING_FOR_HUMAN, StageWaitingForHuman, gate) but requests nothing.
+const ctrl011ApprovalTopicReason = "No repository change was made this invocation: the bounded turn budget was exhausted by required discovery " +
+	"before any file could be written. Discovery for the Human Approval Controls task is complete. Established facts: sopclient already exposes " +
+	"Client.ApproveTask, which truthfully returns ErrOperationUnsupported, and OpApproveTask is StatusUnsupported; SOP currently exposes no `sop approve` " +
+	"operation, so the controller must not simulate approval. Remaining implementation is deterministic: add internal/sopclient/approval.go, expose " +
+	"Store.Approval on TaskDetail, render an approve/decline control only when SOP reports a real human-boundary state (a NEEDS_HUMAN disposition or a " +
+	"WAITING_FOR_HUMAN stage, i.e. StageWaitingForHuman), implement a non-mutating decline button, document that approval is unsupported, and add tests " +
+	"covering the approval gate. A later bounded invocation should perform these edits."
+
+// TestCTRL011ApprovalSubjectIsNotAnApprovalRequest pins the CTRL011 fix: an
+// invocation that is IMPLEMENTING an approval feature, and exhausted its budget
+// after productive discovery, is a bounded continuation — not APPROVAL_REQUIRED and
+// not a human decision. The approval vocabulary is the subject of the work, not a
+// request that the current execution be authorized.
+func TestCTRL011ApprovalSubjectIsNotAnApprovalRequest(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{
+		Status: agent.OutcomeNeedsHuman,
+		Reason: ctrl011ApprovalTopicReason,
+	}})
+	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
+		t.Fatalf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", got)
+	}
+	if got.Kind == ApprovalRequired {
+		t.Error("implementing approval controls must not be read as an approval request")
+	}
+	if got.Confidence != High {
+		t.Errorf("confidence = %s, want HIGH", got.Confidence)
+	}
+}
+
+// TestApprovalTopicWordsAreNotApprovalRequests proves none of the approval-related
+// statements SOP will see while implementing approval functionality is treated as a
+// request for the current execution to be authorized.
+func TestApprovalTopicWordsAreNotApprovalRequests(t *testing.T) {
+	reasons := []string{
+		"implement approval UI",
+		"add an ApproveTask interface to the client",
+		"render the NEEDS_HUMAN state read-only",
+		"test approval behavior end to end",
+		"add an unsupported approval capability descriptor",
+		"document that approval is unsupported",
+		"implement a decline button",
+		"add tests for explicit approval gates",
+		"inspect StageWaitingForHuman",
+		"render the label human approval required",
+		"the test fixture sets disposition = NEEDS_HUMAN",
+		"SOP exposes no `sop approve` command; the contract marks OpApproveTask unsupported",
+	}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Kind == ApprovalRequired || got.Disposition == NeedsHuman {
+				t.Errorf("classification = %+v, want a non-human continuation (approval topic, not a request)", got)
+			}
+		})
+	}
+}
+
+// TestCapabilityGapWithUnsupportedContractContinues pins capability-gap semantics:
+// a missing operation whose behavior the authoritative contract already fixes (an
+// explicitly-unsupported capability the consumer must report truthfully) does not
+// prevent deterministic work, so it is a continuation, not a human decision.
+func TestCapabilityGapWithUnsupportedContractContinues(t *testing.T) {
+	reason := "SOP exposes no `sop approve` operation. OpApproveTask is StatusUnsupported and Client.ApproveTask returns ErrOperationUnsupported, " +
+		"so the controller can implement the read-only boundary truthfully and must not simulate approval; implementation locations are known."
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
+		t.Fatalf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION (unsupported is not unresolved intent)", got)
+	}
+	if got.Kind == ApprovalRequired {
+		t.Error("a missing capability with an authoritative unsupported contract is not an approval boundary")
+	}
+}
+
+// TestStructuredApprovalSignalsRequireHuman proves the structured signals that MAY
+// establish a human boundary still do: an explicit approval requirement, a
+// destructive/irreversible action, and an unresolved requirements conflict. Current
+// lifecycle state, not prose, is what these represent.
+func TestStructuredApprovalSignalsRequireHuman(t *testing.T) {
+	cases := map[string]Evidence{
+		"explicit approval gate":           {Source: "IMPLEMENT", ApprovalRequired: true},
+		"destructive operation":            {Source: "IMPLEMENT", DestructiveOperation: true},
+		"unresolved requirements conflict": {Source: "PLAN", RequirementsConflict: true},
+	}
+	for name, ev := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := Classify(ev)
+			if got.Disposition != NeedsHuman {
+				t.Errorf("classification = %+v, want NEEDS_HUMAN", got)
+			}
+			if got.Confidence != High {
+				t.Errorf("confidence = %s, want HIGH", got.Confidence)
+			}
+		})
+	}
+}
+
+// TestExplicitApprovalRequestBodyStillNeedsHuman guards the other side: prose that
+// actually ASKS for authorization to proceed (not the topic) is still a human
+// boundary, so genuine approval requests are not eliminated by the CTRL011 fix.
+func TestExplicitApprovalRequestBodyStillNeedsHuman(t *testing.T) {
+	reasons := []string{
+		"needs auth",
+		"this requires human authorization to proceed",
+		"the operation requires approval to proceed",
+		"awaiting authorization",
+	}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Disposition != NeedsHuman || got.Kind != ApprovalRequired {
+				t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", got)
+			}
+		})
+	}
+}
+
+// TestInspectedHumanStateIsNotCurrentApprovalGate makes the distinction explicit:
+// inspected/fixture state (another component's or a domain value's NEEDS_HUMAN /
+// WAITING_FOR_HUMAN) is not the CURRENT execution's lifecycle state, while a
+// structured approval signal for the current run is a human boundary.
+func TestInspectedHumanStateIsNotCurrentApprovalGate(t *testing.T) {
+	inspected := []string{
+		"the source renders StageWaitingForHuman and the NEEDS_HUMAN disposition",
+		"the test fixture sets disposition = NEEDS_HUMAN and stage = WAITING_FOR_HUMAN",
+		"the recovery control is shown when the plan gate is active",
+	}
+	for _, reason := range inspected {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Kind == ApprovalRequired || got.Disposition == NeedsHuman {
+				t.Errorf("classification = %+v, want a continuation (inspected state is not the current gate)", got)
+			}
+		})
+	}
+
+	// The current run's genuine approval gate is a structured signal.
+	got := Classify(Evidence{Source: "IMPLEMENT", ApprovalRequired: true})
+	if got.Kind != ApprovalRequired || got.Disposition != NeedsHuman {
+		t.Errorf("structured approval gate = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", got)
 	}
 }
 

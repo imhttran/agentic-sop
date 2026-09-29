@@ -191,7 +191,7 @@ func Decide(c failure.Classification, p Policy) Decision {
 		}
 	case failure.AutoFix:
 		if p.AutoFix {
-			return auto(ActionAutoFix, c, p, RiskMedium, "a deterministic failure is fixed automatically")
+			return auto(ActionAutoFix, c, p, riskOf(c.Kind), "a deterministic failure is fixed automatically")
 		}
 	case failure.Replan:
 		return humanDecision(c, p, RiskMedium, reasonOr(c.Reason, "the plan assumptions are invalid and require a human decision"))
@@ -254,15 +254,15 @@ func boundaryRisk(c failure.Classification) (ApprovalRisk, bool) {
 
 // riskOf maps a failure kind to the risk it carries when the policy does not
 // otherwise classify it. The authority-boundary kinds are handled by boundaryRisk
-// before this is reached.
+// before this is reached. A deterministic, locally-verifiable failure (a compiler
+// error, a failing test, missing coverage, lint) is LOW risk: the fix is a bounded,
+// re-validated, reversible code edit. An unresolved review/JEV finding or genuinely
+// unclassified evidence carries more risk because what it implies is less certain.
 func riskOf(kind failure.Kind) ApprovalRisk {
 	switch kind {
 	case failure.ReplanRequired:
 		return RiskHigh
-	case failure.Unknown,
-		failure.CompilerError, failure.TestFailure, failure.LintFailure, failure.StaleTest,
-		failure.IntegrationWiring, failure.Regression, failure.MissingTestCoverage,
-		failure.BlockingFindings:
+	case failure.Unknown, failure.BlockingFindings:
 		return RiskMedium
 	case "":
 		return RiskNone

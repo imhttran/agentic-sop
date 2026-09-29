@@ -21,11 +21,23 @@
 // on topic words in its prose: an agent saying it will "sanitize token values" or
 // "keep secrets out of the rendered page" is describing ordinary (even
 // security-relevant) implementation work, not asking to cross a security
-// boundary. Only an explicit authorization request, a destructive/irreversible
-// action, an unresolved requirements conflict, or a security DECISION (weakening
-// authentication, exposing a local capability to unauthenticated clients) is a
-// human boundary. Structured Evidence fields are authoritative when a caller can
-// set them.
+// boundary. The same holds for approval: an agent IMPLEMENTING approval controls
+// (an approve button, an ApproveTask interface, tests for an approval gate, a
+// rendered NEEDS_HUMAN or WAITING_FOR_HUMAN state, or another component's
+// explicitly-unsupported approve operation) is doing ordinary work, not asking the
+// current execution to be authorized. Only an explicit authorization request, a
+// destructive/irreversible action, an unresolved requirements conflict, or a
+// security DECISION (weakening authentication, exposing a local capability to
+// unauthenticated clients) is a human boundary. Structured Evidence fields are
+// authoritative when a caller can set them.
+//
+// Evidence precedence is fixed and structured evidence outranks prose: explicit
+// human boundaries, then an invalid plan, then deterministic verification (build,
+// tests, lint, findings), then a JEV analysis failure, then an infrastructure
+// error, and only then the agent's own outcome (its structured status plus its
+// free-form summary). A deterministic compiler error is therefore never UNKNOWN
+// merely because the agent's summary did not name it: the structured `go build`
+// result is authoritative.
 package failure
 
 import (
@@ -127,6 +139,12 @@ type Evidence struct {
 	LintFailed       bool
 	TestsMissing     bool
 	BlockingFindings int
+	// Detail is the bounded diagnostic for a deterministic verification failure
+	// (for example the compiler error line from a failing `go build`). It is
+	// optional provenance: when set it is appended to the classification reason so
+	// a report explains WHY SOP chose the failure kind instead of relying on the
+	// agent's summary. It never changes the disposition.
+	Detail string
 
 	// Authoritative signals, supplied when a caller can determine them. They
 	// select the specific AUTO_FIX kind; their absence does not change the
@@ -184,13 +202,26 @@ func Classify(ev Evidence) Classification {
 			Reason: "the task/plan assumptions are invalid and cannot be corrected locally while preserving the acceptance criteria"}
 	}
 
-	// 3. An agent-reported failure outcome.
-	if c, ok := fromOutcome(ev); ok {
+	// 3. SOP's own deterministic budget/no-change signal. The agent harness (and the
+	//    outcome reconciler) emit these phrasings when an invocation stopped short of
+	//    changing the repository — in particular "no repository change after N" and
+	//    "tool-call limit reached". Because SOP generated them, they are authoritative
+	//    that the work is merely unfinished, and they take precedence over a
+	//    verification failure: a tree that is still red is red because the work is not
+	//    done yet, not because this invocation regressed it, so the correct disposition
+	//    is to continue with a fresh bounded invocation rather than spend a fix cycle or
+	//    escalate. A genuine human decision is reported without these markers.
+	if c, ok := fromHarness(ev); ok {
 		return c
 	}
 
-	// 4. An infrastructure/provider error.
-	if c, ok := fromError(ev); ok {
+	// 4. Deterministic verification: a build, test, lint, or coverage result (or a
+	//    blocking finding) is STRUCTURED evidence about what actually happened, so
+	//    it outranks the agent's own free-form outcome. A red `go build` with an
+	//    undefined symbol is a compiler error even when the agent's summary is empty
+	//    or says something else; it is never UNKNOWN. The bounded fix budget still
+	//    applies: once it is spent this returns the distinct AutoFixExhausted signal.
+	if c, ok := fromVerification(ev); ok {
 		return c
 	}
 
@@ -208,40 +239,54 @@ func Classify(ev Evidence) Classification {
 		return retry(JEVAnalysisFailure, reason)
 	}
 
-	// 6. A deterministic verification failure: the intended behavior can be
-	//    determined from the task, the domain contract, and the diagnostics, so
-	//    the existing bounded fix loop resolves it.
-	if c, ok := fromVerification(ev); ok {
+	// 6. An infrastructure/provider error (a structured, authoritative signal).
+	if c, ok := fromError(ev); ok {
 		return c
 	}
 
-	// 7. No authoritative signal: fail closed to a human rather than guess.
+	// 7. An agent-reported failure outcome: the agent's structured status plus its
+	//    own free-form summary. It is the weakest structured signal, so it is
+	//    consulted only after every deterministic and infrastructure signal above.
+	if c, ok := fromOutcome(ev); ok {
+		return c
+	}
+
+	// 8. No authoritative signal: fail closed to a human rather than guess.
 	return Classification{Kind: Unknown, Disposition: NeedsHuman, Confidence: Low,
 		Reason: "no authoritative signal was available; a human decision is required"}
 }
 
+// fromHarness recognizes SOP's own deterministic budget/no-change signal: the
+// phrasings the agent harness and the outcome reconciler emit when an invocation
+// stopped short of changing the repository. Because SOP generated them, they are
+// authoritative evidence that the work is merely unfinished, so they are checked
+// before a verification failure: a tree that is still red is red because the work is
+// not done yet, so the correct disposition is a bounded continuation rather than a
+// spent fix cycle or a human boundary.
+func fromHarness(ev Evidence) (Classification, bool) {
+	if ev.Outcome == nil {
+		return Classification{}, false
+	}
+	reason := strings.TrimSpace(firstNonEmpty(ev.Outcome.Reason, ev.Outcome.Summary))
+	if !harnessIncomplete(strings.ToLower(reason)) {
+		return Classification{}, false
+	}
+	return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: High,
+		Reason: describe(reason, "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
+}
+
 // fromOutcome classifies a non-completed agent outcome. It examines the reason
-// text for the boundary, transient, and incomplete signals the harness emits, and
+// text for the boundary, transient, and incomplete signals the model emits, and
 // finally falls back on the status the agent reported: an unexplained `needs_human`
 // is a bounded continuation (SOP's harness uses it to request a requeue), while an
-// unexplained `failed` fails closed to a human.
+// unexplained `failed` fails closed to a human. SOP's own deterministic budget/
+// no-change signal is handled earlier, by fromHarness.
 func fromOutcome(ev Evidence) (Classification, bool) {
 	if ev.Outcome == nil {
 		return Classification{}, false
 	}
 	reason := strings.TrimSpace(firstNonEmpty(ev.Outcome.Reason, ev.Outcome.Summary))
 	text := strings.ToLower(reason)
-
-	// SOP's own deterministic budget-exhaustion / no-change signal wins over the
-	// model's surrounding prose. The harness appends this marker when an invocation
-	// stopped short of changing the repository; because SOP generated it, a
-	// human-boundary keyword the model happens to use while describing the work it
-	// never got to do (for example "credential"/"secret") must not turn a
-	// resumable run into a human decision.
-	if harnessIncomplete(text) {
-		return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: High,
-			Reason: describe(reason, "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
-	}
 
 	// An explicit human-boundary ACTION/DECISION: an authorization request, a
 	// destructive/irreversible action, a security decision, or an unresolved
@@ -309,7 +354,9 @@ func fromError(ev Evidence) (Classification, bool) {
 
 // fromVerification classifies a deterministic verification failure as AUTO_FIX,
 // unless the configured fix budget is already spent, in which case the failure is
-// bounded and escalates to a human.
+// bounded and escalates to a human. It is the strongest structured signal, so the
+// classifier consults it before any agent-reported outcome. A red build is the
+// authoritative BUILD_FAILURE class; the existing vocabulary names it CompilerError.
 func fromVerification(ev Evidence) (Classification, bool) {
 	autoFixable := ev.BuildFailed || ev.TestFailed || ev.LintFailed || ev.TestsMissing || ev.BlockingFindings > 0
 	if !autoFixable {
@@ -318,28 +365,28 @@ func fromVerification(ev Evidence) (Classification, bool) {
 
 	if ev.MaxFixCycles > 0 && ev.FixCycles >= ev.MaxFixCycles {
 		return Classification{Kind: AutoFixExhausted, Disposition: NeedsHuman, Confidence: High,
-			Reason: fmt.Sprintf("automatic fixes were exhausted (%d/%d) without resolving the failure", ev.FixCycles, ev.MaxFixCycles)}, true
+			Reason: describe(ev.Detail, fmt.Sprintf("automatic fixes were exhausted (%d/%d) without resolving the failure", ev.FixCycles, ev.MaxFixCycles))}, true
 	}
 
 	switch {
 	case ev.IntegrationWiring:
-		return autoFix(IntegrationWiring, "an integration wiring error with established interfaces can be corrected"), true
+		return autoFix(IntegrationWiring, describe(ev.Detail, "an integration wiring error with established interfaces can be corrected")), true
 	case ev.Regression:
-		return autoFix(Regression, "a regression introduced by the current task can be corrected"), true
+		return autoFix(Regression, describe(ev.Detail, "a regression introduced by the current task can be corrected")), true
 	case ev.StaleTest:
-		return autoFix(StaleTest, "a stale test conflicts with the authoritative contract; the test should be updated"), true
+		return autoFix(StaleTest, describe(ev.Detail, "a stale test conflicts with the authoritative contract; the test should be updated")), true
 	case ev.ConflictResolvedByPlan:
-		return autoFix(TestFailure, "the plan/domain contract resolves the conflicting tests; the tests should be updated"), true
+		return autoFix(TestFailure, describe(ev.Detail, "the plan/domain contract resolves the conflicting tests; the tests should be updated")), true
 	case ev.TestsMissing:
-		return autoFix(MissingTestCoverage, "required deterministic test coverage is missing"), true
+		return autoFix(MissingTestCoverage, describe(ev.Detail, "required deterministic test coverage is missing")), true
 	case ev.BuildFailed:
-		return autoFix(CompilerError, "the build failed with clear diagnostics"), true
+		return autoFix(CompilerError, describe(ev.Detail, "the build failed with clear diagnostics")), true
 	case ev.LintFailed:
-		return autoFix(LintFailure, "lint/static analysis failed"), true
+		return autoFix(LintFailure, describe(ev.Detail, "lint/static analysis failed")), true
 	case ev.TestFailed:
-		return autoFix(TestFailure, "a deterministic test failed against an established contract"), true
+		return autoFix(TestFailure, describe(ev.Detail, "a deterministic test failed against an established contract")), true
 	default:
-		return autoFix(BlockingFindings, "blocking review findings remain"), true
+		return autoFix(BlockingFindings, describe(ev.Detail, "blocking review findings remain")), true
 	}
 }
 
@@ -397,13 +444,25 @@ func harnessIncomplete(text string) bool {
 
 // Boundary markers: an explicit human decision/approval/safety boundary.
 var (
-	// approvalMarkers recognize an explicit authorization request (the agent is
-	// asking to be allowed to proceed), not the topic of the work.
+	// approvalMarkers recognize an explicit REQUEST to be authorized to proceed —
+	// the agent is asking that the current execution be allowed to continue, not
+	// naming the subject of the work. Bare topic/state words are deliberately
+	// absent: approve, approval, human, consent, sign-off, signoff, permission,
+	// NEEDS_HUMAN, WAITING_FOR_HUMAN, decline, gate. Implementing, rendering,
+	// testing, or documenting approval controls is ordinary work, and naming another
+	// system's or a domain value's state (NEEDS_HUMAN / WAITING_FOR_HUMAN / PlanGate)
+	// is not a request. The authoritative structured signal is Evidence.ApprovalRequired.
 	approvalMarkers = []string{
-		"approval", "approve", "authoriz", "consent", "sign-off", "signoff", "permission",
 		"needs auth", "need auth", "requires auth", "require auth", "auth required",
-		"needs authentication", "needs authorization", "requires authentication", "requires authorization",
-		"authentication required", "authorization required",
+		"needs authentication", "needs authorization", "requires authentication",
+		"requires authorization", "authentication required", "authorization required",
+		"needs human authorization", "requires human authorization",
+		"needs approval to proceed", "requires approval to proceed",
+		"needs human approval to proceed", "requires human approval to proceed",
+		"awaiting approval", "awaiting authorization",
+		"waiting for approval", "waiting for authorization",
+		"needs sign-off", "needs signoff", "requires sign-off", "requires signoff",
+		"needs consent", "requires consent", "needs permission", "requires permission",
 	}
 	destructiveMarkers = []string{"destructive", "irreversible", "cannot be undone", "can't be undone", "data loss", "permanent damage", "destroys"}
 	// conflictMarkers recognize an explicit request for a human/authoritative
@@ -436,7 +495,12 @@ var securityDecisionMarkers = []string{
 
 // humanActionKind recognizes a human-boundary ACTION or DECISION in text, in a
 // fixed precedence order, and reports the matching kind. It matches what the
-// agent is asking to DO, not which words its prose happens to contain.
+// agent is asking to DO, not which words its prose happens to contain: an agent
+// implementing approval controls, rendering a NEEDS_HUMAN state, or describing
+// another component's unsupported capability is not requesting authorization for
+// the current execution. The authoritative signal for a human boundary is a
+// structured Evidence field (ApprovalRequired, SecurityBoundary, ...), set from
+// the current lifecycle state; prose only supplements it with explicit requests.
 func humanActionKind(text string) (Kind, bool) {
 	switch {
 	case matchesAny(text, approvalMarkers):
