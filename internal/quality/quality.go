@@ -36,6 +36,17 @@ const (
 	Pass Decision = "PASS"
 	// Fail: a required check failed or a blocking finding remains within budget.
 	Fail Decision = "FAIL"
+	// Continue: the run did not pass, but no human decision is required: the
+	// invocation stopped short of finishing (a budget/no-change exhaustion or a
+	// transient provider failure) and the task should be requeued through the
+	// existing bounded continuation path.
+	//
+	// Evaluate never returns Continue: like Pass and Fail it is decided from the
+	// gate's evidence, whereas Continue describes a run that never reached a gate
+	// verdict. It is produced by the lifecycle when a resumable continuation is
+	// detected, so the operator is told SOP will continue on its own rather than
+	// that a human is needed.
+	Continue Decision = "CONTINUE"
 	// NeedsHuman: a human must decide (approval requested or budget exhausted).
 	NeedsHuman Decision = "NEEDS_HUMAN"
 )

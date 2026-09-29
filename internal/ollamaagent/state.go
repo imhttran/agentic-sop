@@ -1,5 +1,10 @@
 package ollamaagent
 
+import (
+	"fmt"
+	"strings"
+)
+
 // Invocation-scoped execution state.
 //
 // A Harness is reused across invocations, so every piece of execution evidence
@@ -32,7 +37,23 @@ type executionState struct {
 
 	// finalization is the invocation's finalization state.
 	finalization finalizationState
+
+	// inspected lists the repository paths this invocation inspected (read,
+	// listed, or searched), first-seen, deduplicated, and bounded. It is the
+	// deterministic half of a continuation checkpoint: a run that stops short of
+	// changing the repository hands the next invocation the paths it already looked
+	// at, so the next bounded invocation resumes instead of repeating discovery.
+	// It holds paths only — never file contents, prompts, or secrets.
+	inspected []string
 }
+
+// maxCheckpointFiles bounds the continuation checkpoint, so a long discovery run
+// cannot grow the recorded context without limit.
+const maxCheckpointFiles = 12
+
+// maxCheckpointShown bounds how many inspected paths the diagnostic renders; the
+// remainder is summarized as a count.
+const maxCheckpointShown = 5
 
 // executionCounters are the invocation's interaction counters. They measure work
 // done in one invocation and are never carried across invocations.
@@ -84,6 +105,44 @@ func (st *executionState) countNonMutatingInteraction() {
 	if st.mutationObserved {
 		st.counters.sinceMutation++
 	}
+}
+
+// recordInspected adds a repository path to the invocation's continuation
+// checkpoint. It is first-seen ordered, deduplicated, and bounded, so it stays a
+// compact summary rather than a transcript.
+func (st *executionState) recordInspected(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return
+	}
+	for _, seen := range st.inspected {
+		if seen == path {
+			return
+		}
+	}
+	if len(st.inspected) >= maxCheckpointFiles {
+		return
+	}
+	st.inspected = append(st.inspected, path)
+}
+
+// inspectedSummary renders the checkpoint's inspected paths for the no-change
+// diagnostic: the first few, then a count of the rest. It returns "" when nothing
+// was inspected, so a run that read no files adds nothing to the message.
+func (st *executionState) inspectedSummary() string {
+	n := len(st.inspected)
+	if n == 0 {
+		return ""
+	}
+	shown := n
+	if shown > maxCheckpointShown {
+		shown = maxCheckpointShown
+	}
+	summary := strings.Join(st.inspected[:shown], ", ")
+	if n > shown {
+		summary += fmt.Sprintf(" (+%d more)", n-shown)
+	}
+	return summary
 }
 
 // finalizeEligible reports whether the phased loop may withdraw its tools.

@@ -34,9 +34,12 @@ type Metrics struct {
 	Failed     int
 	NeedsHuman int
 	Errored    int
-	Findings   int
-	Cycles     int
-	Duration   time.Duration
+	// Continued counts cases whose run stopped short of finishing without
+	// requiring a human decision (a resumable continuation).
+	Continued int
+	Findings  int
+	Cycles    int
+	Duration  time.Duration
 }
 
 // Run executes every case via runner and returns the aggregate metrics plus the
@@ -67,6 +70,8 @@ func (m *Metrics) add(out Outcome) {
 		m.Failed++
 	case out.Decision == quality.NeedsHuman:
 		m.NeedsHuman++
+	case out.Decision == quality.Continue:
+		m.Continued++
 	}
 	m.Findings += out.Findings
 	m.Cycles += out.Cycles

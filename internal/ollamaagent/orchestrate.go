@@ -399,6 +399,15 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 		recordToolActivity(ctx, name, args)
 
+		// An inspection is remembered in the invocation's continuation checkpoint,
+		// so a run that stops short of changing the repository can hand the next
+		// invocation the paths it already looked at. A failed read is recorded too:
+		// the intent to inspect that path is the useful signal, and the recorded
+		// value is the path alone.
+		if path, ok := checkpointPath(name, args); ok {
+			st.recordInspected(path)
+		}
+
 		// A successful controlled mutation is the primary execution evidence: it
 		// moves the invocation out of discovery and grounds changes_expected. A
 		// failed or denied write never counts, and neither does a read, a search,
@@ -515,10 +524,18 @@ type changeIncompleteError struct{ msg string }
 
 func (e *changeIncompleteError) Error() string { return e.msg }
 
-// noChangeError builds the retryable "made no repository change" diagnostic.
+// noChangeError builds the retryable "made no repository change" diagnostic. It
+// carries a compact continuation checkpoint (the phase the invocation stopped in
+// and the repository paths it inspected), so the next bounded invocation resumes
+// from the context already gathered instead of repeating discovery.
 func (h *Harness) noChangeError(req agent.Request, policy CapabilityPolicy, st *executionState, lastTool, lastRequest string) error {
-	return &changeIncompleteError{fmt.Sprintf("the Ollama agent %s made no repository change after %d iterations (model=%s, tool_calls=%d, termination=%s%s); a retry may succeed",
-		req.Capability, policy.MaxIterations, h.cfg.Model, st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))}
+	msg := fmt.Sprintf("the Ollama agent %s made no repository change after %d iterations (model=%s, tool_calls=%d, termination=%s%s); a retry may succeed",
+		req.Capability, policy.MaxIterations, h.cfg.Model, st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))
+	if inspected := st.inspectedSummary(); inspected != "" {
+		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
+			st.phase.label(), inspected)
+	}
+	return &changeIncompleteError{msg}
 }
 
 // implementExhaustedError reports that a phased run consumed its hard iteration

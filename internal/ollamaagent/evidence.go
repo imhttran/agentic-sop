@@ -69,3 +69,17 @@ func commandMutates(command string) bool {
 	}
 	return false
 }
+
+// checkpointPath returns the repository path a read/inspect tool was asked to
+// inspect, and whether it is worth recording in the continuation checkpoint. It
+// reads only the tool's own path argument; a search with no path is not a file
+// and contributes nothing.
+func checkpointPath(name string, args map[string]any) (string, bool) {
+	switch name {
+	case toolharness.ToolReadFile, toolharness.ToolListFiles, toolharness.ToolSearchFiles:
+		if path, ok := args["path"].(string); ok && strings.TrimSpace(path) != "" {
+			return strings.TrimSpace(path), true
+		}
+	}
+	return "", false
+}

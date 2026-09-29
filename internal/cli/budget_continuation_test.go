@@ -51,8 +51,11 @@ func TestRunBudgetExhaustionWithHumanKeywordsContinues(t *testing.T) {
 	if !strings.Contains(stdout, "CONTINUE") {
 		t.Errorf("stdout = %q, want the CONTINUE disposition", stdout)
 	}
-	if strings.Contains(stdout, "S001 NEEDS_HUMAN") {
-		t.Errorf("stdout = %q, want NEEDS_HUMAN to be overridden by the budget-exhaustion disposition", stdout)
+	if !strings.Contains(stdout, "run S001: CONTINUE") {
+		t.Errorf("stdout = %q, want the run reported as CONTINUE, not a human boundary", stdout)
+	}
+	if strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q, want NEEDS_HUMAN fully absent for a resumable run", stdout)
 	}
 	if !strings.Contains(stdout, "S001 CONTINUE (requeued)") {
 		t.Errorf("stdout = %q, want S001 requeued as CONTINUE", stdout)
@@ -136,6 +139,11 @@ func TestRunBudgetContinuationIsBounded(t *testing.T) {
 	}
 	if !strings.Contains(stdout, "retry budget exhausted") {
 		t.Errorf("stdout = %q, want the bounded retry budget message", stdout)
+	}
+	// Repeated no-mutation continuation ends in a terminal stuck/retry state, not
+	// a human boundary.
+	if strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q, a bounded retry exhaustion must not be reported as NEEDS_HUMAN", stdout)
 	}
 
 	st, err := store.Open(statePath(dir))

@@ -307,8 +307,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		_ = rn.Write("implementation.md", impl.Content)
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-			emitOutcomeActivity(ar, impl.Outcome)
-			return outcomeResult(rn, "IMPLEMENT", impl.Outcome), nil
+			return outcomeResult(ctx, rn, "IMPLEMENT", impl.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -447,8 +446,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			emitOutcomeActivity(ar, fix.Outcome)
-			return outcomeResult(rn, "FIX", fix.Outcome), nil
+			return outcomeResult(ctx, rn, "FIX", fix.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -474,6 +472,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	case quality.NeedsHuman:
 		stage = runpkg.WaitingForHuman
 		ar.Emit(activity.StageBlocked, string(gate.Decision), firstReason(gate))
+	case quality.Continue:
+		// Never produced by Evaluate, but a continuation must not be mistaken for a
+		// pass if a future gate verdict returns one.
+		stage = runpkg.Failed
+		ar.Emit(activity.StageClassify, string(gate.Decision), firstReason(gate))
 	default:
 		ar.Emit(activity.StageComplete, string(gate.Decision), "")
 	}
@@ -587,9 +590,16 @@ func firstReason(gate quality.Result) string {
 	return gate.Reasons[0]
 }
 
-// emitOutcomeActivity reports a non-completed agent outcome (the failure or human
-// boundary the model chose to return) on the activity stream.
-func emitOutcomeActivity(ar *activity.Recorder, outcome *agent.Outcome) {
+// emitOutcomeActivity reports a non-completed agent outcome on the activity
+// stream. A resumable continuation (a retryable disposition) is reported as a
+// CLASSIFY event carrying the disposition, so it is visibly distinct from a human
+// boundary (BLOCKED) and a hard failure (FAILED): the operator sees SOP will
+// continue on its own.
+func emitOutcomeActivity(ar *activity.Recorder, outcome *agent.Outcome, class failure.Classification) {
+	if class.Retryable() {
+		ar.Emit(activity.StageClassify, string(class.Disposition), string(class.Kind))
+		return
+	}
 	if outcome.Status == agent.OutcomeNeedsHuman {
 		ar.Emit(activity.StageBlocked, string(outcome.Status), "")
 		return
@@ -607,12 +617,19 @@ func emitClassificationActivity(ctx context.Context, cls failure.Classification)
 	activity.FromContext(ctx).Emit(activity.StageClassify, string(cls.Disposition), string(cls.Kind))
 }
 
-// outcomeResult maps a non-completed agent outcome to a run result: a human
-// boundary becomes NEEDS_HUMAN, any other reported failure becomes FAIL. A
-// reported outcome is never treated as success. It also attaches the
-// failure-fixability classification, so the driver can apply the same
-// disposition logic it applies to a deterministic gate failure.
-func outcomeResult(rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
+// outcomeResult maps a non-completed agent outcome to a run result and reports it
+// on the activity stream. SOP owns the lifecycle, so the failure classifier's
+// evidence decides the disposition rather than the status label alone: an outcome
+// that is a resumable continuation (budget/no-change exhaustion, a transient
+// provider failure) is NOT a human boundary even though the harness labels it
+// needs_human to request a requeue. Such an outcome is reported as CONTINUE so the
+// operator sees SOP will continue on its own, and the driver requeues it through
+// the existing bounded recovery path. Only a genuine human boundary (approval,
+// safety, ambiguity) becomes NEEDS_HUMAN; any other reported failure becomes FAIL.
+// A reported outcome is never treated as success. It also attaches the
+// classification, so the driver applies the same disposition logic it applies to a
+// deterministic gate failure.
+func outcomeResult(ctx context.Context, rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
 	reason := outcome.Reason
 	if reason == "" {
 		reason = outcome.Summary
@@ -621,6 +638,15 @@ func outcomeResult(rn *runpkg.Run, source string, outcome *agent.Outcome) lifeRe
 		reason = string(outcome.Status)
 	}
 	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome})
+	emitOutcomeActivity(activity.FromContext(ctx), outcome, class)
+
+	if outcome.Status == agent.OutcomeNeedsHuman && class.Retryable() {
+		// A resumable continuation: the invocation did not finish, but no human
+		// decision is required. Report CONTINUE (never NEEDS_HUMAN), mirroring the
+		// gate-failure path where a retryable disposition is a non-pass result.
+		_ = rn.SetStage(runpkg.Failed)
+		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class}
+	}
 	if outcome.Status == agent.OutcomeNeedsHuman {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
 		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman, classification: class}

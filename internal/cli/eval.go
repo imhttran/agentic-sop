@@ -107,8 +107,8 @@ func writeEval(w io.Writer, m eval.Metrics, outcomes []eval.Outcome) {
 		fmt.Fprintf(w, "%-16s %-12s %-7d %-9d %s\n",
 			out.Case.ID, gate, out.Cycles, out.Findings, out.Duration.Round(time.Millisecond))
 	}
-	fmt.Fprintf(w, "\ntotal: %d  passed: %d  failed: %d  needs_human: %d  errored: %d\n",
-		m.Total, m.Passed, m.Failed, m.NeedsHuman, m.Errored)
+	fmt.Fprintf(w, "\ntotal: %d  passed: %d  failed: %d  needs_human: %d  continued: %d  errored: %d\n",
+		m.Total, m.Passed, m.Failed, m.NeedsHuman, m.Continued, m.Errored)
 	fmt.Fprintf(w, "success: %.0f%%  cycles: %d  findings: %d  duration: %s\n",
 		m.SuccessRate()*100, m.Cycles, m.Findings, m.Duration.Round(time.Millisecond))
 }

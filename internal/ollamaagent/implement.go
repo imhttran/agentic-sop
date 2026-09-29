@@ -68,12 +68,11 @@ SOP will perform independent validation afterward.`
 
 	implementFinalInstruction = `You have not yet performed the required repository change.
 
-Do not continue repository exploration.
+This invocation is ending, so no further repository tools are available.
 
-Either:
-- perform the required implementation now using the available tools, or
-- return a truthful structured outcome (needs_human or failed) explaining why
-  the implementation could not be performed.
+Return a truthful structured outcome now (needs_human or failed) explaining what
+remains to be implemented and why the change was not made in this invocation.
+SOP will continue this task in a later bounded invocation.
 
 Do not claim completion without making the required change. Do not invent
 repository changes. SOP will independently validate the repository.`
