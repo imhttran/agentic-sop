@@ -186,6 +186,11 @@ func (t *Task) IsBlockedRecoverable() bool {
 	if t.Status != BLOCKED {
 		return false
 	}
+	// A task terminally stuck after its bounded continuation budget was spent is
+	// not recovered automatically again; only an explicit `sop retry` reopens it.
+	if t.BlockedReason == CONTINUATION_EXHAUSTED {
+		return false
+	}
 	if t.MaxAttempts > 0 && t.Attempt >= t.MaxAttempts {
 		return false
 	}

@@ -29,6 +29,9 @@ type Autonomy struct {
 	// AutoReconcileSafeChanges permits automatic reconciliation of semantically
 	// safe plan changes.
 	AutoReconcileSafeChanges *bool `yaml:"auto_reconcile_safe_changes"`
+	// MaxContinuations bounds automatic continuation of productive incomplete work.
+	// It is separate from the per-task retry budget (max_attempts).
+	MaxContinuations *int `yaml:"max_continuations"`
 }
 
 // AutonomyPolicy resolves the configured autonomy block into the deterministic
@@ -47,6 +50,9 @@ func (c Config) AutonomyPolicy() autonomy.Policy {
 	}
 	if c.Autonomy.AutoReconcileSafeChanges != nil {
 		p.AutoReconcileSafeChanges = *c.Autonomy.AutoReconcileSafeChanges
+	}
+	if c.Autonomy.MaxContinuations != nil && *c.Autonomy.MaxContinuations > 0 {
+		p.MaxContinuations = *c.Autonomy.MaxContinuations
 	}
 	return p
 }

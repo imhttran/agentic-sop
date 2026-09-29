@@ -295,3 +295,138 @@ func TestJEVFailureDoesNotOverrideHumanBoundary(t *testing.T) {
 		t.Errorf("disposition = %s, want NEEDS_HUMAN (a human boundary outranks a JEV failure)", got.Disposition)
 	}
 }
+
+// ctrl008Reason is the real outcome reason from the CTRL008 dogfood run: the
+// agent exhausted its bounded tool budget after productive repository discovery
+// and made no repository change. Its explanation mentions ordinary
+// security-relevant implementation words (secret, token, prompt, "raw"), but it
+// does not request authorization or propose crossing any security boundary.
+const ctrl008Reason = "No repository edits were performed in this invocation; discovery completed but tools ended before any write. " +
+	"Remaining, fully-scoped work (all sources confirmed against source, no sopclient/API changes needed): " +
+	"wire evidenceState into templates; apply the not-run/unavailable convention to empty states; " +
+	"add regression tests asserting absent data never renders PASS and no raw prompt/secret text is shown " +
+	"for a fixture task carrying prompt/token fields. A later bounded invocation should perform these edits."
+
+// TestProductiveDiscoveryNoMutationIsContinue pins the fix for the CTRL008 dogfood
+// failure: an invocation that exhausted its budget after productive discovery made
+// no repository change, but that is a bounded continuation — not a human decision —
+// and the security-relevant vocabulary in the agent's own prose must not turn it
+// into a SECURITY_BOUNDARY.
+func TestProductiveDiscoveryNoMutationIsContinue(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{
+		Status: agent.OutcomeNeedsHuman,
+		Reason: ctrl008Reason,
+	}})
+	if got.Disposition != Continue {
+		t.Fatalf("disposition = %s (kind=%s reason=%q), want CONTINUE", got.Disposition, got.Kind, got.Reason)
+	}
+	if got.Kind != IncompleteImplementation {
+		t.Errorf("kind = %s, want %s", got.Kind, IncompleteImplementation)
+	}
+	if got.Kind == SecurityBoundary {
+		t.Errorf("kind = %s, want no security boundary for ordinary implementation prose", got.Kind)
+	}
+}
+
+// TestTopicWordsNeverImplySecurityBoundary proves the classifier decides on the
+// requested action, not on security-related words appearing anywhere in the
+// agent's explanation.
+func TestTopicWordsNeverImplySecurityBoundary(t *testing.T) {
+	reasons := []string{
+		"discovery finished but no edits were made; remaining work is to add a regression test ensuring secrets are not rendered",
+		"no raw prompt/secret echoing; the sanitizer must redact token values before rendering, then continue with the edits",
+		"required by the acceptance criteria: sanitize token values before rendering so credentials are never displayed",
+	}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Disposition == NeedsHuman || got.Kind == SecurityBoundary {
+				t.Errorf("classification = %+v, want a non-human continuation (no security boundary from topic words)", got)
+			}
+		})
+	}
+}
+
+// TestSecurityDecisionStillNeedsHuman proves a genuine security DECISION is still
+// a human boundary: an action that changes a trust or privilege boundary, not a
+// topic word.
+func TestSecurityDecisionStillNeedsHuman(t *testing.T) {
+	reasons := []string{
+		"the change would weaken authentication so any caller is trusted",
+		"exposing local command execution to remote unauthenticated clients is required",
+	}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Disposition != NeedsHuman || got.Kind != SecurityBoundary {
+				t.Errorf("classification = %+v, want NEEDS_HUMAN/SECURITY_BOUNDARY", got)
+			}
+		})
+	}
+}
+
+// TestBudgetExhaustionAloneNeverSecurityBoundary pins requirements 8-10: tool
+// budget exhaustion, no mutation, and retry exhaustion by themselves never imply
+// a security boundary.
+func TestBudgetExhaustionAloneNeverSecurityBoundary(t *testing.T) {
+	cases := []Evidence{
+		{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "tool-call limit reached (40 tool calls); the model did not finish"}},
+		{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the agent made no repository change"}},
+		{Source: "VALIDATE", TestFailed: true, FixCycles: 3, MaxFixCycles: 3},
+	}
+	for _, ev := range cases {
+		if got := Classify(ev); got.Kind == SecurityBoundary {
+			t.Errorf("evidence %+v classified as SECURITY_BOUNDARY (%s)", ev.Source, got.Reason)
+		}
+	}
+}
+
+// TestUnexplainedNeedsHumanIsAContinuation proves SOP does not park an agent that
+// used the needs_human status without reporting an actual boundary: the harness
+// uses needs_human to request a bounded requeue, so it is unfinished work.
+func TestUnexplainedNeedsHumanIsAContinuation(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "stopped here"}})
+	if got.Disposition != Continue {
+		t.Errorf("disposition = %s (kind=%s), want CONTINUE", got.Disposition, got.Kind)
+	}
+}
+
+// TestUnexplainedFailureStillFailsClosed proves the fallback did not weaken the
+// fail-closed default for a plain failed outcome.
+func TestUnexplainedFailureStillFailsClosed(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "boom"}})
+	if got.Disposition != NeedsHuman {
+		t.Errorf("disposition = %s, want NEEDS_HUMAN (a hard failure is terminal)", got.Disposition)
+	}
+}
+
+// ctrl008RealReason is the verbatim outcome reason persisted by the CTRL008
+// dogfood run. It must classify as a bounded continuation, not SECURITY_BOUNDARY.
+const ctrl008RealReason = "No repository edits were performed in this invocation; discovery completed but tools ended before any write. Remaining, fully-scoped work (all sources confirmed against source, no sopclient/API changes needed): (1) internal/web/render.go — the dead helpers evidenceState/notRunLabel are defined but unused; wire evidenceState into templates and split wording so absent-persisted data renders 'unavailable' while present-but-empty renders 'not run'; absence must never yield a PASS-class badge. (2) templates/task.html — add labeled rows/sections not yet present, using confirmed sources only: Started/elapsed (no StartedAt on TaskDetail; only TaskSummary.UpdatedAt, RunInfo.GeneratedAt/UpdatedAt, Attempt.Timestamp — render a derived elapsed/relative value or explicit 'unavailable', never invent one); Provider/model (RunInfo.Provider/Model); Fix cycles (RunInfo.FixCycles); Retry attempts (TaskSummary.Retries() (int,bool) distinguishing true zero from absence); Blocked reason (TaskSummary.BlockedReason, today only raw BlockedBy is shown); Failure classification (Run.Classification{Kind,Disposition,Confidence,Reason}); Recovery disposition (Task.Recovery / Task.Recovering()); Report (Task.Report ReportRef{Present,Path,Name}). (3) templates/task.html + partials — split Validation/Review/JEV/Quality into four visually distinct individually-labeled sections. (4) partials/status.html, review.html, ci.html — apply the not-run/unavailable convention to empty states. (5) static/app.css — add small-screen rules for the detail page. (6) internal/web tests — add regression tests asserting CTRL008 field labels are present, absent data never renders PASS, no raw prompt/secret text for a fixture task carrying prompt/token fields, and viewport meta + responsive rules exist. Verification pending: go build ./... and go test ./internal/web/... ./internal/sopclient/.... A later bounded invocation should perform these edits; no sopclient/API changes are required."
+
+// TestCTRL008ExactReasonContinues pins the fix against the verbatim CTRL008
+// reason, so a future marker change cannot silently reintroduce the false
+// SECURITY_BOUNDARY.
+func TestCTRL008ExactReasonContinues(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{
+		Status: agent.OutcomeNeedsHuman,
+		Reason: ctrl008RealReason,
+	}})
+	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
+		t.Fatalf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", got)
+	}
+}
+
+// TestExplicitHumanRequestStillNeedsHuman proves the tightened fallback still
+// honors an explicit request for a human decision.
+func TestExplicitHumanRequestStillNeedsHuman(t *testing.T) {
+	reasons := []string{"needs auth", "required operation needs human authorization", "this needs a decision"}
+	for _, reason := range reasons {
+		t.Run(reason, func(t *testing.T) {
+			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
+			if got.Disposition != NeedsHuman {
+				t.Errorf("classification = %+v, want NEEDS_HUMAN", got)
+			}
+		})
+	}
+}

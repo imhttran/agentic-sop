@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -105,6 +106,32 @@ func (r *Run) ReadAttempt() (string, bool) {
 // RecordAttempt stores this attempt's outcome signature for the next run.
 func (r *Run) RecordAttempt(signature string) error {
 	return os.WriteFile(filepath.Join(r.dir, attemptFileName), []byte(signature+"\n"), 0o644)
+}
+
+// continuationFileName stores how many bounded continuations a task has consumed.
+// Like attempt.txt it is not reset by New, so the continuation budget survives
+// across invocations. It is deliberately separate from attempt.txt: a RETRY
+// repeats a failed attempt against max_attempts, while a CONTINUE resumes useful
+// but unfinished work against max_continuations.
+const continuationFileName = "continuations.txt"
+
+// ReadContinuations returns the number of continuations recorded so far. A
+// missing or malformed file reads as zero.
+func (r *Run) ReadContinuations() int {
+	data, err := os.ReadFile(filepath.Join(r.dir, continuationFileName))
+	if err != nil {
+		return 0
+	}
+	n, err := strconv.Atoi(strings.TrimSpace(string(data)))
+	if err != nil || n < 0 {
+		return 0
+	}
+	return n
+}
+
+// RecordContinuations stores the continuation count for the next run.
+func (r *Run) RecordContinuations(n int) error {
+	return os.WriteFile(filepath.Join(r.dir, continuationFileName), []byte(strconv.Itoa(n)+"\n"), 0o644)
 }
 
 // Load reads a run's persisted stage without creating or modifying anything.

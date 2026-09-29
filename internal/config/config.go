@@ -577,6 +577,7 @@ autonomy:
   #   auto_continue: true
   #   auto_fix: true
   #   auto_reconcile_safe_changes: true
+  #   max_continuations: 4
 
 workflow:
   # local | pull-request

@@ -111,7 +111,18 @@ type Policy struct {
 	// AutoReconcileSafeChanges permits automatic reconciliation of semantically
 	// safe plan changes (for example a descriptive-only change to an executed task).
 	AutoReconcileSafeChanges bool
+	// MaxContinuations bounds automatic continuation of productive incomplete work.
+	// It is deliberately separate from the per-task retry budget: a RETRY repeats a
+	// failed attempt, while a CONTINUE resumes useful work that simply did not
+	// finish, and the two should not consume the same allowance.
+	MaxContinuations int
 }
+
+// DefaultMaxContinuations bounds automatic continuation when no explicit limit is
+// configured. It is separate from, and slightly larger than, the default retry
+// budget, because a continuation resumes real progress rather than repeating a
+// failure.
+const DefaultMaxContinuations = 4
 
 // DefaultLevel is the conservative, backward-compatible default: an omitted
 // `autonomy` block resolves to Balanced, which automates exactly the recoveries
@@ -121,7 +132,7 @@ const DefaultLevel = Balanced
 // PolicyFor returns the built-in policy for a level. An unknown level resolves to
 // the conservative default.
 func PolicyFor(level Level) Policy {
-	p := Policy{Level: normalize(level)}
+	p := Policy{Level: normalize(level), MaxContinuations: DefaultMaxContinuations}
 	switch p.Level {
 	case Low:
 		p.AutoRetry, p.AutoContinue, p.AutoFix, p.AutoReconcileSafeChanges = true, true, false, false

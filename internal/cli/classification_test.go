@@ -113,8 +113,9 @@ func TestRunGraphTransientProviderRetries(t *testing.T) {
 }
 
 // TestRunGraphContinueIsBounded proves test 15 at the lifecycle level: a task that
-// keeps exhausting its budget is not retried forever — the configured max_attempts
-// bound eventually blocks it terminally.
+// keeps exhausting its budget is not continued forever — the configured
+// continuation budget (max_continuations, default 4) eventually blocks it
+// terminally, as a bounded automation failure rather than a human decision.
 func TestRunGraphContinueIsBounded(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
@@ -123,9 +124,9 @@ func TestRunGraphContinueIsBounded(t *testing.T) {
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
 
-	// Each attempt reports a distinct incomplete reason so it makes "progress"
-	// (and so spends the budget); the bound is MaxAttempts (default 3).
-	for i := 0; i < 3; i++ {
+	// Each attempt reports a distinct incomplete reason so it makes "progress";
+	// the bound is the continuation budget (default 4), separate from max_attempts.
+	for i := 0; i < 4; i++ {
 		a := outcomeAgent{outcome: &agent.Outcome{
 			Status: agent.OutcomeFailed,
 			Reason: fmt.Sprintf("did not complete after 24 iterations (termination=iteration_limit, attempt=%d)", i),
@@ -143,8 +144,11 @@ func TestRunGraphContinueIsBounded(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("final run: code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "retry budget exhausted") {
-		t.Errorf("stdout = %q, want the bounded retry budget message", stdout)
+	if !strings.Contains(stdout, "continuation budget exhausted") {
+		t.Errorf("stdout = %q, want the bounded continuation budget message", stdout)
+	}
+	if strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q, a bounded continuation exhaustion must not be reported as NEEDS_HUMAN", stdout)
 	}
 
 	st, err := store.Open(statePath(dir))
@@ -157,7 +161,7 @@ func TestRunGraphContinueIsBounded(t *testing.T) {
 		t.Fatalf("get task: %v", err)
 	}
 	if got.Status != domain.BLOCKED {
-		t.Errorf("status = %s, want BLOCKED after the retry budget is spent", got.Status)
+		t.Errorf("status = %s, want BLOCKED after the continuation budget is spent", got.Status)
 	}
 }
 

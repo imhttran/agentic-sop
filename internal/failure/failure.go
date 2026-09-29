@@ -16,6 +16,16 @@
 // iterations, ran out of tools, left work unfinished, still needs tests written,
 // hit a deterministic test failure, needs more investigation, or failed a first
 // fix attempt. Those are AUTO_FIX, CONTINUE, or RETRY.
+//
+// A boundary is decided on the ACTION or DECISION the agent is requesting, never
+// on topic words in its prose: an agent saying it will "sanitize token values" or
+// "keep secrets out of the rendered page" is describing ordinary (even
+// security-relevant) implementation work, not asking to cross a security
+// boundary. Only an explicit authorization request, a destructive/irreversible
+// action, an unresolved requirements conflict, or a security DECISION (weakening
+// authentication, exposing a local capability to unauthenticated clients) is a
+// human boundary. Structured Evidence fields are authoritative when a caller can
+// set them.
 package failure
 
 import (
@@ -211,8 +221,10 @@ func Classify(ev Evidence) Classification {
 }
 
 // fromOutcome classifies a non-completed agent outcome. It examines the reason
-// text for the boundary, transient, and incomplete signals the harness emits,
-// then falls back to respecting the status the agent reported.
+// text for the boundary, transient, and incomplete signals the harness emits, and
+// finally falls back on the status the agent reported: an unexplained `needs_human`
+// is a bounded continuation (SOP's harness uses it to request a requeue), while an
+// unexplained `failed` fails closed to a human.
 func fromOutcome(ev Evidence) (Classification, bool) {
 	if ev.Outcome == nil {
 		return Classification{}, false
@@ -231,20 +243,34 @@ func fromOutcome(ev Evidence) (Classification, bool) {
 			Reason: describe(reason, "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
 	}
 
-	if kind, ok := humanKind(text); ok {
+	// An explicit human-boundary ACTION/DECISION: an authorization request, a
+	// destructive/irreversible action, a security decision, or an unresolved
+	// requirements conflict. Topic words alone never match.
+	if kind, ok := humanActionKind(text); ok {
 		return human(kind, describe(reason, "the agent reported a boundary that requires a human")), true
 	}
-	if kind, ok := transientKind(text); ok {
-		return retry(kind, describe(reason, "a transient failure occurred")), true
+	// A provider transport failure is reported as a failed outcome; a needs_human
+	// outcome is reporting blocked or unfinished work, so its prose is not scanned
+	// for transport markers ("unavailable", "network") that also occur in ordinary
+	// descriptions of the work still to do.
+	if ev.Outcome.Status != agent.OutcomeNeedsHuman {
+		if kind, ok := transientKind(text); ok {
+			return retry(kind, describe(reason, "a transient failure occurred")), true
+		}
 	}
 	if matchesAny(text, incompleteMarkers) {
 		return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: High,
 			Reason: describe(reason, "the implementation is unfinished; no human decision is required")}, true
 	}
 
-	// No recognized signal. An agent that explicitly asked for a human is
-	// honored; a plain failure is parked at the human boundary rather than
-	// silently retried forever.
+	// No explicit boundary signal. SOP's own harness uses needs_human to request a
+	// bounded requeue — it is not authoritative that a human is needed — so an
+	// unexplained needs_human is unfinished work, not a human decision. A plain
+	// `failed` outcome with no signal still fails closed rather than looping.
+	if ev.Outcome.Status == agent.OutcomeNeedsHuman {
+		return Classification{Kind: IncompleteImplementation, Disposition: Continue, Confidence: Medium,
+			Reason: describe(reason, "the agent stopped without an explicit human-boundary signal; the work continues unless a boundary is reported")}, true
+	}
 	return human(Unknown, describe(reason, "the agent reported a failure without an authoritative signal")), true
 }
 
@@ -262,7 +288,7 @@ func fromError(ev Evidence) (Classification, bool) {
 			Reason: describe(ev.Err.Error(), "the invocation exhausted its budget without changing the repository; no human decision is required")}, true
 	}
 
-	if kind, ok := humanKind(text); ok {
+	if kind, ok := humanActionKind(text); ok {
 		return human(kind, ev.Err.Error()), true
 	}
 	if matchesAny(text, emptyMarkers) {
@@ -371,19 +397,51 @@ func harnessIncomplete(text string) bool {
 
 // Boundary markers: an explicit human decision/approval/safety boundary.
 var (
-	approvalMarkers    = []string{"approval", "approve", "authoriz", "consent", "sign-off", "signoff", "permission"}
-	securityMarkers    = []string{"security", "safety", "unsafe", "vulnerab", "credential", "secret", "sensitive data"}
+	// approvalMarkers recognize an explicit authorization request (the agent is
+	// asking to be allowed to proceed), not the topic of the work.
+	approvalMarkers = []string{
+		"approval", "approve", "authoriz", "consent", "sign-off", "signoff", "permission",
+		"needs auth", "need auth", "requires auth", "require auth", "auth required",
+		"needs authentication", "needs authorization", "requires authentication", "requires authorization",
+		"authentication required", "authorization required",
+	}
 	destructiveMarkers = []string{"destructive", "irreversible", "cannot be undone", "can't be undone", "data loss", "permanent damage", "destroys"}
-	conflictMarkers    = []string{"conflict", "ambiguous", "ambiguity", "contradict", "unclear", "cannot determine", "can't determine", "no authoritative", "product decision", "requires a decision"}
+	// conflictMarkers recognize an explicit request for a human/authoritative
+	// decision, or an unresolved conflict — not mere uncertainty about what to do
+	// next (which is a continuation).
+	conflictMarkers = []string{
+		"conflict", "ambiguous", "ambiguity", "contradict", "unclear",
+		"cannot determine", "can't determine", "no authoritative", "product decision", "requires a decision",
+		"needs a decision", "needs a human", "need a human", "needs human", "requires a human",
+	}
 )
 
-// humanKind recognizes a human-boundary signal in text, in a fixed precedence
-// order, and reports the matching kind.
-func humanKind(text string) (Kind, bool) {
+// securityDecisionMarkers recognize a security DECISION or authorization — an
+// action that changes a trust/privilege boundary — rather than the topic of the
+// work. Narrow on purpose: common implementation words (secret, token, prompt,
+// sanitize, security, boundary, raw data, credential) are deliberately absent, so
+// an ordinary security-relevant change required by the task's acceptance criteria
+// is not misread as a request to cross a boundary.
+var securityDecisionMarkers = []string{
+	"weaken", "weakening",
+	"bypass",
+	"unauthenticated",
+	"grant access", "grants access", "grant new",
+	"escalate privilege", "privilege boundary",
+	"trust boundary",
+	"authentication policy", "authorization policy",
+	"remote execution", "remote clients",
+	"expose local",
+}
+
+// humanActionKind recognizes a human-boundary ACTION or DECISION in text, in a
+// fixed precedence order, and reports the matching kind. It matches what the
+// agent is asking to DO, not which words its prose happens to contain.
+func humanActionKind(text string) (Kind, bool) {
 	switch {
 	case matchesAny(text, approvalMarkers):
 		return ApprovalRequired, true
-	case matchesAny(text, securityMarkers):
+	case matchesAny(text, securityDecisionMarkers):
 		return SecurityBoundary, true
 	case matchesAny(text, destructiveMarkers):
 		return DestructiveOperation, true

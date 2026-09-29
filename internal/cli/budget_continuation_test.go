@@ -116,13 +116,15 @@ func TestRunBudgetContinuationEventuallyCompletes(t *testing.T) {
 }
 
 // TestRunBudgetContinuationIsBounded proves test 3: repeated continuation reaches
-// the configured retry ceiling and terminates cleanly rather than looping.
+// the configured continuation ceiling (max_continuations, default 4) and terminates
+// cleanly as a bounded automation failure rather than looping.
 func TestRunBudgetContinuationIsBounded(t *testing.T) {
 	dir := budgetGraph(t)
 
-	// Each attempt reports a distinct budget-exhausted reason so it counts as
-	// progress and spends the attempt budget; the bound is MaxAttempts (default 3).
-	for i := 0; i < 3; i++ {
+	// Each attempt reports a distinct budget-exhausted reason so it makes
+	// "progress"; the bound is the continuation budget (max_continuations, default
+	// 4), separate from and not consuming the retry budget.
+	for i := 0; i < 4; i++ {
 		a := outcomeAgent{outcome: &agent.Outcome{
 			Status: agent.OutcomeNeedsHuman,
 			Reason: budgetExhaustedReason + fmt.Sprintf(" (attempt %d)", i),
@@ -137,13 +139,13 @@ func TestRunBudgetContinuationIsBounded(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("final run: code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "retry budget exhausted") {
-		t.Errorf("stdout = %q, want the bounded retry budget message", stdout)
+	if !strings.Contains(stdout, "continuation budget exhausted") {
+		t.Errorf("stdout = %q, want the bounded continuation budget message", stdout)
 	}
-	// Repeated no-mutation continuation ends in a terminal stuck/retry state, not
-	// a human boundary.
+	// Repeated no-mutation continuation ends in a terminal stuck state, not a
+	// human boundary.
 	if strings.Contains(stdout, "NEEDS_HUMAN") {
-		t.Errorf("stdout = %q, a bounded retry exhaustion must not be reported as NEEDS_HUMAN", stdout)
+		t.Errorf("stdout = %q, a bounded continuation exhaustion must not be reported as NEEDS_HUMAN", stdout)
 	}
 
 	st, err := store.Open(statePath(dir))
@@ -156,7 +158,7 @@ func TestRunBudgetContinuationIsBounded(t *testing.T) {
 		t.Fatalf("get task: %v", err)
 	}
 	if got.Status != domain.BLOCKED {
-		t.Errorf("status = %s, want BLOCKED after the retry budget is spent", got.Status)
+		t.Errorf("status = %s, want BLOCKED after the continuation budget is spent", got.Status)
 	}
 }
 

@@ -43,4 +43,10 @@ const (
 	TEST_DESIGN_FAILED      BlockedReason = "TEST_DESIGN_FAILED"
 	IMPLEMENTATION_TIMEOUT  BlockedReason = "IMPLEMENTATION_TIMEOUT"
 	REVIEW_UNRESOLVED       BlockedReason = "REVIEW_UNRESOLVED"
+	// CONTINUATION_EXHAUSTED marks a task that kept needing another bounded work
+	// slice (CONTINUE) without ever producing a repository change, until its
+	// continuation budget was spent. It is a bounded automation failure — the agent
+	// was stuck, not a human decision — so the task is terminally stuck and is not
+	// automatically recovered again.
+	CONTINUATION_EXHAUSTED BlockedReason = "CONTINUATION_EXHAUSTED"
 )

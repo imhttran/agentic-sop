@@ -210,3 +210,68 @@ func TestDefaultPolicyIsConservative(t *testing.T) {
 		t.Errorf("DefaultLevel = %s, want BALANCED", DefaultLevel)
 	}
 }
+
+// ctrl008Outcome is the CTRL008 dogfood outcome: productive discovery that made no
+// repository change, described with ordinary security-relevant implementation
+// words. It is unfinished work, not a human decision.
+var ctrl008Outcome = &agent.Outcome{
+	Status: agent.OutcomeNeedsHuman,
+	Reason: "No repository edits were performed in this invocation; discovery completed but tools ended before any write. " +
+		"Remaining, fully-scoped work: add regression tests asserting absent data never renders PASS and no raw " +
+		"prompt/secret text is shown for a fixture task carrying prompt/token fields. A later bounded invocation should perform these edits.",
+}
+
+// TestProductiveIncompleteIsAutoContinue pins the CTRL008 fix at the autonomy
+// level: productive, low-risk incomplete work is AUTO_CONTINUE with LOW risk — not
+// SECURITY_BOUNDARY, not HUMAN_APPROVAL_REQUIRED — under the automatic levels.
+func TestProductiveIncompleteIsAutoContinue(t *testing.T) {
+	ev := failure.Evidence{Source: "IMPLEMENT", Outcome: ctrl008Outcome}
+	for _, level := range []Level{Balanced, High} {
+		d := riskDecision(t, ev, level)
+		if d.RequiresHuman || d.Action != ActionAutoContinue {
+			t.Fatalf("%s: decision = %+v, want AUTO_CONTINUE without a human", level, d)
+		}
+		if d.Risk != RiskLow {
+			t.Errorf("%s: risk = %s, want LOW", level, d.Risk)
+		}
+		if d.Classification.Kind != failure.IncompleteImplementation {
+			t.Errorf("%s: kind = %s, want %s", level, d.Classification.Kind, failure.IncompleteImplementation)
+		}
+	}
+}
+
+// TestLowLevelRetainsCorrectClassification proves the classification and risk do
+// not depend on the autonomy level: under LOW the same scenario is still LOW risk
+// and INCOMPLETE_IMPLEMENTATION (never mislabeled a security boundary), even if a
+// conservative policy would stop earlier.
+func TestLowLevelRetainsCorrectClassification(t *testing.T) {
+	d := riskDecision(t, failure.Evidence{Source: "IMPLEMENT", Outcome: ctrl008Outcome}, Low)
+	if d.Classification.Kind != failure.IncompleteImplementation || d.Classification.Disposition != failure.Continue {
+		t.Errorf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", d.Classification)
+	}
+	if d.Risk != RiskLow {
+		t.Errorf("risk = %s, want LOW (the level must not change the factual classification)", d.Risk)
+	}
+	if d.Action != ActionAutoContinue {
+		t.Errorf("action = %s, want AUTO_CONTINUE (a safe continuation is allowed at every level)", d.Action)
+	}
+}
+
+// TestSecurityDecisionRequiresHumanAtEveryLevel proves a genuine security DECISION
+// (an action that changes a trust boundary) is a human boundary at every level,
+// while ordinary security-related implementation prose is not.
+func TestSecurityDecisionRequiresHumanAtEveryLevel(t *testing.T) {
+	ev := failure.Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{
+		Status: agent.OutcomeNeedsHuman,
+		Reason: "required change would weaken authentication and expose local command execution to remote unauthenticated clients",
+	}}
+	for _, level := range []Level{Low, Balanced, High} {
+		d := riskDecision(t, ev, level)
+		if !d.RequiresHuman || d.Action != ActionHumanApproval {
+			t.Fatalf("%s: decision = %+v, want HUMAN_APPROVAL_REQUIRED", level, d)
+		}
+		if d.Classification.Kind != failure.SecurityBoundary || d.Risk != RiskHigh {
+			t.Errorf("%s: classification = %+v risk = %s, want SECURITY_BOUNDARY/HIGH", level, d.Classification, d.Risk)
+		}
+	}
+}

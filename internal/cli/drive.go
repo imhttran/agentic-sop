@@ -565,10 +565,10 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		}
 		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
 		if cls.Retryable() {
-			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), err.Error(), stdout, stderr)
+			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), cls.Disposition, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
 		}
 		if policyForcesHuman(cls, res.decision) {
-			return recoverTask(saver, task, rn, "ERR|NEEDS_HUMAN|"+err.Error(), "NEEDS_HUMAN", err.Error(), stdout, stderr)
+			return recoverTask(saver, task, rn, "ERR|NEEDS_HUMAN|"+err.Error(), "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
 		}
 		_ = rn.SetStage(runpkg.Failed)
 		_ = blockTask(saver, task, domain.RETRIES_EXHAUSTED)
@@ -596,14 +596,14 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			// A human boundary is not terminal: return the task to PLANNED so a
 			// later run retries it. A repeat that changed nothing does not spend
 			// the budget; a progressing attempt does, bounded by max_attempts.
-			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", firstReason(res.gate), stdout, stderr)
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
 		}
 		// A retryable disposition (CONTINUE/RETRY) means required work remains and
-		// no human decision is required, so it uses the same bounded requeue path a
-		// needs_human boundary already used rather than blocking the task.
+		// no human decision is required: RETRY reuses the bounded retry budget,
+		// while CONTINUE consumes the separate bounded continuation budget.
 		if res.classification.Retryable() {
-			disposition := string(res.classification.Disposition)
-			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+disposition, disposition, firstReason(res.gate), stdout, stderr)
+			disposition := res.classification.Disposition
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+string(disposition), string(disposition), disposition, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
 		}
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -629,7 +629,15 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 // (signature) does not spend the attempt budget, and once max_attempts is spent
 // the task is terminally BLOCKED rather than looping. label names the disposal
 // for the operator; reason is a short diagnostic for the no-progress message.
-func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, label, reason string, stdout, stderr io.Writer) int {
+//
+// A CONTINUE disposition is routed to the separate continuation budget
+// (continueTask) so resuming productive-but-unfinished work never consumes the
+// retry budget, which is reserved for repeating a failed attempt.
+func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, label string, disp failure.Disposition, policy autonomy.Policy, reason string, stdout, stderr io.Writer) int {
+	if disp == failure.Continue {
+		return continueTask(saver, task, rn, signature, reason, policy, stdout, stderr)
+	}
+
 	prev, hadPrev := rn.ReadAttempt()
 	_ = rn.RecordAttempt(signature)
 
@@ -654,6 +662,43 @@ func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, 
 		return exitError
 	}
 	fmt.Fprintf(stdout, "%s %s (requeued)\n", task.ID, label)
+	return exitError
+}
+
+// continueTask resumes productive-but-unfinished work against the bounded
+// CONTINUATION budget, which is deliberately separate from the retry budget: a
+// continuation is not a failed attempt, so it returns the task to PLANNED without
+// spending a retry attempt. Every continuation counts against the budget (a
+// continuation that makes no progress must not loop forever); when the budget is
+// spent the task is terminally stuck (CONTINUATION_EXHAUSTED) — a bounded
+// automation failure, never a human decision.
+func continueTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, reason string, policy autonomy.Policy, stdout, stderr io.Writer) int {
+	_ = rn.RecordAttempt(signature)
+
+	max := policy.MaxContinuations
+	if max <= 0 {
+		max = autonomy.DefaultMaxContinuations
+	}
+	n := rn.ReadContinuations() + 1
+	if n > max {
+		if err := blockTask(saver, task, domain.CONTINUATION_EXHAUSTED); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "%s CONTINUE (continuation budget exhausted %d/%d; BLOCKED: %s)\n", task.ID, max, max, reason)
+		fmt.Fprintf(stdout, "continuation: %d/%d\n", max, max)
+		return exitError
+	}
+	if err := rn.RecordContinuations(n); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	if err := requeueTask(saver, task, false); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	fmt.Fprintf(stdout, "%s CONTINUE (requeued)\n", task.ID)
+	fmt.Fprintf(stdout, "continuation: %d/%d\n", n, max)
 	return exitError
 }
 
