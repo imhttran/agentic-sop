@@ -46,6 +46,9 @@ const (
 	StageQuality = "QUALITY"
 	// StageClassify marks the failure classification (kind + disposition).
 	StageClassify = "CLASSIFY"
+	// StageAutonomy marks the risk-based autonomy decision (action + risk + level),
+	// so it is visible why SOP continued automatically or stopped for a human.
+	StageAutonomy = "AUTONOMY"
 	// StageFinalize marks an agent entering its tool-free finalization phase.
 	StageFinalize = "FINALIZE"
 	// StageComplete marks a successful terminal outcome.

@@ -19,6 +19,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/decision"
 )
 
@@ -97,6 +98,7 @@ type Config struct {
 	Decision   DecisionConfig `yaml:"decision"`
 	Features   Features       `yaml:"features"`
 	Workflow   Workflow       `yaml:"workflow"`
+	Autonomy   Autonomy       `yaml:"autonomy"`
 }
 
 // Project holds project metadata.
@@ -378,6 +380,13 @@ func (c *Config) applyDefaults() {
 	if strings.TrimSpace(c.Workflow.Mode) == "" {
 		c.Workflow.Mode = "local"
 	}
+	// The autonomy level defaults to the conservative, backward-compatible
+	// balanced level; an omitted block never adopts maximum autonomy. The boolean
+	// flags are left untouched so an omitted value keeps the level's built-in
+	// setting and an explicit false stays expressible.
+	if strings.TrimSpace(c.Autonomy.Level) == "" {
+		c.Autonomy.Level = string(autonomy.DefaultLevel)
+	}
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -425,6 +434,9 @@ func (c *Config) Validate() error {
 	case "local", "pull-request":
 	default:
 		return fmt.Errorf("config: unknown workflow.mode %q (want local, pull-request)", c.Workflow.Mode)
+	}
+	if err := c.validateAutonomy(); err != nil {
+		return err
 	}
 	return nil
 }
@@ -544,6 +556,35 @@ quality:
 
 human:
   approval_before_commit: true
+
+autonomy:
+  # low | balanced | high
+  #
+  # Human approval is required because of RISK or unresolved HUMAN INTENT, never
+  # merely because automation failed. balanced (the default) automates the
+  # recoveries SOP already trusts: transient retries, productive continuations,
+  # deterministic fixes, and bounded infrastructure recovery. It keeps human
+  # approval for authority boundaries, ambiguity, and plan-semantic changes.
+  #
+  # For local agentic-sop dogfooding, set level: high: everything safe and
+  # deterministic is handled automatically, and a bounded automation exhaustion
+  # becomes a terminal state rather than a human decision.
+  level: balanced
+
+  # Optional explicit overrides of the level's built-in settings. An omitted value
+  # keeps the level's setting, so leave these commented unless you need to pin one.
+  #   auto_retry: true
+  #   auto_continue: true
+  #   auto_fix: true
+  #   auto_reconcile_safe_changes: true
+
+  # Risk categories that always wait for a human. Omit to use these defaults:
+  #   require_human:
+  #     - destructive
+  #     - irreversible
+  #     - security_sensitive
+  #     - ambiguous_requirements
+  #     - external_publish
 
 workflow:
   # local | pull-request

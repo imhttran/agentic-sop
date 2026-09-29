@@ -12,6 +12,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/activity"
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
@@ -121,7 +122,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
 	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), stdout)
-	emitClassificationActivity(ctx, res.classification)
+	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)
 	}
@@ -149,6 +150,11 @@ type lifeResult struct {
 	// It is diagnostic: it records WHY the lifecycle stopped and what disposition
 	// it applied, and never overrides the gate's own decision.
 	classification failure.Classification
+	// decision is the risk-based autonomy decision applied to the classification:
+	// the single authority on whether the failure is handled automatically or needs
+	// a human. It is zero when the run passed. It is diagnostic evidence the driver
+	// acts on; the classification alone never implies human approval.
+	decision autonomy.Decision
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -157,11 +163,12 @@ type lifeResult struct {
 // deterministic gate failure is a normal result.
 func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, stdout io.Writer) (lifeResult, error) {
 	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
-	// Persist the failure classification beside the other run artifacts before any
-	// early return, so a failure that stopped the lifecycle is still recorded. It
-	// is diagnostic evidence: nothing reads it back to drive a decision.
+	// Persist the failure classification and the autonomy decision beside the other
+	// run artifacts before any early return, so a failure that stopped the lifecycle
+	// is still recorded. They are diagnostic evidence: nothing reads them back to
+	// drive a decision.
 	if res.classification.Disposition != "" {
-		writeClassificationArtifact(rn, res.classification)
+		writeClassificationArtifact(rn, res.classification, res.decision)
 	}
 	if err != nil {
 		// Return the partial result alongside the error so a caller can still act
@@ -187,10 +194,21 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// sections, which remain authoritative.
 		JEV:            jevReportSection(res.jevDoc, res.jevPath),
 		Classification: classificationDoc(res.classification),
+		Autonomy:       autonomyDoc(res.decision),
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
 	})
 	return res, nil
+}
+
+// autonomyDoc returns a pointer to the autonomy decision for the report, or nil
+// when no decision was made (a passing run), so an existing PASS report is
+// unchanged.
+func autonomyDoc(d autonomy.Decision) *autonomy.Decision {
+	if d.Action == "" {
+		return nil
+	}
+	return &d
 }
 
 // classificationDoc returns a pointer to the classification for the report, or
@@ -203,10 +221,14 @@ func classificationDoc(cls failure.Classification) *failure.Classification {
 	return &cls
 }
 
-// writeClassificationArtifact persists the failure classification as its own run
-// artifact. It is best-effort: a write failure never changes the run outcome.
-func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification) {
-	data, err := json.MarshalIndent(cls, "", "  ")
+// writeClassificationArtifact persists the failure classification and the
+// autonomy decision as the run's classification artifact. It embeds the
+// classification at the top level, so existing readers of classification.json are
+// unaffected, and adds the decision as provenance. It is best-effort: a write
+// failure never changes the run outcome.
+func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, decision autonomy.Decision) {
+	artifact := classificationArtifact{Classification: cls, Autonomy: autonomyDoc(decision)}
+	data, err := json.MarshalIndent(artifact, "", "  ")
 	if err != nil {
 		return
 	}
@@ -315,7 +337,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// implementation the task already produced.
 		recordTaskChanges(rn, impl.ChangedFiles)
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(ctx, rn, "IMPLEMENT", impl.Outcome), nil
+			return outcomeResult(ctx, cfg, rn, "IMPLEMENT", impl.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -346,6 +368,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	verifiedFirst := sealed != nil
 
 	maxCycles := cfg.Quality.MaxFixCycles
+	// The autonomy policy governs whether the bounded fix loop may run at all: a
+	// conservative level that withholds automatic fixes hands the failure to the
+	// driver (which applies the same policy) instead of mutating the repository.
+	autoPolicy := cfg.AutonomyPolicy()
 	cycles := 0
 	var suite testrunner.SuiteResult
 	var report review.Report
@@ -438,6 +464,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if gate.Decision != quality.Fail || cycles >= maxCycles || (!validationFailed && actionable == 0) {
 			break
 		}
+		if !autoPolicy.AutoFix {
+			// The configured autonomy level withholds automatic fixes: stop here and
+			// let the driver's autonomy decision apply (it will require a human).
+			break
+		}
 
 		// Fix, then re-validate and re-review (regression protection).
 		_ = rn.SetStage(runpkg.Fixing)
@@ -459,7 +490,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 		recordTaskChanges(rn, fix.ChangedFiles)
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			return outcomeResult(ctx, rn, "FIX", fix.Outcome), nil
+			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome), nil
 		}
 
 		diff, err = d.readDiff(ctx, dir)
@@ -478,31 +509,43 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	writeRunJSON(rn, "validation.json", suite)
 	writeRunJSON(rn, "review.json", report)
 
-	stage := runpkg.Passed
-	switch gate.Decision {
-	case quality.Fail:
-		stage = runpkg.Failed
-		ar.Emit(activity.StageFailed, string(gate.Decision), firstReason(gate))
-	case quality.NeedsHuman:
-		stage = runpkg.WaitingForHuman
-		ar.Emit(activity.StageBlocked, string(gate.Decision), firstReason(gate))
-	case quality.Continue:
-		// Never produced by Evaluate, but a continuation must not be mistaken for a
-		// pass if a future gate verdict returns one.
-		stage = runpkg.Failed
-		ar.Emit(activity.StageClassify, string(gate.Decision), firstReason(gate))
-	default:
-		ar.Emit(activity.StageComplete, string(gate.Decision), "")
-	}
-	_ = rn.SetStage(stage)
-
-	// Classify the gate failure so the driver's recovery decision (and the run
-	// report) records why the lifecycle stopped and what disposition it applied. A
-	// pass has no failure to classify.
+	// Classify the gate failure and apply the configured autonomy policy before the
+	// stage is finalized, so the run report and the driver's recovery decision
+	// record why the lifecycle stopped, what disposition it applied, and whether a
+	// human is required. A pass has no failure to classify or decide.
 	var class failure.Classification
+	var decision autonomy.Decision
 	if gate.Decision != quality.Pass {
 		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles, jevEv))
+		decision = decideAutonomy(cfg, class)
 	}
+
+	stage := runpkg.Passed
+	switch {
+	case decision.Action == autonomy.ActionTerminal:
+		// Bounded automation exhausted: a terminal automation state, not a human
+		// boundary, even though the quality gate labeled the exhausted fix loop a
+		// human decision. It reports the effective action.
+		stage = runpkg.Failed
+		ar.Emit(activity.StageFailed, string(decision.Action), firstReason(gate))
+	default:
+		switch gate.Decision {
+		case quality.Fail:
+			stage = runpkg.Failed
+			ar.Emit(activity.StageFailed, string(gate.Decision), firstReason(gate))
+		case quality.NeedsHuman:
+			stage = runpkg.WaitingForHuman
+			ar.Emit(activity.StageBlocked, string(gate.Decision), firstReason(gate))
+		case quality.Continue:
+			// Never produced by Evaluate, but a continuation must not be mistaken for a
+			// pass if a future gate verdict returns one.
+			stage = runpkg.Failed
+			ar.Emit(activity.StageClassify, string(gate.Decision), firstReason(gate))
+		default:
+			ar.Emit(activity.StageComplete, string(gate.Decision), "")
+		}
+	}
+	_ = rn.SetStage(stage)
 	return lifeResult{
 		gate:           gate,
 		cycles:         cycles,
@@ -513,6 +556,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
+		decision:       decision,
 	}, nil
 }
 
@@ -548,12 +592,23 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 	if cfg.Quality.RequiresTests() && !hasCategory(suite, testrunner.UnitTest) && !buildFailed && !testFailed && !lintFailed {
 		ev.TestsMissing = true
 	}
+	// Only the blocking ones, the same rule the gate and the fix loop already use
+	// (quality.JEVSeverityPriority over the fail_on severities). A fail-closed JEV is
+	// handled above as an analysis failure, not a finding.
+	ev.BlockingFindings += quality.JEVBlockingFindings(cfg.Quality.JEVFailOn(), jevEv.gateEvidence())
 	return ev
 }
 
 // emitRunSummary prints the run's outcome and returns the process exit code.
 func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.Run, res lifeResult) int {
-	fmt.Fprintf(stdout, "run %s: %s\n", rn.State().ID, res.gate.Decision)
+	// The displayed outcome is the effective one: a terminal autonomy decision
+	// (bounded automation exhausted) is reported as a failure, not as the gate's
+	// human label, so an operator is never told a human is required when none is.
+	outcome := res.gate.Decision
+	if res.decision.Action == autonomy.ActionTerminal {
+		outcome = quality.Fail
+	}
+	fmt.Fprintf(stdout, "run %s: %s\n", rn.State().ID, outcome)
 	if res.verifiedFirst {
 		fmt.Fprintln(stdout, "verified first: the configured validation passed; no implementation agent was invoked")
 	}
@@ -561,7 +616,8 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
 	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
-	writeClassification(stdout, res.classification)
+	writeClassification(stdout, res.classification, res.decision)
+	writeAutonomySummary(stdout, res.decision)
 	if res.perf.Measured() {
 		fmt.Fprintf(stdout, "performance: %s\n", res.perf.Line())
 	}
@@ -589,12 +645,32 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 // reason. It renders nothing for a passing run (an empty classification), so a
 // PASS leaves the CLI output unchanged. It is diagnostic output: the disposition
 // describes what the lifecycle already decided, it never decides anything.
-func writeClassification(w io.Writer, cls failure.Classification) {
+func writeClassification(w io.Writer, cls failure.Classification, d autonomy.Decision) {
 	if cls.Disposition == "" {
 		return
 	}
-	fmt.Fprintf(w, "classification: %s (%s, %s)\n", cls.Disposition, cls.Kind, cls.Confidence)
+	// The autonomy decision is authoritative over the classifier's conservative
+	// label, so the disposition shown is the effective one: a bounded automation
+	// exhaustion reads TERMINAL rather than the classifier's NEEDS_HUMAN.
+	disposition := string(cls.Disposition)
+	if d.Action == autonomy.ActionTerminal {
+		disposition = string(autonomy.ActionTerminal)
+	}
+	fmt.Fprintf(w, "classification: %s (%s, %s)\n", disposition, cls.Kind, cls.Confidence)
 	if reason := strings.TrimSpace(cls.Reason); reason != "" {
+		fmt.Fprintf(w, "  reason: %s\n", reason)
+	}
+}
+
+// writeAutonomySummary prints the autonomy decision beneath the classification, so
+// a reader sees the risk, the level, the resulting action, and why. It renders
+// nothing when no decision was made (a passing run).
+func writeAutonomySummary(w io.Writer, d autonomy.Decision) {
+	if d.Action == "" {
+		return
+	}
+	fmt.Fprintf(w, "autonomy: %s risk=%s decision=%s\n", strings.ToUpper(string(d.Level)), d.Risk, d.Action)
+	if reason := strings.TrimSpace(d.Reason); reason != "" {
 		fmt.Fprintf(w, "  reason: %s\n", reason)
 	}
 }
@@ -631,14 +707,15 @@ func emitOutcomeActivity(ar *activity.Recorder, outcome *agent.Outcome, class fa
 	ar.Emit(activity.StageFailed, string(outcome.Status), "")
 }
 
-// emitClassificationActivity reports a non-empty failure classification on the
-// activity stream carried by ctx. It is a no-op when reporting is disabled or the
-// run passed (an empty classification).
-func emitClassificationActivity(ctx context.Context, cls failure.Classification) {
+// emitClassificationActivity reports a non-empty failure classification and the
+// autonomy decision on the activity stream carried by ctx. It is a no-op when
+// reporting is disabled or the run passed (an empty classification).
+func emitClassificationActivity(ctx context.Context, cls failure.Classification, decision autonomy.Decision) {
 	if cls.Disposition == "" {
 		return
 	}
 	activity.FromContext(ctx).Emit(activity.StageClassify, string(cls.Disposition), string(cls.Kind))
+	emitAutonomyActivity(ctx, decision)
 }
 
 // outcomeResult maps a non-completed agent outcome to a run result and reports it
@@ -653,7 +730,7 @@ func emitClassificationActivity(ctx context.Context, cls failure.Classification)
 // A reported outcome is never treated as success. It also attaches the
 // classification, so the driver applies the same disposition logic it applies to a
 // deterministic gate failure.
-func outcomeResult(ctx context.Context, rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
+func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, source string, outcome *agent.Outcome) lifeResult {
 	reason := outcome.Reason
 	if reason == "" {
 		reason = outcome.Summary
@@ -664,19 +741,25 @@ func outcomeResult(ctx context.Context, rn *runpkg.Run, source string, outcome *
 	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome})
 	emitOutcomeActivity(activity.FromContext(ctx), outcome, class)
 
+	// The autonomy policy — not the raw disposition or the harness's status label —
+	// decides whether a human is required. Its decision is recorded on the result so
+	// the driver applies the same rule it applies to a gate failure; the driver's
+	// classification-activity emission reports it.
+	decision := decideAutonomy(cfg, class)
+
 	if outcome.Status == agent.OutcomeNeedsHuman && class.Retryable() {
 		// A resumable continuation: the invocation did not finish, but no human
 		// decision is required. Report CONTINUE (never NEEDS_HUMAN), mirroring the
 		// gate-failure path where a retryable disposition is a non-pass result.
 		_ = rn.SetStage(runpkg.Failed)
-		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class}
+		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class, decision: decision}
 	}
 	if outcome.Status == agent.OutcomeNeedsHuman {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
-		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman, classification: class}
+		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, stage: runpkg.WaitingForHuman, classification: class, decision: decision}
 	}
 	_ = rn.SetStage(runpkg.Failed)
-	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class}
+	return lifeResult{gate: quality.Result{Decision: quality.Fail, Reasons: []string{reason}}, stage: runpkg.Failed, classification: class, decision: decision}
 }
 
 // failRun marks the run failed, reports the stage error, and returns the error
@@ -891,7 +974,11 @@ type runReportDoc struct {
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
 	Classification *failure.Classification `json:"classification,omitempty"`
-	GeneratedAt    time.Time               `json:"generated_at"`
+	// Autonomy is the risk-based autonomy decision applied to the classification:
+	// the action (automatic or human), the risk, the level, and the reason. It is
+	// omitted for a passing run.
+	Autonomy    *autonomy.Decision `json:"autonomy,omitempty"`
+	GeneratedAt time.Time          `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
@@ -950,6 +1037,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 		fmt.Fprintf(&b, "- %s\n", reason)
 	}
 	writeClassificationReport(&b, res.classification)
+	writeAutonomyReport(&b, res.decision)
 	return b.String()
 }
 

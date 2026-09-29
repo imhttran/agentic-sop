@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -66,6 +67,10 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 		Agent:         a,
 		Store:         st,
 		AcceptChanged: accept,
+		// The autonomy policy, not the CLI, decides whether a safe plan change is
+		// reconciled automatically. Under a low/balanced policy this authorizes
+		// nothing and the explicit-approval behavior is unchanged.
+		AutoAcceptExecuted: reconcileAutoAccept(cfg.AutonomyPolicy()),
 		OnRepair: func(attempt int, cause error) {
 			fmt.Fprintf(stderr, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
 		},
@@ -77,6 +82,20 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 
 	printReconcileSummary(stdout, res)
 	return exitOK
+}
+
+// reconcileAutoAccept builds the reconciliation callback the planflow layer
+// consults for an executed task whose definition changed. It classifies the change
+// deterministically (equivalent vs material) and asks the autonomy policy; only an
+// AUTO_RECONCILE decision authorizes a silent, history-preserving refresh.
+func reconcileAutoAccept(policy autonomy.Policy) func(planflow.ExecutedChange) autonomy.Decision {
+	return func(change planflow.ExecutedChange) autonomy.Decision {
+		kind := autonomy.PlanChangeExecutedMaterial
+		if change.Equivalent {
+			kind = autonomy.PlanChangeExecutedEquivalent
+		}
+		return autonomy.DecidePlanChange(autonomy.PlanChange{Kind: kind, Tasks: []string{change.TaskID}}, policy)
+	}
 }
 
 // parseReconcileArgs splits the reconcile arguments into the required PLAN path
@@ -137,6 +156,23 @@ func printReconcileSummary(w io.Writer, res planflow.ReconcileResult) {
 	printChangedIDs(w, "accepted (executed)", res.Accepted)
 	printChangedIDs(w, "added", res.Added)
 	printChangedIDs(w, "removed", res.Removed)
+	printAutoReconciled(w, res.AutoReconciled)
+}
+
+// printAutoReconciled reports each task reconciled automatically, with its
+// provenance (the definition hashes, the classification, the risk, and the
+// reason), so a silent refresh is auditable and never loses its history.
+func printAutoReconciled(w io.Writer, recs []planflow.AutoReconciled) {
+	if len(recs) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "  auto-reconciled (executed, history preserved):")
+	for _, r := range recs {
+		fmt.Fprintf(w, "    %s: %s -> %s [%s risk=%s]\n", r.TaskID, r.Before, r.After, r.Classification, r.Risk)
+		if reason := strings.TrimSpace(r.Reason); reason != "" {
+			fmt.Fprintf(w, "      reason: %s\n", reason)
+		}
+	}
 }
 
 func printChangedIDs(w io.Writer, label string, ids []string) {

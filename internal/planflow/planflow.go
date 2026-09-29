@@ -30,6 +30,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -37,6 +38,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/bootstrap"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -106,8 +108,11 @@ type Metadata struct {
 	GeneratedAt  time.Time `json:"generated_at"`
 	// ReconciledTasks records the executed task IDs whose definitions a human
 	// explicitly approved during reconciliation, so the approval is durable
-	// provenance rather than an ephemeral one-line report.
-	ReconciledTasks []string `json:"reconciled_tasks,omitempty"`
+	// provenance rather than an ephemeral one-line report. AutoReconciled records
+	// the tasks an autonomy policy reconciled automatically, with the two definition
+	// hashes and why, so a silent refresh stays auditable.
+	ReconciledTasks []string         `json:"reconciled_tasks,omitempty"`
+	AutoReconciled  []AutoReconciled `json:"auto_reconciled,omitempty"`
 }
 
 // Prepare ensures the project is ready to execute: it reconciles existing tasks,
@@ -336,6 +341,40 @@ type ReconcileOptions struct {
 	// preserved; only the definition is refreshed. An ID that does not name an
 	// executed task whose definition changed is rejected.
 	AcceptChanged []string
+	// AutoAcceptExecuted, when non-nil, is consulted for each executed task whose
+	// definition changed and that no explicit approval covers. It returns the
+	// autonomy decision for the change; when the decision is ActionAutoReconcile the
+	// definition is refreshed (preserving history) and the decision is recorded as
+	// provenance. A nil callback keeps the explicit-approval behavior, so a caller
+	// that does not opt in is unaffected.
+	AutoAcceptExecuted func(ExecutedChange) autonomy.Decision
+}
+
+// ExecutedChange describes an executed task whose definition changed, offered to
+// ReconcileOptions.AutoAcceptExecuted. Equivalent is true when only descriptive
+// text changed and the executable semantics (acceptance criteria, execution mode,
+// dependencies) are unchanged. Before and After are stable hashes of the two
+// definitions, for provenance.
+
+type ExecutedChange struct {
+	TaskID     string
+	Equivalent bool
+	Before     string
+	After      string
+}
+
+// AutoReconciled records one automatic reconciliation: the provenance a silent
+// replacement must leave behind (the two definition hashes, the classification,
+// the risk, and the reason). Validation/review are required afterward because the
+// task's definition changed.
+
+type AutoReconciled struct {
+	TaskID         string `json:"task_id"`
+	Before         string `json:"before"`
+	After          string `json:"after"`
+	Classification string `json:"classification"`
+	Risk           string `json:"risk"`
+	Reason         string `json:"reason"`
 }
 
 // ReconcileResult reports what an explicit reconciliation did. The slices hold
@@ -351,18 +390,22 @@ type ReconcileResult struct {
 	// Accepted names executed tasks whose changed definition the human approved
 	// with --accept-changed and that were replaced by the requested definition.
 	Accepted []string
+	// AutoReconciled records the tasks reconciled automatically under the autonomy
+	// policy, with their provenance. Their history is preserved.
+	AutoReconciled []AutoReconciled
 }
 
 // reconcilePlan is the in-memory outcome of diffing a requested plan against the
 // active graph: the tasks to upsert, the IDs to remove, and the classification
 // used for reporting.
 type reconcilePlan struct {
-	unchanged []string
-	updated   []string
-	added     []string
-	removed   []string
-	accepted  []string
-	upserts   []*domain.Task
+	unchanged      []string
+	updated        []string
+	added          []string
+	removed        []string
+	accepted       []string
+	autoReconciled []AutoReconciled
+	upserts        []*domain.Task
 }
 
 // Reconcile applies an intentional PLAN change to the persisted active plan. It
@@ -432,7 +475,7 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 		return res, err
 	}
 
-	diff, err := reconcileGraph(rel, active, desired, acceptSet(opts.AcceptChanged))
+	diff, err := reconcileGraph(rel, active, desired, acceptSet(opts.AcceptChanged), opts.AutoAcceptExecuted)
 	if err != nil {
 		return res, err
 	}
@@ -450,13 +493,17 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 	if err := writePlan(planPath, plan); err != nil {
 		return res, err
 	}
+	// Read the previous provenance once, so the human-approval and automatic-
+	// reconciliation records are both carried forward.
+	prev := readMetadata(metaPath)
 	if err := writeMetadata(metaPath, Metadata{
 		Source:          rel,
 		SourceKind:      KindPlan,
 		SourceSHA256:    fingerprint(data),
 		PlanID:          planID(rel),
 		GeneratedAt:     time.Now().UTC(),
-		ReconciledTasks: mergeIDs(readMetadata(metaPath).ReconciledTasks, diff.accepted),
+		ReconciledTasks: mergeIDs(prev.ReconciledTasks, diff.accepted),
+		AutoReconciled:  mergeAutoReconciled(prev.AutoReconciled, diff.autoReconciled),
 	}); err != nil {
 		return res, err
 	}
@@ -466,6 +513,7 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 	res.Added = diff.added
 	res.Removed = diff.removed
 	res.Accepted = diff.accepted
+	res.AutoReconciled = diff.autoReconciled
 	return res, nil
 }
 
@@ -488,14 +536,15 @@ func desiredTasks(plan *planner.Plan) ([]*domain.Task, error) {
 
 // reconcileGraph diffs the requested task definitions against the active graph.
 // A task that already matches is left untouched. A changed task with execution
-// history stops with NEEDS_HUMAN unless its ID is in accept, in which case only
-// its definition is refreshed and its history is preserved. A removed task with
-// execution history always stops with NEEDS_HUMAN. An accepted ID that does not
-// name an executed task whose definition changed is rejected, as is any changed
-// executed task left unapproved. The reconciled graph is validated as a whole
-// before being returned, so a change that would leave a dangling dependency is
-// rejected up front rather than mid-mutation.
-func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool) (reconcilePlan, error) {
+// history stops with NEEDS_HUMAN unless its ID is in accept (a human approval) or
+// autoAccept authorizes the refresh; in either case only its definition is
+// refreshed and its history is preserved. A removed task with execution history
+// always stops with NEEDS_HUMAN. An accepted ID that does not name an executed
+// task whose definition changed is rejected, as is any changed executed task left
+// unapproved. The reconciled graph is validated as a whole before being returned,
+// so a change that would leave a dangling dependency is rejected up front rather
+// than mid-mutation.
+func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool, autoAccept func(ExecutedChange) autonomy.Decision) (reconcilePlan, error) {
 	var out reconcilePlan
 
 	activeTasks := taskIndex(active)
@@ -505,10 +554,12 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 		desiredIDs[d.ID] = true
 	}
 
-	// A changed task that already executed is collected here and only replaced
-	// when its ID is in accept; otherwise it is reported after every accepted ID
-	// has been checked, so an unrelated approval is rejected first.
-	changedExecuted := make(map[string]bool)
+	// A changed task that already executed is replaced only when its ID is an
+	// explicit approval or the autonomy policy authorizes it; otherwise it is
+	// reported after every accepted ID has been checked, so an unrelated approval
+	// is rejected first.
+	reconciledExecuted := make(map[string]bool) // replaced (explicitly or automatically)
+	changedExecuted := make(map[string]bool)    // still need an explicit approval
 	for _, d := range desired {
 		task, ok := activeTasks[d.ID]
 		if !ok {
@@ -521,12 +572,21 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 			continue
 		}
 		if hasExecution(task) {
-			changedExecuted[d.ID] = true
-			if !accept[d.ID] {
+			if accept[d.ID] {
+				out.upserts = append(out.upserts, redefineTask(task, d))
+				out.accepted = append(out.accepted, d.ID)
+				reconciledExecuted[d.ID] = true
 				continue
 			}
-			out.upserts = append(out.upserts, redefineTask(task, d))
-			out.accepted = append(out.accepted, d.ID)
+			// A changed executed task is a candidate for automatic reconciliation when
+			// the autonomy policy authorizes it; otherwise it needs an explicit approval.
+			if rec, ok := autoReconcile(task, d, autoAccept); ok {
+				out.upserts = append(out.upserts, redefineTask(task, d))
+				out.autoReconciled = append(out.autoReconciled, rec)
+				reconciledExecuted[d.ID] = true
+				continue
+			}
+			changedExecuted[d.ID] = true
 			continue
 		}
 		out.upserts = append(out.upserts, redefineTask(task, d))
@@ -534,9 +594,10 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 	}
 
 	// Every accepted ID must name an executed task whose definition changed in the
-	// requested plan, so one approval can never silently cover an unrelated task.
+	// requested plan (whether the human approved it or the policy reconciled it), so
+	// one approval can never silently cover an unrelated task.
 	for _, id := range sortedSet(accept) {
-		if changedExecuted[id] {
+		if reconciledExecuted[id] {
 			continue
 		}
 		return reconcilePlan{}, acceptChangedError(id, activeTasks, desiredByID)
@@ -607,6 +668,84 @@ func sameTaskDefinition(a, b *domain.Task) bool {
 // executed may have its definition replaced or be removed.
 func hasExecution(t *domain.Task) bool {
 	return t.Attempt > 0 || len(t.Attempts) > 0 || t.Status != domain.PLANNED
+}
+
+// autoReconcile consults the autonomy callback for a changed executed task. It
+// reports a provenance record and true only when the callback authorizes an
+// automatic reconciliation. A nil callback authorizes nothing, so a caller that
+// does not opt in keeps the explicit-approval behavior.
+func autoReconcile(cur, desired *domain.Task, autoAccept func(ExecutedChange) autonomy.Decision) (AutoReconciled, bool) {
+	if autoAccept == nil {
+		return AutoReconciled{}, false
+	}
+	change := ExecutedChange{
+		TaskID:     cur.ID,
+		Equivalent: equivalentExecutedChange(cur, desired),
+		Before:     definitionHash(cur),
+		After:      definitionHash(desired),
+	}
+	decision := autoAccept(change)
+	if decision.Action != autonomy.ActionAutoReconcile {
+		return AutoReconciled{}, false
+	}
+	classification := autonomy.PlanChangeExecutedMaterial
+	if change.Equivalent {
+		classification = autonomy.PlanChangeExecutedEquivalent
+	}
+	return AutoReconciled{
+		TaskID:         change.TaskID,
+		Before:         change.Before,
+		After:          change.After,
+		Classification: string(classification),
+		Risk:           string(decision.Risk),
+		Reason:         decision.Reason,
+	}, true
+}
+
+// equivalentExecutedChange reports whether an executed task's definition changed
+// only in descriptive text: its executable semantics — the acceptance criteria,
+// the execution mode, and the dependencies — are identical.
+func equivalentExecutedChange(cur, desired *domain.Task) bool {
+	return cur.AcceptanceCriteria == desired.AcceptanceCriteria &&
+		cur.ExecutionMode == desired.ExecutionMode &&
+		sameStringSet(cur.DependencyIDs, desired.DependencyIDs)
+}
+
+// definitionHash is a stable hash of the fields a reconciliation replaces, so the
+// provenance records exactly which two definitions were swapped.
+func definitionHash(t *domain.Task) string {
+	sum := sha256.New()
+	for _, part := range []string{t.ID, t.Title, t.Objective, t.AcceptanceCriteria, string(t.ExecutionMode)} {
+		_, _ = io.WriteString(sum, part)
+		sum.Write([]byte{0})
+	}
+	deps := append([]string(nil), t.DependencyIDs...)
+	sort.Strings(deps)
+	_, _ = io.WriteString(sum, strings.Join(deps, ","))
+	return hex.EncodeToString(sum.Sum(nil))[:16]
+}
+
+// mergeAutoReconciled folds the current reconciliation's automatic records into
+// the previously recorded ones, keeping the latest record per task and the
+// first-seen order, so repeated reconciliations accumulate provenance instead of
+// discarding earlier history.
+func mergeAutoReconciled(prev, cur []AutoReconciled) []AutoReconciled {
+	if len(prev) == 0 && len(cur) == 0 {
+		return nil
+	}
+	latest := make(map[string]AutoReconciled, len(prev)+len(cur))
+	order := make([]string, 0, len(prev)+len(cur))
+	for _, r := range append(append([]AutoReconciled(nil), prev...), cur...) {
+		if _, seen := latest[r.TaskID]; !seen {
+			order = append(order, r.TaskID)
+		}
+		latest[r.TaskID] = r
+	}
+	out := make([]AutoReconciled, 0, len(order))
+	for _, id := range order {
+		out = append(out, latest[id])
+	}
+	return out
 }
 
 // taskIndex keys tasks by id.

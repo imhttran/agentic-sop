@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
@@ -547,21 +548,27 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	_ = rn.Write("task.md", spec.Render())
 
 	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
-	emitClassificationActivity(ctx, res.classification)
+	emitClassificationActivity(ctx, res.classification, res.decision)
 
-	// An error is an agent/infrastructure failure. Classify it (the lifecycle may
-	// not have had enough evidence) and apply the same disposition logic: a
-	// transient failure retries (bounded), anything else is a hard block.
+	// An error is an agent/infrastructure failure. Classify it and apply the
+	// autonomy policy (the lifecycle may not have had enough evidence): a transient
+	// failure retries (bounded), a policy-required human boundary requeues, and
+	// anything else is a terminal automation block.
 	if err != nil {
 		cls := res.classification
 		if cls.Disposition == "" {
 			cls = failure.Classify(failure.Evidence{Source: "run", Err: err})
-			writeClassificationArtifact(rn, cls)
-			emitClassificationActivity(ctx, cls)
+			decision := decideAutonomy(cfg, cls)
+			writeClassificationArtifact(rn, cls, decision)
+			emitClassificationActivity(ctx, cls, decision)
+			res.decision = decision
 		}
 		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
 		if cls.Retryable() {
 			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), err.Error(), stdout, stderr)
+		}
+		if policyForcesHuman(cls, res.decision) {
+			return recoverTask(saver, task, rn, "ERR|NEEDS_HUMAN|"+err.Error(), "NEEDS_HUMAN", err.Error(), stdout, stderr)
 		}
 		_ = rn.SetStage(runpkg.Failed)
 		_ = blockTask(saver, task, domain.RETRIES_EXHAUSTED)
@@ -569,18 +576,34 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	if code := emitRunSummary(stdout, dir, cfg, rn, res); code != exitOK {
+		// The autonomy decision — not the raw disposition or the run stage — decides
+		// how a non-pass outcome is recovered. A terminal decision (bounded automation
+		// exhausted under the high level) wins over the stage, so an exhausted fix
+		// loop stops as an automation failure instead of parking for a human.
+		decision := res.decision
+		if decision.Action == "" {
+			decision = decideAutonomy(cfg, res.classification)
+		}
+		if decision.Action == autonomy.ActionTerminal {
+			if err := blockTask(saver, task, domain.RETRIES_EXHAUSTED); err != nil {
+				fmt.Fprintf(stderr, "run: %v\n", err)
+			}
+			_ = rn.RecordAttempt(outcomeSignature(res.gate))
+			fmt.Fprintf(stdout, "%s BLOCKED (%s exhausted)\n", task.ID, res.classification.Kind)
+			return exitError
+		}
+		if res.stage == runpkg.WaitingForHuman || policyForcesHuman(res.classification, decision) {
+			// A human boundary is not terminal: return the task to PLANNED so a
+			// later run retries it. A repeat that changed nothing does not spend
+			// the budget; a progressing attempt does, bounded by max_attempts.
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", firstReason(res.gate), stdout, stderr)
+		}
 		// A retryable disposition (CONTINUE/RETRY) means required work remains and
 		// no human decision is required, so it uses the same bounded requeue path a
 		// needs_human boundary already used rather than blocking the task.
 		if res.classification.Retryable() {
 			disposition := string(res.classification.Disposition)
 			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+disposition, disposition, firstReason(res.gate), stdout, stderr)
-		}
-		if res.stage == runpkg.WaitingForHuman {
-			// A human boundary is not terminal: return the task to PLANNED so a
-			// later run retries it. A repeat that changed nothing does not spend
-			// the budget; a progressing attempt does, bounded by max_attempts.
-			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", firstReason(res.gate), stdout, stderr)
 		}
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
