@@ -418,6 +418,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			st.counters.interactions++
 			if ev != nil {
 				ev.record(name)
+				if path, ok := mutationPath(name, args); ok {
+					ev.recordPath(path)
+				}
 			}
 		} else {
 			st.countNonMutatingInteraction()

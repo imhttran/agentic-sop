@@ -250,6 +250,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
+		// The task's change evidence is recorded before the agent-less validation,
+		// so a verify-first pass still contributes to the task's accumulated
+		// implementation evidence.
+		recordTaskChanges(rn, changedFiles(diff))
 		suite := sessionValidation(ctx, dir, cfg, diff, rec, sess)
 		switch {
 		case len(suite.Results) == 0:
@@ -306,6 +310,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("implement: %w", err)
 		}
 		_ = rn.Write("implementation.md", impl.Content)
+		// Record the invocation's observed changes as task-scoped evidence even when
+		// it did not complete, so the next bounded invocation (and JEV) keeps the
+		// implementation the task already produced.
+		recordTaskChanges(rn, impl.ChangedFiles)
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
 			return outcomeResult(ctx, rn, "IMPLEMENT", impl.Outcome), nil
 		}
@@ -314,6 +322,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
+		recordTaskChanges(rn, taskInvocationChanges(impl.ChangedFiles, diff))
 		_ = rn.Write("diff.patch", diff)
 
 		// A claimed change with none produced is a failure. A legitimate no-change
@@ -393,7 +402,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// review, and JEV all rerun before the gate is evaluated again. JEV
 		// invocation metrics are recorded on rec as diagnostics only; they never
 		// influence the gate.
-		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn.State().ID, diff, suite, report, rec)
+		// The task-scoped change evidence accumulated across this task's invocations
+		// (not only this one) is handed to JEV, so a no-change final invocation still
+		// reviews the implementation the task produced earlier.
+		jevEv = runOptionalJEV(ctx, cfg, d, spec, rn.State().ID, diff, suite, report, rn.ChangedFiles(), dir, rec)
 
 		// Persist the JEV result as a run artifact beside the other diagnostics,
 		// so results are available after the run. Persistence is best-effort and
@@ -445,6 +457,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
+		recordTaskChanges(rn, fix.ChangedFiles)
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
 			return outcomeResult(ctx, rn, "FIX", fix.Outcome), nil
 		}
@@ -453,6 +466,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
+		recordTaskChanges(rn, taskInvocationChanges(fix.ChangedFiles, diff))
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")

@@ -90,6 +90,13 @@ type Response struct {
 	// nil for legacy prose responses and for capabilities that return structured
 	// content (plans, reviews) instead.
 	Outcome *Outcome
+	// ChangedFiles are the repository-relative paths the invocation changed, when
+	// the provider can report them. They are authoritative mutation evidence: a
+	// provider that reports them lets SOP attribute changes to the task directly
+	// instead of inferring them from the working-tree diff, which may carry
+	// unrelated pre-existing edits. It is nil when the provider cannot report
+	// them, and consumers fall back to the working-tree diff.
+	ChangedFiles []string
 }
 
 // Agent performs a capability request. Implementations must not mutate the

@@ -83,6 +83,14 @@ func (a *sequencedJEV) Analyze(_ context.Context, req jev.Request) (jev.Result, 
 // and JEV analyzer factory.
 func runInjectedCLIWithJEV(t *testing.T, dir, diff string, a agent.Agent, newJEV func(config.Config) (jev.Analyzer, error), args ...string) (code int, stdout, stderr string) {
 	t.Helper()
+	return runInjectedCLIWithDiffFunc(t, dir, func(context.Context, string) (string, error) { return diff, nil }, a, newJEV, args...)
+}
+
+// runInjectedCLIWithDiffFunc is runInjectedCLIWithJEV with a working-tree diff read
+// per call, so a test can model a task implemented across several invocations
+// whose committed work no longer appears in the working-tree diff.
+func runInjectedCLIWithDiffFunc(t *testing.T, dir string, readDiff func(context.Context, string) (string, error), a agent.Agent, newJEV func(config.Config) (jev.Analyzer, error), args ...string) (code int, stdout, stderr string) {
+	t.Helper()
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
@@ -92,7 +100,7 @@ func runInjectedCLIWithJEV(t *testing.T, dir, diff string, a agent.Agent, newJEV
 			}
 			return a, nil
 		},
-		readDiff:       func(context.Context, string) (string, error) { return diff, nil },
+		readDiff:       readDiff,
 		commit:         func(context.Context, string, string) error { return nil },
 		newGitHub:      func(string) github.Client { return &fakeGitHub{} },
 		newJEVAnalyzer: newJEV,

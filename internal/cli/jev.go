@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -10,6 +13,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/perf"
+	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -32,7 +36,12 @@ import (
 // finding count, blocking finding count) are recorded on rec and carried on the
 // evidence. Those metrics are diagnostic only — they never affect the verdict,
 // and a missing value never implies PASS or FAIL.
-func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, runID, diff string, suite testrunner.SuiteResult, report review.Report, rec *perf.Recorder) *jevRunEvidence {
+//
+// taskFiles are the repository paths the task changed across all of its
+// invocations (the run directory's accumulated change evidence), and dir is the
+// repository root used to supply bounded file context when the current diff is
+// empty. Both widen JEV's view from the current invocation to the whole task.
+func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, runID, diff string, suite testrunner.SuiteResult, report review.Report, taskFiles []string, dir string, rec *perf.Recorder) *jevRunEvidence {
 	if !cfg.JEVActive() {
 		return nil
 	}
@@ -49,7 +58,7 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 	}
 
 	activity.FromContext(ctx).Emit(activity.StageJEV, "analyzing changes", "")
-	outcome := runpkg.RunJEV(ctx, analyzer, buildJEVInvocation(spec, diff, suite, report))
+	outcome := runpkg.RunJEV(ctx, analyzer, buildJEVInvocation(spec, diff, suite, report, taskFiles, dir))
 	ev := jevEvidence(outcome)
 	if ev == nil {
 		return nil
@@ -266,18 +275,200 @@ func jevPayloadLocation(p jev.FindingPayload) string {
 	}
 }
 
-// buildJEVInvocation assembles the task-specific, read-only context JEV receives
-// at the quality seam: the task and its criteria, the changed files, the
-// repository context (the diff), and the validation and review outcomes.
-func buildJEVInvocation(spec *taskfile.Spec, diff string, suite testrunner.SuiteResult, report review.Report) runpkg.JEVInvocation {
+// buildJEVInvocation assembles the task-scoped, read-only context JEV receives at
+// the quality seam: the task and its criteria, the task's accumulated changed
+// files, the repository context, and the validation and review outcomes.
+//
+// ChangedFiles is the task's accumulated change set, not merely the files the
+// current invocation touched: a task implemented across several invocations keeps
+// its earlier evidence, so a no-change final invocation still has something for
+// JEV to review. RepositoryContext widens the current diff with bounded excerpts
+// of the accumulated implementation files the diff does not itself cover.
+func buildJEVInvocation(spec *taskfile.Spec, diff string, suite testrunner.SuiteResult, report review.Report, taskFiles []string, dir string) runpkg.JEVInvocation {
 	return runpkg.JEVInvocation{
 		Task:              spec.Render(),
 		Criteria:          strings.Join(spec.AcceptanceCriteria, "\n"),
-		ChangedFiles:      changedFiles(diff),
-		RepositoryContext: diff,
+		ChangedFiles:      taskFiles,
+		RepositoryContext: jevRepositoryContext(dir, diff, taskFiles),
 		ValidationResult:  suiteSummary(suite),
 		ReviewResult:      reviewSummary(report),
 	}
+}
+
+// jevRepositoryContext assembles the read-only repository context JEV reviews: the
+// current invocation's diff, plus bounded excerpts of the task's accumulated
+// implementation files that the diff does not itself cover. In the ordinary case
+// (the current invocation produced the task's change) the excerpt set is empty and
+// the context is exactly the diff, so behavior is unchanged. In the no-change
+// final invocation of a task whose earlier work was committed, the diff is empty
+// and the excerpts carry the accumulated implementation, so JEV still reviews the
+// task rather than an empty change set. A nil/empty result degrades to the diff.
+func jevRepositoryContext(dir, diff string, taskFiles []string) string {
+	covered := make(map[string]bool)
+	for _, f := range changedFiles(diff) {
+		covered[f] = true
+	}
+	var uncovered []string
+	for _, f := range taskFiles {
+		if !covered[f] {
+			uncovered = append(uncovered, f)
+		}
+	}
+	excerpts := taskFileContext(dir, uncovered)
+	switch {
+	case excerpts == "":
+		return diff
+	case strings.TrimSpace(diff) == "":
+		return excerpts
+	default:
+		return diff + "\n\n" + excerpts
+	}
+}
+
+// Task-file context bounds: how many accumulated files are excerpted, how many
+// bytes of each, and the total. They keep the context a bounded snapshot rather
+// than an unrestricted repository dump.
+const (
+	maxJEVContextFiles     = 12
+	maxJEVContextFileBytes = 4 << 10
+	maxJEVContextBytes     = 32 << 10
+)
+
+// taskFileContext renders bounded excerpts of the given repository files for JEV.
+// It reads each file under dir, truncating large files and stopping at the total
+// bound, skips anything unreadable or outside the repository (a deleted file, a
+// directory, an escaping path), and returns "" when nothing could be read. It is
+// read-only and holds repository content only — never prompts or secrets beyond
+// what the files themselves contain.
+func taskFileContext(dir string, files []string) string {
+	var b strings.Builder
+	count := 0
+	for _, path := range files {
+		if count >= maxJEVContextFiles || b.Len() >= maxJEVContextBytes {
+			break
+		}
+		if !safeRepoPath(path) || isSOPPath(path) {
+			continue
+		}
+		limit := maxJEVContextFileBytes
+		if remaining := maxJEVContextBytes - b.Len(); remaining < limit {
+			limit = remaining
+		}
+		if limit <= 0 {
+			break
+		}
+		content, ok := readFileHead(filepath.Join(dir, filepath.FromSlash(path)), limit)
+		if !ok {
+			continue
+		}
+		snippet, truncated := truncateContent(content, limit)
+		fmt.Fprintf(&b, "### %s\n%s\n", path, snippet)
+		if truncated {
+			b.WriteString("... (truncated)\n")
+		}
+		b.WriteByte('\n')
+		count++
+	}
+	if count == 0 {
+		return ""
+	}
+	return strings.TrimSpace("task implementation files (accumulated across the task's invocations):\n\n" + b.String())
+}
+
+// readFileHead reads at most limit+1 bytes of a file, so a very large file is not
+// read in full merely to be truncated. It reports whether the file could be read.
+func readFileHead(path string, limit int) (string, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err != nil {
+		return "", false
+	}
+	return string(data), true
+}
+
+// safeRepoPath reports whether path is a repository-relative path the context
+// reader may open: not absolute, and not escaping the repository root. It is
+// defense in depth — paths come from git diffs and tool arguments — so a crafted
+// path can never read outside the working tree.
+func safeRepoPath(path string) bool {
+	if path == "" || filepath.IsAbs(path) || strings.HasPrefix(path, "/") {
+		return false
+	}
+	clean := filepath.ToSlash(filepath.Clean(path))
+	return clean != "." && clean != ".." && !strings.HasPrefix(clean, "../")
+}
+
+// truncateContent cuts s to at most max bytes, preferring a line boundary so the
+// excerpt ends somewhere readable. It reports whether it truncated.
+func truncateContent(s string, max int) (string, bool) {
+	if len(s) <= max {
+		return s, false
+	}
+	cut := strings.LastIndexByte(s[:max], '\n')
+	if cut <= 0 {
+		cut = max
+	}
+	return s[:cut], true
+}
+
+// taskInvocationChanges returns the repository paths to attribute to the task for
+// one invocation: the paths the agent reported changing, or — when the provider
+// cannot report them — the paths derived from the working-tree diff. Preferring
+// the agent's own evidence keeps unrelated pre-existing dirty files out of the
+// task's change set.
+func taskInvocationChanges(reported []string, diff string) []string {
+	if len(reported) > 0 {
+		return reported
+	}
+	return changedFiles(diff)
+}
+
+// recordTaskChanges persists the given paths as task-scoped change evidence in the
+// run directory, so a later invocation still knows what the task changed. SOP's
+// own state and output paths are dropped first, so a dirty .agent-sdlc/config.yaml
+// (an intentional user-owned edit) or a generated report is never attributed to
+// the task. It is best-effort: a write failure never changes the run outcome.
+func recordTaskChanges(rn *runpkg.Run, paths []string) {
+	if rn == nil {
+		return
+	}
+	changed := taskChangedFiles(paths)
+	if len(changed) == 0 {
+		return
+	}
+	_ = rn.RecordChangedFiles(changed)
+}
+
+// taskChangedFiles drops the paths SOP owns from a task's change set, so SOP's own
+// state and output directories are never attributed to a task however the paths
+// were derived (agent-reported or diff-derived).
+func taskChangedFiles(paths []string) []string {
+	var out []string
+	for _, p := range paths {
+		p = strings.TrimSpace(p)
+		if p == "" || isSOPPath(p) {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// isSOPPath reports whether a repository path is SOP's own state or output,
+// which is never a task's change. It is the single definition of the SOP-owned
+// prefixes, so filtering recorded paths and filtering context excerpts agree.
+func isSOPPath(path string) bool {
+	path = filepath.ToSlash(path)
+	for _, prefix := range []string{config.DirName, planflow.ReportsDir} {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // jevEvidence maps a JEV outcome to gate evidence. It fails closed: an analyzer

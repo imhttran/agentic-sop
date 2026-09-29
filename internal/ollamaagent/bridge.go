@@ -74,9 +74,12 @@ func (n *NativeAgent) Generate(ctx context.Context, req agent.Request) (agent.Re
 		return agent.Response{}, err
 	}
 
-	// One Harness per invocation: nothing crosses invocation boundaries.
+	// One Harness per invocation: nothing crosses invocation boundaries. The
+	// mutation-evidence accumulator is owned here so the repository paths this
+	// invocation changed can be returned as authoritative task change evidence.
 	h := New(n.cfg, n.root)
-	content, _, err := h.Complete(ctx, req)
+	ev := &mutationEvidence{}
+	content, _, err := h.CompleteWithEvidence(ctx, req, ev)
 	if err != nil {
 		h.FlushAudit(n.diag)
 		h.FlushTrace(n.diag)
@@ -87,13 +90,14 @@ func (n *NativeAgent) Generate(ctx context.Context, req agent.Request) (agent.Re
 				status = agent.OutcomeNeedsHuman
 			}
 			return agent.Response{
-				Content: "\"" + err.Error() + "\"",
-				Outcome: &agent.Outcome{Status: status, Reason: err.Error()},
+				Content:      "\"" + err.Error() + "\"",
+				Outcome:      &agent.Outcome{Status: status, Reason: err.Error()},
+				ChangedFiles: ev.mutationPaths(),
 			}, nil
 		}
 		return agent.Response{}, err
 	}
-	return agent.Response{Content: content, Outcome: agent.ParseOutcome(content)}, nil
+	return agent.Response{Content: content, Outcome: agent.ParseOutcome(content), ChangedFiles: ev.mutationPaths()}, nil
 }
 
 // compile-time assertion: the native agent is a full-capability SOP agent.

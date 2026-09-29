@@ -23,6 +23,12 @@ type mutationEvidence struct {
 	// tools records which controlled mutations were observed, in order. It is
 	// diagnostic only; the observed boolean is the signal.
 	tools []string
+	// paths records the repository paths a successful controlled mutation changed,
+	// first-seen and deduplicated. Unlike observed it is not truncated to the first
+	// mutation: it is authoritative task change evidence, so an unrelated
+	// pre-existing dirty file the invocation never touched is never listed and can
+	// never be attributed to the task.
+	paths []string
 }
 
 // record marks that a successful controlled mutation was observed. It is
@@ -34,6 +40,37 @@ func (m *mutationEvidence) record(tool string) {
 	}
 	m.observed = true
 	m.tools = append(m.tools, tool)
+}
+
+// maxMutationPaths bounds the recorded mutation paths, so a model that writes
+// thousands of files cannot grow the in-memory evidence or the reported set
+// without limit. It matches the run directory's task change-set bound.
+const maxMutationPaths = 64
+
+// recordPath records a successful controlled mutation's repository path. It is
+// first-seen ordered, deduplicated, and bounded, so a multi-file change reports
+// each file once and a runaway writer cannot grow the evidence indefinitely, and
+// it accepts every mutation (not only the first).
+func (m *mutationEvidence) recordPath(path string) {
+	path = strings.TrimSpace(path)
+	if path == "" || len(m.paths) >= maxMutationPaths {
+		return
+	}
+	for _, seen := range m.paths {
+		if seen == path {
+			return
+		}
+	}
+	m.paths = append(m.paths, path)
+}
+
+// mutationPaths returns a copy of the recorded mutation paths, so a caller cannot
+// mutate the accumulator's state through the returned slice.
+func (m *mutationEvidence) mutationPaths() []string {
+	if m == nil || len(m.paths) == 0 {
+		return nil
+	}
+	return append([]string(nil), m.paths...)
 }
 
 // controlledMutation reports whether a successful call to name (with args) is a
@@ -68,6 +105,21 @@ func commandMutates(command string) bool {
 		return true
 	}
 	return false
+}
+
+// mutationPath returns the repository path a mutating tool was asked to change,
+// and whether the tool names one. A run_command cannot name a path reliably, so it
+// contributes none; only the file-mutating tools do. It reads only the tool's own
+// path argument.
+func mutationPath(name string, args map[string]any) (string, bool) {
+	switch name {
+	case toolharness.ToolWriteFile, toolharness.ToolCreateFile,
+		toolharness.ToolDeleteFile, toolharness.ToolRestoreFile:
+		if path, ok := args["path"].(string); ok && strings.TrimSpace(path) != "" {
+			return strings.TrimSpace(path), true
+		}
+	}
+	return "", false
 }
 
 // checkpointPath returns the repository path a read/inspect tool was asked to

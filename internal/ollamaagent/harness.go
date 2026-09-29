@@ -91,9 +91,20 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 // signal; the working-tree change since the baseline (ChangedSince) is
 // reconciliation evidence that can confirm or contradict it.
 func (h *Harness) Complete(ctx context.Context, req agent.Request) (content string, reconciled bool, err error) {
+	return h.CompleteWithEvidence(ctx, req, &mutationEvidence{})
+}
+
+// CompleteWithEvidence is Complete with a caller-supplied mutation-evidence
+// accumulator. The caller owns ev and can read the exact repository paths the
+// invocation changed (ev.mutationPaths) after Complete returns, so a caller can
+// attribute changes to a task from observed mutations rather than inferring them
+// from the working-tree diff. Behavior is otherwise identical to Complete.
+func (h *Harness) CompleteWithEvidence(ctx context.Context, req agent.Request, ev *mutationEvidence) (content string, reconciled bool, err error) {
 	mutating := req.Capability == agent.Implement || req.Capability == agent.Fix
 
-	ev := &mutationEvidence{}
+	if ev == nil {
+		ev = &mutationEvidence{}
+	}
 
 	baseline := ""
 	if mutating {
