@@ -13,7 +13,30 @@ import (
 // application asset, kept out of CLI code.
 const planTaskPrompt = `Create an implementation plan from the PRD provided as input.
 
+When the work integrates with or extends an existing system, do not assume its
+capabilities. Discover them from the repository first, then plan against what
+actually exists.
+
 Requirements:
+- Inspect the existing system's boundaries before committing to tasks: its
+  application/service APIs, CLI commands, interfaces, persistence boundaries,
+  scheduler/lifecycle ownership, external adapters, provider capabilities,
+  authorization/approval operations, and existing read/write operations.
+- Record every capability the work depends on with a status of EXISTS, PARTIAL,
+  MISSING, or UNKNOWN and the repository evidence for that finding. When a
+  capability is missing or partial, name the layer that owns providing it.
+- Never describe a missing or unknown capability as if it already exists.
+- A missing capability is not automatically a blocker. When the requested
+  architecture already determines who owns it, record the gap and continue:
+  scope the dependent task to an explicitly unsupported/placeholder contract, or
+  create a correctly-owned prerequisite stage, preserving dependency order.
+  Do not create an implementation task that depends on a capability nothing
+  provides.
+- Record important assumptions with their evidence and consequence.
+- Prefer decomposing work along natural boundaries (discovery/contract, read
+  operations, command operations, missing capabilities, consumer wiring,
+  verification) where they clarify ownership, so implementation does not have to
+  rediscover its own architecture. Use only the boundaries the work justifies.
 - Break the work into implementation stages.
 - Give each stage a clear objective.
 - State explicit dependencies between stages.
@@ -29,12 +52,27 @@ const planOutputRequirements = `Return JSON only (no prose, no markdown) matchin
 {
   "project": string,
   "summary": string,
+  "capabilities": [
+    {
+      "name": string,
+      "status": "EXISTS" | "PARTIAL" | "MISSING" | "UNKNOWN",
+      "evidence": string,
+      "location": string,
+      "owner": string,
+      "gap": string,
+      "resolution": string
+    }
+  ],
+  "assumptions": [
+    { "assumption": string, "evidence": string, "consequence": string }
+  ],
   "stages": [
     {
       "id": string,
       "title": string,
       "objective": string,
       "dependencies": [string],
+      "requires": [string],
       "deliverables": [string],
       "acceptance_criteria": [string],
       "kind": string
@@ -42,6 +80,10 @@ const planOutputRequirements = `Return JSON only (no prose, no markdown) matchin
   ]
 }
 Stage ids are unique; each dependency must reference another stage id in this plan.
+"requires" lists the capabilities this stage depends on; each must be a name
+declared in "capabilities", and a stage must not depend on a capability whose
+status is UNKNOWN. Give "owner" (the layer that must provide it) or "resolution"
+for any capability that is not EXISTS.
 kind is optional: use "environment" for a single development-environment/bootstrap
 stage that all other stages depend on, and "feature" (or omit) otherwise.`
 
@@ -77,19 +119,25 @@ const maxPlanRepairs = 2
 
 // Generate validates the PRD, asks the agent for a plan, parses the JSON
 // response, validates the Plan, and returns it. An invalid execution graph is
-// returned to the agent for correction, bounded by maxPlanRepairs. It never
-// writes files or touches workflow state.
+// returned to the agent for correction, bounded by maxPlanRepairs. A plan that
+// depends on a capability whose owner the requirements do not determine is a
+// genuine human decision and is surfaced as such. It never writes files or
+// touches workflow state.
 func (p *Planner) Generate(ctx context.Context, prd string) (*Plan, error) {
 	if strings.TrimSpace(prd) == "" {
 		return nil, fmt.Errorf("prd is empty")
 	}
 
-	return p.generateValid(ctx, agent.Request{
+	plan, err := p.generateValid(ctx, agent.Request{
 		Capability:         agent.Plan,
 		Task:               planTaskPrompt,
 		Input:              prd,
 		OutputRequirements: planOutputRequirements,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return acceptPlan(plan)
 }
 
 // generateValid asks the agent for a plan and returns it only once it passes

@@ -21,6 +21,9 @@ Do not request any more tools.
 Using only the repository context already gathered, produce the required PLAN response now.
 Do not continue exploring.
 Do not implement anything.
+Include the capability inventory (a status and the evidence for every capability the
+work depends on) and any assumptions behind the plan.
+Never report a missing or unknown capability as if it already exists.
 Return the exact structured PLAN response expected by SOP.`,
 	correction: `Repository discovery is complete.
 No additional tools are available.

@@ -175,16 +175,27 @@ Transforms product intent into implementation intent.
 ```text
 PRD
  ↓
-Architecture assumptions
+Discover existing system
  ↓
-PLAN
+Capability inventory (EXISTS / PARTIAL / MISSING / UNKNOWN)
+ ↓
+Gap + assumption analysis
+ ↓
+Synthesize executable plan
  ↓
 Task DAG
 ```
 
 Outputs a structured machine plan (`.agent-sdlc/plan.json`) and its
 human-readable rendering (`PLAN.md`); the task DAG is built from it
-deterministically, without an agent.
+deterministically, without an agent. When the work integrates with an existing
+system, the plan records the capabilities it depends on — with the evidence
+behind each finding and, for a capability that is missing or partial, the layer
+that owns providing it. Never is a missing or unknown capability described as if
+it already exists. A gap whose owner the requirements determine is handled by the
+plan (recorded and scoped, or covered by a prerequisite stage); a gap with no
+determined owner is a genuine product/architectural choice and stops at
+`NEEDS_HUMAN` rather than being invented at implementation time.
 
 ### Scheduler
 

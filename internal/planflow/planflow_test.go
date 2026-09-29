@@ -319,6 +319,26 @@ func TestPrepareSurfacesUnknownDependency(t *testing.T) {
 	}
 }
 
+// TestPrepareSurfacesCapabilityGapAsNeedsHuman proves a generated plan that
+// depends on an ownerless capability reaches the human gate verbatim: it is not
+// reframed as a plan-validation defect to "fix", and it is not silently accepted.
+func TestPrepareSurfacesCapabilityGapAsNeedsHuman(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, filepath.Join("docs", "PRD.md"), "# PRD\n\nAdd controller human control.\n")
+	const ambiguous = `{"project":"p","summary":"s","capabilities":[{"name":"Reindex","status":"MISSING","evidence":"no reindex operation found"}],"stages":[{"id":"S1","title":"t","objective":"o","requires":["Reindex"],"acceptance_criteria":["a"]}]}`
+
+	_, err := Prepare(context.Background(), Options{Dir: dir, Agent: fakeAgent{content: ambiguous}, Store: &fakeStore{}})
+	if err == nil {
+		t.Fatal("expected a NEEDS_HUMAN error for an ownerless required capability")
+	}
+	if !strings.Contains(err.Error(), "NEEDS_HUMAN") {
+		t.Errorf("error = %q, want a NEEDS_HUMAN gate", err)
+	}
+	if strings.Contains(err.Error(), "Plan validation failed") {
+		t.Errorf("error = %q, must not be reframed as a validation defect", err)
+	}
+}
+
 func TestPrepareRequiresAgentForPRD(t *testing.T) {
 	dir := t.TempDir()
 	write(t, dir, filepath.Join("docs", "PRD.md"), "# PRD\n")

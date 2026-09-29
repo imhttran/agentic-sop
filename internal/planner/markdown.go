@@ -20,32 +20,53 @@ var (
 // compileTaskPrompt asks the agent to normalize a human plan document into the
 // machine plan. It is only used when deterministic compilation fails.
 const compileTaskPrompt = `Convert the provided human PLAN.md into the machine plan JSON.
-Preserve the stages, their ids, titles, objectives, dependencies, deliverables,
-acceptance criteria, and execution mode; do not invent or drop work.`
+Preserve the stages, their ids, titles, objectives, dependencies, the
+capabilities they require, deliverables, acceptance criteria, and execution mode,
+along with any capability inventory and assumptions; do not invent or drop work.`
 
 // PlanFromMarkdown deterministically compiles a human PLAN.md into a Plan. It
 // understands the rendering produced by RenderMarkdown and close human variants:
-// a "## Project" and "## Summary" section, and one "## <id> — <title>" section
-// per stage with optional Dependencies / Deliverables / Acceptance Criteria
-// sub-sections. It does not validate; callers call Validate.
+// a "## Project" and "## Summary" section, optional "## Capabilities" and
+// "## Assumptions" inventories, and one "## <id> — <title>" section per stage
+// with optional Dependencies / Requires / Deliverables / Acceptance Criteria /
+// Execution sub-sections. It does not validate; callers call Validate.
 func PlanFromMarkdown(markdown string) (*Plan, error) {
 	plan := &Plan{}
 	var project, summary strings.Builder
 
-	section := "" // "project" | "summary" | "stage" | ""
+	section := "" // "project" | "summary" | "stage" | "capabilities" | "assumptions" | ""
 	type stageAcc struct {
 		stage     Stage
 		objective strings.Builder
 		sub       string
 	}
 	var cur *stageAcc
+	var curCap *Capability
+	var curAsm *Assumption
 
-	flush := func() {
+	flushStage := func() {
 		if cur != nil {
 			cur.stage.Objective = strings.TrimSpace(cur.objective.String())
 			plan.Stages = append(plan.Stages, cur.stage)
 			cur = nil
 		}
+	}
+	flushCap := func() {
+		if curCap != nil {
+			plan.Capabilities = append(plan.Capabilities, *curCap)
+			curCap = nil
+		}
+	}
+	flushAsm := func() {
+		if curAsm != nil {
+			plan.Assumptions = append(plan.Assumptions, *curAsm)
+			curAsm = nil
+		}
+	}
+	flush := func() {
+		flushStage()
+		flushCap()
+		flushAsm()
 	}
 
 	for _, raw := range strings.Split(markdown, "\n") {
@@ -65,6 +86,12 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 				case "summary":
 					section = "summary"
 					continue
+				case "capabilities", "capability":
+					section = "capabilities"
+					continue
+				case "assumptions", "assumption":
+					section = "assumptions"
+					continue
 				}
 				id, title := splitStageHeading(text)
 				if id == "" {
@@ -74,9 +101,19 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 				cur = &stageAcc{stage: Stage{ID: id, Title: title}}
 				section = "stage"
 				continue
-			default: // level >= 3: a sub-section within the current stage
+			default: // level >= 3: a sub-section within the current section
 				if cur != nil {
 					cur.sub = normalizeHeading(text)
+					continue
+				}
+				switch section {
+				case "capabilities":
+					flushCap()
+					name, status := splitNameStatus(text)
+					curCap = &Capability{Name: name, Status: CapabilityStatus(status)}
+				case "assumptions":
+					flushAsm()
+					curAsm = &Assumption{Assumption: strings.TrimSpace(text)}
 				}
 				continue
 			}
@@ -87,6 +124,42 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 			project.WriteString(raw + "\n")
 		case "summary":
 			summary.WriteString(raw + "\n")
+		case "capabilities":
+			if curCap == nil {
+				continue
+			}
+			key, val, ok := splitField(raw)
+			if !ok {
+				continue
+			}
+			switch key {
+			case "status":
+				curCap.Status = CapabilityStatus(val)
+			case "location":
+				curCap.Location = val
+			case "owner":
+				curCap.Owner = val
+			case "evidence":
+				curCap.Evidence = val
+			case "gap":
+				curCap.Gap = val
+			case "resolution":
+				curCap.Resolution = val
+			}
+		case "assumptions":
+			if curAsm == nil {
+				continue
+			}
+			key, val, ok := splitField(raw)
+			if !ok {
+				continue
+			}
+			switch key {
+			case "evidence":
+				curAsm.Evidence = val
+			case "consequence":
+				curAsm.Consequence = val
+			}
 		case "stage":
 			if cur == nil {
 				continue
@@ -98,6 +171,8 @@ func PlanFromMarkdown(markdown string) (*Plan, error) {
 			switch cur.sub {
 			case "dependencies", "dependency", "depends on":
 				cur.stage.Dependencies = append(cur.stage.Dependencies, item)
+			case "requires", "require", "needs":
+				cur.stage.Requires = append(cur.stage.Requires, item)
 			case "deliverables", "deliverable", "scope", "outputs":
 				cur.stage.Deliverables = append(cur.stage.Deliverables, item)
 			case "acceptance criteria", "acceptance", "acceptance criterion", "tests":
@@ -136,19 +211,23 @@ func (p *Planner) Compile(ctx context.Context, markdown string) (*Plan, error) {
 		if err := parsed.Validate(); err != nil {
 			return nil, err
 		}
-		return parsed, nil
+		return acceptPlan(parsed)
 	}
 
 	if p == nil || p.agent == nil {
 		return nil, fmt.Errorf("cannot compile plan document and no agent is available to normalize it")
 	}
 
-	return p.generateValid(ctx, agent.Request{
+	plan, err := p.generateValid(ctx, agent.Request{
 		Capability:         agent.Plan,
 		Task:               compileTaskPrompt,
 		Input:              markdown,
 		OutputRequirements: planOutputRequirements,
 	})
+	if err != nil {
+		return nil, err
+	}
+	return acceptPlan(plan)
 }
 
 // normalizeHeading lowercases a heading and collapses whitespace for lookup.
@@ -168,6 +247,29 @@ func splitStageHeading(text string) (id, title string) {
 	}
 	rest := strings.TrimLeft(strings.TrimSpace(text[len(m[1]):]), "-–—: \t")
 	return m[1], strings.TrimSpace(rest)
+}
+
+// splitNameStatus separates a capability heading such as "CancelRun — MISSING"
+// into its name and status. It accepts the separators RenderMarkdown emits and
+// the close hand-written variants.
+func splitNameStatus(text string) (name, status string) {
+	for _, sep := range []string{" — ", " – ", " - ", " | ", ": "} {
+		if i := strings.Index(text, sep); i >= 0 {
+			return strings.TrimSpace(text[:i]), strings.TrimSpace(text[i+len(sep):])
+		}
+	}
+	return strings.TrimSpace(text), ""
+}
+
+// splitField parses a rendered "- Key: value" field line into a normalized key
+// and its value. It reports false for a line that carries no field.
+func splitField(line string) (key, value string, ok bool) {
+	item := listItem(line)
+	i := strings.Index(item, ":")
+	if i < 0 {
+		return "", "", false
+	}
+	return normalizeHeading(item[:i]), strings.TrimSpace(item[i+1:]), true
 }
 
 // listItem strips a bullet/checkbox from a line and returns the item text, or ""

@@ -17,6 +17,15 @@ type Plan struct {
 	Project string  `json:"project"`
 	Summary string  `json:"summary"`
 	Stages  []Stage `json:"stages"`
+	// Capabilities is the discovery inventory: the existing capabilities the work
+	// depends on, each classified EXISTS/PARTIAL/MISSING/UNKNOWN with the evidence
+	// behind the finding. It lets synthesis plan against the real system instead
+	// of an assumed one. Optional: a plan with no upstream dependencies omits it.
+	Capabilities []Capability `json:"capabilities,omitempty"`
+	// Assumptions records the important inferences PLAN made, with their evidence
+	// and consequence, so a planning assumption is reviewable rather than silently
+	// baked into a task.
+	Assumptions []Assumption `json:"assumptions,omitempty"`
 }
 
 // Stage kinds. An environment stage is a bootstrap task (development
@@ -41,6 +50,11 @@ type Stage struct {
 	// first; "verify-first" runs deterministic validation before any agent and only
 	// invokes one when that validation fails.
 	ExecutionMode domain.ExecutionMode `json:"execution_mode,omitempty"`
+	// Requires names the capabilities this stage depends on. Each must be declared
+	// in the plan's capability inventory, and a stage may not depend on one whose
+	// status is UNKNOWN: synthesis must not build work on a capability it could
+	// not verify.
+	Requires []string `json:"requires,omitempty"`
 }
 
 // Validate performs deterministic structural validation of a Plan. It is the
@@ -101,6 +115,51 @@ func (p *Plan) Validate() error {
 
 	if err := detectCycle(p.Stages); err != nil {
 		return err
+	}
+
+	return p.validateCapabilities()
+}
+
+// validateCapabilities checks the capability inventory and the stages that
+// depend on it. Capability names are unique and non-empty, statuses are known,
+// and every stage requirement names a declared capability. A stage may not
+// depend on a capability whose status is UNKNOWN, so synthesis cannot silently
+// treat an unverified capability as if it exists.
+func (p *Plan) validateCapabilities() error {
+	status := make(map[string]CapabilityStatus, len(p.Capabilities))
+	for i, c := range p.Capabilities {
+		name := strings.TrimSpace(c.Name)
+		if name == "" {
+			return fmt.Errorf("plan: capability %d has empty name", i)
+		}
+		if c.Name != name {
+			return fmt.Errorf("plan: capability %q must not have surrounding whitespace", c.Name)
+		}
+		if _, dup := status[c.Name]; dup {
+			return fmt.Errorf("plan: duplicate capability %q", c.Name)
+		}
+		if !KnownCapabilityStatus(c.Status) {
+			return fmt.Errorf("plan: capability %s has unknown status %q", c.Name, c.Status)
+		}
+		status[c.Name] = normalizeCapabilityStatus(c.Status)
+	}
+
+	for i, a := range p.Assumptions {
+		if strings.TrimSpace(a.Assumption) == "" {
+			return fmt.Errorf("plan: assumption %d is empty", i)
+		}
+	}
+
+	for _, stage := range p.Stages {
+		for _, name := range stage.Requires {
+			st, ok := status[name]
+			if !ok {
+				return fmt.Errorf("plan: stage %s requires undeclared capability %q", stage.ID, name)
+			}
+			if st == CapabilityUnknown {
+				return fmt.Errorf("plan: stage %s requires capability %q whose status is UNKNOWN; verify it before depending on it", stage.ID, name)
+			}
+		}
 	}
 
 	return nil

@@ -1000,8 +1000,13 @@ func loadPlan(path string) (*planner.Plan, bool) {
 }
 
 // planError formats a plan-problem diagnostic that names the source and the
-// recovery command.
+// recovery command. A capability-gap ambiguity is a genuine human decision, not a
+// structural defect, so it is passed through unchanged rather than reframed as
+// "fix the plan and rerun".
 func planError(source string, err error) error {
+	if planner.IsNeedsHuman(err) {
+		return err
+	}
 	name := source
 	if strings.TrimSpace(name) == "" {
 		name = filepath.Join(config.DirName, planFileName)

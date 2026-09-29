@@ -91,7 +91,17 @@ the plan; the task Input usually already contains the material you need. Discove
 is bounded, and when it ends you will be told to synthesize — so return the
 required structured PLAN response as soon as the context is sufficient rather than
 continuing optional exploration. Do not modify files. SOP performs independent
-validation and review after you return.`
+validation and review after you return.
+
+When the work integrates with or extends an existing system, use discovery to
+check that the capabilities the plan depends on actually exist before you commit
+to tasks: application/service APIs, CLI commands, interfaces, persistence
+boundaries, scheduler/lifecycle ownership, external adapters, provider
+capabilities, authorization/approval operations, and existing read/write
+operations. Record each as EXISTS, PARTIAL, MISSING, or UNKNOWN with the evidence
+you saw. Never plan a task as if a missing or unknown capability already exists;
+when the requested architecture already determines who owns a missing capability,
+record the gap and keep the work that is possible instead of stopping.`
 	case agent.Review:
 		return `This is REVIEW. The change under review is summarised in the Input; inspect the
 repository only if the Input is insufficient. Do not modify files. Return the
