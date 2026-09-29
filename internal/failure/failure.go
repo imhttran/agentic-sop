@@ -73,12 +73,17 @@ const (
 	TransientProvider        Kind = "TRANSIENT_PROVIDER"
 	EmptyResponse            Kind = "EMPTY_RESPONSE"
 	ToolFailure              Kind = "TOOL_FAILURE"
-	ReplanRequired           Kind = "REPLAN_REQUIRED"
-	AmbiguousContract        Kind = "AMBIGUOUS_CONTRACT"
-	ApprovalRequired         Kind = "APPROVAL_REQUIRED"
-	SecurityBoundary         Kind = "SECURITY_BOUNDARY"
-	DestructiveOperation     Kind = "DESTRUCTIVE_OPERATION"
-	Unknown                  Kind = "UNKNOWN"
+	// JEVAnalysisFailure: the optional JEV analysis ran but could not produce a
+	// usable result (a malformed/invalid structured output after the bounded
+	// corrective retries, or an INCOMPLETE/ERROR status). It is a bounded,
+	// non-human failure.
+	JEVAnalysisFailure   Kind = "JEV_ANALYSIS_FAILURE"
+	ReplanRequired       Kind = "REPLAN_REQUIRED"
+	AmbiguousContract    Kind = "AMBIGUOUS_CONTRACT"
+	ApprovalRequired     Kind = "APPROVAL_REQUIRED"
+	SecurityBoundary     Kind = "SECURITY_BOUNDARY"
+	DestructiveOperation Kind = "DESTRUCTIVE_OPERATION"
+	Unknown              Kind = "UNKNOWN"
 )
 
 // Classification is the classifier's verdict for one failure.
@@ -129,6 +134,16 @@ type Evidence struct {
 	SecurityBoundary     bool
 	DestructiveOperation bool
 
+	// JEVFailed reports that the optional JEV analysis ran but could not produce
+	// a usable result: a malformed/invalid provider result (after the bounded
+	// corrective retries), or an INCOMPLETE/ERROR status. It is an analysis
+	// failure, not a human decision — fail-closed, but never NEEDS_HUMAN on its
+	// own.
+	JEVFailed bool
+	// JEVReason is the JEV failure's authoritative reason, preserved verbatim in
+	// the classification and the report.
+	JEVReason string
+
 	// Fix-loop budget. A zero MaxFixCycles means "unknown/unbounded".
 	FixCycles    int
 	MaxFixCycles int
@@ -169,14 +184,28 @@ func Classify(ev Evidence) Classification {
 		return c
 	}
 
-	// 5. A deterministic verification failure: the intended behavior can be
+	// 5. A JEV analysis failure: JEV ran but could not produce a valid result (a
+	//    malformed/invalid structured output after the bounded corrective retries,
+	//    or an INCOMPLETE/ERROR status). It is a bounded, non-human failure —
+	//    fail-closed, but never NEEDS_HUMAN — and its authoritative reason is
+	//    preserved. A valid JEV result with blocking findings is not this case; it
+	//    is weighed like any other finding by the gate and the fix loop.
+	if ev.JEVFailed {
+		reason := strings.TrimSpace(ev.JEVReason)
+		if reason == "" {
+			reason = "JEV analysis could not produce a valid result; no human decision is required"
+		}
+		return retry(JEVAnalysisFailure, reason)
+	}
+
+	// 6. A deterministic verification failure: the intended behavior can be
 	//    determined from the task, the domain contract, and the diagnostics, so
 	//    the existing bounded fix loop resolves it.
 	if c, ok := fromVerification(ev); ok {
 		return c
 	}
 
-	// 6. No authoritative signal: fail closed to a human rather than guess.
+	// 7. No authoritative signal: fail closed to a human rather than guess.
 	return Classification{Kind: Unknown, Disposition: NeedsHuman, Confidence: Low,
 		Reason: "no authoritative signal was available; a human decision is required"}
 }

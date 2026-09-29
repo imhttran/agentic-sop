@@ -386,8 +386,8 @@ func TestChatSendsModelJSONFormatAndNoStream(t *testing.T) {
 	if req.Model != DefaultModel {
 		t.Errorf("model = %q, want %q", req.Model, DefaultModel)
 	}
-	if req.Format != "json" {
-		t.Errorf("format = %q, want json", req.Format)
+	if got := string(req.Format); got != `"json"` {
+		t.Errorf("format = %s, want json", got)
 	}
 	if req.Stream {
 		t.Error("stream = true, want false")

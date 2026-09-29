@@ -252,3 +252,46 @@ func TestRetryableHelper(t *testing.T) {
 		}
 	}
 }
+
+// jevMalformedReason is the real reason a fail-closed JEV analysis produces after
+// its bounded corrective retries are exhausted (the CTRL007 dogfood failure). It
+// must be classified as a bounded, non-human failure with the reason preserved.
+const jevMalformedReason = "JEV analysis failed (fail closed): jev: provider failure (MALFORMED_OUTPUT) after 3 attempts: model output is not valid JSON: invalid character '#' looking for beginning of value"
+
+// TestJEVAnalysisFailureIsBoundedNotHuman pins the fix for the CTRL007 dogfood
+// failure: a JEV analysis that cannot produce a valid result is fail-closed but
+// not a human decision. It is a bounded retry, and its authoritative reason is
+// preserved verbatim.
+func TestJEVAnalysisFailureIsBoundedNotHuman(t *testing.T) {
+	got := Classify(Evidence{Source: "VALIDATE", JEVFailed: true, JEVReason: jevMalformedReason})
+	if got.Disposition != Retry {
+		t.Fatalf("disposition = %s, want RETRY", got.Disposition)
+	}
+	if got.Kind != JEVAnalysisFailure {
+		t.Errorf("kind = %s, want %s", got.Kind, JEVAnalysisFailure)
+	}
+	if got.Reason != jevMalformedReason {
+		t.Errorf("reason = %q, want the preserved JEV reason", got.Reason)
+	}
+}
+
+// TestJEVAnalysisFailureWithoutReasonStillBounded asserts a JEV failure with no
+// recorded reason still classifies as a bounded, non-human retry with a reason.
+func TestJEVAnalysisFailureWithoutReasonStillBounded(t *testing.T) {
+	got := Classify(Evidence{Source: "VALIDATE", JEVFailed: true})
+	if got.Disposition != Retry || got.Kind != JEVAnalysisFailure {
+		t.Fatalf("got %s/%s, want RETRY/%s", got.Disposition, got.Kind, JEVAnalysisFailure)
+	}
+	if got.Reason == "" {
+		t.Error("classification has no reason")
+	}
+}
+
+// TestJEVFailureDoesNotOverrideHumanBoundary asserts an explicit human boundary
+// still wins over a coincident JEV analysis failure.
+func TestJEVFailureDoesNotOverrideHumanBoundary(t *testing.T) {
+	got := Classify(Evidence{Source: "VALIDATE", JEVFailed: true, JEVReason: jevMalformedReason, ApprovalRequired: true})
+	if got.Disposition != NeedsHuman {
+		t.Errorf("disposition = %s, want NEEDS_HUMAN (a human boundary outranks a JEV failure)", got.Disposition)
+	}
+}

@@ -487,7 +487,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// pass has no failure to classify.
 	var class failure.Classification
 	if gate.Decision != quality.Pass {
-		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles))
+		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles, jevEv))
 	}
 	return lifeResult{
 		gate:           gate,
@@ -503,10 +503,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 }
 
 // verificationEvidence builds the structured evidence for a deterministic gate
-// failure: which configured check failed, the blocking findings that remain, and
-// the fix budget, so the classifier can decide whether the failure is safely
-// auto-fixable or has exhausted its bounded budget.
-func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int) failure.Evidence {
+// failure: which configured check failed, the blocking findings that remain, the
+// fix budget, and whether JEV failed closed, so the classifier can decide whether
+// the failure is safely auto-fixable, a bounded continuation, or has exhausted its
+// bounded budget. A JEV analysis failure is a bounded, non-human signal: it is
+// recorded so the classification preserves its reason instead of falling through
+// to an "unknown" human boundary.
+func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int, jevEv *jevRunEvidence) failure.Evidence {
 	buildFailed := hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build)
 	testFailed := hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest)
 	lintFailed := hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint)
@@ -518,6 +521,13 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 		BlockingFindings: quality.BlockingFindings(cfg.Quality.FailOn, report.Findings),
 		FixCycles:        cycles,
 		MaxFixCycles:     cfg.Quality.MaxFixCycles,
+	}
+	// A fail-closed JEV is an analysis/provider failure, not a human decision. Its
+	// authoritative reason is carried through so the classification and the report
+	// say the task is blocked because JEV could not produce a valid result.
+	if jevEvidence := jevEv.gateEvidence(); jevEvidence != nil && jevEvidence.FailClosed {
+		ev.JEVFailed = true
+		ev.JEVReason = jevEvidence.Reason
 	}
 	// Required test coverage is only "missing" when nothing else failed: a build
 	// failure that skipped the tests is a compiler error, not a coverage gap.

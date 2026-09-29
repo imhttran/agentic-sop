@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 	"github.com/imhttran/agentic-sop/internal/review"
@@ -23,12 +24,69 @@ const maxPromptRunes = 48 << 10 // 48 Ki characters
 // is truncated before parsing so a runaway model cannot retain unbounded memory.
 const maxOutputRunes = 256 << 10 // 256 Ki characters
 
+// maxAnalysisAttempts bounds one JEV analysis: the initial attempt plus at most
+// two corrective retries when the model returns output that does not satisfy the
+// required JSON schema. It is small and fixed so a malformed response can neither
+// become an unbounded loop nor a provider-retry storm. Provider failures are not
+// retried here; they are absorbed at the provider-call boundary.
+const maxAnalysisAttempts = 3
+
+// jevOutputSchema is the output contract for a JEV analysis. It states the exact
+// JSON shape the adapter validates and forbids the markdown/prose forms that make
+// the output unparseable, so the model is told the contract rather than guessed
+// at. It reuses the schema the adapter already validates (modelOutput) and is
+// complemented by the provider's schema-constrained mode (jevOutputJSONSchema);
+// it introduces no second protocol.
+const jevOutputSchema = `Return ONE JSON object and nothing else (no prose, no markdown, no code fences):
+{"status":"PASS|FINDINGS|INCOMPLETE|ERROR","summary":string,"findings":[{"id":string,"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","category":string,"path":string,"line":number,"message":string,"evidence":string}]}
+Use "PASS" with an empty findings list when there is nothing to report, and "FINDINGS" with at least one finding otherwise. Report only real findings with concrete evidence.`
+
+// jevCorrectiveInstruction is appended to the prompt when the model's previous
+// response did not satisfy the required JSON schema. It asks the model to correct
+// its own response; SOP never interprets arbitrary prose as findings or strips
+// arbitrary output until it happens to parse.
+const jevCorrectiveInstruction = `Your previous response violated the required JSON schema. Return ONLY valid JSON matching the schema. Do not include markdown, prose, code fences, headings, or commentary.`
+
 // ChatProvider is the reused Ollama provider path the adapter drives. It is the
-// single-turn chat entry point of the existing Ollama infrastructure; the
-// adapter introduces no second provider stack.
+// single-turn chat entry point of the existing Ollama infrastructure; the adapter
+// introduces no second provider stack. ChatStructured is the same provider entry
+// point constrained to a JSON schema, so the adapter can ask Ollama to enforce the
+// output shape instead of relying on the model to infer it from prose.
 type ChatProvider interface {
 	Chat(ctx context.Context, model, prompt string) (string, error)
+	ChatStructured(ctx context.Context, model, prompt string, schema json.RawMessage) (string, error)
 }
+
+// jevOutputJSONSchema is the JSON schema the adapter constrains the model's
+// response to (Ollama's "format" field). It mirrors the authoritative modelOutput
+// contract the strict parser validates, so the provider enforces the same shape
+// the parser already requires rather than the model inferring it. It is the
+// schema-constraint layer of defense in depth; the prompt contract and the strict
+// parser + bounded corrective retry remain in place.
+var jevOutputJSONSchema = json.RawMessage(`{
+  "type": "object",
+  "properties": {
+    "status": {"type": "string", "enum": ["PASS", "FINDINGS", "INCOMPLETE", "ERROR"]},
+    "summary": {"type": "string"},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {"type": "string"},
+          "severity": {"type": "string", "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
+          "category": {"type": "string"},
+          "path": {"type": "string"},
+          "line": {"type": "integer"},
+          "message": {"type": "string"},
+          "evidence": {"type": "string"}
+        },
+        "required": ["severity"]
+      }
+    }
+  },
+  "required": ["status"]
+}`)
 
 // OllamaAnalyzer is a jev.Analyzer backed by the existing Ollama infrastructure.
 // It receives only the bounded jev.Request, builds a prompt from it, and returns
@@ -37,6 +95,12 @@ type ChatProvider interface {
 type OllamaAnalyzer struct {
 	cfg      ollamaagent.Config
 	provider ChatProvider
+	// providerCalls records the number of JEV-level provider calls the most recent
+	// Analyze made: the initial attempt plus any bounded corrective retries. It is
+	// diagnostic metadata only (see JEVToolCalls) and never feeds a decision. It is
+	// atomic so a shared analyzer cannot race if Analyze is ever called
+	// concurrently.
+	providerCalls atomic.Int64
 }
 
 // ProviderErrorKind names the class of an adapter failure so SOP can react to a
@@ -56,19 +120,35 @@ const (
 type ProviderError struct {
 	Kind ProviderErrorKind
 	Err  error
+	// Attempts is how many model attempts were made before the failure, when
+	// known (zero when not applicable). It is diagnostic metadata only, recorded
+	// so a report can distinguish a first-attempt failure from an exhausted
+	// corrective retry.
+	Attempts int
 }
 
 func (e *ProviderError) Error() string {
-	if e.Err == nil {
-		return "jev: provider failure (" + string(e.Kind) + ")"
+	base := "jev: provider failure (" + string(e.Kind) + ")"
+	if e.Attempts > 1 {
+		base += fmt.Sprintf(" after %d attempts", e.Attempts)
 	}
-	return fmt.Sprintf("jev: provider failure (%s): %v", e.Kind, e.Err)
+	if e.Err == nil {
+		return base
+	}
+	return base + ": " + e.Err.Error()
 }
 
 func (e *ProviderError) Unwrap() error { return e.Err }
 
 func providerError(kind ProviderErrorKind, err error) error {
 	return &ProviderError{Kind: kind, Err: err}
+}
+
+// providerErrorAfter is providerError carrying the number of attempts made before
+// the failure, so a malformed-output failure records how many corrective retries
+// were exhausted instead of reading like a first-attempt failure.
+func providerErrorAfter(kind ProviderErrorKind, err error, attempts int) error {
+	return &ProviderError{Kind: kind, Err: err, Attempts: attempts}
 }
 
 // NewOllamaAnalyzer builds an adapter from the reused Ollama configuration. The
@@ -113,14 +193,24 @@ func (a *OllamaAnalyzer) JEVProvider() string { return "ollama" }
 // metrics. It is diagnostic metadata only and never feeds a decision.
 func (a *OllamaAnalyzer) JEVModel() string { return a.cfg.Model }
 
-// JEVToolCalls reports the number of provider calls one analysis makes. The
-// adapter is a single bounded chat round-trip, so it is one. It is diagnostic
+// JEVToolCalls reports the number of JEV-level provider calls the most recent
+// analysis made: the initial attempt plus any bounded corrective retries. It is
+// the analysis's real provider cost, not a fixed one; it does not count
+// lower-level transport retries the shared Ollama client performs internally, so
+// it can under-report a call the transport itself retried. It is diagnostic
 // metadata only and never feeds a decision.
-func (a *OllamaAnalyzer) JEVToolCalls() int { return 1 }
+func (a *OllamaAnalyzer) JEVToolCalls() int { return int(a.providerCalls.Load()) }
 
 // Analyze maps the bounded Request to a model prompt, runs the reused provider
 // under a bounded context, and converts the output into a validated Result. It
 // fails closed: a non-nil error is always accompanied by a zero Result.
+//
+// A response that does not satisfy the required JSON schema is retried a small,
+// fixed number of times with a corrective instruction, so the model corrects its
+// own malformed output (for example markdown preceding the JSON) rather than SOP
+// interpreting arbitrary prose as findings. Provider failures are not retried
+// here: they are absorbed at the provider-call boundary. The corrective retry is
+// bounded by maxAnalysisAttempts and never becomes an unbounded loop.
 func (a *OllamaAnalyzer) Analyze(ctx context.Context, req Request) (Result, error) {
 	if ctx == nil {
 		ctx = context.Background()
@@ -132,32 +222,67 @@ func (a *OllamaAnalyzer) Analyze(ctx context.Context, req Request) (Result, erro
 
 	prompt := a.buildPrompt(req)
 
-	out, err := a.provider.Chat(callCtx, a.cfg.Model, prompt)
-	if err != nil {
-		switch {
-		case errors.Is(err, context.DeadlineExceeded), errors.Is(callCtx.Err(), context.DeadlineExceeded):
+	// Record the analysis's real provider cost (initial attempt plus corrective
+	// retries) for the metrics, whatever path it exits by.
+	providerCalls := 0
+	defer func() { a.providerCalls.Store(int64(providerCalls)) }()
+
+	var lastErr error
+	for attempt := 1; attempt <= maxAnalysisAttempts; attempt++ {
+		// A cancelled/expired context is terminal: never retry it.
+		if err := callCtx.Err(); err != nil {
 			return Result{}, providerError(ErrTimeout, err)
-		case errors.Is(err, context.Canceled), errors.Is(callCtx.Err(), context.Canceled):
-			return Result{}, providerError(ErrTimeout, err)
-		default:
-			return Result{}, providerError(ErrProviderUnreachable, err)
 		}
-	}
-	if err := callCtx.Err(); err != nil {
-		return Result{}, providerError(ErrTimeout, err)
+
+		// The first attempt carries the base contract; a corrective retry appends
+		// the schema-violation instruction so the model corrects its own output.
+		p := prompt
+		if attempt > 1 {
+			p = prompt + "\n\n" + jevCorrectiveInstruction
+		}
+
+		// The provider constrains the response to the JEV output schema; the strict
+		// parser below and the corrective retry are the remaining layers of defense
+		// in depth.
+		providerCalls++
+		out, err := a.provider.ChatStructured(callCtx, a.cfg.Model, p, jevOutputJSONSchema)
+		if err != nil {
+			// A provider failure is handled by the provider-call boundary (which
+			// retries transient failures); it is never corrective-retried here and
+			// never retried once the context is gone.
+			switch {
+			case errors.Is(err, context.DeadlineExceeded), errors.Is(callCtx.Err(), context.DeadlineExceeded):
+				return Result{}, providerError(ErrTimeout, err)
+			case errors.Is(err, context.Canceled), errors.Is(callCtx.Err(), context.Canceled):
+				return Result{}, providerError(ErrTimeout, err)
+			default:
+				return Result{}, providerError(ErrProviderUnreachable, err)
+			}
+		}
+		if err := callCtx.Err(); err != nil {
+			return Result{}, providerError(ErrTimeout, err)
+		}
+
+		result, err := parseModelOutput(out)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
 	}
 
-	result, err := parseModelOutput(out)
-	if err != nil {
-		return Result{}, providerError(ErrMalformedOutput, err)
-	}
-	return result, nil
+	// Every attempt produced output that violated the schema: fail closed with a
+	// malformed-output error that records how many attempts were exhausted.
+	return Result{}, providerErrorAfter(ErrMalformedOutput, lastErr, maxAnalysisAttempts)
 }
 
 // buildPrompt renders the Request using the boundary's own terminology and
 // bounds the result. It uses only the read-only Request snapshot.
 func (a *OllamaAnalyzer) buildPrompt(req Request) string {
 	var b strings.Builder
+	// State the output contract first, so it survives prompt truncation and the
+	// model is told the required JSON shape rather than being expected to infer it.
+	b.WriteString(jevOutputSchema)
+	b.WriteString("\n\n")
 	writeField := func(label, value string) {
 		if strings.TrimSpace(value) == "" {
 			return

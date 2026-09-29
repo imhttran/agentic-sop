@@ -294,6 +294,38 @@ func TestJEVAnalyzerErrorFailsClosed(t *testing.T) {
 	}
 }
 
+// A JEV analysis that exhausts its bounded corrective retries (malformed
+// structured output) is fail-closed but not a human decision: the gate fails with
+// the JEV reason and the run is classified as a bounded JEV analysis failure
+// (RETRY), never NEEDS_HUMAN.
+func TestJEVMalformedOutputIsBoundedNotHuman(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, jevEnabledConfig)
+	a := &jevTestAgent{plan: validPlanJSON, impl: "impl", review: `{"summary":"clean","findings":[]}`}
+	analyzer := &sequencedJEV{errs: []error{&jev.ProviderError{
+		Kind:     jev.ErrMalformedOutput,
+		Err:      errors.New("model output is not valid JSON: invalid character '#' looking for beginning of value"),
+		Attempts: 3,
+	}}}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, jevDiff, a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("a fail-closed JEV must not be reported as NEEDS_HUMAN: %q", stdout)
+	}
+	if !strings.Contains(stdout, "classification: RETRY (JEV_ANALYSIS_FAILURE") {
+		t.Errorf("stdout missing the bounded JEV classification: %q", stdout)
+	}
+	if !strings.Contains(stdout, "MALFORMED_OUTPUT") {
+		t.Errorf("stdout must preserve the JEV failure reason: %q", stdout)
+	}
+}
+
 // --- disabled / absent flow -------------------------------------------------
 
 // With JEV disabled the analyzer factory is never consulted and the run behaves

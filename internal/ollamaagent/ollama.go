@@ -36,17 +36,24 @@ type toolCall struct {
 	Args map[string]any
 }
 
-// ollamaChatRequest is the request body for POST /api/chat. Format "json"
-// constrains the model to emit a single JSON object, which is what the tool
-// protocol and the final outcome both require. Think disables the model's
-// reasoning channel (see chat).
+// ollamaChatRequest is the request body for POST /api/chat. Format is either the
+// string "json" (a single JSON object, which the tool protocol and the final
+// outcome require) or a JSON schema object that constrains the model's output to
+// that schema. It is json.RawMessage so both forms serialize identically to how
+// Ollama expects them, without a second HTTP implementation. Think disables the
+// model's reasoning channel (see chat).
 type ollamaChatRequest struct {
-	Model    string        `json:"model"`
-	Messages []chatMessage `json:"messages"`
-	Stream   bool          `json:"stream"`
-	Format   string        `json:"format,omitempty"`
-	Think    *bool         `json:"think,omitempty"`
+	Model    string          `json:"model"`
+	Messages []chatMessage   `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Format   json.RawMessage `json:"format,omitempty"`
+	Think    *bool           `json:"think,omitempty"`
 }
+
+// jsonFormatMode is the generic JSON-object response mode used by normal agent
+// traffic: Ollama returns a single JSON object. A structured caller instead
+// supplies a JSON schema (see chatStructured), which Ollama enforces.
+var jsonFormatMode = json.RawMessage(`"json"`)
 
 type ollamaChatResponse struct {
 	Message chatMessage     `json:"message"`
@@ -131,15 +138,35 @@ func newOllamaClient(cfg Config) *ollamaClient {
 	}
 }
 
-// chat sends one non-streaming chat completion, retrying transient provider
-// failures at the provider boundary. It returns the assistant message's content
-// and any native tool calls. A retry re-sends the SAME request/messages and
-// happens before any returned tool call is executed, so a transient failure can
-// never duplicate a tool invocation.
+// chat sends one non-streaming chat completion in the generic JSON mode,
+// retrying transient provider failures at the provider boundary. It returns the
+// assistant message's content and any native tool calls. A retry re-sends the
+// SAME request/messages and happens before any returned tool call is executed, so
+// a transient failure can never duplicate a tool invocation.
 func (c *ollamaClient) chat(ctx context.Context, messages []chatMessage) (string, []toolCall, error) {
+	return c.chatWithFormat(ctx, messages, jsonFormatMode)
+}
+
+// chatStructured sends one non-streaming chat completion constrained to a JSON
+// schema, reusing the same transport, timeout, response-size bound, and provider
+// retry as chat. It is how a caller that requires a structured contract (for
+// example JEV) asks Ollama to enforce the output shape, rather than relying on the
+// model to infer it from prose. A nil/empty schema degrades to the generic JSON
+// mode rather than sending a malformed request.
+func (c *ollamaClient) chatStructured(ctx context.Context, messages []chatMessage, schema json.RawMessage) (string, []toolCall, error) {
+	if len(schema) == 0 {
+		schema = jsonFormatMode
+	}
+	return c.chatWithFormat(ctx, messages, schema)
+}
+
+// chatWithFormat is the single bounded retry wrapper both chat and
+// chatStructured drive: it re-issues the same request with the same format until
+// it succeeds or the provider retry budget is exhausted.
+func (c *ollamaClient) chatWithFormat(ctx context.Context, messages []chatMessage, format json.RawMessage) (string, []toolCall, error) {
 	var lastErr error
 	for attempt := 1; attempt <= maxProviderAttempts; attempt++ {
-		content, calls, err := c.chatOnce(ctx, messages)
+		content, calls, err := c.chatOnce(ctx, messages, format)
 		if err == nil {
 			return content, calls, nil
 		}
@@ -156,9 +183,12 @@ func (c *ollamaClient) chat(ctx context.Context, messages []chatMessage) (string
 }
 
 // chatOnce performs exactly one HTTP request to Ollama's /api/chat. It never
-// retries itself; chat is the bounded retry wrapper. It is a single-attempt
-// operation so the retry policy lives in exactly one place.
-func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage) (string, []toolCall, error) {
+// retries itself; chat/chatStructured are the bounded retry wrappers. It is a
+// single-attempt operation so the retry policy lives in exactly one place.
+func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, format json.RawMessage) (string, []toolCall, error) {
+	if len(format) == 0 {
+		format = jsonFormatMode
+	}
 	// Thinking models (for example deepseek-v4.1-flash) emit some turns with an
 	// empty content field and the reasoning in "thinking", and split a turn
 	// across several tool calls. The harness only consumes content and speaks a
@@ -169,7 +199,7 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage) (st
 		Model:    c.model,
 		Messages: messages,
 		Stream:   false,
-		Format:   "json",
+		Format:   format,
 		Think:    &think,
 	})
 	if err != nil {
