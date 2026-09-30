@@ -67,3 +67,45 @@ func TestWriteRoutingArtifact(t *testing.T) {
 		t.Errorf("routing.json appears to carry a credential: %s", data)
 	}
 }
+
+// TestWriteRoutingArtifactFailsClosed proves the store writer validates before
+// writing: an unknown version or source is rejected and NO file is written.
+func TestWriteRoutingArtifactFailsClosed(t *testing.T) {
+	cases := map[string]func(a *RoutingArtifact){
+		"unknown version": func(a *RoutingArtifact) { a.Version = 999 },
+		"unknown source":  func(a *RoutingArtifact) { a.Source = "made_up" },
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			rn, err := New(dir, "T001")
+			if err != nil {
+				t.Fatalf("New: %v", err)
+			}
+			a := wellFormedRouting()
+			mutate(&a)
+			if err := rn.WriteRoutingArtifact(a); err == nil {
+				t.Fatalf("WriteRoutingArtifact accepted an invalid artifact (%s)", name)
+			}
+			if _, err := os.Stat(filepath.Join(rn.Dir(), "routing.json")); err == nil {
+				t.Fatalf("routing.json was written for an invalid artifact (%s)", name)
+			}
+		})
+	}
+}
+
+// TestWriteRoutingArtifactWellFormedStillWrites proves a valid artifact is not
+// refused by the fail-closed validation.
+func TestWriteRoutingArtifactWellFormedStillWrites(t *testing.T) {
+	dir := t.TempDir()
+	rn, err := New(dir, "T001")
+	if err != nil {
+		t.Fatalf("New: %v", err)
+	}
+	if err := rn.WriteRoutingArtifact(wellFormedRouting()); err != nil {
+		t.Fatalf("WriteRoutingArtifact: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(rn.Dir(), "routing.json")); err != nil {
+		t.Fatalf("routing.json not written for a well-formed artifact: %v", err)
+	}
+}

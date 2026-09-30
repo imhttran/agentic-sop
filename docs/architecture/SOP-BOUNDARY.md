@@ -15,6 +15,8 @@ bounded work; models are replaceable reasoning engines.**
 - [../PRD.md](../PRD.md) — product principles and requirements.
 - [../specs/WORKFLOW.md](../specs/WORKFLOW.md) — state transitions and scheduling.
 - [../specs/AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md) — the agent boundary.
+- [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) — the model-routing
+  boundary (classes, precedence, the automatic router, and what routing MUST NOT do).
 - [../specs/OPENJEV.md](../specs/OPENJEV.md) — the JEV analysis boundary.
 - [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md) — human authority.
 - [../specs/SECURITY.md](../specs/SECURITY.md) — repository safety and command boundaries.
@@ -42,7 +44,9 @@ SOP is the orchestration and lifecycle authority. It owns:
 - retry and fix-loop budgets, and bounded autonomy;
 - git branch/commit/PR state and CI/merge gates;
 - human-approval requirements;
-- environment bootstrap and recovery.
+- environment bootstrap and recovery;
+- model routing — selecting a model **class**, never a task outcome
+  (see [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md)).
 
 ## What Agents Own
 
@@ -60,6 +64,20 @@ provider can change without rewriting planning or orchestration:
 ```text
 Provider ≠ Agent Harness ≠ Model
 ```
+
+## The Model-Routing Boundary
+
+Model routing is SOP-owned and deterministic. The automatic router is **opt-in and
+off by default**, enabled only by `SOP_MODEL_ROUTING_ENABLED=true` (which overrides
+`models.routing_enabled`), and it selects a model **class** only. Routing MUST NOT
+transition task state, approve/reject/block/bypass validation, review, quality, or
+human approval, execute commands or modify the repository, or choose a concrete
+model name; a model MUST NOT control routing. `sop-controller` MAY display routing
+data but MUST NOT own routing policy. The authoritative rules — classes,
+configuration precedence, decision rules, and the full boundary — live in
+[../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md); this page does not restate
+them. The non-normative implementation seam is recorded in
+[../model-routing.md](../model-routing.md).
 
 ## State Ownership
 

@@ -231,7 +231,14 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	if res.routing != nil {
 		res.modelSelection = &res.routing.Selection
 		writeModelSelectionArtifact(rn, res.routing.Selection)
-		writeRoutingDecisionArtifact(rn, rn.State().ID, res.routing)
+		// Persist the routing decision and surface any contract violation (an
+		// unknown version or source that failed closed at the store boundary) rather
+		// than discarding it. The artifact is diagnostic only, so this never changes
+		// the run's already-fixed decision; it is reported so a failed write is not
+		// mistaken for success.
+		if werr := writeRoutingDecisionArtifact(rn, rn.State().ID, res.routing); werr != nil {
+			fmt.Fprintf(stdout, "warning: routing decision artifact not persisted: %v\n", werr)
+		}
 	} else {
 		res.modelSelection = modelSelectionDoc(d.routing)
 	}
@@ -1370,21 +1377,27 @@ func writeModelSelectionReport(b *strings.Builder, sel *model.Selection) {
 }
 
 // writeRoutingReport renders the per-task routing decision in the run report, so
-// the class, the reason, and the evidence that informed it are durable. It renders
-// nothing when no routing decision was recorded.
+// the class, the resolved model, the source, the reasons, and the typed evidence
+// that informed it are durable. It renders nothing when no routing decision was
+// recorded.
 func writeRoutingReport(b *strings.Builder, r *routingDoc) {
 	if r == nil {
 		return
 	}
 	b.WriteString("## Model routing\n\n")
 	fmt.Fprintf(b, "- Class: `%s`\n", r.Class)
+	fmt.Fprintf(b, "- Provider: `%s`\n", r.Provider)
 	fmt.Fprintf(b, "- Model: `%s`\n", r.Model)
+	fmt.Fprintf(b, "- Locality: `%s`\n", r.Locality)
 	fmt.Fprintf(b, "- Source: `%s`\n", r.Source)
 	if len(r.Reasons) > 0 {
 		fmt.Fprintf(b, "- Reasons: %s\n", router.ReasonsText(r.Reasons))
 	}
-	if len(r.Checkpoints) > 0 {
-		fmt.Fprintf(b, "- Evidence: %s\n", strings.Join(r.Checkpoints, ", "))
+	if cps := routingCheckpointsText(r.Checkpoints); cps != "" {
+		fmt.Fprintf(b, "- Checkpoints: %s\n", cps)
+	}
+	if ev := routingEvidenceMarkdown(r.Signals); ev != "" {
+		fmt.Fprintf(b, "- Evidence: %s\n", ev)
 	}
 	b.WriteString("\n")
 }

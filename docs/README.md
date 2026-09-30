@@ -56,7 +56,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) — the per-task lifecycle stages, TDD rules, and Git naming conventions.
 - [specs/EXECUTION.md](specs/EXECUTION.md) — `sop run`: planning-source discovery, change detection, artifacts, verify-first, and parallelism.
 - [specs/AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) — the harness/provider/model boundary, configuration precedence, and structured outcomes.
-- [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) — the model-class layer: classes, precedence, the deterministic per-task router, and the routing boundary (opt-in, OFF by default).
+- [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) — **the authoritative home for model-routing rules**: the model-class layer (`small`/`medium`/`large`), configuration precedence, the deterministic per-task router, and the routing boundary. The router is **opt-in and OFF by default**, enabled only by `SOP_MODEL_ROUTING_ENABLED=true` (overriding `models.routing_enabled`), with `--model-class` always winning. Every other page links here rather than restating the rules. The implementation seam (non-normative) is recorded in [model-routing.md](model-routing.md).
 - [specs/VALIDATION.md](specs/VALIDATION.md) — the deterministic validation runner and its evidence rules.
 - [specs/REVIEW.md](specs/REVIEW.md) — the review pipeline and engines, findings, and blocking severities.
 - [specs/OPENJEV.md](specs/OPENJEV.md) — the OpenJEV (JEV) analysis boundary, configuration, and failure behavior; §18 is the implemented Phase 3 early checkpoints, §17 the proposed/future items.
@@ -68,7 +68,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 ## Reference
 
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags.
-- [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`).
+- [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev` and the model-routing classes/precedence, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
 - [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, and severity policy.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
@@ -88,7 +88,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery.
 - [plans/PLAN-Model-Routing.md](plans/PLAN-Model-Routing.md) — model routing.
-- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; router OFF by default).
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis.
 - [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing.
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates.
@@ -109,4 +109,18 @@ To keep SOP working, a few paths are intentionally not under the categories abov
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
 - [PLAN-JEV-Implementation.md](PLAN-JEV-Implementation.md) stays at `docs/` because SOP records it as the active plan.
+- [model-routing.md](model-routing.md) stays at `docs/` as the non-normative implementation seam for the routing layer; the rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`.
+
+## Checking Documentation Links
+
+Documentation links MUST resolve. Run the repository link check over `docs/**/*.md`
+and `README.md` and their relative links:
+
+```bash
+scripts/check-doc-links.sh
+```
+
+It prints `broken links: <count>` (for example `broken links: 0`) and exits
+non-zero when any relative link does not resolve. Routing documentation in
+particular MUST pass with `broken links: 0`.

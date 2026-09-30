@@ -32,8 +32,9 @@ import (
 
 // taskRouting is the per-task routing decision: the resolved class selection plus
 // the deterministic provenance (source, reasons, the typed signals used, and which
-// checkpoints informed it). It is diagnostic evidence; nothing reads it back to
-// drive a decision beyond the model choice it records.
+// checkpoints informed it). It is the SOLE source of truth for the model choice:
+// it is derived in memory by routingForTask and never reconstructed from the
+// persisted routing.json. Nothing reads the artifact back to drive a decision.
 type taskRouting struct {
 	Class       model.Class
 	Source      runpkg.RoutingSource
@@ -105,8 +106,10 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 
 // applyTaskRouting computes the routing decision for the task and, when it
 // applies, replaces the implementation agent with one built for the selected
-// class. It prints a single concise routing line and returns the (possibly
-// unchanged) agent, the decision, and any error.
+// class. It prints a concise routing block — the class, the resolved model, the
+// source, the reasons, and the typed evidence — and returns the (possibly
+// unchanged) agent, the decision, and any error. Nothing is printed when no
+// routing applies.
 //
 // It is called immediately before implementation, after the pre-execution
 // checkpoint, so the model is chosen from the freshest evidence and no expensive
@@ -133,7 +136,10 @@ func applyTaskRouting(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre e
 	if err := guardCapability(ta, agent.Implement); err != nil {
 		return a, nil, err
 	}
-	fmt.Fprintf(stdout, "Task routing: %s (%s; %s)\n", tr.Class, tr.Selection.Model, router.ReasonsText(tr.Reasons))
+	// The operator-facing routing block: class, resolved model, source, reasons,
+	// and the typed evidence the router used. It is rendered from the in-memory
+	// decision (the sole source of truth) and is emitted only when routing applied.
+	fmt.Fprint(stdout, routingClassLine(routingDocFor(&tr))+"\n")
 	return ta, &tr, nil
 }
 
@@ -150,6 +156,11 @@ type routingDoc struct {
 }
 
 // routingDocFor builds the report section from a decision, or nil when none.
+//
+// It projects the IN-MEMORY taskRouting (the sole source of truth) and never
+// reads routing.json, so the report cannot be sourced from the persisted artifact.
+// A nil result means routing did not apply, and every display surface renders
+// nothing for it.
 func routingDocFor(tr *taskRouting) *routingDoc {
 	if tr == nil {
 		return nil
@@ -183,10 +194,20 @@ func routingSignalsDoc(s router.Signals) *runpkg.RoutingSignals {
 }
 
 // writeRoutingDecisionArtifact persists the routing decision as the run's
-// routing.json, best-effort. It is diagnostic evidence: nothing reads it back.
-func writeRoutingDecisionArtifact(rn *runpkg.Run, taskID string, tr *taskRouting) {
+// routing.json.
+//
+// It is WRITE-ONLY diagnostic evidence: nothing reads it back, and it is never a
+// second source of truth — the model class always derives from the in-process
+// router.Decide output, and no stage re-drives the decision from this file.
+//
+// The store writer fails closed on a contract violation (unknown version or
+// source) and refuses to persist the artifact; the returned error is surfaced
+// explicitly by the caller rather than silently discarded. A contract violation
+// never changes the run's decision — the model choice in `tr` is already fixed —
+// but it must not be mistaken for success.
+func writeRoutingDecisionArtifact(rn *runpkg.Run, taskID string, tr *taskRouting) error {
 	if tr == nil {
-		return
+		return nil
 	}
 	art := runpkg.RoutingArtifact{
 		Version:     runpkg.RoutingArtifactVersion,
@@ -201,25 +222,31 @@ func writeRoutingDecisionArtifact(rn *runpkg.Run, taskID string, tr *taskRouting
 		Signals:     routingSignalsDoc(tr.Signals),
 		Timestamp:   time.Now().UTC().Format(time.RFC3339),
 	}
-	_ = rn.WriteRoutingArtifact(art)
+	return rn.WriteRoutingArtifact(art)
 }
 
 // writeRoutingSummary renders the routing decision in `sop report`, so the class,
-// the resolved model, and the reason are auditable. It renders nothing when no
-// routing decision was recorded.
+// the resolved model, the source, the reasons, and the typed evidence are
+// auditable. It renders nothing when no routing decision was recorded, so an
+// unrouted run prints no routing block.
 func writeRoutingSummary(w io.Writer, r *routingDoc) {
 	if r == nil {
 		return
 	}
 	fmt.Fprintln(w, "Model routing:")
 	fmt.Fprintf(w, "  %-11s %s\n", "Class:", r.Class)
+	fmt.Fprintf(w, "  %-11s %s\n", "Provider:", r.Provider)
 	fmt.Fprintf(w, "  %-11s %s\n", "Model:", r.Model)
+	fmt.Fprintf(w, "  %-11s %s\n", "Locality:", r.Locality)
 	fmt.Fprintf(w, "  %-11s %s\n", "Source:", r.Source)
 	if len(r.Reasons) > 0 {
 		fmt.Fprintf(w, "  %-11s %s\n", "Reasons:", router.ReasonsText(r.Reasons))
 	}
-	if len(r.Checkpoints) > 0 {
-		fmt.Fprintf(w, "  %-11s %s\n", "Evidence:", strings.Join(r.Checkpoints, ", "))
+	if cps := routingCheckpointsText(r.Checkpoints); cps != "" {
+		fmt.Fprintf(w, "  %-11s %s\n", "Checkpoints:", cps)
+	}
+	if ev := routingEvidenceLine(r.Signals); ev != "" {
+		fmt.Fprintf(w, "  %-11s %s\n", "Evidence:", ev)
 	}
 	fmt.Fprintln(w)
 }

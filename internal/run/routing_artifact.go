@@ -14,11 +14,18 @@ import (
 // persisted beside the other run artifacts, so a developer can determine after the
 // process exits why a task ran on the model it did.
 //
-// Like the early-JEV artifact, this is diagnostic evidence only. It is written
-// best-effort; it is never read back to drive a decision; and it is not a second
-// source of truth — it never replaces state.json or the state database. It carries
-// no credential: model.Selection and the routing reasons are non-secret, and the
-// typed signals are counts and closed enumerations.
+// This artifact is WRITE-ONLY diagnostic evidence:
+//
+//   - It is never read back to drive a decision, and no read/decision path
+//     consumes it. The sole source of truth for the model choice remains the
+//     in-process router.Decide output (the CLI's taskRouting, derived in memory).
+//   - It is not a second source of truth: it never replaces state.json or the
+//     state database, and no stage may re-drive or override the decision from it.
+//   - It carries no credential: model.Selection and the routing reasons are
+//     non-secret, and the typed signals are counts and closed enumerations.
+//
+// The writer fails closed: an artifact with an unknown version or an unknown
+// source is rejected and not persisted, rather than silently written or defaulted.
 
 // RoutingArtifactVersion is the schema version of the routing artifact contract.
 const RoutingArtifactVersion = 1
@@ -108,10 +115,19 @@ func (a RoutingArtifact) Validate() error {
 // routingArtifactFileName is the artifact holding the routing decision for a run.
 const routingArtifactFileName = "routing.json"
 
-// WriteRoutingArtifact records the routing decision in the run directory,
-// best-effort. It writes plain data only: it never reads the artifact back,
-// touches state.json or state.db, or transitions any state.
+// WriteRoutingArtifact records the routing decision in the run directory.
+//
+// It validates the artifact before writing and fails closed: an artifact with an
+// unknown version or unknown source is rejected and NO file is written, and the
+// validation error is returned to the caller. This keeps the persisted artifact a
+// faithful, single copy of the in-process decision.
+//
+// The write is purely additive diagnostic evidence: it never reads the artifact
+// back, never consults it to drive a decision, and never touches state.json or
+// state.db or transitions any state.
 func (r *Run) WriteRoutingArtifact(a RoutingArtifact) error {
+	// Validate first and refuse to write on a contract violation, so an unknown
+	// version or source can never be persisted.
 	if err := a.Validate(); err != nil {
 		return err
 	}
