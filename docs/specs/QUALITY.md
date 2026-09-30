@@ -68,8 +68,10 @@ then MUST run again (regression protection).
 
 - The loop MUST be bounded by `quality.max_fix_cycles`.
 - A `require_tests` gate MUST NOT pass while the configured tests fail.
-- Exhausting the budget MUST yield `NEEDS_HUMAN` rather than looping — never an
-  unbounded agent loop.
+- Exhausting the budget MUST yield a `NEEDS_HUMAN` verdict rather than looping —
+  never an unbounded agent loop. The verdict is the gate's; whether it becomes a
+  human authorization or a bounded terminal stop is owned by the autonomy policy
+  and [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md).
 
 ## 5. Outcome Semantics
 
@@ -77,9 +79,12 @@ then MUST run again (regression protection).
   task may proceed to commit/integration gates.
 - `FAIL` — a deterministic failure (including a claimed change with none produced)
   leaves the task `BLOCKED`.
-- `NEEDS_HUMAN` — the fix budget is spent, or a human boundary was reported; the
-  task is requeued for a later run, bounded by `max_attempts`, rather than blocking
-  outright. See [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) and [RECOVERY.md](RECOVERY.md).
+- `NEEDS_HUMAN` — the fix budget is spent, or a human boundary was reported. The
+  gate's verdict is `NEEDS_HUMAN`; what follows is owned by the autonomy policy and
+  [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md). At the conservative levels the task is
+  requeued for a later run, bounded by `max_attempts`; a level that treats bounded
+  automation exhaustion as terminal stops the task as an automation failure rather
+  than a human decision. The gate itself never loops. See [RECOVERY.md](RECOVERY.md).
 
 ## 6. Relationship to Validation and Review
 

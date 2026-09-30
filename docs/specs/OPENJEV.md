@@ -235,13 +235,13 @@ behavior.
 
 ## 9. Acceptance-criteria traceability
 
-| JEV001 acceptance criterion | Satisfied by |
-| --- | --- |
-| JEV has a clearly defined interface. | §4 — `internal/jev.Analyzer` (`Analyze(ctx, Request) (Result, error)`), `Request`, `Result`, and `FakeAnalyzer`. |
-| SOP remains the lifecycle owner. | §1, §5 — SOP owns control flow and the quality gate in `internal/quality`. |
-| JEV cannot directly modify persisted task state. | §3, §4 — request carries read-only snapshots; the interface exposes no state-mutation path and results fail closed. |
-| Existing execution providers remain usable without JEV. | §6 — JEV is optional behind a replaceable interface with no lifecycle dependency. |
-| Architecture is documented in code or package documentation. | This document plus the package doc comment in `internal/jev/jev.go` §7 diagram. |
+| JEV001 acceptance criterion                                  | Satisfied by                                                                                                        |
+| ------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------- |
+| JEV has a clearly defined interface.                         | §4 — `internal/jev.Analyzer` (`Analyze(ctx, Request) (Result, error)`), `Request`, `Result`, and `FakeAnalyzer`.    |
+| SOP remains the lifecycle owner.                             | §1, §5 — SOP owns control flow and the quality gate in `internal/quality`.                                          |
+| JEV cannot directly modify persisted task state.             | §3, §4 — request carries read-only snapshots; the interface exposes no state-mutation path and results fail closed. |
+| Existing execution providers remain usable without JEV.      | §6 — JEV is optional behind a replaceable interface with no lifecycle dependency.                                   |
+| Architecture is documented in code or package documentation. | This document plus the package doc comment in `internal/jev/jev.go` §7 diagram.                                     |
 
 ---
 
@@ -304,14 +304,48 @@ lifecycle runs unchanged.
 
 ## 15. Failure and fallback behavior
 
+JEV has two failure-shaped outcomes that MUST NOT be conflated:
+
+- **An analysis result** — a structured `Result` with status `PASS`, `FINDINGS`,
+  `INCOMPLETE`, or `ERROR`. Findings are evidence; `INCOMPLETE`/`ERROR` are not a
+  pass.
+- **An infrastructure/provider failure** — a timeout, an unavailable provider, a
+  transport failure, or a malformed/invalid response. It is a failure to analyze,
+  never a finding.
+
+Rules:
+
 - Malformed JEV results MUST fail closed (§4): an unknown status, an unknown
   severity, a `PASS` carrying findings, or `FINDINGS` with none is rejected and
   never treated as a pass.
+- An infrastructure/provider failure MUST NOT be interpreted as a finding and MUST
+  NOT be treated as a pass.
 - When JEV is disabled, absent, unavailable, times out, or returns
   `ERROR`/`INCOMPLETE`, SOP MUST fall back to deterministic policy; JEV MUST NOT
   silently fail open for a high-risk decision.
 - JEV is optional behind a replaceable interface, so removing or not configuring
   it MUST NOT break any execution path (§6).
+
+### Who blocks
+
+JEV itself never blocks workflow: it holds no authority to transition state, reject
+a task, or hold up a merge. What follows from JEV evidence is decided by SOP:
+
+- **Configured SOP policy may block or escalate** because of JEV evidence. That
+  decision is deterministic and lives in SOP — the quality gate for quality
+  evidence ([QUALITY.md](QUALITY.md)), and autonomy/policy elsewhere — never in
+  JEV.
+- **Advisory JEV failure does not automatically block normal work.** An optional
+  early/advisory JEV failure MAY be recorded and the workflow MAY continue under
+  deterministic policy.
+- **High-risk policy may fail closed or require human authorization.** A policy
+  governing a consequential decision MAY treat a JEV failure as non-clearing and/or
+  require a human; the policy owns that choice.
+
+Recording a JEV failure does not by itself change a verdict; SOP policy decides
+whether that failure is blocking for the decision at hand. Optional capabilities
+are additive and MUST NOT gate core work
+([../architecture/SOP-BOUNDARY.md](../architecture/SOP-BOUNDARY.md)).
 
 ## 16. Relationship to review and human approval
 
@@ -326,8 +360,12 @@ lifecycle runs unchanged.
 The following are **not implemented** and are recorded as candidates only. They
 MUST NOT be presented as current behavior.
 
-- **Earlier pipeline checkpoints** — invoking JEV at earlier points (for example
-  before review) rather than only after validation and review.
+- **Earlier pipeline checkpoints (Phase 3)** — task-triage and pre-execution
+  checkpoints that run before implementation rather than only after validation and
+  review. Planned in
+  [../requirements/PRD-Phase-3-OpenJEV.md](../requirements/PRD-Phase-3-OpenJEV.md)
+  and [../plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md); not
+  implemented, and the gates will default OFF.
 - **JEV decision layer** — using JEV as an optional decision provider for bounded
   judgments (task-complexity classification, model routing, review escalation,
   finding prioritization, risk classification, whether another review pass is

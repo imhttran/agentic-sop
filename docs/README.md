@@ -41,6 +41,7 @@ Where new documentation belongs:
 
 - [PRD.md](PRD.md) — **the canonical product requirements** (goals, functional requirements, constraints, success criteria).
 - [requirements/PRD-JEV.md](requirements/PRD-JEV.md) — the JEV workstream's product requirements (problem, vision, decision layer).
+- [requirements/PRD-Phase-3-OpenJEV.md](requirements/PRD-Phase-3-OpenJEV.md) — **proposed** Phase 3 product requirements: early JEV task-triage and pre-execution checkpoints. Not implemented.
 
 ## Architecture
 
@@ -80,6 +81,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 ## Plans
 
 - [PLAN-JEV-Implementation.md](PLAN-JEV-Implementation.md) — **the active plan** (JEV001–JEV017). SOP records this as active, so it stays at `docs/`. Execute via `sop run docs/PLAN-JEV-Implementation.md`.
+- [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — **proposed** Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer. Not implemented.
 - [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream.
 - [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — pre-JEV stabilization workstream.
 
