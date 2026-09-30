@@ -17,7 +17,10 @@ const DefaultBaseURL = "http://127.0.0.1:8080"
 // endpoint (the same setting internal/agent reads).
 const EnvBaseURL = "SOP_LLAMACPP_BASE_URL"
 
-// New returns a llama.cpp provider for baseURL.
-func New(baseURL string, timeout time.Duration) provider.Provider {
-	return openai.New(provider.LlamaCPP, baseURL, timeout)
+// New returns a llama.cpp provider for baseURL. configuredModel is the model the
+// operator configured for the single-model llama-server (SOP_LLAMACPP_MODEL or
+// agent.model); it is reported as the provider's identity when the server cannot
+// enumerate models, never as a discovery result.
+func New(baseURL, configuredModel string, timeout time.Duration) provider.Provider {
+	return openai.New(provider.LlamaCPP, baseURL, timeout).WithConfiguredModel(configuredModel)
 }

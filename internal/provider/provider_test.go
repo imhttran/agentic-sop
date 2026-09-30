@@ -44,3 +44,18 @@ func TestKnownIDsCopy(t *testing.T) {
 		t.Fatal("KnownIDs must return a copy")
 	}
 }
+
+// TestModelInfoMetadata pins the deterministic metadata rendering: only fields
+// the provider determined are shown, and an unknown set renders as empty.
+func TestModelInfoMetadata(t *testing.T) {
+	if got := (provider.ModelInfo{}).Metadata(); got != "" {
+		t.Fatalf("empty metadata = %q, want empty", got)
+	}
+	m := provider.ModelInfo{Family: "llama", ParameterSize: "8B", Quantization: "Q5", ContextWindow: 8192, SizeBytes: 512}
+	if got, want := m.Metadata(), "family=llama params=8B quant=Q5 ctx=8192 size=512B"; got != want {
+		t.Fatalf("Metadata() = %q, want %q", got, want)
+	}
+	if got := (provider.ModelInfo{SizeBytes: 1024}).Metadata(); got != "size=1.0KiB" {
+		t.Fatalf("size rendering = %q", got)
+	}
+}

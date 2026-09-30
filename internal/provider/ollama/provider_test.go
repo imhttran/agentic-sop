@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/provider"
@@ -52,7 +53,7 @@ func TestOllamaHealthDegradedAndUnavailable(t *testing.T) {
 
 func TestOllamaModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:4b","model":"qwen3:4b"},{"model":"glm-5.3-flash:cloud"}]}`))
+		_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:4b","model":"qwen3:4b","size":2147483648,"details":{"family":"qwen3","parameter_size":"4.0B","quantization_level":"Q4_K_M","context_length":40960}},{"model":"glm-5.3-flash:cloud"}]}`))
 	}))
 	defer srv.Close()
 
@@ -69,6 +70,18 @@ func TestOllamaModels(t *testing.T) {
 	// Locality must not be guessed from the model name.
 	if infos[1].Locality != "" {
 		t.Fatalf("locality = %q, want unset (Ollama does not report it)", infos[1].Locality)
+	}
+	// Metadata comes from the /api/tags details and size, and stays zero when the
+	// server does not report it — never fabricated.
+	if infos[0].Family != "qwen3" || infos[0].ParameterSize != "4.0B" || infos[0].Quantization != "Q4_K_M" ||
+		infos[0].ContextWindow != 40960 || infos[0].SizeBytes != 2147483648 {
+		t.Fatalf("metadata = %+v", infos[0])
+	}
+	if meta := infos[0].Metadata(); !strings.Contains(meta, "family=qwen3") || !strings.Contains(meta, "size=2.0GiB") {
+		t.Fatalf("Metadata() = %q", meta)
+	}
+	if got := infos[1].Metadata(); got != "" {
+		t.Fatalf("unreported metadata = %q, want empty", got)
 	}
 }
 

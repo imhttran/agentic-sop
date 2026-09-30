@@ -14,6 +14,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/model"
@@ -79,6 +80,56 @@ type ModelInfo struct {
 	Provider     ID
 	Locality     model.Locality
 	Capabilities Capabilities
+
+	// Optional metadata. Each field is populated only when the runtime reports it
+	// reliably; a zero value means "not determined", never "absent". Like
+	// Capabilities it is evidence only and MUST NOT influence routing or any
+	// lifecycle state. Ollama fills these from /api/tags; the OpenAI-compatible
+	// adapters leave them unset, because /v1/models reports no such detail.
+	Family        string
+	ParameterSize string
+	Quantization  string
+	ContextWindow int
+	SizeBytes     int64
+}
+
+// Metadata renders the optional metadata as a deterministic "key=value" list,
+// omitting fields the provider did not determine so the output shows only what was
+// actually observed. It returns "" when nothing is known.
+func (m ModelInfo) Metadata() string {
+	var parts []string
+	if m.Family != "" {
+		parts = append(parts, "family="+m.Family)
+	}
+	if m.ParameterSize != "" {
+		parts = append(parts, "params="+m.ParameterSize)
+	}
+	if m.Quantization != "" {
+		parts = append(parts, "quant="+m.Quantization)
+	}
+	if m.ContextWindow > 0 {
+		parts = append(parts, "ctx="+strconv.Itoa(m.ContextWindow))
+	}
+	if m.SizeBytes > 0 {
+		parts = append(parts, "size="+humanBytes(m.SizeBytes))
+	}
+	return strings.Join(parts, " ")
+}
+
+// humanBytes renders a byte count in binary units with one decimal place.
+func humanBytes(n int64) string {
+	const unit = 1024
+	if n < unit {
+		return strconv.FormatInt(n, 10) + "B"
+	}
+	labels := []string{"KiB", "MiB", "GiB", "TiB", "PiB"}
+	value := float64(n)
+	i := -1
+	for value >= unit && i < len(labels)-1 {
+		value /= unit
+		i++
+	}
+	return strconv.FormatFloat(value, 'f', 1, 64) + labels[i]
 }
 
 // Provider inspects one model runtime. Every method is a read-only observation:

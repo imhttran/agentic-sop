@@ -21,9 +21,10 @@ import (
 
 // Provider inspects an OpenAI-compatible endpoint under a given provider id.
 type Provider struct {
-	id      provider.ID
-	baseURL string
-	client  *http.Client
+	id              provider.ID
+	baseURL         string
+	client          *http.Client
+	configuredModel string
 }
 
 // New returns a provider for id at baseURL. An empty baseURL is retained and
@@ -35,6 +36,16 @@ func New(id provider.ID, baseURL string, timeout time.Duration) *Provider {
 		baseURL: httpx.NormalizeBaseURL(baseURL),
 		client:  httpx.NewClient(timeout),
 	}
+}
+
+// WithConfiguredModel records the model the operator configured for this
+// endpoint. It matters only for a single-model server (llama.cpp) that may not
+// enumerate models: when discovery is unavailable, Models reports the configured
+// identity instead of claiming nothing is known. It never overrides a discovery
+// result, so a server that does answer still reports the truth.
+func (p *Provider) WithConfiguredModel(name string) *Provider {
+	p.configuredModel = strings.TrimSpace(name)
+	return p
 }
 
 // ID returns the provider identity.
@@ -56,10 +67,12 @@ func (p *Provider) Health(ctx context.Context) provider.HealthResult {
 }
 
 // Models lists the models reported by GET /v1/models. A server that does not
-// answer the list reports ErrDiscoveryUnsupported so absence is never assumed.
+// answer the list reports the operator-configured model when one was set (a
+// single-model server still has a known identity), or ErrDiscoveryUnsupported
+// otherwise, so absence is never assumed.
 func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 	if p.baseURL == "" {
-		return nil, provider.ErrDiscoveryUnsupported
+		return p.configuredFallback()
 	}
 	var out struct {
 		Data []struct {
@@ -67,7 +80,7 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 		} `json:"data"`
 	}
 	if err := httpx.GetJSON(ctx, p.client, p.baseURL+"/v1/models", &out); err != nil {
-		return nil, provider.ErrDiscoveryUnsupported
+		return p.configuredFallback()
 	}
 	infos := make([]provider.ModelInfo, 0, len(out.Data))
 	seen := map[string]bool{}
@@ -85,6 +98,23 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 		})
 	}
 	return infos, nil
+}
+
+// configuredFallback reports the operator-configured model when discovery is
+// unavailable, so a single-model server still has a known identity. With no
+// configured model it reports ErrDiscoveryUnsupported, so absence is never
+// assumed. It is not a probe result: it is the configured identity, not a claim
+// that the model is loaded.
+func (p *Provider) configuredFallback() ([]provider.ModelInfo, error) {
+	if p.configuredModel == "" {
+		return nil, provider.ErrDiscoveryUnsupported
+	}
+	return []provider.ModelInfo{{
+		Name:         p.configuredModel,
+		Provider:     p.id,
+		Locality:     model.LocalityLocal,
+		Capabilities: chatCapabilities(),
+	}}, nil
 }
 
 // Capabilities reports the capabilities an OpenAI-compatible chat server is

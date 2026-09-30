@@ -60,16 +60,24 @@ func (p *Provider) Health(ctx context.Context) provider.HealthResult {
 	return provider.HealthResult{Status: provider.HealthDegraded, Message: fmt.Sprintf("http %d", status)}
 }
 
-// Models lists GET /api/tags. A server that does not answer the list reports
-// ErrDiscoveryUnsupported so absence is never assumed.
+// Models lists GET /api/tags, including each model's reported metadata (family,
+// parameter size, quantization, context length, size). A server that does not
+// answer the list reports ErrDiscoveryUnsupported so absence is never assumed.
 func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 	if p.baseURL == "" {
 		return nil, provider.ErrDiscoveryUnsupported
 	}
 	var out struct {
 		Models []struct {
-			Name  string `json:"name"`
-			Model string `json:"model"`
+			Name    string `json:"name"`
+			Model   string `json:"model"`
+			Size    int64  `json:"size"`
+			Details struct {
+				Family        string `json:"family"`
+				ParameterSize string `json:"parameter_size"`
+				Quantization  string `json:"quantization_level"`
+				ContextLength int    `json:"context_length"`
+			} `json:"details"`
 		} `json:"models"`
 	}
 	if err := httpx.GetJSON(ctx, p.client, p.baseURL+"/api/tags", &out); err != nil {
@@ -87,9 +95,14 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 		}
 		seen[name] = true
 		infos = append(infos, provider.ModelInfo{
-			Name:         name,
-			Provider:     provider.Ollama,
-			Capabilities: streamingCapabilities(),
+			Name:          name,
+			Provider:      provider.Ollama,
+			Capabilities:  streamingCapabilities(),
+			Family:        strings.TrimSpace(m.Details.Family),
+			ParameterSize: strings.TrimSpace(m.Details.ParameterSize),
+			Quantization:  strings.TrimSpace(m.Details.Quantization),
+			ContextWindow: m.Details.ContextLength,
+			SizeBytes:     m.Size,
 		})
 	}
 	return infos, nil

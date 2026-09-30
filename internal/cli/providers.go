@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider"
@@ -31,7 +32,11 @@ func newProviderRegistry(cfg config.Config) (*provider.Registry, error) {
 	reg := provider.NewRegistry()
 	entries := []provider.Provider{
 		ollama.New(endpointOr(cfg.Providers.Ollama.Endpoint, ollama.EnvBaseURL, ollama.DefaultBaseURL), providerProbeTimeout),
-		llamacpp.New(endpointOr(cfg.Providers.LlamaCpp.Endpoint, llamacpp.EnvBaseURL, llamacpp.DefaultBaseURL), providerProbeTimeout),
+		llamacpp.New(
+			endpointOr(cfg.Providers.LlamaCpp.Endpoint, llamacpp.EnvBaseURL, llamacpp.DefaultBaseURL),
+			llamacppConfiguredModel(cfg),
+			providerProbeTimeout,
+		),
 		mlx.New(endpointOr(cfg.Providers.MLX.Endpoint, mlx.EnvBaseURL, mlx.DefaultBaseURL), providerProbeTimeout),
 		command.New(),
 	}
@@ -54,6 +59,21 @@ func endpointOr(configured, envKey, fallback string) string {
 		return v
 	}
 	return fallback
+}
+
+// llamacppConfiguredModel resolves the model configured for the single-model
+// llama.cpp endpoint: the agent path's SOP_LLAMACPP_MODEL wins, then agent.model
+// when llama.cpp is the configured provider. It is used only as the provider's
+// identity when llama-server cannot enumerate models, never as a discovery
+// result, and never to select a class.
+func llamacppConfiguredModel(cfg config.Config) string {
+	if v := strings.TrimSpace(os.Getenv(agent.EnvLlamaCppModel)); v != "" {
+		return v
+	}
+	if cfg.Agent.Provider == string(provider.LlamaCPP) {
+		return strings.TrimSpace(cfg.Agent.Model)
+	}
+	return ""
 }
 
 // runProviders implements `sop providers [--models]`: a read-only inspection of
@@ -110,6 +130,9 @@ func runProviders(args []string, stdout, stderr io.Writer, d deps) int {
 				fmt.Fprintf(stdout, "  %s\n", m.Name)
 				if m.Locality != "" {
 					fmt.Fprintf(stdout, "    locality: %s\n", m.Locality)
+				}
+				if meta := m.Metadata(); meta != "" {
+					fmt.Fprintf(stdout, "    %s\n", meta)
 				}
 				if caps, err := p.Capabilities(ctx, m.Name); err == nil {
 					fmt.Fprintf(stdout, "    capabilities: %s\n", caps)

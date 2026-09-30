@@ -28,7 +28,7 @@ func providerTestServer(t *testing.T) *httptest.Server {
 		case "/api/version":
 			_, _ = w.Write([]byte(`{"version":"0.1"}`))
 		case "/api/tags":
-			_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:4b"},{"name":"glm-5.3-flash:cloud"}]}`))
+			_, _ = w.Write([]byte(`{"models":[{"name":"qwen3:4b","size":2147483648,"details":{"family":"qwen3","parameter_size":"4.0B","quantization_level":"Q4_K_M","context_length":40960}},{"name":"glm-5.3-flash:cloud"}]}`))
 		case "/api/show":
 			_, _ = w.Write([]byte(`{"capabilities":["completion","tools"]}`))
 		case "/v1/models":
@@ -92,7 +92,7 @@ func TestProvidersCommandModels(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, errOut)
 	}
-	for _, want := range []string{"qwen3:4b", "glm-5.3-flash:cloud", "local-model", "capabilities:"} {
+	for _, want := range []string{"qwen3:4b", "glm-5.3-flash:cloud", "local-model", "capabilities:", "family=qwen3"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("providers --models output missing %q:\n%s", want, out)
 		}

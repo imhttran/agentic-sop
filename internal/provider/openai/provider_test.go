@@ -87,3 +87,22 @@ func TestOpenAINoEndpoint(t *testing.T) {
 		t.Fatalf("err = %v", err)
 	}
 }
+
+// TestOpenAIConfiguredModelFallback proves a single-model endpoint that cannot be
+// enumerated reports its configured identity rather than claiming nothing is
+// known — and that with no configured model the failure stays "unknown".
+func TestOpenAIConfiguredModelFallback(t *testing.T) {
+	_, bad := servers(t)
+
+	infos, err := openai.New(provider.LlamaCPP, bad.URL, 0).WithConfiguredModel("only-model").Models(context.Background())
+	if err != nil || len(infos) != 1 || infos[0].Name != "only-model" {
+		t.Fatalf("configured fallback: infos=%+v err=%v", infos, err)
+	}
+	if infos[0].Provider != provider.LlamaCPP {
+		t.Fatalf("provider = %q", infos[0].Provider)
+	}
+
+	if _, err := openai.New(provider.LlamaCPP, bad.URL, 0).Models(context.Background()); !errors.Is(err, provider.ErrDiscoveryUnsupported) {
+		t.Fatalf("without a configured model, err = %v, want ErrDiscoveryUnsupported", err)
+	}
+}
