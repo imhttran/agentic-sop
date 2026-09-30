@@ -115,6 +115,10 @@ const (
 	SourceConfig Source = "config"
 	// SourceDefault: no layer supplied a value; built-in defaults applied.
 	SourceDefault Source = "default"
+	// SourceRouter: SOP's deterministic router (internal/router) chose the class
+	// from task/evidence signals, with no CLI override. It is the automatic-routing
+	// source and is used only when the router's feature flag is enabled.
+	SourceRouter Source = "router"
 )
 
 // Reason is the deterministic, non-secret explanation of why a selection was
@@ -133,6 +137,11 @@ const (
 	// supplied the selection.
 	ReasonFallbackClass = "fallback class used"
 )
+
+// RoutingReasonManual is the deterministic reason recorded when a manual
+// --model-class override (rather than the automatic router) chose the class. It
+// is fixed, non-prose evidence.
+const RoutingReasonManual = "manual model-class override"
 
 // knownProviders is the provider allow-list a routed class may name. It mirrors
 // the providers the agent layer supports; an unknown name fails at resolution
@@ -162,12 +171,19 @@ func (cc ClassConfig) empty() bool {
 // fallback policy, and the per-class models. It is the `models:` block of
 // config.yaml and, reused, the parsed shape of the SOP_MODEL_* environment.
 type Route struct {
-	DefaultClass               Class       `yaml:"default_class"`
-	FallbackClass              Class       `yaml:"fallback_class"`
-	AllowCloudFallbackForLocal *bool       `yaml:"allow_cloud_fallback_for_local"`
-	Small                      ClassConfig `yaml:"small"`
-	Medium                     ClassConfig `yaml:"medium"`
-	Large                      ClassConfig `yaml:"large"`
+	DefaultClass               Class `yaml:"default_class"`
+	FallbackClass              Class `yaml:"fallback_class"`
+	AllowCloudFallbackForLocal *bool `yaml:"allow_cloud_fallback_for_local"`
+	// RoutingEnabled turns on the automatic model-class router (internal/router),
+	// which selects a class per task from typed task/JEV evidence. It is a pointer
+	// so an omitted value is distinguishable from an explicit false; both resolve
+	// to disabled. It is separate from Configured(): it does not, on its own, change
+	// the class table, and the router is OFF by default so an existing project is
+	// unchanged. SOP_MODEL_ROUTING_ENABLED overrides it.
+	RoutingEnabled *bool       `yaml:"routing_enabled"`
+	Small          ClassConfig `yaml:"small"`
+	Medium         ClassConfig `yaml:"medium"`
+	Large          ClassConfig `yaml:"large"`
 }
 
 // DefaultRoute is the built-in routing table: the default class, and the
@@ -258,6 +274,9 @@ const (
 	EnvFallbackClass = "SOP_MODEL_FALLBACK_CLASS"
 	// EnvAllowCloudFallbackForLocal overrides models.allow_cloud_fallback_for_local.
 	EnvAllowCloudFallbackForLocal = "SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL"
+	// EnvRoutingEnabled overrides models.routing_enabled (the automatic
+	// model-class router). It defaults to false.
+	EnvRoutingEnabled = "SOP_MODEL_ROUTING_ENABLED"
 )
 
 // Class env field names.
@@ -301,6 +320,13 @@ func routeFromEnv(lookup func(string) string) (Route, error) {
 		}
 		r.AllowCloudFallbackForLocal = &b
 	}
+	if v := get(EnvRoutingEnabled); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return Route{}, fmt.Errorf("model routing: %s: invalid boolean %q (want true or false)", EnvRoutingEnabled, v)
+		}
+		r.RoutingEnabled = &b
+	}
 
 	for _, c := range Classes {
 		var cc ClassConfig
@@ -332,6 +358,14 @@ type Inputs struct {
 	Config   Route
 	Lookup   func(string) string
 	CLIClass string
+	// RoutedClass is the class selected by SOP's deterministic router (Phase 3.5)
+	// when automatic routing is enabled. It is used only when no CLI override is
+	// present, so a manual --model-class always wins. Its zero value means "no
+	// routed class" and leaves the existing class selection unchanged.
+	RoutedClass Class
+	// RoutedReason is the deterministic explanation for RoutedClass. It is one of
+	// the router's fixed reason phrases, never model-generated prose.
+	RoutedReason string
 }
 
 // Selection is the resolved model selection: the class, the provider and model
@@ -377,18 +411,18 @@ func Resolve(in Inputs) (Result, error) {
 	}
 
 	cli := strings.TrimSpace(in.CLIClass)
-	if !in.Config.Configured() && !env.Configured() && cli == "" {
+	if !in.Config.Configured() && !env.Configured() && cli == "" && in.RoutedClass == "" {
 		return Result{Active: false}, nil
 	}
 
-	class, reason, err := selectClass(DefaultRoute(), in.Config, env, cli)
+	class, reason, err := selectClass(DefaultRoute(), in.Config, env, cli, in.RoutedClass, in.RoutedReason)
 	if err != nil {
 		return Result{}, err
 	}
 
 	primary := entryFor(class, in.Config, env)
 	if primary.complete() {
-		return Result{Active: true, Selection: selectionFor(class, primary, sourceFor(class, in.Config, env, cli), reason, false)}, nil
+		return Result{Active: true, Selection: selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass), reason, false)}, nil
 	}
 
 	// Fallback: SOP_MODEL_FALLBACK_CLASS > models.fallback_class > the selected class.
@@ -406,7 +440,7 @@ func Resolve(in Inputs) (Result, error) {
 				return Result{}, fmt.Errorf("model routing: class %q is local but has no model; refusing to fall back to the cloud model %q for class %q (set %s=true to allow)",
 					class, fb.model, fallback, EnvAllowCloudFallbackForLocal)
 			}
-			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, ""), ReasonFallbackClass, true)}, nil
+			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, "", ""), ReasonFallbackClass, true)}, nil
 		}
 	}
 
@@ -415,10 +449,13 @@ func Resolve(in Inputs) (Result, error) {
 }
 
 // selectClass picks the class to route and the deterministic reason it was
-// chosen: an explicit CLI class, an environment default class, a
-// project-configured default class, or the built-in default. It is the single
-// owner of the class-selection rule.
-func selectClass(defaults Route, config, env Route, cli string) (Class, string, error) {
+// chosen: an explicit CLI class, SOP's routed class (automatic routing), an
+// environment default class, a project-configured default class, or the built-in
+// default. It is the single owner of the class-selection rule.
+//
+// Precedence: a manual --model-class override always wins over the router, so an
+// operator's explicit choice is never silently replaced by automatic routing.
+func selectClass(defaults Route, config, env Route, cli string, routed Class, routedReason string) (Class, string, error) {
 	switch {
 	case cli != "":
 		c, err := ParseClass(cli)
@@ -426,6 +463,11 @@ func selectClass(defaults Route, config, env Route, cli string) (Class, string, 
 			return "", "", fmt.Errorf("model routing: --model-class: %w", err)
 		}
 		return c, ReasonCLIClass, nil
+	case routed != "":
+		if !routed.Valid() {
+			return "", "", fmt.Errorf("model routing: routed class %q is not a known class (want %s)", routed, joinClasses())
+		}
+		return routed, routedReason, nil
 	case env.DefaultClass != "":
 		return env.DefaultClass, ReasonEnvClass, nil
 	case config.DefaultClass != "":
@@ -489,16 +531,44 @@ func selectionFor(c Class, e entry, source Source, reason string, fallback bool)
 }
 
 // sourceFor names the layer that supplied the selection: the CLI override when it
-// chose the class, otherwise the layer that supplied the model name, otherwise
-// the built-in default.
-func sourceFor(c Class, config, env Route, cli string) Source {
+// chose the class, the router when it chose the class, otherwise the layer that
+// supplied the model name, otherwise the built-in default.
+func sourceFor(c Class, config, env Route, cli string, routed Class) Source {
 	if strings.TrimSpace(cli) != "" {
 		return SourceCLI
+	}
+	if routed != "" {
+		return SourceRouter
 	}
 	if s := entryFor(c, config, env).nameSource; s != "" {
 		return s
 	}
 	return SourceDefault
+}
+
+// RoutingEnabled resolves the automatic model-class router feature flag
+// (Phase 3.5 §14): the SOP_MODEL_ROUTING_ENABLED environment overrides the
+// models.routing_enabled configuration value, and an omitted value on both layers
+// resolves to false. An unparseable environment value is an actionable error.
+//
+// It is a separate flag from Configured(): enabling the router does not, by
+// itself, activate a class table, and the router is OFF by default so an existing
+// installation keeps its current agent selection.
+func RoutingEnabled(config Route, lookup func(string) string) (bool, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	if v := strings.TrimSpace(lookup(EnvRoutingEnabled)); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return false, fmt.Errorf("model routing: %s: invalid boolean %q (want true or false)", EnvRoutingEnabled, v)
+		}
+		return b, nil
+	}
+	if config.RoutingEnabled != nil {
+		return *config.RoutingEnabled, nil
+	}
+	return false, nil
 }
 
 // allowCloudFallback reports whether a local class may fall back to a cloud

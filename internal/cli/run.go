@@ -21,6 +21,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
+	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
@@ -124,6 +125,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyRoutingEnabled(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to the lifecycle so the run records it.
 	d.routing = routing
 
@@ -156,12 +161,13 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	// scheduler store to requeue into, so a policy escalation stops with a clear
 	// human boundary message instead of silently running the task. A disabled gate
 	// is a strict no-op.
-	if tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage); tri.Escalate {
+	tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage)
+	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", rn.State().ID, tri.Reason)
 		return exitError
 	}
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), stdout)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)
@@ -198,23 +204,37 @@ type lifeResult struct {
 	// modelSelection is the resolved, non-secret model-routing evidence for the
 	// run, or nil when routing is inactive. It is diagnostic: it records which
 	// class, provider, model, and layer the run used and why, and never feeds a
-	// decision.
+	// decision. When per-task routing applied, this is the task's own selection.
 	modelSelection *model.Selection
+	// routing is the per-task routing decision (Phase 3.5), or nil when no routing
+	// applied. It records the class, the deterministic reasons, the resolved
+	// selection, and the typed signals used. It is diagnostic evidence; it never
+	// feeds a decision beyond the model choice it already recorded.
+	routing *taskRouting
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
 // report) into rn. It returns an error only for infrastructure failures
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
-func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, stdout io.Writer) (lifeResult, error) {
+func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (lifeResult, error) {
 	// Persist the non-secret model-routing evidence before the lifecycle runs, so
 	// the selected class/provider/model and why remain inspectable even when the
 	// lifecycle stops early. It is diagnostic: nothing reads it back.
 	if d.routing.Active {
 		writeModelSelectionArtifact(rn, d.routing.Selection)
 	}
-	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
-	res.modelSelection = modelSelectionDoc(d.routing)
+	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+	// A per-task routing decision (Phase 3.5) supersedes the run-level selection:
+	// the task's own resolved class/provider/model is recorded, and a routing
+	// artifact records the class, reasons, and typed signals. Both are diagnostic.
+	if res.routing != nil {
+		res.modelSelection = &res.routing.Selection
+		writeModelSelectionArtifact(rn, res.routing.Selection)
+		writeRoutingDecisionArtifact(rn, rn.State().ID, res.routing)
+	} else {
+		res.modelSelection = modelSelectionDoc(d.routing)
+	}
 	// Persist the failure classification and the autonomy decision beside the other
 	// run artifacts before any early return, so a failure that stopped the lifecycle
 	// is still recorded. They are diagnostic evidence: nothing reads them back to
@@ -249,6 +269,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// class, provider, model, locality, layer, whether a fallback was used, and
 		// why. It is omitted when model routing is inactive.
 		ModelSelection: res.modelSelection,
+		Routing:        routingDocFor(res.routing),
 		Classification: classificationDoc(res.classification),
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
@@ -295,11 +316,15 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 // configured deterministic validation first and invokes the implementation agent
 // only when that validation fails (or when there is nothing configured to
 // verify). It returns the final result and writes the intermediate artifacts.
-func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, stdout io.Writer) (res lifeResult, err error) {
+func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (res lifeResult, err error) {
 	rec := perf.NewRecorder(rn.State().ID)
+	// trouting holds the per-task routing decision once it is made, so the deferred
+	// assignment records it even when the lifecycle returns through a literal.
+	var trouting *taskRouting
 	defer func() {
 		res.perf = rec.Task()
 		_ = writeMetrics(rn, res.perf)
+		res.routing = trouting
 	}()
 
 	// ar observes the lifecycle for the activity stream. It is nil when reporting
@@ -389,6 +414,19 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				classification: pre.Decision.Classification,
 				decision:       pre.Decision,
 			}, nil
+		} else {
+			// Deterministic per-task model routing (Phase 3.5). It runs immediately
+			// before implementation, using the freshest evidence. It only selects the
+			// model for the bounded implementation work: it never approves, blocks, or
+			// bypasses a gate. A manual --model-class override always wins. Routing is
+			// OFF by default, so this is a no-op unless enabled.
+			ra, tr, rerr := applyTaskRouting(cfg, d, spec, tri, pre, a, stdout)
+			if rerr != nil {
+				return lifeResult{}, fmt.Errorf("model routing: %w", rerr)
+			}
+			if tr != nil {
+				a, trouting = ra, tr
+			}
 		}
 
 		_ = rn.SetStage(runpkg.Implementing)
@@ -1238,6 +1276,10 @@ type runReportDoc struct {
 	// whether a fallback was used, and why. It is omitted when model routing is
 	// inactive, so a run without routing is unchanged.
 	ModelSelection *model.Selection `json:"model_selection,omitempty"`
+	// Routing is the per-task routing decision (Phase 3.5): the class, source,
+	// deterministic reasons, the resolved provider/model, and the typed signals
+	// used. It is omitted when no routing decision was recorded.
+	Routing *routingDoc `json:"routing,omitempty"`
 	// Classification is the failure-fixability classification for a run that did
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
@@ -1259,6 +1301,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	}
 	fmt.Fprintf(&b, "- Gate: `%s`\n\n", res.gate.Decision)
 	writeModelSelectionReport(&b, res.modelSelection)
+	writeRoutingReport(&b, routingDocFor(res.routing))
 
 	b.WriteString("## Task\n\n")
 	b.WriteString(strings.TrimSpace(spec.Render()))
@@ -1322,6 +1365,26 @@ func writeModelSelectionReport(b *strings.Builder, sel *model.Selection) {
 	fmt.Fprintf(b, "- Reason: %s\n", sel.Reason)
 	if sel.Fallback {
 		b.WriteString("- Fallback: `true`\n")
+	}
+	b.WriteString("\n")
+}
+
+// writeRoutingReport renders the per-task routing decision in the run report, so
+// the class, the reason, and the evidence that informed it are durable. It renders
+// nothing when no routing decision was recorded.
+func writeRoutingReport(b *strings.Builder, r *routingDoc) {
+	if r == nil {
+		return
+	}
+	b.WriteString("## Model routing\n\n")
+	fmt.Fprintf(b, "- Class: `%s`\n", r.Class)
+	fmt.Fprintf(b, "- Model: `%s`\n", r.Model)
+	fmt.Fprintf(b, "- Source: `%s`\n", r.Source)
+	if len(r.Reasons) > 0 {
+		fmt.Fprintf(b, "- Reasons: %s\n", router.ReasonsText(r.Reasons))
+	}
+	if len(r.Checkpoints) > 0 {
+		fmt.Fprintf(b, "- Evidence: %s\n", strings.Join(r.Checkpoints, ", "))
 	}
 	b.WriteString("\n")
 }

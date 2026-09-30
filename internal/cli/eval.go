@@ -79,7 +79,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 		_ = rn.Write("task.md", spec.Render())
 
-		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), failure.ApprovalNone, stdout)
+		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), failure.ApprovalNone, earlyGateResult{}, stdout)
 		out := eval.Outcome{
 			Case:     c,
 			Duration: time.Since(start),

@@ -201,6 +201,7 @@ func writeReport(w io.Writer, doc runReportDoc) {
 	fmt.Fprintf(w, "Fix cycles: %d\n", doc.FixCycles)
 	fmt.Fprintf(w, "Gate: %s\n\n", doc.Decision)
 	writeModelSelectionSummary(w, doc.ModelSelection)
+	writeRoutingSummary(w, doc.Routing)
 
 	fmt.Fprintln(w, "Validation:")
 	if len(doc.Validation) == 0 {

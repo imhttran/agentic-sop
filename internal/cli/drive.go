@@ -64,6 +64,10 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyRoutingEnabled(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to each task run so it is recorded.
 	d.routing = routing
 	if cfg.Workflow.Mode != "local" {
@@ -579,7 +583,8 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// strict no-op unless early_jev.gates.task_triage is enabled. A policy
 	// escalation stops through the existing human boundary and introduces no new
 	// task state.
-	if tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage); tri.Escalate {
+	tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage)
+	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
 		// Park the run at the existing WAITING_FOR_HUMAN stage before recording the
 		// approval request, so the persisted run state matches the boundary — the
@@ -590,7 +595,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 
 	// A genuine human boundary (the classifier's human disposition, the autonomy

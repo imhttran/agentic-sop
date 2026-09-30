@@ -65,6 +65,10 @@ type deps struct {
 	// exits. It is zero when routing is inactive (no models: block, SOP_MODEL_*
 	// variable, or --model-class) and carries no credential.
 	routing model.Result
+	// routingEnabled is the automatic model-class router feature flag for this
+	// invocation (SOP_MODEL_ROUTING_ENABLED / models.routing_enabled). It is OFF by
+	// default; the run commands set it after resolution, and only they consult it.
+	routingEnabled bool
 }
 
 func defaultDeps() deps {

@@ -61,6 +61,7 @@ workflow:
 #   default_class: medium # small | medium | large
 #   fallback_class: medium
 #   allow_cloud_fallback_for_local: false
+#   routing_enabled: false # automatic per-task routing (see "Automatic model routing")
 #   small:
 #     provider: ollama # ollama | llamacpp | command
 #     name: qwen3:4b
@@ -165,6 +166,7 @@ Resolution order, highest first:
 | `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                        |
 | `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.     |
 | `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model. |
+| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.       |
 | `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, or `command`.                  |
 | `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                            |
 | `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                  |
@@ -202,6 +204,44 @@ is present, so an existing project is unchanged.
   artifact beside it, and the `Model selection:` section of `sop report`. It
   records no credential; `.env` secrets (API keys, tokens) stay in the environment
   and are never written to run artifacts.
+
+## Automatic model routing
+
+Automatic (per-task) routing is a separate, opt-in layer on top of the class table.
+It selects a class per task from typed evidence and is **OFF by default**, so an
+existing installation keeps its current agent selection. Enable it with:
+
+```dotenv
+SOP_MODEL_ROUTING_ENABLED=true
+```
+
+or, equivalently, `models.routing_enabled: true` in `config.yaml`. The environment
+overrides the configuration; both default to `false`.
+
+When enabled, immediately before implementation (after the pre-execution
+checkpoint), SOP's deterministic router maps typed evidence — the task's structure
+(acceptance-criteria and dependency counts) and the early-JEV checkpoints' typed
+evidence — to a class, and the class resolves to a concrete model through the table
+above:
+
+```text
+risk / complexity / cross-cutting   -> large
+multi-file scope                    -> medium
+no JEV evidence                     -> medium (safe default)
+isolated, clear, low-risk task      -> small
+```
+
+- The router reads only typed categories, severities, and counts — never summary
+  text, and never a bare confidence threshold. See
+  [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) for the normative rules.
+- A manual `--model-class` override always wins over the router.
+- JEV is advisory: a provider failure is never a finding, and routing falls back to
+  `medium` and records that the evidence was unavailable. Routing never blocks a
+  task, approves, or bypasses validation/review/quality/human approval.
+- The decision is persisted per run as `routing.json` (class, source, reasons,
+  resolved provider/model/locality, the checkpoints that informed it, and a typed
+  signal summary) and shown by `sop report` as a `Model routing:` section. It is
+  non-secret diagnostic evidence; it never becomes a second source of task state.
 
 ## Early JEV checkpoints
 
@@ -246,6 +286,7 @@ provider/engine/severity, a missing `project.name`, or an unsupported
 ## Related
 
 - [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md)
+- [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md)
 - [`../specs/QUALITY.md`](../specs/QUALITY.md)
 - [`../specs/OPENJEV.md`](../specs/OPENJEV.md)
 - [`CLI.md`](CLI.md)

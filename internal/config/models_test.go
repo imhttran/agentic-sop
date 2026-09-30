@@ -14,6 +14,7 @@ models:
   default_class: large
   fallback_class: medium
   allow_cloud_fallback_for_local: true
+  routing_enabled: true
   small:
     provider: ollama
     name: qwen3:4b
@@ -44,6 +45,9 @@ func TestParseModelsBlock(t *testing.T) {
 	}
 	if c.Models.AllowCloudFallbackForLocal == nil || !*c.Models.AllowCloudFallbackForLocal {
 		t.Errorf("allow_cloud_fallback_for_local = %v, want true", c.Models.AllowCloudFallbackForLocal)
+	}
+	if c.Models.RoutingEnabled == nil || !*c.Models.RoutingEnabled {
+		t.Errorf("routing_enabled = %v, want true", c.Models.RoutingEnabled)
 	}
 	if c.Models.Small.Locality != model.LocalityLocal || c.Models.Small.Name != "qwen3:4b" {
 		t.Errorf("small = %+v", c.Models.Small)

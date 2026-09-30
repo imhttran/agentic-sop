@@ -334,3 +334,89 @@ func TestResolveInvalidProviderFromEnv(t *testing.T) {
 		t.Fatalf("error must name the offending variable: %v", err)
 	}
 }
+
+func boolPtr(b bool) *bool { return &b }
+
+// TestResolveRoutedClass verifies that a class chosen by SOP's router (Phase 3.5)
+// activates the layer, wins over the configured/environment default class, and
+// resolves through the built-in defaults with no other configuration.
+func TestResolveRoutedClass(t *testing.T) {
+	res, err := Resolve(Inputs{
+		Lookup:       lookup(nil),
+		RoutedClass:  ClassSmall,
+		RoutedReason: "isolated low-risk task",
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if !res.Active {
+		t.Fatal("a routed class must activate the layer")
+	}
+	want := Selection{
+		Class:    ClassSmall,
+		Provider: "ollama",
+		Model:    "qwen3:4b",
+		Locality: LocalityLocal,
+		Source:   SourceRouter,
+		Reason:   "isolated low-risk task",
+	}
+	if res.Selection != want {
+		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
+	}
+}
+
+// TestResolveCLIOverrideBeatsRoutedClass verifies the precedence rule: a manual
+// --model-class override always wins over the automatic router, so an operator's
+// explicit choice is never silently replaced.
+func TestResolveCLIOverrideBeatsRoutedClass(t *testing.T) {
+	res, err := Resolve(Inputs{
+		Lookup:      lookup(nil),
+		CLIClass:    "large",
+		RoutedClass: ClassSmall,
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Class != ClassLarge || res.Selection.Source != SourceCLI {
+		t.Fatalf("selection = %+v, want the CLI-selected large class", res.Selection)
+	}
+}
+
+// TestResolveRoutedClassOverridesDefaultClass verifies that a routed class beats
+// an environment default class but still resolves its model from the layers.
+func TestResolveRoutedClassOverridesDefaultClass(t *testing.T) {
+	env := mediumEnv()
+	env[EnvDefaultClass] = "medium"
+	res, err := Resolve(Inputs{
+		Lookup:      lookup(env),
+		RoutedClass: ClassMedium,
+	})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Class != ClassMedium || res.Selection.Source != SourceRouter {
+		t.Fatalf("selection = %+v, want the routed medium class", res.Selection)
+	}
+}
+
+func TestRoutingEnabledPrecedence(t *testing.T) {
+	// Default: disabled with no layer set.
+	if on, err := RoutingEnabled(Route{}, lookup(nil)); err != nil || on {
+		t.Fatalf("default = (%v, %v), want false", on, err)
+	}
+	// Config enables it.
+	if on, err := RoutingEnabled(Route{RoutingEnabled: boolPtr(true)}, lookup(nil)); err != nil || !on {
+		t.Fatalf("config = (%v, %v), want true", on, err)
+	}
+	// Environment overrides config (both directions).
+	if on, err := RoutingEnabled(Route{RoutingEnabled: boolPtr(false)}, lookup(map[string]string{EnvRoutingEnabled: "true"})); err != nil || !on {
+		t.Fatalf("env true over config false = (%v, %v), want true", on, err)
+	}
+	if on, err := RoutingEnabled(Route{RoutingEnabled: boolPtr(true)}, lookup(map[string]string{EnvRoutingEnabled: "false"})); err != nil || on {
+		t.Fatalf("env false over config true = (%v, %v), want false", on, err)
+	}
+	// An invalid boolean fails clearly.
+	if _, err := RoutingEnabled(Route{}, lookup(map[string]string{EnvRoutingEnabled: "maybe"})); err == nil {
+		t.Fatal("expected an actionable error for an invalid boolean")
+	}
+}

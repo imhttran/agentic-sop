@@ -45,3 +45,16 @@ func applyModelRouting(cfg *config.Config, cliClass string) (model.Result, error
 	}
 	return res, nil
 }
+
+// applyRoutingEnabled resolves the automatic model-class router feature flag and
+// records it on d. It is off unless SOP_MODEL_ROUTING_ENABLED (or the config's
+// models.routing_enabled) turns it on, so an existing installation's behavior is
+// unchanged.
+func applyRoutingEnabled(d *deps, cfg config.Config) error {
+	on, err := model.RoutingEnabled(cfg.Models, os.Getenv)
+	if err != nil {
+		return err
+	}
+	d.routingEnabled = on
+	return nil
+}
