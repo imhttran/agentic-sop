@@ -120,5 +120,5 @@ Commit: `task(T058): make the ollama agent capability-aware`
 
 Agent Harness V2; SOP lifecycle, validation, review, or gate changes; the plan
 parser; adding another agent; changing Ollama/DeepSeek behavior; committing or
-pushing the plan documents (`docs/PLAN-Agent-Harness-V2.md`,
-`docs/PLAN-SOP-Performance.md`); deleting or resetting SOP state.
+pushing the plan documents (`docs/plans/PLAN-Agent-Harness-V2.md`,
+`docs/plans/PLAN-SOP-Performance.md`); deleting or resetting SOP state.

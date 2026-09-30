@@ -1,5 +1,30 @@
 # JEV Capability Boundary (JEV001)
 
+**Type:** Normative specification
+
+## Purpose
+
+Defines the OpenJEV (JEV) integration contract for SOP: where JEV runs, what it
+may read and return, how it interacts with the quality gate, review, and human
+approval, and how it fails. JEV provides analysis or bounded judgments only;
+**SOP owns policy, lifecycle transitions, execution authority, approval
+requirements, and authoritative state.**
+
+## Related Specifications
+
+- [WORKFLOW.md](WORKFLOW.md) — lifecycle stages and transitions.
+- [QUALITY.md](QUALITY.md) — the deterministic quality gate JEV feeds.
+- [REVIEW.md](REVIEW.md) — the review stage, distinct from JEV.
+- [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) — the human gate JEV must never bypass.
+- [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md) — `quality.jev.*` configuration.
+- [../reference/JEV-OPERATIONS.md](../reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, and severity policy.
+
+## Normative Language
+
+The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
+
+---
+
 This document is the authoritative specification of the domain boundary between
 **SOP** and **JEV**. It defines what JEV may and may not do, and records the
 invariant:
@@ -10,8 +35,8 @@ SOP decides.
 IMPLEMENT/FIX changes code.
 ```
 
-It satisfies the JEV001 work item in `docs/PLAN-JEV.md` ("Define JEV Capability
-Boundary") and the JEV decision layer described in `docs/PRD-JEV.md` §15.
+It satisfies the JEV001 work item in `docs/PLAN-JEV-Implementation.md` ("Define JEV Capability
+Boundary") and the JEV decision layer described in `docs/requirements/PRD-JEV.md` §15.
 
 ---
 
@@ -225,4 +250,88 @@ behavior.
 This boundary is JEV001 only. It does **not** implement scheduling, retries,
 code modification, commits, PR creation, merges, quality-lifecycle wiring, or any
 behavior beyond defining and enforcing the boundary. Those are separate JEV work
-items (`docs/PLAN-JEV.md`).
+items (`docs/PLAN-JEV-Implementation.md`).
+
+---
+
+## 11. Configuration
+
+JEV is configured in `.agent-sdlc/config.yaml` under `quality.jev` (see
+[../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)):
+
+- `quality.jev.enabled` — the feature flag. **Disabled by default**; enabling
+  requires explicit configuration, and JEV MUST NOT be enabled by inference.
+- `quality.jev.mode` — the execution form; only `review` is supported today. An
+  unknown mode is a focused load-time error, never a silent fallback.
+- `quality.jev.fail_on` — the finding severities that block; when unset it
+  defaults to `quality.fail_on`.
+
+The `quality.jev` block is optional, so a project without it keeps working
+unchanged.
+
+## 12. Where JEV runs
+
+In the current pipeline JEV is an optional, read-only analysis stage that runs
+**after** validation and review and feeds the same quality gate and fix loop:
+
+```text
+IMPLEMENT / FIX -> VALIDATE -> REVIEW -> (optional JEV) -> QUALITY DECISION
+```
+
+When `quality.jev.enabled` is false the stage is absent and the normal SOP
+lifecycle runs unchanged.
+
+## 13. Inputs and outputs
+
+- **Inputs** — bounded, read-only snapshots only: the task, its acceptance
+  criteria, the changed files and repository context, the validation result, and
+  the review result. JEV MUST NOT receive ownership of the SOP runtime or
+  persistence layer.
+- **Outputs** — a structured result: a status (`PASS`, `FINDINGS`, `INCOMPLETE`,
+  `ERROR`), findings (severity, category, path, line, message, evidence), and a
+  summary. Statuses and severities are result values, not lifecycle transitions.
+- **Confidence** — where a decision-layer use is proposed (see §17), JEV MAY
+  return confidence metadata, but SOP owns the thresholds that interpret it.
+
+## 14. Findings, severity, and the quality gate
+
+- JEV findings carry severities. A finding whose severity is named in
+  `quality.jev.fail_on` (defaulting to `quality.fail_on`) is blocking for the JEV
+  result.
+- SOP MUST reduce the JEV result into the deterministic quality gate
+  ([QUALITY.md](QUALITY.md)). JEV MUST NOT decide PASS/FAIL, mark validation or
+  review successful, or cause a task to pass on its own.
+
+## 15. Failure and fallback behavior
+
+- Malformed JEV results MUST fail closed (§4): an unknown status, an unknown
+  severity, a `PASS` carrying findings, or `FINDINGS` with none is rejected and
+  never treated as a pass.
+- When JEV is disabled, absent, unavailable, times out, or returns
+  `ERROR`/`INCOMPLETE`, SOP MUST fall back to deterministic policy; JEV MUST NOT
+  silently fail open for a high-risk decision.
+- JEV is optional behind a replaceable interface, so removing or not configuring
+  it MUST NOT break any execution path (§6).
+
+## 16. Relationship to review and human approval
+
+- JEV and review are separate stages with separate owners. Review findings and
+  JEV findings MUST be presented distinctly; see [REVIEW.md](REVIEW.md).
+- JEV MUST NOT bypass or satisfy a human-approval gate; consequential actions
+  remain governed by SOP policy and the human gate. See
+  [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md).
+
+## 17. Proposed / Future (Not Implemented)
+
+The following are **not implemented** and are recorded as candidates only. They
+MUST NOT be presented as current behavior.
+
+- **Earlier pipeline checkpoints** — invoking JEV at earlier points (for example
+  before review) rather than only after validation and review.
+- **JEV decision layer** — using JEV as an optional decision provider for bounded
+  judgments (task-complexity classification, model routing, review escalation,
+  finding prioritization, risk classification, whether another review pass is
+  warranted). It would be gated by the `decision` configuration and disabled by
+  default (`features.jev_decisions: false`), per
+  [../requirements/PRD-JEV.md](../requirements/PRD-JEV.md).
+- **Additional JEV modes** — execution forms other than `review`.

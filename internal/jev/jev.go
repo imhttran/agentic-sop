@@ -1,6 +1,6 @@
 // Package jev defines the boundary between SOP and JEV (the optional
 // engineering-analysis capability described in docs/PLAN-JEV.md and
-// docs/PRD-JEV.md).
+// docs/requirements/PRD-JEV.md).
 //
 // # Boundary
 //
@@ -33,7 +33,7 @@
 // without JEV. Absence of a JEV implementation is never an error for the normal
 // SOP lifecycle.
 //
-// See docs/JEV-BOUNDARY.md for the authoritative boundary specification.
+// See docs/specs/OPENJEV.md for the authoritative boundary specification.
 package jev
 
 import (

@@ -9,7 +9,7 @@ DONE (measurement core; some optimizations deliberately deferred, see below)
 
 ## Objective
 
-Implement `docs/PLAN-SOP-Performance.md` measurement-first: add stage-level timing
+Implement `docs/plans/PLAN-SOP-Performance.md` measurement-first: add stage-level timing
 and operation counts, persist them as diagnostic metadata, surface them in
 `sop run` and `sop report`, measure the verify-first fast path, and reduce repeated
 work only where SOP can prove the inputs are unchanged. Timing and reuse never
@@ -30,7 +30,7 @@ influence a workflow decision.
   otherwise the task's record, otherwise a clear "unavailable" line.
 - `internal/cli/session.go` (new): the per-run reuse cache for validation and
   review, keyed by input identity.
-- `docs/PERFORMANCE.md` (new) and this task doc.
+- `docs/reference/PERFORMANCE.md` (new) and this task doc.
 
 ## Rules
 
@@ -45,7 +45,7 @@ influence a workflow decision.
   validation, and a persistent agent session are deferred with evidence rather than
   implemented unsafely.
 
-## Deferred (with evidence, in docs/PERFORMANCE.md)
+## Deferred (with evidence, in docs/reference/PERFORMANCE.md)
 
 PERF008 targeted validation, PERF010 agent startup sessions, PERF011 intra-task
 context reuse, PERF012 parallel mutation, and the real-provider half of PERF014.

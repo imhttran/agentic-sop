@@ -13,9 +13,9 @@ None
 
 ## Requirements
 
-- Read the existing dispositions in `docs/PREJEV-BASELINE.md`,
-  `docs/PREJEV005-AHV2001-2007-RECONCILE.md`, and
-  `docs/PREJEV004-AHV2009-PROOF.md`.
+- Read the existing dispositions in `docs/history/PREJEV-BASELINE.md`,
+  `docs/history/PREJEV005-AHV2001-2007-RECONCILE.md`, and
+  `docs/history/PREJEV004-AHV2009-PROOF.md`.
 - Confirm each block is classified (resolved, expected, or a documented issue
   with severity) and that none is left unexplained.
 - Record any residual gap by severity in the readiness gate's remaining-issues

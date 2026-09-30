@@ -448,7 +448,7 @@ Updates human-readable state:
 ```text
 PLAN.md
 docs/tasks/TASK-0NN.md
-LESSONS.md
+docs/guides/LESSONS.md
 README / architecture docs when the task requires it
 ```
 

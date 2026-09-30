@@ -591,7 +591,7 @@ Update as appropriate:
 ```text
 TASKS.md
 PLAN.md
-LESSONS.md
+docs/guides/LESSONS.md
 README.md
 ARCHITECTURE.md
 ```
@@ -633,8 +633,8 @@ works with bounded human intervention.
 
 ## Goal
 
-Adopt the forward roadmap in [`PRD-JEV.md`](PRD-JEV.md) and
-[`PLAN-JEV.md`](PLAN-JEV.md) on top of the V1 core, one task at a time, each with
+Adopt the forward roadmap in [`PRD-JEV.md`](requirements/PRD-JEV.md) and
+[`PLAN-JEV-Implementation.md`](PLAN-JEV-Implementation.md) on top of the V1 core, one task at a time, each with
 a spec under [`docs/tasks/`](tasks/) and tests.
 
 ## Delivered
@@ -698,7 +698,7 @@ The Go module was renamed to `github.com/imhttran/agentic-sop`.
 
 ## Remaining
 
-See [BACKLOG.md](BACKLOG.md) for future work that is not yet scheduled into a
+See [BACKLOG.md](plans/BACKLOG.md) for future work that is not yet scheduled into a
 numbered task.
 
 ---

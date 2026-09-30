@@ -24,21 +24,21 @@ entire software project requires more than code generation.
 
 A reliable SDLC must coordinate:
 
--   requirements;
--   architecture and planning;
--   task decomposition;
--   task dependencies;
--   Git isolation;
--   test-first development;
--   implementation;
--   local verification;
--   code review;
--   CI;
--   failure diagnosis;
--   bounded retries;
--   pull requests and merges;
--   documentation;
--   progress tracking.
+- requirements;
+- architecture and planning;
+- task decomposition;
+- task dependencies;
+- Git isolation;
+- test-first development;
+- implementation;
+- local verification;
+- code review;
+- CI;
+- failure diagnosis;
+- bounded retries;
+- pull requests and merges;
+- documentation;
+- progress tracking.
 
 Without an explicit orchestrator, an agent can lose state, repeat work,
 merge incomplete changes, run indefinitely on failures, or attempt
@@ -49,14 +49,14 @@ dependent tasks in the wrong order.
 The initial user is an experienced software engineer who wants AI agents
 to perform substantial implementation work while retaining:
 
--   visible plans and tasks;
--   deterministic workflow gates;
--   Git history;
--   tests;
--   review;
--   CI;
--   bounded resource usage;
--   the ability to intervene at any time.
+- visible plans and tasks;
+- deterministic workflow gates;
+- Git history;
+- tests;
+- review;
+- CI;
+- bounded resource usage;
+- the ability to intervene at any time.
 
 V1 is designed for a single developer and a single GitHub repository at
 a time.
@@ -65,7 +65,7 @@ a time.
 
 Given a PRD and repository, the system can move the project through:
 
-``` text
+```text
 PRD
  ↓
 Engineering Plan
@@ -143,34 +143,34 @@ updated before it is considered complete.
 
 ## 6. Core User Stories
 
--   As a developer, I want to provide a PRD and receive a staged
-    engineering plan.
--   As a developer, I want the plan decomposed into small tasks with
-    acceptance criteria and dependencies.
--   As a developer, I want independent tasks identified so limited
-    parallel work is possible.
--   As a developer, I want each task implemented on a dedicated Git
-    branch.
--   As a developer, I want tests written before implementation where
-    practical.
--   As a developer, I want the system to verify that a new test fails
-    before implementing the feature.
--   As a developer, I want automated review after implementation.
--   As a developer, I want review findings fixed and rechecked within
-    bounded retry limits.
--   As a developer, I want pull requests and GitHub CI used when
-    configured.
--   As a developer, I want failed CI logs inspected and actionable
-    failures retried.
--   As a developer, I want successful tasks merged into `main`.
--   As a developer, I want the orchestrator to continue to the next
-    ready task automatically.
--   As a developer, I want blocked tasks surfaced instead of looping
-    indefinitely.
--   As a developer, I want Docker/development-environment setup created
-    when the project does not yet have a runnable environment.
--   As a developer, I want project documentation updated as
-    implementation progresses.
+- As a developer, I want to provide a PRD and receive a staged
+  engineering plan.
+- As a developer, I want the plan decomposed into small tasks with
+  acceptance criteria and dependencies.
+- As a developer, I want independent tasks identified so limited
+  parallel work is possible.
+- As a developer, I want each task implemented on a dedicated Git
+  branch.
+- As a developer, I want tests written before implementation where
+  practical.
+- As a developer, I want the system to verify that a new test fails
+  before implementing the feature.
+- As a developer, I want automated review after implementation.
+- As a developer, I want review findings fixed and rechecked within
+  bounded retry limits.
+- As a developer, I want pull requests and GitHub CI used when
+  configured.
+- As a developer, I want failed CI logs inspected and actionable
+  failures retried.
+- As a developer, I want successful tasks merged into `main`.
+- As a developer, I want the orchestrator to continue to the next
+  ready task automatically.
+- As a developer, I want blocked tasks surfaced instead of looping
+  indefinitely.
+- As a developer, I want Docker/development-environment setup created
+  when the project does not yet have a runnable environment.
+- As a developer, I want project documentation updated as
+  implementation progresses.
 
 ## 7. Functional Requirements
 
@@ -195,13 +195,13 @@ and verify independently.
 
 Each task shall include at minimum:
 
--   ID;
--   title;
--   objective;
--   acceptance criteria;
--   dependencies;
--   expected test scope;
--   status.
+- ID;
+- title;
+- objective;
+- acceptance criteria;
+- dependencies;
+- expected test scope;
+- status.
 
 ### FR-5 --- Dependency graph
 
@@ -226,7 +226,7 @@ Each implementation task shall use an isolated Git branch.
 
 Recommended convention:
 
-``` text
+```text
 task/<task-id>-<slug>
 ```
 
@@ -234,7 +234,7 @@ task/<task-id>-<slug>
 
 Where practical, implementation tasks shall follow:
 
-``` text
+```text
 Acceptance Criteria
  ↓
 Write Test
@@ -328,7 +328,7 @@ and CI state.
 
 ## 8. Task Lifecycle
 
-``` text
+```text
 PLANNED
    ↓
 READY
@@ -360,7 +360,7 @@ DONE
 
 Failure transitions may move a task into:
 
-``` text
+```text
 FIX_REQUIRED
 RETRY_WAIT
 BLOCKED
@@ -406,20 +406,20 @@ infrastructure.
 
 The intended implementation is:
 
--   Go CLI/application;
--   SQLite for durable workflow state;
--   local Git CLI for repository operations;
--   GitHub integration for PRs and CI;
--   pluggable coding/review agent commands;
--   Docker/Compose support for project environments where useful;
--   Markdown project artifacts for humans;
--   machine-readable task/workflow state owned by the orchestrator.
+- Go CLI/application;
+- SQLite for durable workflow state;
+- local Git CLI for repository operations;
+- GitHub integration for PRs and CI;
+- pluggable coding/review agent commands;
+- Docker/Compose support for project environments where useful;
+- Markdown project artifacts for humans;
+- machine-readable task/workflow state owned by the orchestrator.
 
 ## 11. V1 Commands
 
 The intended CLI shape is:
 
-``` text
+```text
 sop init
 sop plan
 sop status
@@ -435,17 +435,17 @@ Exact command names may change during implementation.
 
 Human-readable:
 
-``` text
+```text
 PRD.md
 ARCHITECTURE.md
 PLAN.md
 TASKS.md
-LESSONS.md
+docs/guides/LESSONS.md
 ```
 
 Operational state:
 
-``` text
+```text
 SQLite / structured state
 ```
 
@@ -455,7 +455,7 @@ Markdown must not be the only source of runtime state.
 
 Initial defaults:
 
-``` text
+```text
 max parallel implementation tasks: 2
 local test/fix attempts:            3
 review/fix attempts:                3
@@ -490,28 +490,28 @@ V1 is successful when it can take a small repository with a PRD and:
 
 ## 15. Out of Scope for V1
 
--   unlimited autonomous execution;
--   large multi-agent swarms;
--   more than a small number of parallel tasks;
--   automatic production deployment;
--   infrastructure provisioning across cloud providers;
--   autonomous secret creation;
--   bypassing branch protections;
--   replacing GitHub's permission model;
--   self-modifying workflow policy;
--   cross-repository dependency orchestration;
--   automatic acceptance of every AI review suggestion.
+- unlimited autonomous execution;
+- large multi-agent swarms;
+- more than a small number of parallel tasks;
+- automatic production deployment;
+- infrastructure provisioning across cloud providers;
+- autonomous secret creation;
+- bypassing branch protections;
+- replacing GitHub's permission model;
+- self-modifying workflow policy;
+- cross-repository dependency orchestration;
+- automatic acceptance of every AI review suggestion.
 
 ## 16. Future Candidates
 
--   richer task DAG visualization;
--   worktree-based parallel task isolation;
--   multiple repositories;
--   issue tracker synchronization;
--   deployment gates;
--   release generation;
--   richer security scanning;
--   cost/token budgets;
--   agent/provider benchmarking;
--   learned scheduling policies;
--   automated rollback after post-merge regression.
+- richer task DAG visualization;
+- worktree-based parallel task isolation;
+- multiple repositories;
+- issue tracker synchronization;
+- deployment gates;
+- release generation;
+- richer security scanning;
+- cost/token budgets;
+- agent/provider benchmarking;
+- learned scheduling policies;
+- automated rollback after post-merge regression.

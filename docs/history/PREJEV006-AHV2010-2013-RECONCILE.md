@@ -6,7 +6,7 @@ PREJEV006 milestone.
 
 This reconciliation is read from each task's own run artifacts under
 `.agent-sdlc/runs/<task>/` and from `git log`, cross-referenced with the
-PREJEV001 baseline (`docs/PREJEV-BASELINE.md`). No manual `state.db` edit and
+PREJEV001 baseline (`docs/history/PREJEV-BASELINE.md`). No manual `state.db` edit and
 no destructive recovery were used to produce it.
 
 PREJEV006 has one objective:
@@ -29,7 +29,7 @@ Each is addressed below with cited evidence.
 
 Authoritative, read-only state of the four tasks, from per-task run artifacts
 (`report.json`, `state.json`, `metrics.json`, `diff.patch`) cross-checked against
-`git log` on `main`, as recorded in `docs/PREJEV-BASELINE.md`.
+`git log` on `main`, as recorded in `docs/history/PREJEV-BASELINE.md`.
 
 | Task    | Title                             | Run artifact stage          | Committed on `main` | Classification                                   |
 | ------- | --------------------------------- | --------------------------- | ------------------- | ------------------------------------------------ |
@@ -131,7 +131,7 @@ malformed tool calls/responses, structured outcomes, `changes_expected`,
 validation after implementation, retry, `needs_human`, provider/model visibility,
 and unavailable Ollama/model. Much of this already exists in
 `internal/ollamaagent`, `internal/e2e`, `internal/agent`, `internal/cli`, and
-`internal/toolharness` (see `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`), so the
+`internal/toolharness` (see `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`), so the
 retry reuses existing coverage where present and adds only genuine gaps. Normal
 tests require no live Ollama and use fakes for external dependencies.
 
@@ -145,7 +145,7 @@ AHV2012's committed work provides the opt-in end-to-end dogfood path:
 - `internal/ollamaagent/dogfood_test.go` — `TestOllamaDogfood`, skipped unless
   `SOP_OLLAMA_RUN_DOGFOOD=1` is set, driven by `SOP_OLLAMA_BASE_URL` and
   `SOP_OLLAMA_MODEL` (default `deepseek-v4.1-flash:cloud`).
-- `docs/OLLAMA-DOGFOOD.md` — the documented procedure, including the exact
+- `docs/history/OLLAMA-DOGFOOD.md` — the documented procedure, including the exact
   invocation:
   `SOP_OLLAMA_RUN_DOGFOOD=1 go test ./internal/ollamaagent -v -run TestOllamaDogfood -timeout 120s`.
 
@@ -164,7 +164,7 @@ there); it passes when enabled against a live Ollama with the configured model.
 The harness/provider/model architecture is documented consistently with the
 implementation:
 
-- `docs/ARCHITECTURE.md` and `docs/PLAN-Pre-JEV-Stabilization.md` state the
+- `docs/architecture/OVERVIEW.md` and `docs/plans/PLAN-Pre-JEV-Stabilization.md` state the
   boundary: agentic-sop is workflow authority; `sop-controller` delegates;
   the Ollama harness executes controlled tools; JEV is not workflow authority.
 - The README documents the native tool-harness Ollama configuration
@@ -186,8 +186,8 @@ implementation:
 | Ollama tool harness is the intended native path | S2; `internal/agent/provider.go` harness/provider/model separation and precedence             |
 | external command compatibility remains optional | S3; `internal/agent/command.go`, `SOP_AGENT_COMMAND`, `agent.provider: command`             |
 | no Claude dependency is required             | S3; no Claude reference or fallback in `internal/agent`                                          |
-| Ollama dogfood passes                        | S5; `TestOllamaDogfood`, `docs/OLLAMA-DOGFOOD.md`, opt-in + disposable fixture                   |
-| documentation matches the architecture       | S6; `docs/ARCHITECTURE.md`, README, this document, `docs/PREJEV018-READINESS-GATE.md`            |
+| Ollama dogfood passes                        | S5; `TestOllamaDogfood`, `docs/history/OLLAMA-DOGFOOD.md`, opt-in + disposable fixture                   |
+| documentation matches the architecture       | S6; `docs/architecture/OVERVIEW.md`, README, this document, `docs/history/PREJEV018-READINESS-GATE.md`            |
 
 ## Summary
 

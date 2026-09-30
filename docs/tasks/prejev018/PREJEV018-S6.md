@@ -15,7 +15,7 @@ rather than passing silently.
 ## Requirements
 
 - Inspect `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`,
-  `scripts/sop-ollama-agent.sh`, and `docs/OLLAMA-DOGFOOD.md`.
+  `scripts/sop-ollama-agent.sh`, and `docs/history/OLLAMA-DOGFOOD.md`.
 - Verify existing coverage first; add a test only where a real gap is demonstrated.
 - Confirm the runtime never self-builds candidate source and the default install
   directory is outside the working tree.

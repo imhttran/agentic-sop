@@ -11,7 +11,7 @@ commit was made for any of these six tasks during this run.
 
 ## S1 — Baseline
 
-Per `docs/PREJEV-BASELINE.md`, all six tasks were already committed on
+Per `docs/history/PREJEV-BASELINE.md`, all six tasks were already committed on
 `main` at `1a977f2` (`AHV2007` additionally at `6cc61b8`) with run stage
 `PASSED` before this reconciliation began. None are `LOCAL_DONE` (uncommitted
 passing work) — they are already merged. `AHV2005` is out of scope for this

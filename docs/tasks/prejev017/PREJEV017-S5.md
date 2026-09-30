@@ -6,7 +6,7 @@ PREJEV017-S5
 
 ## Objective
 
-Confirm `docs/PREJEV017-PERFORMANCE-BASELINE.md` records the captured baseline for
+Confirm `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` records the captured baseline for
 both measured workflows, that every PREJEV017 acceptance criterion maps to captured
 evidence, and that each captured number matches an existing artifact; refresh the
 document only where it is stale, and add no test or code to satisfy the milestone.

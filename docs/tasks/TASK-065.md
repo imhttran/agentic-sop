@@ -25,7 +25,7 @@ with `max_fix_cycles: 3` configured.
   as well as findings.
 - `internal/cli/cli_test.go`: the validation-failure tests are updated to the new
   behavior, plus a new test where the fix repairs a failing check.
-- `README.md`, `docs/ARCHITECTURE.md`, `LESSONS.md`: the fix loop is described as
+- `README.md`, `docs/architecture/OVERVIEW.md`, `LESSONS.md`: the fix loop is described as
   triggered by a failing check as well as by blocking findings.
 - `docs/PLAN.md`: Delivered gains `T065`.
 

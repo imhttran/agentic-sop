@@ -18,7 +18,7 @@ worth reusing.
 
 - `README.md`: current status reflects the completed V1 surface; add the `resume`
   command; note that `sop run` is the remaining CLI wiring.
-- `docs/ARCHITECTURE.md`: add the components built after the first draft (commit
+- `docs/architecture/OVERVIEW.md`: add the components built after the first draft (commit
   gate, CI generation/remediation, merge gate, completion loop, resume, bootstrap,
   parallelism, handoff).
 - `LESSONS.md`: new, concise engineering lessons.

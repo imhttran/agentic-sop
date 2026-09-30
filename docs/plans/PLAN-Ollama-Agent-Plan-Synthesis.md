@@ -286,7 +286,7 @@ sop task AHV2006
 Use normal SOP recovery commands according to persisted state, then:
 
 ``` bash
-sop run docs/PLAN-Agent-Harness-V2.md
+sop run docs/plans/PLAN-Agent-Harness-V2.md
 ```
 
 Expected:

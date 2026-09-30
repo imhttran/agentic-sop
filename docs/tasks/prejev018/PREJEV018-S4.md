@@ -16,7 +16,7 @@ runs produce the same result with no unexplained nondeterminism.
 
 - Inspect `internal/ollamaagent` (`review.go`) and its tests plus the deterministic
   `internal/e2e` harness; cross-check
-  `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`.
+  `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`.
 - Verify existing coverage first; add a test only where a real gap is demonstrated.
 - Recorded evidence must confirm REVIEW stays read-only, inspection and synthesis
   are bounded, and phase-specific failure diagnostics exist.

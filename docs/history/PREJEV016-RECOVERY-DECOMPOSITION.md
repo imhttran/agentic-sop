@@ -9,7 +9,7 @@ be understood, verified, and completed on their own, verify-first.
 
 - **PREJEV016 remains the umbrella recovery milestone.** It completes only when
   S1–S7 have all been validated (see [Umbrella completion criteria](#umbrella-completion-criteria)).
-- **The plan source now decomposes PREJEV016.** `docs/PLAN-Pre-JEV-Stabilization.md`
+- **The plan source now decomposes PREJEV016.** `docs/plans/PLAN-Pre-JEV-Stabilization.md`
   declares the umbrella plus PREJEV016-S1 … PREJEV016-S7, and `.agent-sdlc/plan.json`
   is regenerated from it so the machine plan matches.
 - **S1–S7 are standalone task files** under `docs/tasks/prejev016/`, each runnable

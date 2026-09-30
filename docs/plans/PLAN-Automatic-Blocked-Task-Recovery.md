@@ -61,7 +61,7 @@ This behavior must preserve dependency ordering, human approval gates, working-t
 
 ## ABR000 — Verify Completed Active-Plan Handoff
 
-ABR000 verifies the already-implemented completed active-plan handoff and its regression coverage. The capability now lives in `internal/planflow` (`reconcileState` → `handOff`) and has already been dogfooded: running `sop run docs/PLAN-Automatic-Blocked-Task-Recovery.md` while the fully satisfied Pre-JEV plan was active handed off without deleting `.agent-sdlc/state.db`, validated this plan, and created its tasks. That event is evidence, not work ABR000 must reproduce, and this task must not re-implement the capability.
+ABR000 verifies the already-implemented completed active-plan handoff and its regression coverage. The capability now lives in `internal/planflow` (`reconcileState` → `handOff`) and has already been dogfooded: running `sop run docs/plans/PLAN-Automatic-Blocked-Task-Recovery.md` while the fully satisfied Pre-JEV plan was active handed off without deleting `.agent-sdlc/state.db`, validated this plan, and created its tasks. That event is evidence, not work ABR000 must reproduce, and this task must not re-implement the capability.
 
 ### Execution
 
@@ -540,7 +540,7 @@ Do **not** delete `.agent-sdlc/state.db` to prepare this test. The persisted com
 Run:
 
 ```bash
-sop run docs/PLAN-Automatic-Blocked-Task-Recovery.md
+sop run docs/plans/PLAN-Automatic-Blocked-Task-Recovery.md
 ```
 
 Expected behavior:

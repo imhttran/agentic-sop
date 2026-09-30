@@ -295,7 +295,7 @@ Recorded here as limitations; none is implemented by PREJEV017:
 
 ## Optimization — deferred
 
-Every optimization above is deferred to `docs/PLAN-SOP-Performance.md`; nothing is
+Every optimization above is deferred to `docs/plans/PLAN-SOP-Performance.md`; nothing is
 pulled forward here. PREJEV017 measures and reports only. Non-blocking optimization
 remains in the Performance plan (PERF001–PERF015) and is out of scope for
 PREJEV017.

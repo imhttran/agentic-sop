@@ -8,9 +8,9 @@ failure behavior, and safety boundaries.
 
 It is documentation only. It does not implement or change any JEV behavior.
 The authoritative boundary specification is
-[`docs/JEV-BOUNDARY.md`](JEV-BOUNDARY.md); the implementation plan is
-[`docs/PLAN-JEV-Implementation.md`](PLAN-JEV-Implementation.md); the original
-requirements are in [`docs/PRD-JEV.md`](PRD-JEV.md).
+[`docs/specs/OPENJEV.md`](../specs/OPENJEV.md); the implementation plan is
+[`docs/PLAN-JEV-Implementation.md`](../PLAN-JEV-Implementation.md); the original
+requirements are in [`docs/requirements/PRD-JEV.md`](../requirements/PRD-JEV.md).
 
 > **Core rule**
 >
@@ -99,8 +99,8 @@ type Analyzer interface {
 
 This document does not restate the boundary inconsistently; the authoritative
 role model, allowed/forbidden operations, and interface are specified in
-[`docs/JEV-BOUNDARY.md`](JEV-BOUNDARY.md) and the Architecture section of
-[`docs/PLAN-JEV-Implementation.md`](PLAN-JEV-Implementation.md).
+[`docs/specs/OPENJEV.md`](../specs/OPENJEV.md) and the Architecture section of
+[`docs/PLAN-JEV-Implementation.md`](../PLAN-JEV-Implementation.md).
 
 **SOP keeps execution authority. JEV only provides analysis.**
 
@@ -400,7 +400,7 @@ state**. JEV must not manufacture `validation PASS`, `review PASS`, `CI PASS`,
 occurred through their owning subsystem.
 
 These limits are consistent with
-[`docs/JEV-BOUNDARY.md`](JEV-BOUNDARY.md) and introduce no new behavior.
+[`docs/specs/OPENJEV.md`](../specs/OPENJEV.md) and introduce no new behavior.
 
 ### Safety invariants
 
@@ -450,7 +450,7 @@ only part of the lifecycle that changes code.
   reasoning engine. `Provider ≠ Agent Harness ≠ Model`.
 
 This glossary is consistent with the glossary in
-[`docs/JEV-BOUNDARY.md`](JEV-BOUNDARY.md), the PRD, and the JEV implementation
+[`docs/specs/OPENJEV.md`](../specs/OPENJEV.md), the PRD, and the JEV implementation
 plan.
 
 ---
@@ -467,5 +467,5 @@ plan.
 
 Auxiliary documentation of architecture, severity policy, lifecycle placement,
 and terminology is provided above and is consistent with
-[`docs/JEV-BOUNDARY.md`](JEV-BOUNDARY.md) and
-[`docs/PLAN-JEV-Implementation.md`](PLAN-JEV-Implementation.md).
+[`docs/specs/OPENJEV.md`](../specs/OPENJEV.md) and
+[`docs/PLAN-JEV-Implementation.md`](../PLAN-JEV-Implementation.md).

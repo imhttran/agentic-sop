@@ -5,7 +5,7 @@ issue blocks JEV; then record the final PRE-JEV READY determination.
 
 ## Objective
 
-Confirm the remaining-issues register in `docs/PREJEV018-READINESS-GATE.md`
+Confirm the remaining-issues register in `docs/history/PREJEV018-READINESS-GATE.md`
 documents every remaining issue by severity, that no critical/high issue blocks
 JEV, and that human approval gates remain intact at the PRE-JEV READY
 determination.
@@ -16,8 +16,8 @@ determination.
 
 ## Requirements
 
-- Audit the register against the earlier baselines (`docs/PREJEV-BASELINE.md`,
-  `docs/PREJEV005-*.md`, `docs/PREJEV017-PERFORMANCE-BASELINE.md`) so no remaining
+- Audit the register against the earlier baselines (`docs/history/PREJEV-BASELINE.md`,
+  `docs/PREJEV005-*.md`, `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`) so no remaining
   issue is omitted or mis-severitized.
 - Confirm the single HIGH-classified item (AHV2011) is explicitly non-blocking for
   JEV, and that no CRITICAL issue exists.

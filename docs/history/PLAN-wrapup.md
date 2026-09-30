@@ -1,15 +1,15 @@
 # AI Development Harness — Implementation Plan
 
 > **Two editions of one roadmap.** This file is the **condensed** edition — the one
-> adopted as the wrap-up (see Stage 24 of [`PLAN.md`](PLAN.md)). Its sibling
-> [`PLAN-JEV.md`](PLAN-JEV.md) is the **fuller** edition: both share T001–T032
+> adopted as the wrap-up (see Stage 24 of [`PLAN.md`](../PLAN.md)). Its sibling
+> [`PLAN-JEV.md`](../PLAN-JEV-Implementation.md) is the **fuller** edition: both share T001–T032
 > (identical numbers and the same work), then diverge — this file condenses the
 > decision layer and continues to the operational tasks (for example "Command
 > Policy" is T043 here but T052 in the JEV file). A `T0NN` reference elsewhere is
 > only meaningful against the file it names: `docs/tasks/TASK-024..029` cite this
 > file, `TASK-030..040` cite the JEV file.
 >
-> Neither is actively maintained. The roadmap of record is [`PLAN.md`](PLAN.md), and
+> Neither is actively maintained. The roadmap of record is [`PLAN.md`](../PLAN.md), and
 > the executed task sequence is `docs/tasks/TASK-0NN.md`.
 
 **Status:** Draft v1

@@ -11,7 +11,7 @@ DONE
 ## Objective
 
 SOP's `command` provider takes any harness. To execute
-`docs/PLAN-Agent-Harness-V2.md` without Claude, this adds the smallest useful
+`docs/plans/PLAN-Agent-Harness-V2.md` without Claude, this adds the smallest useful
 harness: it reads an SOP agent request, drives a bounded tool loop against Ollama,
 and returns the structured response SOP expects. It implements no Agent Harness V2
 work — it only exists so DeepSeek can do that work.
@@ -85,4 +85,4 @@ PR: `[Task T056] Bootstrap DeepSeek coding-agent harness`
 ## Out of Scope
 
 Agent Harness V2 (harness/provider/model separation, capability corrections, native
-config); any change to SOP's workflow engine; committing `docs/PLAN-Agent-Harness-V2.md`.
+config); any change to SOP's workflow engine; committing `docs/plans/PLAN-Agent-Harness-V2.md`.

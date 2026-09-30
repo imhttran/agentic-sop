@@ -12,14 +12,14 @@ document records that gap, why SOP cannot close it automatically, and the option
 
 ## Plan state (in sync)
 
-- Human source: `docs/PLAN-Pre-JEV-Stabilization.md`. PREJEV012 is an umbrella
+- Human source: `docs/plans/PLAN-Pre-JEV-Stabilization.md`. PREJEV012 is an umbrella
   that depends on `PREJEV012-S6` … `PREJEV012-S12`.
 - Machine plan: `.agent-sdlc/plan.json` — 25 stages; the umbrella plus seven
   sub-stages, all `execution_mode: implement`.
 - Provenance: `.agent-sdlc/plan.meta.json` `source_sha256` =
   `a254a4d91f3c9949a10bde4e4bf1ac82558233fa4eecb5168a71558c38bb9b43`, matching
   the source file exactly.
-- Decomposition detail: `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`. Runnable
+- Decomposition detail: `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`. Runnable
   specs: `docs/tasks/prejev012/PREJEV012-S6.md` … `PREJEV012-S12.md`.
 
 ## Task-graph state (lagging)
@@ -105,7 +105,7 @@ outcome if B is deferred and the umbrella is closed by the recorded S6–S12 run
 # The plan compiles deterministically (no agent) to 25 stages:
 python3 - <<'PY'
 import hashlib, json
-src = open("docs/PLAN-Pre-JEV-Stabilization.md","rb").read()
+src = open("docs/plans/PLAN-Pre-JEV-Stabilization.md","rb").read()
 meta = json.load(open(".agent-sdlc/plan.meta.json"))
 print("source sha:", hashlib.sha256(src).hexdigest())
 print("meta   sha:", meta["source_sha256"])

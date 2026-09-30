@@ -78,7 +78,7 @@ var (
 )
 
 // JEV modes: the only execution forms the initial JEV capability runs in. JEV is
-// read-only analysis (docs/JEV-BOUNDARY.md), so "review" is the sole mode today.
+// read-only analysis (docs/specs/OPENJEV.md), so "review" is the sole mode today.
 var supportedJEVModes = map[string]bool{"review": true}
 
 // ErrNotFound is returned by Load when no configuration file exists. Callers
@@ -149,7 +149,7 @@ type Quality struct {
 // JEV is the JEV feature flag (conceptually quality.jev.enabled).
 //
 // JEV is an optional, read-only engineering-analysis capability (see
-// docs/JEV-BOUNDARY.md and docs/PLAN-JEV.md). It is DISABLED BY DEFAULT: the
+// docs/specs/OPENJEV.md and docs/PLAN-JEV.md). It is DISABLED BY DEFAULT: the
 // flag is a pointer so an omitted value is distinguishable from an explicit
 // false, and both resolve to disabled. Enabling JEV requires explicit
 // configuration — there is no inference that turns it on. A project that

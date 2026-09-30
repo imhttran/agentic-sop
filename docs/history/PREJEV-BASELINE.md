@@ -36,7 +36,7 @@ and `report.json` (per-task source of truth) cross-checked against `git log`
 | AHV2012 | End-to-End Ollama Dogfood          | FAILED (stale, see below) | yes — `aec2774`            |
 | AHV2013 | Documentation                      | PASSED              | yes — `6b7c8b1`                  |
 
-`git status` on this baseline shows only `docs/PLAN-Pre-JEV-Stabilization.md`
+`git status` on this baseline shows only `docs/plans/PLAN-Pre-JEV-Stabilization.md`
 modified (this plan's own tracking doc) — no uncommitted AHV work exists, so
 there is no LOCAL_DONE work at risk. Every AHV task whose run artifact ever
 reported a passing/completed result is already committed on `main`.
@@ -85,7 +85,7 @@ Evidence is internally inconsistent, which is itself the finding:
   15 minutes later): final recorded stage is `FAILED`.
 - `.agent-sdlc/runs/AHV2012/diff.patch` and `metrics.json` (same run
   directory) show a **substantive, successful mutation**: new files
-  `docs/DOGFOOD-OLLAMA.md`, `docs/OLLAMA-DOGFOOD.md`,
+  `docs/DOGFOOD-OLLAMA.md`, `docs/history/OLLAMA-DOGFOOD.md`,
   `internal/ollamaagent/dogfood_test.go`, and companion plan docs, plus
   `validation_runs: 1`, `review_runs: 1` in `metrics.json` — evidence of a
   later, successful attempt within the same run.

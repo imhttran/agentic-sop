@@ -15,7 +15,7 @@ or run history, and no `git reset --hard` or `git clean`.
 
 ## Requirements
 
-- Inspect `docs/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`,
+- Inspect `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`,
   and `internal/resume`.
 - Verify existing coverage first; add a test only where a real gap is demonstrated.
 - Confirm recovery preserves pre-existing working-tree changes and human approval

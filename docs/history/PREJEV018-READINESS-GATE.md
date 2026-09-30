@@ -37,7 +37,7 @@ Harness V2 reconciled
   [Umbrella completion criteria](#umbrella-completion-criteria)). This document
   is the decomposition and the tracking artifact; it does **not** itself assert
   that the gate has passed. The status table below is the current, honest state.
-- **The plan source decomposes PREJEV018.** `docs/PLAN-Pre-JEV-Stabilization.md`
+- **The plan source decomposes PREJEV018.** `docs/plans/PLAN-Pre-JEV-Stabilization.md`
   declares the umbrella plus PREJEV018-S1 … PREJEV018-S11.
 - **S1–S11 are standalone task files** under `docs/tasks/prejev018/`, each runnable
   in isolation. They are **pending work items, not completed results**; opening a
@@ -113,16 +113,16 @@ matches, S11 records that and completes with `changes_expected=false`.
 
 | Gate stage                        | Task | Primary evidence (existing)                                                                                                     |
 | --------------------------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------ |
-| Harness V2 reconciled             | S1   | `docs/PREJEV-BASELINE.md`, `docs/PREJEV005-AHV2001-2007-RECONCILE.md`, `docs/PREJEV004-AHV2009-PROOF.md`                       |
+| Harness V2 reconciled             | S1   | `docs/history/PREJEV-BASELINE.md`, `docs/history/PREJEV005-AHV2001-2007-RECONCILE.md`, `docs/history/PREJEV004-AHV2009-PROOF.md`                       |
 | PLAN deterministic                | S2   | `internal/ollamaagent/plan.go`, `internal/ollamaagent/harness_test.go`, `internal/e2e/...`                                     |
 | IMPLEMENT deterministic           | S3   | `internal/ollamaagent/implement.go`, `internal/ollamaagent/outcome.go`, `internal/ollamaagent` tests                             |
-| REVIEW deterministic              | S4   | `internal/ollamaagent/review.go`, `internal/ollamaagent` tests, `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`                    |
-| Validation ownership proven       | S5   | `internal/cli` (validate/review/fix wiring), `docs/ARCHITECTURE.md`, `internal/domain` gates                                    |
-| Bootstrap resilient               | S6   | `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`, `scripts/sop-ollama-agent.sh`, `docs/OLLAMA-DOGFOOD.md`             |
-| Controller aligned                | S7   | controller README/config; `docs/ARCHITECTURE.md` boundary                                                                       |
-| Recovery proven                   | S8   | `docs/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`, `internal/resume`                                  |
+| REVIEW deterministic              | S4   | `internal/ollamaagent/review.go`, `internal/ollamaagent` tests, `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`                    |
+| Validation ownership proven       | S5   | `internal/cli` (validate/review/fix wiring), `docs/architecture/OVERVIEW.md`, `internal/domain` gates                                    |
+| Bootstrap resilient               | S6   | `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`, `scripts/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`             |
+| Controller aligned                | S7   | controller README/config; `docs/architecture/OVERVIEW.md` boundary                                                                       |
+| Recovery proven                   | S8   | `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`, `internal/resume`                                  |
 | Both projects dogfooded           | S9   | `docs/PREJEV018-DOGFOOD-RESULTS.md` (per-repo `gofmt`/`vet`/`test`/`build` results)                                             |
-| Performance baseline captured     | S10  | `docs/PREJEV017-PERFORMANCE-BASELINE.md`, `.agent-sdlc/runs/*/metrics.json`                                                     |
+| Performance baseline captured     | S10  | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`, `.agent-sdlc/runs/*/metrics.json`                                                     |
 | Remaining issues + PRE-JEV READY  | S11  | this document + the remaining-issues register                                                                                   |
 
 ## Existing coverage map
@@ -133,16 +133,16 @@ establish it, and to the validation command that actually exercises them.
 
 | Stage | Subsystem / artifact                                  | Existing evidence                                                                                                                                                                                                                     | Validation command                                                                                  | Status  |
 | ----- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- | ------- |
-| S1    | `docs/`, `.agent-sdlc/runs/<AHV*>/`                   | AHV2001–AHV2013 dispositions in `docs/PREJEV-BASELINE.md`, `docs/PREJEV005-*.md`, `docs/PREJEV006-AHV2010-2013-RECONCILE.md`; AHV2009 proof in `docs/PREJEV004-AHV2009-PROOF.md`                                                       | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
+| S1    | `docs/`, `.agent-sdlc/runs/<AHV*>/`                   | AHV2001–AHV2013 dispositions in `docs/history/PREJEV-BASELINE.md`, `docs/PREJEV005-*.md`, `docs/history/PREJEV006-AHV2010-2013-RECONCILE.md`; AHV2009 proof in `docs/history/PREJEV004-AHV2009-PROOF.md`                                                       | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
 | S2    | `internal/ollamaagent`, `internal/e2e`                | PLAN lifecycle/two-phase tests (`plan.go`, harness tests)                                                                                                                        | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
 | S3    | `internal/ollamaagent`, `internal/e2e`                | IMPLEMENT mutation-aware completion/outcome tests                                                                                                                                | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
-| S4    | `internal/ollamaagent`, `internal/e2e`                | REVIEW inspect→synthesize tests, `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`                                                                                                    | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
-| S5    | `internal/cli`, `internal/domain`, `docs/ARCHITECTURE.md` | SOP-owned VALIDATE/REVIEW/FIX wiring and gate tests; human-gate behavior in `internal/cli`                                                                                    | `go test ./internal/cli/... ./internal/domain/...`                                                   | covered |
+| S4    | `internal/ollamaagent`, `internal/e2e`                | REVIEW inspect→synthesize tests, `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`                                                                                                    | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
+| S5    | `internal/cli`, `internal/domain`, `docs/architecture/OVERVIEW.md` | SOP-owned VALIDATE/REVIEW/FIX wiring and gate tests; human-gate behavior in `internal/cli`                                                                                    | `go test ./internal/cli/... ./internal/domain/...`                                                   | covered |
 | S6    | `internal/agentbin`, `scripts/`                       | `go test ./internal/agentbin/...`; install/resolve tests; no self-build path                                                                                                     | `go test ./internal/agentbin/...`                                                                    | covered |
-| S7    | controller docs/config, `docs/ARCHITECTURE.md`        | Architecture boundary text: controller delegates to SOP; no second state machine                                                                                                 | `go vet ./... && go build ./...`                                                                     | pending |
-| S8    | `internal/cli/recovery_test.go`, `internal/resume`    | `docs/PREJEV016-RECOVERY-DECOMPOSITION.md`; recovery tests in `internal/cli` and `internal/resume`                                                                                | `go test ./internal/cli/ -run 'PreservesWorkingTree\|Resume\|Retry\|Active'` and `go test ./internal/resume/...` | covered |
+| S7    | controller docs/config, `docs/architecture/OVERVIEW.md`        | Architecture boundary text: controller delegates to SOP; no second state machine                                                                                                 | `go vet ./... && go build ./...`                                                                     | pending |
+| S8    | `internal/cli/recovery_test.go`, `internal/resume`    | `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`; recovery tests in `internal/cli` and `internal/resume`                                                                                | `go test ./internal/cli/ -run 'PreservesWorkingTree\|Resume\|Retry\|Active'` and `go test ./internal/resume/...` | covered |
 | S9    | both repositories                                     | per-repo build/test results recorded by S9 in `docs/PREJEV018-DOGFOOD-RESULTS.md`                                                                                                | the full matrix per repository                                                       | pending |
-| S10   | `docs/PREJEV017-PERFORMANCE-BASELINE.md`, `internal/perf` | baseline document + `metrics.json` artifacts                                                                                                                                    | `go test ./internal/perf/...` and `go test ./internal/cli/ -run 'Performance\|Report'`              | covered |
+| S10   | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`, `internal/perf` | baseline document + `metrics.json` artifacts                                                                                                                                    | `go test ./internal/perf/...` and `go test ./internal/cli/ -run 'Performance\|Report'`              | covered |
 | S11   | this document + register                              | remaining-issues register (below)                                                                                                                                                | `go test ./... && go vet ./... && go build ./...`                                                    | pending |
 
 The Status column is deliberate and honest:
@@ -166,12 +166,12 @@ construction. Sources are cited per issue.
 
 | ID  | Severity | Issue                                                                                                                              | Source                                             | Blocks JEV? |
 | --- | -------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------- | ----------- |
-| I1  | MEDIUM   | AHV2011 run recorded `FAILED` due to an external provider session limit (transient infrastructure, not a task defect).             | `docs/PREJEV-BASELINE.md`                          | No          |
-| I2  | MEDIUM   | AHV2012 run bookkeeping recorded a stale `FAILED` after a successful, committed attempt.                                            | `docs/PREJEV-BASELINE.md`                          | No          |
-| I3  | MEDIUM   | `internal/agent/ollama_tool.go` package doc/error strings claim only `deepseek-v4.1-flash:cloud` is supported; multiple deepseek models are accepted intentionally. | `docs/PREJEV005-AHV2001-2007-RECONCILE.md` | No          |
-| I4  | LOW      | Tool-call count is unavailable from `internal/perf` (`Counts` has no field); baseline states it as unavailable rather than inventing a value. | `docs/PREJEV017-PERFORMANCE-BASELINE.md` | No          |
-| I5  | LOW      | A reused validation carries no `validation_ms` `build`/`test`/`lint` breakdown.                                                    | `docs/PREJEV017-PERFORMANCE-BASELINE.md`           | No          |
-| I6  | LOW      | PLAN has no per-step timing; a slow plan is a single number, not a profile.                                                        | `docs/PREJEV017-PERFORMANCE-BASELINE.md`           | No          |
+| I1  | MEDIUM   | AHV2011 run recorded `FAILED` due to an external provider session limit (transient infrastructure, not a task defect).             | `docs/history/PREJEV-BASELINE.md`                          | No          |
+| I2  | MEDIUM   | AHV2012 run bookkeeping recorded a stale `FAILED` after a successful, committed attempt.                                            | `docs/history/PREJEV-BASELINE.md`                          | No          |
+| I3  | MEDIUM   | `internal/agent/ollama_tool.go` package doc/error strings claim only `deepseek-v4.1-flash:cloud` is supported; multiple deepseek models are accepted intentionally. | `docs/history/PREJEV005-AHV2001-2007-RECONCILE.md` | No          |
+| I4  | LOW      | Tool-call count is unavailable from `internal/perf` (`Counts` has no field); baseline states it as unavailable rather than inventing a value. | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` | No          |
+| I5  | LOW      | A reused validation carries no `validation_ms` `build`/`test`/`lint` breakdown.                                                    | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`           | No          |
+| I6  | LOW      | PLAN has no per-step timing; a slow plan is a single number, not a profile.                                                        | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`           | No          |
 | I7  | LOW      | Controller documentation/config alignment is tracked by S7 and finalized here.                                                     | this milestone                                     | No          |
 
 ### I1 severity note
@@ -205,7 +205,7 @@ severity has been corrected to match its actual impact.)
 
 ## Controller documentation alignment
 
-The architecture boundary is stated in `docs/ARCHITECTURE.md` and restated in the
+The architecture boundary is stated in `docs/architecture/OVERVIEW.md` and restated in the
 plan's Architecture Boundary section:
 
 ``` text
@@ -231,7 +231,7 @@ candidate source, and the default install directory is outside the working tree.
 Repeat/re-run must not require destructive state manipulation, and a bootstrap
 failure must surface clearly rather than pass silently. Evidence:
 `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`,
-`scripts/sop-ollama-agent.sh`, `docs/OLLAMA-DOGFOOD.md`.
+`scripts/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`.
 
 ## Harness/provider/model boundary (Harness V2)
 
@@ -269,7 +269,7 @@ The native path is `harness: tool` with `provider: ollama` and an
 optional; Claude is neither required nor a default. The Ollama text endpoint alone
 is not a mutating coding agent — mutation requires the tool harness with controlled
 tools. The full AHV2010–AHV2013 reconciliation is in
-`docs/PREJEV006-AHV2010-2013-RECONCILE.md`; that document is the single source for
+`docs/history/PREJEV006-AHV2010-2013-RECONCILE.md`; that document is the single source for
 the AHV2010–AHV2013 dispositions, and this document references it rather than
 restating them.
 

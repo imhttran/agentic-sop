@@ -8,7 +8,7 @@ understood, implemented, validated, and completed on their own.
 ## Status
 
 - **PREJEV012 remains the umbrella regression milestone.** It completes only when S6–S12 have all been validated (see [Umbrella completion criteria](#umbrella-completion-criteria)).
-- **The active plan source is left unchanged.** `docs/PLAN-Pre-JEV-Stabilization.md`
+- **The active plan source is left unchanged.** `docs/plans/PLAN-Pre-JEV-Stabilization.md`
   and `.agent-sdlc/plan.json` are not edited, so the existing task graph's
   provenance is preserved and the next `sop run` does not stop with
   `NEEDS_HUMAN: plan changed`. PREJEV012 continues to exist as the umbrella;

@@ -16,7 +16,7 @@ observed controller behavior.
 ## Requirements
 
 - Inspect the controller's configuration/documentation and the architecture
-  boundary in `docs/ARCHITECTURE.md`.
+  boundary in `docs/architecture/OVERVIEW.md`.
 - Verify existing coverage first; record any documentation/behavior mismatch and
   its resolution in the readiness gate's remaining-issues register (do not silently
   edit either side).

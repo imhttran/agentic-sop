@@ -15,7 +15,7 @@ understood, verified, and completed on their own.
   artifacts. It adds no instrumentation, no optimization, and no test merely to
   force a repository mutation.
 - **The plan source now decomposes PREJEV017.**
-  `docs/PLAN-Pre-JEV-Stabilization.md` declares the umbrella plus PREJEV017-S1 …
+  `docs/plans/PLAN-Pre-JEV-Stabilization.md` declares the umbrella plus PREJEV017-S1 …
   PREJEV017-S5, and `.agent-sdlc/plan.json` is regenerated from it so the machine
   plan matches.
 - **S1–S5 are standalone task files** under `docs/tasks/prejev017/`, each runnable
@@ -30,7 +30,7 @@ understood, verified, and completed on their own.
   ```
 
 - **The baseline itself is recorded** in
-  `docs/PREJEV017-PERFORMANCE-BASELINE.md`.
+  `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`.
 
 ## Why this decomposition exists
 
@@ -89,7 +89,7 @@ Execution mode is per-task:
   completes with `changes_expected=false`. This is the fast path that removes the
   budget-exhaustion failure mode.
 - **S5 runs in `implement`.** It is the recording-and-closure task: it may need to
-  refresh `docs/PREJEV017-PERFORMANCE-BASELINE.md`. Because SOP allows a completed
+  refresh `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`. Because SOP allows a completed
   no-change outcome, S5 still passes with `changes_expected=false` when the
   document already reflects the captured evidence; `verify-first` was deliberately
   *not* used for S5 because it short-circuits before the document can be refreshed.
@@ -132,7 +132,7 @@ confirms the instrumentation. Two documentation outputs are in scope:
 
 | ID  | Area | Output                                                                       |
 | --- | ---- | ---------------------------------------------------------------------------- |
-| D1  | S5   | `docs/PREJEV017-PERFORMANCE-BASELINE.md` — the recorded baseline             |
+| D1  | S5   | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` — the recorded baseline             |
 | D2  | S4   | the tool-call and missing-instrumentation limitations recorded in that file  |
 
 Neither D1 nor D2 is a code change, and neither may be satisfied by adding
@@ -192,7 +192,7 @@ documentation requirement.
 
 ### PREJEV017-S5 — Baseline Recording and Closure
 
-- **Responsibility:** confirm `docs/PREJEV017-PERFORMANCE-BASELINE.md` records the
+- **Responsibility:** confirm `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` records the
   captured baseline for both measured workflows, that every PREJEV017 acceptance
   criterion maps to captured evidence, and that each captured number matches an
   existing artifact; refresh the document only where it is stale, and add no test
@@ -230,7 +230,7 @@ PREJEV017 is complete only when **all** of the following hold:
 2. The baseline is supported by existing instrumentation and the captured run
    artifacts (see the [metric availability and evidence map](#metric-availability-and-evidence-map)),
    and every captured number matches an artifact.
-3. `docs/PREJEV017-PERFORMANCE-BASELINE.md` records both measured workflows and the
+3. `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` records both measured workflows and the
    full metric set, and states tool calls as unavailable from perf.
 4. The validation matrix above passes.
 5. No instrumentation, optimization, or test was added merely to force a

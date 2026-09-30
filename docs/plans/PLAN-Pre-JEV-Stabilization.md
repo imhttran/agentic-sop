@@ -256,7 +256,7 @@ recorded, not rewritten.
 A SOP plan is a flat dependency graph, so the parent/child relationship is
 expressed two ways: each sub-task is named `<umbrella>-<sub>`, and this milestone
 depends on every sub-task, becoming ready only once they are done. Exact commands
-and the existing-coverage map live in `docs/PREJEV012-REGRESSION-DECOMPOSITION.md`
+and the existing-coverage map live in `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`
 and `docs/tasks/prejev012/`.
 
 ### Dependencies
@@ -625,7 +625,7 @@ A SOP plan is a flat dependency graph, so the parent/child relationship is
 expressed two ways: each sub-task is named `<umbrella>-<sub>`, and this milestone
 depends on every sub-task, becoming ready only once they are done. Exact commands
 and the existing-coverage map live in
-`docs/PREJEV016-RECOVERY-DECOMPOSITION.md` and `docs/tasks/prejev016/`.
+`docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md` and `docs/tasks/prejev016/`.
 
 ### Dependencies
 
@@ -931,12 +931,12 @@ runs before any agent, and when it passes the milestone completes with no change
 (`changes_expected=false`). PREJEV017 passes when the required baseline is supported
 by the existing instrumentation and the captured run artifacts, whether or not any
 repository file changed. Optimization is explicitly out of scope and remains in
-`docs/PLAN-SOP-Performance.md`.
+`docs/plans/PLAN-SOP-Performance.md`.
 
 A SOP plan is a flat dependency graph, so the parent/child relationship is expressed
 two ways: each sub-task is named `<umbrella>-<sub>`, and this milestone depends on
 every sub-task, becoming ready only once they are done. Exact commands and the
-metric/evidence map live in `docs/PREJEV017-PERFORMANCE-DECOMPOSITION.md` and
+metric/evidence map live in `docs/history/PREJEV017-PERFORMANCE-DECOMPOSITION.md` and
 `docs/tasks/prejev017/`.
 
 ### Dependencies
@@ -1082,7 +1082,7 @@ does not. Tool calls have no field in `perf.Counts`, so the baseline states them
 unavailable from the perf metrics rather than inventing a value; the missing
 instrumentation is documented as a limitation, not implemented. Document each known
 bottleneck with the metric and evidence that support it, and confirm the
-non-blocking optimization work remains in `docs/PLAN-SOP-Performance.md`. Package:
+non-blocking optimization work remains in `docs/plans/PLAN-SOP-Performance.md`. Package:
 `internal/perf`, `internal/cli` (`report.go`). Verify existing coverage first,
 implement only the missing coverage, then validate independently.
 
@@ -1096,7 +1096,7 @@ implement only the missing coverage, then validate independently.
 -   tool-call availability is stated from the existing instrumentation, and no new perf field is added
 -   each documented bottleneck cites the captured metric and its source artifact
 -   the missing instrumentation is recorded as a limitation, not implemented
--   optimization is delegated to `docs/PLAN-SOP-Performance.md`, with nothing pulled forward
+-   optimization is delegated to `docs/plans/PLAN-SOP-Performance.md`, with nothing pulled forward
 -   the focused and broader validation commands pass
 
 ### Validation
@@ -1113,7 +1113,7 @@ go test ./...
 
 ## PREJEV017-S5 --- Baseline Recording and Closure
 
-Confirm `docs/PREJEV017-PERFORMANCE-BASELINE.md` records the captured baseline for
+Confirm `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` records the captured baseline for
 both measured workflows, that every PREJEV017 acceptance criterion maps to captured
 evidence, and that each captured number matches an existing artifact; refresh the
 document only where it is stale, and add no test or code to satisfy the milestone.

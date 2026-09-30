@@ -14,7 +14,7 @@ method.
 
 ## Requirements
 
-- Read `docs/PREJEV017-PERFORMANCE-BASELINE.md` and the `internal/perf`
+- Read `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` and the `internal/perf`
   instrumentation and recorded `metrics.json` artifacts.
 - Verify existing coverage first; the baseline already exists from PREJEV017, so
   record it rather than reimplementing instrumentation.

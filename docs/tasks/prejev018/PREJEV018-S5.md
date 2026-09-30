@@ -18,7 +18,7 @@ intact.
 
 - Inspect SOP's VALIDATE/REVIEW/FIX wiring in `internal/cli` and the gate/transition
   rules in `internal/domain`; cross-check the ownership boundary in
-  `docs/ARCHITECTURE.md`.
+  `docs/architecture/OVERVIEW.md`.
 - Verify existing coverage first; add a test only where a real gap is demonstrated.
 - Confirm an agent's self-report is never the passing validation.
 
