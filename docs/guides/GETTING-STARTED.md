@@ -42,16 +42,16 @@ sop version
 
 Once installed, `sop` runs from any project directory.
 
-## Install the bundled end-to-end skill
+## Install script
 
 ```bash
 ./scripts/install.sh
 ```
 
-This installs the `sop` CLI (via `go install ./cmd/sop`) and links the bundled
-`sop-end-to-end` agent skill into `~/.agents/skills/`, so an agent can drive the
-workflow end to end in any project. Set `SOP_SKILLS_DIR` to install the skill
-somewhere else. `make install` runs the same script.
+This installs the `sop` CLI (via `go install ./cmd/sop`). The `sop-end-to-end`
+agent skill is provided as a global Zed skill at `~/.agents/skills/sop-end-to-end`,
+so an agent can drive the workflow end to end in any project. `make install` runs
+the same script.
 
 ## One-command run
 

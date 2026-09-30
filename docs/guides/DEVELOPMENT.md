@@ -12,9 +12,8 @@ go install ./cmd/sop    # install the CLI
 ```
 
 The `Makefile` wraps the common tasks: `make fmt`, `make vet`, `make test`,
-`make build`, `make check`, and `make install` (which runs
-`./scripts/install.sh`, installing the CLI and the bundled `sop-end-to-end`
-skill).
+`make build`, `make check`, and `make install` (which runs `./scripts/install.sh`
+to install the CLI).
 
 ## Testing
 
