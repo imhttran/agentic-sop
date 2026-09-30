@@ -58,6 +58,23 @@ normalizer has no `execution_mode` field (`internal/planner/planner.go`), so a p
 cannot mark an already-implemented task `verify-first` to avoid the re-implement
 loop.
 
+## A fully-implemented plan cannot close through SOP
+
+`sop run <PLAN>.md` regenerates tasks from the plan's stages and starts each at
+`PLANNED` (`internal/taskbuilder/taskbuilder.go`); the plan's per-task `Status:`
+line is documentation only and is not read. When every stage is already
+implemented — for example a plan whose tasks were finished in a prior session —
+the agent finds nothing to change, the run classifies as
+`INCOMPLETE_IMPLEMENTATION` → `CONTINUE` (`internal/failure`), and after the retry
+budget the task ends `BLOCKED`. Work that is already green therefore cannot be
+closed out through the lifecycle.
+
+Options: teach the planner/task builder to honour an explicit completed marker (or
+an `execution_mode: verify-first` / `done` field) so an already-satisfied stage is
+accepted; or provide a `sop reconcile`-style path that records an externally
+finished task. Related: "Bootstrap agent exhausts its budget on multi-package
+tasks" above.
+
 ## Status and roadmap
 
 SOP V1 is complete; every V1 stage is implemented and tested:

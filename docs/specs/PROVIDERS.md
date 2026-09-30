@@ -43,12 +43,12 @@ This document distinguishes three kinds of statement:
 
 SOP MUST keep four concepts independent, and MUST NOT collapse them:
 
-| Concept         | Meaning                                                              | Owner                       |
-| --------------- | -------------------------------------------------------------------- | --------------------------- |
-| **Model class** | `small` / `medium` / `large` — a routing decision.                   | SOP router (`internal/router`, `internal/model`) |
-| **Model**       | A concrete model id within a provider (`qwen3:4b`).                   | Provider configuration      |
-| **Provider / runtime** | The server that serves a model (Ollama, llama.cpp, MLX, command). | `internal/provider`         |
-| **Harness**     | How SOP interacts with an agent (tool loop, command subprocess).      | `internal/agent`, `internal/ollamaagent` |
+| Concept                | Meaning                                                           | Owner                                            |
+| ---------------------- | ----------------------------------------------------------------- | ------------------------------------------------ |
+| **Model class**        | `small` / `medium` / `large` — a routing decision.                | SOP router (`internal/router`, `internal/model`) |
+| **Model**              | A concrete model id within a provider (`qwen3:4b`).               | Provider configuration                           |
+| **Provider / runtime** | The server that serves a model (Ollama, llama.cpp, MLX, command). | `internal/provider`                              |
+| **Harness**            | How SOP interacts with an agent (tool loop, command subprocess).  | `internal/agent`, `internal/ollamaagent`         |
 
 A provider serves inference. A harness defines how SOP talks to an agent. The two
 MUST NOT be merged into one abstraction.
@@ -121,15 +121,25 @@ freezes the method set (`internal/provider/boundary_test.go`).
 ## 6. Model Discovery
 
 **Implemented.** `Models` returns `ModelInfo{Name, Provider, Locality,
-Capabilities}`.
+Capabilities}` plus optional metadata (`Family`, `ParameterSize`, `Quantization`,
+`ContextWindow`, `SizeBytes`).
 
 - **Required.** A provider that cannot enumerate models MUST return
   `ErrDiscoveryUnsupported`, not an empty list, so a caller never mistakes
   "unknown" for "absent".
+- **Implemented.** A single-model server (llama.cpp) MAY report its
+  operator-configured model as a known identity when it cannot enumerate models.
+  It MUST be surfaced as the configured identity, never as a discovery result, and
+  MUST NOT override a server that does answer; with no configured model the failure
+  stays `ErrDiscoveryUnsupported`.
 - **Required.** `Locality` MUST be populated only when the runtime determines it
   reliably. Ollama's model list does not report locality, so Ollama leaves it
   empty; the authoritative locality for a run is the routing selection's, never a
   provider's guess.
+- **Implemented.** Optional metadata is populated only when the runtime reports it
+  reliably (Ollama fills it from `/api/tags`; the OpenAI-compatible adapters leave
+  it unset). A zero value means "not determined", never "absent"; `ModelInfo.Metadata`
+  renders it deterministically for the inspection surface.
 - **Required.** Capabilities MUST NOT be inferred from model names by brittle
   string matching.
 
@@ -272,10 +282,10 @@ This specification does not:
 
 ## 16. Validation Checklist
 
-- [ ] Provider identity is validated; unknown names fail.
-- [ ] The registry rejects duplicates and lists deterministically.
-- [ ] Health, discovery, and capabilities are read-only evidence.
-- [ ] Undetermined results are never treated as negative.
-- [ ] Validation is opt-in, read-only, and never substitutes a provider/model.
-- [ ] No credential is configured, persisted, or printed by the provider layer.
-- [ ] Existing runs are unchanged when the layer is off or unconfigured.
+- [x] Provider identity is validated; unknown names fail.
+- [x] The registry rejects duplicates and lists deterministically.
+- [x] Health, discovery, and capabilities are read-only evidence.
+- [x] Undetermined results are never treated as negative.
+- [x] Validation is opt-in, read-only, and never substitutes a provider/model.
+- [x] No credential is configured, persisted, or printed by the provider layer.
+- [x] Existing runs are unchanged when the layer is off or unconfigured.

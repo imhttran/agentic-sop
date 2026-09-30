@@ -320,6 +320,12 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
   actionable error.
 - Capability data, health, and model lists are **evidence only**; they never change
   task state, approval, validation, review, quality gates, or the model class.
+- `sop providers --models` also shows the optional metadata a runtime reports
+  (family, parameter size, quantization, context window, size) when it can be
+  determined; a field the runtime does not report is simply omitted. When
+  llama-server cannot enumerate models, the llama.cpp provider reports the
+  configured `SOP_LLAMACPP_MODEL` (or `agent.model` when llama.cpp is the provider)
+  as its known identity — never as a discovery result.
 - Credentials are never configured here (and never printed by `sop providers`);
   they stay in the environment, exactly as for the agent path.
 

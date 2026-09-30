@@ -148,6 +148,17 @@ substitution; no credential is persisted or printed; all provider tests run
 offline; existing Phase 3/3.5 tests remain green; with the layer off or
 unconfigured, existing behavior is unchanged.
 
+## Hardening (post-DoD)
+
+All read-only and still OFF by default:
+
+- `ModelInfo` gained optional metadata (`Family`, `ParameterSize`, `Quantization`,
+  `ContextWindow`, `SizeBytes`), populated from Ollama's `/api/tags` and rendered by
+  `ModelInfo.Metadata` in `sop providers --models`.
+- The llama.cpp provider reports its configured model as a known identity when the
+  server cannot enumerate models (never as a discovery result).
+- `internal/provider/httpx` gained direct unit tests.
+
 ## Out of scope
 
 Automatic provider fallback, cheapest/latency/cost routing, benchmarks, learned
