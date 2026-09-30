@@ -149,8 +149,8 @@ acceptance criteria, and validation.
   `enabled` switch, per-gate flags (`gates.task_triage`, `gates.pre_execution`),
   and an optional `fail_on` severity list. Validate at load time with focused errors
   for unknown keys/values, matching the current configuration policy. Reuse the
-  existing JEV analyzer/provider resolution; do not touch `quality.jev` or
-  `decision.*`.
+  existing JEV analyzer/provider resolution; do not touch `quality.jev`,
+  `decision.*`, or `models` (the agent's model routing).
 - **Depends on:** none.
 - **Likely files/packages:** `internal/config/config.go`, `internal/config/*_test.go`,
   `docs/reference/CONFIGURATION.md`.

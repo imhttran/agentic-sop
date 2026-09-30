@@ -253,8 +253,8 @@ action`. Failure and approval classification already moved away from topic-word
   behavior MUST remain compatible. Unknown configuration keys MUST continue to
   fail clearly, per the current configuration policy. Phase 3 behavior MUST NOT be
   silently enabled. The early gates MUST live in their own namespace, separate
-  from `quality.jev` (quality analysis) and `decision.*` (the model-routing
-  decision layer) --- see §10.1.
+  from `quality.jev` (quality analysis), `decision.*` (the decision/thresholds
+  layer), and `models` (agent model routing) --- see §10.1.
 - **FR-P3-12 --- Progressive rollout.** Rollout order: structured early-analysis
   model + persistence + fake analyzer + tests, then task triage, then
   pre-execution, then the real OpenJEV provider via dogfood, then
@@ -341,8 +341,10 @@ reconciliation, plan task P3-001):
 ### 10.1 Configuration namespace (decided)
 
 The early checkpoints MUST use their **own top-level namespace, `early_jev`**,
-separate from `quality.jev` (quality-seam JEV) and from `decision.*` (the partial
-model-routing decision layer in `internal/decision`). Keeping the three namespaces
+separate from `quality.jev` (quality-seam JEV), from `decision.*` (the
+pre-existing decision/thresholds layer in `internal/decision`), and from `models`
+(the agent's class-based model routing in `internal/model`, configured by the
+`models:` block, `SOP_MODEL_*`, and an optional `.env`). Keeping these namespaces
 apart prevents one concept from acquiring two meanings.
 
 ```yaml
