@@ -37,6 +37,26 @@ A read-only view of SOP state for small devices.
 An adapter for the Jev planner, and an evaluation comparing it with the
 deterministic planner.
 
+## Bootstrap agent exhausts its budget on multi-package tasks
+
+The bootstrap Ollama agent has a per-capability iteration ceiling and a late-stage
+cutoff for a run that has not mutated (`IMPLEMENT`: 32 iterations,
+`implementLateStageAfter` 22). On a task that spans several packages the model can
+spend the whole budget on read-only discovery and be finalized having written
+nothing, so SOP records `CONTINUE` and requeues the task. It converges only after a
+re-run, and not at all for a task whose work already exists in the tree.
+
+Observed dogfooding Phase 3 (2026-09-30): P3-006 issued 22 read-only tool calls and
+zero writes across four attempts; P3-009/011/014/017 requeued the same way before
+converging on a later run. The harness already nudges the model to write at 6/12/22
+turns and the model ignores them, so raising the budget alone is unlikely to help.
+
+Candidate fixes: give the task request a concrete file/work scope so discovery is
+shorter; let a productive-but-unmutated run continue incrementally instead of
+finalizing; or use a stronger model for multi-package tasks. Related: SOP's plan
+normalizer has no `execution_mode` field (`internal/planner/planner.go`), so a plan
+cannot mark an already-implemented task `verify-first` to avoid the re-implement
+loop.
 
 ## Status and roadmap
 
