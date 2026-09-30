@@ -151,7 +151,7 @@ CLI Reference     docs/reference/CLI.md
 Configuration     docs/reference/CONFIGURATION.md
 Status/Recovery   docs/reference/STATUS-AND-RECOVERY.md
 Development       docs/guides/DEVELOPMENT.md
-Plans             docs/plans/ · active plan: docs/PLAN-JEV-Implementation.md
+Plans             docs/plans/ · active plan: docs/plans/PLAN-Phase-3.5-Model-Routing.md
 History           docs/history/
 ```
 

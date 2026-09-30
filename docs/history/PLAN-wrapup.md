@@ -2,7 +2,7 @@
 
 > **Two editions of one roadmap.** This file is the **condensed** edition — the one
 > adopted as the wrap-up (see Stage 24 of [`PLAN.md`](../PLAN.md)). Its sibling
-> [`PLAN-JEV.md`](../PLAN-JEV-Implementation.md) is the **fuller** edition: both share T001–T032
+> [`PLAN-JEV.md`](../plans/PLAN-JEV-Implementation.md) is the **fuller** edition: both share T001–T032
 > (identical numbers and the same work), then diverge — this file condenses the
 > decision layer and continues to the operational tasks (for example "Command
 > Policy" is T043 here but T052 in the JEV file). A `T0NN` reference elsewhere is

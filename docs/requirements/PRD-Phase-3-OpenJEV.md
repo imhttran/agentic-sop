@@ -33,7 +33,7 @@ execution before expensive agent work occurs.
   recovery, and safety.
 - [../architecture/SOP-BOUNDARY.md](../architecture/SOP-BOUNDARY.md) --- the
   ownership model this phase must preserve.
-- [../PLAN-JEV-Implementation.md](../PLAN-JEV-Implementation.md) --- the V1 JEV
+- [../plans/PLAN-JEV-Implementation.md](../plans/PLAN-JEV-Implementation.md) --- the V1 JEV
   plan (JEV001--JEV016), which is complete and is the baseline Phase 3 extends.
 
 ## 1. Problem

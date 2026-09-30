@@ -35,7 +35,7 @@ SOP decides.
 IMPLEMENT/FIX changes code.
 ```
 
-It satisfies the JEV001 work item in `docs/PLAN-JEV-Implementation.md` ("Define JEV Capability
+It satisfies the JEV001 work item in `docs/plans/PLAN-JEV-Implementation.md` ("Define JEV Capability
 Boundary") and the JEV decision layer described in `docs/requirements/PRD-JEV.md` §15.
 
 ---
@@ -250,7 +250,7 @@ behavior.
 This boundary is JEV001 only. It does **not** implement scheduling, retries,
 code modification, commits, PR creation, merges, quality-lifecycle wiring, or any
 behavior beyond defining and enforcing the boundary. Those are separate JEV work
-items (`docs/PLAN-JEV-Implementation.md`).
+items (`docs/plans/PLAN-JEV-Implementation.md`).
 
 ---
 

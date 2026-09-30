@@ -82,14 +82,14 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 ## Plans
 
-- [PLAN-JEV-Implementation.md](PLAN-JEV-Implementation.md) — **the active plan** (JEV001–JEV017). SOP records this as active, so it stays at `docs/`. Execute via `sop run docs/PLAN-JEV-Implementation.md`.
+- [plans/PLAN-JEV-Implementation.md](plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017); complete. Execute with `sop run docs/plans/PLAN-JEV-Implementation.md`.
 - [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default. **Implemented** (P3-001–P3-015) and committed; P3-016 records the dogfood.
 - [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream.
 - [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — pre-JEV stabilization workstream.
 
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery.
 - [plans/PLAN-Model-Routing.md](plans/PLAN-Model-Routing.md) — model routing.
-- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; SOP's recorded active plan; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis.
 - [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing.
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates.
@@ -109,7 +109,6 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 To keep SOP working, a few paths are intentionally not under the categories above:
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
-- [PLAN-JEV-Implementation.md](PLAN-JEV-Implementation.md) stays at `docs/` because SOP records it as the active plan.
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`.
 
 ## Checking Documentation Links
