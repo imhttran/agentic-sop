@@ -14,6 +14,9 @@ restating them.
 
 - [AGENT-PROVIDER.md](AGENT-PROVIDER.md) — the harness/provider/model boundary and
   how a resolved model reaches the agent.
+- [PROVIDERS.md](PROVIDERS.md) — the provider/runtime layer beneath routing: how a
+  selected model is inspected and (opt-in) validated before execution. Routing is
+  unaffected by it.
 - [OPENJEV.md](OPENJEV.md) — the JEV analysis boundary that produces the typed
   evidence the router consumes.
 - [EXECUTION.md](EXECUTION.md) — the `sop run` lifecycle the router plugs into.

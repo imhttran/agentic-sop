@@ -74,40 +74,56 @@ workflow:
 #     provider: ollama
 #     name: deepseek-v4.1-flash:cloud
 #     locality: cloud
+
+# Optional provider runtime inspection (Phase 4). Off unless this block or a
+# SOP_*_URL/SOP_*_BASE_URL variable is set, so an existing project is unchanged.
+# Endpoints may also come from the environment; credentials never belong here.
+# providers:
+#   validate: false # opt-in pre-execution model-availability validation
+#   ollama:
+#     endpoint: http://127.0.0.1:11434
+#   llamacpp:
+#     endpoint: http://127.0.0.1:8080
+#   mlx:
+#     endpoint: http://127.0.0.1:8000
 ```
 
 ## Field reference
 
-| Key                                     | Default            | Values / behavior                                                                          |
-| --------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------ |
-| `version`                               | `1`                | Configuration schema version.                                                              |
-| `project.name`                          | — (required)       | Project identifier. A missing name fails with a clear message.                             |
-| `project.integration_branch`            | `main`             | Base branch for task branches and PRs.                                                     |
-| `agent.harness`                         | `command`          | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
-| `agent.provider`                        | —                  | `ollama`, `llamacpp`, or `command`. Required when `harness: tool`.                         |
-| `agent.model`                           | —                  | Model ID. Required when `provider: ollama` or `llamacpp`.                                  |
-| `validation.build` / `test` / `lint`    | —                  | Command lists run in the project directory, in order, stopping at the first failure.       |
-| `review.engine`                         | `self`             | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
-| `review.delegation`                     | `false`            | Review delegation flag.                                                                    |
-| `quality.require_tests`                 | `true`             | Require tests as part of the quality policy.                                               |
-| `quality.max_fix_cycles`                | `3`                | Upper bound on the validate → review → gate → fix loop.                                    |
-| `quality.fail_on`                       | `critical`, `high` | Severities that block a pass.                                                              |
-| `quality.jev.enabled`                   | `false`            | Enable the optional read-only JEV analysis stage.                                          |
-| `quality.jev.mode`                      | `review`           | Only implemented JEV mode (read-only analysis).                                            |
-| `quality.jev.fail_on`                   | `quality.fail_on`  | JEV severities that block a pass.                                                          |
-| `early_jev.enabled`                     | `false`            | Enable the early-JEV decision layer (independent of `quality.jev`).                        |
-| `early_jev.mode`                        | `review`           | Only implemented early-JEV mode (read-only analysis).                                      |
-| `early_jev.gates.task_triage`           | `false`            | Run JEV task triage before implementation (requires `early_jev.enabled: true`).            |
-| `early_jev.gates.pre_execution`         | `false`            | Run JEV pre-execution analysis before implementation (requires `early_jev.enabled: true`). |
-| `early_jev.fail_on`                     | `quality.fail_on`  | Severities that escalate an early-JEV result to a human boundary.                          |
-| `human.approval_before_commit`          | `true`             | When on, `sop commit` / `sop pr` require `--yes`.                                          |
-| `workflow.mode`                         | `local`            | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
-| `models.default_class`                  | `medium`           | Default model class (`small`, `medium`, `large`).                                          |
-| `models.fallback_class`                 | selected class     | Class used when the selected class has no model.                                           |
-| `models.allow_cloud_fallback_for_local` | `false`            | Allow a `local` class to fall back to a cloud model.                                       |
-| `models.<class>.provider`               | `ollama`           | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
-| `models.<class>.name`                   | per class          | Model name for a class (see "Model routing").                                              |
-| `models.<class>.locality`               | per class          | `local` or `cloud` (see "Model routing").                                                  |
+| Key                                     | Default                  | Values / behavior                                                                          |
+| --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------ |
+| `version`                               | `1`                      | Configuration schema version.                                                              |
+| `project.name`                          | — (required)             | Project identifier. A missing name fails with a clear message.                             |
+| `project.integration_branch`            | `main`                   | Base branch for task branches and PRs.                                                     |
+| `agent.harness`                         | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
+| `agent.provider`                        | —                        | `ollama`, `llamacpp`, or `command`. Required when `harness: tool`.                         |
+| `agent.model`                           | —                        | Model ID. Required when `provider: ollama` or `llamacpp`.                                  |
+| `validation.build` / `test` / `lint`    | —                        | Command lists run in the project directory, in order, stopping at the first failure.       |
+| `review.engine`                         | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
+| `review.delegation`                     | `false`                  | Review delegation flag.                                                                    |
+| `quality.require_tests`                 | `true`                   | Require tests as part of the quality policy.                                               |
+| `quality.max_fix_cycles`                | `3`                      | Upper bound on the validate → review → gate → fix loop.                                    |
+| `quality.fail_on`                       | `critical`, `high`       | Severities that block a pass.                                                              |
+| `quality.jev.enabled`                   | `false`                  | Enable the optional read-only JEV analysis stage.                                          |
+| `quality.jev.mode`                      | `review`                 | Only implemented JEV mode (read-only analysis).                                            |
+| `quality.jev.fail_on`                   | `quality.fail_on`        | JEV severities that block a pass.                                                          |
+| `early_jev.enabled`                     | `false`                  | Enable the early-JEV decision layer (independent of `quality.jev`).                        |
+| `early_jev.mode`                        | `review`                 | Only implemented early-JEV mode (read-only analysis).                                      |
+| `early_jev.gates.task_triage`           | `false`                  | Run JEV task triage before implementation (requires `early_jev.enabled: true`).            |
+| `early_jev.gates.pre_execution`         | `false`                  | Run JEV pre-execution analysis before implementation (requires `early_jev.enabled: true`). |
+| `early_jev.fail_on`                     | `quality.fail_on`        | Severities that escalate an early-JEV result to a human boundary.                          |
+| `human.approval_before_commit`          | `true`                   | When on, `sop commit` / `sop pr` require `--yes`.                                          |
+| `workflow.mode`                         | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
+| `models.default_class`                  | `medium`                 | Default model class (`small`, `medium`, `large`).                                          |
+| `models.fallback_class`                 | selected class           | Class used when the selected class has no model.                                           |
+| `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class to fall back to a cloud model.                                       |
+| `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
+| `models.<class>.name`                   | per class                | Model name for a class (see "Model routing").                                              |
+| `models.<class>.locality`               | per class                | `local` or `cloud` (see "Model routing").                                                  |
+| `providers.validate`                    | `false`                  | Opt-in pre-execution model-availability validation (see "Provider runtime").               |
+| `providers.ollama.endpoint`             | `http://127.0.0.1:11434` | Ollama base URL.                                                                           |
+| `providers.llamacpp.endpoint`           | `http://127.0.0.1:8080`  | llama.cpp `llama-server` base URL.                                                         |
+| `providers.mlx.endpoint`                | `http://127.0.0.1:8000`  | MLX / oMLX base URL.                                                                       |
 
 ## Agent configuration matrix
 
@@ -277,6 +293,36 @@ early_jev:
   path and its `SOP_OLLAMA_*` settings); no second provider stack is configured.
   See [`../specs/OPENJEV.md`](../specs/OPENJEV.md) for the checkpoint behavior.
 
+## Provider runtime
+
+The optional `providers:` block configures the provider/runtime inspection layer
+(Phase 4): the base URLs `sop providers` probes and the opt-in pre-execution
+model-availability check. It is **separate** from `models:` (which selects a model
+class) and does not affect routing. An omitted block leaves existing behavior
+unchanged, and building the registry never selects a class, executes a task, or
+mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
+
+| Setting (config / environment)                          | Default                  | Meaning                                |
+| ------------------------------------------------------- | ------------------------ | -------------------------------------- |
+| `providers.ollama.endpoint` / `SOP_OLLAMA_BASE_URL`     | `http://127.0.0.1:11434` | Ollama base URL.                       |
+| `providers.llamacpp.endpoint` / `SOP_LLAMACPP_BASE_URL` | `http://127.0.0.1:8080`  | llama.cpp base URL.                    |
+| `providers.mlx.endpoint` / `SOP_MLX_BASE_URL`           | `http://127.0.0.1:8000`  | MLX / oMLX base URL.                   |
+| `providers.validate` / (no env)                         | `false`                  | Opt-in pre-execution model validation. |
+
+- Endpoints resolve **environment over configuration over built-in default**, the
+  same precedence the agent path uses. `SOP_OLLAMA_BASE_URL` and
+  `SOP_LLAMACPP_BASE_URL` are the existing agent variables (one name per setting);
+  `SOP_MLX_BASE_URL` is new and follows the same `_BASE_URL` convention.
+- `providers.validate: true` makes a run check, before it starts a task, that the
+  selected provider is reachable and the selected model exists. It defaults to
+  `false`, so existing behavior is unchanged. It never substitutes a provider or
+  model: an unavailable provider or an absent model stops the run with an
+  actionable error.
+- Capability data, health, and model lists are **evidence only**; they never change
+  task state, approval, validation, review, quality gates, or the model class.
+- Credentials are never configured here (and never printed by `sop providers`);
+  they stay in the environment, exactly as for the agent path.
+
 ## Validity
 
 An invalid file — malformed YAML, an unknown key, an unknown
@@ -287,6 +333,7 @@ provider/engine/severity, a missing `project.name`, or an unsupported
 
 - [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md)
 - [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md)
+- [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md)
 - [`../specs/QUALITY.md`](../specs/QUALITY.md)
 - [`../specs/OPENJEV.md`](../specs/OPENJEV.md)
 - [`CLI.md`](CLI.md)

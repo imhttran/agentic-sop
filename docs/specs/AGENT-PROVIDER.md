@@ -10,6 +10,7 @@ This document is the normative specification for SOP's agent boundary: the **Har
 
 - [../architecture/OVERVIEW.md](../architecture/OVERVIEW.md) — §4 Agent Harness Adapter, Agent Providers.
 - [../PRD.md](../PRD.md) — §10; [EXECUTION.md](EXECUTION.md) — the up-front provider check; [RECOVERY.md](RECOVERY.md) — requeue and retry; [VALIDATION.md](VALIDATION.md), [QUALITY.md](QUALITY.md) — checks and the gate.
+- [PROVIDERS.md](PROVIDERS.md) — the provider/runtime abstraction (identity, health, discovery, capabilities, opt-in validation) that sits beneath the agent boundary.
 - [../README.md](../README.md) — documentation index.
 
 ## Normative Language

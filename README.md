@@ -139,6 +139,7 @@ Workflow          docs/specs/WORKFLOW.md
 Task Lifecycle    docs/specs/TASK-LIFECYCLE.md
 Execution         docs/specs/EXECUTION.md
 Agent Providers   docs/specs/AGENT-PROVIDER.md
+Provider Runtime  docs/specs/PROVIDERS.md
 Model Routing     docs/specs/MODEL-ROUTING.md
 Validation        docs/specs/VALIDATION.md
 Review            docs/specs/REVIEW.md
