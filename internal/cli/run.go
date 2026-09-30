@@ -154,6 +154,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := validateSelectedModel(context.Background(), cfg, routing); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
 

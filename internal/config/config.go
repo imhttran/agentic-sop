@@ -110,6 +110,10 @@ type Config struct {
 	// the SOP_MODEL_* environment (which a .env file may supply) by
 	// internal/model; an omitted block leaves the agent selection unchanged.
 	Models model.Route `yaml:"models"`
+	// Providers configures the optional provider/runtime inspection layer (Phase 4):
+	// per-provider endpoints and the opt-in pre-execution model validation. An
+	// omitted block leaves existing behavior unchanged.
+	Providers Providers `yaml:"providers"`
 }
 
 // Project holds project metadata.
@@ -273,6 +277,31 @@ type Features struct {
 type Workflow struct {
 	Mode string `yaml:"mode"`
 }
+
+// Providers configures the optional provider/runtime inspection layer (Phase 4).
+// It is additive: an omitted block leaves existing behavior unchanged. Endpoints
+// can also come from the environment (SOP_OLLAMA_BASE_URL, SOP_LLAMACPP_BASE_URL,
+// SOP_MLX_BASE_URL), which overrides the configured value. Credentials are never
+// configured here — they stay in the environment.
+type Providers struct {
+	// Validate turns on pre-execution model-availability validation: before a run
+	// starts a task it checks that the selected provider is reachable and the
+	// selected model exists. It is OFF by default, so an existing installation's
+	// behavior is unchanged. A pointer distinguishes an omitted value from an
+	// explicit false.
+	Validate *bool            `yaml:"validate"`
+	Ollama   ProviderEndpoint `yaml:"ollama"`
+	LlamaCpp ProviderEndpoint `yaml:"llamacpp"`
+	MLX      ProviderEndpoint `yaml:"mlx"`
+}
+
+// ProviderEndpoint is a provider's base URL.
+type ProviderEndpoint struct {
+	Endpoint string `yaml:"endpoint"`
+}
+
+// ValidateSelections reports whether pre-execution model validation is enabled.
+func (p Providers) ValidateSelections() bool { return p.Validate != nil && *p.Validate }
 
 // Default returns the built-in configuration, the same values the generated
 // template documents. New projects — and controllers such as sop-controller
