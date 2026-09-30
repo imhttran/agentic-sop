@@ -18,6 +18,10 @@ authoritative graph is in [../architecture/OVERVIEW.md](../architecture/OVERVIEW
   and merge requirements.
 - [TASK-LIFECYCLE.md](TASK-LIFECYCLE.md) — per-task lifecycle stages, TDD rules,
   and Git conventions.
+- [QUALITY.md](QUALITY.md) — the gate verdict and fix-loop budget.
+- [OPENJEV.md](OPENJEV.md) — the JEV boundary: who-blocks rule (§15) and the
+  JEV → quality → autonomy → approval chain (§16).
+- [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) — the human boundary.
 
 ## Normative Language
 
@@ -90,7 +94,27 @@ MUST NOT be read as a substitute for it.
   unmet dependencies MUST remain `PLANNED`.
 - When a plan marks an environment stage, feature tasks MUST implicitly depend on it and stay blocked until bootstrap completes.
 
-## 7. Handoff Between Plans
+## 7. Relationship to JEV
+
+JEV is an optional, read-only analysis capability that holds no workflow
+authority; it cannot transition state or drive scheduling. **Who blocks** is
+defined by [OPENJEV.md](OPENJEV.md) §15: JEV itself never blocks workflow,
+configured SOP policy may block or escalate from JEV evidence, advisory JEV
+failure does not automatically block normal work, and high-risk policy may fail
+closed or require human authorization. The ordered JEV → quality → autonomy →
+approval chain is stated once in [OPENJEV.md](OPENJEV.md) §16.
+
+- The quality gate verdict (PASS | FAIL | NEEDS_HUMAN) is owned by
+  [QUALITY.md](QUALITY.md); the disposition after `NEEDS_HUMAN` is owned by the
+  autonomy policy and [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md).
+- **Implemented, off by default:** the Phase 3 task-triage and pre-execution
+  checkpoints run the same read-only analyzer earlier in the pipeline, gated by the
+  `early_jev` namespace and disabled by default. When enabled they produce
+  structured evidence that SOP policy evaluates before implementation; they never
+  change the lifecycle itself. See [OPENJEV.md](OPENJEV.md) §18 and
+  [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md).
+
+## 8. Handoff Between Plans
 
 - On completion, SOP SHOULD record a small, deterministic capsule (handoff)
   describing the completed task, with optional provider-independent compression

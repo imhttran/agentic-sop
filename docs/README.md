@@ -81,7 +81,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 ## Plans
 
 - [PLAN-JEV-Implementation.md](PLAN-JEV-Implementation.md) — **the active plan** (JEV001–JEV017). SOP records this as active, so it stays at `docs/`. Execute via `sop run docs/PLAN-JEV-Implementation.md`.
-- [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — **proposed** Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer. Not implemented.
+- [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — **in progress** Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default.
 - [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream.
 - [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — pre-JEV stabilization workstream.
 

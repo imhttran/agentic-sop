@@ -92,6 +92,13 @@ workflow:
 | `quality.max_fix_cycles`                | `3`                | Upper bound on the validate → review → gate → fix loop.                                    |
 | `quality.fail_on`                       | `critical`, `high` | Severities that block a pass.                                                              |
 | `quality.jev.enabled`                   | `false`            | Enable the optional read-only JEV analysis stage.                                          |
+| `quality.jev.mode`                      | `review`           | Only implemented JEV mode (read-only analysis).                                            |
+| `quality.jev.fail_on`                   | `quality.fail_on`  | JEV severities that block a pass.                                                          |
+| `early_jev.enabled`                     | `false`            | Enable the early-JEV decision layer (independent of `quality.jev`).                        |
+| `early_jev.mode`                        | `review`           | Only implemented early-JEV mode (read-only analysis).                                      |
+| `early_jev.gates.task_triage`           | `false`            | Run JEV task triage before implementation (requires `early_jev.enabled: true`).            |
+| `early_jev.gates.pre_execution`         | `false`            | Run JEV pre-execution analysis before implementation (requires `early_jev.enabled: true`). |
+| `early_jev.fail_on`                     | `quality.fail_on`  | Severities that escalate an early-JEV result to a human boundary.                          |
 | `human.approval_before_commit`          | `true`             | When on, `sop commit` / `sop pr` require `--yes`.                                          |
 | `workflow.mode`                         | `local`            | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
 | `models.default_class`                  | `medium`           | Default model class (`small`, `medium`, `large`).                                          |
@@ -195,6 +202,40 @@ is present, so an existing project is unchanged.
   artifact beside it, and the `Model selection:` section of `sop report`. It
   records no credential; `.env` secrets (API keys, tokens) stay in the environment
   and are never written to run artifacts.
+
+## Early JEV checkpoints
+
+The early-JEV decision layer runs the same read-only JEV analyzer earlier in the
+pipeline, before implementation. It is a **separate, independent** capability
+from `quality.jev`: enabling it does not require or imply `quality.jev.enabled`,
+and vice versa. It lives in its own top-level `early_jev` namespace so it is never
+confused with `quality.jev` (quality analysis), `decision.*` (the decision layer),
+or `models` (agent model routing).
+
+```yaml
+early_jev:
+  enabled: false # master switch for the early decision layer; OFF by default
+  mode: review
+  gates:
+    task_triage: false # after task selection, before implementation
+    pre_execution: false # after precheck, before implementation
+  fail_on:
+    - critical
+    - high
+```
+
+- Both gates default **OFF** and each requires `early_jev.enabled: true`; enabling
+  a gate without enabling the layer fails clearly rather than silently doing
+  nothing. Existing configurations without this block keep working unchanged.
+- A checkpoint sends JEV bounded, read-only context and receives structured
+  evidence; SOP policy (`internal/autonomy`) decides. JEV never transitions state,
+  mutates the repository, approves, or blocks on its own.
+- `early_jev.fail_on` names the severities that escalate to a human boundary; it
+  defaults to the `quality.fail_on` severities. A finding below every `fail_on`
+  severity is advisory and the task continues.
+- The early layer reuses the existing JEV analyzer/provider resolution (the Ollama
+  path and its `SOP_OLLAMA_*` settings); no second provider stack is configured.
+  See [`../specs/OPENJEV.md`](../specs/OPENJEV.md) for the checkpoint behavior.
 
 ## Validity
 

@@ -42,6 +42,13 @@ const (
 	StageReview = "REVIEW"
 	// StageJEV marks the optional JEV analysis.
 	StageJEV = "JEV"
+	// StageTriage marks the optional early JEV task-triage checkpoint (PRD-Phase-3
+	// §10.2.4). It is distinct from StageJEV so triage evidence is never conflated
+	// with quality evidence in the activity stream or reports.
+	StageTriage = "TRIAGE"
+	// StagePreExecution marks the optional early JEV pre-execution checkpoint
+	// (PRD-Phase-3 §10.2.4), distinct from both StageTriage and StageJEV.
+	StagePreExecution = "PRE_EXECUTION"
 	// StageQuality marks the quality gate decision.
 	StageQuality = "QUALITY"
 	// StageClassify marks the failure classification (kind + disposition).

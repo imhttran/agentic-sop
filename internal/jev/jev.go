@@ -83,15 +83,31 @@ type Finding struct {
 
 // Result is the structured outcome of a JEV analysis. It is machine-readable
 // data that SOP policy consumes; it is never a lifecycle command.
+//
+// StructuredEvidence is an additive field: it carries the validated, versioned
+// early JEV analysis evidence contract (see evidence.go). Existing consumers
+// that ignore it keep compiling and observing the pre-existing serialized shape
+// unchanged, so Result stays backward compatible. It is optional; absent
+// evidence means "no structured evidence was computed" and is not a pass.
 type Result struct {
 	Status   Status
 	Findings []Finding
 	Summary  string
+
+	// StructuredEvidence carries the validated early JEV analysis evidence, when
+	// an analyzer computes it. It is validated through the fail-closed contract
+	// validator and never derived from Summary text.
+	StructuredEvidence *Evidence
 }
 
 // Validate rejects malformed results. Callers must treat an invalid result as a
 // failure (fail closed) rather than a pass: malformed JEV output must never
 // silently become PASS.
+//
+// Structured evidence, when present, is validated through the same fail-closed
+// contract validator, so an unknown purpose, severity, or status in the
+// evidence fails the whole result rather than being silently accepted. Summary
+// text is never inspected: it is descriptive only and not a decision input.
 func (r Result) Validate() error {
 	if !r.Status.Valid() {
 		return errInvalidStatus(string(r.Status))
@@ -106,6 +122,11 @@ func (r Result) Validate() error {
 	}
 	if r.Status == StatusFindings && len(r.Findings) == 0 {
 		return errFindingsWithoutFindings
+	}
+	if r.StructuredEvidence != nil {
+		if err := r.StructuredEvidence.Validate(); err != nil {
+			return err
+		}
 	}
 	return nil
 }

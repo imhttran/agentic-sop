@@ -100,6 +100,12 @@ type Config struct {
 	Features   Features       `yaml:"features"`
 	Workflow   Workflow       `yaml:"workflow"`
 	Autonomy   Autonomy       `yaml:"autonomy"`
+	// EarlyJEV is the optional early-JEV checkpoint configuration: its own
+	// top-level namespace, separate from quality.jev (quality-seam JEV),
+	// decision.* (the thresholds layer), and models (agent model routing).
+	// The block is additive: an omitted block leaves existing behavior
+	// unchanged and the early gates default OFF.
+	EarlyJEV EarlyJEV `yaml:"early_jev"`
 	// Models is the optional model-routing table. It is resolved together with
 	// the SOP_MODEL_* environment (which a .env file may supply) by
 	// internal/model; an omitted block leaves the agent selection unchanged.
@@ -184,6 +190,44 @@ func (q Quality) JEVFailOn() []string {
 		return q.JEV.FailOn
 	}
 	return q.FailOn
+}
+
+// EarlyJEV is the early-JEV checkpoint feature flag (its own top-level
+// `early_jev` namespace, per PRD-Phase-3-OpenJEV §10.1).
+//
+// The early decision layer runs the JEV analyzer earlier in the pipeline (task
+// triage and pre-execution checkpoints) and is a separate, independent
+// capability from quality-seam JEV. It is DISABLED BY DEFAULT: Enabled is a
+// pointer so an omitted value is distinguishable from an explicit false, and
+// both resolve to disabled. Enabling the early layer requires explicit
+// configuration and MUST NOT require — or imply — quality.jev.enabled.
+//
+// The block is additive and optional: a project that already has a
+// configuration file without this key keeps working unchanged.
+//
+// Mode selects the execution form; only "review" (read-only analysis) is
+// implemented today, and an unknown mode is a focused load-time error. FailOn
+// names the finding severities that escalate to a human boundary; when empty it
+// is defaulted to the quality gate's own blocking severities (quality.fail_on,
+// which itself defaults to critical,high). It is policy only and never a state
+// path.
+type EarlyJEV struct {
+	Enabled *bool         `yaml:"enabled"`
+	Mode    string        `yaml:"mode"`
+	Gates   EarlyJEJGates `yaml:"gates"`
+	FailOn  []string      `yaml:"fail_on"`
+}
+
+// EarlyJEJGates selects which early checkpoints run. Each gate is a pointer so an
+// omitted value is distinguishable from an explicit false, and both resolve to
+// disabled. A gate runs only when the early layer is active AND the gate itself
+// is enabled, so both new checkpoints are OFF by default and existing behavior is
+// unchanged (PRD-Phase-3-OpenJEV §6, §10.1).
+type EarlyJEJGates struct {
+	// TaskTriage runs JEV triage after task selection, before implementation.
+	TaskTriage *bool `yaml:"task_triage"`
+	// PreExecution runs JEV analysis after precheck, before implementation.
+	PreExecution *bool `yaml:"pre_execution"`
 }
 
 // RequiresTests reports whether tests are required, defaulting to true.
@@ -317,7 +361,7 @@ func Parse(data []byte) (*Config, error) {
 
 // applyDefaults fills omitted settings. A field whose zero value is also a
 // valid explicit value uses a pointer (RequireTests, ApprovalBeforeCommit,
-// JEV.Enabled); the others use their zero value as "unset".
+// JEV.Enabled, EarlyJEV.Enabled); the others use their zero value as "unset".
 //
 // Precedence is defaults < explicit config file values: an explicitly
 // configured value is never overwritten. In particular a project that sets
@@ -326,7 +370,8 @@ func Parse(data []byte) (*Config, error) {
 //
 // JEV is never enabled by a default: an omitted flag stays disabled. The JEV
 // mode is only defaulted when JEV is enabled, so a disabled stub is never
-// mutated and is never blocked by its own optional settings.
+// mutated and is never blocked by its own optional settings. The early-JEV
+// layer follows the same rule and is defaulted only when it is enabled.
 func (c *Config) applyDefaults() {
 	if c.Version == 0 {
 		c.Version = CurrentVersion
@@ -376,6 +421,12 @@ func (c *Config) applyDefaults() {
 	if c.Quality.JEVEnabled() && strings.TrimSpace(c.Quality.JEV.Mode) == "" {
 		c.Quality.JEV.Mode = "review"
 	}
+	// The early-JEV layer is independent of quality.jev and follows the same
+	// "default only when enabled" rule: an omitted or disabled stub is never
+	// mutated and never blocked by its own optional settings.
+	if c.EarlyJEVActive() && strings.TrimSpace(c.EarlyJEV.Mode) == "" {
+		c.EarlyJEV.Mode = "review"
+	}
 	if strings.TrimSpace(c.Decision.Provider) == "" {
 		c.Decision.Provider = "deterministic"
 	}
@@ -424,6 +475,9 @@ func (c *Config) Validate() error {
 		}
 	}
 	if err := c.validateJEV(); err != nil {
+		return err
+	}
+	if err := c.validateEarlyJEV(); err != nil {
 		return err
 	}
 	switch strings.TrimSpace(c.Decision.Provider) {
@@ -480,6 +534,111 @@ func (c *Config) validateJEV() error {
 	return nil
 }
 
+// validateEarlyJEV validates the early-JEV feature flag. It mirrors validateJEV
+// so the early namespace fails at load time with a focused error naming the
+// offending setting, and it never consults quality.jev: the two layers are
+// independently enable-able and both default OFF.
+//
+// An unknown early_jev mode or fail_on severity is always rejected, whether the
+// early layer is enabled or not, so a later enable cannot silently carry a bad
+// setting. An omitted early_jev block (the default) has nothing to reject and
+// stays disabled.
+func (c *Config) validateEarlyJEV() error {
+	e := c.EarlyJEV
+	if mode := strings.TrimSpace(e.Mode); mode != "" && !supportedJEVModes[mode] {
+		return fmt.Errorf("config: unknown early_jev.mode %q (want %s)",
+			e.Mode, strings.Join(sortedKeys(supportedJEVModes), ", "))
+	}
+	for _, sev := range e.FailOn {
+		if !supportedSeverity[strings.TrimSpace(sev)] {
+			return fmt.Errorf("config: unknown early_jev.fail_on severity %q (want %s)",
+				sev, strings.Join(sortedKeys(supportedSeverity), ", "))
+		}
+	}
+	// Enabling the early layer is explicit: a project that turns it on must name
+	// the read-only review mode (applyDefaults fills it in when omitted, so this
+	// only trips when an explicit empty mode was written alongside enabled: true).
+	if e.Enabled != nil && *e.Enabled {
+		if mode := strings.TrimSpace(e.Mode); mode == "" {
+			return errors.New("config: early_jev.enabled requires early_jev.mode (want review)")
+		}
+	}
+	// A gate is only meaningful when the early layer is active; enabling a gate
+	// without enabling the layer is almost certainly a mistake, so it fails clearly
+	// rather than silently doing nothing.
+	if e.Gates.TaskTriage != nil && *e.Gates.TaskTriage && !c.EarlyJEVActive() {
+		return errors.New("config: early_jev.gates.task_triage requires early_jev.enabled: true")
+	}
+	if e.Gates.PreExecution != nil && *e.Gates.PreExecution && !c.EarlyJEVActive() {
+		return errors.New("config: early_jev.gates.pre_execution requires early_jev.enabled: true")
+	}
+	return nil
+}
+
+// EarlyJEVActive reports whether the early-JEV decision layer is enabled for
+// this configuration. It is the single source of truth for the early-layer
+// enabled state: the early layer is active only when early_jev.enabled is
+// explicitly set, and nothing is enabled by default.
+//
+// It reads only the early_jev flag: quality.jev.enabled, the decision-layer
+// signals (features.jev_decisions and decision.provider: jev), and models are
+// NOT consulted. Enabling the early layer MUST NOT require — or imply —
+// quality.jev.enabled, and vice versa.
+func (c *Config) EarlyJEVActive() bool {
+	return c.EarlyJEV.Enabled != nil && *c.EarlyJEV.Enabled
+}
+
+// EarlyJEVMode returns the configured early-JEV execution mode. It is empty when
+// the early layer is disabled or the block is omitted.
+func (c *Config) EarlyJEVMode() string {
+	return c.EarlyJEV.Mode
+}
+
+// EarlyJEVTaskTriageEnabled reports whether the task-triage checkpoint runs. It
+// is active only when the early layer is enabled AND early_jev.gates.task_triage
+// is explicitly true, so the checkpoint is OFF by default and existing behavior
+// is unchanged (PRD-Phase-3-OpenJEV §6, §10.1).
+func (c *Config) EarlyJEVTaskTriageEnabled() bool {
+	return c.EarlyJEVActive() && c.EarlyJEV.Gates.TaskTriage != nil && *c.EarlyJEV.Gates.TaskTriage
+}
+
+// EarlyJEVPreExecutionEnabled reports whether the pre-execution checkpoint runs.
+// It is active only when the early layer is enabled AND
+// early_jev.gates.pre_execution is explicitly true, so the checkpoint is OFF by
+// default and existing behavior is unchanged (PRD-Phase-3-OpenJEV §6, §10.1).
+func (c *Config) EarlyJEVPreExecutionEnabled() bool {
+	return c.EarlyJEVActive() && c.EarlyJEV.Gates.PreExecution != nil && *c.EarlyJEV.Gates.PreExecution
+}
+
+// EarlyJEVFailOn returns the severities that escalate an early-JEV result to a
+// human boundary (PRD §10.1).
+//
+// Precedence, matching JEVFailOn so the two layers agree on the quality gate's
+// severities:
+//
+//  1. early_jev.fail_on, when the project names one or more severities.
+//  2. quality.fail_on, the quality gate's own blocking severities, when
+//     early_jev names none (the PRD default). applyDefaults fills quality.fail_on
+//     with the built-in default when it is omitted, so on a parsed configuration
+//     this branch already resolves to that built-in default.
+//  3. The built-in default severities (critical, high) as a last resort, so the
+//     accessor is well-defined even on a configuration that has not been through
+//     applyDefaults. This mirrors the quality.fail_on default, so it can never
+//     diverge from the quality gate's effective default.
+//
+// Note: an explicitly empty fail_on: [] is indistinguishable from an omitted
+// one and therefore also falls through to the quality severities; the early
+// layer is off by default, so this is policy-only and has no behavioral impact.
+func (c *Config) EarlyJEVFailOn() []string {
+	if len(c.EarlyJEV.FailOn) > 0 {
+		return c.EarlyJEV.FailOn
+	}
+	if len(c.Quality.FailOn) > 0 {
+		return c.Quality.FailOn
+	}
+	return []string{"critical", "high"}
+}
+
 // JEVActive reports whether JEV is enabled for this configuration. It is the
 // single source of truth for the JEV enabled state: JEV is active only when the
 // new quality.jev.enabled flag is explicitly set. Nothing is enabled by default.
@@ -489,6 +648,9 @@ func (c *Config) validateJEV() error {
 // themselves. Those signals select or describe the decision layer, which is a
 // separate capability (plan T033–T046); enabling them does not enable JEV, and
 // a project that wants JEV must set quality.jev.enabled: true explicitly.
+//
+// The early-JEV layer (early_jev) is a different capability with its own flag
+// and is likewise NOT consulted here.
 func (c *Config) JEVActive() bool {
 	return c.Quality.JEVEnabled()
 }
@@ -561,6 +723,28 @@ quality:
     fail_on:
       - critical
       - high
+
+# The early-JEV decision layer is a SEPARATE, independent capability from
+# quality.jev above: it runs the JEV analyzer earlier in the pipeline (task
+# triage before implementation and pre-execution analysis after precheck).
+# It is DISABLED by default, and enabling it does NOT require enabling
+# quality.jev. Existing configurations without this block keep working
+# unchanged. The early layer reuses the existing JEV analyzer/provider
+# resolution; no separate provider is configured here.
+early_jev:
+  enabled: false
+  # review is the only implemented mode (read-only analysis).
+  mode: review
+  # gates selects which early checkpoints run. Both default OFF and each
+  # requires enabled: true above; enabling the layer alone runs neither.
+  gates:
+    task_triage: false
+    pre_execution: false
+  # fail_on names the early-JEV severities that escalate to a human boundary;
+  # omit it to reuse the quality.fail_on severities above.
+  fail_on:
+    - critical
+    - high
 
 human:
   approval_before_commit: true

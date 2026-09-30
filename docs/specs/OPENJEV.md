@@ -281,6 +281,17 @@ IMPLEMENT / FIX -> VALIDATE -> REVIEW -> (optional JEV) -> QUALITY DECISION
 When `quality.jev.enabled` is false the stage is absent and the normal SOP
 lifecycle runs unchanged.
 
+The early-JEV decision layer (§18) adds two optional, disabled-by-default
+checkpoints that run the same read-only analyzer **before** implementation:
+
+```text
+TASK SELECTED -> (optional JEV TASK TRIAGE) -> SOP POLICY
+PRECHECK -> (optional JEV PRE-EXECUTION) -> SOP POLICY -> IMPLEMENT / FIX -> ...
+```
+
+Both are gated by the separate `early_jev` namespace and default OFF, so the
+pipeline above is unchanged unless they are explicitly enabled. See §18.
+
 ## 13. Inputs and outputs
 
 - **Inputs** — bounded, read-only snapshots only: the task, its acceptance
@@ -290,8 +301,12 @@ lifecycle runs unchanged.
 - **Outputs** — a structured result: a status (`PASS`, `FINDINGS`, `INCOMPLETE`,
   `ERROR`), findings (severity, category, path, line, message, evidence), and a
   summary. Statuses and severities are result values, not lifecycle transitions.
-- **Confidence** — where a decision-layer use is proposed (see §17), JEV MAY
-  return confidence metadata, but SOP owns the thresholds that interpret it.
+  An early checkpoint additionally returns structured evidence that names its
+  purpose (`QUALITY`, `TASK_TRIAGE`, or `PRE_EXECUTION`, §18) and carries typed
+  items (purpose, typed category, severity, detail, evidence).
+- **Confidence** — bounded (`0.0 <= c <= 1.0`) advisory metadata on structured
+  evidence. It MUST NOT directly control lifecycle state; SOP owns the thresholds
+  that interpret it (§18).
 
 ## 14. Findings, severity, and the quality gate
 
@@ -360,12 +375,6 @@ are additive and MUST NOT gate core work
 The following are **not implemented** and are recorded as candidates only. They
 MUST NOT be presented as current behavior.
 
-- **Earlier pipeline checkpoints (Phase 3)** — task-triage and pre-execution
-  checkpoints that run before implementation rather than only after validation and
-  review. Planned in
-  [../requirements/PRD-Phase-3-OpenJEV.md](../requirements/PRD-Phase-3-OpenJEV.md)
-  and [../plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md); not
-  implemented, and the gates will default OFF.
 - **JEV decision layer** — using JEV as an optional decision provider for bounded
   judgments (task-complexity classification, model routing, review escalation,
   finding prioritization, risk classification, whether another review pass is
@@ -373,3 +382,33 @@ MUST NOT be presented as current behavior.
   default (`features.jev_decisions: false`), per
   [../requirements/PRD-JEV.md](../requirements/PRD-JEV.md).
 - **Additional JEV modes** — execution forms other than `review`.
+
+## 18. Early checkpoints (Phase 3, implemented)
+
+Two optional, disabled-by-default checkpoints run the same read-only analyzer
+before implementation. They are owned by the separate `early_jev` configuration
+namespace ([../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)).
+
+- **Task triage** (`early_jev.gates.task_triage`) runs after SOP deterministically
+  selects a runnable task and before implementation.
+- **Pre-execution** (`early_jev.gates.pre_execution`) runs after the precheck and
+  immediately before implementation. It is analysis only: it MUST NOT execute or
+  mutate anything.
+
+Both preserve the boundary: JEV produces structured evidence; SOP policy
+(`internal/autonomy`) decides; IMPLEMENT/FIX changes code. The three analysis
+purposes (quality, task triage, pre-execution) are distinct so evidence is never
+conflated across checkpoints. Early findings carry a typed category (ambiguity,
+missing context, scope, requirement conflict, dependency concern, security,
+destructive, credential sensitivity, unexpected area, approval-sensitive) and a
+severity; SOP maps that typed pair against `early_jev.fail_on` and MUST NOT infer a
+lifecycle action from free-form summary text. An unclassified category fails closed
+to a human boundary.
+
+Disabling or omitting the gates is a strict no-op: existing SOP behavior is
+unchanged (§6, FR-P3-6). A provider failure or malformed result is recorded as a
+failure with no evidence payload, never as a finding; under the advisory default it
+does not block normal work, while a policy naming the relevant severities may fail
+closed or require human authorization (§15). Early results are persisted as
+diagnostic run artifacts (`early-jev.json`, `early-jev-history.jsonl`) and are
+never read back to drive a decision.

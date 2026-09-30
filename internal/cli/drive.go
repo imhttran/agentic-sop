@@ -561,6 +561,17 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	ctx = taskActivityContext(ctx, rn.Dir(), stdout, task.ID, task.Title)
 	_ = rn.Write("task.md", spec.Render())
 
+	// Optional early JEV task-triage checkpoint (Phase 3): a deterministic policy
+	// check on the already-chosen task, run before the lifecycle begins. It is a
+	// strict no-op unless early_jev.gates.task_triage is enabled. A policy
+	// escalation stops through the existing human boundary and introduces no new
+	// task state.
+	if tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage); tri.Escalate {
+		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
+		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
+		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
+	}
+
 	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 

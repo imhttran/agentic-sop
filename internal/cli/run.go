@@ -151,6 +151,16 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
+
+	// Optional early JEV task-triage checkpoint (Phase 3). Single-task mode has no
+	// scheduler store to requeue into, so a policy escalation stops with a clear
+	// human boundary message instead of silently running the task. A disabled gate
+	// is a strict no-op.
+	if tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage); tri.Escalate {
+		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", rn.State().ID, tri.Reason)
+		return exitError
+	}
+
 	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
@@ -366,6 +376,21 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// remains the authority on what changed. The input carries the deterministic
 		// failure that made the agent necessary, and the previous attempt's outcome,
 		// so it can address the blocker rather than repeat the request that stopped it.
+		// Optional early JEV pre-execution checkpoint (Phase 3): analysis of the
+		// proposed execution context immediately before implementation, after the
+		// precheck and planning. It is analysis-only and a strict no-op unless
+		// early_jev.gates.pre_execution is enabled. A policy escalation stops the
+		// task at the existing human boundary; the lifecycle itself is unchanged.
+		if pre := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointPreExecution); pre.Escalate {
+			_ = rn.SetStage(runpkg.WaitingForHuman)
+			return lifeResult{
+				gate:           fail(pre.Reason),
+				stage:          runpkg.WaitingForHuman,
+				classification: pre.Decision.Classification,
+				decision:       pre.Decision,
+			}, nil
+		}
+
 		_ = rn.SetStage(runpkg.Implementing)
 		ar.Emit(activity.StageImplement, "implementing", "")
 		input := plan.RenderMarkdown()
