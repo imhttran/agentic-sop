@@ -1809,13 +1809,15 @@ func TestRunImplementNeedsHuman(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "required operation needs human authorization"}}
+	// A genuine human boundary reached via a structured action kind: the agent is
+	// proposing to cross a security boundary (expose a local capability remotely).
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "this would expose local command execution to unauthenticated remote clients"}}
 
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run", "--task", "TASK.md")
 	if code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "NEEDS_HUMAN") || !strings.Contains(stdout, "human authorization") {
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
 		t.Errorf("stdout = %q", stdout)
 	}
 }
@@ -1894,7 +1896,7 @@ func TestRunGraphNeedsHumanRequeues(t *testing.T) {
 	}
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone"}}
 
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 	if code != exitError {
@@ -2147,13 +2149,13 @@ func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
 	// Each attempt must make progress (a distinct outcome) to spend the budget;
 	// the budget is MaxAttempts (default 3).
 	for i := 0; i < 3; i++ {
-		a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: fmt.Sprintf("needs auth %d", i)}}
+		a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: fmt.Sprintf("the operation is destructive and cannot be undone (%d)", i)}}
 		if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
 			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
 		}
 	}
 
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth final"}}
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone (final)"}}
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 	if code != exitError {
 		t.Fatalf("final run: code=%d, want %d", code, exitError)
@@ -2183,7 +2185,7 @@ func TestRunGraphNeedsHumanNoProgressDoesNotSpend(t *testing.T) {
 	}
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs auth"}}
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone"}}
 
 	// First attempt makes progress (spends one attempt).
 	if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
@@ -2247,22 +2249,22 @@ func TestRunGraphCarriesPreviousOutcome(t *testing.T) {
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
 
-	// First attempt stops at a human boundary.
-	first := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs authorization"}}
+	// First attempt stops at a human boundary (a structured destructive action).
+	first := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone"}}
 	if code, _, _ := runInjectedCLI(t, dir, "diff\n", first, "run"); code != exitError {
 		t.Fatalf("first run: code=%d, want %d", code, exitError)
 	}
 
 	// The retry is told why the previous attempt stopped, so the agent can address
 	// the blocker rather than repeat the request.
-	second := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "needs authorization"}}
+	second := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone"}}
 	if code, _, _ := runInjectedCLI(t, dir, "diff\n", second, "run"); code != exitError {
 		t.Fatalf("second run: code=%d, want %d", code, exitError)
 	}
 	if len(second.inputs) == 0 {
 		t.Fatal("no implement request recorded on the retry")
 	}
-	if input := second.inputs[0]; !strings.Contains(input, "Previous attempt") || !strings.Contains(input, "needs authorization") {
+	if input := second.inputs[0]; !strings.Contains(input, "Previous attempt") || !strings.Contains(input, "destructive") {
 		t.Errorf("retry context missing the previous outcome:\n%s", input)
 	}
 	if len(first.inputs) == 0 || strings.Contains(first.inputs[0], "Previous attempt") {

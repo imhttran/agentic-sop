@@ -110,14 +110,21 @@ func TestClassifyDispositions(t *testing.T) {
 			disposition: NeedsHuman, kind: AmbiguousContract,
 		},
 		{
-			name:        "explicit approval boundary",
+			name:        "structured approval boundary",
 			ev:          Evidence{Source: "IMPLEMENT", ApprovalRequired: true},
 			disposition: NeedsHuman, kind: ApprovalRequired,
 		},
 		{
-			name:        "explicit approval boundary in an outcome reason",
-			ev:          Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "required operation needs human authorization"}},
+			name:        "current-run approval request",
+			ev:          Evidence{Source: "IMPLEMENT", Approval: ApprovalRequest},
 			disposition: NeedsHuman, kind: ApprovalRequired,
+		},
+		{
+			// Authorization prose is NOT a gate: APPROVAL_REQUIRED is structured only,
+			// so an authorization-sounding reason is treated as unfinished work.
+			name:        "authorization prose is not an approval boundary",
+			ev:          Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "required operation needs human authorization"}},
+			disposition: Continue, kind: IncompleteImplementation,
 		},
 		{
 			name:        "destructive or unsafe operation",
@@ -595,6 +602,48 @@ const ctrl011ApprovalTopicReason = "No repository change was made this invocatio
 	"WAITING_FOR_HUMAN stage, i.e. StageWaitingForHuman), implement a non-mutating decline button, document that approval is unsupported, and add tests " +
 	"covering the approval gate. A later bounded invocation should perform these edits."
 
+// ctrl012Reason models the CTRL012 dogfood outcome: a partially implemented
+// reconciliation/approval feature. It is saturated with approval and
+// reconciliation vocabulary (explicit approval, per-task approval, accept-changed,
+// reconciliation controls, NEEDS_HUMAN) but requests nothing for the CURRENT run.
+const ctrl012Reason = "Incomplete: I rewrote internal/sopclient/changed_task.go (added ChangedTasks/ChangedExecutedTask read model " +
+	"and Store.ChangedTasks reading SOP's reconcile.json) and internal/sopclient/boundary.go (flipped OpGetChangedExecutedTasks/OpAcceptChangedTask " +
+	"to StatusSupported with real Client.ChangedExecutedTasks/AcceptChangedTask). However the blocking finding also requires web handlers/routes/templates " +
+	"surfacing the changed-task list and per-task approval controls, which I did not add, and I did not update internal/sopclient/boundary_test.go, " +
+	"whose assertions still expect these ops to be unsupported and ErrOperationUnsupported. As left, go test ./internal/sopclient/... fails and the " +
+	"acceptance criteria 'all changed executed tasks reported before mutation' and 'each changed task requires explicit approval' are still not wired " +
+	"into the UI. More work is required to finish: update boundary_test.go, add project-page changed-task presentation + per-task accept routes/handlers, " +
+	"enforce reconcile-before-mutation ordering, and add tests."
+
+// TestCTRL012PlanReconciliationIsNotApprovalRequired pins the CTRL012 fix: a task
+// implementing plan-reconciliation/approval controls, whose summary is full of
+// approval and reconciliation vocabulary, is NEVER APPROVAL_REQUIRED. With no
+// structured current-run approval state, it is a bounded continuation.
+func TestCTRL012PlanReconciliationIsNotApprovalRequired(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: ctrl012Reason}})
+	if got.Kind == ApprovalRequired || got.Disposition == NeedsHuman {
+		t.Fatalf("classification = %+v, want a non-human continuation (approval/reconciliation is the subject, not a request)", got)
+	}
+	if got.Disposition != Continue || got.Kind != IncompleteImplementation {
+		t.Errorf("classification = %+v, want CONTINUE/INCOMPLETE_IMPLEMENTATION", got)
+	}
+}
+
+// TestCTRL012FailingTestsAutoFix proves the failing deterministic tests in the
+// CTRL012 scenario are the authoritative signal: the structured test result
+// outranks the approval-heavy prose and the failure is auto-fixable.
+func TestCTRL012FailingTestsAutoFix(t *testing.T) {
+	got := Classify(Evidence{
+		Source:     "VALIDATE",
+		Outcome:    &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: ctrl012Reason},
+		TestFailed: true,
+		Detail:     "UNIT_TEST `go test ./internal/sopclient/...`: boundary_test.go still expects these ops to be unsupported",
+	})
+	if got.Kind != TestFailure || got.Disposition != AutoFix {
+		t.Fatalf("classification = %+v, want AUTO_FIX/TEST_FAILURE", got)
+	}
+}
+
 // TestCTRL011ApprovalSubjectIsNotAnApprovalRequest pins the CTRL011 fix: an
 // invocation that is IMPLEMENTING an approval feature, and exhausted its budget
 // after productive discovery, is a bounded continuation — not APPROVAL_REQUIRED and
@@ -683,23 +732,63 @@ func TestStructuredApprovalSignalsRequireHuman(t *testing.T) {
 	}
 }
 
-// TestExplicitApprovalRequestBodyStillNeedsHuman guards the other side: prose that
-// actually ASKS for authorization to proceed (not the topic) is still a human
-// boundary, so genuine approval requests are not eliminated by the CTRL011 fix.
-func TestExplicitApprovalRequestBodyStillNeedsHuman(t *testing.T) {
+// TestApprovalProseIsNotAnApprovalBoundary proves authorization-sounding agent prose
+// never produces APPROVAL_REQUIRED: an approval gate is structured only, coming
+// from the current run's lifecycle state. These reasons are unfinished work, not a
+// request that the current execution be authorized.
+func TestApprovalProseIsNotAnApprovalBoundary(t *testing.T) {
 	reasons := []string{
 		"needs auth",
 		"this requires human authorization to proceed",
 		"the operation requires approval to proceed",
 		"awaiting authorization",
+		"each changed task requires explicit approval",
+		"per-task approval controls and accept-changed routes remain",
 	}
 	for _, reason := range reasons {
 		t.Run(reason, func(t *testing.T) {
 			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})
-			if got.Disposition != NeedsHuman || got.Kind != ApprovalRequired {
-				t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", got)
+			if got.Kind == ApprovalRequired {
+				t.Errorf("classification = %+v, want NOT APPROVAL_REQUIRED (prose is not a gate)", got)
 			}
 		})
+	}
+}
+
+// TestStructuredApprovalBoundariesRequireHuman proves each structured current-run
+// approval source produces APPROVAL_REQUIRED, and that APPROVAL_REQUIRED is a
+// structured-only outcome.
+func TestStructuredApprovalBoundariesRequireHuman(t *testing.T) {
+	cases := map[string]Evidence{
+		"active approval request":   {Source: "IMPLEMENT", Approval: ApprovalRequest},
+		"waiting for human stage":   {Source: "IMPLEMENT", Approval: ApprovalWaitingForHuman},
+		"plan approval gate":        {Source: "IMPLEMENT", Approval: ApprovalPlanGate},
+		"approval-required boolean": {Source: "IMPLEMENT", ApprovalRequired: true},
+	}
+	for name, ev := range cases {
+		t.Run(name, func(t *testing.T) {
+			got := Classify(ev)
+			if got.Kind != ApprovalRequired || got.Disposition != NeedsHuman {
+				t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", got)
+			}
+			if got.Confidence != High {
+				t.Errorf("confidence = %s, want HIGH", got.Confidence)
+			}
+		})
+	}
+}
+
+// TestApprovalGateStructuredOutranksProseAndVerification proves the structured
+// approval gate outranks a deterministic verification failure and unrelated prose.
+func TestApprovalGateStructuredOutranksProseAndVerification(t *testing.T) {
+	got := Classify(Evidence{Source: "VALIDATE", TestFailed: true, Approval: ApprovalRequest})
+	if got.Kind != ApprovalRequired || got.Disposition != NeedsHuman {
+		t.Fatalf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", got)
+	}
+	// An authoritative reason is preserved verbatim.
+	got = Classify(Evidence{Source: "IMPLEMENT", Approval: ApprovalPlanGate, ApprovalReason: "the plan gate requires explicit approval"})
+	if got.Reason != "the plan gate requires explicit approval" {
+		t.Errorf("reason = %q, want the supplied authoritative reason", got.Reason)
 	}
 }
 
@@ -730,9 +819,10 @@ func TestInspectedHumanStateIsNotCurrentApprovalGate(t *testing.T) {
 }
 
 // TestExplicitHumanRequestStillNeedsHuman proves the tightened fallback still
-// honors an explicit request for a human decision.
+// honors an explicit request for a human DECISION (an unresolved requirements
+// conflict). Authorization/approval prose is covered separately: it is not a gate.
 func TestExplicitHumanRequestStillNeedsHuman(t *testing.T) {
-	reasons := []string{"needs auth", "required operation needs human authorization", "this needs a decision"}
+	reasons := []string{"this needs a decision", "the requirements conflict with no authoritative resolution"}
 	for _, reason := range reasons {
 		t.Run(reason, func(t *testing.T) {
 			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: reason}})

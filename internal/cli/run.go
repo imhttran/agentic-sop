@@ -104,7 +104,9 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	printExecutionStack(stdout, dir, cfg, stack)
 	fmt.Fprintln(stdout)
 
-	rn, err := runpkg.New(dir, runID(spec))
+	id := runID(spec)
+	priorStage, _ := runpkg.Load(dir, id)
+	rn, err := runpkg.New(dir, id)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
@@ -122,7 +124,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), stdout)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)
@@ -162,8 +164,8 @@ type lifeResult struct {
 // report) into rn. It returns an error only for infrastructure failures
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
-func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, stdout io.Writer) (lifeResult, error) {
-	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
+func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, stdout io.Writer) (lifeResult, error) {
+	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
 	// Persist the failure classification and the autonomy decision beside the other
 	// run artifacts before any early return, so a failure that stopped the lifecycle
 	// is still recorded. They are diagnostic evidence: nothing reads them back to
@@ -240,7 +242,7 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 // configured deterministic validation first and invokes the implementation agent
 // only when that validation fails (or when there is nothing configured to
 // verify). It returns the final result and writes the intermediate artifacts.
-func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, stdout io.Writer) (res lifeResult, err error) {
+func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, stdout io.Writer) (res lifeResult, err error) {
 	rec := perf.NewRecorder(rn.State().ID)
 	defer func() {
 		res.perf = rec.Task()
@@ -368,7 +370,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			} else {
 				// Nothing changed, so there is nothing to validate: the outcome's own
 				// signal stands (a budget/no-change exhaustion is a continuation).
-				return outcomeResult(ctx, cfg, rn, "IMPLEMENT", impl.Outcome, cycles), nil
+				return outcomeResult(ctx, cfg, rn, "IMPLEMENT", impl.Outcome, cycles, approval), nil
 			}
 		}
 
@@ -425,7 +427,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// disposition — a continuation, a retry, or a genuine human boundary — is
 		// reported, with the deterministic evidence folded in.
 		if pendingOutcome != nil {
-			class := pendingClassification(cfg, suite, pendingSource, pendingOutcome, cycles)
+			class := pendingClassification(cfg, suite, pendingSource, pendingOutcome, cycles, approval)
 			if class.Disposition == failure.AutoFix {
 				pendingOutcome = nil
 			} else {
@@ -558,7 +560,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				pendingOutcome, pendingSource = fix.Outcome, "FIX"
 				continue
 			}
-			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles), nil
+			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles, approval), nil
 		}
 
 		if strings.TrimSpace(diff) == "" {
@@ -579,7 +581,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var class failure.Classification
 	var decision autonomy.Decision
 	if gate.Decision != quality.Pass {
-		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles, jevEv))
+		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles, jevEv, approval))
 		decision = decideAutonomy(cfg, class)
 	}
 
@@ -630,12 +632,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 // bounded budget. A JEV analysis failure is a bounded, non-human signal: it is
 // recorded so the classification preserves its reason instead of falling through
 // to an "unknown" human boundary.
-func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int, jevEv *jevRunEvidence) failure.Evidence {
+func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int, jevEv *jevRunEvidence, approval failure.ApprovalBoundary) failure.Evidence {
 	buildFailed := hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build)
 	testFailed := hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest)
 	lintFailed := hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint)
 	ev := failure.Evidence{
 		Source:           "VALIDATE",
+		Approval:         approval,
 		BuildFailed:      buildFailed,
 		TestFailed:       testFailed,
 		LintFailed:       lintFailed,
@@ -668,10 +671,11 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 // or test failure outranks the agent's free-form summary. It reuses the classifier's
 // fixed evidence precedence: a red `go build` is a compiler error even when the
 // agent's summary is empty, and the bounded fix budget still applies.
-func pendingClassification(cfg config.Config, suite testrunner.SuiteResult, source string, outcome *agent.Outcome, cycles int) failure.Classification {
+func pendingClassification(cfg config.Config, suite testrunner.SuiteResult, source string, outcome *agent.Outcome, cycles int, approval failure.ApprovalBoundary) failure.Classification {
 	return failure.Classify(failure.Evidence{
 		Source:       source,
 		Outcome:      outcome,
+		Approval:     approval,
 		BuildFailed:  hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build),
 		TestFailed:   hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest),
 		LintFailed:   hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint),
@@ -872,8 +876,8 @@ func outcomeReason(outcome *agent.Outcome) string {
 // outcomeResult classifies a non-completed agent outcome from its own evidence
 // alone and maps it to a run result. Use it when no deterministic validation
 // evidence exists (for example a no-change invocation).
-func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, source string, outcome *agent.Outcome, cycles int) lifeResult {
-	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome})
+func outcomeResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, source string, outcome *agent.Outcome, cycles int, approval failure.ApprovalBoundary) lifeResult {
+	class := failure.Classify(failure.Evidence{Source: source, Outcome: outcome, Approval: approval})
 	emitOutcomeActivity(activity.FromContext(ctx), outcome, class)
 	return classifiedOutcome(cfg, rn, outcome, class, cycles)
 }

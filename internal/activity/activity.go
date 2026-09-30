@@ -57,6 +57,8 @@ const (
 	StageFailed = "FAILED"
 	// StageBlocked marks a human boundary / blocked outcome.
 	StageBlocked = "BLOCKED"
+	// StageApproval marks a human approval request or decision on it.
+	StageApproval = "APPROVAL"
 )
 
 // Event is one structured activity observation. Action and Detail are a short

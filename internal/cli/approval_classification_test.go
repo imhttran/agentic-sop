@@ -1,12 +1,16 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -96,10 +100,125 @@ func TestRunApprovalDiscoveryCheckpointReachesNextInvocation(t *testing.T) {
 	}
 }
 
-// TestRunExplicitApprovalRequestStillBlocks is the separate regression: prose that
-// actually ASKS for authorization to proceed is still a human boundary, proving the
-// classifier distinguishes an approval SUBJECT from an approval REQUEST.
-func TestRunExplicitApprovalRequestStillBlocks(t *testing.T) {
+// ctrl012CLIReason models the CTRL012 dogfood outcome (see the classifier's
+// ctrl012Reason): a partially implemented plan-reconciliation/approval feature.
+const ctrl012CLIReason = "Incomplete: I rewrote internal/sopclient/changed_task.go and internal/sopclient/boundary.go (flipped OpAcceptChangedTask " +
+	"to StatusSupported). However the blocking finding also requires web handlers/routes/templates surfacing the changed-task list and per-task approval " +
+	"controls, and I did not update internal/sopclient/boundary_test.go, whose assertions still expect these ops to be unsupported. As left, " +
+	"go test ./internal/sopclient/... fails and the acceptance criteria 'each changed task requires explicit approval' are still not wired into the UI. " +
+	"More work is required to finish: update boundary_test.go, add per-task accept routes/handlers, enforce reconcile-before-mutation ordering, and add tests."
+
+// ctrl012PlanDoc is a plan whose task TITLE and acceptance criteria use approval and
+// reconciliation vocabulary: implementing the feature is ordinary work, not a
+// request that the current run be authorized.
+const ctrl012PlanDoc = "# Implementation Plan\n\n## Project\n\nSOP Controller\n\n## Summary\n\nAdd plan reconciliation controls.\n\n" +
+	"## S001 — Add Plan Reconciliation and Approval Controls\n\nAdd per-task approval and accept-changed controls for changed executed tasks.\n\n" +
+	"### Dependencies\n\nNone\n\n### Deliverables\n\n- changed-task presentation\n\n" +
+	"### Acceptance Criteria\n\n- all changed executed tasks are reported before mutation\n- each changed task requires explicit approval\n"
+
+// TestRunPlanReconciliationControlsContinues is the CTRL012 dogfood regression: a
+// partially implemented reconciliation/approval feature — title, acceptance
+// criteria, and summary saturated with approval vocabulary — is CONTINUE /
+// INCOMPLETE_IMPLEMENTATION with LOW risk and AUTO_CONTINUE under BALANCED, never
+// APPROVAL_REQUIRED / NEEDS_HUMAN.
+func TestRunPlanReconciliationControlsContinues(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), ctrl012PlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: ctrl012CLIReason}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if strings.Contains(stdout, "classification: NEEDS_HUMAN") || strings.Contains(stdout, "decision=HUMAN_APPROVAL_REQUIRED") {
+		t.Errorf("implementing reconciliation/approval controls must not require a human:\n%s", stdout)
+	}
+	if !strings.Contains(stdout, "decision=AUTO_CONTINUE") {
+		t.Errorf("stdout = %q, want AUTO_CONTINUE under BALANCED", stdout)
+	}
+	cls := readClassification(t, dir, "S001")
+	if cls.Kind == failure.ApprovalRequired || cls.Disposition == failure.NeedsHuman {
+		t.Errorf("classification = %+v, want a non-human continuation", cls)
+	}
+}
+
+// TestRunWaitingForHumanStageStaysHuman proves a task whose persisted run stage is
+// WAITING_FOR_HUMAN stays at a human gate across invocations: the stage is a
+// structured current-run signal, independent of the agent's prose.
+func TestRunWaitingForHumanStageStaysHuman(t *testing.T) {
+	dir := budgetGraph(t)
+	rn, err := runpkg.New(dir, "S001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rn.SetStage(runpkg.WaitingForHuman); err != nil {
+		t.Fatal(err)
+	}
+
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the implementation is incomplete"}}
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q, want NEEDS_HUMAN for a WAITING_FOR_HUMAN run", stdout)
+	}
+	cls := readClassification(t, dir, "S001")
+	if cls.Kind != failure.ApprovalRequired || cls.Disposition != failure.NeedsHuman {
+		t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", cls)
+	}
+}
+
+// TestRunActiveApprovalRequestStillBlocks is the separate regression: a CURRENT
+// run with an active (unresolved) approval request is a genuine human boundary.
+// APPROVAL_REQUIRED is STRUCTURED ONLY — it comes from SOP's own current-run
+// lifecycle state, never from the agent's summary prose.
+func TestRunActiveApprovalRequestStillBlocks(t *testing.T) {
+	dir := budgetGraph(t)
+	// SOP recorded an approval request for this task (as the lifecycle does when it
+	// parks a task at a genuine gate). It is unresolved, so the task stays at the
+	// gate.
+	rn, err := runpkg.New(dir, "S001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := rn.SaveApproval(domain.ApprovalRequest{
+		ID:          "S001-gate",
+		TaskID:      "S001",
+		Kind:        domain.ApprovalNeedsHuman,
+		Target:      "S001",
+		Reason:      "conflicting requirements",
+		RequestedAt: time.Now().UTC(),
+		Status:      domain.ApprovalPending,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	// Even an ordinary, incomplete-sounding summary stays at the gate: the prose is
+	// irrelevant, the structured request is authoritative.
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the implementation is incomplete"}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("code=%d, want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Errorf("stdout = %q, want NEEDS_HUMAN for an active approval request", stdout)
+	}
+	cls := readClassification(t, dir, "S001")
+	if cls.Kind != failure.ApprovalRequired || cls.Disposition != failure.NeedsHuman {
+		t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", cls)
+	}
+}
+
+// TestRunApprovalProseAloneContinues proves authorization-sounding agent prose is
+// NOT an approval gate: with no structured current-run approval state, the
+// invocation is a bounded continuation.
+func TestRunApprovalProseAloneContinues(t *testing.T) {
 	dir := budgetGraph(t)
 	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the required operation needs human authorization to proceed"}}
 
@@ -107,11 +226,11 @@ func TestRunExplicitApprovalRequestStillBlocks(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "NEEDS_HUMAN") {
-		t.Errorf("stdout = %q, want NEEDS_HUMAN for an explicit authorization request", stdout)
+	if strings.Contains(stdout, "classification: NEEDS_HUMAN") || strings.Contains(stdout, "decision=HUMAN_APPROVAL_REQUIRED") {
+		t.Errorf("authorization prose must not require a human:\n%s", stdout)
 	}
 	cls := readClassification(t, dir, "S001")
-	if cls.Kind != failure.ApprovalRequired || cls.Disposition != failure.NeedsHuman {
-		t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", cls)
+	if cls.Kind == failure.ApprovalRequired || cls.Disposition == failure.NeedsHuman {
+		t.Errorf("classification = %+v, want a non-human continuation (prose is not a gate)", cls)
 	}
 }

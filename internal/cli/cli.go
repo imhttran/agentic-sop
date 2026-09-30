@@ -157,6 +157,12 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runResume(rest, stdout, stderr, d)
 	case "retry":
 		return runRetry(rest, stdout, stderr, d.getwd)
+	case "approve":
+		return runApprove(rest, stdout, stderr, d)
+	case "decline":
+		return runDecline(rest, stdout, stderr, d)
+	case "approval":
+		return runApprovalStatus(rest, stdout, stderr, d)
 	case "reconcile":
 		return runReconcile(rest, stdout, stderr, d)
 	default:
@@ -195,6 +201,9 @@ Commands:
   mcp       serve tools over the Model Context Protocol (stdio)
   report    print a concise summary of the latest run
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
+  approve   record an approval decision on a task's active human approval gate
+  decline   record a decline decision on a task's active human approval gate
+  approval  show SOP's approval request (if any) for a task
   reconcile reconcile an intentional PLAN change with the active plan (--accept-changed <id> to approve a changed executed task)
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work

@@ -9,10 +9,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/review"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
 
 // runReport prints a concise, CI-friendly summary of a completed run from its
@@ -64,8 +66,37 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	}
 
 	writeReport(stdout, doc)
+	writeApprovalReport(stdout, dir, id)
 	writePerformance(stdout, dir, doc)
 	return exitOK
+}
+
+// writeApprovalReport renders the task's approval boundary (SOP's explicit
+// request and any decision) by reading the same run artifact the approval
+// application boundary owns, so `sop report` shows the human gate and its
+// outcome. It renders nothing when SOP recorded no request, and never derives a
+// gate from the report's own status.
+func writeApprovalReport(w io.Writer, dir, taskID string) {
+	req, ok := runpkg.At(runpkg.Dir(dir, taskID)).Approval()
+	if !ok {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Approval:")
+	fmt.Fprintf(w, "  %-12s %s\n", "Status:", req.Status)
+	fmt.Fprintf(w, "  %-12s %s\n", "Kind:", req.Kind)
+	if req.Reason != "" {
+		fmt.Fprintf(w, "  %-12s %s\n", "Reason:", req.Reason)
+	}
+	if d := req.Decision; d != nil {
+		fmt.Fprintf(w, "  %-12s %s\n", "Decided:", d.DecidedAt.Format(time.RFC3339))
+		if d.DecidedBy != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "Decided by:", d.DecidedBy)
+		}
+		if d.LifecycleAction != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "Lifecycle:", d.LifecycleAction)
+		}
+	}
 }
 
 // writePerformance renders where time was spent: the plan-level run summary when

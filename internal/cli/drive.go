@@ -535,11 +535,18 @@ func printCannotResume(stderr io.Writer, task *domain.Task, stage runpkg.Stage, 
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
 	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
+	// The previous invocation's run stage is read before New resets state.json, so
+	// a task parked at WAITING_FOR_HUMAN stays a human gate on re-entry.
+	priorStage, _ := runpkg.Load(dir, task.ID)
 	rn, err := runpkg.New(dir, task.ID)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// The current run's structured approval boundary: an active approval request
+	// recorded for this task, or a persisted WAITING_FOR_HUMAN stage. It is the only
+	// input that can produce APPROVAL_REQUIRED; agent prose never can.
+	approval := currentApprovalBoundary(rn, priorStage)
 	// Attach this task's activity stream (a no-op when reporting is disabled) so
 	// the lifecycle and the in-process agent report what they are doing while it
 	// runs. The recorder carries the task id, so events stay attributed even
@@ -547,8 +554,18 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	ctx = taskActivityContext(ctx, rn.Dir(), stdout, task.ID, task.Title)
 	_ = rn.Write("task.md", spec.Render())
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, stdout)
+	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
+
+	// A genuine human boundary (the classifier's human disposition, the autonomy
+	// policy's human decision, or the WAITING_FOR_HUMAN stage) records an explicit,
+	// resolvable approval request, so a client resolves the gate through SOP rather
+	// than inferring one from a task status. It is provenance only: it never changes
+	// the task status or the run outcome.
+	if err == nil && humanBoundary(res.stage, res.classification, res.decision) {
+		recordHumanApprovalRequest(ctx, rn, task, res.stage, res.classification.Disposition,
+			firstNonBlank(firstReason(res.gate), res.classification.Reason), res.classification.Reason)
+	}
 
 	// An error is an agent/infrastructure failure. Classify it and apply the
 	// autonomy policy (the lifecycle may not have had enough evidence): a transient
@@ -557,13 +574,17 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if err != nil {
 		cls := res.classification
 		if cls.Disposition == "" {
-			cls = failure.Classify(failure.Evidence{Source: "run", Err: err})
+			cls = failure.Classify(failure.Evidence{Source: "run", Err: err, Approval: approval})
 			decision := decideAutonomy(cfg, cls)
 			writeClassificationArtifact(rn, cls, decision)
 			emitClassificationActivity(ctx, cls, decision)
 			res.decision = decision
 		}
 		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
+		if humanBoundary(res.stage, cls, res.decision) {
+			recordHumanApprovalRequest(ctx, rn, task, res.stage, cls.Disposition,
+				firstNonBlank(cls.Reason, err.Error()), cls.Reason)
+		}
 		if cls.Retryable() {
 			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), cls.Disposition, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
 		}

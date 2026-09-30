@@ -21,15 +21,19 @@
 // on topic words in its prose: an agent saying it will "sanitize token values" or
 // "keep secrets out of the rendered page" is describing ordinary (even
 // security-relevant) implementation work, not asking to cross a security
-// boundary. The same holds for approval: an agent IMPLEMENTING approval controls
-// (an approve button, an ApproveTask interface, tests for an approval gate, a
-// rendered NEEDS_HUMAN or WAITING_FOR_HUMAN state, or another component's
-// explicitly-unsupported approve operation) is doing ordinary work, not asking the
-// current execution to be authorized. Only an explicit authorization request, a
-// destructive/irreversible action, an unresolved requirements conflict, or a
-// security DECISION (weakening authentication, exposing a local capability to
-// unauthenticated clients) is a human boundary. Structured Evidence fields are
-// authoritative when a caller can set them.
+// boundary. The same holds for approval, and goes further: APPROVAL_REQUIRED is
+// STRUCTURED ONLY. It comes exclusively from the current run's lifecycle state (an
+// active approval request, the WAITING_FOR_HUMAN stage, or an active plan approval
+// gate), never from free-form prose and never from inspected/domain/fixture values.
+// An agent IMPLEMENTING approval or reconciliation controls (an approve/accept
+// button, an ApproveTask interface, tests for an approval gate, a rendered
+// NEEDS_HUMAN or WAITING_FOR_HUMAN state, a changed-task accept flow, or another
+// component's explicitly-unsupported approve operation) is doing ordinary work,
+// not asking the current execution to be authorized. A destructive/irreversible
+// action, a security DECISION (weakening authentication, exposing a local
+// capability to unauthenticated clients), or an unresolved requirements conflict
+// is still a human boundary, recognized from the action wording. Structured
+// Evidence fields are authoritative when a caller can set them.
 //
 // Evidence precedence is fixed and structured evidence outranks prose: explicit
 // human boundaries, then an invalid plan, then deterministic verification (build,
@@ -108,6 +112,26 @@ const (
 	Unknown              Kind = "UNKNOWN"
 )
 
+// ApprovalBoundary names the CURRENT run's structured source of a human approval
+// gate. It is the only thing besides the ApprovalRequired shorthand that can
+// produce APPROVAL_REQUIRED, and it is set from SOP's own current-run lifecycle
+// state — never from free-form prose and never from inspected/domain/fixture
+// values (which describe the feature being implemented, not the current run).
+type ApprovalBoundary string
+
+const (
+	// ApprovalNone: the current run is not at an approval boundary.
+	ApprovalNone ApprovalBoundary = ""
+	// ApprovalRequest: the current task/run has an active (unresolved) SOP approval
+	// request.
+	ApprovalRequest ApprovalBoundary = "APPROVAL_REQUEST"
+	// ApprovalWaitingForHuman: the current run's lifecycle stage is
+	// WAITING_FOR_HUMAN.
+	ApprovalWaitingForHuman ApprovalBoundary = "WAITING_FOR_HUMAN"
+	// ApprovalPlanGate: the current plan has an active explicit approval gate.
+	ApprovalPlanGate ApprovalBoundary = "PLAN_APPROVAL_GATE"
+)
+
 // Classification is the classifier's verdict for one failure.
 type Classification struct {
 	Kind        Kind        `json:"kind"`
@@ -155,10 +179,16 @@ type Evidence struct {
 	ConflictResolvedByPlan bool
 
 	// Explicit boundaries. Any of these makes the failure a human decision
-	// regardless of everything else.
+	// regardless of everything else. ApprovalRequired is the boolean shorthand for
+	// Approval; either establishes the CURRENT run's approval gate. They are set
+	// from SOP's own current-run lifecycle state, never from agent prose.
 	PlanInvalid          bool
 	RequirementsConflict bool
 	ApprovalRequired     bool
+	Approval             ApprovalBoundary
+	// ApprovalReason is the authoritative reason for the current approval gate, when
+	// a caller has one. It is preserved verbatim in the classification.
+	ApprovalReason       string
 	SecurityBoundary     bool
 	DestructiveOperation bool
 
@@ -181,9 +211,14 @@ type Evidence struct {
 // It is pure and deterministic: the same evidence always yields the same result.
 func Classify(ev Evidence) Classification {
 	// 1. Explicit human boundaries win over every automated disposition: a human
-	//    decision, approval, or safety limit is not something SOP may resolve.
-	if ev.ApprovalRequired {
-		return human(ApprovalRequired, "an explicit approval is required before this change may proceed")
+	//    decision, approval, or safety limit is not something SOP may resolve. The
+	//    approval gate is STRUCTURED — it comes from the current run's lifecycle
+	//    state (an active approval request, the WAITING_FOR_HUMAN stage, or an active
+	//    plan approval gate), never from agent prose, a task title, an acceptance
+	//    criterion, or inspected domain/fixture state. Free-form prose therefore can
+	//    never manufacture APPROVAL_REQUIRED.
+	if ev.ApprovalRequired || ev.Approval != ApprovalNone {
+		return approvalHuman(ev)
 	}
 	if ev.SecurityBoundary {
 		return human(SecurityBoundary, "the change crosses a security or safety boundary that requires authorization")
@@ -395,6 +430,17 @@ func human(kind Kind, reason string) Classification {
 	return Classification{Kind: kind, Disposition: NeedsHuman, Confidence: High, Reason: reason}
 }
 
+// approvalHuman builds the APPROVAL_REQUIRED classification for a structured
+// current-run approval gate, preserving a caller-supplied authoritative reason
+// when one exists.
+func approvalHuman(ev Evidence) Classification {
+	reason := strings.TrimSpace(ev.ApprovalReason)
+	if reason == "" {
+		reason = "the current run is at an authoritative approval boundary; a human decision is required"
+	}
+	return human(ApprovalRequired, reason)
+}
+
 // retry builds a RETRY classification.
 func retry(kind Kind, reason string) Classification {
 	return Classification{Kind: kind, Disposition: Retry, Confidence: High, Reason: reason}
@@ -442,36 +488,25 @@ func harnessIncomplete(text string) bool {
 	return matchesAny(text, harnessIncompleteMarkers)
 }
 
-// Boundary markers: an explicit human decision/approval/safety boundary.
+// Boundary markers: an explicit human decision/safety boundary inferred from the
+// agent's own ACTION wording. APPROVAL is deliberately absent: an approval gate is
+// STRUCTURED (Evidence.Approval / Evidence.ApprovalRequired, set from the current
+// run's lifecycle state) and is never inferred from prose, a task title, an
+// acceptance criterion, or inspected/fixture state. An agent may describe approval,
+// reconciliation, accept-changed, or NEEDS_HUMAN/WAITING_FOR_HUMAN concepts — even
+// quote them from requirements it is implementing — without that being a request
+// for the current execution to be authorized.
 var (
-	// approvalMarkers recognize an explicit REQUEST to be authorized to proceed —
-	// the agent is asking that the current execution be allowed to continue, not
-	// naming the subject of the work. Bare topic/state words are deliberately
-	// absent: approve, approval, human, consent, sign-off, signoff, permission,
-	// NEEDS_HUMAN, WAITING_FOR_HUMAN, decline, gate. Implementing, rendering,
-	// testing, or documenting approval controls is ordinary work, and naming another
-	// system's or a domain value's state (NEEDS_HUMAN / WAITING_FOR_HUMAN / PlanGate)
-	// is not a request. The authoritative structured signal is Evidence.ApprovalRequired.
-	approvalMarkers = []string{
-		"needs auth", "need auth", "requires auth", "require auth", "auth required",
-		"needs authentication", "needs authorization", "requires authentication",
-		"requires authorization", "authentication required", "authorization required",
-		"needs human authorization", "requires human authorization",
-		"needs approval to proceed", "requires approval to proceed",
-		"needs human approval to proceed", "requires human approval to proceed",
-		"awaiting approval", "awaiting authorization",
-		"waiting for approval", "waiting for authorization",
-		"needs sign-off", "needs signoff", "requires sign-off", "requires signoff",
-		"needs consent", "requires consent", "needs permission", "requires permission",
-	}
 	destructiveMarkers = []string{"destructive", "irreversible", "cannot be undone", "can't be undone", "data loss", "permanent damage", "destroys"}
-	// conflictMarkers recognize an explicit request for a human/authoritative
-	// decision, or an unresolved conflict — not mere uncertainty about what to do
-	// next (which is a continuation).
+	// conflictMarkers recognize an unresolved requirements CONFLICT or an explicit
+	// request for an authoritative decision about one — not mere uncertainty about
+	// what to do next, and not a request for authorization (approval is structured
+	// only). The bare "needs/requires a human" phrasings are deliberately absent: a
+	// request to be authorized is approval, which is never inferred from prose.
 	conflictMarkers = []string{
 		"conflict", "ambiguous", "ambiguity", "contradict", "unclear",
-		"cannot determine", "can't determine", "no authoritative", "product decision", "requires a decision",
-		"needs a decision", "needs a human", "need a human", "needs human", "requires a human",
+		"cannot determine", "can't determine", "no authoritative", "product decision",
+		"requires a decision", "needs a decision",
 	}
 )
 
@@ -498,13 +533,13 @@ var securityDecisionMarkers = []string{
 // agent is asking to DO, not which words its prose happens to contain: an agent
 // implementing approval controls, rendering a NEEDS_HUMAN state, or describing
 // another component's unsupported capability is not requesting authorization for
-// the current execution. The authoritative signal for a human boundary is a
-// structured Evidence field (ApprovalRequired, SecurityBoundary, ...), set from
-// the current lifecycle state; prose only supplements it with explicit requests.
+// the current execution. APPROVAL is deliberately not inferred from prose: a
+// current approval gate is the structured Evidence.Approval / ApprovalRequired
+// signal, set from the current run's lifecycle state. A security DECISION, a
+// destructive action, or an explicit requirements conflict is still recognized
+// from the action wording.
 func humanActionKind(text string) (Kind, bool) {
 	switch {
-	case matchesAny(text, approvalMarkers):
-		return ApprovalRequired, true
 	case matchesAny(text, securityDecisionMarkers):
 		return SecurityBoundary, true
 	case matchesAny(text, destructiveMarkers):

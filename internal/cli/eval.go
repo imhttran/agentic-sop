@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/eval"
+	"github.com/imhttran/agentic-sop/internal/failure"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
@@ -78,7 +79,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 		_ = rn.Write("task.md", spec.Render())
 
-		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), stdout)
+		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), failure.ApprovalNone, stdout)
 		out := eval.Outcome{
 			Case:     c,
 			Duration: time.Since(start),
