@@ -59,6 +59,12 @@ type deps struct {
 	// the highest-precedence input to the optional model-routing layer and is
 	// empty for every command that does not accept the flag.
 	modelClass string
+	// routing is the resolved, non-secret model-routing evidence for this
+	// invocation. The run commands set it after resolution; each task run records
+	// it in its artifacts so the model choice stays auditable after the process
+	// exits. It is zero when routing is inactive (no models: block, SOP_MODEL_*
+	// variable, or --model-class) and carries no credential.
+	routing model.Result
 }
 
 func defaultDeps() deps {

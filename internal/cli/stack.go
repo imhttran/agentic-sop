@@ -119,7 +119,7 @@ func printExecutionStack(w io.Writer, dir string, cfg config.Config, stack execu
 	}
 	if routing.Active {
 		sel := routing.Selection
-		fmt.Fprintf(w, "Model class: %s (%s, source: %s)\n", sel.Class, sel.Locality, sel.Source)
+		fmt.Fprintf(w, "Model class: %s (%s, source: %s; %s)\n", sel.Class, sel.Locality, sel.Source, sel.Reason)
 	}
 	fmt.Fprintf(w, "Provider source: %s\n", stack.Source)
 	if stack.Command != "" {

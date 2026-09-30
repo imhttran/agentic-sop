@@ -16,6 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
@@ -123,6 +124,8 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// Carry the resolved evidence down to the lifecycle so the run records it.
+	d.routing = routing
 
 	stack := resolveExecutionStack(cfg)
 	printExecutionStack(stdout, dir, cfg, stack, routing)
@@ -182,6 +185,11 @@ type lifeResult struct {
 	// a human. It is zero when the run passed. It is diagnostic evidence the driver
 	// acts on; the classification alone never implies human approval.
 	decision autonomy.Decision
+	// modelSelection is the resolved, non-secret model-routing evidence for the
+	// run, or nil when routing is inactive. It is diagnostic: it records which
+	// class, provider, model, and layer the run used and why, and never feeds a
+	// decision.
+	modelSelection *model.Selection
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -189,7 +197,14 @@ type lifeResult struct {
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
 func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, stdout io.Writer) (lifeResult, error) {
+	// Persist the non-secret model-routing evidence before the lifecycle runs, so
+	// the selected class/provider/model and why remain inspectable even when the
+	// lifecycle stops early. It is diagnostic: nothing reads it back.
+	if d.routing.Active {
+		writeModelSelectionArtifact(rn, d.routing.Selection)
+	}
 	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, stdout)
+	res.modelSelection = modelSelectionDoc(d.routing)
 	// Persist the failure classification and the autonomy decision beside the other
 	// run artifacts before any early return, so a failure that stopped the lifecycle
 	// is still recorded. They are diagnostic evidence: nothing reads them back to
@@ -219,7 +234,11 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// JEV is diagnostic evidence, reported in its own section and pointing at
 		// the persisted artifact. It is separate from the validation and review
 		// sections, which remain authoritative.
-		JEV:            jevReportSection(res.jevDoc, res.jevPath),
+		JEV: jevReportSection(res.jevDoc, res.jevPath),
+		// ModelSelection is the non-secret model-routing evidence: the selected
+		// class, provider, model, locality, layer, whether a fallback was used, and
+		// why. It is omitted when model routing is inactive.
+		ModelSelection: res.modelSelection,
 		Classification: classificationDoc(res.classification),
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
@@ -1140,6 +1159,26 @@ func writeRunJSON(rn *runpkg.Run, name string, v any) {
 	_ = rn.Write(name, string(append(data, '\n')))
 }
 
+// modelSelectionDoc returns the persistable, non-secret model-routing evidence
+// for a run, or nil when routing is inactive. model.Selection carries no
+// credential, so the artifact never records a secret.
+func modelSelectionDoc(routing model.Result) *model.Selection {
+	if !routing.Active {
+		return nil
+	}
+	sel := routing.Selection
+	return &sel
+}
+
+// writeModelSelectionArtifact persists the resolved model-routing evidence as a
+// run artifact beside report.json, so the selected class/provider/model, the
+// layer that chose it, whether a fallback was used, and why are all durable.
+// It is written before the lifecycle so it survives a run that stops early. It
+// is evidence only: nothing reads it back to drive a decision.
+func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection) {
+	writeRunJSON(rn, "model-selection.json", sel)
+}
+
 // relDir returns target relative to base when possible, else target.
 func relDir(base, target string) string {
 	if rel, err := filepath.Rel(base, target); err == nil {
@@ -1169,6 +1208,11 @@ type runReportDoc struct {
 	// Performance is the task's timing/count record: diagnostic metadata only,
 	// never an input to a decision.
 	Performance perf.Task `json:"performance"`
+	// ModelSelection is the non-secret model-routing evidence for the run: the
+	// selected class, provider, model, locality, the layer that chose them,
+	// whether a fallback was used, and why. It is omitted when model routing is
+	// inactive, so a run without routing is unchanged.
+	ModelSelection *model.Selection `json:"model_selection,omitempty"`
 	// Classification is the failure-fixability classification for a run that did
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
@@ -1189,6 +1233,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
 	fmt.Fprintf(&b, "- Gate: `%s`\n\n", res.gate.Decision)
+	writeModelSelectionReport(&b, res.modelSelection)
 
 	b.WriteString("## Task\n\n")
 	b.WriteString(strings.TrimSpace(spec.Render()))
@@ -1234,6 +1279,26 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	writeClassificationReport(&b, res.classification)
 	writeAutonomyReport(&b, res.decision)
 	return b.String()
+}
+
+// writeModelSelectionReport renders the resolved model-routing evidence in the
+// run report, so the class/provider/model and why they were chosen are durable.
+// It renders nothing when routing is inactive.
+func writeModelSelectionReport(b *strings.Builder, sel *model.Selection) {
+	if sel == nil {
+		return
+	}
+	b.WriteString("## Model selection\n\n")
+	fmt.Fprintf(b, "- Class: `%s`\n", sel.Class)
+	fmt.Fprintf(b, "- Provider: `%s`\n", sel.Provider)
+	fmt.Fprintf(b, "- Model: `%s`\n", sel.Model)
+	fmt.Fprintf(b, "- Locality: `%s`\n", sel.Locality)
+	fmt.Fprintf(b, "- Source: `%s`\n", sel.Source)
+	fmt.Fprintf(b, "- Reason: %s\n", sel.Reason)
+	if sel.Fallback {
+		b.WriteString("- Fallback: `true`\n")
+	}
+	b.WriteString("\n")
 }
 
 // writeClassificationReport renders the failure classification in the run report,

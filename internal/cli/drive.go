@@ -64,6 +64,8 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// Carry the resolved evidence down to each task run so it is recorded.
+	d.routing = routing
 	if cfg.Workflow.Mode != "local" {
 		fmt.Fprintf(stderr, "run: workflow.mode %q is not supported by the local run; set workflow.mode: local\n", cfg.Workflow.Mode)
 		return exitError

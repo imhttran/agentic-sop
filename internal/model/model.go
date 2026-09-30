@@ -7,11 +7,20 @@
 //  1. a CLI override (the `--model-class` flag),
 //  2. environment variables (SOP_MODEL_*), which a .env file may supply,
 //  3. the `models:` block in .agent-sdlc/config.yaml,
-//  4. built-in defaults.
+//  4. built-in defaults (see DefaultRoute).
 //
 // The layer is opt-in. Without any `models:` configuration, any SOP_MODEL_*
 // environment, or a CLI override, Resolve reports the layer inactive and callers
 // keep the existing agent selection — so an existing installation is unchanged.
+// The built-in defaults do not change that: they fill a class's model once
+// routing is active, they never activate it.
+//
+// A class's provider, model, and locality are merged field by field from the
+// configuration and environment layers. The built-in default for a class applies
+// only when neither layer mentions that class at all, so a bare `--model-class`
+// resolves to a usable model with no configuration, while a class a layer does
+// mention is used as written (a partially configured class stays partial, so the
+// fallback and reporting rules below still apply).
 //
 // Locality (local or cloud) is descriptive metadata and a fallback guard, not an
 // execution mode: resolution never silently switches a local class to a cloud
@@ -108,6 +117,23 @@ const (
 	SourceDefault Source = "default"
 )
 
+// Reason is the deterministic, non-secret explanation of why a selection was
+// made. It is one of a small set of fixed phrases — never model-generated prose,
+// and never parsed to drive a decision — so the routing choice stays auditable.
+const (
+	// ReasonCLIClass: the --model-class flag chose the class.
+	ReasonCLIClass = "explicit CLI model class"
+	// ReasonEnvClass: SOP_MODEL_DEFAULT_CLASS chose the class.
+	ReasonEnvClass = "environment default class"
+	// ReasonConfigClass: models.default_class chose the class.
+	ReasonConfigClass = "project-configured default class"
+	// ReasonBuiltinClass: no layer chose a class; the built-in default applied.
+	ReasonBuiltinClass = "built-in default class"
+	// ReasonFallbackClass: the chosen class had no model, so the fallback class
+	// supplied the selection.
+	ReasonFallbackClass = "fallback class used"
+)
+
 // knownProviders is the provider allow-list a routed class may name. It mirrors
 // the providers the agent layer supports; an unknown name fails at resolution
 // rather than reaching the agent constructor.
@@ -142,6 +168,25 @@ type Route struct {
 	Small                      ClassConfig `yaml:"small"`
 	Medium                     ClassConfig `yaml:"medium"`
 	Large                      ClassConfig `yaml:"large"`
+}
+
+// DefaultRoute is the built-in routing table: the default class, and the
+// provider/model/locality each class uses when neither the config nor the
+// environment names it. It is the base layer of resolution and the single owner
+// of these defaults — CLI, config, and provider code never restate them.
+//
+// Defining complete built-in routes does NOT activate routing: Resolve is active
+// only when an explicit layer (the `models:` block, a SOP_MODEL_* variable, or
+// --model-class) is present, so an existing installation's agent selection is
+// unchanged. FallbackClass is intentionally left empty: the fallback class
+// defaults to the selected class unless a layer names one.
+func DefaultRoute() Route {
+	return Route{
+		DefaultClass: ClassMedium,
+		Small:        ClassConfig{Provider: "ollama", Name: "qwen3:4b", Locality: LocalityLocal},
+		Medium:       ClassConfig{Provider: "ollama", Name: "glm-5.3-flash:cloud", Locality: LocalityCloud},
+		Large:        ClassConfig{Provider: "ollama", Name: "deepseek-v4.1-flash:cloud", Locality: LocalityCloud},
+	}
 }
 
 // classConfig returns the entry for a class.
@@ -290,14 +335,21 @@ type Inputs struct {
 }
 
 // Selection is the resolved model selection: the class, the provider and model
-// it names, the locality, and the layer that supplied it. It carries no
-// credential.
+// it names, the locality, the layer that supplied it, whether a fallback class
+// was used, and why. It carries no credential, so it is safe to persist as
+// non-secret routing evidence.
 type Selection struct {
-	Class    Class
-	Provider string
-	Model    string
-	Locality Locality
-	Source   Source
+	Class    Class    `json:"class"`
+	Provider string   `json:"provider"`
+	Model    string   `json:"model"`
+	Locality Locality `json:"locality"`
+	Source   Source   `json:"source"`
+	// Fallback reports whether the fallback class supplied this selection rather
+	// than the class the selection rules chose.
+	Fallback bool `json:"fallback"`
+	// Reason is the deterministic explanation of the selection (see the Reason*
+	// constants). It is a fixed phrase, never model prose.
+	Reason string `json:"reason"`
 }
 
 // Result is the outcome of resolution. Active is false when no routing layer was
@@ -329,25 +381,14 @@ func Resolve(in Inputs) (Result, error) {
 		return Result{Active: false}, nil
 	}
 
-	// Selected class: CLI override > SOP_MODEL_DEFAULT_CLASS > models.default_class
-	// > built-in default (medium).
-	class := ClassMedium
-	switch {
-	case cli != "":
-		c, err := ParseClass(cli)
-		if err != nil {
-			return Result{}, fmt.Errorf("model routing: --model-class: %w", err)
-		}
-		class = c
-	case env.DefaultClass != "":
-		class = env.DefaultClass
-	case in.Config.DefaultClass != "":
-		class = in.Config.DefaultClass
+	class, reason, err := selectClass(DefaultRoute(), in.Config, env, cli)
+	if err != nil {
+		return Result{}, err
 	}
 
 	primary := entryFor(class, in.Config, env)
 	if primary.complete() {
-		return Result{Active: true, Selection: selectionFor(class, primary, sourceFor(class, in.Config, env, cli))}, nil
+		return Result{Active: true, Selection: selectionFor(class, primary, sourceFor(class, in.Config, env, cli), reason, false)}, nil
 	}
 
 	// Fallback: SOP_MODEL_FALLBACK_CLASS > models.fallback_class > the selected class.
@@ -365,16 +406,37 @@ func Resolve(in Inputs) (Result, error) {
 				return Result{}, fmt.Errorf("model routing: class %q is local but has no model; refusing to fall back to the cloud model %q for class %q (set %s=true to allow)",
 					class, fb.model, fallback, EnvAllowCloudFallbackForLocal)
 			}
-			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, ""))}, nil
+			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, ""), ReasonFallbackClass, true)}, nil
 		}
 	}
 
-	return Result{}, fmt.Errorf("model routing: class %q has no model configured (set %s, %s, and %s, or the models.%s block in config.yaml)",
+	return Result{}, fmt.Errorf("model routing: class %q has no complete model (set %s, %s, and %s, or the models.%s block in config.yaml)",
 		class, ClassEnvKey(class, fieldProvider), ClassEnvKey(class, fieldName), ClassEnvKey(class, fieldLocality), class)
 }
 
+// selectClass picks the class to route and the deterministic reason it was
+// chosen: an explicit CLI class, an environment default class, a
+// project-configured default class, or the built-in default. It is the single
+// owner of the class-selection rule.
+func selectClass(defaults Route, config, env Route, cli string) (Class, string, error) {
+	switch {
+	case cli != "":
+		c, err := ParseClass(cli)
+		if err != nil {
+			return "", "", fmt.Errorf("model routing: --model-class: %w", err)
+		}
+		return c, ReasonCLIClass, nil
+	case env.DefaultClass != "":
+		return env.DefaultClass, ReasonEnvClass, nil
+	case config.DefaultClass != "":
+		return config.DefaultClass, ReasonConfigClass, nil
+	default:
+		return defaults.DefaultClass, ReasonBuiltinClass, nil
+	}
+}
+
 // entry is a class's merged routing: per-field, the environment layer over the
-// config layer.
+// config layer, falling back to the built-in default when neither names the class.
 type entry struct {
 	provider   string
 	model      string
@@ -387,40 +449,43 @@ func (e entry) complete() bool {
 	return e.provider != "" && e.model != "" && e.locality != ""
 }
 
-// entryFor merges the config and environment entries for a class, the
-// environment winning field by field.
+// entryFor merges the routing layers for a class. The config and environment
+// entries merge field by field (the environment winning). A class that neither
+// layer mentions falls back to its built-in default (DefaultRoute), so a bare
+// --model-class resolves to a usable model with no configuration; a class a
+// layer does mention is used as written.
 func entryFor(c Class, config, env Route) entry {
 	var e entry
 	if cc := config.classConfig(c); !cc.empty() {
-		if v := strings.TrimSpace(cc.Provider); v != "" {
-			e.provider = v
-		}
-		if v := strings.TrimSpace(cc.Name); v != "" {
-			e.model = v
-			e.nameSource = SourceConfig
-		}
-		if cc.Locality != "" {
-			e.locality = cc.Locality
-		}
+		applyClassConfig(&e, cc, SourceConfig)
 	}
 	if cc := env.classConfig(c); !cc.empty() {
-		if v := strings.TrimSpace(cc.Provider); v != "" {
-			e.provider = v
-		}
-		if v := strings.TrimSpace(cc.Name); v != "" {
-			e.model = v
-			e.nameSource = SourceEnv
-		}
-		if cc.Locality != "" {
-			e.locality = cc.Locality
-		}
+		applyClassConfig(&e, cc, SourceEnv)
+	}
+	if e.provider == "" && e.model == "" && e.locality == "" {
+		applyClassConfig(&e, DefaultRoute().classConfig(c), SourceDefault)
 	}
 	return e
 }
 
+// applyClassConfig overlays a class config onto an entry, field by field, and
+// records the layer that supplied the model name.
+func applyClassConfig(e *entry, cc ClassConfig, source Source) {
+	if v := strings.TrimSpace(cc.Provider); v != "" {
+		e.provider = v
+	}
+	if v := strings.TrimSpace(cc.Name); v != "" {
+		e.model = v
+		e.nameSource = source
+	}
+	if cc.Locality != "" {
+		e.locality = cc.Locality
+	}
+}
+
 // selectionFor builds a Selection from a merged entry.
-func selectionFor(c Class, e entry, source Source) Selection {
-	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, Source: source}
+func selectionFor(c Class, e entry, source Source, reason string, fallback bool) Selection {
+	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, Source: source, Fallback: fallback, Reason: reason}
 }
 
 // sourceFor names the layer that supplied the selection: the CLI override when it

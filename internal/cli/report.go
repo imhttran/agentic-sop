@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/review"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -195,6 +196,7 @@ func writeReport(w io.Writer, doc runReportDoc) {
 	fmt.Fprintf(w, "Review: %s\n", doc.Engine)
 	fmt.Fprintf(w, "Fix cycles: %d\n", doc.FixCycles)
 	fmt.Fprintf(w, "Gate: %s\n\n", doc.Decision)
+	writeModelSelectionSummary(w, doc.ModelSelection)
 
 	fmt.Fprintln(w, "Validation:")
 	if len(doc.Validation) == 0 {
@@ -214,6 +216,28 @@ func writeReport(w io.Writer, doc runReportDoc) {
 
 	writeJEVSummary(w, doc.JEV)
 	writeClassificationSummary(w, doc.Classification)
+}
+
+// writeModelSelectionSummary renders the run's resolved model-routing evidence
+// (class, provider, model, locality, layer, reason) in `sop report`, so the model
+// choice is auditable. It renders nothing when model routing was inactive.
+func writeModelSelectionSummary(w io.Writer, sel *model.Selection) {
+	if sel == nil {
+		return
+	}
+	fmt.Fprintln(w, "Model selection:")
+	fmt.Fprintf(w, "  %-9s %s\n", "Class:", sel.Class)
+	fmt.Fprintf(w, "  %-9s %s\n", "Provider:", sel.Provider)
+	fmt.Fprintf(w, "  %-9s %s\n", "Model:", sel.Model)
+	fmt.Fprintf(w, "  %-9s %s\n", "Locality:", sel.Locality)
+	fmt.Fprintf(w, "  %-9s %s\n", "Source:", sel.Source)
+	if sel.Reason != "" {
+		fmt.Fprintf(w, "  %-9s %s\n", "Reason:", sel.Reason)
+	}
+	if sel.Fallback {
+		fmt.Fprintf(w, "  %-9s %s\n", "Fallback:", "true")
+	}
+	fmt.Fprintln(w)
 }
 
 // writeClassificationSummary renders the failure classification of a run that did

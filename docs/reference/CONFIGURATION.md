@@ -54,6 +54,7 @@ human:
 workflow:
   mode: local # local | pull-request
 
+
 # Optional model routing. Off unless this block (or a SOP_MODEL_* variable, or
 # --model-class) is set, so an existing project is unchanged. See "Model routing".
 # models:
@@ -94,11 +95,11 @@ workflow:
 | `human.approval_before_commit`          | `true`             | When on, `sop commit` / `sop pr` require `--yes`.                                          |
 | `workflow.mode`                         | `local`            | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
 | `models.default_class`                  | `medium`           | Default model class (`small`, `medium`, `large`).                                          |
-| `models.fallback_class`                 | —                  | Class used when the default class has no model.                                            |
+| `models.fallback_class`                 | selected class     | Class used when the selected class has no model.                                           |
 | `models.allow_cloud_fallback_for_local` | `false`            | Allow a `local` class to fall back to a cloud model.                                       |
-| `models.<class>.provider`               | —                  | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
-| `models.<class>.name`                   | —                  | Model name for a class.                                                                    |
-| `models.<class>.locality`               | —                  | `local` or `cloud`.                                                                        |
+| `models.<class>.provider`               | `ollama`           | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
+| `models.<class>.name`                   | per class          | Model name for a class (see "Model routing").                                              |
+| `models.<class>.locality`               | per class          | `local` or `cloud` (see "Model routing").                                                  |
 
 ## Agent configuration matrix
 
@@ -121,7 +122,8 @@ SOP's state database.
 2. Environment variables (SOP_AGENT_*, SOP_OLLAMA_MODEL, SOP_MODEL_*, ...), which
    an optional project .env file may supply
 3. .agent-sdlc/config.yaml settings (agent.*, models.*)
-4. Built-in defaults (command harness if nothing is specified)
+4. Built-in defaults (the command harness, and the model-routing class table
+   below, when nothing else is specified)
 ```
 
 - Environment variables always override config-file values — for example
@@ -151,23 +153,48 @@ Resolution order, highest first:
 --model-class  >  environment / .env  >  models: block  >  built-in defaults
 ```
 
-| Setting (config / environment)                                                       | Default  | Meaning                                              |
-| ------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------- |
-| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium` | Class the default agent uses.                        |
-| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | —        | Class used when the selected class has no model.     |
-| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`  | Allow a `local` class to fall back to a cloud model. |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | —        | `ollama`, `llamacpp`, or `command`.                  |
-| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | —        | Model name for the class.                            |
-| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | —        | `local` or `cloud`.                                  |
+| Setting (config / environment)                                                       | Default            | Meaning                                              |
+| ------------------------------------------------------------------------------------ | ------------------ | ---------------------------------------------------- |
+| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                        |
+| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.     |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model. |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, or `command`.                  |
+| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                            |
+| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                  |
 
-- An unknown class, locality, or provider fails with an actionable error; a class
-  used with no model configured fails and names the variables to set.
+Built-in class defaults (used when no layer names a class):
+
+| Class    | Provider | Model                       | Locality |
+| -------- | -------- | --------------------------- | -------- |
+| `small`  | `ollama` | `qwen3:4b`                  | `local`  |
+| `medium` | `ollama` | `glm-5.3-flash:cloud`       | `cloud`  |
+| `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  |
+
+These defaults live in the routing package (`model.DefaultRoute`); no other layer
+restates them. They make a bare `sop run --model-class small` resolve with no
+configuration, and they never activate routing on their own — the layer is still
+active only when the `models:` block, a `SOP_MODEL_*` variable, or `--model-class`
+is present, so an existing project is unchanged.
+
+- A class's provider, model, and locality merge field by field from the
+  configuration and environment layers. The built-in default for a class applies
+  only when neither layer mentions that class at all, so a class a layer partially
+  configures is used as written (and fails naming the variables to set if still
+  incomplete).
+- An unknown class, locality, or provider fails with an actionable error.
 - Locality never silently switches a `local` class to a cloud model: if a `local`
   class has no model and the fallback is a cloud model, resolution fails unless
   `allow_cloud_fallback_for_local` is set.
-- The startup summary records the resolved class, provider, model, locality, and
-  the layer it came from (`cli`, `env`, `config`, or `default`). This is
-  non-secret evidence only; `.env` credentials are never recorded.
+- The startup summary records the resolved class, provider, model, locality, the
+  layer it came from (`cli`, `env`, `config`, or `default`), and a deterministic
+  reason. The reason is one of a fixed set of phrases — `explicit CLI model class`,
+  `environment default class`, `project-configured default class`,
+  `built-in default class`, or `fallback class used` — never model-generated prose.
+- The same evidence is persisted per run as non-secret trace data: the
+  `model_selection` object in `report.json`, a standalone `model-selection.json`
+  artifact beside it, and the `Model selection:` section of `sop report`. It
+  records no credential; `.env` secrets (API keys, tokens) stay in the environment
+  and are never written to run artifacts.
 
 ## Validity
 
