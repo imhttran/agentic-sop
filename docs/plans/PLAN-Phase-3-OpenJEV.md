@@ -102,12 +102,12 @@ acceptance criteria, and validation.
 - **Scope:** Add an analysis purpose type (`task_triage`, `pre_execution`,
   `quality`) and a structured evidence result (purpose, bounded confidence,
   findings, summary). Reuse the existing `jev.Finding`, severity, and
-  `Result.Validate` concepts; do not duplicate types. Findings must carry enough
-  structure (category, severity, evidence/reason, path, line, confidence) for
-  policy to evaluate.
+  `Result.Validate` concepts; do not duplicate types. Findings must carry a
+  **typed category** (PRD §10.2.3), a severity, and the evidence/reason field so
+  policy can evaluate them structurally; no free-text topic matching.
 - **Depends on:** none.
 - **Likely files/packages:** `internal/jev` (`jev.go` or a new
-  `evidence.go`), `internal/jev/jev_test.go`.
+  `evidence.go`/`categories.go`), `internal/jev/jev_test.go`.
 - **Acceptance criteria:** Evidence is structured and validated (fail closed on
   unknown purpose/severity/status); no lifecycle action is derived from summary
   text; existing `Analyzer`/`Result` remain backward compatible.
@@ -176,26 +176,27 @@ acceptance criteria, and validation.
 ### P3-007 --- Define deterministic triage policy mapping
 
 - **Objective:** Map triage evidence to a deterministic disposition.
-- **Scope:** Classify structured triage findings into the existing evidence/risk
-  vocabulary and evaluate them with deterministic policy (reusing the autonomy
-  classification approach). No prose matching; no bare confidence threshold.
+- **Scope:** Map typed triage findings into the existing `failure.Kind`
+  vocabulary and let `autonomy.Decide` produce the disposition (PRD §10.2.2). No
+  prose matching; no bare confidence threshold.
 - **Depends on:** P3-002, P3-006.
-- **Likely files/packages:** `internal/quality` (new early policy) or a small
-  early-policy file; `internal/autonomy` (reuse `failure.Kind`, `ApprovalRisk`).
+- **Likely files/packages:** `internal/autonomy/early.go` (new),
+  `internal/autonomy/autonomy_test.go`.
 - **Acceptance criteria:** Clear tasks continue; ambiguity/scope/security evidence
   is evaluated by deterministic rules; no lifecycle action comes from summary text.
-- **Validation:** `go test ./internal/quality/... ./internal/autonomy/...`.
+- **Validation:** `go test ./internal/autonomy/...`.
 
 ### P3-008 --- Integrate task triage into lifecycle
 
 - **Objective:** Run the triage gate after task selection and before
   implementation, and act on its deterministic disposition.
-- **Scope:** Hook the triage seam into the per-task selection path in the graph
-  driver, before the lifecycle runs. Record observability (P3-012) and persist the
-  result (P3-004). Disabled = no behavior change.
+- **Scope:** Hook the triage seam into the deterministic per-task selection path
+  (PRD §10.2.1): `internal/cli/drive.go` immediately after `scheduler.Next`
+  returns `scheduler.ReadyTask`, before `runScheduledTask`; and `runSingleTask` for
+  `sop run --task`. Record observability (P3-012) and persist the result (P3-004).
+  Disabled = no behavior change.
 - **Depends on:** P3-004, P3-006, P3-007.
-- **Likely files/packages:** `internal/cli/drive.go`, `internal/cli/run.go`,
-  `internal/scheduler` (only if selection visibility needs it).
+- **Likely files/packages:** `internal/cli/drive.go`, `internal/cli/run.go`.
 - **Acceptance criteria:** Normal tasks run unchanged; a policy escalation stops
   through the existing human boundary; no new task states are introduced.
 - **Validation:** `go test ./internal/cli/... ./internal/scheduler/...`.
@@ -216,26 +217,26 @@ acceptance criteria, and validation.
 ### P3-010 --- Define deterministic pre-execution policy mapping
 
 - **Objective:** Map pre-execution evidence to a deterministic disposition.
-- **Scope:** Classify structured pre-execution findings (scope expansion,
-  unexpected area, destructive operation, security boundary, credential-sensitive
-  work, requirement conflict, approval-sensitive operation) into the existing
-  risk/kind vocabulary and evaluate with deterministic policy.
+- **Scope:** Map typed pre-execution findings (scope expansion, unexpected area,
+  destructive operation, security boundary, credential-sensitive work, requirement
+  conflict, approval-sensitive operation) into the existing risk/kind vocabulary in
+  `internal/autonomy/early.go` (PRD §10.2.2) and evaluate with deterministic
+  policy.
 - **Depends on:** P3-002, P3-009.
-- **Likely files/packages:** early-policy file; `internal/autonomy`.
+- **Likely files/packages:** `internal/autonomy/early.go`, `internal/autonomy/autonomy_test.go`.
 - **Acceptance criteria:** Bounded normal tasks continue; destructive/security
   concerns reach a human boundary only when policy requires it; no prose matching.
-- **Validation:** `go test ./internal/quality/... ./internal/autonomy/...`.
+- **Validation:** `go test ./internal/autonomy/...`.
 
 ### P3-011 --- Integrate pre-execution gate
 
 - **Objective:** Run the pre-execution gate after precheck and before
   implementation, and act on its deterministic disposition.
-- **Scope:** Hook the pre-execution seam into the lifecycle immediately before the
-  implement stage. Record observability and persist the result. Disabled = no
-  behavior change.
+- **Scope:** Hook the pre-execution seam into `runStages`, after the verify-first
+  precheck and immediately before the implement stage (PRD §10.2.1). Record
+  observability and persist the result. Disabled = no behavior change.
 - **Depends on:** P3-004, P3-009, P3-010.
-- **Likely files/packages:** `internal/cli/run.go`, `internal/run/run.go`,
-  `internal/scheduler`.
+- **Likely files/packages:** `internal/cli/run.go`, `internal/run/run.go`.
 - **Acceptance criteria:** Normal bounded tasks continue; deterministic
   dispositions apply; no new task states.
 - **Validation:** `go test ./internal/cli/... ./internal/scheduler/...`.
@@ -243,7 +244,8 @@ acceptance criteria, and validation.
 ### P3-012 --- Add activity/report observability
 
 - **Objective:** Expose the checkpoints via existing reporting/activity mechanisms.
-- **Scope:** Add triage/pre-execution activity lines (for example `[TRIAGE]`,
+- **Scope:** Add `activity.StageTriage`/`activity.StagePreExecution` constants
+  (PRD §10.2.4) and emit triage/pre-execution lines (for example `[TRIAGE]`,
   `[PRE_EXECUTION]`, `[AUTONOMY]`). Human-readable only; never used for policy.
 - **Depends on:** P3-008, P3-011.
 - **Likely files/packages:** `internal/activity/activity.go`, `internal/cli/activity.go`,

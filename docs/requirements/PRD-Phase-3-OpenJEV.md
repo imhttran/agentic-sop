@@ -336,7 +336,7 @@ reconciliation, plan task P3-001):
 - The relationship between JEV analysis, JEV quality evidence, SOP quality policy,
   autonomy disposition, and human approval must be unambiguous.
 
-## 10. Resolved Decisions and Open Questions
+## 10. Design Decisions
 
 ### 10.1 Configuration namespace (decided)
 
@@ -369,18 +369,34 @@ early_jev:
 - Omitting the block MUST leave existing behavior unchanged, and `decision.*` MUST
   remain untouched (it is a different capability).
 
-### 10.2 Open questions
+### 10.2 Other design decisions (decided)
 
-1. **Where triage hooks in graph execution.** The natural seam is the per-task
-   selection path in the graph driver, after the scheduler returns a runnable task
-   and before the lifecycle runs.
-2. **Policy location.** Whether early-gate policy lives beside the existing quality
-   JEV policy (`internal/quality`) or in a small early-policy file/package that
-   reuses the same severity/risk vocabulary. The existing `internal/autonomy`
-   classification vocabulary (`failure.Kind`) should be reused rather than
-   extended with free-form categories.
-3. **Activity stages.** Whether to add distinct activity stages (`TRIAGE`,
-   `PRE_EXECUTION`) or reuse `StageJEV` with distinct actions.
+1. **Triage hook point.** The task-triage gate runs in the deterministic per-task
+   _selection_ path, not inside the task lifecycle: in graph mode,
+   `internal/cli/drive.go` immediately after `scheduler.Next` returns
+   `scheduler.ReadyTask`, before `runScheduledTask`; in single-task mode
+   (`sop run --task`), in `runSingleTask` before the lifecycle. Triage is therefore
+   a policy check on the already-chosen task, and the lifecycle itself is
+   unchanged.
+2. **Policy location.** The deterministic early policy lives in
+   `internal/autonomy` (a new `early.go`), because autonomy is already "the single
+   place that decides whether a failure or a requested action may be handled
+   automatically or must wait for a human." It maps structured early JEV evidence
+   (typed category + severity, never free text) into the existing `failure.Kind`
+   vocabulary, and the existing `autonomy.Decide` produces the lifecycle action ---
+   so evidence interpretation and disposition stay in one SOP-owned place. This adds
+   an `internal/autonomy -> internal/jev` edge (no cycle: `jev` does not import
+   `autonomy`). The quality-seam policy in `internal/quality` is unchanged.
+3. **Typed categories, not strings.** Early findings carry a **typed category**
+   constant defined in `internal/jev` (for example ambiguity, missing context,
+   scope concern, requirement conflict, dependency concern, security sensitivity,
+   destructive operation, credential sensitivity, unexpected area,
+   approval-sensitive operation), so policy maps enums and severities, never
+   topics or words.
+4. **Activity stages.** Add explicit `activity.StageTriage = "TRIAGE"` and
+   `activity.StagePreExecution = "PRE_EXECUTION"` constants rather than overloading
+   `StageJEV`, so the activity stream and reports distinguish triage,
+   pre-execution, and quality evidence unambiguously.
 
 ## 11. Where Behavioral Requirements Live
 
