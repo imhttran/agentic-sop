@@ -3,7 +3,7 @@
 > **This page is non-normative and subordinate.** The authoritative home for
 > model-routing rules — model classes, configuration precedence, the automatic
 > router, and the routing boundary — is
-> [`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.md). This page MUST NOT restate
+> [`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md). This page MUST NOT restate
 > or override those rules; where it and the specification disagree, the
 > specification wins. It records only the implementation seam, which is not
 > normative.
@@ -12,8 +12,8 @@ The router is **opt-in and off by default**: it activates only when
 `SOP_MODEL_ROUTING_ENABLED=true` (environment, overriding `models.routing_enabled`
 in configuration), a `SOP_MODEL_*` variable, or `--model-class` is present. A manual
 `--model-class` override always wins. See
-[`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.md) for the normative rules and
-[`reference/CONFIGURATION.md`](reference/CONFIGURATION.md) for the configuration
+[`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) for the normative rules and
+[`reference/CONFIGURATION.md`](../reference/CONFIGURATION.md) for the configuration
 reference.
 
 ## The seam
@@ -40,7 +40,7 @@ keep routing from ever acting as lifecycle authority.
 ## The selection contract
 
 The normative precedence and decision rules live in
-[`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.md) ("Configuration Precedence",
+[`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) ("Configuration Precedence",
 "Automatic Router", and "Manual Override"). At the seam:
 
 1. Gate on routing: a manual `--model-class` override wins; otherwise the router
@@ -57,7 +57,7 @@ The normative precedence and decision rules live in
 
 ## Boundaries (what routing must never do)
 
-The normative boundary lives in [`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.md)
+The normative boundary lives in [`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md)
 ("Boundary"). At the seam, the implementation upholds it:
 
 - The router is pure: it never transitions task state, mutates the repository,
@@ -75,6 +75,6 @@ The normative boundary lives in [`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.m
 ## Implemented vs. proposed
 
 The split between implemented and proposed/future behavior is owned by
-[`specs/MODEL-ROUTING.md`](specs/MODEL-ROUTING.md) ("Implemented Behavior" and
+[`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) ("Implemented Behavior" and
 "Proposed / Future Behavior"). Automatic availability pre-validation, automatic
 escalation/downgrade, and learned or LLM-controlled routing are **not implemented**.

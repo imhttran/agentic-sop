@@ -77,7 +77,7 @@ data but MUST NOT own routing policy. The authoritative rules — classes,
 configuration precedence, decision rules, and the full boundary — live in
 [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md); this page does not restate
 them. The non-normative implementation seam is recorded in
-[../model-routing.md](../model-routing.md).
+[model-routing.md](model-routing.md).
 
 ## State Ownership
 
