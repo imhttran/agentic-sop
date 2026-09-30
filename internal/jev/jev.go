@@ -1,5 +1,5 @@
 // Package jev defines the boundary between SOP and JEV (the optional
-// engineering-analysis capability described in docs/PLAN-JEV.md and
+// engineering-analysis capability described in docs/plans/PLAN-JEV-Implementation.md and
 // docs/requirements/PRD-JEV.md).
 //
 // # Boundary

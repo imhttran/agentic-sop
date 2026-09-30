@@ -4,7 +4,7 @@
 # SOP invokes this as:
 #   export SOP_AGENT_PROVIDER=command
 #   export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
-#   sop run docs/PLAN-Agent-Harness-V2.md
+#   sop run docs/plans/PLAN-Agent-Harness-V2.md
 #
 # It reads the JSON agent request on stdin and writes the response on stdout,
 # exactly like any other command agent. It runs the installed known-good
