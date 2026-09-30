@@ -8,6 +8,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/model"
 )
 
 // StackSource records where an effective execution-stack value came from. It is
@@ -106,13 +107,19 @@ func effectiveCommand() string {
 }
 
 // printExecutionStack formats and prints the execution stack to stdout: the
-// harness, provider, model when applicable, and configuration sources.
-func printExecutionStack(w io.Writer, dir string, cfg config.Config, stack executionStack) {
+// harness, provider, model when applicable, and configuration sources. When the
+// optional model-routing layer is active, it also prints the selected class,
+// locality, and layer so the model choice is auditable.
+func printExecutionStack(w io.Writer, dir string, cfg config.Config, stack executionStack, routing model.Result) {
 	fmt.Fprintf(w, "Project: %s\n", projectName(dir, cfg))
 	fmt.Fprintf(w, "Harness: %s\n", stack.Harness)
 	fmt.Fprintf(w, "Provider: %s\n", stack.Provider)
 	if stack.Model != "" {
 		fmt.Fprintf(w, "Model: %s\n", stack.Model)
+	}
+	if routing.Active {
+		sel := routing.Selection
+		fmt.Fprintf(w, "Model class: %s (%s, source: %s)\n", sel.Class, sel.Locality, sel.Source)
 	}
 	fmt.Fprintf(w, "Provider source: %s\n", stack.Source)
 	if stack.Command != "" {

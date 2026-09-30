@@ -59,6 +59,11 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	routing, err := applyModelRouting(&cfg, d.modelClass)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	if cfg.Workflow.Mode != "local" {
 		fmt.Fprintf(stderr, "run: workflow.mode %q is not supported by the local run; set workflow.mode: local\n", cfg.Workflow.Mode)
 		return exitError
@@ -67,7 +72,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	stack := resolveExecutionStack(cfg)
 	fmt.Fprintln(stdout, "SOP")
 	fmt.Fprintln(stdout)
-	printExecutionStack(stdout, dir, cfg, stack)
+	printExecutionStack(stdout, dir, cfg, stack, routing)
 	fmt.Fprintln(stdout)
 
 	st, err := store.Open(statePath(dir))

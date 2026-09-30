@@ -16,6 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/jev"
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/resume"
@@ -54,6 +55,10 @@ type deps struct {
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.
 	newJEVAnalyzer func(cfg config.Config) (jev.Analyzer, error)
+	// modelClass is the --model-class override for this invocation, if any. It is
+	// the highest-precedence input to the optional model-routing layer and is
+	// empty for every command that does not accept the flag.
+	modelClass string
 }
 
 func defaultDeps() deps {
@@ -118,6 +123,18 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) == 0 {
 		writeHelp(stdout)
 		return exitOK
+	}
+
+	// Apply the optional project .env before any command resolves configuration or
+	// the environment, so a .env-supplied value (for example model routing) is
+	// visible everywhere. A missing .env is fine; a malformed one fails clearly.
+	if d.getwd != nil {
+		if dir, err := d.getwd(); err == nil {
+			if err := loadDotEnv(dir); err != nil {
+				fmt.Fprintf(stderr, "error: %v\n", err)
+				return exitError
+			}
+		}
 	}
 
 	command, rest := args[0], args[1:]
@@ -233,12 +250,24 @@ func statePath(projectDir string) string {
 // project configuration, or ("", "", "") when there is no configuration (the
 // environment then decides). A present but invalid configuration is an error,
 // not a silent fallback.
-func configuredAgent(projectDir string) (harness, provider, model string, err error) {
+func configuredAgent(projectDir string) (harness, provider, modelName string, err error) {
 	cfg, err := config.LoadDir(projectDir)
 	if errors.Is(err, config.ErrNotFound) {
+		// No configuration file: only the model-routing environment (which a .env
+		// file may supply) can select an agent. Otherwise the environment decides.
+		res, rerr := model.Resolve(model.Inputs{Lookup: os.Getenv})
+		if rerr != nil {
+			return "", "", "", rerr
+		}
+		if res.Active {
+			return "", res.Selection.Provider, res.Selection.Model, nil
+		}
 		return "", "", "", nil
 	}
 	if err != nil {
+		return "", "", "", err
+	}
+	if _, err := applyModelRouting(cfg, ""); err != nil {
 		return "", "", "", err
 	}
 	return cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, nil

@@ -21,6 +21,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/decision"
+	"github.com/imhttran/agentic-sop/internal/model"
 )
 
 // Layout: the configuration lives alongside the SQLite state in one directory.
@@ -99,6 +100,10 @@ type Config struct {
 	Features   Features       `yaml:"features"`
 	Workflow   Workflow       `yaml:"workflow"`
 	Autonomy   Autonomy       `yaml:"autonomy"`
+	// Models is the optional model-routing table. It is resolved together with
+	// the SOP_MODEL_* environment (which a .env file may supply) by
+	// internal/model; an omitted block leaves the agent selection unchanged.
+	Models model.Route `yaml:"models"`
 }
 
 // Project holds project metadata.
@@ -438,6 +443,9 @@ func (c *Config) Validate() error {
 	if err := c.validateAutonomy(); err != nil {
 		return err
 	}
+	if err := c.Models.Validate(); err != nil {
+		return fmt.Errorf("config: %w", err)
+	}
 	return nil
 }
 
@@ -578,6 +586,29 @@ autonomy:
   #   auto_fix: true
   #   auto_reconcile_safe_changes: true
   #   max_continuations: 4
+
+# Optional model routing. Selects the model by class (small | medium | large)
+# from the layers: --model-class flag > SOP_MODEL_* environment (which a .env
+# file may supply) > this block > built-in defaults. The layer is disabled
+# unless this block or a SOP_MODEL_* variable is set, so an existing project is
+# unchanged. See docs/reference/CONFIGURATION.md.
+#
+# models:
+#   default_class: medium
+#   fallback_class: medium
+#   allow_cloud_fallback_for_local: false
+#   small:
+#     provider: ollama
+#     name: qwen3:4b
+#     locality: local
+#   medium:
+#     provider: ollama
+#     name: glm-5.3-flash:cloud
+#     locality: cloud
+#   large:
+#     provider: ollama
+#     name: deepseek-v4.1-flash:cloud
+#     locality: cloud
 
 workflow:
   # local | pull-request

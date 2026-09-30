@@ -53,27 +53,52 @@ human:
 
 workflow:
   mode: local # local | pull-request
+
+# Optional model routing. Off unless this block (or a SOP_MODEL_* variable, or
+# --model-class) is set, so an existing project is unchanged. See "Model routing".
+# models:
+#   default_class: medium # small | medium | large
+#   fallback_class: medium
+#   allow_cloud_fallback_for_local: false
+#   small:
+#     provider: ollama # ollama | llamacpp | command
+#     name: qwen3:4b
+#     locality: local # local | cloud
+#   medium:
+#     provider: ollama
+#     name: glm-5.3-flash:cloud
+#     locality: cloud
+#   large:
+#     provider: ollama
+#     name: deepseek-v4.1-flash:cloud
+#     locality: cloud
 ```
 
 ## Field reference
 
-| Key                                  | Default            | Values / behavior                                                                          |
-| ------------------------------------ | ------------------ | ------------------------------------------------------------------------------------------ |
-| `version`                            | `1`                | Configuration schema version.                                                              |
-| `project.name`                       | — (required)       | Project identifier. A missing name fails with a clear message.                             |
-| `project.integration_branch`         | `main`             | Base branch for task branches and PRs.                                                     |
-| `agent.harness`                      | `command`          | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
-| `agent.provider`                     | —                  | `ollama`, `llamacpp`, or `command`. Required when `harness: tool`.                         |
-| `agent.model`                        | —                  | Model ID. Required when `provider: ollama` or `llamacpp`.                                  |
-| `validation.build` / `test` / `lint` | —                  | Command lists run in the project directory, in order, stopping at the first failure.       |
-| `review.engine`                      | `self`             | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
-| `review.delegation`                  | `false`            | Review delegation flag.                                                                    |
-| `quality.require_tests`              | `true`             | Require tests as part of the quality policy.                                               |
-| `quality.max_fix_cycles`             | `3`                | Upper bound on the validate → review → gate → fix loop.                                    |
-| `quality.fail_on`                    | `critical`, `high` | Severities that block a pass.                                                              |
-| `quality.jev.enabled`                | `false`            | Enable the optional read-only JEV analysis stage.                                          |
-| `human.approval_before_commit`       | `true`             | When on, `sop commit` / `sop pr` require `--yes`.                                          |
-| `workflow.mode`                      | `local`            | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
+| Key                                     | Default            | Values / behavior                                                                          |
+| --------------------------------------- | ------------------ | ------------------------------------------------------------------------------------------ |
+| `version`                               | `1`                | Configuration schema version.                                                              |
+| `project.name`                          | — (required)       | Project identifier. A missing name fails with a clear message.                             |
+| `project.integration_branch`            | `main`             | Base branch for task branches and PRs.                                                     |
+| `agent.harness`                         | `command`          | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
+| `agent.provider`                        | —                  | `ollama`, `llamacpp`, or `command`. Required when `harness: tool`.                         |
+| `agent.model`                           | —                  | Model ID. Required when `provider: ollama` or `llamacpp`.                                  |
+| `validation.build` / `test` / `lint`    | —                  | Command lists run in the project directory, in order, stopping at the first failure.       |
+| `review.engine`                         | `self`             | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
+| `review.delegation`                     | `false`            | Review delegation flag.                                                                    |
+| `quality.require_tests`                 | `true`             | Require tests as part of the quality policy.                                               |
+| `quality.max_fix_cycles`                | `3`                | Upper bound on the validate → review → gate → fix loop.                                    |
+| `quality.fail_on`                       | `critical`, `high` | Severities that block a pass.                                                              |
+| `quality.jev.enabled`                   | `false`            | Enable the optional read-only JEV analysis stage.                                          |
+| `human.approval_before_commit`          | `true`             | When on, `sop commit` / `sop pr` require `--yes`.                                          |
+| `workflow.mode`                         | `local`            | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
+| `models.default_class`                  | `medium`           | Default model class (`small`, `medium`, `large`).                                          |
+| `models.fallback_class`                 | —                  | Class used when the default class has no model.                                            |
+| `models.allow_cloud_fallback_for_local` | `false`            | Allow a `local` class to fall back to a cloud model.                                       |
+| `models.<class>.provider`               | —                  | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
+| `models.<class>.name`                   | —                  | Model name for a class.                                                                    |
+| `models.<class>.locality`               | —                  | `local` or `cloud`.                                                                        |
 
 ## Agent configuration matrix
 
@@ -92,19 +117,57 @@ SOP's state database.
 ## Environment overrides and precedence
 
 ```text
-1. Environment variables (SOP_AGENT_PROVIDER, SOP_OLLAMA_MODEL, SOP_AGENT_COMMAND, etc.)
-2. .agent-sdlc/config.yaml settings
-3. Hardcoded defaults (command harness if nothing is specified)
+1. CLI override (--model-class)
+2. Environment variables (SOP_AGENT_*, SOP_OLLAMA_MODEL, SOP_MODEL_*, ...), which
+   an optional project .env file may supply
+3. .agent-sdlc/config.yaml settings (agent.*, models.*)
+4. Built-in defaults (command harness if nothing is specified)
 ```
 
 - Environment variables always override config-file values — for example
   `SOP_AGENT_PROVIDER` overrides `agent.provider`, and `SOP_OLLAMA_MODEL`
   overrides `agent.model`.
+- An optional `.env` file at the project root is loaded at startup. It only fills
+  variables that are not already set, so an explicitly exported variable always
+  wins over the file. `.env` is gitignored; commit `.env.example` instead. A
+  missing `.env` is not an error and it is never required in CI.
 - When using the `command` harness, `SOP_AGENT_COMMAND` is required; the run
   fails if it is not set.
 - The startup summary prints the effective provider and whether configuration or
   the environment selected it, and a run rejects a provider that cannot
   `IMPLEMENT` before running any task.
+
+## Model routing
+
+The optional `models:` block — or its `SOP_MODEL_*` environment equivalents, which
+an optional `.env` file may supply — selects the agent's provider and model by
+class instead of pinning them in `agent.*`. The layer is **off** unless this
+block, a `SOP_MODEL_*` variable, or `--model-class` is set, so an existing
+project behaves exactly as before.
+
+Resolution order, highest first:
+
+```text
+--model-class  >  environment / .env  >  models: block  >  built-in defaults
+```
+
+| Setting (config / environment)                                                       | Default  | Meaning                                              |
+| ------------------------------------------------------------------------------------ | -------- | ---------------------------------------------------- |
+| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium` | Class the default agent uses.                        |
+| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | —        | Class used when the selected class has no model.     |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`  | Allow a `local` class to fall back to a cloud model. |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | —        | `ollama`, `llamacpp`, or `command`.                  |
+| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | —        | Model name for the class.                            |
+| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | —        | `local` or `cloud`.                                  |
+
+- An unknown class, locality, or provider fails with an actionable error; a class
+  used with no model configured fails and names the variables to set.
+- Locality never silently switches a `local` class to a cloud model: if a `local`
+  class has no model and the fallback is a cloud model, resolution fails unless
+  `allow_cloud_fallback_for_local` is set.
+- The startup summary records the resolved class, provider, model, locality, and
+  the layer it came from (`cli`, `env`, `config`, or `default`). This is
+  non-secret evidence only; `.env` credentials are never recorded.
 
 ## Validity
 

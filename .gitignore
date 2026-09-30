@@ -3,3 +3,6 @@
 # Build outputs the agents leave at the repository root (see scripts/sop-agent.sh);
 # they are large binaries and must never enter a diff or a commit.
 /sop-*
+
+# Local configuration and credentials (commit .env.example instead).
+.env

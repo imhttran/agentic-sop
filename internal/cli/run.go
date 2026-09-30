@@ -35,50 +35,69 @@ import (
 // The braces are a bounded fix loop (≤ quality.max_fix_cycles; exhaustion yields
 // NEEDS_HUMAN). A run never commits, pushes, or merges.
 func runRun(args []string, stdout, stderr io.Writer, d deps) int {
-	planArg, taskArg, ok := parseRunArgs(args, stderr)
+	opts, ok := parseRunArgs(args, stderr)
 	if !ok {
 		return exitUsage
 	}
-	if taskArg != "" {
-		return runSingleTask(taskArg, stdout, stderr, d)
+	d.modelClass = opts.modelClass
+	if opts.taskArg != "" {
+		return runSingleTask(opts.taskArg, stdout, stderr, d)
 	}
-	return runGraph(planArg, stdout, stderr, d)
+	return runGraph(opts.planArg, stdout, stderr, d)
 }
 
 // runUsage is the one-line usage for `sop run`.
-const runUsage = "usage: sop run [PLAN.md | --task TASK.md]"
+const runUsage = "usage: sop run [--model-class small|medium|large] [PLAN.md | --task TASK.md]"
 
-// parseRunArgs parses "sop run [PLAN.md | --task TASK.md]": no arguments
-// discovers the project plan, one argument names an execution PLAN, and --task
-// names a single task file.
-func parseRunArgs(args []string, stderr io.Writer) (planArg, taskArg string, ok bool) {
+// runOptions are the parsed arguments of `sop run`.
+type runOptions struct {
+	planArg    string
+	taskArg    string
+	modelClass string
+}
+
+// parseRunArgs parses "sop run [--model-class CLASS] [PLAN.md | --task TASK.md]":
+// no arguments discovers the project plan, one argument names an execution PLAN,
+// --task names a single task file, and --model-class overrides the model-routing
+// class for this invocation.
+func parseRunArgs(args []string, stderr io.Writer) (runOptions, bool) {
+	var opts runOptions
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "--task":
 			if i+1 >= len(args) {
 				fmt.Fprintln(stderr, runUsage)
-				return "", "", false
+				return runOptions{}, false
 			}
-			taskArg = args[i+1]
+			opts.taskArg = args[i+1]
 			i++
 		case strings.HasPrefix(a, "--task="):
-			taskArg = strings.TrimPrefix(a, "--task=")
+			opts.taskArg = strings.TrimPrefix(a, "--task=")
+		case a == "--model-class":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, runUsage)
+				return runOptions{}, false
+			}
+			opts.modelClass = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--model-class="):
+			opts.modelClass = strings.TrimPrefix(a, "--model-class=")
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "unknown flag %s\n%s\n", a, runUsage)
-			return "", "", false
+			return runOptions{}, false
 		default:
-			if planArg != "" {
+			if opts.planArg != "" {
 				fmt.Fprintln(stderr, runUsage)
-				return "", "", false
+				return runOptions{}, false
 			}
-			planArg = a
+			opts.planArg = a
 		}
 	}
-	if planArg != "" && taskArg != "" {
+	if opts.planArg != "" && opts.taskArg != "" {
 		fmt.Fprintln(stderr, runUsage)
-		return "", "", false
+		return runOptions{}, false
 	}
-	return planArg, taskArg, true
+	return opts, true
 }
 
 // runSingleTask runs one task file through the local lifecycle.
@@ -99,9 +118,14 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	routing, err := applyModelRouting(&cfg, d.modelClass)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 
 	stack := resolveExecutionStack(cfg)
-	printExecutionStack(stdout, dir, cfg, stack)
+	printExecutionStack(stdout, dir, cfg, stack, routing)
 	fmt.Fprintln(stdout)
 
 	id := runID(spec)
@@ -943,10 +967,17 @@ func failRun(rn *runpkg.Run, stderr io.Writer, err error) int {
 func loadConfigOrDefault(dir string) (config.Config, error) {
 	loaded, err := config.LoadDir(dir)
 	if err == nil {
+		if _, err := applyModelRouting(loaded, ""); err != nil {
+			return config.Config{}, err
+		}
 		return *loaded, nil
 	}
 	if errors.Is(err, config.ErrNotFound) {
-		return config.Default(), nil
+		cfg := config.Default()
+		if _, err := applyModelRouting(&cfg, ""); err != nil {
+			return config.Config{}, err
+		}
+		return cfg, nil
 	}
 	return config.Config{}, err
 }
