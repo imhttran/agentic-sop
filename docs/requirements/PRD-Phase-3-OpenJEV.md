@@ -252,7 +252,9 @@ action`. Failure and approval classification already moved away from topic-word
   current behavior. Early JEV gates MUST default OFF. The existing `quality.jev`
   behavior MUST remain compatible. Unknown configuration keys MUST continue to
   fail clearly, per the current configuration policy. Phase 3 behavior MUST NOT be
-  silently enabled.
+  silently enabled. The early gates MUST live in their own namespace, separate
+  from `quality.jev` (quality analysis) and `decision.*` (the model-routing
+  decision layer) --- see §10.1.
 - **FR-P3-12 --- Progressive rollout.** Rollout order: structured early-analysis
   model + persistence + fake analyzer + tests, then task triage, then
   pre-execution, then the real OpenJEV provider via dogfood, then
@@ -334,26 +336,50 @@ reconciliation, plan task P3-001):
 - The relationship between JEV analysis, JEV quality evidence, SOP quality policy,
   autonomy disposition, and human approval must be unambiguous.
 
-## 10. Open Questions To Confirm At Review
+## 10. Resolved Decisions and Open Questions
 
-These are decisions, not requirements; they are resolved during review before
-implementation.
+### 10.1 Configuration namespace (decided)
 
-1. **Configuration shape.** Extend the existing `quality.jev` block with explicit
-   early-gate flags, or introduce a separate block? The current `decision.*` block
-   belongs to a _different_ capability (the partial model-routing decision layer in
-   `internal/decision`), so reusing it would conflate two concepts. Recommended:
-   keep early gates under `quality.jev` (for example a `gates` sub-block) unless
-   review prefers a distinct namespace.
-2. **Where triage hooks in graph execution.** The natural seam is the per-task
+The early checkpoints MUST use their **own top-level namespace, `early_jev`**,
+separate from `quality.jev` (quality-seam JEV) and from `decision.*` (the partial
+model-routing decision layer in `internal/decision`). Keeping the three namespaces
+apart prevents one concept from acquiring two meanings.
+
+```yaml
+early_jev:
+  enabled: false # master switch for the early decision layer; OFF by default
+  gates:
+    task_triage: false # run JEV triage after task selection, before implementation
+    pre_execution: false # run JEV analysis after precheck, before implementation
+  fail_on: # severities that escalate to a human boundary
+    - critical
+    - high
+```
+
+- `early_jev.enabled` MUST independently activate the analyzer for the early
+  checkpoints; it MUST NOT require `quality.jev.enabled`. The two layers are
+  independently enable-able and both default OFF.
+- The early layer MUST reuse the existing JEV analyzer/provider resolution (the
+  Ollama path and its `SOP_OLLAMA_*` settings) and MUST NOT introduce a second
+  provider stack in Phase 3. A dedicated `early_jev.provider`/`model` override
+  MAY be added later; Phase 3 adds none.
+- `early_jev.fail_on` is optional and defaults to the same blocking severities as
+  `quality.fail_on` (`critical`, `high`); an invalid severity or unknown key MUST
+  fail clearly, per the current configuration policy.
+- Omitting the block MUST leave existing behavior unchanged, and `decision.*` MUST
+  remain untouched (it is a different capability).
+
+### 10.2 Open questions
+
+1. **Where triage hooks in graph execution.** The natural seam is the per-task
    selection path in the graph driver, after the scheduler returns a runnable task
    and before the lifecycle runs.
-3. **Policy location.** Whether early-gate policy lives beside the existing quality
+2. **Policy location.** Whether early-gate policy lives beside the existing quality
    JEV policy (`internal/quality`) or in a small early-policy file/package that
    reuses the same severity/risk vocabulary. The existing `internal/autonomy`
    classification vocabulary (`failure.Kind`) should be reused rather than
    extended with free-form categories.
-4. **Activity stages.** Whether to add distinct activity stages (`TRIAGE`,
+3. **Activity stages.** Whether to add distinct activity stages (`TRIAGE`,
    `PRE_EXECUTION`) or reuse `StageJEV` with distinct actions.
 
 ## 11. Where Behavioral Requirements Live

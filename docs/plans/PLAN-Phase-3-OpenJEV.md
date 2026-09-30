@@ -9,7 +9,7 @@ specification wins.
 
 ## Summary
 
-Add two **optional, disabled-by-default** JEV checkpoints that run *before* agent
+Add two **optional, disabled-by-default** JEV checkpoints that run _before_ agent
 implementation --- task triage (after task selection) and pre-execution (after
 precheck, before execution) --- so SOP can obtain bounded early engineering
 evidence without moving lifecycle authority into a model.
@@ -145,14 +145,19 @@ acceptance criteria, and validation.
 
 - **Objective:** Add explicit configuration for the early checkpoints, off by
   default, compatible with existing installations.
-- **Scope:** Add early-gate flags under the JEV configuration (namespace confirmed
-  at review --- see PRD §10), validated at load time with focused errors for unknown
-  keys/values, matching the current configuration policy.
+- **Scope:** Add the separate top-level `early_jev` namespace (PRD §10.1): a master
+  `enabled` switch, per-gate flags (`gates.task_triage`, `gates.pre_execution`),
+  and an optional `fail_on` severity list. Validate at load time with focused errors
+  for unknown keys/values, matching the current configuration policy. Reuse the
+  existing JEV analyzer/provider resolution; do not touch `quality.jev` or
+  `decision.*`.
 - **Depends on:** none.
 - **Likely files/packages:** `internal/config/config.go`, `internal/config/*_test.go`,
   `docs/reference/CONFIGURATION.md`.
 - **Acceptance criteria:** Existing configs load unchanged; gates default OFF; an
-  unknown mode/key fails clearly; `sop run` behavior is identical when disabled.
+  unknown mode/key fails clearly; `sop run` behavior is identical when disabled;
+  `early_jev.enabled` activates the early layer without requiring
+  `quality.jev.enabled`.
 - **Validation:** `go test ./internal/config/...`; `go vet ./internal/config/...`.
 
 ### P3-006 --- Implement task-triage analysis seam
