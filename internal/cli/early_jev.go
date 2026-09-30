@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
@@ -29,6 +30,13 @@ import (
 // failure is explicit: a provider failure (or malformed/invalid evidence) is
 // recorded as a failure with no evidence payload and never interpreted as a
 // finding (FR-P3-9, FR-P3-10).
+//
+// Observability: each checkpoint emits a stage-correct activity event (TRIAGE or
+// PRE_EXECUTION, distinct from the quality QA stage) carrying a concise, secret-free
+// summary of findings, the highest severity seen, and (when stated) the analysis
+// confidence. The activity/confidence detail is human-readable only; it never
+// feeds a decision, gate, or task state. A disabled checkpoint emits nothing, so
+// JEV off adds no observability noise (FR-P3-6).
 
 // earlyGateResult is the outcome of one early checkpoint. It is provenance plus a
 // deterministic disposition; it carries no authority of its own.
@@ -99,8 +107,9 @@ func earlyGateLabel(checkpoint runpkg.Checkpoint) string {
 // checkpoint sends JEV. It reuses runpkg.JEVInvocation (the boundary the quality
 // seam uses) so there is one request shape across the JEV integration, and it
 // carries only task-scoped read-only context: no runtime handle, no persistence.
-func buildEarlyJEVInvocation(spec *taskfile.Spec) runpkg.JEVInvocation {
+func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec) runpkg.JEVInvocation {
 	inv := runpkg.JEVInvocation{
+		Purpose:  earlyPurpose(checkpoint),
 		Task:     strings.TrimSpace(spec.Title + "\n\n" + spec.Description),
 		Criteria: strings.Join(spec.AcceptanceCriteria, "\n"),
 	}
@@ -140,7 +149,7 @@ func runEarlyGate(ctx context.Context, cfg config.Config, d deps, spec *taskfile
 	rec := activity.FromContext(ctx)
 	rec.Emit(earlyStage(checkpoint), "analyzing", earlyGateLabel(checkpoint))
 
-	out := runpkg.RunJEV(ctx, analyzer, buildEarlyJEVInvocation(spec))
+	out := runpkg.RunJEV(ctx, analyzer, buildEarlyJEVInvocation(checkpoint, spec))
 
 	res := earlyGateResult{Ran: true, Task: spec.ID, Provider: out.Provider}
 	switch {
@@ -203,16 +212,83 @@ func earlyGateAction(res earlyGateResult) string {
 	}
 }
 
-// earlyGateDetail renders a concise, secret-free activity detail.
+// earlyGateDetail renders a concise, secret-free activity detail. It surfaces the
+// finding count, the highest severity seen, and (when the analysis stated one) the
+// confidence, so triage/pre-execution evidence is visible in the activity stream
+// without ever emitting raw prompts or model output. The confidence and severity
+// are display-only: they describe the analysis, they never feed a decision.
 func earlyGateDetail(res earlyGateResult) string {
 	var b strings.Builder
 	if res.ProviderFailed {
 		b.WriteString("provider failure recorded")
 	} else {
 		b.WriteString("findings: " + strconv.Itoa(len(res.Evidence.Items)))
+		if sev := earlyHighestSeverity(res.Evidence); sev != "" {
+			b.WriteString("; severity: " + sev)
+		}
+		if conf, stated := earlyConfidence(res.Evidence); stated {
+			b.WriteString("; confidence: " + conf)
+		}
 	}
 	if action := strings.TrimSpace(string(res.Decision.Action)); action != "" {
 		b.WriteString("; disposition: " + action)
 	}
 	return b.String()
+}
+
+// earlyHighestSeverity returns the highest severity among the evidence items (by
+// the shared JEV severity rank), or "" when there are no findings. It only
+// summarizes existing values, so it never invents a severity.
+func earlyHighestSeverity(ev jev.Evidence) string {
+	best := ""
+	bestRank := -1
+	for _, item := range ev.Items {
+		sev := strings.ToUpper(strings.TrimSpace(string(item.Severity)))
+		if sev == "" {
+			continue
+		}
+		if rank := earlySeverityRank(sev); rank > bestRank {
+			best, bestRank = sev, rank
+		}
+	}
+	return best
+}
+
+// earlySeverityRank orders the shared severity vocabulary high-to-low. An unknown
+// severity ranks lowest so it never outranks a known one.
+func earlySeverityRank(sev string) int {
+	switch jev.Severity(sev) {
+	case jev.SeverityCritical:
+		return 4
+	case jev.SeverityHigh:
+		return 3
+	case jev.SeverityMedium:
+		return 2
+	case jev.SeverityLow:
+		return 1
+	case jev.SeverityInfo:
+		return 0
+	default:
+		return -1
+	}
+}
+
+// earlyConfidence renders the analysis confidence as a bounded 0.00–1.00 value
+// and reports whether it was stated. Confidence is only rendered when the
+// analysis actually produced a result (it carries status/severity); a stated
+// confidence of exactly 0.00 is a real, if low, judgment and is rendered as
+// "0.00" rather than silently dropped. When no analysis produced evidence there
+// is nothing to report and the value is unstated.
+func earlyConfidence(ev jev.Evidence) (string, bool) {
+	if !ev.Status.Valid() {
+		return "", false
+	}
+	if ev.Confidence < 0 {
+		return "", false
+	}
+	if ev.Confidence > 1 {
+		// Out-of-range confidence is not a stated judgment; never fabricate one.
+		return "", false
+	}
+	return fmt.Sprintf("%.2f", ev.Confidence), true
 }

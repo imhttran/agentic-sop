@@ -135,6 +135,12 @@ func (r Result) Validate() error {
 // excludes ownership of the SOP runtime and persistence layer: JEV receives
 // read-only snapshots, never handles it could use to mutate task state.
 type Request struct {
+	// Purpose is the checkpoint/purpose the analysis is being run under (for
+	// example TASK_TRIAGE or PRE_EXECUTION). It is provenance for the analyzer:
+	// it names why the analysis ran, and it carries no authority. It is optional
+	// and advisory; an empty value means the caller did not declare a purpose and
+	// existing callers keep working unchanged.
+	Purpose Purpose
 	// Task is the task description.
 	Task string
 	// Criteria is the task's acceptance criteria.

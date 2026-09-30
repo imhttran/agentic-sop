@@ -12,6 +12,10 @@ import (
 // quality seam. It carries the same task-specific evidence the quality gate
 // sees, so JEV can add analysis without owning any lifecycle decision.
 type JEVInvocation struct {
+	// Purpose is the checkpoint/purpose the analysis runs under (for example
+	// TASK_TRIAGE or PRE_EXECUTION). It is provenance for the analyzer and
+	// carries no authority; an empty value means the caller did not declare one.
+	Purpose jev.Purpose
 	// Task is the task description.
 	Task string
 	// Criteria is the task's acceptance criteria.
@@ -31,6 +35,7 @@ type JEVInvocation struct {
 // boundary.
 func (inv JEVInvocation) request() jev.Request {
 	return jev.Request{
+		Purpose:           inv.Purpose,
 		Task:              inv.Task,
 		Criteria:          inv.Criteria,
 		ChangedFiles:      inv.ChangedFiles,

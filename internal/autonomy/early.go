@@ -26,14 +26,46 @@ import (
 // policy: it never transitions task state, mutates persistence, or runs anything.
 
 // DecideEarly maps structured early JEV evidence into a deterministic disposition.
-// It is pure and deterministic.
+// It is pure and deterministic: the same (evidence, failOn, policy) always yields
+// the same Decision.
+//
+// # Decision-input contract
+//
+// The disposition is a function of typed, structured values only:
+//
+//   - inputs: jev.Evidence.Purpose and jev.Evidence.Status (context), each
+//     jev.EvidenceItem.Severity and jev.EvidenceItem.Category (the decision
+//     inputs), the failOn severity set, and the resolved autonomy Policy.
+//   - outputs (every field of autonomy.Decision): Action, Level, Risk,
+//     RequiresHuman, Classification (Kind/Disposition/Confidence/Reason), and
+//     Reason.
+//
+// No prose field participates in the decision. jev.Evidence.Summary and
+// jev.EvidenceItem.Detail / jev.EvidenceItem.Evidence are provenance only: this
+// path performs no string matching on them, and an item's Detail is appended to
+// the decision Reason as description only — after the action, risk, and human
+// boundary have already been fully determined by the typed fields.
+//
+// # Disposition rules
 //
 // When no finding's severity is in failOn the task continues (the advisory
 // default): a clear or low-severity task proceeds without human intervention.
-// When a blocking finding is present, its typed category selects a failure kind
-// and the existing Decide produces the action — which, for the authority
-// boundaries (ambiguity, security, destructive, approval, or an unclassified
-// category that fails closed), is a human boundary.
+// Severity values that are unknown or absent never match failOn, so a malformed
+// severity is non-blocking and the task continues. When a blocking finding is
+// present, its typed category selects a failure kind and the existing Decide
+// produces the action — which, for the authority boundaries (ambiguity,
+// security, destructive, approval), is a human boundary; an empty or unknown
+// category fails closed to failure.BlockingFindings (also a human boundary). A
+// destructive/security concern therefore reaches a human boundary only when the
+// configured fail_on policy includes the finding's severity.
+//
+// # fail_on input contract
+//
+// failOn is caller-supplied and is the only policy input for severity gating.
+// internal/autonomy does not read configuration or build this list itself:
+// supplying the early fail_on severities (from configuration or the lifecycle
+// caller) is owned outside this package. Entries are matched against the typed
+// severity case-insensitively and whitespace-tolerantly.
 //
 // Confidence is deliberately not a decision input here: it is advisory metadata
 // carried on the evidence, and a bare confidence threshold is not a rule.
@@ -75,7 +107,9 @@ func earlyBlockingFinding(ev jev.Evidence, failOn []string) (jev.EvidenceItem, b
 	return best, found
 }
 
-// severityBlocking reports whether s is one of the failOn severities.
+// severityBlocking reports whether s is one of the failOn severities. Only the
+// typed severity participates: an unknown or empty severity never matches, so it
+// is never treated as blocking.
 func severityBlocking(s jev.Severity, failOn []string) bool {
 	for _, f := range failOn {
 		if strings.EqualFold(strings.TrimSpace(f), string(s)) {
@@ -86,7 +120,8 @@ func severityBlocking(s jev.Severity, failOn []string) bool {
 }
 
 // severityRankEarly orders the typed severities so the most serious blocking
-// finding is chosen.
+// finding is chosen. An unknown severity ranks lowest and is never blocking,
+// because it cannot match failOn.
 func severityRankEarly(s jev.Severity) int {
 	switch s {
 	case jev.SeverityInfo:

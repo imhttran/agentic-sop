@@ -67,6 +67,10 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	}
 
 	writeReport(stdout, doc)
+	// Early JEV checkpoint evidence (TRIAGE / PRE_EXECUTION) is rendered from the
+	// run's persisted artifact. It renders nothing when no early checkpoint ran, so
+	// a disabled JEV adds no noise. It is human-readable only.
+	writeEarlyReport(stdout, filepath.Join(runsRoot, id))
 	writeApprovalReport(stdout, dir, id)
 	writePerformance(stdout, dir, doc)
 	return exitOK

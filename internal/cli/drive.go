@@ -537,6 +537,19 @@ func printCannotResume(stderr io.Writer, task *domain.Task, stage runpkg.Stage, 
 	fmt.Fprintf(stderr, "\nInspect and resume explicitly:\n\n  sop resume %s\n", task.ID)
 }
 
+// parkRunAtHumanBoundary parks a run at the EXISTING WAITING_FOR_HUMAN stage, the
+// same stage the lifecycle's own human boundary sets, before a caller records an
+// approval request. It keeps the persisted run stage consistent with the reported
+// human boundary without introducing a new task state. The write is best-effort
+// (stage persistence is diagnostic and must never fail the run), but a failure is
+// surfaced as a diagnostic so the persisted stage cannot silently disagree with
+// the boundary the operator was told about.
+func parkRunAtHumanBoundary(rn *runpkg.Run, taskID string, stderr io.Writer) {
+	if err := rn.SetStage(runpkg.WaitingForHuman); err != nil {
+		fmt.Fprintf(stderr, "%s: could not persist the WAITING_FOR_HUMAN run stage: %v\n", taskID, err)
+	}
+}
+
 // runScheduledTask runs the lifecycle for one scheduled task and updates its
 // persisted state.
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
@@ -568,6 +581,11 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// task state.
 	if tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage); tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
+		// Park the run at the existing WAITING_FOR_HUMAN stage before recording the
+		// approval request, so the persisted run state matches the boundary — the
+		// same stage the lifecycle's own human boundary sets. No new task state is
+		// introduced.
+		parkRunAtHumanBoundary(rn, task.ID, stderr)
 		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}

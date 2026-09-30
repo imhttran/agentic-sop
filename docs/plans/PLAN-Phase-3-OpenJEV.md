@@ -2,7 +2,9 @@
 
 **Type:** Implementation plan (proposed, for review)
 
-**Status:** Proposed. No task is implemented. This plan describes the work needed
+**Status:** Implemented (P3-001–P3-015) and committed; P3-016 records the dogfood.
+The tasks whose implementation already exists are marked `verify-first` so SOP verifies
+the committed work rather than re-implementing it. This plan describes the work needed
 to satisfy [../requirements/PRD-Phase-3-OpenJEV.md](../requirements/PRD-Phase-3-OpenJEV.md).
 It MUST NOT override the specifications; where it and a specification disagree, the
 specification wins.
@@ -162,6 +164,8 @@ acceptance criteria, and validation.
 
 ### P3-006 --- Implement task-triage analysis seam
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Invoke JEV for task triage with bounded context.
 - **Scope:** Build the triage request (task, acceptance criteria, dependencies,
   plan context, bounded repository context) and call the `Analyzer` at the triage
@@ -175,6 +179,8 @@ acceptance criteria, and validation.
 
 ### P3-007 --- Define deterministic triage policy mapping
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Map triage evidence to a deterministic disposition.
 - **Scope:** Map typed triage findings into the existing `failure.Kind`
   vocabulary and let `autonomy.Decide` produce the disposition (PRD §10.2.2). No
@@ -187,6 +193,8 @@ acceptance criteria, and validation.
 - **Validation:** `go test ./internal/autonomy/...`.
 
 ### P3-008 --- Integrate task triage into lifecycle
+
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
 
 - **Objective:** Run the triage gate after task selection and before
   implementation, and act on its deterministic disposition.
@@ -203,6 +211,8 @@ acceptance criteria, and validation.
 
 ### P3-009 --- Implement pre-execution analysis seam
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Invoke JEV immediately before agent execution with bounded context.
 - **Scope:** Build the pre-execution request (selected task, proposed execution
   context, relevant repository area) and call the `Analyzer` at the pre-execution
@@ -215,6 +225,8 @@ acceptance criteria, and validation.
 - **Validation:** `go test ./internal/cli/... ./internal/run/...`.
 
 ### P3-010 --- Define deterministic pre-execution policy mapping
+
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
 
 - **Objective:** Map pre-execution evidence to a deterministic disposition.
 - **Scope:** Map typed pre-execution findings (scope expansion, unexpected area,
@@ -230,6 +242,8 @@ acceptance criteria, and validation.
 
 ### P3-011 --- Integrate pre-execution gate
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Run the pre-execution gate after precheck and before
   implementation, and act on its deterministic disposition.
 - **Scope:** Hook the pre-execution seam into `runStages`, after the verify-first
@@ -243,6 +257,8 @@ acceptance criteria, and validation.
 
 ### P3-012 --- Add activity/report observability
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Expose the checkpoints via existing reporting/activity mechanisms.
 - **Scope:** Add `activity.StageTriage`/`activity.StagePreExecution` constants
   (PRD §10.2.4) and emit triage/pre-execution lines (for example `[TRIAGE]`,
@@ -255,6 +271,8 @@ acceptance criteria, and validation.
 - **Validation:** `go test ./internal/activity/... ./internal/cli/...`.
 
 ### P3-013 --- Add provider failure/fallback behavior
+
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
 
 - **Objective:** Make the analysis-result vs provider-failure distinction explicit
   and policy-owned.
@@ -271,6 +289,8 @@ acceptance criteria, and validation.
 
 ### P3-014 --- Add security and ownership-boundary tests
 
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
+
 - **Objective:** Prove JEV cannot mutate state or bypass gates.
 - **Scope:** Tests that JEV cannot transition state, write files, commit, push,
   merge, approve, or modify persistence directly, and that the early gates cannot
@@ -283,6 +303,8 @@ acceptance criteria, and validation.
   `go test -race ./internal/jev/... ./internal/cli/...`.
 
 ### P3-015 --- Add end-to-end regression tests
+
+- **Execution:** verify-first — the implementation is already committed; SOP verifies the working tree rather than re-implementing it.
 
 - **Objective:** Prove the early-decision lifecycle end to end with the fake
   analyzer.
@@ -298,26 +320,33 @@ acceptance criteria, and validation.
   OpenJEV install, or LLM required; no manufactured success.
 - **Validation:** `go test ./...`; `go test -race ./...`.
 
-### P3-016 --- Dogfood Phase 3 with OpenJEV
+### P3-016 --- Record the Phase 3 dogfood
 
-- **Objective:** Exercise the real OpenJEV provider against the new checkpoints.
-- **Scope:** Dogfood with JEV enabled for triage/pre-execution on a bounded task;
-  record results. No automated test depends on the real provider.
+- **Objective:** Capture the observable behavior of the early checkpoints in a
+  reproducible record, without requiring the network, a live OpenJEV provider, or
+  an LLM.
+- **Scope:** Add `docs/history/PHASE-3-DOGFOOD.md` recording how to exercise the
+  task-triage and pre-execution gates (the `early_jev` configuration, the
+  `[TRIAGE]` / `[PRE_EXECUTION]` / `[AUTONOMY]` activity lines, and the persisted
+  `early-jev.json` artifact) using the deterministic fake analyzer, and describe
+  the separate real-provider dogfood procedure. Reference the existing tests that
+  demonstrate each flow; do not claim a real-provider run that was not performed.
 - **Depends on:** P3-015.
-- **Likely files/packages:** `docs/history/` (dogfood record), optional e2e fixture.
-- **Acceptance criteria:** Real-provider run demonstrates the checkpoints; results
-  are persisted and auditable; failure behavior observed and documented.
-- **Validation:** manual dogfood run; documented outcome.
+- **Likely files/packages:** `docs/history/PHASE-3-DOGFOOD.md`.
+- **Acceptance criteria:** The record is accurate, references only implemented
+  behavior, and distinguishes the deterministic fake-analyzer demonstration from
+  the separate real-provider procedure.
+- **Validation:** manual review; no network or provider required.
 
 ### P3-017 --- Phase 3 acceptance validation
 
 - **Objective:** Confirm every Phase 3 acceptance criterion is met.
-- **Scope:** Run the full validation suite, verify disabled behavior is
-  backward compatible, verify docs distinguish implemented vs proposed behavior,
-  and update the documentation index/status.
+- **Execution:** verify-first.
+- **Scope:** Run the full validation suite (`go build ./...`, `go test ./...`,
+  `go vet ./...`, and `go test -race` for the affected packages) and confirm the
+  documentation distinguishes implemented from proposed behavior.
 - **Depends on:** all.
-- **Likely files/packages:** `docs/README.md`, `docs/requirements/PRD-Phase-3-OpenJEV.md`,
-  `docs/specs/*`.
+- **Likely files/packages:** `docs/README.md`, `docs/specs/*`.
 - **Acceptance criteria:** All PRD §8 criteria pass; existing tests pass.
 - **Validation:** see Overall Validation.
 
