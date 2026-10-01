@@ -35,6 +35,7 @@ package model
 import (
 	"fmt"
 	"os"
+	"sort"
 	"strconv"
 	"strings"
 )
@@ -144,12 +145,30 @@ const (
 const RoutingReasonManual = "manual model-class override"
 
 // knownProviders is the provider allow-list a routed class may name. It mirrors
-// the providers the agent layer supports; an unknown name fails at resolution
-// rather than reaching the agent constructor.
+// the canonical provider identifiers (internal/provider.KnownIDs); an unknown name
+// fails at resolution rather than reaching the agent constructor.
+//
+// internal/model cannot import internal/provider (provider imports model, so the
+// reverse would be an import cycle), so the set is duplicated here and kept in
+// sync by a test (provider_identity_test.go) that compares it with
+// provider.KnownIDs(). That test, not this comment, is what prevents drift.
 var knownProviders = map[string]bool{
 	"ollama":   true,
 	"llamacpp": true,
 	"command":  true,
+	"mlx":      true,
+}
+
+// KnownProviders returns the provider names a routed class may name, in a stable
+// order. It mirrors provider.KnownIDs and exists so an external test can assert
+// the two lists agree without introducing an import cycle.
+func KnownProviders() []string {
+	names := make([]string, 0, len(knownProviders))
+	for name := range knownProviders {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
 }
 
 // ClassConfig is one class's routing in the config file (and, reused, the shape

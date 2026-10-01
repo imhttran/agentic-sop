@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"sort"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/provider"
@@ -23,6 +24,58 @@ func TestProviderInterfaceHasNoAuthority(t *testing.T) {
 	want := []string{"Capabilities", "Health", "ID", "Models"}
 	if !reflect.DeepEqual(names, want) {
 		t.Fatalf("Provider methods = %v, want %v", names, want)
+	}
+}
+
+// authorityVerbs are method-name fragments that would indicate the provider layer
+// had grown lifecycle, approval, routing, or repository authority. It is a
+// heuristic guardrail, not a proof: it catches an obvious boundary violation early.
+var authorityVerbs = []string{
+	"Approve", "Reject", "Transition", "Advance", "Execute", "Generate",
+	"Route", "SelectClass", "SelectModel", "Fallback", "Commit", "Push",
+	"Merge", "Write", "Mutate", "SetState", "SetStatus",
+}
+
+// assertNoAuthorityMethods fails if t exposes a method whose name suggests a
+// capability the provider layer must never have.
+func assertNoAuthorityMethods(t *testing.T, name string, typ reflect.Type) {
+	t.Helper()
+	for i := 0; i < typ.NumMethod(); i++ {
+		method := typ.Method(i).Name
+		for _, verb := range authorityVerbs {
+			if strings.Contains(method, verb) {
+				t.Errorf("%s.%s looks like lifecycle/authority: providers are read-only observers", name, method)
+			}
+		}
+	}
+}
+
+// TestProviderTypesCarryNoAuthorityMethods proves the exported provider types
+// expose no method that could approve, reject, transition state, route, or mutate
+// the repository: capability discovery and model listing are evidence only and
+// cannot bypass approval or drive the lifecycle.
+func TestProviderTypesCarryNoAuthorityMethods(t *testing.T) {
+	providerType := reflect.TypeOf((*provider.Provider)(nil)).Elem()
+	assertNoAuthorityMethods(t, "Provider", providerType)
+	assertNoAuthorityMethods(t, "Registry", reflect.TypeOf((*provider.Registry)(nil)))
+	assertNoAuthorityMethods(t, "Capabilities", reflect.TypeOf(provider.Capabilities{}))
+	assertNoAuthorityMethods(t, "ModelInfo", reflect.TypeOf(provider.ModelInfo{}))
+	assertNoAuthorityMethods(t, "HealthResult", reflect.TypeOf(provider.HealthResult{}))
+}
+
+// TestRegistryHasNoLifecycleAuthority freezes the Registry method set. A registry
+// is constructed and inspected, never driven: if a future change adds an
+// execute/transition/approve method, this test fails.
+func TestRegistryHasNoLifecycleAuthority(t *testing.T) {
+	typ := reflect.TypeOf((*provider.Registry)(nil))
+	var names []string
+	for i := 0; i < typ.NumMethod(); i++ {
+		names = append(names, typ.Method(i).Name)
+	}
+	sort.Strings(names)
+	want := []string{"Get", "IDs", "Len", "List", "Register"}
+	if !reflect.DeepEqual(names, want) {
+		t.Fatalf("Registry methods = %v, want %v", names, want)
 	}
 }
 

@@ -26,40 +26,65 @@ const (
 	defaultLlamaCppModel = "local"
 )
 
-// llamacppCapabilities is the set the text-only LlamaCpp provider can
-// actually serve. It generates text for planning, test design, diagnosis and
-// review, but cannot mutate the repository, so IMPLEMENT and FIX are excluded.
-var llamacppCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure, Review)
+// openAITextCapabilities is the set the text-only OpenAI-compatible providers
+// (llama.cpp, MLX/oMLX) can actually serve. They generate text for planning, test
+// design, diagnosis and review, but cannot mutate the repository, so IMPLEMENT and
+// FIX are excluded. Sharing one set keeps the two identities honest and identical:
+// the transport, not the identity, is what determines the capability ceiling.
+var openAITextCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure, Review)
 
-// LlamaCpp is an Agent backed by an OpenAI-compatible chat completions
-// endpoint, such as llama.cpp's llama-server.
-type LlamaCpp struct {
+// OpenAICompatible is an Agent backed by an OpenAI-compatible chat-completions
+// endpoint (POST /v1/chat/completions). It is the shared execution transport for
+// llama.cpp's llama-server and an MLX/oMLX runtime; the identity only changes the
+// error text, never the wire protocol. It performs model inference only — it
+// cannot mutate the repository or workflow state.
+type OpenAICompatible struct {
+	id      string
 	baseURL string
 	model   string
 	apiKey  string
 	client  *http.Client
 }
 
-// NewLlamaCpp returns an OpenAI-compatible provider for the given base URL,
-// model, and optional API key (empty for local servers without auth).
-func NewLlamaCpp(baseURL, model, apiKey string, timeout time.Duration) (*LlamaCpp, error) {
+// LlamaCpp and MLX are the two configured identities of the shared transport.
+type (
+	LlamaCpp = OpenAICompatible
+	MLX      = OpenAICompatible
+)
+
+// NewOpenAICompatible returns an OpenAI-compatible provider for the given provider
+// identity, base URL, model, and optional API key (empty for local servers without
+// auth). id is the canonical provider name (for example agent.ProviderLlamaCpp) and
+// is used only for diagnostics.
+func NewOpenAICompatible(id, baseURL, model, apiKey string, timeout time.Duration) (*OpenAICompatible, error) {
 	baseURL = normalizeBaseURL(baseURL)
 	model = strings.TrimSpace(model)
+	id = strings.TrimSpace(id)
+	if id == "" {
+		return nil, fmt.Errorf("openai-compatible provider: identity is required")
+	}
 	if baseURL == "" {
-		return nil, fmt.Errorf("llamacpp: %w", errBaseURLRequired)
+		return nil, fmt.Errorf("%s: %w", id, errBaseURLRequired)
 	}
 	if model == "" {
-		return nil, fmt.Errorf("llamacpp: model is required")
+		return nil, fmt.Errorf("%s: model is required", id)
 	}
 	if timeout <= 0 {
 		timeout = defaultProviderTimeout
 	}
-	return &LlamaCpp{
+	return &OpenAICompatible{
+		id:      id,
 		baseURL: baseURL,
 		model:   model,
 		apiKey:  strings.TrimSpace(apiKey),
 		client:  &http.Client{Timeout: timeout},
 	}, nil
+}
+
+// NewLlamaCpp returns an OpenAI-compatible provider for the given base URL,
+// model, and optional API key (empty for local servers without auth).
+func NewLlamaCpp(baseURL, model, apiKey string, timeout time.Duration) (*LlamaCpp, error) {
+	return NewOpenAICompatible(ProviderLlamaCpp, baseURL, model, apiKey, timeout)
 }
 
 // NewLlamaCppFromEnv builds an OpenAI-compatible provider from the environment,
@@ -86,7 +111,7 @@ func NewLlamaCppFromEnv(configuredModel string) (Agent, error) {
 
 // Generate validates the request and calls POST /v1/chat/completions with a
 // single user message rendered from the request.
-func (c *LlamaCpp) Generate(ctx context.Context, request Request) (Response, error) {
+func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Response, error) {
 	if err := request.Validate(); err != nil {
 		return Response{}, err
 	}
@@ -104,18 +129,18 @@ func (c *LlamaCpp) Generate(ctx context.Context, request Request) (Response, err
 		Error json.RawMessage `json:"error"`
 	}
 	if err := postJSON(ctx, c.client, c.baseURL+"/v1/chat/completions", c.apiKey, body, &out); err != nil {
-		return Response{}, fmt.Errorf("llamacpp %s: %w", request.Capability, err)
+		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, err)
 	}
 	if detail := rawError(out.Error); detail != "" {
-		return Response{}, fmt.Errorf("llamacpp %s: %s", request.Capability, detail)
+		return Response{}, fmt.Errorf("%s %s: %s", c.id, request.Capability, detail)
 	}
 	if len(out.Choices) == 0 {
-		return Response{}, fmt.Errorf("llamacpp %s returned no choices", request.Capability)
+		return Response{}, fmt.Errorf("%s %s returned no choices", c.id, request.Capability)
 	}
-	return requireNonEmpty("llamacpp", request.Capability, out.Choices[0].Message.Content)
+	return requireNonEmpty(c.id, request.Capability, out.Choices[0].Message.Content)
 }
 
-// Capabilities declares the text-generation capabilities the LlamaCpp provider
-// serves. It cannot mutate the repository, so IMPLEMENT and FIX are excluded;
-// such requests are rejected rather than silently forwarded.
-func (c *LlamaCpp) Capabilities() Capabilities { return llamacppCapabilities }
+// Capabilities declares the text-generation capabilities the OpenAI-compatible
+// providers serve. They cannot mutate the repository, so IMPLEMENT and FIX are
+// excluded; such requests are rejected rather than silently forwarded.
+func (c *OpenAICompatible) Capabilities() Capabilities { return openAITextCapabilities }

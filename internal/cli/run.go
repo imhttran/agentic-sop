@@ -154,9 +154,14 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	if err := validateSelectedModel(context.Background(), cfg, routing); err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
+	if !d.routingEnabled {
+		// The run-level/default selection is what executes only when the automatic
+		// per-task router is off. With the router on, each task's final selection is
+		// validated in applyTaskRouting instead.
+		if err := validateSelectedModel(context.Background(), cfg, routing); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
 	}
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
@@ -431,7 +436,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// model for the bounded implementation work: it never approves, blocks, or
 			// bypasses a gate. A manual --model-class override always wins. Routing is
 			// OFF by default, so this is a no-op unless enabled.
-			ra, tr, rerr := applyTaskRouting(cfg, d, spec, tri, pre, a, stdout)
+			ra, tr, rerr := applyTaskRouting(ctx, cfg, d, spec, tri, pre, a, stdout)
 			if rerr != nil {
 				return lifeResult{}, fmt.Errorf("model routing: %w", rerr)
 			}

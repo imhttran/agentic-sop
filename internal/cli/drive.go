@@ -135,9 +135,14 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	if err := validateSelectedModel(ctx, cfg, routing); err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
+	if !d.routingEnabled {
+		// The run-level/default selection is what executes only when the automatic
+		// per-task router is off. With the router on, each task's final selection is
+		// validated in applyTaskRouting instead.
+		if err := validateSelectedModel(ctx, cfg, routing); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
 	}
 
 	sess := newRunSession()

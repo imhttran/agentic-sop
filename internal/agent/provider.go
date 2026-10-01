@@ -11,6 +11,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/provider"
 )
 
 // EnvAgentHarness selects which harness the composition root builds. It is
@@ -32,12 +34,19 @@ const (
 	HarnessCommand = "command"
 )
 
-// Provider names accepted by EnvAgentProvider.
+// Provider names accepted by EnvAgentProvider. They are derived from the
+// canonical provider identifiers (internal/provider), so the agent, configuration,
+// and runtime layers cannot drift into separate vocabularies.
 const (
-	ProviderCommand  = "command"
-	ProviderOllama   = "ollama"
-	ProviderLlamaCpp = "llamacpp"
+	ProviderCommand  = string(provider.Command)
+	ProviderOllama   = string(provider.Ollama)
+	ProviderLlamaCpp = string(provider.LlamaCPP)
+	ProviderMLX      = string(provider.MLX)
 )
+
+// providerNames lists every execution provider in a deterministic order for error
+// messages, derived from the canonical identifiers.
+var providerNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOllama}
 
 const (
 	// defaultProviderTimeout bounds a single model call when none is configured.
@@ -61,8 +70,8 @@ func FromEnv() (Agent, error) {
 // A blank provider means "let the environment decide", which keeps the historical
 // command agent as the default. An unsupported name is an error rather than a
 // silent fallback.
-func FromConfig(provider, model string) (Agent, error) {
-	providerName, _ := EffectiveProvider(provider)
+func FromConfig(configuredProvider, model string) (Agent, error) {
+	providerName, _ := EffectiveProvider(configuredProvider)
 
 	// Resolve model with full precedence: unified env > provider-specific env > configured.
 	// First check the unified SOP_AGENT_MODEL override.
@@ -76,6 +85,8 @@ func FromConfig(provider, model string) (Agent, error) {
 			modelName = strings.TrimSpace(os.Getenv(EnvOllamaModel))
 		case ProviderLlamaCpp:
 			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+		case ProviderMLX:
+			modelName = strings.TrimSpace(os.Getenv(EnvMLXModel))
 		}
 		// If still empty, fall back to configured model
 		if modelName == "" {
@@ -112,9 +123,21 @@ func FromConfig(provider, model string) (Agent, error) {
 			modelName = defaultLlamaCppModel
 		}
 		return NewLlamaCpp(baseURL, modelName, os.Getenv(EnvLlamaCppAPIKey), timeout)
+	case ProviderMLX:
+		baseURL := strings.TrimSpace(os.Getenv(EnvMLXBaseURL))
+		if baseURL == "" {
+			baseURL = defaultMLXBaseURL
+		}
+		timeout, err := timeoutFromEnv(EnvMLXTimeout)
+		if err != nil {
+			return nil, err
+		}
+		if modelName == "" {
+			return nil, errNoModel("mlx", EnvAgentModel)
+		}
+		return NewMLX(baseURL, modelName, os.Getenv(EnvMLXAPIKey), timeout)
 	default:
-		return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
-			providerName, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
+		return nil, unknownProviderError(providerName)
 	}
 }
 
@@ -130,9 +153,9 @@ func HarnessFromEnv() (Harness, error) {
 // routes between tool (works with any provider) and command (command provider only)
 // harnesses. The provider and model parameters follow the same rules as FromConfig,
 // with SOP_AGENT_MODEL providing top-level precedence over configured model.
-func HarnessFromConfig(harness, provider, model string) (Harness, error) {
+func HarnessFromConfig(harness, configuredProvider, model string) (Harness, error) {
 	harnessName, _ := EffectiveHarness(harness)
-	providerName, _ := EffectiveProvider(provider)
+	providerName, _ := EffectiveProvider(configuredProvider)
 
 	// Resolve model with full precedence: unified env > provider-specific env > configured.
 	// First check the unified SOP_AGENT_MODEL override.
@@ -146,6 +169,8 @@ func HarnessFromConfig(harness, provider, model string) (Harness, error) {
 			modelName = strings.TrimSpace(os.Getenv(EnvOllamaModel))
 		case ProviderLlamaCpp:
 			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
+		case ProviderMLX:
+			modelName = strings.TrimSpace(os.Getenv(EnvMLXModel))
 		}
 		// If still empty, fall back to configured model
 		if modelName == "" {
@@ -208,9 +233,25 @@ func HarnessFromConfig(harness, provider, model string) (Harness, error) {
 				return nil, err
 			}
 			return HarnessFunc(agent.Generate), nil
+		case ProviderMLX:
+			baseURL := strings.TrimSpace(os.Getenv(EnvMLXBaseURL))
+			if baseURL == "" {
+				baseURL = defaultMLXBaseURL
+			}
+			timeout, err := timeoutFromEnv(EnvMLXTimeout)
+			if err != nil {
+				return nil, err
+			}
+			if modelName == "" {
+				return nil, errNoModel("mlx", EnvAgentModel)
+			}
+			agent, err := NewMLX(baseURL, modelName, os.Getenv(EnvMLXAPIKey), timeout)
+			if err != nil {
+				return nil, err
+			}
+			return HarnessFunc(agent.Generate), nil
 		default:
-			return nil, fmt.Errorf("unknown agent provider %q: want %s, %s or %s",
-				providerName, ProviderCommand, ProviderOllama, ProviderLlamaCpp)
+			return nil, unknownProviderError(providerName)
 		}
 	case HarnessCommand:
 		// Command harness only works with command provider.
@@ -406,6 +447,12 @@ func requireNonEmpty(provider string, cap Capability, content string) (Response,
 // normalizeBaseURL trims whitespace and any trailing slashes from a base URL.
 func normalizeBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
+}
+
+// unknownProviderError names every supported execution provider in a stable order,
+// derived from the canonical provider identifiers so the message cannot go stale.
+func unknownProviderError(name string) error {
+	return fmt.Errorf("unknown agent provider %q: want %s", name, strings.Join(providerNames, ", "))
 }
 
 // errNoModel reports a provider with no model, naming both ways to set one.

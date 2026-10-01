@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/imhttran/agentic-sop/internal/provider"
 )
 
 const validYAML = `version: 1
@@ -149,6 +151,25 @@ func TestParseErrors(t *testing.T) {
 				t.Errorf("error = %q, want it to contain %q", err, tc.wantMsg)
 			}
 		})
+	}
+}
+
+// TestSupportedProvidersMatchCanonicalIDs prevents provider identity drift: the
+// configuration allow-list must equal the canonical provider identifiers, and every
+// canonical id (including mlx) must be accepted as agent.provider.
+func TestSupportedProvidersMatchCanonicalIDs(t *testing.T) {
+	canonical := map[string]bool{}
+	for _, id := range provider.KnownIDs() {
+		canonical[id.String()] = true
+	}
+	if !reflect.DeepEqual(supportedProviders, canonical) {
+		t.Fatalf("supportedProviders = %v, want canonical %v", supportedProviders, canonical)
+	}
+	for _, id := range provider.KnownIDs() {
+		yaml := "project:\n  name: a\nagent:\n  provider: " + id.String() + "\n"
+		if _, err := Parse([]byte(yaml)); err != nil {
+			t.Errorf("provider %q must be accepted: %v", id, err)
+		}
 	}
 }
 

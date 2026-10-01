@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -116,13 +117,23 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 // agent work precedes the decision. Building the agent for the selected class can
 // fail (for example an unknown provider); that failure is surfaced rather than
 // silently falling back to a different model (Phase 3.5 §10).
-func applyTaskRouting(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult, a agent.Agent, stdout io.Writer) (agent.Agent, *taskRouting, error) {
+//
+// When providers.validate is opted in, the FINAL per-task selection — not the
+// run-level default — is validated here, before any agent work, so a routed model
+// the runtime cannot serve stops the task instead of failing mid-execution. The
+// validation is read-only and never substitutes a provider or model.
+func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult, a agent.Agent, stdout io.Writer) (agent.Agent, *taskRouting, error) {
 	tr, ok, err := routingForTask(cfg, d, spec, tri, pre)
 	if err != nil {
 		return a, nil, err
 	}
 	if !ok {
 		return a, nil, nil
+	}
+	// Validate the final routed selection before it runs. This is the selection that
+	// will execute the task, so it is the one provider validation must see.
+	if err := validateSelection(ctx, cfg, tr.Selection); err != nil {
+		return a, nil, fmt.Errorf("class %s selection: %w", tr.Class, err)
 	}
 	if d.newAgent == nil {
 		// Without an agent factory there is nothing to rebuild; leave the existing

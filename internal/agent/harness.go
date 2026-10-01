@@ -9,8 +9,8 @@ import "context"
 //	Harness  -> engineering execution + controlled tools
 //	SOP      -> workflow authority
 //
-// A Provider (an Agent implementation such as CommandAgent, Ollama, or
-// LlamaCpp) performs model inference only: it turns a Request into a Response
+// A Provider (an Agent implementation such as CommandAgent, Ollama, LlamaCpp, or
+// MLX) performs model inference only: it turns a Request into a Response
 // and must never mutate the filesystem or workflow state. A Harness owns
 // engineering execution itself, driving controlled tools (for example the
 // read_file/write_file/create_file/list_files/search_files/run_command/
@@ -38,7 +38,9 @@ type Harness interface {
 var (
 	_ Agent = (*CommandAgent)(nil)
 	_ Agent = (*Ollama)(nil)
+	_ Agent = (*OpenAICompatible)(nil)
 	_ Agent = (*LlamaCpp)(nil)
+	_ Agent = (*MLX)(nil)
 
 	_ Harness = (*CommandHarness)(nil)
 )

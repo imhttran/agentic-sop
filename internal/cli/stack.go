@@ -66,8 +66,9 @@ func resolveExecutionStack(cfg config.Config) executionStack {
 
 // effectiveModel resolves the model the provider will serve and where it came
 // from, with precedence: SOP_AGENT_MODEL (unified override) > provider-specific
-// environment variable (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) > configured value.
-// The command provider has no model, so it reports none and has no source.
+// environment variable (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL / SOP_MLX_MODEL) >
+// configured value. The command provider has no model, so it reports none and has
+// no source.
 func effectiveModel(provider, configured string) (string, StackSource) {
 	// Unified model environment variable has highest precedence for any provider.
 	if unifiedModel := strings.TrimSpace(os.Getenv(agent.EnvAgentModel)); unifiedModel != "" {
@@ -85,6 +86,14 @@ func effectiveModel(provider, configured string) (string, StackSource) {
 		return "", ""
 	case agent.ProviderLlamaCpp:
 		if env := strings.TrimSpace(os.Getenv(agent.EnvLlamaCppModel)); env != "" {
+			return env, agent.SourceEnvironment
+		}
+		if model := strings.TrimSpace(configured); model != "" {
+			return model, agent.SourceConfiguration
+		}
+		return "", ""
+	case agent.ProviderMLX:
+		if env := strings.TrimSpace(os.Getenv(agent.EnvMLXModel)); env != "" {
 			return env, agent.SourceEnvironment
 		}
 		if model := strings.TrimSpace(configured); model != "" {

@@ -148,13 +148,32 @@ func runProviders(args []string, stdout, stderr io.Writer, d deps) int {
 // when the layer is off — which is the default — so an existing installation's
 // behavior is unchanged.
 //
+// It validates the run-level/default selection. When the automatic per-task router
+// is enabled, the run-level default is not what executes: each task's final
+// selection is validated by validateSelection inside applyTaskRouting instead, and
+// the caller skips this call (see the `!d.routingEnabled` guard at the call sites)
+// so a default class that the router never selects cannot fail the run.
+//
 // It never substitutes a provider or model: on failure it returns the error and
 // the caller stops. The command provider has no model to validate and is skipped.
 func validateSelectedModel(ctx context.Context, cfg config.Config, routing model.Result) error {
 	if !cfg.Providers.ValidateSelections() {
 		return nil
 	}
-	sel := selectionForValidation(cfg, routing)
+	return validateSelection(ctx, cfg, selectionForValidation(cfg, routing))
+}
+
+// validateSelection checks one resolved model selection against the configured
+// provider runtimes, when validation is opted in. It is the single validation
+// seam: both the run-level check and the final per-task check go through it.
+//
+// It is a strict no-op when providers.validate is off. It never substitutes a
+// provider or model, and the command provider (which has no model to inspect) is
+// skipped.
+func validateSelection(ctx context.Context, cfg config.Config, sel model.Selection) error {
+	if !cfg.Providers.ValidateSelections() {
+		return nil
+	}
 	if sel.Provider == string(provider.Command) {
 		return nil
 	}

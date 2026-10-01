@@ -22,6 +22,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/decision"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/provider"
 )
 
 // Layout: the configuration lives alongside the SQLite state in one directory.
@@ -71,12 +72,26 @@ const (
 // value fails at load time with a clear message instead of at first use.
 var (
 	supportedHarnesses = map[string]bool{"tool": true, "command": true}
-	supportedProviders = map[string]bool{"command": true, "ollama": true, "llamacpp": true}
+	// supportedProviders is derived from the canonical provider identifiers
+	// (internal/provider), so the configuration, agent, and runtime layers cannot
+	// drift into separate vocabularies. Adding a provider id there (mlx) makes it a
+	// valid agent.provider here automatically.
+	supportedProviders = providerNameSet()
 	supportedEngines   = map[string]bool{"self": true, "open-code-review": true}
 	supportedSeverity  = map[string]bool{
 		"critical": true, "high": true, "medium": true, "low": true, "info": true,
 	}
 )
+
+// providerNameSet builds the accepted-provider set from provider.KnownIDs.
+func providerNameSet() map[string]bool {
+	ids := provider.KnownIDs()
+	set := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		set[id.String()] = true
+	}
+	return set
+}
 
 // JEV modes: the only execution forms the initial JEV capability runs in. JEV is
 // read-only analysis (docs/specs/OPENJEV.md), so "review" is the sole mode today.
