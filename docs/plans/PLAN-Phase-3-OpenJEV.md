@@ -86,7 +86,7 @@ acceptance criteria, and validation.
   provider-failure distinction. Reconcile [../specs/QUALITY.md](../specs/QUALITY.md)
   with the autonomy architecture. Update [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)
   for the new keys. Cross-reference rather than duplicate.
-- **Depends on:** P3-002 (the evidence model must be settled first).
+- **Depends on:** P3-002.
 - **Likely files:** `docs/specs/OPENJEV.md`, `docs/specs/QUALITY.md`,
   `docs/specs/WORKFLOW.md`, `docs/specs/EXECUTION.md`,
   `docs/reference/CONFIGURATION.md`.
@@ -279,7 +279,7 @@ acceptance criteria, and validation.
 - **Scope:** Ensure a provider failure is recorded as a failure (never a finding)
   and that the configured policy fallback is deterministic: advisory fallback
   continues normal work; high-risk policy may fail closed or require authorization.
-- **Depends on:** P3-006, P3-009 (with P3-007, P3-010).
+- **Depends on:** P3-006, P3-007, P3-009, P3-010.
 - **Likely files/packages:** `internal/run/jev.go`, early-policy file,
   `internal/cli/run.go`.
 - **Acceptance criteria:** Timeout/unavailable/malformed/invalid-schema/transport
@@ -295,7 +295,7 @@ acceptance criteria, and validation.
 - **Scope:** Tests that JEV cannot transition state, write files, commit, push,
   merge, approve, or modify persistence directly, and that the early gates cannot
   bypass validation/review/human approval.
-- **Depends on:** P3-002 through P3-011.
+- **Depends on:** P3-002, P3-003, P3-004, P3-005, P3-006, P3-007, P3-008, P3-009, P3-010, P3-011.
 - **Likely files/packages:** `internal/jev/boundary_test.go`,
   `internal/cli/jev_lifecycle_test.go`, plus new early-gate tests.
 - **Acceptance criteria:** Ownership/boundary tests are deterministic and pass.
@@ -345,7 +345,7 @@ acceptance criteria, and validation.
 - **Scope:** Run the full validation suite (`go build ./...`, `go test ./...`,
   `go vet ./...`, and `go test -race` for the affected packages) and confirm the
   documentation distinguishes implemented from proposed behavior.
-- **Depends on:** all.
+- **Depends on:** P3-001, P3-002, P3-003, P3-004, P3-005, P3-006, P3-007, P3-008, P3-009, P3-010, P3-011, P3-012, P3-013, P3-014, P3-015, P3-016.
 - **Likely files/packages:** `docs/README.md`, `docs/specs/*`.
 - **Acceptance criteria:** All PRD §8 criteria pass; existing tests pass.
 - **Validation:** see Overall Validation.

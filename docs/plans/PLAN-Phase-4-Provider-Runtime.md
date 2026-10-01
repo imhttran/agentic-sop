@@ -79,7 +79,7 @@ Each step is additive and independently reversible; the new surface defaults OFF
 - **Scope:** `internal/provider/mlx`, an OpenAI-compatible boundary so SOP is not
   coupled to a specific MLX server.
 - **Files:** `internal/provider/mlx/provider.go`, `mlx/provider_test.go`.
-- **Depends on:** P4-004 (shared adapter).
+- **Depends on:** P4-004.
 - **Acceptance:** `mlx` provider id, `/v1/models` discovery, honest capabilities.
 
 ### P4-006 — Selection availability validation

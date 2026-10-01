@@ -57,6 +57,26 @@ deterministically, without an agent; a compiled stage MUST carry its optional
 `.agent-sdlc/` (self-ignoring for Git), and a PRD-generated plan MUST be written to
 `docs/reports/<plan-id>.md` (`sop init`/`sop plan`/`sop tasks` stay lower-level).
 
+**Implemented.** A human PLAN document is compiled deterministically in either of two
+recognized shapes, so an agent is consulted only for a document that is not
+recognizable as a plan:
+
+- the **rendered shape**: one `## <id> — <title>` section per stage, with optional
+  `### Dependencies` / `### Deliverables` / `### Acceptance Criteria` / `### Execution`
+  sub-sections;
+- the **task-list shape**: a `## Tasks` section whose stages are level-3 headings
+  (`### P5-001 — <title>`) described by inline `- **Field:** value` lines
+  (`Objective`, `Scope`, `Files`, `Depends on`, `Acceptance`, `Execution`).
+
+**Required.** In the task-list shape a stage's dependencies MUST be an explicit list of
+stage ids (`P5-002, P5-003`), or a marker for none (`—`, `none`). A range
+(`P35-001..P35-005`), `all`, or a parenthetical is an error rather than a guess: a
+dropped edge would silently reorder the graph. Only recognized fields become plan
+fields — a stage's `Status:` and `Validation:` lines stay documentation, and the stage's
+execution mode MUST NOT be inferred from them. When the document names no `## Project`
+or `## Summary`, the project defaults to the document title and the summary to the
+`## Objective` section.
+
 ## 4. Change Detection
 
 Git MUST be the authority on what changed. Change detection MUST include untracked

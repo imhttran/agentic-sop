@@ -80,7 +80,7 @@ acceptance criteria, and validation.
 - **Depends on:** none.
 - **Likely files/packages:** `internal/router/router.go`.
 - **Acceptance criteria:** Deterministic; consumes typed evidence only (`(category,
-  severity)`, scope/level values, counts); never string-matches; a bare confidence
+severity)`, scope/level values, counts); never string-matches; a bare confidence
   threshold is never a rule; `medium` is the safe default; security-family evidence
   never routes below `large`.
 - **Validation:** `go test ./internal/router/...`; `go vet ./internal/router/...`.
@@ -91,7 +91,7 @@ acceptance criteria, and validation.
 - **Scope:** Add `models.routing_enabled` and `SOP_MODEL_ROUTING_ENABLED` (default
   false) to the model-routing layer, and a `RoutedClass`/`RoutedReason` input to
   `model.Resolve` with precedence `CLI > router > env default > config default >
-  built-in`. Add `model.SourceRouter`.
+built-in`. Add `model.SourceRouter`.
 - **Depends on:** P35-001.
 - **Likely files/packages:** `internal/model/model.go`, `internal/config/config.go`.
 - **Acceptance criteria:** Routing is inactive by default; a routed class activates
@@ -146,7 +146,7 @@ acceptance criteria, and validation.
   unavailable/malformed evidence, reason phrases, confidence-is-not-a-rule), and
   CLI integration tests (disabled = unchanged; clear -> small; cross-cutting ->
   large; no evidence -> medium; manual override; no credential in the artifact).
-- **Depends on:** P35-001..P35-005.
+- **Depends on:** P35-001, P35-002, P35-003, P35-004, P35-005.
 - **Likely files/packages:** `internal/router/router_test.go`,
   `internal/cli/routing_test.go`, `internal/model/model_test.go`.
 - **Acceptance criteria:** Deterministic, fast, offline tests cover the compatibility,
@@ -159,7 +159,7 @@ acceptance criteria, and validation.
 - **Scope:** New `../specs/MODEL-ROUTING.md` (normative); update
   `../reference/CONFIGURATION.md`, `../README.md`, and `.env.example`. Separate
   implemented behavior from proposed/future behavior.
-- **Depends on:** P35-001..P35-006.
+- **Depends on:** P35-001, P35-002, P35-003, P35-004, P35-005, P35-006.
 - **Likely files/packages:** `docs/specs/MODEL-ROUTING.md`,
   `docs/reference/CONFIGURATION.md`, `docs/README.md`, `.env.example`.
 - **Acceptance criteria:** Links resolve; precedence, classes, and the boundary are
@@ -172,11 +172,11 @@ acceptance criteria, and validation.
   consistent.
 - **Scope:** Run the repository's canonical checks and confirm no behavior changed
   for a disabled router.
-- **Depends on:** P35-001..P35-007.
+- **Depends on:** P35-001, P35-002, P35-003, P35-004, P35-005, P35-006, P35-007.
 - **Acceptance criteria:** `make check` (fmt, vet, test, build) passes; race tests
   pass for the affected packages; no live provider is required.
 - **Validation:** `make check`; `go test -race ./internal/cli/ ./internal/router/
-  ./internal/model/ ./internal/config/ ./internal/run/`.
+./internal/model/ ./internal/config/ ./internal/run/`.
 
 ## Dependency Graph
 

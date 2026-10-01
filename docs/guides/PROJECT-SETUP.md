@@ -70,6 +70,14 @@ Planning produces two representations of the same plan — `PLAN.md` for people
 `.agent-sdlc/plan.json` for the orchestrator. SOP does not parse `PLAN.md` to
 determine executable workflow state; structured data is used instead.
 
+SOP compiles a plan document deterministically in two shapes: one `## <id> — <title>`
+section per stage, or a `## Tasks` section whose stages are level-3 headings
+(`### P5-001 — <title>`) described by inline fields (`- **Objective:**`, `- **Scope:**`,
+`- **Files:**`, `- **Depends on:**`, `- **Acceptance:**`, `- **Execution:**`). In that
+shape list dependencies explicitly (`P5-002, P5-003`, or `—` for none): a range or a
+parenthetical is refused rather than guessed. A `- **Status:**` line is documentation;
+declare the execution mode with `- **Execution:**`.
+
 A stage can declare how it executes: `### Execution / - verify-first` in
 Markdown, or `"execution_mode": "verify-first"` in JSON. A verification-first
 stage runs the configured validation before any agent; omitting it keeps the
