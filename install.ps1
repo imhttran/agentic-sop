@@ -158,13 +158,27 @@ function Resolve-BinDir {
     return [System.IO.Path]::GetFullPath($dir)
 }
 
+# Get-CanonicalPath normalizes a path for comparison: separators, a trailing separator,
+# surrounding quotes, and Windows short (8.3) names, which GetFullPath expands. It
+# returns the input unchanged when it cannot be canonicalized.
+function Get-CanonicalPath([string]$Path) {
+    $trimmed = $Path.Trim().Trim('"').Replace('/', '\').TrimEnd('\')
+    if (-not $trimmed) { return '' }
+    try { return ([System.IO.Path]::GetFullPath($trimmed)).TrimEnd('\') } catch { return $trimmed }
+}
+
 # Test-OnPath reports whether dir is one of PATH's entries.
+#
+# Both sides go through Get-CanonicalPath, because a PATH entry can be spelled
+# differently from the directory the installer resolved. Windows shortens long
+# components to 8.3 form in some environments (TEMP is C:\Users\RUNNER~1\... on CI),
+# and comparing the strings directly reported a directory as missing from PATH while it
+# was on PATH.
 function Test-OnPath([string]$Dir) {
-    $want = $Dir.Replace('/', '\').TrimEnd('\')
+    $want = Get-CanonicalPath $Dir
     foreach ($entry in ($env:Path -split ';')) {
         if (-not $entry) { continue }
-        $e = $entry.Replace('/', '\').TrimEnd('\')
-        if ([string]::Equals($e, $want, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
+        if ([string]::Equals((Get-CanonicalPath $entry), $want, [System.StringComparison]::OrdinalIgnoreCase)) { return $true }
     }
     return $false
 }

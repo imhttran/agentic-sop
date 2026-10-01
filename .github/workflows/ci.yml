@@ -115,12 +115,17 @@ jobs:
           $code = $LASTEXITCODE
           $lines | Write-Host
           if ($code -ne 0) {
-            # Go prints a test's diagnostics before its "--- FAIL" summary line, so collect
-            # that block for each failing test.
+            # Go prints a failing test's diagnostics before its "--- FAIL" summary line,
+            # followed by whatever the test printed. Collect from the nearest preceding
+            # diagnostic, so the reason leads the message and survives any truncation.
             $failed = @()
             for ($i = 0; $i -lt $lines.Count; $i++) {
               if ($lines[$i] -like '*--- FAIL: *') {
-                $failed += ($lines[([Math]::Max(0, $i - 25))..$i] | ForEach-Object { $_.Trim() })
+                $start = $i
+                for ($j = $i - 1; $j -ge [Math]::Max(0, $i - 200); $j--) {
+                  if ($lines[$j] -match '_test\.go:\d+:') { $start = $j; break }
+                }
+                $failed += ($lines[$start..$i] | ForEach-Object { $_.Trim() })
                 $failed += ''
               }
             }
