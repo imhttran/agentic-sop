@@ -277,6 +277,27 @@ function Get-SkillNames {
     return $names
 }
 
+# Get-FileSha256 returns a file's SHA-256 as lowercase hex. It uses the .NET hash API
+# rather than the Get-FileHash cmdlet, which is not resolvable in every Windows
+# PowerShell environment (CI reported CommandNotFoundException for it while the
+# surrounding cmdlets worked), so this has no module-autoloading dependency.
+function Get-FileSha256([string]$Path) {
+    $sha = [System.Security.Cryptography.SHA256]::Create()
+    try {
+        $stream = [System.IO.File]::OpenRead($Path)
+        try {
+            $digest = $sha.ComputeHash($stream)
+        }
+        finally {
+            $stream.Dispose()
+        }
+    }
+    finally {
+        $sha.Dispose()
+    }
+    return ([System.BitConverter]::ToString($digest) -replace '-', '').ToLowerInvariant()
+}
+
 # Read-Marker returns the marker's fields for a SOP-managed skill directory, or $null
 # when the directory is not SOP's.
 function Read-Marker([string]$SkillDir) {
@@ -310,8 +331,8 @@ function Test-SkillCurrent([string]$Source, [string]$Target) {
         $relative = $file.FullName.Substring($Source.Length).TrimStart('\', '/')
         $installed = Join-Path $Target $relative
         if (-not (Test-Path -LiteralPath $installed -PathType Leaf)) { return $false }
-        $a = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
-        $b = (Get-FileHash -LiteralPath $installed -Algorithm SHA256).Hash
+        $a = Get-FileSha256 $file.FullName
+        $b = Get-FileSha256 $installed
         if ($a -ne $b) { return $false }
     }
     return $true
