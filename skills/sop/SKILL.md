@@ -33,10 +33,10 @@ Agent / Assistant
 The skill **calls SOP**. It does not reimplement routing, approval, provider
 selection, or the lifecycle. SOP remains the sole authority.
 
-## Zed slash commands
+## Slash commands
 
-Installed as a Zed skill, this file is the `/sop` entry point. Thin aliases in the
-same install expose one capability each:
+Installed as an agent skill (Zed or Claude Code), this file is the `/sop` entry point.
+Thin aliases in the same install expose one capability each:
 
 ```text
 /sop <request>            general entry point (this skill)
@@ -50,8 +50,10 @@ same install expose one capability each:
 
 Each alias is a few lines that call the one command below with its capability fixed;
 none of them carries routing, provider, or lifecycle policy. Install them with
-`make install-skills` (see the project README); `/sop-implement` is hidden from the
-agent's autonomous catalog because repository mutation is an explicit operator choice.
+`make install-skills-zed` (Zed) or `make install-skills-claude` (Claude Code), or
+`make install-skills` for every supported agent that is present (see the project
+README); `/sop-implement` is hidden from the agent's autonomous catalog because
+repository mutation is an explicit operator choice.
 
 ## The one command
 
@@ -100,7 +102,8 @@ reinterpreting the request.
 ## Output
 
 - Human output goes to stdout (the model's result for a read-only prompt).
-- `--json` prints a result document with no secrets and no hidden reasoning:
+- `--json` prints a result document with no secrets and no hidden reasoning. When your
+  environment can parse JSON, prefer `--json` and relay the fields to the operator:
 
 ```json
 {

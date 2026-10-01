@@ -27,6 +27,7 @@ for the same machinery a task uses. Model-class selection remains
 - [`../reference/CLI.md`](../reference/CLI.md) — the command surface.
 - [`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md) — the thin skill that calls `sop prompt`.
 - [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md) — installing the Zed command aliases (`/sop-plan`, `/sop-review`, …).
+- [`../guides/CLAUDE-SKILLS.md`](../guides/CLAUDE-SKILLS.md) — installing the same command aliases for Claude Code.
 
 ## Normative Language
 
@@ -210,8 +211,10 @@ pointing outside the project is rejected rather than read.
 choose a model class or provider, and MUST NOT reimplement routing, approval, or the
 lifecycle. It is a client of SOP.
 
-**Implemented.** One Zed command alias per capability ships beside the canonical
-skill, each a thin adapter that calls `sop prompt` with its capability fixed:
+**Implemented.** One command alias per capability ships beside the canonical skill,
+each a thin adapter that calls `sop prompt` with its capability fixed. Zed and Claude
+Code both discover skills as flat folders of `SKILL.md` files, so the same seven
+folders serve both platforms and the command set is identical:
 
 ```text
 /sop          general entry point (the canonical skill)
@@ -228,7 +231,10 @@ lifecycle policy, and MUST NOT mutate the repository itself: it selects a capabi
 and delegates. It MUST NOT upgrade a read-only request into `implement`, and an
 `implement` request MUST enter the governed lifecycle (§6). When the `sop` CLI is
 unavailable the alias MUST fail closed rather than let the calling agent do the work.
-Installation is described in [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md).
+Installation is described in [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md)
+(Zed) and [`../guides/CLAUDE-SKILLS.md`](../guides/CLAUDE-SKILLS.md) (Claude Code); one
+installer (`scripts/install-skills.sh`) links the same canonical tree into whichever
+agent skill root is present, and no adapter is a second source of SOP policy.
 
 ## 14. Failure Behavior
 

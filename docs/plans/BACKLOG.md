@@ -154,8 +154,8 @@ Run report command (sop report) · Evaluation harness (sop eval)
 Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
 Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
 Unified work items + governed `sop prompt` (Phase 5.4)
-SOP Zed skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
-`/sop-implement`) + `make install-skills` (Phase 5.4 hardening)
+SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
+`/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
 ```
 
 Next candidates, in the plan's build order:

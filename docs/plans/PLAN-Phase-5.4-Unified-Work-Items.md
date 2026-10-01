@@ -122,6 +122,23 @@ Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
   points outside the project is rejected, not read. See
   [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §12.
 
+## Follow-up (multi-agent skill installation)
+
+- **The SOP skill installs for Claude Code as well as Zed.** Both agents discover a
+  skill the same way — a flat folder containing a `SKILL.md`, exposed as a `/` command
+  named after the folder — so the **same** canonical tree under [`skills/`](../../skills)
+  serves both and the capability mapping is shared. A single installer
+  (`scripts/install-skills.sh`, with thin `install-zed-skills.sh` /
+  `install-claude-skills.sh` wrappers) links the tree into `~/.agents/skills` or
+  `~/.claude/skills` (or the project-local equivalents). It is idempotent, touches
+  only SOP-owned entries, refuses to clobber a foreign entry at a SOP name, and needs
+  no root; `make install-skills` installs every supported agent that is present, and
+  `make install-skills-zed` / `make install-skills-claude` install one. Neither
+  adapter carries routing, provider, model-class, approval, or lifecycle policy: both
+  call `sop prompt`, and `/sop-implement` enters the same governed lifecycle on each.
+  See [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md) and
+  [`../guides/CLAUDE-SKILLS.md`](../guides/CLAUDE-SKILLS.md).
+
 ## Out of scope
 
 Automatic escalation for **read-only** prompts, provider fallback, provider scoring,

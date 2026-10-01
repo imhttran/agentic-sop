@@ -20,8 +20,10 @@ import (
 const skillDir = "../../skills/sop"
 const skillsRoot = "../../skills"
 
-// zedSkills is the canonical Zed command surface. Each entry names a folder under
-// skills/ (a Zed slash command) and the delegation its body MUST contain.
+// zedSkills is the canonical SOP command surface: the same seven skill folders are
+// installed for every supported agent (Zed and Claude Code share this layout), and
+// each folder is exposed as a slash command named after it. Each entry names a folder
+// under skills/ and the delegation its body MUST contain.
 //
 //	capability == ""  -> the command fixes no capability; the CLI's read-only default
 //	                     applies (the default lives in the CLI, not in the skill).
@@ -249,11 +251,12 @@ func TestImplementCommandDelegatesToGovernedPrompt(t *testing.T) {
 
 // TestInstallerKnowsEverySkill proves the installer's skill list matches the shipped
 // surface: a shell list and the Go catalog drifting apart would install a partial UI.
+// The shared installer owns the list; the per-agent wrappers forward to it.
 func TestInstallerKnowsEverySkill(t *testing.T) {
-	body := read(t, "../../scripts/install-zed-skills.sh")
+	body := read(t, "../../scripts/install-skills.sh")
 	for _, s := range zedSkills {
 		if !strings.Contains(body, s.name) {
-			t.Errorf("scripts/install-zed-skills.sh does not know the %q skill", s.name)
+			t.Errorf("scripts/install-skills.sh does not know the %q skill", s.name)
 		}
 	}
 }

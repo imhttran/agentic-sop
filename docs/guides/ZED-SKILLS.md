@@ -8,7 +8,8 @@ The commands are **thin aliases**. They pick a capability and call `sop prompt`;
 still owns routing, provider selection, validation, the lifecycle, and approval. The
 normative behavior is in
 [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); the skill contract is in
-[`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md).
+[`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md). Claude Code exposes the same
+commands from the same skill tree — see [`CLAUDE-SKILLS.md`](CLAUDE-SKILLS.md).
 
 ## How Zed discovers skills
 
@@ -38,29 +39,32 @@ single source of truth. Install links them into a Zed skills root:
 ```bash
 git clone https://github.com/imhttran/agentic-sop.git
 cd agentic-sop
-make install          # install the sop CLI (the skills call it)
-make install-skills   # link the SOP skills into ~/.agents/skills
+make install              # install the sop CLI (the skills call it)
+make install-skills-zed   # link the SOP skills into ~/.agents/skills
 ```
 
-`make install-skills` links each skill folder into `~/.agents/skills/`, so the
+`make install-skills-zed` links each skill folder into `~/.agents/skills/`, so the
 commands are available in **every** project you open in Zed. The skills stay live
 against your checkout: editing a `SKILL.md` takes effect without reinstalling.
+
+`make install-skills` (no suffix) installs every supported agent whose directory is
+present (Zed and Claude Code); `make install-skills-zed` installs Zed specifically.
 
 Use the script directly for more control:
 
 ```bash
-scripts/install-zed-skills.sh                    # global (same as make install-skills)
-scripts/install-zed-skills.sh --project          # project-local: ./.agents/skills
-scripts/install-zed-skills.sh --project ~/work/api
-scripts/install-zed-skills.sh --dry-run          # print what would change
-scripts/install-zed-skills.sh --force            # replace a SOP-named symlink that points elsewhere
+scripts/install-zed-skills.sh             # global (same as make install-skills-zed)
+scripts/install-skills.sh zed --project   # project-local: ./.agents/skills
+scripts/install-skills.sh zed --project ~/work/api
+scripts/install-skills.sh zed --dry-run   # print what would change
+scripts/install-skills.sh zed --force     # replace a SOP-named symlink that points elsewhere
 ```
 
 Uninstall (also safe and idempotent):
 
 ```bash
-make uninstall-skills
-# or: scripts/install-zed-skills.sh --uninstall [--project ...]
+make uninstall-skills-zed
+# or: scripts/install-skills.sh zed --uninstall [--project ...]
 ```
 
 ## The commands
@@ -157,5 +161,6 @@ for example), move it aside before installing so the `/sop` command can be linke
 
 - [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) — the normative behavior of `sop prompt`.
 - [`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md) — the canonical skill contract and capability map.
+- [`CLAUDE-SKILLS.md`](CLAUDE-SKILLS.md) — the same commands for Claude Code.
 - [`../reference/CLI.md`](../reference/CLI.md) — the CLI surface, including `sop prompt`.
 - [`PLAN-Phase-5.4-Unified-Work-Items.md`](../plans/PLAN-Phase-5.4-Unified-Work-Items.md) — where the skills came from.

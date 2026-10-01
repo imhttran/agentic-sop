@@ -101,14 +101,17 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
-## Zed
+## Agent Skills
 
-SOP ships Zed skills that expose the same governed path as `/sop` commands. Install
-the CLI and link the skills, then use them from Zed's agent editor in any project:
+SOP ships agent skills that expose the same governed path as `/sop` commands in the
+coding agents that support them. Install the CLI, then link the skills into the
+agent(s) you use:
 
 ```bash
-make install          # install the sop CLI
-make install-skills   # link the SOP skills into ~/.agents/skills
+make install                 # install the sop CLI
+make install-skills-zed      # Zed:    link into ~/.agents/skills
+make install-skills-claude   # Claude: link into ~/.claude/skills
+make install-skills          # all supported agents that are present
 ```
 
 ```text
@@ -122,7 +125,8 @@ make install-skills   # link the SOP skills into ~/.agents/skills
 Each command is a thin alias over `sop prompt --capability ...`: it picks a capability
 and calls SOP, which still owns routing, provider selection, validation, and approval.
 `/sop-implement` is the only mutating command and runs the governed implementation
-lifecycle. Guide: [docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md).
+lifecycle. Guides: [docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md) and
+[docs/guides/CLAUDE-SKILLS.md](docs/guides/CLAUDE-SKILLS.md).
 
 ## Basic Workflow
 
@@ -175,6 +179,7 @@ Execution         docs/specs/EXECUTION.md
 Work Items        docs/specs/WORK-ITEMS.md
 Prompt Execution  docs/specs/PROMPT-EXECUTION.md
 Zed Skills        docs/guides/ZED-SKILLS.md
+Claude Skills     docs/guides/CLAUDE-SKILLS.md
 Agent Providers   docs/specs/AGENT-PROVIDER.md
 Provider Runtime  docs/specs/PROVIDERS.md
 Model Routing     docs/specs/MODEL-ROUTING.md

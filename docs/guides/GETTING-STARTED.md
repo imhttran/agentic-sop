@@ -53,15 +53,19 @@ agent skill is provided as a global Zed skill at `~/.agents/skills/sop-end-to-en
 so an agent can drive the workflow end to end in any project. `make install` runs
 the same script.
 
-To also get the governed SOP commands in Zed's agent (`/sop`, `/sop-prompt`,
-`/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, `/sop-implement`), run:
+To also get the governed SOP commands in an agent (Zed: `/sop`, `/sop-prompt`,
+`/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, `/sop-implement`; Claude Code
+exposes the same commands), run the installer for the agent(s) you use:
 
 ```bash
-make install-skills
+make install-skills           # every supported agent that is present
+# or just one:
+make install-skills-zed
+make install-skills-claude
 ```
 
 Each command is a thin alias over `sop prompt`; see
-[ZED-SKILLS.md](ZED-SKILLS.md).
+[ZED-SKILLS.md](ZED-SKILLS.md) and [CLAUDE-SKILLS.md](CLAUDE-SKILLS.md).
 
 ## One-command run
 

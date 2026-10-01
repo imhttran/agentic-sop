@@ -7,6 +7,7 @@
 # Local configuration and credentials (commit .env.example instead).
 .env
 
-# Project-local Zed skills, created by `scripts/install-zed-skills.sh --project`.
+# Project-local agent skills, created by `scripts/install-skills.sh <agent> --project`.
 # They are symlinks into ./skills/ and are never committed.
 .agents/
+.claude/
