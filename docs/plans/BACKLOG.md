@@ -165,6 +165,33 @@ prompt is a single bounded call with no quality gate, so escalation never applie
 it. Recorded here for traceability; see
 [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8._
 
+## OpenAI-style tool calling for `openai_compatible` (Phase 3)
+
+`openai_compatible` (Phase 1 identity/configuration, Phase 2 execution) currently
+runs against the shared `internal/agent` `OpenAICompatible` transport, which is
+text-only: its `chatRequest` has no `tools` field and it parses no tool calls, so
+the checked wrapper honestly declares the text capabilities and rejects
+`IMPLEMENT`/`FIX`. The only tool-calling loop in the tree is Ollama-native
+(`internal/ollamaagent`, `POST /api/chat`).
+
+Make the generic provider a coding agent by giving the shared OpenAI-compatible
+transport real tool calling:
+
+- add `tools` / `tool_calls` to the shared request/response (one implementation,
+  reused by every OpenAI-compatible identity — do not fork a second HTTP client),
+  and route the tool-call loop through the existing `internal/toolharness`
+  surface (`internal/ollamaagent`-equivalent controls, no parallel harness);
+- declare `IMPLEMENT`/`FIX` only when the server/model establishes tool support
+  (never inferred from the model name), keeping the honest capability model;
+- preserve the Phase 2 endpoint precedence
+  (`SOP_OPENAI_COMPATIBLE_BASE_URL` > `providers.openai_compatible.endpoint` >
+  `http://127.0.0.1:8000`), locality-as-configuration, and the IMPLEMENT/FIX
+  no-progress guard semantics; do not raise the iteration ceilings.
+
+Related: `internal/agent/openai.go` (the shared transport), `internal/agent/openaicompatible.go`
+(the generic identity), `internal/toolharness`, `internal/ollamaagent` (the native
+tool loop to mirror), and [../specs/PROVIDERS.md](../specs/PROVIDERS.md) §2a.
+
 ## Status and roadmap
 
 SOP V1 is complete; every V1 stage is implemented and tested:
@@ -224,6 +251,7 @@ only when a read-only observation says the local runtime cannot serve it; MEDIUM
 Next candidates, in the plan's build order:
 
 ```text
+OpenAI-style tool calling for openai_compatible (Phase 3)
 Local network service (team mode)
 Small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation

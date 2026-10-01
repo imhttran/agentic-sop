@@ -117,6 +117,20 @@ func defaultDeps() deps {
 				}
 				return agent.NewChecked(a), nil
 			}
+			if p == agent.ProviderOpenAICompatible {
+				// The generic OpenAI-compatible provider owns its endpoint with the
+				// documented precedence environment > configuration > default. The
+				// agent layer resolves the environment and default tiers; the
+				// composition root adds the project-configuration tier, which the
+				// factory cannot otherwise see (the agent layer cannot import
+				// internal/config). It never substitutes another provider.
+				dir, _ := os.Getwd()
+				a, err := agent.NewOpenAICompatibleExecution(openAICompatibleExecutionEndpoint(dir), model)
+				if err != nil {
+					return nil, err
+				}
+				return agent.NewChecked(a), nil
+			}
 			a, err := agent.FromConfig(provider, model)
 			if err != nil {
 				return nil, err
@@ -149,6 +163,23 @@ func defaultDeps() deps {
 		interactive: isTerminalReader,
 		localProbe:  localRuntimeProbe,
 	}
+}
+
+// openAICompatibleExecutionEndpoint resolves the generic OpenAI-compatible
+// provider's execution endpoint with the documented precedence: environment >
+// configuration > default. The environment and default tiers come from the agent
+// layer; the configuration tier is read from the project configuration at dir,
+// which the agent factory receives no other way. It is used only by the
+// production composition root, so a test that injects its own newAgent keeps its
+// seam.
+func openAICompatibleExecutionEndpoint(dir string) string {
+	cfg, err := config.LoadDir(dir)
+	if err != nil {
+		// No configuration (or an unreadable one) leaves the environment > default
+		// tiers; the caller has already validated a present configuration.
+		return agent.OpenAICompatibleEndpointFromEnv()
+	}
+	return cfg.ResolveOpenAICompatibleEndpoint()
 }
 
 // Run parses args and executes a single command, writing normal output to

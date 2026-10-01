@@ -76,13 +76,20 @@ The provider layer is inspection only. Actual agent execution lives in
 internal/agent
   CommandAgent          command (subprocess)
   Ollama                ollama (/api/chat)
-  OpenAICompatible      llamacpp + mlx (POST /v1/chat/completions)
+  OpenAICompatible      llamacpp + mlx + openai_compatible (POST /v1/chat/completions)
 ```
 
-`LlamaCpp` and `MLX` are two identities of the one `OpenAICompatible` transport,
-so llama.cpp and MLX share the execution plumbing rather than duplicating it.
-Text-only providers declare no `IMPLEMENT`/`FIX`; the tool harness remains the
-layer that turns a provider into a coding agent.
+`LlamaCpp`, `MLX`, and `openai_compatible` are three identities of the one
+`OpenAICompatible` transport, so they share the execution plumbing rather than
+duplicating it; identity, endpoint, and configuration differ. `openai_compatible`
+is the generic identity for any OpenAI-compatible server (oMLX, vLLM, LM Studio,
+LocalAI, ...), while `mlx` and `llamacpp` keep their own identities and default
+endpoints. The generic provider owns its endpoint with the precedence
+`environment (SOP_OPENAI_COMPATIBLE_BASE_URL) > configuration
+(providers.openai_compatible.endpoint) > default (http://127.0.0.1:8000)`; the
+composition root adds the configuration tier (the agent layer cannot import
+`internal/config`). Text-only providers declare no `IMPLEMENT`/`FIX`; the tool
+harness remains the layer that turns a provider into a coding agent.
 
 ## Boundaries kept explicit
 

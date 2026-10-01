@@ -47,16 +47,8 @@ const (
 
 // providerNames lists every provider identity in a deterministic order for error
 // messages, derived from the canonical identifiers. It is the vocabulary the
-// agent layer recognizes — identity and configuration, not necessarily execution
-// (openai_compatible is recognized and configurable, but not executable yet).
+// agent layer recognizes and can execute.
 var providerNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOpenAICompatible, ProviderOllama}
-
-// executableProviderNames lists the providers the agent layer can actually
-// build and execute. openai_compatible is deliberately absent: Phase 1
-// recognizes and configures it, but selecting it returns the existing
-// unsupported/not-configured behavior with no fallback and no silent
-// substitution to another provider.
-var executableProviderNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOllama}
 
 const (
 	// defaultProviderTimeout bounds a single model call when none is configured.
@@ -149,12 +141,11 @@ func FromConfig(configuredProvider, model string) (Agent, error) {
 		}
 		return NewMLX(baseURL, modelName, os.Getenv(EnvMLXAPIKey), timeout)
 	case ProviderOpenAICompatible:
-		// Phase 1: the generic OpenAI-compatible provider identity is recognized
-		// and configurable (endpoint, model, timeout), but it is NOT executable
-		// yet. Return the existing unsupported/not-configured behavior instead of
-		// constructing an HTTP-backed agent, and never fall back to another
-		// provider.
-		return nil, errProviderNotConfigured(providerName)
+		// The generic OpenAI-compatible provider executes through the shared
+		// transport at its own endpoint (environment > default here; the CLI
+		// composition root adds the project-configuration tier). It never falls
+		// back to another provider's endpoint or identity.
+		return NewOpenAICompatibleExecution(OpenAICompatibleEndpointFromEnv(), modelName)
 	default:
 		return nil, unknownProviderError(providerName)
 	}
@@ -272,10 +263,11 @@ func HarnessFromConfig(harness, configuredProvider, model string) (Harness, erro
 			}
 			return HarnessFunc(agent.Generate), nil
 		case ProviderOpenAICompatible:
-			// Phase 1: recognized and configurable, but not executable. Return the
-			// existing unsupported/not-configured behavior without wrapping any
-			// substituted provider.
-			return nil, errProviderNotConfigured(providerName)
+			a, err := NewOpenAICompatibleExecution(OpenAICompatibleEndpointFromEnv(), modelName)
+			if err != nil {
+				return nil, err
+			}
+			return HarnessFunc(a.Generate), nil
 		default:
 			return nil, unknownProviderError(providerName)
 		}
@@ -479,17 +471,6 @@ func normalizeBaseURL(baseURL string) string {
 // derived from the canonical provider identifiers so the message cannot go stale.
 func unknownProviderError(name string) error {
 	return fmt.Errorf("unknown agent provider %q: want %s", name, strings.Join(providerNames, ", "))
-}
-
-// errProviderNotConfigured reports a recognized but non-executable provider
-// through the established "not configured" behavior: the provider has no
-// runtime configured in this phase, so the caller must configure a different
-// provider. It names the provider explicitly, mirrors the wording of
-// errNoModel's "no ... configured" contract, and never substitutes another
-// provider.
-func errProviderNotConfigured(name string) error {
-	return fmt.Errorf("%s: no provider runtime configured (configured providers: %s)",
-		name, strings.Join(executableProviderNames, ", "))
 }
 
 // errNoModel reports a provider with no model, naming both ways to set one.

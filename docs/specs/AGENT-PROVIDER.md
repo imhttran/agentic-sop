@@ -25,11 +25,11 @@ SOP MUST keep three concepts independent: **Harness** — the layer executing ag
 
 ## 2. Options
 
-Harness MUST be `tool` (a local tool-calling harness such as `sop-ollama-agent`) or `command` (a subprocess adapter running an external command that implements the agent interface). Provider MUST be `ollama` (local text-only), `llamacpp` (OpenAI-compatible), `mlx` (an Apple-Silicon MLX / oMLX runtime behind an OpenAI-compatible boundary), or `command` (an external subprocess already a full agent). `llamacpp` and `mlx` share one OpenAI-compatible execution transport; see [PROVIDERS.md](PROVIDERS.md) §2a.
+Harness MUST be `tool` (a local tool-calling harness such as `sop-ollama-agent`) or `command` (a subprocess adapter running an external command that implements the agent interface). Provider MUST be `ollama` (local text-only), `llamacpp` (OpenAI-compatible), `mlx` (an Apple-Silicon MLX / oMLX runtime behind an OpenAI-compatible boundary), `openai_compatible` (a generic OpenAI-compatible endpoint — oMLX, vLLM, LM Studio, LocalAI, ...), or `command` (an external subprocess already a full agent). `llamacpp`, `mlx`, and `openai_compatible` share one OpenAI-compatible execution transport; see [PROVIDERS.md](PROVIDERS.md) §2a.
 
 ## 3. Model Requirement Rules
 
-For `ollama`/`llamacpp`/`mlx` a model MUST be specified (config `agent.model` or the provider's env var); the run MUST fail clearly if neither provides one. The command provider MUST NOT require a model. The command harness MUST require `SOP_AGENT_COMMAND`; the run MUST fail if unset.
+For `ollama`/`llamacpp`/`mlx`/`openai_compatible` a model MUST be specified (config `agent.model` or the provider's env var); the run MUST fail clearly if neither provides one. The command provider MUST NOT require a model. The command harness MUST require `SOP_AGENT_COMMAND`; the run MUST fail if unset.
 
 ## 4. Configuration Matrix
 

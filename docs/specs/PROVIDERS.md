@@ -56,13 +56,15 @@ MUST NOT be merged into one abstraction.
 ## 2. Provider Identity
 
 **Required.** Provider identity MUST be a closed, validated identifier. SOP
-defines exactly four:
+defines exactly five:
 
 ```text
-ollama     a local or cloud Ollama server
-llamacpp   an OpenAI-compatible llama.cpp llama-server
-mlx        an Apple-Silicon MLX / oMLX runtime (OpenAI-compatible boundary)
-command    an external subprocess that is already a full agent
+ollama             a local or cloud Ollama server
+llamacpp           an OpenAI-compatible llama.cpp llama-server
+mlx                an Apple-Silicon MLX / oMLX runtime (OpenAI-compatible boundary)
+openai_compatible  a generic OpenAI-compatible endpoint (oMLX, vLLM, LM Studio,
+                   LocalAI, Hugging Face / NVIDIA NIM inference servers, ...)
+command            an external subprocess that is already a full agent
 ```
 
 Provider names MUST be parsed through `provider.ParseID`; code MUST NOT scatter
@@ -88,27 +90,40 @@ runtime support   internal/provider/<name>  discovery, health, capabilities (rea
 execution support internal/agent             a provider can actually run a model request
 ```
 
-A provider may have one without the other. As of this hardening pass all four have
-both:
+A provider may have one without the other. Runtime support and execution support
+are tracked independently:
 
-| Provider   | Runtime (`internal/provider`) | Execution (`internal/agent`)             |
-| ---------- | ----------------------------- | ---------------------------------------- |
-| `ollama`   | yes                           | yes (native, or the tool loop)           |
-| `llamacpp` | yes                           | yes (shared OpenAI-compatible transport) |
-| `mlx`      | yes                           | yes (shared OpenAI-compatible transport) |
-| `command`  | yes (limited, honest)         | yes (subprocess)                         |
+| Provider            | Runtime (`internal/provider`)                  | Execution (`internal/agent`)             |
+| ------------------- | ---------------------------------------------- | ---------------------------------------- |
+| `ollama`            | yes                                            | yes (native, or the tool loop)           |
+| `llamacpp`          | yes                                            | yes (shared OpenAI-compatible transport) |
+| `mlx`               | yes                                            | yes (shared OpenAI-compatible transport) |
+| `openai_compatible` | identity/configuration only (no discovery yet) | yes (shared OpenAI-compatible transport) |
+| `command`           | yes (limited, honest)                          | yes (subprocess)                         |
 
-**Required.** `mlx` and `llamacpp` MUST share one OpenAI-compatible execution
-transport (`internal/agent`, the shared `OpenAICompatible` agent); only identity,
-endpoint, and configuration differ. The transport POSTs `/v1/chat/completions` with
-`model` and `stream:false` and MUST NOT contain routing, JEV, lifecycle, approval,
-or quality-gate logic. SOP MUST NOT be coupled to a specific MLX server
-implementation.
+**Required.** `mlx`, `llamacpp`, and `openai_compatible` MUST share one
+OpenAI-compatible execution transport (`internal/agent`, the shared
+`OpenAICompatible` agent); only identity, endpoint, and configuration differ. The
+transport POSTs `/v1/chat/completions` with `model` and `stream:false` and MUST NOT
+contain routing, JEV, lifecycle, approval, or quality-gate logic. SOP MUST NOT be
+coupled to a specific MLX/oMLX server implementation: `openai_compatible` is the
+generic identity for any OpenAI-compatible server, while `mlx` and `llamacpp`
+remain their own identities with their own default endpoints.
 
-**Required.** A text-only execution provider (llama.cpp, MLX) MUST declare the
-text-generation capabilities it actually serves and MUST NOT declare repository
-mutation (`IMPLEMENT`/`FIX`); a checked wrapper rejects such a request rather than
-forwarding it. Becoming a coding agent still requires the harness tools of
+**Required.** The generic `openai_compatible` provider MUST own its endpoint
+independently of the specialized adapters, resolved with the precedence
+`environment > configuration > default` and a built-in default of
+`http://127.0.0.1:8000`. It MUST use `SOP_OPENAI_COMPATIBLE_BASE_URL` (and
+`providers.openai_compatible.endpoint`), never `SOP_MLX_BASE_URL` or
+`SOP_LLAMACPP_BASE_URL`. Locality is configuration, not inference: both
+`provider=openai_compatible, locality=local` and `locality=cloud` are legal, and
+the provider MUST NOT decide locality from the endpoint or the model name.
+
+**Required.** A text-only execution provider (llama.cpp, MLX, and the generic
+`openai_compatible` transport) MUST declare the text-generation capabilities it
+actually serves and MUST NOT declare repository mutation (`IMPLEMENT`/`FIX`); a
+checked wrapper rejects such a request rather than forwarding it. Becoming a coding
+agent still requires the harness tools of
 [`AGENT-PROVIDER.md`](AGENT-PROVIDER.md) §6.
 
 ## 3. Registry
