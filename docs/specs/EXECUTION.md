@@ -72,6 +72,11 @@ Every stage SHOULD write an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 terminates MUST stay inspectable. Each task SHOULD end with a concise performance
 line; see [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md).
 
+When model routing applies, `routing.json` records the routing decision, and when
+bounded escalation applies, `attempts/NNN.json` records one execution attempt per
+try. Both are non-secret diagnostic evidence: neither is read back to drive a
+decision, and neither is a second source of task state.
+
 ## 6. Verify-First Execution Mode
 
 `execution_mode: verify-first` MUST be explicit plan/task metadata — never inferred
@@ -90,6 +95,19 @@ failure back to the agent with the plan, the deterministic failure (when a check
 failed), the findings, and the current diff, then re-run validation and review. The
 loop MUST be bounded by `quality.max_fix_cycles`; exhausting the budget MUST yield
 `NEEDS_HUMAN` rather than looping forever. See [QUALITY.md](QUALITY.md), [RECOVERY.md](RECOVERY.md).
+
+## 7a. Bounded Model Escalation
+
+When `models.escalation_enabled` (or `SOP_MODEL_ESCALATION_ENABLED`) is on, a task
+that fails a quality gate MAY be retried once more on the next larger model class in
+the same invocation, before the existing human boundary applies. The escalation
+happens outside the lifecycle: each retry is a fresh, bounded lifecycle on the
+escalated class, with the previous attempt's bounded context handed forward, and
+with the escalated selection resolved, validated, built, and capability-guarded
+first. Escalation MUST NOT change state transitions, gates, approval, or autonomy
+policy, MUST NOT wrap past `large`, and MUST be bounded by
+`models.max_escalations`. It is OFF by default. See [RECOVERY.md](RECOVERY.md) §8 and
+[MODEL-ROUTING.md](MODEL-ROUTING.md).
 
 ## 8. Controlled Parallelism
 

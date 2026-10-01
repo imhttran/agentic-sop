@@ -18,6 +18,7 @@ provenance, handoff, and archive. The state graph and remediation rules are owne
   §9 Recoverability and Idempotency, §12 Sources of Truth.
 - [WORKFLOW.md](WORKFLOW.md) — state vocabulary and terminal states.
 - [EXECUTION.md](EXECUTION.md) — `sop run` preparation and lifecycle.
+- [MODEL-ROUTING.md](MODEL-ROUTING.md) — model-class selection (Phase 3.5).
 - [QUALITY.md](QUALITY.md) — the gate and fix-loop budget.
 - [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) — the human boundary.
 - [../reference/STATUS-AND-RECOVERY.md](../reference/STATUS-AND-RECOVERY.md) and
@@ -59,6 +60,20 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 Each attempt SHOULD record its operation, start/end, result, failure summary,
 logs/artifacts where practical, agent action, and next state; see
 [WORKFLOW.md](WORKFLOW.md) §2 and [../architecture/OVERVIEW.md](../architecture/OVERVIEW.md) §12.
+
+When bounded model escalation is enabled (§8), SOP additionally persists one
+**execution-attempt record** per lifecycle attempt as non-secret diagnostic
+evidence under `.agent-sdlc/runs/<task>/attempts/NNN.json`. Each record names the
+attempt number, the model class, provider, model, and locality the attempt ran on,
+the deterministic reason its class was chosen, the result, the failure stage, and
+the recovery action SOP applied afterwards. Attempt records:
+
+- MUST NOT carry a credential (API key, token, authorization header, provider
+  credential);
+- MUST NOT be read back to drive a decision;
+- MUST NOT replace the initial routing decision (`routing.json` records what the
+  router first chose and MUST NOT be overwritten by an escalated attempt);
+- MUST NOT create a second source of task state.
 
 ## 4. Resume Semantics
 
@@ -108,3 +123,52 @@ logs/artifacts where practical, agent action, and next state; see
   task's definition while preserving its lifecycle state, attempts, and history, and
   the approval MUST be recorded in `plan.meta.json`. The flag MUST be repeatable, and
   every changed executed task MUST be named, so one approval never silently covers another.
+
+## 8. Bounded Model Escalation
+
+Phase 5 adds a deterministic, bounded recovery action above the existing requeue and
+fix loops: after an attempt fails a quality gate, SOP MAY retry the task on the next
+larger model class in the same invocation. The full policy is owned by
+`internal/recovery`; model-class selection remains owned by
+[MODEL-ROUTING.md](MODEL-ROUTING.md).
+
+- Escalation MUST be OFF by default (`SOP_MODEL_ESCALATION_ENABLED` unset and
+  `models.escalation_enabled` absent), so an installation that does not opt in
+  behaves exactly as before.
+- The ladder MUST be one-way and MUST NOT wrap: `small → medium → large → human`.
+  There is no class above `large`, and an attempt MUST NOT be downgraded. In
+  particular, an escalated attempt MUST run the class the ladder selected: the model
+  layer's fallback policy (which MAY resolve a different class for ordinary
+  selection) MUST NOT be used for recovery, and a resolution that yields another
+  class MUST be refused rather than silently accepted.
+- Escalation MUST be bounded by `models.max_escalations` (default **2**):
+  `small → medium → large` is exactly two escalations, after which the existing
+  human/terminal boundary applies. `0` disables escalation on either layer.
+- The decision MUST be a deterministic function of typed evidence only (reused from
+  `internal/failure`), never of agent prose or of a class a model proposed.
+- A safety, approval, destructive-operation, or invalid-plan boundary MUST NOT be
+  escalated: risk policy outranks model escalation. A transient
+  provider/infrastructure failure MUST retry the same class, and unfinished but
+  productive work MUST continue, rather than spend a larger model.
+- An attempt whose gate failed without an authoritative failure classification MUST
+  NOT be escalated; it keeps the existing human/block path (fail closed).
+- Every escalated selection MUST be resolved and validated (Phase 4) before it runs,
+  and MUST be built and capability-guarded before use: the selected model MUST equal
+  the executing model. If the escalated class cannot be resolved, validated, or built,
+  escalation MUST stop and the existing recovery path MUST apply — SOP MUST NOT
+  silently continue on the previous model.
+- A manual `--model-class` override MUST disable automatic escalation: the
+  operator's explicit class is never silently replaced.
+- The escalated attempt MUST receive bounded context from the failed attempt (the
+  previous class/model, the failure stage, the deterministic reason, and bounded
+  validation/review evidence) rather than restarting from zero.
+- Escalation MUST NOT grant authority: it selects a stronger model only, and MUST NOT
+  bypass approval, safety, validation, review, or quality gates.
+
+## 9. See Also
+
+- [MODEL-ROUTING.md](MODEL-ROUTING.md) — class selection and the routing table.
+- [PROVIDERS.md](PROVIDERS.md) — provider capability and availability evidence.
+- [QUALITY.md](QUALITY.md) — the gate and the bounded fix loop.
+- [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) — the human boundary the ladder ends at.
+- [WORKFLOW.md](WORKFLOW.md) — state vocabulary and terminal states.

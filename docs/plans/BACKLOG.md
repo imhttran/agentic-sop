@@ -75,6 +75,20 @@ accepted; or provide a `sop reconcile`-style path that records an externally
 finished task. Related: "Bootstrap agent exhausts its budget on multi-package
 tasks" above.
 
+## A gate failure with no authoritative classification is not escalated
+
+Phase 5 escalates only a failure the classifier identified (for example
+`COMPILER_ERROR`, `TEST_FAILURE`, `BLOCKING_FINDINGS`, or the bounded
+`AUTO_FIX_EXHAUSTED`). Two lifecycle paths fail the gate **without** producing a
+classification — an agent that claims success but leaves the working tree
+unchanged (`no repository changes`), and a fix that claims success but changes
+nothing. Recovery fails closed there and keeps the existing human/block path, so
+such a task is never retried on a larger model.
+
+Candidate fix: classify those paths (they are SOP's own deterministic verdicts, not
+prose) so a stronger model with a smaller change scope can be tried before a human
+is involved. See [../specs/RECOVERY.md](../specs/RECOVERY.md) §8.
+
 ## Status and roadmap
 
 SOP V1 is complete; every V1 stage is implemented and tested:
@@ -106,6 +120,8 @@ Provider capability detection
 Git workflow commands (sop commit, sop pr)
 MCP server (sop mcp) · Optional decision layer (deterministic + routing)
 Run report command (sop report) · Evaluation harness (sop eval)
+Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
+Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
 ```
 
 Next candidates, in the plan's build order:

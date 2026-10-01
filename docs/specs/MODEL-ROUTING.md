@@ -136,7 +136,10 @@ override:
 - MUST resolve through the same routing table (so it needs no configuration when
   the class has a built-in default);
 - MUST NOT bypass any safety, validation, review, quality, or human-approval gate:
-  it selects a model only.
+  it selects a model only;
+- MUST pin the class for the task, so the automatic router and the bounded
+  escalation policy (Phase 5) do not replace it: an operator's explicit class is
+  never silently swapped for another.
 
 ## Failure Semantics
 
@@ -189,14 +192,18 @@ Phase 2.5 installation is unchanged.
 ## Implemented Behavior
 
 The configuration table, the automatic router, the decision rules above, manual
-overrides, persistence (`routing.json`), and report visibility are **implemented**.
+overrides, persistence (`routing.json`), report visibility, and Phase 4 pre-execution
+availability validation are **implemented**. Bounded, deterministic escalation
+after a failed attempt (Phase 5) is implemented too; it is owned by
+[RECOVERY.md](RECOVERY.md) §8, not by this specification — routing selects the
+class a task starts on, and recovery decides what to do after an attempt fails.
 
 ## Proposed / Future Behavior
 
 The following are **not implemented** and are recorded here as future work only:
 
-- Provider/model availability validation before execution (confirming the
-  configured model exists on the provider). Today an unavailable model fails when
-  the agent is constructed or invoked; SOP does not pre-validate availability.
-- Automatic escalation or downgrade between classes within a task, and
-  benchmark- or cost-driven routing. Phase 3.5 is deterministic selection only.
+- Automatic downgrade between classes, and benchmark- or cost-driven routing.
+  Selection (Phase 3.5) and failure-driven escalation (Phase 5) are deterministic
+  and bounded; neither chooses a class from measured model performance.
+- Automatically lowering a class back after a failure, or continuing past the
+  `large` class. The ladder is one-way and ends at the existing human boundary.

@@ -93,6 +93,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery.
 - [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; SOP's recorded active plan; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation (**implemented**; off by default; see [specs/PROVIDERS.md](specs/PROVIDERS.md)).
+- [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery (**implemented**; off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`; see [specs/RECOVERY.md](specs/RECOVERY.md) §8).
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis.
 - [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing.
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates.

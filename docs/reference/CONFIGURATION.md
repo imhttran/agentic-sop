@@ -62,6 +62,9 @@ workflow:
 #   fallback_class: medium
 #   allow_cloud_fallback_for_local: false
 #   routing_enabled: false # automatic per-task routing (see "Automatic model routing")
+#   escalation_enabled: false # bounded escalation after a failed attempt (see
+#                             # "Bounded model escalation"); OFF by default
+#   max_escalations: 2 # small -> medium -> large is exactly two; 0 disables it
 #   small:
 #     provider: ollama # ollama | llamacpp | mlx | command
 #     name: qwen3:4b
@@ -178,15 +181,17 @@ Resolution order, highest first:
 --model-class  >  environment / .env  >  models: block  >  built-in defaults
 ```
 
-| Setting (config / environment)                                                       | Default            | Meaning                                              |
-| ------------------------------------------------------------------------------------ | ------------------ | ---------------------------------------------------- |
-| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                        |
-| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.     |
-| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model. |
-| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.       |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.           |
-| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                            |
-| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                  |
+| Setting (config / environment)                                                       | Default            | Meaning                                                             |
+| ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------- |
+| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                       |
+| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                    |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model.                |
+| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                      |
+| `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt. |
+| `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                    |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                          |
+| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                           |
+| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                 |
 
 Built-in class defaults (used when no layer names a class):
 
@@ -259,6 +264,53 @@ isolated, clear, low-risk task      -> small
   resolved provider/model/locality, the checkpoints that informed it, and a typed
   signal summary) and shown by `sop report` as a `Model routing:` section. It is
   non-secret diagnostic evidence; it never becomes a second source of task state.
+
+## Bounded model escalation
+
+Bounded escalation is a separate, opt-in recovery layer above the class table. After
+an attempt fails a quality gate, SOP may retry the task on the next larger class. It
+is **OFF by default**, so an installation that does not opt in behaves exactly as
+before. Enable it with:
+
+```dotenv
+SOP_MODEL_ESCALATION_ENABLED=true
+SOP_MODEL_MAX_ESCALATIONS=2
+```
+
+or, equivalently, in `config.yaml`:
+
+```yaml
+models:
+  escalation_enabled: true
+  max_escalations: 2
+```
+
+The environment overrides the configuration. The ladder is one-way and bounded:
+
+```text
+small -> medium -> large -> human / blocked
+```
+
+- There is no class above `large`; `max_escalations` bounds how many escalations a
+  task may take (default `2`, which is exactly `small → medium → large`). `0`
+  disables escalation even when the feature flag is on. A negative value is rejected.
+- A safety, approval, destructive-operation, or invalid-plan failure is never
+  escalated; a transient provider failure retries the same class; unfinished work
+  continues. A gate failure with no authoritative classification keeps the existing
+  human/block path.
+- A manual `--model-class` override pins the class and disables automatic
+  escalation.
+- Every escalated model is resolved, availability-validated (when `providers.validate`
+  is on), built, and capability-guarded before it runs; a failure to do so stops
+  escalation rather than substituting a model.
+- Each attempt is persisted under `.agent-sdlc/runs/<task>/attempts/NNN.json` (class,
+  provider, model, locality, reason, result, failure stage, recovery action) and
+  summarised by `sop report` as an `Execution attempts:` section with escalation
+  metrics. The initial decision in `routing.json` is never overwritten. Neither
+  artifact carries a credential.
+- Enabling escalation alone does not activate model routing and does not change the
+  agent selection: it applies only to a class the task already ran with (routing on,
+  or a run-level class selected).
 
 ## Early JEV checkpoints
 

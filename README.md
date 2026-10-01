@@ -124,7 +124,9 @@ Detailed state transitions and lifecycle rules live in the specifications:
 
 SOP V1 is complete: dependency-aware execution, isolated branches, test-first
 implementation, bounded review/fix loops, CI and merge gates, durable state,
-resume/recovery, environment bootstrap, and limited parallelism. See
+resume/recovery, environment bootstrap, and limited parallelism. Above it, model
+routing (Phase 3.5), the provider runtime (Phase 4), and bounded model escalation
+(Phase 5) are implemented and OFF by default. See
 [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md) for status and roadmap.
 
 ## Documentation
@@ -153,6 +155,7 @@ Configuration     docs/reference/CONFIGURATION.md
 Status/Recovery   docs/reference/STATUS-AND-RECOVERY.md
 Development       docs/guides/DEVELOPMENT.md
 Plans             docs/plans/ · active plan: docs/plans/PLAN-Phase-3.5-Model-Routing.md
+                  Phase 5 recovery: docs/plans/PLAN-Phase-5-Execution-Recovery.md
 History           docs/history/
 ```
 
