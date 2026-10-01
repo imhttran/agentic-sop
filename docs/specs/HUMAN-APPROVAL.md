@@ -73,3 +73,19 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 - SOP MUST own approval requirements and MUST NOT provide a path that bypasses them.
 - Exhausting the fix or retry budget MUST yield `NEEDS_HUMAN`, never an unbounded
   loop (see [QUALITY.md](QUALITY.md) and [RECOVERY.md](RECOVERY.md)).
+
+## 6. The Approval Surface Is Read-Only Until a Human Decides
+
+- SOP MUST expose the gate as data: the present-or-absent request and its fields for
+  one task, and the set of tasks at an applicable gate.
+- Enumerating the gates MUST NOT create, refresh, or resolve a request. It MUST NOT
+  infer a gate from a task status, a blocked reason, attempt counts, or prose — a task
+  with no recorded request MUST NOT be listed.
+- A request MUST be reported applicable only while it is `PENDING` **and** its task can
+  still act on it. A request whose task has already completed is stale: it MUST be
+  reported as not applicable, exactly as a decision on it is refused.
+- A decision MUST go through SOP's single approval application boundary (the same one
+  the CLI, MCP, and a controller use). A client MUST NOT write an approval decision of
+  its own, and MUST NOT infer an approval from a task status.
+- Reading a gate or listing the gates MUST NOT mutate the repository, the task graph,
+  or run history.

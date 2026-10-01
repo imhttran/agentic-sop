@@ -212,10 +212,11 @@ Small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation
 ```
 
-The former first candidate is now planned and proposed:
+The former first candidate is now planned, and its read surface is shipped:
 [PLAN-Phase-6-Interactive-Approval.md](PLAN-Phase-6-Interactive-Approval.md)
-(Phase 6, `P6-001`–`P6-009`) makes the human approval gate operable and discoverable at a
-terminal without moving any authority. It is not implemented.
+(Phase 6, `P6-001`–`P6-011`). `sop approvals` and the read-only
+`sop reconcile --list-changed` — the two SOP operations an external consumer needed to
+reach — landed as `P6-001`–`P6-004`; the interactive surface is proposed.
 
 ## Known limitations (current)
 

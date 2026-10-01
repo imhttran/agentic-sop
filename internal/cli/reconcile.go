@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -22,7 +23,7 @@ import (
 // This is the supported counterpart to the guard `sop run` raises when the plan
 // changed: the user never needs to delete state.db or hand-edit plan.meta.json.
 func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
-	planArg, accept, ok := parseReconcileArgs(args, stderr)
+	planArg, accept, listChanged, jsonOut, ok := parseReconcileArgs(args, stderr)
 	if !ok {
 		return exitUsage
 	}
@@ -61,6 +62,34 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 	// reports the missing agent clearly only when normalization is required.
 	a, _ := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
 
+	// A listing is read-only: it reports what a reconciliation would change, so a
+	// client can name every changed executed task before anything is applied. It
+	// never mutates the graph, the machine plan, or the provenance.
+	if listChanged {
+		res, err := planflow.Inspect(context.Background(), planflow.ReconcileOptions{
+			Dir:        dir,
+			PlanSource: source,
+			Agent:      a,
+			Store:      st,
+			OnRepair: func(attempt int, cause error) {
+				fmt.Fprintf(stderr, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
+			},
+		})
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitError
+		}
+		if jsonOut {
+			if err := writeReconcileListingJSON(stdout, res); err != nil {
+				fmt.Fprintf(stderr, "reconcile: %v\n", err)
+				return exitError
+			}
+			return exitOK
+		}
+		printReconcileListing(stdout, res)
+		return exitOK
+	}
+
 	res, err := planflow.Reconcile(context.Background(), planflow.ReconcileOptions{
 		Dir:           dir,
 		PlanSource:    source,
@@ -98,18 +127,20 @@ func reconcileAutoAccept(policy autonomy.Policy) func(planflow.ExecutedChange) a
 	}
 }
 
-// parseReconcileArgs splits the reconcile arguments into the required PLAN path
-// and the repeatable --accept-changed approvals. It accepts both
-// `--accept-changed ID` and `--accept-changed=ID`.
-func parseReconcileArgs(args []string, stderr io.Writer) (plan string, accept []string, ok bool) {
-	const usage = "usage: sop reconcile <PLAN.md> [--accept-changed <TASK_ID>]..."
+// parseReconcileArgs splits the reconcile arguments into the required PLAN path,
+// the repeatable --accept-changed approvals, and the read-only --list-changed and
+// --json flags. It accepts both `--accept-changed ID` and `--accept-changed=ID`.
+// A listing authorizes nothing, so combining it with an approval is a usage error
+// rather than a silently ignored flag.
+func parseReconcileArgs(args []string, stderr io.Writer) (plan string, accept []string, listChanged, jsonOut, ok bool) {
+	const usage = "usage: sop reconcile <PLAN.md> [--accept-changed <TASK_ID>]... [--list-changed] [--json]"
 	for i := 0; i < len(args); i++ {
 		switch a := args[i]; {
 		case a == "--accept-changed":
 			if i+1 >= len(args) {
 				fmt.Fprintln(stderr, "reconcile: --accept-changed requires a task id")
 				fmt.Fprintln(stderr, usage)
-				return "", nil, false
+				return "", nil, false, false, false
 			}
 			accept = append(accept, args[i+1])
 			i++
@@ -118,25 +149,39 @@ func parseReconcileArgs(args []string, stderr io.Writer) (plan string, accept []
 			if id == "" {
 				fmt.Fprintln(stderr, "reconcile: --accept-changed requires a task id")
 				fmt.Fprintln(stderr, usage)
-				return "", nil, false
+				return "", nil, false, false, false
 			}
 			accept = append(accept, id)
+		case a == "--list-changed":
+			listChanged = true
+		case a == "--json":
+			jsonOut = true
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "reconcile: unknown flag %s\n", a)
 			fmt.Fprintln(stderr, usage)
-			return "", nil, false
+			return "", nil, false, false, false
 		case plan == "":
 			plan = a
 		default:
 			fmt.Fprintln(stderr, usage)
-			return "", nil, false
+			return "", nil, false, false, false
 		}
+	}
+	if listChanged && len(accept) > 0 {
+		fmt.Fprintln(stderr, "reconcile: --list-changed only reports; drop --accept-changed (approve after you see the list)")
+		fmt.Fprintln(stderr, usage)
+		return "", nil, false, false, false
+	}
+	if jsonOut && !listChanged {
+		fmt.Fprintln(stderr, "reconcile: --json is available with --list-changed")
+		fmt.Fprintln(stderr, usage)
+		return "", nil, false, false, false
 	}
 	if plan == "" {
 		fmt.Fprintln(stderr, usage)
-		return "", nil, false
+		return "", nil, false, false, false
 	}
-	return plan, accept, true
+	return plan, accept, listChanged, jsonOut, true
 }
 
 // printReconcileSummary reports what the reconciliation changed, naming the task
@@ -180,4 +225,79 @@ func printChangedIDs(w io.Writer, label string, ids []string) {
 		return
 	}
 	fmt.Fprintf(w, "  %s: %v\n", label, ids)
+}
+
+// printReconcileListing renders the read-only preview: what a reconciliation would
+// change, and which executed tasks would need an explicit human decision. It says
+// plainly that nothing was applied, so a preview is never mistaken for a run.
+func printReconcileListing(w io.Writer, res planflow.ReconcileResult) {
+	fmt.Fprintf(w, "Reconcile preview for %s (nothing applied)\n", res.Source)
+	fmt.Fprintf(w, "Plan ID: %s\n\n", res.PlanID)
+
+	if res.PlanChanged {
+		fmt.Fprintln(w, "The requested plan differs from the recorded plan.")
+	} else {
+		fmt.Fprintln(w, "The requested plan matches the recorded plan.")
+	}
+
+	fmt.Fprintf(w, "  unchanged: %d\n", len(res.Unchanged))
+	printChangedIDs(w, "updated (never executed)", res.Updated)
+	printChangedIDs(w, "added", res.Added)
+	printChangedIDs(w, "removed (never executed)", res.Removed)
+	printAutoReconciled(w, res.AutoReconciled)
+	printChangedIDs(w, "changed (executed: approve each with --accept-changed)", res.ChangedExecuted)
+	printChangedIDs(w, "removed (executed: cannot be approved; keep it or complete it first)", res.RemovedExecuted)
+	if len(res.ChangedExecuted) == 0 && len(res.RemovedExecuted) == 0 {
+		fmt.Fprintln(w, "  no executed task needs a human decision")
+	}
+}
+
+// reconcileListingDoc is the machine-readable shape of a read-only reconciliation
+// preview. It is stable data for a client (for example the controller) that must
+// render what a reconciliation would change without diffing the plan itself.
+// Every slice is non-nil so an empty category serializes as [] rather than null.
+type reconcileListingDoc struct {
+	Version         int                       `json:"version"`
+	Source          string                    `json:"source"`
+	PlanID          string                    `json:"plan_id"`
+	PlanChanged     bool                      `json:"plan_changed"`
+	Unchanged       []string                  `json:"unchanged"`
+	Updated         []string                  `json:"updated"`
+	Added           []string                  `json:"added"`
+	Removed         []string                  `json:"removed"`
+	ChangedExecuted []string                  `json:"changed_executed"`
+	RemovedExecuted []string                  `json:"removed_executed"`
+	AutoReconciled  []planflow.AutoReconciled `json:"auto_reconciled"`
+}
+
+// writeReconcileListingJSON renders the read-only preview as a JSON document.
+func writeReconcileListingJSON(w io.Writer, res planflow.ReconcileResult) error {
+	doc := reconcileListingDoc{
+		Version:         1,
+		Source:          res.Source,
+		PlanID:          res.PlanID,
+		PlanChanged:     res.PlanChanged,
+		Unchanged:       idsOrEmpty(res.Unchanged),
+		Updated:         idsOrEmpty(res.Updated),
+		Added:           idsOrEmpty(res.Added),
+		Removed:         idsOrEmpty(res.Removed),
+		ChangedExecuted: idsOrEmpty(res.ChangedExecuted),
+		RemovedExecuted: idsOrEmpty(res.RemovedExecuted),
+		AutoReconciled:  res.AutoReconciled,
+	}
+	if doc.AutoReconciled == nil {
+		doc.AutoReconciled = []planflow.AutoReconciled{}
+	}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	return enc.Encode(doc)
+}
+
+// idsOrEmpty returns a non-nil copy of ids, so an empty category renders as [] in
+// JSON rather than null.
+func idsOrEmpty(ids []string) []string {
+	if ids == nil {
+		return []string{}
+	}
+	return ids
 }

@@ -387,6 +387,16 @@ type ReconcileResult struct {
 	Updated     []string
 	Added       []string
 	Removed     []string
+
+	// ChangedExecuted lists executed tasks whose definition changed and that the
+	// requested plan would replace only with an explicit approval. The applying path
+	// stops on these; the read-only listing (Inspect) reports them instead, so a
+	// client can name every changed task before anything is mutated.
+	ChangedExecuted []string
+	// RemovedExecuted lists executed tasks the requested plan drops. They cannot be
+	// approved with AcceptChanged: a removed executed task must be kept or completed
+	// first, so the listing reports them rather than offering an approval.
+	RemovedExecuted []string
 	// Accepted names executed tasks whose changed definition the human approved
 	// with --accept-changed and that were replaced by the requested definition.
 	Accepted []string
@@ -399,14 +409,30 @@ type ReconcileResult struct {
 // active graph: the tasks to upsert, the IDs to remove, and the classification
 // used for reporting.
 type reconcilePlan struct {
-	unchanged      []string
-	updated        []string
-	added          []string
-	removed        []string
-	accepted       []string
-	autoReconciled []AutoReconciled
-	upserts        []*domain.Task
+	unchanged       []string
+	updated         []string
+	added           []string
+	removed         []string
+	accepted        []string
+	autoReconciled  []AutoReconciled
+	changedExecuted []string
+	removedExecuted []string
+	upserts         []*domain.Task
 }
+
+// reconcileGraphMode selects how a diff disposes of a task that needs an explicit
+// human decision. The two modes share one diff, so a read-only listing can never
+// disagree with the reconciliation it previews.
+type reconcileGraphMode int
+
+const (
+	// reconcileApply mutates: an unapproved changed executed task, an executed task
+	// the plan removes, or an approval that names neither, is an error.
+	reconcileApply reconcileGraphMode = iota
+	// reconcileInspect only reports: those categories are returned in the result
+	// instead of stopping the call, and nothing is mutated.
+	reconcileInspect
+)
 
 // Reconcile applies an intentional PLAN change to the persisted active plan. It
 // compiles and validates the requested plan deterministically, diffs its
@@ -429,56 +455,13 @@ type reconcilePlan struct {
 // while the graph still held the old definitions. A retry once the file write
 // succeeds completes idempotently.
 func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error) {
-	res := ReconcileResult{}
-	if strings.TrimSpace(opts.PlanSource) == "" {
-		return res, errors.New("reconcile: a plan path is required")
-	}
-
-	data, err := os.ReadFile(opts.PlanSource)
+	res, diff, plan, data, err := reconcileDiff(ctx, opts, reconcileApply)
 	if err != nil {
-		return res, fmt.Errorf("reconcile: read %s: %w", opts.PlanSource, err)
+		return res, err
 	}
-	rel := relOf(opts.Dir, opts.PlanSource)
-	res.Source = rel
-	res.PlanID = planID(rel)
 
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
-
-	// The comparison baseline is the recorded machine plan, which the active task
-	// graph mirrors. It must exist: an explicit reconciliation only makes sense
-	// against an active plan.
-	recorded, ok := loadPersistedPlan(planPath)
-	if !ok {
-		return res, fmt.Errorf("NEEDS_HUMAN: no persisted plan to reconcile against\n\n%s is missing or unreadable. Run `sop run` to establish the active plan first", filepath.Join(config.DirName, planFileName))
-	}
-
-	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, KindPlan, string(data))
-	if err != nil {
-		if errors.Is(err, errNoAgent) {
-			return res, err
-		}
-		return res, planError(rel, err)
-	}
-	if err := plan.Validate(); err != nil {
-		return res, planError(rel, err)
-	}
-	res.PlanChanged = !plansEquivalent(recorded, plan)
-
-	desired, err := desiredTasks(plan)
-	if err != nil {
-		return res, planError(rel, err)
-	}
-
-	active, err := opts.Store.List()
-	if err != nil {
-		return res, err
-	}
-
-	diff, err := reconcileGraph(rel, active, desired, acceptSet(opts.AcceptChanged), opts.AutoAcceptExecuted)
-	if err != nil {
-		return res, err
-	}
 
 	if len(diff.upserts) > 0 || len(diff.removed) > 0 {
 		if err := opts.Store.ReplaceGraph(diff.upserts, diff.removed); err != nil {
@@ -497,15 +480,92 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 	// reconciliation records are both carried forward.
 	prev := readMetadata(metaPath)
 	if err := writeMetadata(metaPath, Metadata{
-		Source:          rel,
+		Source:          res.Source,
 		SourceKind:      KindPlan,
 		SourceSHA256:    fingerprint(data),
-		PlanID:          planID(rel),
+		PlanID:          res.PlanID,
 		GeneratedAt:     time.Now().UTC(),
 		ReconciledTasks: mergeIDs(prev.ReconciledTasks, diff.accepted),
 		AutoReconciled:  mergeAutoReconciled(prev.AutoReconciled, diff.autoReconciled),
 	}); err != nil {
 		return res, err
+	}
+
+	return res, nil
+}
+
+// Inspect computes what Reconcile would do without changing anything. It compiles
+// and validates the requested plan, diffs it against the active graph, and reports
+// every category - including the tasks that would stop a reconciliation for an
+// explicit human decision (ChangedExecuted) or that cannot be reconciled at all
+// (RemovedExecuted). It writes no graph, no machine plan, and no metadata, so it is
+// the read-only listing a client uses to show a human what a reconciliation would
+// change before anything is applied.
+func Inspect(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error) {
+	res, _, _, _, err := reconcileDiff(ctx, opts, reconcileInspect)
+	return res, err
+}
+
+// reconcileDiff is the shared first half of a reconciliation: it compiles and
+// validates the requested plan, diffs it against the active graph, and returns the
+// classification, the in-memory graph change, the compiled plan, and the source
+// bytes. mode decides only how a task needing an explicit human decision is
+// disposed of (an error when applying, a report when inspecting), so the listing
+// and the reconciliation are one diff and can never disagree.
+func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGraphMode) (ReconcileResult, reconcilePlan, *planner.Plan, []byte, error) {
+	res := ReconcileResult{}
+	if strings.TrimSpace(opts.PlanSource) == "" {
+		return res, reconcilePlan{}, nil, nil, errors.New("reconcile: a plan path is required")
+	}
+
+	data, err := os.ReadFile(opts.PlanSource)
+	if err != nil {
+		return res, reconcilePlan{}, nil, nil, fmt.Errorf("reconcile: read %s: %w", opts.PlanSource, err)
+	}
+	rel := relOf(opts.Dir, opts.PlanSource)
+	res.Source = rel
+	res.PlanID = planID(rel)
+
+	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
+
+	// The comparison baseline is the recorded machine plan, which the active task
+	// graph mirrors. It must exist: an explicit reconciliation only makes sense
+	// against an active plan.
+	recorded, ok := loadPersistedPlan(planPath)
+	if !ok {
+		return res, reconcilePlan{}, nil, nil, fmt.Errorf("NEEDS_HUMAN: no persisted plan to reconcile against\n\n%s is missing or unreadable. Run `sop run` to establish the active plan first", filepath.Join(config.DirName, planFileName))
+	}
+
+	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, KindPlan, string(data))
+	if err != nil {
+		if errors.Is(err, errNoAgent) {
+			return res, reconcilePlan{}, nil, nil, err
+		}
+		return res, reconcilePlan{}, nil, nil, planError(rel, err)
+	}
+	if err := plan.Validate(); err != nil {
+		return res, reconcilePlan{}, nil, nil, planError(rel, err)
+	}
+	res.PlanChanged = !plansEquivalent(recorded, plan)
+
+	desired, err := desiredTasks(plan)
+	if err != nil {
+		return res, reconcilePlan{}, nil, nil, planError(rel, err)
+	}
+
+	active, err := opts.Store.List()
+	if err != nil {
+		return res, reconcilePlan{}, nil, nil, err
+	}
+
+	// A listing is independent of any approval: it reports what would need one.
+	accept := opts.AcceptChanged
+	if mode == reconcileInspect {
+		accept = nil
+	}
+	diff, err := reconcileGraph(rel, active, desired, acceptSet(accept), opts.AutoAcceptExecuted, mode)
+	if err != nil {
+		return res, reconcilePlan{}, nil, nil, err
 	}
 
 	res.Unchanged = diff.unchanged
@@ -514,7 +574,9 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 	res.Removed = diff.removed
 	res.Accepted = diff.accepted
 	res.AutoReconciled = diff.autoReconciled
-	return res, nil
+	res.ChangedExecuted = diff.changedExecuted
+	res.RemovedExecuted = diff.removedExecuted
+	return res, diff, plan, data, nil
 }
 
 // desiredTasks builds the executable task definitions for a plan, wiring in the
@@ -544,8 +606,19 @@ func desiredTasks(plan *planner.Plan) ([]*domain.Task, error) {
 // unapproved. The reconciled graph is validated as a whole before being returned,
 // so a change that would leave a dangling dependency is rejected up front rather
 // than mid-mutation.
-func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool, autoAccept func(ExecutedChange) autonomy.Decision) (reconcilePlan, error) {
+//
+// mode decides the disposition of the categories that need a human: reconcileApply
+// stops the call (an unapproved changed executed task, an executed task the plan
+// removes, or an approval naming neither is an error), while reconcileInspect
+// reports them in the result and mutates nothing.
+func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool, autoAccept func(ExecutedChange) autonomy.Decision, mode reconcileGraphMode) (reconcilePlan, error) {
 	var out reconcilePlan
+
+	// kept holds executed tasks whose current definition survives because an
+	// explicit human decision is outstanding (reconcileInspect). It keeps the
+	// graph validation honest: the task still exists, so a dependency on it is not
+	// dangling. It is always empty when applying, because those paths stop instead.
+	var kept []*domain.Task
 
 	activeTasks := taskIndex(active)
 	desiredByID := taskIndex(desired)
@@ -586,6 +659,13 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 				reconciledExecuted[d.ID] = true
 				continue
 			}
+			if mode == reconcileInspect {
+				// A listing reports the changed executed task instead of stopping, and
+				// keeps its current definition in the graph it validates.
+				out.changedExecuted = append(out.changedExecuted, d.ID)
+				kept = append(kept, task)
+				continue
+			}
 			changedExecuted[d.ID] = true
 			continue
 		}
@@ -616,6 +696,14 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 		}
 		task := activeTasks[id]
 		if hasExecution(task) {
+			if mode == reconcileInspect {
+				// A removed executed task cannot be approved with --accept-changed: SOP
+				// never discards history. The listing reports it; the task stays in the
+				// graph it validates.
+				out.removedExecuted = append(out.removedExecuted, id)
+				kept = append(kept, task)
+				continue
+			}
 			return reconcilePlan{}, removedExecutedError(task)
 		}
 		out.removed = append(out.removed, id)
@@ -623,10 +711,11 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 
 	// Validate the reconciled graph before any mutation, catching a surviving task
 	// whose dependency the requested plan drops.
-	final := make([]*domain.Task, 0, len(out.unchanged)+len(out.upserts))
+	final := make([]*domain.Task, 0, len(out.unchanged)+len(kept)+len(out.upserts))
 	for _, id := range out.unchanged {
 		final = append(final, activeTasks[id])
 	}
+	final = append(final, kept...)
 	final = append(final, out.upserts...)
 	if err := taskbuilder.ValidateDAG(final); err != nil {
 		return reconcilePlan{}, planError(source, err)

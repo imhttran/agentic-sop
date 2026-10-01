@@ -124,6 +124,13 @@ the recovery action SOP applied afterwards. Attempt records:
   task's definition while preserving its lifecycle state, attempts, and history, and
   the approval MUST be recorded in `plan.meta.json`. The flag MUST be repeatable, and
   every changed executed task MUST be named, so one approval never silently covers another.
+- `sop reconcile docs/PLAN.md --list-changed` MUST report what a reconciliation would
+  change **without changing anything**: it MUST name every changed executed task (whose
+  approval `--accept-changed` would take) and every executed task the requested plan
+  removes (which cannot be approved and MUST be kept or completed first). It MUST NOT
+  write the task graph, the machine plan, or the provenance, and MUST NOT record an
+  approval. The listing and the reconciliation MUST be the same diff, so a preview can
+  never disagree with what applying it does.
 
 ## 8. Bounded Model Escalation
 

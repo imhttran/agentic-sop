@@ -2,10 +2,12 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
 	"github.com/imhttran/agentic-sop/internal/approval"
@@ -24,6 +26,103 @@ func approvalService(st *store.Store, projectDir string) *approval.Service {
 	return approval.New(st, func(taskID string) approval.Record {
 		return runpkg.At(runpkg.Dir(projectDir, taskID))
 	})
+}
+
+// runApprovals lists every task SOP reports at an applicable human approval gate.
+// It is read-only: it classifies nothing itself, creates no request, and resolves
+// nothing. A task whose boundary cannot be read is an error, so a listing never
+// silently omits a gate the human needs to see.
+func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
+	jsonOut := false
+	for _, a := range args {
+		switch a {
+		case "--json":
+			jsonOut = true
+		default:
+			fmt.Fprintln(stderr, "usage: sop approvals [--json]")
+			return exitUsage
+		}
+	}
+
+	dir, st, ok := openApprovalState(d, stderr, "approvals")
+	if !ok {
+		return exitError
+	}
+	defer st.Close()
+
+	tasks, err := st.List()
+	if err != nil {
+		fmt.Fprintf(stderr, "approvals: %v\n", err)
+		return exitError
+	}
+
+	svc := approvalService(st, dir)
+	items := []approvalListingItem{}
+	for _, task := range tasks {
+		view, err := svc.Approval(task.ID)
+		if err != nil {
+			fmt.Fprintf(stderr, "approvals: %s: %v\n", task.ID, err)
+			return exitError
+		}
+		if !view.Applicable {
+			continue
+		}
+		items = append(items, approvalListingItem{
+			TaskID:      view.TaskID,
+			Kind:        string(view.Kind),
+			Target:      view.Target,
+			Reason:      view.Reason,
+			Evidence:    view.Evidence,
+			Stage:       view.Stage,
+			Disposition: view.Disposition,
+			Status:      string(view.Status),
+			RequestedAt: view.RequestedAt,
+			TaskStatus:  string(view.TaskStatus),
+		})
+	}
+
+	if jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(approvalListingDoc{Version: 1, Approvals: items}); err != nil {
+			fmt.Fprintf(stderr, "approvals: %v\n", err)
+			return exitError
+		}
+		return exitOK
+	}
+
+	if len(items) == 0 {
+		fmt.Fprintln(stdout, "no pending approvals")
+		return exitOK
+	}
+	for _, it := range items {
+		fmt.Fprintf(stdout, "%s  %s  %s  %s\n", it.TaskID, it.Kind, it.Stage, oneLine(it.Reason))
+	}
+	fmt.Fprintln(stdout, "\nInspect one with: sop approval <task-id>")
+	fmt.Fprintln(stdout, "Decide one with:  sop approve <task-id> | sop decline <task-id>")
+	return exitOK
+}
+
+// approvalListingItem is one pending gate in the machine-readable listing: the
+// same fields the single-task view projects, so a client renders a gate identically
+// whether it read one or listed many.
+type approvalListingItem struct {
+	TaskID      string    `json:"task_id"`
+	Kind        string    `json:"kind,omitempty"`
+	Target      string    `json:"target,omitempty"`
+	Reason      string    `json:"reason,omitempty"`
+	Evidence    string    `json:"evidence,omitempty"`
+	Stage       string    `json:"stage,omitempty"`
+	Disposition string    `json:"disposition,omitempty"`
+	Status      string    `json:"status"`
+	RequestedAt time.Time `json:"requested_at,omitempty"`
+	TaskStatus  string    `json:"task_status,omitempty"`
+}
+
+// approvalListingDoc is the stable JSON document for `sop approvals --json`.
+type approvalListingDoc struct {
+	Version   int                   `json:"version"`
+	Approvals []approvalListingItem `json:"approvals"`
 }
 
 // runApprovalStatus prints SOP's authoritative approval boundary for a task: the

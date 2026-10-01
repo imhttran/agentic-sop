@@ -293,6 +293,30 @@ func TestStaleRequestCannotBeApproved(t *testing.T) {
 	}
 }
 
+// TestStaleRequestIsNotApplicable proves the read projection agrees with the decision
+// boundary: a pending request whose task has already completed is reported as NOT
+// applicable, for the same reason Approve refuses it (ErrApprovalNotApplicable). A
+// client that trusted Applicable would otherwise advertise a decision that cannot be
+// recorded.
+func TestStaleRequestIsNotApplicable(t *testing.T) {
+	completed := &domain.Task{ID: "S001", Status: domain.LOCAL_DONE}
+	svc, _ := newTestService(newMemTasks(completed))
+	if _, err := svc.Request(RequestInput{TaskID: "S001", Reason: gateReason}); err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+
+	view, err := svc.Approval("S001")
+	if err != nil {
+		t.Fatalf("Approval: %v", err)
+	}
+	if !view.Present {
+		t.Fatal("the request is present")
+	}
+	if view.Applicable {
+		t.Error("a pending request on a satisfied task must not be applicable")
+	}
+}
+
 func TestRequestSupersedesResolvedGate(t *testing.T) {
 	tasks := newMemTasks(&domain.Task{ID: "S001", Status: domain.BLOCKED})
 	svc, records := newTestService(tasks)

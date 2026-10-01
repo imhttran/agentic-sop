@@ -346,8 +346,13 @@ func (s *Service) task(taskID string) (*domain.Task, error) {
 // record: a gate can be acted on only while it is present and pending.
 func (s *Service) view(req domain.ApprovalRequest, task *domain.Task) View {
 	v := View{
-		Present:     true,
-		Applicable:  req.Status == domain.ApprovalPending,
+		Present: true,
+		// A decision may be recorded only while the request is pending AND its task can
+		// still act on it: a request whose task already completed is stale, and decide()
+		// refuses it with ErrApprovalNotApplicable. Reporting it as applicable would
+		// advertise a decision the boundary would reject. A nil task (a record-only
+		// service) has nothing to be stale against, so the pending request stands.
+		Applicable:  req.Status == domain.ApprovalPending && (task == nil || !task.IsSatisfied()),
 		TaskID:      req.TaskID,
 		Kind:        req.Kind,
 		Target:      req.Target,

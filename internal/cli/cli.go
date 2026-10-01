@@ -203,6 +203,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runDecline(rest, stdout, stderr, d)
 	case "approval":
 		return runApprovalStatus(rest, stdout, stderr, d)
+	case "approvals":
+		return runApprovals(rest, stdout, stderr, d)
 	case "reconcile":
 		return runReconcile(rest, stdout, stderr, d)
 	case "providers":
@@ -247,9 +249,10 @@ Commands:
   approve   record an approval decision on a task's active human approval gate
   decline   record a decline decision on a task's active human approval gate
   approval  show SOP's approval request (if any) for a task
-  	reconcile reconcile an intentional PLAN change with the active plan (--accept-changed <id> to approve a changed executed task)
-  	providers inspect configured provider runtimes and their models (--models)
-  	eval      run a corpus of task files and report benchmark metrics
+  approvals list every task waiting at an approval gate (--json)
+  reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
+  providers inspect configured provider runtimes and their models (--models)
+  eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   version   print the CLI version
   help      show this help
