@@ -1,12 +1,14 @@
 # PRD --- Phase 3: Early OpenJEV Decision Layer
 
-**Type:** Product requirements (draft, for review)
+**Type:** Product requirements
 
-**Status:** Proposed. Phase 3 is **not implemented**. This document records what
-we intend to build and why; the required _behavior_ is owned by the
-[specifications](../specs/), and the _work_ is owned by
-[../plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md). Nothing in
-this document describes current behavior.
+**Status:** Implemented. The early JEV checkpoints (task triage and pre-execution)
+shipped in Phase 3 — see [../plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md)
+and [../specs/OPENJEV.md](../specs/OPENJEV.md) §18. The required _behavior_ is
+owned by the [specifications](../specs/), and the _work_ by the plan; where this
+document disagrees with either, they win. Items this document records as future
+work remain **proposed** and are listed in
+[../specs/OPENJEV.md](../specs/OPENJEV.md) §17.
 
 ## Purpose
 

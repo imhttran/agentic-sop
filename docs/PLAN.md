@@ -1,6 +1,10 @@
 # SOP --- Execution Plan
 
-> Historical task records live under [`docs/tasks/`](tasks/).
+> **Complete.** This is the master execution plan for building SOP (T000–T075), all
+> of which is done. It is kept at `docs/PLAN.md` because SOP discovers that path
+> (`internal/planflow`); active workstreams live under [`docs/plans/`](plans/), and
+> the canonical product requirements are [`docs/PRD.md`](PRD.md). Historical task
+> records live under [`docs/tasks/`](tasks/).
 
 ## Strategy
 
