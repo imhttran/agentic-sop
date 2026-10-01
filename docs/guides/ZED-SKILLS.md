@@ -39,21 +39,20 @@ single source of truth. Install links them into a Zed skills root:
 ```bash
 git clone https://github.com/imhttran/agentic-sop.git
 cd agentic-sop
-make install              # install the sop CLI (the skills call it)
-make install-skills-zed   # link the SOP skills into ~/.agents/skills
+./install.sh --skills zed   # the sop CLI + the SOP skills in ~/.agents/skills
 ```
 
-`make install-skills-zed` links each skill folder into `~/.agents/skills/`, so the
-commands are available in **every** project you open in Zed. The skills stay live
-against your checkout: editing a `SKILL.md` takes effect without reinstalling.
-
-`make install-skills` (no suffix) installs every supported agent whose directory is
-present (Zed and Claude Code); `make install-skills-zed` installs Zed specifically.
+`./install.sh --skills zed` delegates to `scripts/install-skills.sh`, which links each
+skill folder into `~/.agents/skills/`, so the commands are available in **every**
+project you open in Zed. The skills stay live against your checkout: editing a
+`SKILL.md` takes effect without reinstalling. (See
+[INSTALLATION.md](INSTALLATION.md) for the installer's options; `make
+install-skills-zed` runs the same thing.)
 
 Use the script directly for more control:
 
 ```bash
-scripts/install-zed-skills.sh             # global (same as make install-skills-zed)
+scripts/install-zed-skills.sh             # global (same as ./install.sh --skills zed)
 scripts/install-skills.sh zed --project   # project-local: ./.agents/skills
 scripts/install-skills.sh zed --project ~/work/api
 scripts/install-skills.sh zed --dry-run   # print what would change
@@ -63,8 +62,8 @@ scripts/install-skills.sh zed --force     # replace a SOP-named symlink that poi
 Uninstall (also safe and idempotent):
 
 ```bash
-make uninstall-skills-zed
-# or: scripts/install-skills.sh zed --uninstall [--project ...]
+scripts/install-skills.sh zed --uninstall
+# make uninstall-skills-zed runs the same thing
 ```
 
 ## The commands
@@ -129,7 +128,7 @@ interprets prompt text as a shell command, an approval, a model class, or a prov
 ## When `sop` is not installed
 
 The skills drive the `sop` CLI, so every one of them tells the agent: if `sop` is not
-on `PATH`, stop and report it (install it with `make install`), and do **not** answer
+on `PATH`, stop and report it (install it with `./install.sh`), and do **not** answer
 the request yourself or mutate the repository in SOP's place. Missing SOP fails closed;
 this matters most for `/sop-implement`.
 
@@ -153,8 +152,8 @@ for example), move it aside before installing so the `/sop` command can be linke
 | Symptom                                | Cause                                                                                                               |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | A command is missing from the `/` menu | The skill is not installed, or an untrusted project's project-local skills are excluded.                            |
-| No SOP commands at all                 | `~/.agents/skills/` has no SOP entries — run `make install-skills`.                                                 |
-| The command runs but fails immediately | `sop` is not on `PATH` — run `make install` and check `sop version`.                                                |
+| No SOP commands at all                 | `~/.agents/skills/` has no SOP entries — run `./install.sh --skills zed`.                                                 |
+| The command runs but fails immediately | `sop` is not on `PATH` — run `./install.sh` and check `sop version`.                                                |
 | "provider cannot IMPLEMENT"            | The selected provider cannot mutate the repository; see [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md). |
 
 ## See also

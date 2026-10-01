@@ -1,0 +1,14 @@
+{
+  "name": "agentic-sop",
+  "description": "Agentic SOP — a standard operating procedure for agentic software development.",
+  "owner": {
+    "name": "imhttran"
+  },
+  "plugins": [
+    {
+      "name": "sop",
+      "source": "./integrations/claude",
+      "description": "Run governed work through Agentic SOP: plan, review, diagnose, design tests, and implement, with SOP owning routing, providers, validation, and approval."
+    }
+  ]
+}

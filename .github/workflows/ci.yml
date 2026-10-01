@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # Formatting, static analysis, the full test suite, and the documentation link check.
+  check:
+    name: fmt, vet, build, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "::error::these files are not gofmt-formatted:"
+            echo "$unformatted"
+            exit 1
+          fi
+      - name: vet
+        run: go vet ./...
+      - name: build
+        run: go build ./...
+      - name: test
+        run: go test ./...
+      - name: documentation links
+        run: bash scripts/check-doc-links.sh
+
+  # The suite under the race detector, which the lifecycle and scheduler tests rely on.
+  race:
+    name: race detector
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: test -race
+        run: go test -race ./...
+
+  # The distribution layer: the packaged Claude Code plugin must be current, and the
+  # installer must work from a clean checkout with no agent configuration to touch. The
+  # install itself is exercised for real (against a temporary HOME) by the Go tests in
+  # internal/dist; the smoke steps here only exercise the documented entry points.
+  distribution:
+    name: installer + plugin packaging
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: plugin package is current
+        run: scripts/build-claude-plugin.sh --check
+      - name: installer smoke (isolated HOME, nothing written)
+        env:
+          HOME: ${{ runner.temp }}/sop-ci-home
+        run: |
+          mkdir -p "$HOME"
+          ./install.sh --help
+          ./install.sh --dry-run
+          ./install.sh --skills zed --dry-run
+          ./install.sh --skills claude --dry-run
+          ./install.sh --plugin claude --dry-run
+      - name: installer and plugin tests
+        run: go test -v ./internal/dist/... ./internal/skill/...

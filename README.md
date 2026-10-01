@@ -77,7 +77,7 @@ Install the CLI:
 ```bash
 git clone https://github.com/imhttran/agentic-sop.git
 cd agentic-sop
-go install ./cmd/sop          # ensure $(go env GOPATH)/bin is on PATH
+./install.sh                  # builds sop into a user-writable bin directory
 sop version
 ```
 
@@ -108,10 +108,10 @@ coding agents that support them. Install the CLI, then link the skills into the
 agent(s) you use:
 
 ```bash
-make install                 # install the sop CLI
-make install-skills-zed      # Zed:    link into ~/.agents/skills
-make install-skills-claude   # Claude: link into ~/.claude/skills
-make install-skills          # all supported agents that are present
+./install.sh --skills zed     # the /sop* commands in Zed
+./install.sh --skills claude  # the same commands in Claude Code
+./install.sh --plugin claude  # the Claude Code plugin
+./install.sh --all            # the CLI + every present agent's skills + the plugin
 ```
 
 ```text
@@ -125,8 +125,10 @@ make install-skills          # all supported agents that are present
 Each command is a thin alias over `sop prompt --capability ...`: it picks a capability
 and calls SOP, which still owns routing, provider selection, validation, and approval.
 `/sop-implement` is the only mutating command and runs the governed implementation
-lifecycle. Guides: [docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md) and
-[docs/guides/CLAUDE-SKILLS.md](docs/guides/CLAUDE-SKILLS.md).
+lifecycle. Guides: [docs/guides/INSTALLATION.md](docs/guides/INSTALLATION.md),
+[docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md), and
+[docs/guides/CLAUDE-SKILLS.md](docs/guides/CLAUDE-SKILLS.md); the plugin is
+[docs/guides/CLAUDE-PLUGIN.md](docs/guides/CLAUDE-PLUGIN.md).
 
 ## Basic Workflow
 
@@ -178,8 +180,10 @@ Task Lifecycle    docs/specs/TASK-LIFECYCLE.md
 Execution         docs/specs/EXECUTION.md
 Work Items        docs/specs/WORK-ITEMS.md
 Prompt Execution  docs/specs/PROMPT-EXECUTION.md
+Installation      docs/guides/INSTALLATION.md
 Zed Skills        docs/guides/ZED-SKILLS.md
 Claude Skills     docs/guides/CLAUDE-SKILLS.md
+Claude Plugin     docs/guides/CLAUDE-PLUGIN.md
 Agent Providers   docs/specs/AGENT-PROVIDER.md
 Provider Runtime  docs/specs/PROVIDERS.md
 Model Routing     docs/specs/MODEL-ROUTING.md

@@ -119,8 +119,8 @@ kind), which works for a read-only run too.
 The shipped command aliases (`/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop`, `/sop-prompt`) are thin wrappers over this
 command: each fixes a capability and calls `sop prompt`. Install them with
-`make install-skills-zed` (Zed), `make install-skills-claude` (Claude Code), or
-`make install-skills` (every supported agent present); see
+`./install.sh --skills zed` (Zed), `./install.sh --skills claude` (Claude Code), or
+`./install.sh --all` (the CLI, every supported agent present, and the Claude plugin); see
 [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md) and
 [`../guides/CLAUDE-SKILLS.md`](../guides/CLAUDE-SKILLS.md).
 

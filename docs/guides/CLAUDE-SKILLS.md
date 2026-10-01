@@ -48,18 +48,18 @@ single source of truth. Install links them into Claude Code's skills root:
 ```bash
 git clone https://github.com/imhttran/agentic-sop.git
 cd agentic-sop
-make install                 # install the sop CLI (the skills call it)
-make install-skills-claude   # link the SOP skills into ~/.claude/skills
+./install.sh --skills claude   # the sop CLI + the SOP skills in ~/.claude/skills
 ```
 
-`make install-skills-claude` links each skill folder into `~/.claude/skills/`, so the
-commands are available in **every** project you open Claude Code in. The skills stay
+`./install.sh --skills claude` delegates to `scripts/install-skills.sh`, which links
+each skill folder into `~/.claude/skills/`, so the commands are available in **every**
+project you open Claude Code in. The skills stay
 live against your checkout: editing a `SKILL.md` takes effect without reinstalling.
 
 Use the script directly for more control:
 
 ```bash
-scripts/install-claude-skills.sh           # personal scope (same as make install-skills-claude)
+scripts/install-claude-skills.sh           # personal scope (same as ./install.sh --skills claude)
 scripts/install-skills.sh claude --project # project scope: ./.claude/skills
 scripts/install-skills.sh claude --project ~/work/api
 scripts/install-skills.sh claude --dry-run # print what would change
@@ -69,12 +69,14 @@ scripts/install-skills.sh claude --force   # replace a SOP-named symlink that po
 Uninstall (also safe and idempotent):
 
 ```bash
-make uninstall-skills-claude
-# or: scripts/install-skills.sh claude --uninstall [--project ...]
+scripts/install-skills.sh claude --uninstall
+# make uninstall-skills-claude runs the same thing
 ```
 
-`make install-skills` (no suffix) installs every supported agent whose directory is
-present; `make install-skills-claude` installs Claude Code specifically.
+`./install.sh --skills all` installs every supported agent whose directory is present;
+`./install.sh --skills claude` installs Claude Code specifically. To package the same
+commands as a Claude Code **plugin** instead of (or as well as) personal skills, see
+[CLAUDE-PLUGIN.md](CLAUDE-PLUGIN.md).
 
 ## The commands
 
@@ -143,7 +145,7 @@ interprets prompt text as a shell command, an approval, a model class, or a prov
 ## When `sop` is not installed
 
 The skills drive the `sop` CLI, so every one of them tells the agent: if `sop` is not
-on `PATH`, stop and report it (install it with `make install`), and do **not** answer
+on `PATH`, stop and report it (install it with `./install.sh`), and do **not** answer
 the request yourself or mutate the repository in SOP's place. Missing SOP fails closed;
 this matters most for `/sop-implement`.
 
@@ -167,8 +169,8 @@ installing so the `/sop` command can be linked. Claude Code reserves the folder 
 
 | Symptom                                | Cause                                                                                                                                  |
 | -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
-| A command is missing from the `/` menu | The skill is not installed — run `make install-skills-claude`, then `/reload-skills`.                                                  |
-| The command runs but fails immediately | `sop` is not on `PATH` — run `make install` and check `sop version`.                                                                   |
+| A command is missing from the `/` menu | The skill is not installed — run `./install.sh --skills claude`, then `/reload-skills`.                                                  |
+| The command runs but fails immediately | `sop` is not on `PATH` — run `./install.sh` and check `sop version`.                                                                   |
 | Claude uses a SOP skill unprompted     | That is the model-invocable default; set `disable-model-invocation` or a `skillOverrides` entry to stop it (as `/sop-implement` does). |
 | "provider cannot IMPLEMENT"            | The selected provider cannot mutate the repository; see [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md).                    |
 

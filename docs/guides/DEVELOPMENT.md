@@ -8,12 +8,12 @@ project, see [GETTING-STARTED.md](GETTING-STARTED.md).
 
 ```bash
 go build ./...          # build everything (make build)
-go install ./cmd/sop    # install the CLI
+./install.sh            # install the CLI (make install; add --all for every integration)
 ```
 
 The `Makefile` wraps the common tasks: `make fmt`, `make vet`, `make test`,
-`make build`, `make check`, and `make install` (which runs `./scripts/install.sh`
-to install the CLI).
+`make build`, `make check`, and `make install` (which delegate to `./install.sh`, the
+documented installation entry point; see [INSTALLATION.md](INSTALLATION.md)).
 
 ## Testing
 
@@ -21,7 +21,7 @@ to install the CLI).
 go test ./...                # run the test suite
 go test -race ./...          # with race detection
 CGO_ENABLED=0 go test ./...  # verify operation without CGO
-make check                   # format, vet, test, build
+make check                   # format, vet, test, build, plugin package current
 ```
 
 AI boundaries are replaced with deterministic fakes in unit tests. The tests do

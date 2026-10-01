@@ -24,6 +24,7 @@ var repoPlans = []repoPlan{
 	{"../../docs/plans/PLAN-Phase-3.5-Model-Routing.md", 8},
 	{"../../docs/plans/PLAN-Phase-4-Provider-Runtime.md", 9},
 	{"../../docs/plans/PLAN-Phase-5-Execution-Recovery.md", 10},
+	{"../../docs/plans/PLAN-Phase-5.5-Distribution.md", 11},
 }
 
 // TestPlanFromMarkdownCompilesRepoPlans proves the repository's own phase plans

@@ -1,19 +1,11 @@
 #!/usr/bin/env sh
 # Install the sop CLI.
 #
-#   - installs the CLI with `go install ./cmd/sop`
-#
-# The `sop-end-to-end` agent skill is provided as a global Zed skill at
-# `~/.agents/skills/sop-end-to-end`, so it is not bundled or installed here.
-#
-# Requires Go.
+# Thin wrapper: the root install.sh owns CLI installation (and delegates the agent
+# skills to scripts/install-skills.sh). This file is kept so an existing workflow that
+# calls scripts/install.sh keeps working; use ./install.sh directly for the documented
+# interface, including --skills/--plugin.
 set -eu
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-
-echo "installing the sop CLI..."
-( cd "$repo_dir" && go install ./cmd/sop )
-
-echo
-echo "done."
-echo "  next: make sure \$(go env GOPATH)/bin is on your PATH, then run 'sop version'"
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+exec "$script_dir/../install.sh" "$@"

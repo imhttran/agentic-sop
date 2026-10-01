@@ -176,6 +176,9 @@ exists records its stages as satisfied instead of re-implementing them
 Two plan shapes compile deterministically (no agent): the rendered
 `## <id> — <title>` form, and the `## Tasks` + `### <id> — <title>` form the phase
 plans use, with explicit dependencies and a load-bearing `Execution:` field
+Unified installer `./install.sh` (CLI + per-agent skills + Claude plugin) and the
+native Claude Code plugin package, generated from `skills/` (Phase 5.5)
+GitHub Actions CI: fmt, vet, build, test, race, doc links, installer + plugin packaging
 SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
 `/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
 ```

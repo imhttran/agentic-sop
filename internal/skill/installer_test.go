@@ -42,8 +42,8 @@ func runInstaller(t *testing.T, home, script string, args ...string) (string, er
 // (a broken link would be invisible to the agent).
 func assertLinked(t *testing.T, root string) {
 	t.Helper()
-	for _, s := range zedSkills {
-		path := filepath.Join(root, s.name)
+	for _, c := range Commands {
+		path := filepath.Join(root, c.Name)
 		fi, err := os.Lstat(path)
 		if err != nil {
 			t.Errorf("missing %s: %v", path, err)
@@ -62,8 +62,8 @@ func assertLinked(t *testing.T, root string) {
 // assertAbsent proves no SOP command is present in root.
 func assertAbsent(t *testing.T, root string) {
 	t.Helper()
-	for _, s := range zedSkills {
-		path := filepath.Join(root, s.name)
+	for _, c := range Commands {
+		path := filepath.Join(root, c.Name)
 		if _, err := os.Lstat(path); err == nil {
 			t.Errorf("%s should not exist", path)
 		}
@@ -312,7 +312,7 @@ func TestInstallScriptsAreThinAndSafe(t *testing.T) {
 		"../../scripts/install-zed-skills.sh",
 		"../../scripts/install-claude-skills.sh",
 	}
-	forbidden := append([]string{}, providerBinaries...)
+	forbidden := append([]string{}, ProviderBinaries...)
 	forbidden = append(forbidden, "git ", "sed -i", "rm -rf", "go install")
 	for _, script := range scripts {
 		body := read(t, script)

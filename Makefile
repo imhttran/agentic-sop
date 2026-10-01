@@ -1,4 +1,9 @@
-.PHONY: fmt vet test build check install install-ollama-agent \
+# Developer convenience targets. The documented installation entry point is
+# ./install.sh (see docs/guides/INSTALLATION.md); these targets delegate to it so there
+# is one installation implementation and Make is never a second one.
+
+.PHONY: fmt vet test build check check-plugin install install-all install-ollama-agent \
+	plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude
 
@@ -14,15 +19,32 @@ test:
 build:
 	go build ./...
 
-check: fmt vet test build
+# The repository's canonical pre-commit check.
+check: fmt vet test build check-plugin
 
+# Verify the packaged Claude Code plugin still mirrors the canonical skills/ tree.
+check-plugin:
+	./scripts/build-claude-plugin.sh --check
+
+# Install the sop CLI (and nothing else). Add `./install.sh --all` for everything.
 install:
-	./scripts/install.sh
+	./install.sh
 
-# Link the SOP skills into the coding agents' skill roots so `/sop*` commands appear.
-# `install-skills` installs every supported agent that is present; the per-agent
-# targets install one. See docs/guides/ZED-SKILLS.md and docs/guides/CLAUDE-SKILLS.md;
-# add `--project` to scripts/install-skills.sh for a project-local install.
+# Install the sop CLI plus every agent integration whose environment is present.
+install-all:
+	./install.sh --all
+
+# Prepare the Claude Code plugin package and print the official install steps.
+install-plugin:
+	./install.sh --plugin claude
+
+# Regenerate the packaged Claude Code plugin from skills/ (it is a generated mirror).
+plugin:
+	./scripts/build-claude-plugin.sh
+
+# The skill roots are installed by scripts/install-skills.sh, which owns that logic;
+# ./install.sh --skills <agent> delegates to it. Use the script directly for
+# --project/--uninstall/--force.
 install-skills:
 	./scripts/install-skills.sh all
 

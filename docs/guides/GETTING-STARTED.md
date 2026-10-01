@@ -23,11 +23,11 @@ service to run. How SOP selects a harness, provider, and model is described in
 ```bash
 git clone https://github.com/imhttran/agentic-sop.git
 cd agentic-sop
-go install ./cmd/sop
+./install.sh
 ```
 
-The installed binary lands in your Go binary directory, which needs to be on your
-`PATH`:
+The installed binary lands in a user-writable bin directory (`--bin-dir`, else the Go
+toolchain's bin directory), which needs to be on your `PATH`:
 
 ```bash
 export PATH="$PATH:$(go env GOPATH)/bin"
@@ -45,23 +45,21 @@ Once installed, `sop` runs from any project directory.
 ## Install script
 
 ```bash
-./scripts/install.sh
+./install.sh
 ```
 
-This installs the `sop` CLI (via `go install ./cmd/sop`). The `sop-end-to-end`
-agent skill is provided as a global Zed skill at `~/.agents/skills/sop-end-to-end`,
-so an agent can drive the workflow end to end in any project. `make install` runs
-the same script.
+This builds the `sop` CLI from the checkout and writes it to a user-writable bin
+directory. `scripts/install.sh` and `make install` run the same installer; see
+[INSTALLATION.md](INSTALLATION.md) for the options, the PATH guidance, and removal.
 
 To also get the governed SOP commands in an agent (Zed: `/sop`, `/sop-prompt`,
 `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, `/sop-implement`; Claude Code
-exposes the same commands), run the installer for the agent(s) you use:
+exposes the same commands), install for the agent(s) you use:
 
 ```bash
-make install-skills           # every supported agent that is present
-# or just one:
-make install-skills-zed
-make install-skills-claude
+./install.sh --skills zed      # the /sop* commands in Zed
+./install.sh --skills claude   # the same commands in Claude Code
+./install.sh --all             # the CLI + every present agent's skills + the plugin
 ```
 
 Each command is a thin alias over `sop prompt`; see
