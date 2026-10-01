@@ -41,11 +41,11 @@ locality for each class MUST come from configuration (the `models:` block,
 `SOP_MODEL_*` environment, or the built-in defaults), never from a literal in
 execution code. The built-in defaults are:
 
-| Class    | Provider | Model                       | Locality |
-| -------- | -------- | --------------------------- | -------- |
-| `small`  | `ollama` | `qwen3:4b`                  | `local`  |
-| `medium` | `ollama` | `glm-5.3-flash:cloud`       | `cloud`  |
-| `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  |
+| Class    | Provider | Model                       | Locality | Fallback (local-first)      |
+| -------- | -------- | --------------------------- | -------- | --------------------------- |
+| `small`  | `ollama` | `qwen3:4b`                  | `local`  | `nemotron-3-nano:30b-cloud` |
+| `medium` | `ollama` | `nemotron-3-super:cloud`    | `cloud`  | —                           |
+| `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  | —                           |
 
 An unknown class, locality, or provider MUST fail with an actionable error naming
 the accepted values.
@@ -70,6 +70,55 @@ The routing layer MUST be a strict no-op — leaving the agent selection unchang
 unless a `models:` block, a `SOP_MODEL_*` variable, a `--model-class` override, or
 an enabled router with a selected class is present. The built-in defaults MUST NOT
 activate routing on their own.
+
+## Local-First Fallback
+
+A class MAY declare a `fallback` model, so that a LOCAL class is local-first
+without being local-only. SMALL's built-in fallback is `nemotron-3-nano:30b-cloud`.
+
+When the selected class is `local` and has a complete fallback configured, SOP
+MUST run the fallback instead of the class's primary model if and only if a
+read-only availability observation reports that the local runtime cannot serve the
+primary:
+
+```text
+SMALL (local)
+   |
+   +-- local runtime serves the model -------> local model
+   |
+   +-- local runtime cannot serve the model -> configured fallback (cloud)
+```
+
+"Cannot serve" means, and only means:
+
+1. the local runtime is unreachable;
+2. the configured local model is not present in the runtime's own model list; or
+3. the runtime determines the model cannot chat.
+
+The observation MUST be read-only and MUST NOT spend a generation request. A
+provider that cannot determine reachability or enumerate models MUST NOT be read as
+an outage, so the fallback triggers only on a positive observation. When no
+observation is available, the local model MUST be kept.
+
+The fallback MUST NOT be triggered by a generation failure, a malformed or invalid
+model response, a validation failure, a review finding, a quality-gate failure, an
+application-level error, or a timeout. Those failures MUST continue through the
+existing retry, review, escalation, and error handling: the runtime fallback is an
+environment-availability switch, never a failure-recovery policy.
+
+The fallback MUST keep the selected CLASS — only the concrete provider and model
+change. Applying it MUST record the deterministic source `cloud-fallback` and the
+reason `local runtime unavailable; cloud fallback`, so the switch is auditable. A
+class whose locality is not `local` MUST NOT have a fallback candidate.
+
+### Fallback configuration
+
+A fallback field an operator does not set inherits: the provider from the class's
+primary model, and the locality `cloud`. The built-in fallback is the base layer of
+the merge, so naming a local model does not remove the built-in cloud fallback; the
+configuration and environment layers override a fallback field by field. The
+environment variables are `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`,
+`SOP_MODEL_<CLASS>_FALLBACK_NAME`, and `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`.
 
 ## Automatic Router
 
@@ -192,8 +241,9 @@ Phase 2.5 installation is unchanged.
 ## Implemented Behavior
 
 The configuration table, the automatic router, the decision rules above, manual
-overrides, persistence (`routing.json`), report visibility, and Phase 4 pre-execution
-availability validation are **implemented**. Bounded, deterministic escalation
+overrides, the local-first fallback for a local class, persistence
+(`routing.json`), report visibility, and Phase 4 pre-execution availability
+validation are **implemented**. Bounded, deterministic escalation
 after a failed attempt (Phase 5) is implemented too; it is owned by
 [RECOVERY.md](RECOVERY.md) §8, not by this specification — routing selects the
 class a task starts on, and recovery decides what to do after an attempt fails.

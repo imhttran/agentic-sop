@@ -34,7 +34,9 @@ Human approval remains explicit where policy requires it.
 - **Bounded autonomy.** Retries and fix loops have explicit limits and end at a
   human gate when they must.
 - **Local first, provider neutral.** Runs locally with local or cloud models and
-  does not require a cloud service.
+  does not require a cloud service. The smallest class is local-first: it runs a
+  local model and falls back to a cloud model only when the local runtime cannot
+  serve it (see [docs/specs/MODEL-ROUTING.md](docs/specs/MODEL-ROUTING.md)).
 
 SOP is **not** an unrestricted autonomous coding agent: the orchestrator defines
 boundaries, the agent performs specific work, validation checks it, and only then

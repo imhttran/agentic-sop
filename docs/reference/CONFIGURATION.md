@@ -69,9 +69,12 @@ workflow:
 #     provider: ollama # ollama | llamacpp | mlx | command
 #     name: qwen3:4b
 #     locality: local # local | cloud
+#     fallback: # used only when the local runtime cannot serve the local model
+#       name: nemotron-3-nano:30b-cloud
+#       locality: cloud
 #   medium:
 #     provider: ollama
-#     name: glm-5.3-flash:cloud
+#     name: nemotron-3-super:cloud
 #     locality: cloud
 #   large:
 #     provider: ollama
@@ -123,6 +126,9 @@ workflow:
 | `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `mlx`, `command`).                             |
 | `models.<class>.name`                   | per class                | Model name for a class (see "Model routing").                                              |
 | `models.<class>.locality`               | per class                | `local` or `cloud` (see "Model routing").                                                  |
+| `models.<class>.fallback.provider`      | class provider           | Provider for a class's runtime cloud fallback; defaults to the class's provider.           |
+| `models.<class>.fallback.name`          | per class                | Model a LOCAL class runs when its local runtime cannot serve the primary.                  |
+| `models.<class>.fallback.locality`      | `cloud`                  | `local` or `cloud` for a class's runtime fallback.                                         |
 | `providers.validate`                    | `false`                  | Opt-in pre-execution model-availability validation (see "Provider runtime").               |
 | `providers.ollama.endpoint`             | `http://127.0.0.1:11434` | Ollama base URL.                                                                           |
 | `providers.llamacpp.endpoint`           | `http://127.0.0.1:8080`  | llama.cpp `llama-server` base URL.                                                         |
@@ -191,25 +197,28 @@ Resolution order, highest first:
 --model-class  >  environment / .env  >  models: block  >  built-in defaults
 ```
 
-| Setting (config / environment)                                                       | Default            | Meaning                                                             |
-| ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------- |
-| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                       |
-| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                    |
-| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model.                |
-| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                      |
-| `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt. |
-| `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                    |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                          |
-| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                           |
-| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                 |
+| Setting (config / environment)                                                       | Default            | Meaning                                                                   |
+| ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------- |
+| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                             |
+| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                          |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model.                      |
+| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                            |
+| `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt.       |
+| `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                          |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                                |
+| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                                 |
+| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                       |
+| `models.<class>.fallback.provider` / `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`           | class provider     | Provider for the class's runtime fallback.                                |
+| `models.<class>.fallback.name` / `SOP_MODEL_<CLASS>_FALLBACK_NAME`                   | per class (below)  | Model a LOCAL class runs when its local runtime cannot serve the primary. |
+| `models.<class>.fallback.locality` / `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`           | `cloud`            | `local` or `cloud` for the class's runtime fallback.                      |
 
 Built-in class defaults (used when no layer names a class):
 
-| Class    | Provider | Model                       | Locality |
-| -------- | -------- | --------------------------- | -------- |
-| `small`  | `ollama` | `qwen3:4b`                  | `local`  |
-| `medium` | `ollama` | `glm-5.3-flash:cloud`       | `cloud`  |
-| `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  |
+| Class    | Provider | Model                       | Locality | Fallback (local-first)      |
+| -------- | -------- | --------------------------- | -------- | --------------------------- |
+| `small`  | `ollama` | `qwen3:4b`                  | `local`  | `nemotron-3-nano:30b-cloud` |
+| `medium` | `ollama` | `nemotron-3-super:cloud`    | `cloud`  | —                           |
+| `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  | —                           |
 
 These defaults live in the routing package (`model.DefaultRoute`); no other layer
 restates them. They make a bare `sop run --model-class small` resolve with no
@@ -226,11 +235,20 @@ is present, so an existing project is unchanged.
 - Locality never silently switches a `local` class to a cloud model: if a `local`
   class has no model and the fallback is a cloud model, resolution fails unless
   `allow_cloud_fallback_for_local` is set.
+- A `local` class that configures a `fallback` model is local-first, not
+  local-only: the fallback runs only when the local runtime cannot SERVE the
+  primary model (Ollama unreachable, the model not installed, or the runtime
+  reports it cannot chat), observed read-only — never because a generation,
+  validation, or review failed. The switch keeps the class and is recorded with
+  the source `cloud-fallback` and the reason `local runtime unavailable; cloud
+fallback`. SMALL's built-in fallback is `nemotron-3-nano:30b-cloud`. See
+  [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
 - The startup summary records the resolved class, provider, model, locality, the
   layer it came from (`cli`, `env`, `config`, or `default`), and a deterministic
   reason. The reason is one of a fixed set of phrases — `explicit CLI model class`,
   `environment default class`, `project-configured default class`,
-  `built-in default class`, or `fallback class used` — never model-generated prose.
+  `built-in default class`, `fallback class used`, or
+  `local runtime unavailable; cloud fallback` — never model-generated prose.
 - The same evidence is persisted per run as non-secret trace data: the
   `model_selection` object in `report.json`, a standalone `model-selection.json`
   artifact beside it, and the `Model selection:` section of `sop report`. It

@@ -50,10 +50,18 @@ The normative precedence and decision rules live in
    early-JEV checkpoint.
 3. `router.Decide(signals)` selects **only a class** plus fixed-phrase reasons.
 4. `model.Resolve(model.Inputs{CLIClass, RoutedClass, RoutedReason, Config,
-   Lookup})` alone resolves the class to a concrete provider/model
+Lookup})` alone resolves the class to a concrete provider/model
    (`Selection.Provider`, `Selection.Model`). An incomplete class fails closed
-   with an actionable error; no silent default is applied.
-5. The resolved provider/model builds the implementation agent.
+   with an actionable error; no silent default is applied. For a LOCAL class with
+   a configured fallback, Resolve additionally reports the fallback as
+   `Result.LocalFallback` — a candidate it never applies.
+5. The local-first fallback is applied here, once: `applyLocalFallback` replaces
+   the selection with `Result.LocalFallback` only when the injected read-only
+   availability probe (`deps.localProbe`, the production `localRuntimeProbe`)
+   reports the local runtime cannot serve the primary model. It is a no-op when no
+   probe is wired, so an unwired test or process keeps the local model; it is
+   never reached on a generation, validation, or gate failure.
+6. The resolved provider/model builds the implementation agent.
 
 ## Boundaries (what routing must never do)
 
@@ -76,5 +84,8 @@ The normative boundary lives in [`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTIN
 
 The split between implemented and proposed/future behavior is owned by
 [`specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) ("Implemented Behavior" and
-"Proposed / Future Behavior"). Automatic availability pre-validation, automatic
-escalation/downgrade, and learned or LLM-controlled routing are **not implemented**.
+"Proposed / Future Behavior"). The local-first fallback for a local class is
+**implemented**; it is an availability switch (a read-only runtime observation),
+never a failure-recovery policy. Automatic downgrade after a failure, learned or
+LLM-controlled routing, and cost- or benchmark-driven class selection are **not
+implemented**.

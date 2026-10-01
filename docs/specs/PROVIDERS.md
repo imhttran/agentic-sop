@@ -220,6 +220,16 @@ the model can chat, when the provider determined the chat capability
 **Required.** Validation is a pure, read-only observation: it MUST NOT mutate the
 selection it is given or any SOP state.
 
+**Implemented.** `provider.LocalUsable(ctx, registry, selection)` is the same
+read-only check expressed as a usability verdict (with a short non-secret detail)
+for the local-first model fallback owned by
+[`MODEL-ROUTING.md`](MODEL-ROUTING.md) ("Local-First Fallback"). It reuses
+`ValidateSelection` so the two views can never disagree, and it is conservative in
+the same way: an undetermined reachability, an unsupported model list, or an
+unknown capability MUST NOT be reported as unusable. It is independent of
+`providers.validate` — the fallback consults availability even when the opt-in
+pre-execution validation is off.
+
 ## 9. When Validation Runs
 
 **Implemented.** Validation is **opt-in** and OFF by default:

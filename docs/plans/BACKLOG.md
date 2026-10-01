@@ -202,6 +202,10 @@ SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-tes
 Recurring, closing steering for an unmutated IMPLEMENT/FIX run (T076): the
 implement-now instruction is re-stated every interaction, and the turns before the
 late-stage cutoff tell the model the invocation is about to end
+Local-first model tiers (routing/configuration hardening): SMALL runs a local
+model and switches to its configured cloud fallback (`nemotron-3-nano:30b-cloud`)
+only when a read-only observation says the local runtime cannot serve it; MEDIUM is
+`nemotron-3-super:cloud` and LARGE is `deepseek-v4.1-flash:cloud`
 ```
 
 Next candidates, in the plan's build order:
@@ -251,6 +255,14 @@ open" is a claim about the _scheduled_ list above, not about these.
   their run id is not a stored task, so `sop approvals`/`sop approve`/`sop decline` do
   not apply to them. They print the boundary and how to continue instead of naming a
   command that would fail (Phase 6, P6-005).
+- **The local-first fallback applies to the class the router or `--model-class`
+  selects, not to the run-level default agent or an escalation attempt.**
+  `applyModelRouting` (the run-level default) and `escalateTo` (Phase 5) resolve
+  without an availability probe, so a `local` class used as the run-level default
+  (routing off) or reached by escalation runs its local model even when the local
+  runtime cannot serve it. The fallback is owned by the per-task and per-prompt
+  routing seam in `internal/cli`. See
+  [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
 - **Capabilities designed but not delivered are documented in place, not here:** the TDD
   test-design stage ([../specs/TASK-LIFECYCLE.md](../specs/TASK-LIFECYCLE.md)),
   `max_parallel_tasks` ([../specs/EXECUTION.md](../specs/EXECUTION.md)), and the CLI-driven
