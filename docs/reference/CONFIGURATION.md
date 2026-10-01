@@ -387,6 +387,14 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
 - Credentials are never configured here (and never printed by `sop providers`);
   they stay in the environment, exactly as for the agent path.
 
+## Prompts
+
+`sop prompt` introduces **no new configuration**. A prompt reuses the model-routing
+configuration (the `models:` block and the `SOP_MODEL_*` variables) for its
+`small`/`medium`/`large` class, and the `providers.validate` setting for
+pre-execution model validation. Its capability is supplied on the command line, not
+in configuration. See [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md).
+
 ## Validity
 
 An invalid file — malformed YAML, an unknown key, an unknown
@@ -398,6 +406,7 @@ provider/engine/severity, a missing `project.name`, or an unsupported
 - [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md)
 - [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md)
 - [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md)
+- [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md)
 - [`../specs/QUALITY.md`](../specs/QUALITY.md)
 - [`../specs/OPENJEV.md`](../specs/OPENJEV.md)
 - [`CLI.md`](CLI.md)

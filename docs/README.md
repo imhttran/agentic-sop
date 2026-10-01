@@ -50,6 +50,7 @@ Where new documentation belongs:
 - [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) — what SOP owns vs what agents, models, and optional capabilities own; the single-source-of-truth rule.
 - [architecture/model-routing.md](architecture/model-routing.md) — the **non-normative** implementation seam for per-task model routing (how the lifecycle selects the task's model); the authoritative rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
+- [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
 
 ## Specifications
 
@@ -58,6 +59,8 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/WORKFLOW.md](specs/WORKFLOW.md) — task state vocabulary, legal transitions, remediation, scheduling, and plan handoff.
 - [specs/TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) — the per-task lifecycle stages, TDD rules, and Git naming conventions.
 - [specs/EXECUTION.md](specs/EXECUTION.md) — `sop run`: planning-source discovery, change detection, artifacts, verify-first, and parallelism.
+- [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) — the unified execution input (**WorkItem**): how tasks and prompts adapt to it, and what it MUST NOT contain.
+- [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md) — **the authoritative home for `sop prompt`**: the command surface, default capability, deterministic routing, capability enforcement, read-only vs. governed `implement` execution, provider validation, artifacts, and the structured result. The SOP skill ([skills/sop/SKILL.md](../skills/sop/SKILL.md)) calls this command.
 - [specs/AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) — the harness/provider/model boundary, configuration precedence, and structured outcomes.
 - [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) — **the authoritative home for model-routing rules**: the model-class layer (`small`/`medium`/`large`), configuration precedence, the deterministic per-task router, and the routing boundary. The router is **opt-in and OFF by default**, enabled only by `SOP_MODEL_ROUTING_ENABLED=true` (overriding `models.routing_enabled`), with `--model-class` always winning. Every other page links here rather than restating the rules. The implementation seam (non-normative) is recorded in [architecture/model-routing.md](architecture/model-routing.md).
 - [specs/PROVIDERS.md](specs/PROVIDERS.md) — **the authoritative home for the provider/runtime layer** (Phase 4): provider identity, the registry, health, model discovery, typed capabilities, selection validation, failure behavior, and the read-only `sop providers` surface. The provider layer sits underneath model routing and never chooses a class; the seam is recorded (non-normatively) in [architecture/provider-runtime.md](architecture/provider-runtime.md).
@@ -82,6 +85,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md) — building, testing, and developing SOP.
 - [guides/LESSONS.md](guides/LESSONS.md) — engineering lessons from building SOP V1 (working notes).
 - [guides/SOP-CONTROLLER-DASHBOARD.md](guides/SOP-CONTROLLER-DASHBOARD.md) — run and control a SOP run from a local dashboard (and phone).
+- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement).
 
 ## Plans
 
@@ -94,6 +98,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; SOP's recorded active plan; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation (**implemented**; off by default; see [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery (**implemented**; off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`; see [specs/RECOVERY.md](specs/RECOVERY.md) §8).
+- [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill (**implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md)).
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis.
 - [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing.
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates.

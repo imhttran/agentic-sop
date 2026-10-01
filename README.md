@@ -93,6 +93,14 @@ the task graph — idempotently. Full setup: [docs/guides/GETTING-STARTED.md](do
 and [docs/guides/PROJECT-SETUP.md](docs/guides/PROJECT-SETUP.md). Complete command
 reference: [docs/reference/CLI.md](docs/reference/CLI.md).
 
+For ad-hoc work, `sop prompt` runs a request through the same governed machinery:
+
+```bash
+sop prompt --capability review "Review internal/provider for architectural issues"
+```
+
+Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
+
 ## Basic Workflow
 
 ```text
@@ -125,8 +133,9 @@ Detailed state transitions and lifecycle rules live in the specifications:
 SOP V1 is complete: dependency-aware execution, isolated branches, test-first
 implementation, bounded review/fix loops, CI and merge gates, durable state,
 resume/recovery, environment bootstrap, and limited parallelism. Above it, model
-routing (Phase 3.5), the provider runtime (Phase 4), and bounded model escalation
-(Phase 5) are implemented and OFF by default. See
+routing (Phase 3.5), the provider runtime (Phase 4), bounded model escalation
+(Phase 5), and unified work items with `sop prompt` (Phase 5.4) are implemented;
+the routing and escalation layers are OFF by default. See
 [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md) for status and roadmap.
 
 ## Documentation
@@ -140,6 +149,8 @@ Architecture      docs/architecture/OVERVIEW.md · docs/architecture/SOP-BOUNDAR
 Workflow          docs/specs/WORKFLOW.md
 Task Lifecycle    docs/specs/TASK-LIFECYCLE.md
 Execution         docs/specs/EXECUTION.md
+Work Items        docs/specs/WORK-ITEMS.md
+Prompt Execution  docs/specs/PROMPT-EXECUTION.md
 Agent Providers   docs/specs/AGENT-PROVIDER.md
 Provider Runtime  docs/specs/PROVIDERS.md
 Model Routing     docs/specs/MODEL-ROUTING.md
