@@ -82,6 +82,11 @@ func installEnv(t *testing.T, home, pathFirst string, overrides map[string]strin
 	setEnv(env, "USERPROFILE", home)
 	setEnv(env, "HOME", home)
 	unsetEnv(env, "SOP_BIN_DIR")
+	// Drop the module path inherited from the shell that ran the tests (CI's step runs
+	// under pwsh). A clean machine has no such variable, and each PowerShell then
+	// composes its own default; inheriting another generation's module directories made
+	// Windows PowerShell 5.1 fail to resolve a cmdlet the installer used.
+	unsetEnv(env, "PSModulePath")
 	// Pin the Go caches to this machine's real ones: the toolchain derives GOPATH and the
 	// build/module caches from the home directory, so the scratch USERPROFILE above would
 	// otherwise send every `go build` inside the installer to an empty cache.
