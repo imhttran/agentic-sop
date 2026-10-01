@@ -70,6 +70,47 @@ raw string comparisons. An unknown name MUST fail with an error naming the known
 providers. An empty name is rejected (callers that treat "unset" specially MUST
 check for it first).
 
+**Implemented.** These identifiers are the canonical vocabulary for the whole
+repository. The agent execution layer (`internal/agent`) derives its provider
+constants from them, the configuration allow-list (`agent.provider`) is built from
+`provider.KnownIDs`, and the model-routing allow-list is kept equal to it by a
+test. Adding or renaming a provider MUST happen here first; the other layers MUST
+NOT maintain an independent list. A test (`internal/model`,
+`internal/config`) fails if the lists drift.
+
+## 2a. Provider Runtime Support vs Agent Execution Support
+
+**Implemented.** Provider _runtime_ support and agent _execution_ support are
+distinct capabilities with distinct owners:
+
+```text
+runtime support   internal/provider/<name>  discovery, health, capabilities (read-only)
+execution support internal/agent             a provider can actually run a model request
+```
+
+A provider may have one without the other. As of this hardening pass all four have
+both:
+
+| Provider   | Runtime (`internal/provider`) | Execution (`internal/agent`)             |
+| ---------- | ----------------------------- | ---------------------------------------- |
+| `ollama`   | yes                           | yes (native, or the tool loop)           |
+| `llamacpp` | yes                           | yes (shared OpenAI-compatible transport) |
+| `mlx`      | yes                           | yes (shared OpenAI-compatible transport) |
+| `command`  | yes (limited, honest)         | yes (subprocess)                         |
+
+**Required.** `mlx` and `llamacpp` MUST share one OpenAI-compatible execution
+transport (`internal/agent`, the shared `OpenAICompatible` agent); only identity,
+endpoint, and configuration differ. The transport POSTs `/v1/chat/completions` with
+`model` and `stream:false` and MUST NOT contain routing, JEV, lifecycle, approval,
+or quality-gate logic. SOP MUST NOT be coupled to a specific MLX server
+implementation.
+
+**Required.** A text-only execution provider (llama.cpp, MLX) MUST declare the
+text-generation capabilities it actually serves and MUST NOT declare repository
+mutation (`IMPLEMENT`/`FIX`); a checked wrapper rejects such a request rather than
+forwarding it. Becoming a coding agent still requires the harness tools of
+[`AGENT-PROVIDER.md`](AGENT-PROVIDER.md) §6.
+
 ## 3. Registry
 
 **Required.** Providers MUST be held in an explicit `provider.Registry` that is
@@ -188,6 +229,14 @@ selection it is given or any SOP state.
   it starts a task. With the flag off (the default), a run's behavior is
   unchanged.
 
+**Required.** Validation MUST operate on the **final** selection for a task. When
+the automatic model-class router (Phase 3.5) is enabled, each task's routed
+selection — not the run-level/default selection the router may override — is the
+one validated, immediately before the task's implementation runs. A routed model
+the runtime cannot serve MUST stop the task instead of failing mid-execution. When
+the router is off, the run-level/default selection (the effective execution stack)
+is validated up front, as before.
+
 **Required.** Enabling validation MUST NOT enable automatic fallback (§12): an
 unavailable provider or an absent model stops the run with an actionable error,
 and SOP never silently runs the task on a different provider or model.
@@ -287,5 +336,9 @@ This specification does not:
 - [x] Health, discovery, and capabilities are read-only evidence.
 - [x] Undetermined results are never treated as negative.
 - [x] Validation is opt-in, read-only, and never substitutes a provider/model.
+- [x] Validation runs on the final per-task routing selection.
 - [x] No credential is configured, persisted, or printed by the provider layer.
 - [x] Existing runs are unchanged when the layer is off or unconfigured.
+- [x] `llamacpp` and `mlx` share one OpenAI-compatible execution transport.
+- [x] Provider identity does not drift between the provider, config, model, and
+      agent layers.

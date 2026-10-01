@@ -24,8 +24,8 @@ project:
 
 agent:
   harness: tool # tool | command (optional; defaults to command)
-  provider: ollama # ollama | llamacpp | command (required if harness: tool)
-  model: deepseek-v4.1-flash:cloud # model ID (required if provider: ollama|llamacpp)
+  provider: ollama # ollama | llamacpp | mlx | command (required if harness: tool)
+  model: deepseek-v4.1-flash:cloud # model ID (required if provider: ollama|llamacpp|mlx)
 
 validation: # commands run by the verification stages
   build:
@@ -63,7 +63,7 @@ workflow:
 #   allow_cloud_fallback_for_local: false
 #   routing_enabled: false # automatic per-task routing (see "Automatic model routing")
 #   small:
-#     provider: ollama # ollama | llamacpp | command
+#     provider: ollama # ollama | llamacpp | mlx | command
 #     name: qwen3:4b
 #     locality: local # local | cloud
 #   medium:
@@ -96,8 +96,8 @@ workflow:
 | `project.name`                          | — (required)             | Project identifier. A missing name fails with a clear message.                             |
 | `project.integration_branch`            | `main`                   | Base branch for task branches and PRs.                                                     |
 | `agent.harness`                         | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
-| `agent.provider`                        | —                        | `ollama`, `llamacpp`, or `command`. Required when `harness: tool`.                         |
-| `agent.model`                           | —                        | Model ID. Required when `provider: ollama` or `llamacpp`.                                  |
+| `agent.provider`                        | —                        | `ollama`, `llamacpp`, `mlx`, or `command`. Required when `harness: tool`.                  |
+| `agent.model`                           | —                        | Model ID. Required when `provider: ollama`, `llamacpp`, or `mlx`.                          |
 | `validation.build` / `test` / `lint`    | —                        | Command lists run in the project directory, in order, stopping at the first failure.       |
 | `review.engine`                         | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
 | `review.delegation`                     | `false`                  | Review delegation flag.                                                                    |
@@ -117,7 +117,7 @@ workflow:
 | `models.default_class`                  | `medium`                 | Default model class (`small`, `medium`, `large`).                                          |
 | `models.fallback_class`                 | selected class           | Class used when the selected class has no model.                                           |
 | `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class to fall back to a cloud model.                                       |
-| `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `command`).                                    |
+| `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `mlx`, `command`).                             |
 | `models.<class>.name`                   | per class                | Model name for a class (see "Model routing").                                              |
 | `models.<class>.locality`               | per class                | `local` or `cloud` (see "Model routing").                                                  |
 | `providers.validate`                    | `false`                  | Opt-in pre-execution model-availability validation (see "Provider runtime").               |
@@ -131,6 +131,7 @@ workflow:
 | --------- | ---------- | ------------------------------------------------ | --------------------------------------------------------------------------------------------- | --------------- |
 | `tool`    | `ollama`   | `agent.harness`, `agent.provider`, `agent.model` | `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT`                               | Yes             |
 | `tool`    | `llamacpp` | `agent.harness`, `agent.provider`, `agent.model` | `SOP_LLAMACPP_BASE_URL`, `SOP_LLAMACPP_MODEL`, `SOP_LLAMACPP_TIMEOUT`, `SOP_LLAMACPP_API_KEY` | Yes             |
+| `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`                     | Yes             |
 | `command` | `command`  | `agent.harness` (optional; defaults to command)  | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                               | No              |
 
 `SOP_OLLAMA_TIMEOUT` is a Go duration (e.g. `300s` / `2m`); `SOP_LLAMACPP_TIMEOUT`
@@ -183,7 +184,7 @@ Resolution order, highest first:
 | `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.     |
 | `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model. |
 | `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.       |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, or `command`.                  |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.           |
 | `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                            |
 | `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                  |
 
@@ -312,12 +313,17 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
 - Endpoints resolve **environment over configuration over built-in default**, the
   same precedence the agent path uses. `SOP_OLLAMA_BASE_URL` and
   `SOP_LLAMACPP_BASE_URL` are the existing agent variables (one name per setting);
-  `SOP_MLX_BASE_URL` is new and follows the same `_BASE_URL` convention.
-- `providers.validate: true` makes a run check, before it starts a task, that the
-  selected provider is reachable and the selected model exists. It defaults to
-  `false`, so existing behavior is unchanged. It never substitutes a provider or
-  model: an unavailable provider or an absent model stops the run with an
-  actionable error.
+  `SOP_MLX_BASE_URL` is the same setting the MLX execution provider reads.
+- `providers.validate: true` makes a run check that the selected provider is
+  reachable and the selected model exists. It defaults to `false`, so existing
+  behavior is unchanged. It validates the **final** selection for what runs: with
+  the automatic router off, the run-level/default selection; with the router on,
+  each task's routed selection, immediately before it implements. It never
+  substitutes a provider or model: an unavailable provider or an absent model
+  stops the run with an actionable error.
+- The `mlx` provider is both inspectable (`sop providers`) and executable
+  (`agent.provider: mlx`), sharing the llama.cpp OpenAI-compatible transport. See
+  [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md) §2a.
 - Capability data, health, and model lists are **evidence only**; they never change
   task state, approval, validation, review, quality gates, or the model class.
 - `sop providers --models` also shows the optional metadata a runtime reports

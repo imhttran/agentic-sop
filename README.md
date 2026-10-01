@@ -67,7 +67,7 @@ Detailed structure: [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.m
 
 - **Go** (see `go.mod`) and **Git**.
 - An **AI command or agent harness** for planning and implementation (a local
-  model via Ollama/llama.cpp, or an external agent command).
+  model via Ollama/llama.cpp/MLX, or an external agent command).
 - SQLite is provided through the Go driver; no external database is required.
 
 ## Quick Start

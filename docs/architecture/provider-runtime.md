@@ -11,7 +11,7 @@
 The provider layer is **additive and off by default**: building the registry
 starts no execution, and the only behavior it can change — pre-execution model
 validation — is opt-in via `providers.validate: true`. Model-class selection is
-untouched: the provider layer sits *underneath* Phase 3.5 routing and never
+untouched: the provider layer sits _underneath_ Phase 3.5 routing and never
 chooses a class.
 
 ## The seam
@@ -26,10 +26,18 @@ chooses a class.
   assembled.
 - **Inspection:** `internal/cli/providers.go` — `runProviders` (the
   `sop providers` command) is read-only: it never creates SOP state.
-- **Validation seam:** `internal/cli/providers.go` — `validateSelectedModel` runs
-  in `internal/cli/run.go` (`runSingleTask`) and `internal/cli/drive.go`
-  (`runGraph`) immediately after the up-front capability guard, before the
-  lifecycle starts. It is a strict no-op unless `providers.validate` is on.
+- **Validation seam:** `internal/cli/providers.go` — `validateSelection` is the
+  single opt-in check. When the automatic per-task router is OFF, it runs on the
+  run-level/default selection from `internal/cli/run.go` (`runSingleTask`) and
+  `internal/cli/drive.go` (`runGraph`) immediately after the up-front capability
+  guard. When the router is ON, each task's final routed selection is validated in
+  `internal/cli/routing.go` (`applyTaskRouting`) immediately before implementation,
+  so the selection that actually executes is the one validated. Either way it is a
+  strict no-op unless `providers.validate` is on.
+- **Execution transport:** `internal/agent` — `OpenAICompatible` is the shared
+  `POST /v1/chat/completions` transport behind both the `llamacpp` and `mlx`
+  identities; identity and endpoint are configuration, not protocol. It performs
+  model inference only and holds no routing, lifecycle, or approval logic.
 
 ## Data flow
 
@@ -54,9 +62,27 @@ provider.ValidateSelection    (opt-in, read-only)
 ok  →  run continues          error →  run stops with an actionable message
 ```
 
-The selection validated is the routing layer's selection when routing is active,
-otherwise the effective execution stack's provider and model
-(`selectionForValidation`). It is never rewritten.
+The selection validated is the **final** selection for what will run: with the
+automatic router off, the effective execution stack's provider and model
+(`selectionForValidation`); with it on, the task's routed selection
+(`applyTaskRouting`). It is never rewritten.
+
+## Execution support
+
+The provider layer is inspection only. Actual agent execution lives in
+`internal/agent`, which now covers every provider:
+
+```text
+internal/agent
+  CommandAgent          command (subprocess)
+  Ollama                ollama (/api/chat)
+  OpenAICompatible      llamacpp + mlx (POST /v1/chat/completions)
+```
+
+`LlamaCpp` and `MLX` are two identities of the one `OpenAICompatible` transport,
+so llama.cpp and MLX share the execution plumbing rather than duplicating it.
+Text-only providers declare no `IMPLEMENT`/`FIX`; the tool harness remains the
+layer that turns a provider into a coding agent.
 
 ## Boundaries kept explicit
 

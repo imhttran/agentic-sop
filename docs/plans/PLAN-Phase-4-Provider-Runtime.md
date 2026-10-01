@@ -159,6 +159,30 @@ All read-only and still OFF by default:
   server cannot enumerate models (never as a discovery result).
 - `internal/provider/httpx` gained direct unit tests.
 
+### Provider runtime / execution alignment
+
+- **MLX execution.** `mlx` is a first-class execution provider: `internal/agent`
+  gained `NewMLX`/`NewMLXFromEnv` and the `SOP_MLX_*` variables, accepted by
+  `agent.provider` and the tool harness (`harness: tool, provider: mlx`).
+- **Shared transport.** The llama.cpp agent was generalized to
+  `agent.OpenAICompatible`; `LlamaCpp` and `MLX` are its two identities, so both
+  share the `POST /v1/chat/completions` plumbing instead of duplicating it. The
+  transport holds no routing/lifecycle logic.
+- **Identity unification.** The agent provider constants derive from
+  `provider.KnownIDs`; the config allow-list is built from it; the model-routing
+  allow-list is kept equal by a test. Provider identity can no longer drift across
+  the provider/config/model/agent layers.
+- **Final-selection validation.** Provider validation now runs on the **final**
+  per-task selection. With the automatic router on, `applyTaskRouting` validates the
+  routed selection immediately before implementation; the run-level default check is
+  skipped so a class the router never picks cannot fail the run. With the router off,
+  the run-level/default selection is validated up front, as before.
+- **Boundary tests.** The provider boundary test also freezes the `Registry` method
+  set and rejects authority-verb methods on the exported provider types.
+- **Tests.** Offline `httptest` coverage for MLX discover/validate/generate, shared
+  transport, identity sync, and per-task validation (positive, absent-model,
+  validation-off, routing-off).
+
 ## Out of scope
 
 Automatic provider fallback, cheapest/latency/cost routing, benchmarks, learned
