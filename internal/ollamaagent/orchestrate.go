@@ -21,6 +21,7 @@ import (
 // (policy.go). harness.go keeps only dispatch plus the common infrastructure.
 
 // --- Two-phase engine (document-producing capabilities) ---
+const maxSynthesisCorrections = 2
 
 // twoPhase bounds one document-producing capability's loop: a bounded read-only
 // discovery phase, then a tool-free synthesis phase that must produce the
@@ -61,11 +62,12 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 	}
 
 	var (
-		synthesis  bool // the synthesis phase has begun
-		discovery  int  // discovery turns taken (each executes at most one tool)
-		discovered int  // discovery tools actually executed
-		synth      int  // synthesis turns taken
-		nudged     bool // the soft wrap-up nudge has been sent
+		synthesis        bool // the synthesis phase has begun
+		discovery        int  // discovery turns taken (each executes at most one tool)
+		discovered       int  // discovery tools actually executed
+		synth            int  // actual synthesis turns taken
+		synthCorrections int  // denied synthesis tool requests
+		nudged           bool // the soft wrap-up nudge has been sent
 	)
 
 	for {
@@ -124,12 +126,42 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 			return string(encoded), nil
 
 		case synthesis: // no tools during synthesis: deny and correct
-			synth++
-			h.recordTwoPhaseTurn(req, tp.synthLabel, synth, name, toolharness.SummarizeRequest(name, args))
-			h.tools.RecordDenied(name, args, "tools are unavailable during synthesis")
-			messages = append(messages,
-				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: tp.correction},
+			synthCorrections++
+
+			h.recordTwoPhaseTurn(
+				req,
+				tp.synthLabel,
+				synthCorrections,
+				name,
+				toolharness.SummarizeRequest(name, args),
+			)
+
+			h.tools.RecordDenied(
+				name,
+				args,
+				"tools are unavailable during synthesis",
+			)
+
+			if synthCorrections > maxSynthesisCorrections {
+				return "", fmt.Errorf(
+					"the Ollama agent %s repeatedly requested tools during %s (model=%s, synthesis_corrections=%d, termination=synthesis_correction_limit)",
+					req.Capability,
+					strings.ToLower(tp.synthLabel),
+					h.cfg.Model,
+					synthCorrections,
+				)
+			}
+
+			messages = append(
+				messages,
+				chatMessage{
+					Role:    "assistant",
+					Content: assistantEcho(name, args, raw),
+				},
+				chatMessage{
+					Role:    "user",
+					Content: tp.correction,
+				},
 			)
 
 		default: // discovery

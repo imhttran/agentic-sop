@@ -795,39 +795,112 @@ func TestPlanForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 }
 
 func TestPlanSynthesisDeniesTools(t *testing.T) {
+	for _, corrections := range []int{1, 2} {
+		t.Run(fmt.Sprintf("corrections=%d", corrections), func(t *testing.T) {
+			dir := t.TempDir()
+			seedToolFiles(t, dir, "pkg", planDiscoveryTurns)
+			writeFile(t, dir, "notes.txt", "discovery context")
+			responses := make([]string, 0, planDiscoveryTurns+corrections+1)
+			for i := 0; i < planDiscoveryTurns; i++ {
+				responses = append(responses, readToolCall(i))
+			}
+			for i := 0; i < corrections; i++ {
+				responses = append(responses, `{"tool":"read_file","args":{"path":"notes.txt"}}`)
+			}
+			responses = append(responses, `{"project":"p","summary":"plan complete","stages":[{"id":"stage-1","title":"Implement change"}]}`)
+			fake, srv := newFakeOllama(t, responses...)
+			cfg := testConfig(srv.URL)
+			cfg.MaxToolCalls = 100
+
+			h := New(cfg, dir)
+			content, err := h.Execute(context.Background(), planRequest())
+			if err != nil {
+				t.Fatalf("Execute failed: %v", err)
+			}
+			if !strings.Contains(content, "plan complete") || !strings.Contains(content, "stages") {
+				t.Errorf("content = %q, want the final PLAN", content)
+			}
+			if got := fake.count(); got != planDiscoveryTurns+corrections+1 {
+				t.Errorf("chat calls = %d, want %d", got, planDiscoveryTurns+corrections+1)
+			}
+			audit := h.AuditRecords()
+			if len(audit) != planDiscoveryTurns+corrections {
+				t.Fatalf("audit records = %d, want %d", len(audit), planDiscoveryTurns+corrections)
+			}
+			for i, r := range audit {
+				if i < planDiscoveryTurns {
+					if r.Action != toolharness.ActionAllow || r.Outcome != toolharness.OutcomeOK {
+						t.Errorf("discovery audit = %+v, want successful execution", r)
+					}
+				} else if r.Tool != toolharness.ToolReadFile || r.Request != "path=notes.txt" ||
+					r.Action != toolharness.ActionDeny || r.Outcome != toolharness.OutcomeDenied ||
+					!strings.Contains(r.Detail, "unavailable during synthesis") {
+					t.Errorf("synthesis audit = %+v, want denied read", r)
+				}
+			}
+			for i := 1; i <= corrections; i++ {
+				msgs := fake.request(planDiscoveryTurns + i).Messages
+				if last := msgs[len(msgs)-1]; last.Role != "user" || last.Content != planTwoPhase.correction {
+					t.Errorf("correction %d: last message = %+v", i, last)
+				}
+			}
+			records := h.TraceRecords()
+			if got := countPhase(records, "DISCOVERY"); got != planDiscoveryTurns {
+				t.Errorf("discovery turns = %d, want %d (no rediscovery)", got, planDiscoveryTurns)
+			}
+			if last := records[len(records)-1]; last.Phase != "SYNTHESIS" || last.Tool != "final" || last.Iteration != 1 {
+				t.Errorf("final trace = %+v, want synthesis attempt 1 after corrections", last)
+			}
+		})
+	}
+}
+
+func TestPlanSynthesisCorrectionLimit(t *testing.T) {
 	dir := t.TempDir()
-	responses := make([]string, 0, planDiscoveryTurns+2)
+	seedToolFiles(t, dir, "pkg", planDiscoveryTurns)
+	writeFile(t, dir, "notes.txt", "must not be read during synthesis")
+	responses := make([]string, 0, planDiscoveryTurns+3)
 	for i := 0; i < planDiscoveryTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
-	// During synthesis the model requests a read-only tool; it must be denied.
-	// On the next synthesis turn it returns the required final PLAN.
-	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"notes.txt"}}`,
-		`{"project":"p","summary":"plan complete","stages":[{"id":"stage-1","title":"Implement change"}]}`,
-	)
+	for i := 0; i < 3; i++ {
+		responses = append(responses, `{"tool":"read_file","args":{"path":"notes.txt"}}`)
+	}
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
-
 	h := New(cfg, dir)
-	if _, err := h.Execute(context.Background(), planRequest()); err != nil {
-		t.Fatalf("Execute failed: %v", err)
+	_, err := h.Execute(context.Background(), planRequest())
+	if err == nil || !strings.Contains(err.Error(), "termination=synthesis_correction_limit") {
+		t.Fatalf("err = %v, want synthesis_correction_limit", err)
 	}
-	denied := 0
-	for _, r := range h.AuditRecords() {
-		if r.Action == toolharness.ActionDeny {
-			denied++
+	if strings.Contains(err.Error(), "termination=synthesis_limit") || strings.Contains(err.Error(), "iteration_limit") {
+		t.Errorf("err = %v, must distinguish correction exhaustion", err)
+	}
+	if !strings.Contains(err.Error(), "synthesis_corrections=3") {
+		t.Errorf("err = %v, want third prohibited request", err)
+	}
+	if got := fake.count(); got != planDiscoveryTurns+3 {
+		t.Errorf("chat calls = %d, want %d (bounded corrections)", got, planDiscoveryTurns+3)
+	}
+	audit := h.AuditRecords()
+	if len(audit) != planDiscoveryTurns+3 {
+		t.Fatalf("audit records = %d, want %d", len(audit), planDiscoveryTurns+3)
+	}
+	for _, r := range audit[planDiscoveryTurns:] {
+		if r.Tool != toolharness.ToolReadFile || r.Request != "path=notes.txt" ||
+			r.Action != toolharness.ActionDeny || r.Outcome != toolharness.OutcomeDenied {
+			t.Errorf("synthesis audit = %+v, want denied read (never executed)", r)
 		}
 	}
-	if denied != 1 {
-		t.Errorf("denied records = %d, want 1 (the synthesis tool request)", denied)
+	for i := 1; i <= 2; i++ {
+		msgs := fake.request(planDiscoveryTurns + i).Messages
+		if last := msgs[len(msgs)-1]; last.Role != "user" || last.Content != planTwoPhase.correction {
+			t.Errorf("correction %d: last message = %+v", i, last)
+		}
 	}
-	if got := len(h.AuditRecords()); got != planDiscoveryTurns+1 {
-		t.Errorf("audit records = %d, want %d executed + 1 denied", got, planDiscoveryTurns)
-	}
-	if !strings.Contains(messageText(fake.request(fake.count()-1)), "No additional tools are available") {
-		t.Error("the synthesis correction was not sent")
+	if got := countPhase(h.TraceRecords(), "DISCOVERY"); got != planDiscoveryTurns {
+		t.Errorf("discovery turns = %d, want %d (no rediscovery)", got, planDiscoveryTurns)
 	}
 }
 
@@ -838,8 +911,8 @@ func TestPlanSynthesisExhaustion(t *testing.T) {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/a.go"}}`,
-		`{"tool":"read_file","args":{"path":"pkg/b.go"}}`,
+		`I am still synthesizing the plan.`,
+		`I am continuing to synthesize the plan.`,
 	)
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -946,8 +1019,8 @@ func TestPlanTraceShowsSynthesisTermination(t *testing.T) {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/a.go"}}`,
-		`{"tool":"read_file","args":{"path":"pkg/b.go"}}`,
+		`I am still synthesizing the plan.`,
+		`I am continuing to synthesize the plan.`,
 	)
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -994,12 +1067,13 @@ func TestImplementNormalCompletion(t *testing.T) {
 func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
-	responses := make([]string, 0, reviewInspectTurns+2)
+	responses := make([]string, 0, reviewInspectTurns+3)
 	for i := 0; i < reviewInspectTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
 		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`, // refused: synthesis has no tools
+		`{"tool":"read_file","args":{"path":"pkg/extra.go"}}`, // second correction must still leave room for the final
 		`{"summary":"clean","findings":[]}`,
 	)
 	fake, srv := newFakeOllama(t, responses...)
@@ -1021,8 +1095,8 @@ func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 	if got := countPhase(records, "INSPECT"); got != reviewInspectTurns {
 		t.Errorf("inspect turns = %d, want %d", got, reviewInspectTurns)
 	}
-	if got := countPhase(records, "SYNTHESIZE"); got != 2 {
-		t.Errorf("synthesize turns = %d, want 2 (the denied tool call plus the final response)", got)
+	if got := countPhase(records, "SYNTHESIZE"); got != 3 {
+		t.Errorf("synthesize turns = %d, want 3 (two denied tool calls plus the final response)", got)
 	}
 	denied := 0
 	for _, r := range h.AuditRecords() {
@@ -1030,14 +1104,32 @@ func TestReviewForcedSynthesisAfterDiscoveryLimit(t *testing.T) {
 			denied++
 		}
 	}
-	if denied != 1 {
-		t.Errorf("denied tools = %d, want 1 (synthesis has no tools)", denied)
+	if denied != 2 {
+		t.Errorf("denied tools = %d, want 2 (synthesis has no tools)", denied)
 	}
 	if !strings.Contains(messageText(fake.request(reviewInspectTurns)), "Inspection is complete") {
 		t.Error("the forced-synthesis instruction was not sent")
 	}
-	if !strings.Contains(messageText(fake.request(fake.count()-1)), "No additional tools are available") {
-		t.Error("the synthesis correction was not sent")
+	if got := fake.count(); got != reviewInspectTurns+3 {
+		t.Errorf("chat calls = %d, want %d", got, reviewInspectTurns+3)
+	}
+	if last := records[len(records)-1]; last.Tool != "final" || last.Iteration != 1 {
+		t.Errorf("final trace = %+v, want synthesis attempt 1 after corrections", last)
+	}
+	audit := h.AuditRecords()
+	if len(audit) != reviewInspectTurns+2 {
+		t.Fatalf("audit records = %d, want %d", len(audit), reviewInspectTurns+2)
+	}
+	for _, r := range audit[reviewInspectTurns:] {
+		if r.Tool != toolharness.ToolReadFile || r.Action != toolharness.ActionDeny || r.Outcome != toolharness.OutcomeDenied {
+			t.Errorf("synthesis audit = %+v, want denied read (never executed)", r)
+		}
+	}
+	for i := 1; i <= 2; i++ {
+		msgs := fake.request(reviewInspectTurns + i).Messages
+		if last := msgs[len(msgs)-1]; last.Role != "user" || last.Content != reviewTwoPhase.correction {
+			t.Errorf("correction %d: last message = %+v", i, last)
+		}
 	}
 }
 
@@ -1153,14 +1245,14 @@ func TestReviewInspectNudgeAtSixthCall(t *testing.T) {
 
 func TestReviewSynthesisExhaustion(t *testing.T) {
 	dir := t.TempDir()
-	seedToolFiles(t, dir, "pkg", reviewInspectTurns+2)
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
 	responses := make([]string, 0, reviewInspectTurns+reviewSynthesizeTurns)
 	for i := 0; i < reviewInspectTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/extra1.go"}}`,
-		`{"tool":"read_file","args":{"path":"pkg/extra2.go"}}`,
+		`I am still synthesizing the review.`,
+		`I am continuing to synthesize the review.`,
 	)
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -1217,14 +1309,14 @@ func TestReviewTraceRendering(t *testing.T) {
 
 func TestReviewTraceShowsSynthesisTermination(t *testing.T) {
 	dir := t.TempDir()
-	seedToolFiles(t, dir, "pkg", reviewInspectTurns+2)
+	seedToolFiles(t, dir, "pkg", reviewInspectTurns)
 	responses := make([]string, 0, reviewInspectTurns+reviewSynthesizeTurns)
 	for i := 0; i < reviewInspectTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
 	responses = append(responses,
-		`{"tool":"read_file","args":{"path":"pkg/extra1.go"}}`,
-		`{"tool":"read_file","args":{"path":"pkg/extra2.go"}}`,
+		`I am still synthesizing the review.`,
+		`I am continuing to synthesize the review.`,
 	)
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
