@@ -19,8 +19,8 @@ import (
 
 // Deterministic per-task model routing (Phase 3.5).
 //
-// The router (internal/router) maps typed evidence — the task's structure and the
-// early-JEV checkpoints' typed evidence — to one of the configured model classes,
+// The router (internal/router) maps typed evidence - the task's structure and the
+// early-JEV checkpoints' typed evidence - to one of the configured model classes,
 // and the model layer resolves that class to a concrete provider/model. This file
 // is the seam that computes the decision, records it, and (only) selects the model
 // for the task's implementation agent.
@@ -29,20 +29,28 @@ import (
 // state, or bypasses a gate. It only selects which configured model runs the
 // bounded implementation work. A manual --model-class override always wins over
 // the automatic router, so an operator's explicit choice is never silently
-// replaced (Phase 3.5 §6).
+// replaced (Phase 3.5 6).
 
 // taskRouting is the per-task routing decision: the resolved class selection plus
 // the deterministic provenance (source, reasons, the typed signals used, and which
 // checkpoints informed it). It is the SOLE source of truth for the model choice:
 // it is derived in memory by routingForTask and never reconstructed from the
 // persisted routing.json. Nothing reads the artifact back to drive a decision.
+//
+// ExecutionTarget is the resolved EXECUTION target: the routing class carried
+// over unchanged plus the actual provider/model/locality that will run and the
+// typed execution source (primary, or availability-fallback). It keeps the
+// distinction between the routing DECISION and the executing model explicit, so
+// persisted evidence never rewrites a SMALL routing decision to MEDIUM merely
+// because a SMALL availability fallback executed.
 type taskRouting struct {
-	Class       model.Class
-	Source      runpkg.RoutingSource
-	Reasons     []string
-	Selection   model.Selection
-	Signals     router.Signals
-	Checkpoints []string
+	Class           model.Class
+	Source          runpkg.RoutingSource
+	Reasons         []string
+	Selection       model.Selection
+	ExecutionTarget model.ExecutionTarget
+	Signals         router.Signals
+	Checkpoints     []string
 }
 
 // routingForTask computes the per-task routing decision. It returns ok=false when
@@ -58,22 +66,24 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 	// never as a router or operator decision.
 	if d.attempt != nil {
 		return taskRouting{
-			Class:     d.attempt.Decision.ToClass,
-			Source:    runpkg.RoutingSourceEscalation,
-			Reasons:   []string{d.attempt.Decision.Reason},
-			Selection: d.attempt.Selection,
+			Class:           d.attempt.Decision.ToClass,
+			Source:          runpkg.RoutingSourceEscalation,
+			Reasons:         []string{d.attempt.Decision.Reason},
+			Selection:       d.attempt.Selection,
+			ExecutionTarget: model.ExecutionTargetForPrimary(d.attempt.Selection),
 		}, true, nil
 	}
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
 			// A manual override pins the CLASS; it does not pin the model within it,
 			// so the local-first fallback applies to an explicitly chosen class too.
-			res := applyLocalFallback(cfg, d, d.routing)
+			res, applied := applyLocalFallback(cfg, d, d.routing)
 			return taskRouting{
-				Class:     res.Selection.Class,
-				Source:    runpkg.RoutingSourceManual,
-				Reasons:   routingReasons([]string{model.RoutingReasonManual}, res.Selection),
-				Selection: res.Selection,
+				Class:           res.Selection.Class,
+				Source:          runpkg.RoutingSourceManual,
+				Reasons:         routingReasons([]string{model.RoutingReasonManual}, res.Selection),
+				Selection:       res.Selection,
+				ExecutionTarget: executionTargetFor(res, applied),
 			}, true, nil
 		}
 		return taskRouting{}, false, nil
@@ -111,15 +121,33 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 	if !res.Active {
 		return taskRouting{}, false, nil
 	}
-	res = applyLocalFallback(cfg, d, res)
+	res, applied := applyLocalFallback(cfg, d, res)
 	return taskRouting{
-		Class:       dec.Class,
-		Source:      runpkg.RoutingSourcePolicy,
-		Reasons:     routingReasons(dec.Reasons, res.Selection),
-		Selection:   res.Selection,
-		Signals:     sig,
-		Checkpoints: checkpoints,
+		Class:           dec.Class,
+		Source:          runpkg.RoutingSourcePolicy,
+		Reasons:         routingReasons(dec.Reasons, res.Selection),
+		Selection:       res.Selection,
+		ExecutionTarget: executionTargetFor(res, applied),
+		Signals:         sig,
+		Checkpoints:     checkpoints,
 	}, true, nil
+}
+
+// executionTargetFor records the resolved EXECUTION target for a routing result.
+// It classifies the result as primary or availability-fallback from the EXPLICIT
+// decision the caller made: `applied` is true only when applyLocalFallback
+// replaced the selection with the class's configured availability fallback.
+// Taking the decision as an argument (rather than inferring it from an unrelated
+// Selection field) keeps the provenance explicit and cannot silently degrade if
+// another code path later reuses a source value. It performs no probe.
+//
+// The routing CLASS is carried over UNCHANGED whether or not the fallback
+// applied: a SMALL decision stays SMALL even when its SMALL cloud fallback runs.
+func executionTargetFor(res model.Result, applied bool) model.ExecutionTarget {
+	if applied && res.LocalFallback != nil {
+		return model.ExecutionTargetForFallback(res.Selection, *res.LocalFallback)
+	}
+	return model.ExecutionTargetForPrimary(res.Selection)
 }
 
 // routingReasons returns a routing decision's reasons, with the local-fallback
@@ -137,8 +165,8 @@ func routingReasons(reasons []string, sel model.Selection) []string {
 
 // applyTaskRouting computes the routing decision for the task and, when it
 // applies, replaces the implementation agent with one built for the selected
-// class. It prints a concise routing block — the class, the resolved model, the
-// source, the reasons, and the typed evidence — and returns the (possibly
+// class. It prints a concise routing block - the class, the resolved model, the
+// source, the reasons, and the typed evidence - and returns the (possibly
 // unchanged) agent, the decision, and any error. Nothing is printed when no
 // routing applies.
 //
@@ -146,10 +174,10 @@ func routingReasons(reasons []string, sel model.Selection) []string {
 // checkpoint, so the model is chosen from the freshest evidence and no expensive
 // agent work precedes the decision. Building the agent for the selected class can
 // fail (for example an unknown provider); that failure is surfaced rather than
-// silently falling back to a different model (Phase 3.5 §10).
+// silently falling back to a different model (Phase 3.5 10).
 //
-// When providers.validate is opted in, the FINAL per-task selection — not the
-// run-level default — is validated here, before any agent work, so a routed model
+// When providers.validate is opted in, the FINAL per-task selection - not the
+// run-level default - is validated here, before any agent work, so a routed model
 // the runtime cannot serve stops the task instead of failing mid-execution. The
 // validation is read-only and never substitutes a provider or model.
 //
@@ -166,7 +194,7 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 		// implementation. Guard it here, at the final-selection seam, rather than only at
 		// construction: with routing enabled the default agent is a fallback, and
 		// rejecting it before routing would refuse work whose routed class could have
-		// executed (Phase 5.4 §36). Guarding here keeps the invariant that the agent
+		// executed (Phase 5.4 36). Guarding here keeps the invariant that the agent
 		// which actually runs supports IMPLEMENT, whether it is routed or default.
 		if err := guardCapability(a, agent.Implement); err != nil {
 			return a, nil, err
@@ -187,7 +215,7 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 		return a, nil, fmt.Errorf("class %s selection: %w", tr.Class, err)
 	}
 	if d.newAgent == nil {
-		// Fail closed (Phase 5 §14): routing selected a different model, but without
+		// Fail closed (Phase 5 14): routing selected a different model, but without
 		// an agent factory SOP cannot build it. Silently leaving the previous agent
 		// in place would execute a model other than the one routing selected.
 		return a, nil, fmt.Errorf("model routing: no agent factory is available to build the %s model (%s/%s)", tr.Class, tr.Selection.Provider, tr.Selection.Model)
@@ -208,14 +236,15 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 
 // routingDoc is the serializable routing section of the run report.
 type routingDoc struct {
-	Class       model.Class            `json:"class"`
-	Source      string                 `json:"source"`
-	Reasons     []string               `json:"reasons,omitempty"`
-	Provider    string                 `json:"provider,omitempty"`
-	Model       string                 `json:"model,omitempty"`
-	Locality    model.Locality         `json:"locality,omitempty"`
-	Checkpoints []string               `json:"checkpoints,omitempty"`
-	Signals     *runpkg.RoutingSignals `json:"signals,omitempty"`
+	Class           model.Class            `json:"class"`
+	Source          string                 `json:"source"`
+	Reasons         []string               `json:"reasons,omitempty"`
+	Provider        string                 `json:"provider,omitempty"`
+	Model           string                 `json:"model,omitempty"`
+	Locality        model.Locality         `json:"locality,omitempty"`
+	ExecutionSource string                 `json:"execution_source,omitempty"`
+	Checkpoints     []string               `json:"checkpoints,omitempty"`
+	Signals         *runpkg.RoutingSignals `json:"signals,omitempty"`
 }
 
 // routingDocFor builds the report section from a decision, or nil when none.
@@ -229,15 +258,22 @@ func routingDocFor(tr *taskRouting) *routingDoc {
 		return nil
 	}
 	return &routingDoc{
-		Class:       tr.Class,
-		Source:      string(tr.Source),
-		Reasons:     tr.Reasons,
-		Provider:    tr.Selection.Provider,
-		Model:       tr.Selection.Model,
-		Locality:    tr.Selection.Locality,
-		Checkpoints: tr.Checkpoints,
-		Signals:     routingSignalsDoc(tr.Signals),
+		Class:           tr.Class,
+		Source:          string(tr.Source),
+		Reasons:         tr.Reasons,
+		Provider:        tr.Selection.Provider,
+		Model:           tr.Selection.Model,
+		Locality:        tr.Selection.Locality,
+		ExecutionSource: executionSourceFor(tr),
+		Checkpoints:     tr.Checkpoints,
+		Signals:         routingSignalsDoc(tr.Signals),
 	}
+}
+
+// executionSourceFor returns the typed execution source for a routing decision,
+// defaulting to primary when no explicit target was recorded.
+func executionSourceFor(tr *taskRouting) string {
+	return tr.ExecutionTarget.Source.String()
 }
 
 // routingSignalsDoc projects the typed router signals into the persistable shape.
@@ -260,30 +296,37 @@ func routingSignalsDoc(s router.Signals) *runpkg.RoutingSignals {
 // routing.json.
 //
 // It is WRITE-ONLY diagnostic evidence: nothing reads it back, and it is never a
-// second source of truth — the model class always derives from the in-process
+// second source of truth - the model class always derives from the in-process
 // router.Decide output, and no stage re-drives the decision from this file.
 //
 // The store writer fails closed on a contract violation (unknown version or
 // source) and refuses to persist the artifact; the returned error is surfaced
 // explicitly by the caller rather than silently discarded. A contract violation
-// never changes the run's decision — the model choice in `tr` is already fixed —
+// never changes the run's decision - the model choice in `tr` is already fixed -
 // but it must not be mistaken for success.
+//
+// The persisted evidence keeps the routing CLASS unchanged and records the
+// execution target beside it: the class is the routing DECISION, the provider/
+// model/locality are the ACTUAL execution target, and execution_source is the
+// typed provenance (primary or availability-fallback). A SMALL routing decision
+// is never rewritten to MEDIUM because a SMALL availability fallback executed.
 func writeRoutingDecisionArtifact(rn *runpkg.Run, taskID string, tr *taskRouting) error {
 	if tr == nil {
 		return nil
 	}
 	art := runpkg.RoutingArtifact{
-		Version:     runpkg.RoutingArtifactVersion,
-		Task:        taskID,
-		Class:       string(tr.Class),
-		Source:      tr.Source,
-		Reasons:     tr.Reasons,
-		Provider:    tr.Selection.Provider,
-		Model:       tr.Selection.Model,
-		Locality:    string(tr.Selection.Locality),
-		Checkpoints: tr.Checkpoints,
-		Signals:     routingSignalsDoc(tr.Signals),
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Version:         runpkg.RoutingArtifactVersion,
+		Task:            taskID,
+		Class:           string(tr.Class),
+		Source:          tr.Source,
+		Reasons:         tr.Reasons,
+		Provider:        tr.Selection.Provider,
+		Model:           tr.Selection.Model,
+		Locality:        string(tr.Selection.Locality),
+		ExecutionSource: executionSourceFor(tr),
+		Checkpoints:     tr.Checkpoints,
+		Signals:         routingSignalsDoc(tr.Signals),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 	}
 	return rn.WriteRoutingArtifact(art)
 }
@@ -297,19 +340,22 @@ func writeRoutingSummary(w io.Writer, r *routingDoc) {
 		return
 	}
 	fmt.Fprintln(w, "Model routing:")
-	fmt.Fprintf(w, "  %-11s %s\n", "Class:", r.Class)
-	fmt.Fprintf(w, "  %-11s %s\n", "Provider:", r.Provider)
-	fmt.Fprintf(w, "  %-11s %s\n", "Model:", r.Model)
-	fmt.Fprintf(w, "  %-11s %s\n", "Locality:", r.Locality)
-	fmt.Fprintf(w, "  %-11s %s\n", "Source:", r.Source)
+	fmt.Fprintf(w, "  %-16s %s\n", "Class:", r.Class)
+	fmt.Fprintf(w, "  %-16s %s\n", "Provider:", r.Provider)
+	fmt.Fprintf(w, "  %-16s %s\n", "Model:", r.Model)
+	fmt.Fprintf(w, "  %-16s %s\n", "Locality:", r.Locality)
+	fmt.Fprintf(w, "  %-16s %s\n", "Source:", r.Source)
+	if r.ExecutionSource != "" {
+		fmt.Fprintf(w, "  %-16s %s\n", "Execution source:", r.ExecutionSource)
+	}
 	if len(r.Reasons) > 0 {
-		fmt.Fprintf(w, "  %-11s %s\n", "Reasons:", router.ReasonsText(r.Reasons))
+		fmt.Fprintf(w, "  %-16s %s\n", "Reasons:", router.ReasonsText(r.Reasons))
 	}
 	if cps := routingCheckpointsText(r.Checkpoints); cps != "" {
-		fmt.Fprintf(w, "  %-11s %s\n", "Checkpoints:", cps)
+		fmt.Fprintf(w, "  %-16s %s\n", "Checkpoints:", cps)
 	}
 	if ev := routingEvidenceLine(r.Signals); ev != "" {
-		fmt.Fprintf(w, "  %-11s %s\n", "Evidence:", ev)
+		fmt.Fprintf(w, "  %-16s %s\n", "Evidence:", ev)
 	}
 	fmt.Fprintln(w)
 }

@@ -35,6 +35,12 @@ func TestParseRunArgsModelClass(t *testing.T) {
 }
 
 func TestApplyModelRoutingInactiveByDefault(t *testing.T) {
+	// The environment is process-global: the model-routing layer reads it directly,
+	// so a developer's shell (or a loaded .env) could otherwise make this assertion
+	// about the ABSENCE of configuration fail. Clear the routing namespace so the
+	// test proves what it claims.
+	clearModelEnv(t)
+
 	cfg := config.Default()
 	before := cfg.Agent
 
@@ -60,7 +66,11 @@ func setClassEnv(t *testing.T, class, name, locality string) {
 }
 
 func TestApplyModelRoutingFromEnvironment(t *testing.T) {
-	setClassEnv(t, "medium", "glm-5.3-flash:cloud", "cloud")
+	// A leaked default class (for example SOP_MODEL_DEFAULT_CLASS from a developer's
+	// .env) would outrank the per-class environment set below, so clear the routing
+	// namespace first and set it explicitly.
+	clearModelEnv(t)
+	setClassEnv(t, "medium", "nemotron-3-super:cloud", "cloud")
 
 	cfg := config.Default()
 	res, err := applyModelRouting(&cfg, "")
@@ -70,12 +80,13 @@ func TestApplyModelRoutingFromEnvironment(t *testing.T) {
 	if !res.Active || res.Selection.Class != "medium" {
 		t.Fatalf("res = %+v, want an active medium selection", res)
 	}
-	if cfg.Agent.Model != "glm-5.3-flash:cloud" {
+	if cfg.Agent.Model != "nemotron-3-super:cloud" {
 		t.Fatalf("agent model = %q, want the routed model", cfg.Agent.Model)
 	}
 }
 
 func TestApplyModelRoutingCLIOverride(t *testing.T) {
+	clearModelEnv(t)
 	setClassEnv(t, "small", "small-model", "local")
 	setClassEnv(t, "large", "large-model", "cloud")
 
@@ -90,6 +101,7 @@ func TestApplyModelRoutingCLIOverride(t *testing.T) {
 }
 
 func TestApplyModelRoutingInvalidClassIsActionable(t *testing.T) {
+	clearModelEnv(t)
 	t.Setenv("SOP_MODEL_DEFAULT_CLASS", "gigantic")
 	cfg := config.Default()
 	if _, err := applyModelRouting(&cfg, ""); err == nil {

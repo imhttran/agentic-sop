@@ -65,7 +65,9 @@ type RoutingArtifact struct {
 	Version int `json:"version"`
 	// Task is the task identifier the decision pertains to.
 	Task string `json:"task"`
-	// Class is the selected model class (small, medium, or large).
+	// Class is the selected model class (small, medium, or large). It is the
+	// routing DECISION and is never rewritten by an availability fallback: a SMALL
+	// decision stays class=small even when its SMALL cloud fallback executed.
 	Class string `json:"class"`
 	// Source records what selected the class.
 	Source RoutingSource `json:"source"`
@@ -77,6 +79,13 @@ type RoutingArtifact struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Locality string `json:"locality,omitempty"`
+	// ExecutionSource records where the EXECUTING model came from: "primary" or
+	// "availability-fallback". It distinguishes the routing DECISION (Class, above)
+	// from the actual execution target, so a SMALL decision that ran its SMALL
+	// cloud availability fallback keeps class=small and records
+	// execution_source=availability-fallback. It is a typed, non-secret value and
+	// never model-generated prose; empty is treated as "primary" by consumers.
+	ExecutionSource string `json:"execution_source,omitempty"`
 	// Checkpoints names the early-JEV checkpoints whose evidence informed the
 	// decision (task_triage, pre_execution). Empty when no evidence was available.
 	Checkpoints []string `json:"checkpoints,omitempty"`

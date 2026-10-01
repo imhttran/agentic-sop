@@ -43,13 +43,13 @@ import (
 //
 // The prompt path is OFF from a policy standpoint in the same way routing is: with
 // routing disabled and no --model-class, the configured/default execution stack is
-// used, and no automatic escalation is performed for prompts (Phase 5.4 §37).
+// used, and no automatic escalation is performed for prompts (Phase 5.4 37).
 
 // promptUsage is the one-line usage for `sop prompt`.
 const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--file PATH | PROMPT]"
 
 // defaultPromptCapability is the conservative, read-only default: a bare prompt is
-// never treated as an implementation request (Phase 5.4 §8).
+// never treated as an implementation request (Phase 5.4 8).
 const defaultPromptCapability = "plan"
 
 // promptCapabilities maps the accepted CLI capability names to the canonical
@@ -306,7 +306,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 
 	ctx := context.Background()
 
-	// Optional typed JEV triage (Phase 5.4 §12). Reused unchanged: JEV provides
+	// Optional typed JEV triage (Phase 5.4 12). Reused unchanged: JEV provides
 	// evidence only and never selects the class.
 	tri := runPromptJEV(ctx, cfg, d, wi, rn)
 	// Early JEV triage owns a human boundary exactly as it does for a task: a policy
@@ -439,7 +439,7 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	tri := runPromptJEV(ctx, cfg, d, wi, rn)
 	// Early JEV triage owns a human boundary exactly as it does for a task, and
 	// BEFORE any implementation work, so a policy escalation cannot mutate the
-	// repository (Phase 5.4 §6, §8).
+	// repository (Phase 5.4 6, 8).
 	if tri.Escalate {
 		return stopPromptForTriage(rn, wi, tri, opts, progress, stdout, stderr)
 	}
@@ -516,12 +516,13 @@ func runPromptJEV(ctx context.Context, cfg config.Config, d deps, wi workitem.Wo
 func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting, bool, error) {
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
-			res := applyLocalFallback(cfg, d, d.routing)
+			res, applied := applyLocalFallback(cfg, d, d.routing)
 			return &taskRouting{
-				Class:     res.Selection.Class,
-				Source:    runpkg.RoutingSourceManual,
-				Reasons:   routingReasons([]string{model.RoutingReasonManual}, res.Selection),
-				Selection: res.Selection,
+				Class:           res.Selection.Class,
+				Source:          runpkg.RoutingSourceManual,
+				Reasons:         routingReasons([]string{model.RoutingReasonManual}, res.Selection),
+				Selection:       res.Selection,
+				ExecutionTarget: executionTargetFor(res, applied),
 			}, true, nil
 		}
 		return nil, false, nil
@@ -549,14 +550,15 @@ func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting
 	if !res.Active {
 		return nil, false, nil
 	}
-	res = applyLocalFallback(cfg, d, res)
+	res, applied := applyLocalFallback(cfg, d, res)
 	return &taskRouting{
-		Class:       dec.Class,
-		Source:      runpkg.RoutingSourcePolicy,
-		Reasons:     routingReasons(dec.Reasons, res.Selection),
-		Selection:   res.Selection,
-		Signals:     sig,
-		Checkpoints: checkpoints,
+		Class:           dec.Class,
+		Source:          runpkg.RoutingSourcePolicy,
+		Reasons:         routingReasons(dec.Reasons, res.Selection),
+		Selection:       res.Selection,
+		ExecutionTarget: executionTargetFor(res, applied),
+		Signals:         sig,
+		Checkpoints:     checkpoints,
 	}, true, nil
 }
 
@@ -642,13 +644,14 @@ func renderPromptRouting(w io.Writer, wi workitem.WorkItem, tr *taskRouting, sel
 	}
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Model routing:")
-	fmt.Fprintf(w, "  %-9s %s\n", "Class:", tr.Class)
-	fmt.Fprintf(w, "  %-9s %s\n", "Provider:", sel.Provider)
+	fmt.Fprintf(w, "  %-17s %s\n", "Class:", tr.Class)
+	fmt.Fprintf(w, "  %-17s %s\n", "Provider:", sel.Provider)
 	if sel.Model != "" {
-		fmt.Fprintf(w, "  %-9s %s\n", "Model:", sel.Model)
+		fmt.Fprintf(w, "  %-17s %s\n", "Model:", sel.Model)
 	}
+	fmt.Fprintf(w, "  %-17s %s\n", "Execution source:", executionSourceFor(tr))
 	if len(tr.Reasons) > 0 {
-		fmt.Fprintf(w, "  %-9s %s\n", "Reason:", router.ReasonsText(tr.Reasons))
+		fmt.Fprintf(w, "  %-17s %s\n", "Reason:", router.ReasonsText(tr.Reasons))
 	}
 	fmt.Fprintln(w)
 }
@@ -693,13 +696,16 @@ type promptResultDoc struct {
 }
 
 // promptRoutingSection is the prompt's routing evidence in the result document. It
-// reuses the same fields the task routing artifact records.
+// reuses the same fields the task routing artifact records, including the typed
+// execution source so the routing CLASS is distinguishable from the actual
+// EXECUTION target.
 type promptRoutingSection struct {
-	Class    string   `json:"class,omitempty"`
-	Provider string   `json:"provider,omitempty"`
-	Model    string   `json:"model,omitempty"`
-	Source   string   `json:"source,omitempty"`
-	Reasons  []string `json:"reasons,omitempty"`
+	Class           string   `json:"class,omitempty"`
+	Provider        string   `json:"provider,omitempty"`
+	Model           string   `json:"model,omitempty"`
+	Source          string   `json:"source,omitempty"`
+	ExecutionSource string   `json:"execution_source,omitempty"`
+	Reasons         []string `json:"reasons,omitempty"`
 }
 
 // promptRoutingDoc projects a routing decision and selection into the result
@@ -710,6 +716,7 @@ func promptRoutingDoc(tr *taskRouting, sel model.Selection) *promptRoutingSectio
 	if tr != nil {
 		out.Class = string(tr.Class)
 		out.Source = string(tr.Source)
+		out.ExecutionSource = executionSourceFor(tr)
 		out.Reasons = tr.Reasons
 	}
 	return out
@@ -723,17 +730,18 @@ func writePromptRoutingArtifact(rn *runpkg.Run, wi workitem.WorkItem, tr *taskRo
 		return
 	}
 	art := runpkg.RoutingArtifact{
-		Version:     runpkg.RoutingArtifactVersion,
-		Task:        wi.ID,
-		Class:       string(tr.Class),
-		Source:      tr.Source,
-		Reasons:     tr.Reasons,
-		Provider:    sel.Provider,
-		Model:       sel.Model,
-		Locality:    string(sel.Locality),
-		Checkpoints: tr.Checkpoints,
-		Signals:     routingSignalsDoc(tr.Signals),
-		Timestamp:   time.Now().UTC().Format(time.RFC3339),
+		Version:         runpkg.RoutingArtifactVersion,
+		Task:            wi.ID,
+		Class:           string(tr.Class),
+		Source:          tr.Source,
+		Reasons:         tr.Reasons,
+		Provider:        sel.Provider,
+		Model:           sel.Model,
+		Locality:        string(sel.Locality),
+		ExecutionSource: executionSourceFor(tr),
+		Checkpoints:     tr.Checkpoints,
+		Signals:         routingSignalsDoc(tr.Signals),
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := rn.WriteRoutingArtifact(art); err != nil {
 		// Diagnostic only: a contract violation never changes the run.
@@ -813,17 +821,20 @@ func writePromptReport(w io.Writer, runDir string) bool {
 		fmt.Fprintln(w)
 		fmt.Fprintln(w, "Model routing:")
 		if r.Class != "" {
-			fmt.Fprintf(w, "  %-9s %s\n", "Class:", r.Class)
+			fmt.Fprintf(w, "  %-17s %s\n", "Class:", r.Class)
 		}
-		fmt.Fprintf(w, "  %-9s %s\n", "Provider:", r.Provider)
+		fmt.Fprintf(w, "  %-17s %s\n", "Provider:", r.Provider)
 		if r.Model != "" {
-			fmt.Fprintf(w, "  %-9s %s\n", "Model:", r.Model)
+			fmt.Fprintf(w, "  %-17s %s\n", "Model:", r.Model)
 		}
 		if r.Source != "" {
-			fmt.Fprintf(w, "  %-9s %s\n", "Source:", r.Source)
+			fmt.Fprintf(w, "  %-17s %s\n", "Source:", r.Source)
+		}
+		if r.ExecutionSource != "" {
+			fmt.Fprintf(w, "  %-17s %s\n", "Execution source:", r.ExecutionSource)
 		}
 		if len(r.Reasons) > 0 {
-			fmt.Fprintf(w, "  %-9s %s\n", "Reason:", router.ReasonsText(r.Reasons))
+			fmt.Fprintf(w, "  %-17s %s\n", "Reason:", router.ReasonsText(r.Reasons))
 		}
 	}
 	if doc.ResultPath != "" {

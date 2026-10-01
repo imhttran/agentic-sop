@@ -26,7 +26,7 @@ const providerProbeTimeout = 5 * time.Second
 // environment. It is the composition root for the provider layer, mirroring how
 // the agent layer is assembled: endpoints come from config, the environment
 // overrides them, and built-in defaults fill the rest. It is read-only with
-// respect to SOP state — building a registry starts no execution and selects no
+// respect to SOP state - building a registry starts no execution and selects no
 // model class.
 func newProviderRegistry(cfg config.Config) (*provider.Registry, error) {
 	reg := provider.NewRegistry()
@@ -145,7 +145,7 @@ func runProviders(args []string, stdout, stderr io.Writer, d deps) int {
 
 // validateSelectedModel checks the resolved model selection before a run starts
 // a task, when the operator opted in (providers.validate). It is a strict no-op
-// when the layer is off — which is the default — so an existing installation's
+// when the layer is off - which is the default - so an existing installation's
 // behavior is unchanged.
 //
 // It validates the run-level/default selection. When the automatic per-task router
@@ -197,10 +197,22 @@ func selectionForValidation(cfg config.Config, routing model.Result) model.Selec
 
 // localRuntimeProbe observes whether a local class's model can be served by its
 // configured runtime. It is the production availability probe behind the
-// local-first cloud fallback: it probes read-only (reachability, model list, and
-// chat capability) and never substitutes a provider or model. A command-harness
-// selection has no model runtime to probe. A probe that cannot be built, or that
-// observes nothing definite, reports "usable" so the local model is kept.
+// local-first cloud fallback.
+//
+// It is deliberately MORE precise than a bare "can this run" check: it
+// distinguishes an UNREACHABLE runtime (Ollama at http://127.0.0.1:11434 is
+// down) from a HEALTHY runtime that cannot serve the configured local model. A
+// cloud-hosted Ollama model still uses the same Ollama execution path, so an
+// unreachable runtime MUST NOT trigger the availability fallback - that case
+// follows the existing provider/runtime-unavailable error path. It reports
+// fallback=true ONLY for the healthy-but-model-unavailable case, so
+// applyLocalFallback can never silently swap in a cloud model to "fix" a down
+// daemon.
+//
+// It probes read-only (reachability, model list, and chat capability) and never
+// substitutes a provider or model. A command-harness selection has no model
+// runtime to probe. A probe that cannot be built, or that observes nothing
+// definite, reports no fallback so the local model is kept.
 func localRuntimeProbe(cfg config.Config, sel model.Selection) (bool, string) {
 	if sel.Provider == string(provider.Command) {
 		return false, ""
@@ -211,14 +223,35 @@ func localRuntimeProbe(cfg config.Config, sel model.Selection) (bool, string) {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
 	defer cancel()
-	usable, detail := provider.LocalUsable(ctx, reg, sel)
-	return !usable, detail
+	av := provider.ResolveAvailability(ctx, reg, sel)
+	if av.Source == provider.AvailabilityFallback {
+		return true, av.Reason
+	}
+	return false, av.Reason
+}
+
+// localRuntimeUnreachable reports whether the local class's runtime is itself
+// unreachable (as opposed to healthy-but-model-absent). It is used so the CLI can
+// surface the existing provider/runtime-unavailable error rather than pretend a
+// cloud model fixes a down endpoint.
+func localRuntimeUnreachable(cfg config.Config, sel model.Selection) bool {
+	if sel.Provider == string(provider.Command) {
+		return false
+	}
+	reg, err := newProviderRegistry(cfg)
+	if err != nil {
+		return false
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
+	defer cancel()
+	return provider.ResolveAvailability(ctx, reg, sel).RuntimeUnreachable
 }
 
 // localUnavailableProbe returns the closure that reports whether a local
-// selection's runtime cannot serve it, or nil when no probe is wired. A nil
-// closure means "no observation", so the local model is kept — an absent probe
-// is never read as an outage.
+// selection's runtime is HEALTHY but cannot serve it, or nil when no probe is
+// wired. A nil closure means "no observation", so the local model is kept - an
+// absent probe is never read as an outage. As above, an unreachable runtime is
+// NOT reported here: it is not a fallback trigger.
 func localUnavailableProbe(cfg config.Config, d deps) func(model.Selection) bool {
 	if d.localProbe == nil {
 		return nil
@@ -230,23 +263,32 @@ func localUnavailableProbe(cfg config.Config, d deps) func(model.Selection) bool
 }
 
 // applyLocalFallback returns res with its selection replaced by the class's
-// configured cloud fallback when the local runtime cannot serve the primary
-// model. It is the single place the local-first runtime fallback is applied, so
-// the automatic router and a manual --model-class override behave identically.
+// configured cloud fallback when the local runtime is HEALTHY but cannot serve
+// the primary model, along with whether it applied. It is the single place the
+// local-first runtime fallback is applied, so the automatic router and a manual
+// --model-class override behave identically.
 //
-// It is a no-op — leaving res unchanged — when the class is not local, no
-// fallback is configured, no probe is wired, or the probe reports the local
-// model is usable. It never runs the fallback on a generation, validation,
-// review, or gate failure: those keep the existing recovery behavior, because the
-// probe observes runtime AVAILABILITY only.
-func applyLocalFallback(cfg config.Config, d deps, res model.Result) model.Result {
+// It is a no-op - returning (res, false) - when the class is not local, no
+// fallback is configured, no probe is wired, the probe reports the local model is
+// usable, or the probe reports the local runtime is UNREACHABLE. An unreachable
+// runtime is NOT a fallback trigger: a cloud-hosted Ollama model uses the same
+// execution path, so the run keeps the local selection and surfaces the existing
+// provider/runtime-unavailable error rather than pretending a cloud model fixes a
+// down daemon. It never runs the fallback on a generation, validation, review, or
+// gate failure: those keep the existing recovery behavior, because the probe
+// observes runtime AVAILABILITY only.
+//
+// The returned bool is the EXPLICIT decision the caller records as the execution
+// source (primary vs availability-fallback); it is not re-derived from an
+// unrelated Selection field.
+func applyLocalFallback(cfg config.Config, d deps, res model.Result) (model.Result, bool) {
 	if !res.Active || res.LocalFallback == nil {
-		return res
+		return res, false
 	}
 	probe := localUnavailableProbe(cfg, d)
 	if probe == nil || !probe(res.Selection) {
-		return res
+		return res, false
 	}
 	res.Selection = *res.LocalFallback
-	return res
+	return res, true
 }

@@ -14,7 +14,7 @@ func lookup(m map[string]string) func(string) string {
 func mediumEnv() map[string]string {
 	return map[string]string{
 		ClassEnvKey(ClassMedium, fieldProvider): "ollama",
-		ClassEnvKey(ClassMedium, fieldName):     "glm-5.3-flash:cloud",
+		ClassEnvKey(ClassMedium, fieldName):     "env-medium",
 		ClassEnvKey(ClassMedium, fieldLocality): "cloud",
 	}
 }
@@ -62,7 +62,7 @@ func TestResolveEnvOverridesConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	if res.Selection.Model != "glm-5.3-flash:cloud" {
+	if res.Selection.Model != "env-medium" {
 		t.Fatalf("model = %q, want the environment value", res.Selection.Model)
 	}
 	if res.Selection.Source != SourceEnv {

@@ -829,9 +829,16 @@ autonomy:
 #     provider: ollama
 #     name: qwen3:4b
 #     locality: local
+#     # Local-first availability fallback: used only when the local runtime is
+#     # healthy but cannot serve the local primary. The class stays SMALL; this
+#     # is NOT quality escalation (SMALL -> MEDIUM -> LARGE).
+#     fallback:
+#       provider: ollama
+#       name: nemotron-3-nano:30b-cloud
+#       locality: cloud
 #   medium:
 #     provider: ollama
-#     name: glm-5.3-flash:cloud
+#     name: nemotron-3-super:cloud
 #     locality: cloud
 #   large:
 #     provider: ollama
