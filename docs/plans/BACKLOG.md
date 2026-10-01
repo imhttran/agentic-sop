@@ -63,6 +63,21 @@ deterministic planner.
 
 ## Bootstrap agent exhausts its budget on multi-package tasks
 
+_ADDRESSED (steering, T076): the unmutated run's steering now recurs._ The write
+nudges were one-shot (at 6 and 12 interactions), so a model had up to nine
+unsteered interactions (13–21) between being told to implement and the late-stage
+cutoff at 22 — a one-shot instruction is easy for a small model to outrun. The
+implement-now instruction is now re-stated on **every** interaction past
+`implementNowAfter`, and the interactions from `implementClosingAfter` (19) to the
+cutoff become **closing**: the run states that this invocation is about to end, so
+the model is told the consequence while it can still write. No bound, phase, tool
+availability, or finalization changes; the `→ CHANGE_CONTINUE` transition is still
+recorded once. The two candidate fixes left here are not deterministic: a concrete
+file/work scope would have to come from the plan, and "a stronger model for
+multi-package tasks" is a routing/configuration choice (routing is off by
+default). The continuation checkpoint and `execution_mode: done` (below) already
+cover the other two symptoms. The original observation is kept for traceability.
+
 The bootstrap Ollama agent has a per-capability iteration ceiling and a late-stage
 cutoff for a run that has not mutated (`IMPLEMENT`: 32 iterations,
 `implementLateStageAfter` 22). On a task that spans several packages the model can
@@ -184,6 +199,9 @@ Windows distribution: native `install.ps1` (no WSL/Bash/Make/admin, copied skill
 (Phase 5.6; the clean-room test on a real Windows machine is still outstanding)
 SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
 `/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
+Recurring, closing steering for an unmutated IMPLEMENT/FIX run (T076): the
+implement-now instruction is re-stated every interaction, and the turns before the
+late-stage cutoff tell the model the invocation is about to end
 ```
 
 Next candidates, in the plan's build order:

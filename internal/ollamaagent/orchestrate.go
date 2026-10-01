@@ -237,9 +237,12 @@ func (p implementPhase) label() string {
 // finalization must not truncate a multi-file change — while FINALIZE itself is
 // terminal: every tool request there, mutation included, is denied. A threshold
 // crossed without a mutation does not finalize: the model is told to implement
-// and keeps its tools. A final response ends the invocation in any phase, so
-// early completion is preserved, and the capability's MaxIterations stays the
-// hard safety ceiling.
+// and keeps its tools. That steering recurs on every interaction past
+// implementNowAfter (a one-shot instruction can be outrun), and becomes closing
+// just before the late-stage cutoff, so an unmutated run is warned that the
+// invocation is about to end while it can still write. A final response ends the
+// invocation in any phase, so early completion is preserved, and the capability's
+// MaxIterations stays the hard safety ceiling.
 //
 // A mutated run is force-finalized once it reaches the capability's
 // ForceFinalizeAfter, evaluated before the next model turn so the cutoff does not
@@ -463,10 +466,24 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 					advice = append(advice, implementFinalInstruction)
 				}
 				h.recordImplementEvent(req, implementFinalizeEvent, "")
-			case !st.mutationObserved && st.counters.interactions >= implementNowAfter && !st.finalization.implementInstructed:
-				st.finalization.implementInstructed = true
-				advice = append(advice, implementNowInstruction)
-				h.recordImplementEvent(req, implementContinueEvent, "implementation required before finalization")
+			case !st.mutationObserved && st.counters.interactions >= implementNowAfter:
+				// An unmutated run is steered on EVERY interaction past the implement-now
+				// threshold, not once. A single instruction is easy to outrun: the model
+				// reads on and the instruction is many turns stale by the time the run
+				// finalizes. Re-stating it keeps the steering at most one turn old, and the
+				// interactions immediately before the late-stage cutoff become closing, so
+				// the model is told the consequence of not writing while it can still
+				// write. The transition is still recorded once, as the phase event, so the
+				// trace is unchanged.
+				if st.counters.interactions >= implementClosingAfter {
+					advice = append(advice, implementClosingInstruction)
+				} else {
+					advice = append(advice, implementNowInstruction)
+				}
+				if !st.finalization.implementInstructed {
+					st.finalization.implementInstructed = true
+					h.recordImplementEvent(req, implementContinueEvent, "implementation required before finalization")
+				}
 			}
 		}
 

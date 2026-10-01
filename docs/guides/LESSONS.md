@@ -229,6 +229,20 @@ That distinction has to hold when the model reports the failure itself, too: a
 `failed` outcome with an unchanged tree is still "the agent never tried", so it is
 classified retryable rather than blocked.
 
+## Steering that fires once is steering the model can outrun
+
+The phased engine gave an unmutated run one instruction to implement (at 12
+interactions) and then nothing until the late-stage cutoff at 22. The turn-by-turn
+history of a failed run was a straight line of reads: the model had been told,
+once, and read on. A nudge is not a decision -- it is a message that competes with
+everything else in the context -- and an instruction that lands nine turns before it
+matters is stale by the time the model could act on it. Re-stating it on every
+interaction keeps it at most one turn old, and making the last turns _closing_ (this
+invocation is about to end; make the change now or report truthfully) tells the
+model the consequence while it still has the tools to avoid it. The bounds did not
+move: recurring steering is not a bigger budget, and a run that ignores every
+restatement still finalizes at the same cutoff.
+
 ## An agent that can overwrite must be able to undo
 
 The harness let the model overwrite `README.md` and then had no way to recover it:

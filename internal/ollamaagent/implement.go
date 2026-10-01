@@ -66,6 +66,16 @@ actually been performed.
 Once the implementation is complete, return the required structured outcome.
 SOP will perform independent validation afterward.`
 
+	implementClosingInstruction = `You have not yet made the required repository change.
+
+This invocation is about to end: if you do not make the change now, it ends
+without one and SOP continues this task in a later bounded invocation.
+
+Make the requested change now using the tools still available, or return a
+truthful structured outcome (needs_human or failed) explaining what remains.
+
+Do not claim completion without making the required change.`
+
 	implementFinalInstruction = `You have not yet performed the required repository change.
 
 This invocation is ending, so no further repository tools are available.

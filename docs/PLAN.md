@@ -1,6 +1,6 @@
 # SOP --- Execution Plan
 
-> **Complete.** This is the master execution plan for building SOP (T000–T075), all
+> **Complete.** This is the master execution plan for building SOP (T000–T076), all
 > of which is done. It is kept at `docs/PLAN.md` because SOP discovers that path
 > (`internal/planflow`); active workstreams live under [`docs/plans/`](plans/), and
 > the canonical product requirements are [`docs/PRD.md`](PRD.md). Historical task
@@ -696,6 +696,7 @@ T072 bring the implement-now nudge forward (12, so there is budget to finish)
 T073 raise IMPLEMENT's iteration ceiling to 32 (room for explore-then-write)
 T074 add a Claude Code command-agent adapter (scripts/agents/sop-agent.sh)
 T075 requeue a task whose retry budget is spent (sop retry --force)
+T076 steer an unmutated IMPLEMENT/FIX run to write (the implement-now instruction recurs; the turns before the late-stage cutoff become closing)
 ```
 
 The Go module was renamed to `github.com/imhttran/agentic-sop`.

@@ -161,8 +161,19 @@ const (
 	implementNudgeAfter = 6
 	// implementNowAfter: an unmutated run is told, strongly, to implement now.
 	// It sits below implementFinalizeAfter so a model that only starts writing
-	// when told still has turns left to change and return.
+	// when told still has turns left to change and return. The instruction is
+	// RE-STATED on every subsequent interaction (not sent once), because a one-shot
+	// nudge is easy for a small model to outrun: it reads on and the instruction is
+	// many turns stale by the time the run finalizes.
 	implementNowAfter = 12
+	// implementClosingAfter: the interaction count from which an unmutated run's
+	// re-stated steering becomes closing — it states that this invocation is about
+	// to end, so a model that has only been reading is told the consequence (this
+	// invocation ends without a change; SOP continues the task later) while its
+	// tools are still available. It sits below implementLateStageAfter so the
+	// warning always precedes the cutoff, and above implementNowAfter so the
+	// standard instruction is restated first.
+	implementClosingAfter = 19
 	// implementFinalizeAfter: a mutated run becomes eligible to finalize once it
 	// has stopped writing for the completion window. Crossing it without a
 	// mutation does not finalize: a count is not evidence the work is done.

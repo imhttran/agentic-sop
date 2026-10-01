@@ -131,6 +131,7 @@ func TestHardCeilingsAndSoftThresholdsAreDistinct(t *testing.T) {
 		{"reviewSynthesizeTurns", reviewSynthesizeTurns},
 		{"implementNudgeAfter", implementNudgeAfter},
 		{"implementNowAfter", implementNowAfter},
+		{"implementClosingAfter", implementClosingAfter},
 		{"implementFinalizeAfter", implementFinalizeAfter},
 		{"implementCompletionWindow", implementCompletionWindow},
 		{"implementLateStageAfter", implementLateStageAfter},
@@ -155,6 +156,14 @@ func TestHardCeilingsAndSoftThresholdsAreDistinct(t *testing.T) {
 	}
 	if implementNowAfter >= implementFinalizeAfter {
 		t.Errorf("implementNowAfter = %d must sit below implementFinalizeAfter = %d", implementNowAfter, implementFinalizeAfter)
+	}
+	// The closing steering must land after the standard implement-now steering and
+	// before the unmutated run is finalized, so it always precedes the cutoff.
+	if implementClosingAfter <= implementNowAfter {
+		t.Errorf("implementClosingAfter = %d must sit above implementNowAfter = %d", implementClosingAfter, implementNowAfter)
+	}
+	if implementClosingAfter >= implementLateStageAfter {
+		t.Errorf("implementClosingAfter = %d must sit below implementLateStageAfter = %d", implementClosingAfter, implementLateStageAfter)
 	}
 	if implementFinalizeAfter >= implementLateStageAfter {
 		t.Errorf("implementFinalizeAfter = %d must sit below implementLateStageAfter = %d", implementFinalizeAfter, implementLateStageAfter)
