@@ -1,6 +1,8 @@
 package ollamaagent
 
 import (
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -216,6 +218,51 @@ var (
 	)
 )
 
+// Optional operator overrides for the IMPLEMENT/FIX iteration ceilings. Raising a
+// ceiling gives a model that narrates between actions more turns before the
+// ceiling stops the run; the soft thresholds (finalize/late-stage/force-finalize)
+// scale with it so their relative steering position is preserved. An unset,
+// non-numeric, or non-positive value keeps the built-in ceiling, so behavior is
+// unchanged when they are not set.
+const (
+	implementIterationsEnv = "SOP_OLLAMA_IMPLEMENT_ITERATIONS"
+	fixIterationsEnv       = "SOP_OLLAMA_FIX_ITERATIONS"
+)
+
+// implementIterations is the effective IMPLEMENT iteration ceiling.
+func implementIterations() int { return positiveEnvInt(implementIterationsEnv, maxIterationsImplement) }
+
+// fixIterations is the effective FIX iteration ceiling.
+func fixIterations() int { return positiveEnvInt(fixIterationsEnv, maxIterationsFix) }
+
+// scaleIterations maps a soft threshold defined against base onto a ceiling of n,
+// rounding up, so a raised ceiling moves every threshold to the same relative
+// position. A ceiling at or below the built-in base keeps the threshold verbatim.
+func scaleIterations(n, threshold, base int) int {
+	if n <= base {
+		return threshold
+	}
+	scaled := (n*threshold + base - 1) / base
+	if scaled > n {
+		scaled = n
+	}
+	return scaled
+}
+
+// positiveEnvInt returns the named environment variable when it parses as a
+// positive integer, and fallback otherwise (unset, blank, non-numeric, or <= 0).
+func positiveEnvInt(name string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
 // toolset builds a tool-name set.
 func toolset(names ...string) map[string]bool {
 	m := make(map[string]bool, len(names))
@@ -250,23 +297,25 @@ func PolicyFor(c agent.Capability) CapabilityPolicy {
 		// Completion: return the final JSON object from the generic bounded loop.
 		return CapabilityPolicy{MaxIterations: maxIterationsDiagnose, ReadOnly: true, AllowedTools: inspectTools}
 	case agent.Implement:
+		n := implementIterations()
 		return CapabilityPolicy{
-			MaxIterations:      maxIterationsImplement,
+			MaxIterations:      n,
 			AllowedTools:       allTools,
-			FinalizeAfter:      implementFinalizeAfter,
-			LateStageAfter:     implementLateStageAfter,
+			FinalizeAfter:      scaleIterations(n, implementFinalizeAfter, maxIterationsImplement),
+			LateStageAfter:     scaleIterations(n, implementLateStageAfter, maxIterationsImplement),
 			CompletionWindow:   implementCompletionWindow,
-			ForceFinalizeAfter: implementForceFinalizeAfter,
+			ForceFinalizeAfter: scaleIterations(n, implementForceFinalizeAfter, maxIterationsImplement),
 			FinalizeTurns:      implementFinalizeTurns,
 		}
 	case agent.Fix:
+		n := fixIterations()
 		return CapabilityPolicy{
-			MaxIterations:      maxIterationsFix,
+			MaxIterations:      n,
 			AllowedTools:       allTools,
-			FinalizeAfter:      implementFinalizeAfter,
-			LateStageAfter:     implementLateStageAfter,
+			FinalizeAfter:      scaleIterations(n, implementFinalizeAfter, maxIterationsImplement),
+			LateStageAfter:     scaleIterations(n, implementLateStageAfter, maxIterationsImplement),
 			CompletionWindow:   implementCompletionWindow,
-			ForceFinalizeAfter: fixForceFinalizeAfter,
+			ForceFinalizeAfter: scaleIterations(n, fixForceFinalizeAfter, maxIterationsFix),
 			FinalizeTurns:      fixFinalizeTurns,
 		}
 	default:
