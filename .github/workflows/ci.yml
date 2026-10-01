@@ -106,7 +106,24 @@ jobs:
           [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD\install.ps1", [ref]$null, [ref]$errors)
           if ($errors) { $errors | ForEach-Object { $_.ToString() }; exit 1 }
       - name: installer and plugin tests
-        run: go test -v ./internal/dist/... ./internal/skill/...
+        shell: pwsh
+        run: |
+          # Run the distribution tests and, on failure, publish the failing tests and the
+          # first diagnostics as an annotation, so a red Windows run is diagnosable from
+          # the run summary rather than only inside the step log.
+          $lines = @(& go test -v ./internal/dist/... ./internal/skill/... 2>&1 | ForEach-Object { "$_" })
+          $code = $LASTEXITCODE
+          $lines | Write-Host
+          if ($code -ne 0) {
+            $failed = @($lines | Select-String -SimpleMatch '--- FAIL: ' | ForEach-Object { $_.Line.Trim() })
+            if ($failed.Count -eq 0) { $failed = @('no "--- FAIL:" line in the output') }
+            $detail = @($lines | Select-String -Pattern '([A-Za-z0-9_]+\.go:\d+:|expected|got )' |
+              Select-Object -First 20 | ForEach-Object { $_.Line.Trim() })
+            $message = (($failed + $detail) -join ' || ')
+            if ($message.Length -gt 60000) { $message = $message.Substring(0, 60000) }
+            Write-Host "::error title=Windows distribution tests failed::$message"
+            exit 1
+          }
       - name: installer smoke (Windows PowerShell, isolated USERPROFILE)
         shell: powershell
         run: |
