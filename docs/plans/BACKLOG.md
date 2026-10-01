@@ -223,9 +223,10 @@ open" is a claim about the _scheduled_ list above, not about these.
   `windows` job against temporary directories on `windows-latest`; a real machine's
   `%USERPROFILE%`, PATH, Zed, and Claude Code are unverified. See
   [../testing/WINDOWS-CLEAN-ROOM.md](../testing/WINDOWS-CLEAN-ROOM.md).
-- **No project-scope skill install on Windows.** `scripts/install/install-skills.sh
---project [DIR]` installs the skills into a project's `.agents`/`.claude` directory;
-  `install.ps1` has no `-Project` equivalent yet.
+- **No project-scope skill install on Windows.** On Unix,
+  `scripts/install/install-skills.sh --project [DIR]` installs the skills into a
+  project's `.agents`/`.claude` directory; `install.ps1` has no `-Project` equivalent
+  yet.
 - **The Windows CI job runs a scoped test set, not the full suite.** Several lifecycle
   tests execute POSIX commands (`true`/`false`/`sh`), so that job covers the build, vet,
   static PowerShell parsing, and the distribution surface under both Windows PowerShell
