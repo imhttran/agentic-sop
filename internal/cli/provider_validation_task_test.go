@@ -80,7 +80,7 @@ func TestPerTaskValidationStopsOnAbsentRoutedModel(t *testing.T) {
 	clearProviderEnv(t)
 	t.Setenv(model.EnvRoutingEnabled, "true")
 	// Only the default MEDIUM model exists; the routed LARGE model does not.
-	t.Setenv(ollama.EnvBaseURL, ollamaTagsServer(t, "glm-5.3-flash:cloud").URL)
+	t.Setenv(ollama.EnvBaseURL, ollamaTagsServer(t, "nemotron-3-super:cloud").URL)
 
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)

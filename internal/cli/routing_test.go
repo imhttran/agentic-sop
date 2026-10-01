@@ -210,7 +210,7 @@ func TestRoutingMediumWithoutEvidence(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
 	}
-	if !strings.Contains(stdout, "Task routing: medium (glm-5.3-flash:cloud; JEV evidence unavailable; defaulting to medium)") {
+	if !strings.Contains(stdout, "Task routing: medium (nemotron-3-super:cloud; JEV evidence unavailable; defaulting to medium)") {
 		t.Errorf("stdout missing medium fallback line: %q", stdout)
 	}
 	art := readRoutingArtifact(t, dir)

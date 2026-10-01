@@ -516,11 +516,12 @@ func runPromptJEV(ctx context.Context, cfg config.Config, d deps, wi workitem.Wo
 func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting, bool, error) {
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
+			res := applyLocalFallback(cfg, d, d.routing)
 			return &taskRouting{
-				Class:     d.routing.Selection.Class,
+				Class:     res.Selection.Class,
 				Source:    runpkg.RoutingSourceManual,
-				Reasons:   []string{model.RoutingReasonManual},
-				Selection: d.routing.Selection,
+				Reasons:   routingReasons([]string{model.RoutingReasonManual}, res.Selection),
+				Selection: res.Selection,
 			}, true, nil
 		}
 		return nil, false, nil
@@ -548,10 +549,11 @@ func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting
 	if !res.Active {
 		return nil, false, nil
 	}
+	res = applyLocalFallback(cfg, d, res)
 	return &taskRouting{
 		Class:       dec.Class,
 		Source:      runpkg.RoutingSourcePolicy,
-		Reasons:     dec.Reasons,
+		Reasons:     routingReasons(dec.Reasons, res.Selection),
 		Selection:   res.Selection,
 		Signals:     sig,
 		Checkpoints: checkpoints,

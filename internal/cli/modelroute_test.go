@@ -130,7 +130,7 @@ func clearModelEnv(t *testing.T) {
 	}
 	for _, c := range model.Classes {
 		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY"} {
-			keys = append(keys, model.ClassEnvKey(c, f))
+			keys = append(keys, model.ClassEnvKey(c, f), model.ClassFallbackEnvKey(c, f))
 		}
 	}
 	for _, k := range keys {

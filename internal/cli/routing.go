@@ -66,11 +66,14 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 	}
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
+			// A manual override pins the CLASS; it does not pin the model within it,
+			// so the local-first fallback applies to an explicitly chosen class too.
+			res := applyLocalFallback(cfg, d, d.routing)
 			return taskRouting{
-				Class:     d.routing.Selection.Class,
+				Class:     res.Selection.Class,
 				Source:    runpkg.RoutingSourceManual,
-				Reasons:   []string{model.RoutingReasonManual},
-				Selection: d.routing.Selection,
+				Reasons:   routingReasons([]string{model.RoutingReasonManual}, res.Selection),
+				Selection: res.Selection,
 			}, true, nil
 		}
 		return taskRouting{}, false, nil
@@ -108,14 +111,28 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 	if !res.Active {
 		return taskRouting{}, false, nil
 	}
+	res = applyLocalFallback(cfg, d, res)
 	return taskRouting{
 		Class:       dec.Class,
 		Source:      runpkg.RoutingSourcePolicy,
-		Reasons:     dec.Reasons,
+		Reasons:     routingReasons(dec.Reasons, res.Selection),
 		Selection:   res.Selection,
 		Signals:     sig,
 		Checkpoints: checkpoints,
 	}, true, nil
+}
+
+// routingReasons returns a routing decision's reasons, with the local-fallback
+// phrase appended when the class's configured runtime fallback supplied the
+// selection. The appended phrase is a fixed constant, so the reason list stays
+// deterministic and is never model-generated prose.
+func routingReasons(reasons []string, sel model.Selection) []string {
+	if sel.Source != model.SourceCloudFallback {
+		return reasons
+	}
+	out := make([]string, 0, len(reasons)+1)
+	out = append(out, reasons...)
+	return append(out, model.ReasonLocalFallback)
 }
 
 // applyTaskRouting computes the routing decision for the task and, when it

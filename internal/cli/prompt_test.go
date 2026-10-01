@@ -152,8 +152,8 @@ func TestPromptRoutingNoEvidenceIsMedium(t *testing.T) {
 		Model   string `json:"model"`
 	}
 	readRunJSON(t, filepath.Join(promptRunDirs(t, dir)[0], "routing.json"), &art)
-	if art.Class != "medium" || art.Model != "glm-5.3-flash:cloud" || art.Source != "policy" {
-		t.Fatalf("routing = %+v, want medium/policy/glm-5.3-flash:cloud", art)
+	if art.Class != "medium" || art.Model != "nemotron-3-super:cloud" || art.Source != "policy" {
+		t.Fatalf("routing = %+v, want medium/policy/nemotron-3-super:cloud", art)
 	}
 }
 
@@ -302,7 +302,7 @@ func TestPromptImplementEscalatesWithBoundedRecovery(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, triageRoutingConfig)
 
-	res := runPromptEscalation(t, dir, "diff --git a/a.go b/a.go\n+escalated\n", "glm-5.3-flash:cloud", jev.NewClearFake())
+	res := runPromptEscalation(t, dir, "diff --git a/a.go b/a.go\n+escalated\n", "nemotron-3-super:cloud", jev.NewClearFake())
 	if res.code != exitOK {
 		t.Fatalf("code=%d, want ok; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
 	}

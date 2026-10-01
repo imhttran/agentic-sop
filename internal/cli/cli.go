@@ -89,6 +89,12 @@ type deps struct {
 	// exercise the interactive path without a pseudo-terminal. A nil value falls
 	// back to the real terminal check, so an unwired process fails closed.
 	interactive func(io.Reader) bool
+	// localProbe reports whether a local class's resolved model cannot be served
+	// by its runtime, with a short non-secret detail. It is the read-only
+	// availability observation behind the local-first cloud fallback. A nil value
+	// means "no observation", which model resolution never treats as
+	// unavailability, so an unwired process keeps the local model.
+	localProbe func(cfg config.Config, sel model.Selection) (unavailable bool, detail string)
 }
 
 func defaultDeps() deps {
@@ -141,6 +147,7 @@ func defaultDeps() deps {
 		},
 		stdin:       os.Stdin,
 		interactive: isTerminalReader,
+		localProbe:  localRuntimeProbe,
 	}
 }
 

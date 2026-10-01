@@ -23,10 +23,21 @@
 // fallback and reporting rules below still apply).
 //
 // Locality (local or cloud) is descriptive metadata and a fallback guard, not an
-// execution mode: resolution never silently switches a local class to a cloud
-// model. If a local class has no model and the fallback is a cloud model,
-// resolution fails rather than quietly using the cloud model unless
-// allow_cloud_fallback_for_local is set.
+// execution mode. Two distinct fallbacks exist:
+//
+//   - the config-completeness fallback (fallback_class): when the chosen class has
+//     no model at all, another class supplies one. A local class with no model and
+//     a cloud fallback fails rather than quietly using the cloud model unless
+//     allow_cloud_fallback_for_local is set.
+//   - the local-first runtime fallback (a class's configured `fallback` model):
+//     when a LOCAL class's primary model cannot be served by its local runtime,
+//     the class's configured fallback (by default a cloud model) runs instead. It
+//     is enabled by the fallback being configured, and only a caller's positive
+//     observation of unavailability selects it (the CLI's applyLocalFallback). It
+//     is never triggered by a generation failure, a validation failure, a review
+//     finding, or a quality gate — those keep the existing retry/recovery
+//     behavior. Resolve reports the candidate as Result.LocalFallback; it never
+//     probes a runtime and never applies it.
 //
 // This package holds no secrets: a Selection records only the class, provider,
 // model name, locality, and the source layer, never a credential.
@@ -120,6 +131,11 @@ const (
 	// from task/evidence signals, with no CLI override. It is the automatic-routing
 	// source and is used only when the router's feature flag is enabled.
 	SourceRouter Source = "router"
+	// SourceCloudFallback: a class's configured runtime fallback supplied the
+	// selection because the class's primary model runs locally and the local
+	// runtime could not serve it. Unlike the other values it is not a configuration
+	// layer; it records a runtime-availability outcome.
+	SourceCloudFallback Source = "cloud-fallback"
 )
 
 // Reason is the deterministic, non-secret explanation of why a selection was
@@ -137,6 +153,10 @@ const (
 	// ReasonFallbackClass: the chosen class had no model, so the fallback class
 	// supplied the selection.
 	ReasonFallbackClass = "fallback class used"
+	// ReasonLocalFallback: the chosen class's primary model runs locally and its
+	// local runtime could not serve it, so the class's configured cloud fallback
+	// supplied the selection instead.
+	ReasonLocalFallback = "local runtime unavailable; cloud fallback"
 )
 
 // RoutingReasonManual is the deterministic reason recorded when a manual
@@ -178,12 +198,34 @@ type ClassConfig struct {
 	Provider string   `yaml:"provider"`
 	Name     string   `yaml:"name"`
 	Locality Locality `yaml:"locality"`
+	// Fallback is an alternate model for this class, consulted only when the
+	// class's primary model runs locally and its local runtime cannot serve it
+	// (see Resolve). It is a pointer so "no fallback configured" is
+	// distinguishable from an empty one.
+	Fallback *FallbackConfig `yaml:"fallback"`
 }
 
 func (cc ClassConfig) empty() bool {
 	return strings.TrimSpace(cc.Provider) == "" &&
 		strings.TrimSpace(cc.Name) == "" &&
-		strings.TrimSpace(string(cc.Locality)) == ""
+		strings.TrimSpace(string(cc.Locality)) == "" &&
+		cc.Fallback == nil
+}
+
+// FallbackConfig is the alternate model a class may run on when its primary model
+// runs locally and the local runtime cannot serve it. An unset field inherits:
+// the provider from the class's primary model, and the locality defaults to cloud
+// (a fallback for a local class is a cloud model unless it says otherwise).
+type FallbackConfig struct {
+	Provider string   `yaml:"provider"`
+	Name     string   `yaml:"name"`
+	Locality Locality `yaml:"locality"`
+}
+
+func (f FallbackConfig) empty() bool {
+	return strings.TrimSpace(f.Provider) == "" &&
+		strings.TrimSpace(f.Name) == "" &&
+		strings.TrimSpace(string(f.Locality)) == ""
 }
 
 // Route is the routing table: the default and fallback class, the local-to-cloud
@@ -225,6 +267,10 @@ type Route struct {
 // environment names it. It is the base layer of resolution and the single owner
 // of these defaults — CLI, config, and provider code never restate them.
 //
+// `small` is local-first with a cloud runtime fallback: its primary model is a
+// local Ollama model, and its configured fallback (`nemotron-3-nano:30b-cloud`)
+// runs only when the local runtime cannot serve the primary (see Resolve).
+//
 // Defining complete built-in routes does NOT activate routing: Resolve is active
 // only when an explicit layer (the `models:` block, a SOP_MODEL_* variable, or
 // --model-class) is present, so an existing installation's agent selection is
@@ -233,9 +279,12 @@ type Route struct {
 func DefaultRoute() Route {
 	return Route{
 		DefaultClass: ClassMedium,
-		Small:        ClassConfig{Provider: "ollama", Name: "qwen3:4b", Locality: LocalityLocal},
-		Medium:       ClassConfig{Provider: "ollama", Name: "glm-5.3-flash:cloud", Locality: LocalityCloud},
-		Large:        ClassConfig{Provider: "ollama", Name: "deepseek-v4.1-flash:cloud", Locality: LocalityCloud},
+		Small: ClassConfig{
+			Provider: "ollama", Name: "qwen3:4b", Locality: LocalityLocal,
+			Fallback: &FallbackConfig{Provider: "ollama", Name: "nemotron-3-nano:30b-cloud", Locality: LocalityCloud},
+		},
+		Medium: ClassConfig{Provider: "ollama", Name: "nemotron-3-super:cloud", Locality: LocalityCloud},
+		Large:  ClassConfig{Provider: "ollama", Name: "deepseek-v4.1-flash:cloud", Locality: LocalityCloud},
 	}
 }
 
@@ -296,6 +345,14 @@ func (r Route) Validate() error {
 		if provider := strings.TrimSpace(cc.Provider); provider != "" && !knownProviders[provider] {
 			return fmt.Errorf("model routing: unknown %s.provider %q (want %s)", c, provider, joinProviders())
 		}
+		if fb := cc.Fallback; fb != nil {
+			if loc := strings.TrimSpace(string(fb.Locality)); loc != "" && !fb.Locality.Valid() {
+				return fmt.Errorf("model routing: unknown %s.fallback.locality %q (want local, cloud)", c, loc)
+			}
+			if provider := strings.TrimSpace(fb.Provider); provider != "" && !knownProviders[provider] {
+				return fmt.Errorf("model routing: unknown %s.fallback.provider %q (want %s)", c, provider, joinProviders())
+			}
+		}
 	}
 	if r.MaxEscalations != nil && *r.MaxEscalations < 0 {
 		return fmt.Errorf("model escalation: max_escalations must not be negative (got %d)", *r.MaxEscalations)
@@ -340,6 +397,22 @@ const (
 func ClassEnvKey(c Class, field string) string {
 	return "SOP_MODEL_" + strings.ToUpper(string(c)) + "_" + strings.ToUpper(field)
 }
+
+// ClassFallbackEnvKey returns the environment variable naming a class's fallback
+// field, for example SOP_MODEL_SMALL_FALLBACK_NAME. It is exported for the same
+// reason as ClassEnvKey.
+func ClassFallbackEnvKey(c Class, field string) string {
+	return ClassEnvKey(c, "FALLBACK_"+field)
+}
+
+// FallbackFieldProvider / FallbackFieldName / FallbackFieldLocality name the
+// fallback fields for ClassFallbackEnvKey, so error messages and tests agree with
+// the parser.
+const (
+	FallbackFieldProvider = "PROVIDER"
+	FallbackFieldName     = "NAME"
+	FallbackFieldLocality = "LOCALITY"
+)
 
 // routeFromEnv parses the SOP_MODEL_* environment into a Route, returning an
 // actionable error for an unknown class, locality, or boolean.
@@ -392,6 +465,24 @@ func routeFromEnv(lookup func(string) string) (Route, error) {
 			}
 			cc.Locality = loc
 		}
+		var fb FallbackConfig
+		if v := get(ClassFallbackEnvKey(c, FallbackFieldProvider)); v != "" {
+			if !knownProviders[v] {
+				return Route{}, fmt.Errorf("model routing: %s: unknown provider %q (want %s)", ClassFallbackEnvKey(c, FallbackFieldProvider), v, joinProviders())
+			}
+			fb.Provider = v
+		}
+		fb.Name = get(ClassFallbackEnvKey(c, FallbackFieldName))
+		if v := get(ClassFallbackEnvKey(c, FallbackFieldLocality)); v != "" {
+			loc, err := ParseLocality(v)
+			if err != nil {
+				return Route{}, fmt.Errorf("model routing: %s: %w", ClassFallbackEnvKey(c, FallbackFieldLocality), err)
+			}
+			fb.Locality = loc
+		}
+		if !fb.empty() {
+			cc.Fallback = &fb
+		}
 		if !cc.empty() {
 			r.setClassConfig(c, cc)
 		}
@@ -417,8 +508,8 @@ type Inputs struct {
 }
 
 // Selection is the resolved model selection: the class, the provider and model
-// it names, the locality, the layer that supplied it, whether a fallback class
-// was used, and why. It carries no credential, so it is safe to persist as
+// it names, the locality, the layer that supplied it, whether a fallback
+// supplied it, and why. It carries no credential, so it is safe to persist as
 // non-secret routing evidence.
 type Selection struct {
 	Class    Class    `json:"class"`
@@ -426,8 +517,10 @@ type Selection struct {
 	Model    string   `json:"model"`
 	Locality Locality `json:"locality"`
 	Source   Source   `json:"source"`
-	// Fallback reports whether the fallback class supplied this selection rather
-	// than the class the selection rules chose.
+	// Fallback reports whether a fallback supplied this selection rather than the
+	// primary model: either the config-completeness fallback class
+	// (ReasonFallbackClass), or a class's configured runtime cloud fallback
+	// (ReasonLocalFallback).
 	Fallback bool `json:"fallback"`
 	// Reason is the deterministic explanation of the selection (see the Reason*
 	// constants). It is a fixed phrase, never model prose.
@@ -440,6 +533,14 @@ type Selection struct {
 type Result struct {
 	Selection Selection
 	Active    bool
+	// LocalFallback is the selected class's configured runtime fallback, present
+	// only when Selection is a LOCAL class with a complete fallback configured. It
+	// is a CANDIDATE, not a decision: Resolve never probes a runtime and never
+	// applies it. The caller applies it only on a positive observation that the
+	// local runtime cannot serve Selection (see the CLI's applyLocalFallback), so
+	// the fallback is never triggered by a generation, validation, or gate
+	// failure.
+	LocalFallback *Selection
 }
 
 // Resolve applies the routing layers and returns the selected model. It is pure
@@ -470,7 +571,13 @@ func Resolve(in Inputs) (Result, error) {
 
 	primary := entryFor(class, in.Config, env)
 	if primary.complete() {
-		return Result{Active: true, Selection: selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass), reason, false)}, nil
+		sel := selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass), reason, false)
+		// The local-first runtime fallback is a CANDIDATE only: it is reported here
+		// and applied by the caller, never by Resolve.
+		if fb, ok := localFallback(class, in.Config, env, primary); ok {
+			return Result{Active: true, Selection: sel, LocalFallback: &fb}, nil
+		}
+		return Result{Active: true, Selection: sel}, nil
 	}
 
 	// Fallback: SOP_MODEL_FALLBACK_CLASS > models.fallback_class > the selected class.
@@ -570,6 +677,68 @@ func applyClassConfig(e *entry, cc ClassConfig, source Source) {
 	}
 	if cc.Locality != "" {
 		e.locality = cc.Locality
+	}
+}
+
+// localFallback returns the class's configured runtime fallback selection, or
+// ok=false when none applies. It applies only to a LOCAL class with a complete
+// fallback model; a cloud class never has one, so a cloud selection is never a
+// candidate for the runtime fallback.
+func localFallback(c Class, config, env Route, primary entry) (Selection, bool) {
+	if primary.locality != LocalityLocal {
+		return Selection{}, false
+	}
+	fb, ok := fallbackEntry(c, config, env, primary)
+	if !ok {
+		return Selection{}, false
+	}
+	return selectionFor(c, fb, SourceCloudFallback, ReasonLocalFallback, true), true
+}
+
+// fallbackEntry merges a class's fallback config, field by field, from the
+// built-in default (base), then the configuration, then the environment (which
+// wins). The built-in default is the base layer for the same reason it is the
+// base layer of the primary: an operator who names a local model still gets the
+// built-in cloud fallback unless they override it.
+//
+// A fallback with no model is not configured, so ok=false. An unset provider
+// inherits the class's primary provider, and an unset locality defaults to cloud.
+func fallbackEntry(c Class, config, env Route, primary entry) (entry, bool) {
+	var e entry
+	if fb := DefaultRoute().classConfig(c).Fallback; fb != nil {
+		applyFallback(&e, *fb)
+	}
+	if fb := config.classConfig(c).Fallback; fb != nil {
+		applyFallback(&e, *fb)
+	}
+	if fb := env.classConfig(c).Fallback; fb != nil {
+		applyFallback(&e, *fb)
+	}
+	if e.model == "" {
+		return entry{}, false
+	}
+	if e.provider == "" {
+		e.provider = primary.provider
+	}
+	if e.locality == "" {
+		e.locality = LocalityCloud
+	}
+	if !e.complete() {
+		return entry{}, false
+	}
+	return e, true
+}
+
+// applyFallback overlays a fallback config onto an entry, field by field.
+func applyFallback(e *entry, f FallbackConfig) {
+	if v := strings.TrimSpace(f.Provider); v != "" {
+		e.provider = v
+	}
+	if v := strings.TrimSpace(f.Name); v != "" {
+		e.model = v
+	}
+	if f.Locality != "" {
+		e.locality = f.Locality
 	}
 }
 

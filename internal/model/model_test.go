@@ -233,7 +233,7 @@ func TestResolveBuiltinDefaultsTable(t *testing.T) {
 		locality Locality
 	}{
 		{"small", "ollama", "qwen3:4b", LocalityLocal},
-		{"medium", "ollama", "glm-5.3-flash:cloud", LocalityCloud},
+		{"medium", "ollama", "nemotron-3-super:cloud", LocalityCloud},
 		{"large", "ollama", "deepseek-v4.1-flash:cloud", LocalityCloud},
 	}
 	for _, tc := range cases {
@@ -418,5 +418,142 @@ func TestRoutingEnabledPrecedence(t *testing.T) {
 	// An invalid boolean fails clearly.
 	if _, err := RoutingEnabled(Route{}, lookup(map[string]string{EnvRoutingEnabled: "maybe"})); err == nil {
 		t.Fatal("expected an actionable error for an invalid boolean")
+	}
+}
+
+// TestDefaultRouteTierModels pins the built-in tier table: SMALL is local-first
+// with a cloud runtime fallback, and MEDIUM/LARGE are cloud models.
+func TestDefaultRouteTierModels(t *testing.T) {
+	small := DefaultRoute().classConfig(ClassSmall)
+	if small.Name != "qwen3:4b" || small.Locality != LocalityLocal {
+		t.Fatalf("small primary = %+v, want local qwen3:4b", small)
+	}
+	if small.Fallback == nil || small.Fallback.Name != "nemotron-3-nano:30b-cloud" || small.Fallback.Locality != LocalityCloud {
+		t.Fatalf("small fallback = %+v, want nemotron-3-nano:30b-cloud/cloud", small.Fallback)
+	}
+	if med := DefaultRoute().classConfig(ClassMedium); med.Name != "nemotron-3-super:cloud" {
+		t.Fatalf("medium default = %q, want nemotron-3-super:cloud", med.Name)
+	}
+	if lg := DefaultRoute().classConfig(ClassLarge); lg.Name != "deepseek-v4.1-flash:cloud" {
+		t.Fatalf("large default = %q, want deepseek-v4.1-flash:cloud", lg.Name)
+	}
+}
+
+// TestResolveSmallLocalFallbackCandidate verifies that a LOCAL class with a
+// configured fallback reports the fallback as a candidate while keeping the local
+// selection primary: Resolve never probes a runtime and never switches on its own.
+func TestResolveSmallLocalFallbackCandidate(t *testing.T) {
+	res, err := Resolve(Inputs{Lookup: lookup(nil), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := Selection{Class: ClassSmall, Provider: "ollama", Model: "qwen3:4b", Locality: LocalityLocal, Source: SourceRouter}
+	if res.Selection != want {
+		t.Fatalf("selection = %+v, want the local primary %+v", res.Selection, want)
+	}
+	if res.LocalFallback == nil {
+		t.Fatal("a local class with a configured fallback must report the candidate")
+	}
+	fb := *res.LocalFallback
+	if fb.Model != "nemotron-3-nano:30b-cloud" || fb.Locality != LocalityCloud || fb.Source != SourceCloudFallback {
+		t.Fatalf("fallback = %+v, want the small cloud fallback", fb)
+	}
+	if fb.Class != ClassSmall || fb.Provider != "ollama" || !fb.Fallback || fb.Reason != ReasonLocalFallback {
+		t.Fatalf("fallback = %+v, want class small / provider ollama / fallback=true", fb)
+	}
+}
+
+// TestResolveCloudClassHasNoLocalFallback proves a cloud class is never a
+// fallback candidate, so the caller can never swap a cloud model for a fallback.
+func TestResolveCloudClassHasNoLocalFallback(t *testing.T) {
+	for _, c := range []Class{ClassMedium, ClassLarge} {
+		res, err := Resolve(Inputs{Lookup: lookup(nil), RoutedClass: c})
+		if err != nil {
+			t.Fatalf("%s: Resolve: %v", c, err)
+		}
+		if res.LocalFallback != nil {
+			t.Fatalf("%s: a cloud class must have no local fallback, got %+v", c, res.LocalFallback)
+		}
+	}
+}
+
+// TestResolveSmallFallbackOverride verifies the env override for the fallback
+// model, and that an unset fallback provider/locality inherit the primary's
+// provider and default to cloud.
+func TestResolveSmallFallbackOverride(t *testing.T) {
+	env := map[string]string{ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "my-cloud:latest"}
+	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.LocalFallback == nil {
+		t.Fatal("the overridden fallback must be reported")
+	}
+	if res.LocalFallback.Model != "my-cloud:latest" {
+		t.Fatalf("fallback model = %q, want my-cloud:latest", res.LocalFallback.Model)
+	}
+	if res.LocalFallback.Provider != "ollama" {
+		t.Fatalf("fallback provider = %q, want the primary's provider (ollama)", res.LocalFallback.Provider)
+	}
+	if res.LocalFallback.Locality != LocalityCloud {
+		t.Fatalf("fallback locality = %q, want cloud (the default)", res.LocalFallback.Locality)
+	}
+}
+
+// TestResolveExplicitSmallModelIsPrimary verifies that an explicitly configured
+// local SMALL model is kept as the primary (never replaced by the built-in
+// qwen3:4b), and that its fallback is reported beside it.
+func TestResolveExplicitSmallModelIsPrimary(t *testing.T) {
+	env := map[string]string{
+		ClassEnvKey(ClassSmall, fieldProvider): "ollama",
+		ClassEnvKey(ClassSmall, fieldName):     "my-local-model",
+		ClassEnvKey(ClassSmall, fieldLocality): "local",
+	}
+	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Model != "my-local-model" || res.Selection.Locality != LocalityLocal {
+		t.Fatalf("selection = %+v, want the configured local model kept as primary", res.Selection)
+	}
+	if res.LocalFallback == nil || res.LocalFallback.Model != "nemotron-3-nano:30b-cloud" {
+		t.Fatalf("fallback = %+v, want the built-in small fallback", res.LocalFallback)
+	}
+}
+
+// TestResolveFallbackOnlyDoesNotFillPrimary proves a fallback alone does not
+// replace the class's primary: the class still resolves through the built-in
+// default, and the fallback is reported beside it.
+func TestResolveFallbackOnlyDoesNotFillPrimary(t *testing.T) {
+	env := map[string]string{ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "my-cloud:latest"}
+	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Model != "qwen3:4b" {
+		t.Fatalf("primary = %q, want the built-in qwen3:4b (a fallback never fills the primary)", res.Selection.Model)
+	}
+}
+
+// TestResolveFallbackConfigValidation proves an unknown fallback provider or
+// locality fails with an actionable error rather than being ignored.
+func TestResolveFallbackConfigValidation(t *testing.T) {
+	bad := Route{Small: ClassConfig{Fallback: &FallbackConfig{Name: "x", Provider: "gpt"}}}
+	if err := bad.Validate(); err == nil || !strings.Contains(err.Error(), "fallback.provider") {
+		t.Fatalf("Validate = %v, want an error naming the fallback provider", err)
+	}
+	badLoc := Route{Small: ClassConfig{Fallback: &FallbackConfig{Name: "x", Locality: "orbit"}}}
+	if err := badLoc.Validate(); err == nil || !strings.Contains(err.Error(), "fallback.locality") {
+		t.Fatalf("Validate = %v, want an error naming the fallback locality", err)
+	}
+}
+
+// TestResolveInvalidFallbackEnvIsActionable proves an unknown fallback value from
+// the environment names the offending variable.
+func TestResolveInvalidFallbackEnvIsActionable(t *testing.T) {
+	env := map[string]string{ClassFallbackEnvKey(ClassSmall, FallbackFieldLocality): "mars"}
+	_, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	if err == nil || !strings.Contains(err.Error(), ClassFallbackEnvKey(ClassSmall, FallbackFieldLocality)) {
+		t.Fatalf("error = %v, want the offending variable named", err)
 	}
 }

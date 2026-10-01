@@ -194,3 +194,59 @@ func selectionForValidation(cfg config.Config, routing model.Result) model.Selec
 	stack := resolveExecutionStack(cfg)
 	return model.Selection{Provider: stack.Provider, Model: stack.Model}
 }
+
+// localRuntimeProbe observes whether a local class's model can be served by its
+// configured runtime. It is the production availability probe behind the
+// local-first cloud fallback: it probes read-only (reachability, model list, and
+// chat capability) and never substitutes a provider or model. A command-harness
+// selection has no model runtime to probe. A probe that cannot be built, or that
+// observes nothing definite, reports "usable" so the local model is kept.
+func localRuntimeProbe(cfg config.Config, sel model.Selection) (bool, string) {
+	if sel.Provider == string(provider.Command) {
+		return false, ""
+	}
+	reg, err := newProviderRegistry(cfg)
+	if err != nil {
+		return false, ""
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
+	defer cancel()
+	usable, detail := provider.LocalUsable(ctx, reg, sel)
+	return !usable, detail
+}
+
+// localUnavailableProbe returns the closure that reports whether a local
+// selection's runtime cannot serve it, or nil when no probe is wired. A nil
+// closure means "no observation", so the local model is kept — an absent probe
+// is never read as an outage.
+func localUnavailableProbe(cfg config.Config, d deps) func(model.Selection) bool {
+	if d.localProbe == nil {
+		return nil
+	}
+	return func(sel model.Selection) bool {
+		unavailable, _ := d.localProbe(cfg, sel)
+		return unavailable
+	}
+}
+
+// applyLocalFallback returns res with its selection replaced by the class's
+// configured cloud fallback when the local runtime cannot serve the primary
+// model. It is the single place the local-first runtime fallback is applied, so
+// the automatic router and a manual --model-class override behave identically.
+//
+// It is a no-op — leaving res unchanged — when the class is not local, no
+// fallback is configured, no probe is wired, or the probe reports the local
+// model is usable. It never runs the fallback on a generation, validation,
+// review, or gate failure: those keep the existing recovery behavior, because the
+// probe observes runtime AVAILABILITY only.
+func applyLocalFallback(cfg config.Config, d deps, res model.Result) model.Result {
+	if !res.Active || res.LocalFallback == nil {
+		return res
+	}
+	probe := localUnavailableProbe(cfg, d)
+	if probe == nil || !probe(res.Selection) {
+		return res
+	}
+	res.Selection = *res.LocalFallback
+	return res
+}

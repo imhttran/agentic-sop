@@ -112,3 +112,39 @@ func TestParseEscalationBlock(t *testing.T) {
 		t.Error("escalation settings alone must not mark the models block configured")
 	}
 }
+
+// TestParseFallbackBlock pins the local-first fallback configuration: the nested
+// fallback model parses (it is a known key, not rejected), and it marks the block
+// configured.
+func TestParseFallbackBlock(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nproject:\n  name: fallback\nmodels:\n  small:\n    provider: ollama\n    name: qwen3:4b\n    locality: local\n    fallback:\n      name: nemotron-3-nano:30b-cloud\n      locality: cloud\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	fb := c.Models.Small.Fallback
+	if fb == nil || fb.Name != "nemotron-3-nano:30b-cloud" || fb.Locality != model.LocalityCloud {
+		t.Fatalf("small.fallback = %+v, want the parsed cloud fallback", fb)
+	}
+	if !c.Models.Configured() {
+		t.Error("a fallback model must mark the models block configured")
+	}
+}
+
+// TestParseRejectsUnknownFallbackValues proves the fallback block is validated
+// like the class block: an unknown provider or locality fails clearly.
+func TestParseRejectsUnknownFallbackValues(t *testing.T) {
+	wrap := func(body string) []byte {
+		return []byte("version: 1\nproject:\n  name: x\nmodels:\n  small:\n" + body)
+	}
+	for _, tc := range []struct{ name, body, want string }{
+		{"provider", "    fallback:\n      provider: gpt\n", "fallback.provider"},
+		{"locality", "    fallback:\n      locality: orbit\n", "fallback.locality"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := Parse(wrap(tc.body))
+			if err == nil || !strings.Contains(err.Error(), tc.want) {
+				t.Fatalf("Parse = %v, want an error mentioning %q", err, tc.want)
+			}
+		})
+	}
+}

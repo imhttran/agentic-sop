@@ -156,3 +156,59 @@ func TestValidateSelectionDoesNotMutate(t *testing.T) {
 		t.Fatalf("selection mutated: %+v -> %+v", before, sel)
 	}
 }
+
+// TestLocalUsable pins the availability probe behind the local-first cloud
+// fallback. It is exactly ValidateSelection's read-only verdict, and it is
+// conservative: a runtime whose reachability cannot be determined, or that cannot
+// enumerate models, is NOT reported unusable, so the fallback triggers only on a
+// positive observation.
+func TestLocalUsable(t *testing.T) {
+	healthy := &stubProvider{
+		id:     provider.Ollama,
+		health: provider.HealthResult{Status: provider.HealthHealthy},
+		models: []provider.ModelInfo{{Name: "qwen3:4b", Provider: provider.Ollama}},
+		caps:   provider.Capabilities{Chat: provider.CapYes},
+	}
+	if ok, detail := provider.LocalUsable(context.Background(), registryWith(healthy), ollamaSelection("qwen3:4b")); !ok {
+		t.Fatalf("a reachable runtime with the model must be usable: %s", detail)
+	}
+
+	t.Run("reachable but model absent", func(t *testing.T) {
+		ok, detail := provider.LocalUsable(context.Background(), registryWith(healthy), ollamaSelection("missing:1b"))
+		if ok || detail == "" {
+			t.Fatalf("an absent local model must be unusable with a detail, got (%v, %q)", ok, detail)
+		}
+	})
+
+	t.Run("unreachable", func(t *testing.T) {
+		down := &stubProvider{id: provider.Ollama, health: provider.HealthResult{Status: provider.HealthUnavailable, Message: "refused"}}
+		ok, detail := provider.LocalUsable(context.Background(), registryWith(down), ollamaSelection("qwen3:4b"))
+		if ok || detail == "" {
+			t.Fatalf("an unreachable runtime must be unusable with a detail, got (%v, %q)", ok, detail)
+		}
+	})
+
+	t.Run("undetermined reachability is usable", func(t *testing.T) {
+		p := &stubProvider{
+			id:        provider.Ollama,
+			health:    provider.HealthResult{Status: provider.HealthUnknown},
+			modelsErr: provider.ErrDiscoveryUnsupported,
+			caps:      provider.Capabilities{Chat: provider.CapUnknown},
+		}
+		if ok, detail := provider.LocalUsable(context.Background(), registryWith(p), ollamaSelection("anything")); !ok {
+			t.Fatalf("undetermined availability must never be read as unusable: %s", detail)
+		}
+	})
+
+	t.Run("known-incapable model is unusable", func(t *testing.T) {
+		p := &stubProvider{
+			id:        provider.Ollama,
+			health:    provider.HealthResult{Status: provider.HealthHealthy},
+			modelsErr: provider.ErrDiscoveryUnsupported,
+			caps:      provider.Capabilities{Chat: provider.CapNo},
+		}
+		if ok, _ := provider.LocalUsable(context.Background(), registryWith(p), ollamaSelection("m")); ok {
+			t.Fatal("a model that definitely cannot chat must be unusable")
+		}
+	})
+}

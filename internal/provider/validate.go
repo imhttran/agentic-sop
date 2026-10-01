@@ -85,3 +85,22 @@ func containsModel(infos []ModelInfo, name string) bool {
 	}
 	return false
 }
+
+// LocalUsable reports whether a locally-run selection can be served by its
+// runtime, and a short non-secret detail when it cannot. It is the availability
+// observation behind the local-first cloud fallback (internal/model
+// .Result.LocalFallback, applied by internal/cli.applyLocalFallback): when a local
+// class cannot be served, SOP runs the class's configured cloud fallback instead.
+//
+// It is exactly the read-only check ValidateSelection performs — reachability,
+// authoritative model presence, and a definitely-known chat capability — so the
+// two views can never disagree, and it is deliberately conservative: a provider
+// that cannot report reachability or enumerate models does NOT count as unusable,
+// so the fallback triggers only on a positive observation. It never substitutes a
+// provider or model and never changes SOP state.
+func LocalUsable(ctx context.Context, reg *Registry, sel model.Selection) (bool, string) {
+	if err := ValidateSelection(ctx, reg, sel); err != nil {
+		return false, err.Error()
+	}
+	return true, ""
+}

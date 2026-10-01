@@ -136,7 +136,7 @@ func TestEscalationSmallToMediumPasses(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, preExecRoutingConfig)
 
-	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "diff --git a/a.go b/a.go\n+escalated\n", "glm-5.3-flash:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
+	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "diff --git a/a.go b/a.go\n+escalated\n", "nemotron-3-super:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
 	if res.code != exitOK {
 		t.Fatalf("code=%d, want ok; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
 	}
@@ -149,7 +149,7 @@ func TestEscalationSmallToMediumPasses(t *testing.T) {
 	if !strings.Contains(res.stdout, "Retrying (attempt 2):") {
 		t.Errorf("stdout missing the retry block: %q", res.stdout)
 	}
-	if !strings.Contains(res.stdout, "glm-5.3-flash:cloud") {
+	if !strings.Contains(res.stdout, "nemotron-3-super:cloud") {
 		t.Errorf("stdout missing the escalated model: %q", res.stdout)
 	}
 
@@ -169,8 +169,8 @@ func TestEscalationSmallToMediumPasses(t *testing.T) {
 	if attempts[0].FailureStage != "review" {
 		t.Errorf("attempt 1 failure stage = %q, want review", attempts[0].FailureStage)
 	}
-	if attempts[1].Attempt != 2 || attempts[1].Class != "medium" || attempts[1].Model != "glm-5.3-flash:cloud" {
-		t.Errorf("attempt 2 = %+v, want medium/glm-5.3-flash:cloud", attempts[1])
+	if attempts[1].Attempt != 2 || attempts[1].Class != "medium" || attempts[1].Model != "nemotron-3-super:cloud" {
+		t.Errorf("attempt 2 = %+v, want medium/nemotron-3-super:cloud", attempts[1])
 	}
 	if attempts[1].Result != runpkg.AttemptPassed {
 		t.Errorf("attempt 2 result = %q, want passed", attempts[1].Result)
@@ -216,7 +216,7 @@ func TestEscalationLadderExhaustsAtLarge(t *testing.T) {
 	}
 	for i, want := range []struct{ class, model string }{
 		{"small", "qwen3:4b"},
-		{"medium", "glm-5.3-flash:cloud"},
+		{"medium", "nemotron-3-super:cloud"},
 		{"large", "deepseek-v4.1-flash:cloud"},
 	} {
 		if attempts[i].Class != want.class || attempts[i].Model != want.model {
@@ -319,7 +319,7 @@ func TestEscalationSafetyBoundaryDoesNotEscalate(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, preExecRoutingConfig)
 
-	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "glm-5.3-flash:cloud", jev.NewDestructiveConcernFake(), "run", "--task", "TASK.md")
+	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "nemotron-3-super:cloud", jev.NewDestructiveConcernFake(), "run", "--task", "TASK.md")
 	if res.code != exitError {
 		t.Fatalf("code=%d, want error; stdout=%s", res.code, res.stdout)
 	}
@@ -367,7 +367,7 @@ func TestEscalatedSelectionIsValidatedBeforeExecution(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, validateRoutingConfig)
 
-	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "glm-5.3-flash:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
+	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "nemotron-3-super:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
 	if res.code != exitError {
 		t.Fatalf("code=%d, want error; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
 	}
@@ -381,7 +381,7 @@ func TestEscalatedSelectionIsValidatedBeforeExecution(t *testing.T) {
 		t.Errorf("the validated SMALL model should have been built: %v", res.models)
 	}
 	for _, m := range res.models {
-		if m == "glm-5.3-flash:cloud" {
+		if m == "nemotron-3-super:cloud" {
 			t.Errorf("the unvalidated escalated model must never be built: %v", res.models)
 		}
 	}
@@ -404,7 +404,7 @@ func TestEscalationRefusesSubstitutedClass(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, substitutedClassConfig)
 
-	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "glm-5.3-flash:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
+	res := runEscalation(t, dir, "diff --git a/a.go b/a.go\n-old\n", "", "nemotron-3-super:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
 	if res.code != exitError {
 		t.Fatalf("code=%d, want error; stdout=%s", res.code, res.stdout)
 	}
@@ -415,7 +415,7 @@ func TestEscalationRefusesSubstitutedClass(t *testing.T) {
 		t.Errorf("stdout missing the substitution refusal: %q", res.stdout)
 	}
 	for _, m := range res.models {
-		if m == "glm-5.3-flash:cloud" {
+		if m == "nemotron-3-super:cloud" {
 			t.Errorf("the substituted class must never be built: %v", res.models)
 		}
 	}
@@ -475,7 +475,7 @@ func TestEscalationNoChangesProducesEscalates(t *testing.T) {
 
 	// Attempt 1 changes nothing (diffBefore is empty); the escalated MEDIUM attempt
 	// produces a reviewable diff, so it passes.
-	res := runEscalation(t, dir, "", "diff --git a/a.go b/a.go\n+escalated\n", "glm-5.3-flash:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
+	res := runEscalation(t, dir, "", "diff --git a/a.go b/a.go\n+escalated\n", "nemotron-3-super:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
 	if res.code != exitOK {
 		t.Fatalf("code=%d, want ok; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
 	}
@@ -504,8 +504,8 @@ func TestEscalationNoChangesProducesEscalates(t *testing.T) {
 	if attempts[0].Action != "escalate" {
 		t.Errorf("attempt 1 action = %q, want escalate (the no-change verdict is now classified)", attempts[0].Action)
 	}
-	if attempts[1].Class != "medium" || attempts[1].Model != "glm-5.3-flash:cloud" || attempts[1].Result != runpkg.AttemptPassed {
-		t.Errorf("attempt 2 = %+v, want a passing medium/glm-5.3-flash:cloud attempt", attempts[1])
+	if attempts[1].Class != "medium" || attempts[1].Model != "nemotron-3-super:cloud" || attempts[1].Result != runpkg.AttemptPassed {
+		t.Errorf("attempt 2 = %+v, want a passing medium/nemotron-3-super:cloud attempt", attempts[1])
 	}
 
 	// The initial routing decision is preserved: an escalation never overwrites it.
