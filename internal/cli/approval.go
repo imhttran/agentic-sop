@@ -1,11 +1,14 @@
 package cli
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -160,10 +163,16 @@ func runApprovalStatus(args []string, stdout, stderr io.Writer, d deps) int {
 
 // runApprove records an approval of the task's active approval request. It
 // delegates entirely to the application boundary; it holds no lifecycle logic.
+// With no <task-id> (or --select) it chooses among the applicable gates at a
+// terminal (Phase 6). With --run it starts the ordinary run only AFTER the decision
+// is persisted, so a failure to start the run never loses the recorded decision.
 func runApprove(args []string, stdout, stderr io.Writer, d deps) int {
-	id, by, note, ok := parseDecisionArgs(args, stderr)
+	opts, ok := parseDecisionArgs(args, true, stderr)
 	if !ok {
 		return exitUsage
+	}
+	if opts.id == "" || opts.choose {
+		return runInteractiveDecision(true, opts, stdout, stderr, d)
 	}
 
 	dir, st, ok := openApprovalState(d, stderr, "approve")
@@ -172,27 +181,37 @@ func runApprove(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	defer st.Close()
 
-	res, err := approvalService(st, dir).Approve(id, approval.DecisionInput{By: by, Note: note})
+	res, err := approvalService(st, dir).Approve(opts.id, approval.DecisionInput{By: opts.by, Note: opts.note})
 	if err != nil {
 		fmt.Fprintf(stderr, "approve: %v\n", err)
 		return exitError
 	}
-	recordApprovalDecisionActivity(dir, id, true, note)
+	recordApprovalDecisionActivity(dir, opts.id, true, opts.note)
 	if res.Idempotent {
-		fmt.Fprintf(stdout, "already approved: %s\n", id)
-		return exitOK
+		fmt.Fprintf(stdout, "already approved: %s\n", opts.id)
+	} else {
+		fmt.Fprintf(stdout, "approved %s\n", opts.id)
+		writeApprovalView(stdout, res.View)
 	}
-	fmt.Fprintf(stdout, "approved %s\n", id)
-	writeApprovalView(stdout, res.View)
+	if opts.run {
+		// The decision above is already persisted, so a failure to start the run
+		// leaves the approval recorded and the task runnable. The continuation is the
+		// ordinary run — the same path `sop run` uses — and never bypasses a gate.
+		return runRun(nil, stdout, stderr, d)
+	}
 	return exitOK
 }
 
 // runDecline records a decline of the task's active approval request. It
-// preserves truthful lifecycle state and never manufactures completion.
+// preserves truthful lifecycle state and never manufactures completion. With no
+// <task-id> (or --select) it chooses among the applicable gates at a terminal.
 func runDecline(args []string, stdout, stderr io.Writer, d deps) int {
-	id, by, note, ok := parseDecisionArgs(args, stderr)
+	opts, ok := parseDecisionArgs(args, false, stderr)
 	if !ok {
 		return exitUsage
+	}
+	if opts.id == "" || opts.choose {
+		return runInteractiveDecision(false, opts, stdout, stderr, d)
 	}
 
 	dir, st, ok := openApprovalState(d, stderr, "decline")
@@ -201,17 +220,17 @@ func runDecline(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	defer st.Close()
 
-	res, err := approvalService(st, dir).Decline(id, approval.DecisionInput{By: by, Note: note})
+	res, err := approvalService(st, dir).Decline(opts.id, approval.DecisionInput{By: opts.by, Note: opts.note})
 	if err != nil {
 		fmt.Fprintf(stderr, "decline: %v\n", err)
 		return exitError
 	}
-	recordApprovalDecisionActivity(dir, id, false, note)
+	recordApprovalDecisionActivity(dir, opts.id, false, opts.note)
 	if res.Idempotent {
-		fmt.Fprintf(stdout, "already declined: %s\n", id)
+		fmt.Fprintf(stdout, "already declined: %s\n", opts.id)
 		return exitOK
 	}
-	fmt.Fprintf(stdout, "declined %s\n", id)
+	fmt.Fprintf(stdout, "declined %s\n", opts.id)
 	writeApprovalView(stdout, res.View)
 	return exitOK
 }
@@ -236,31 +255,74 @@ func openApprovalState(d deps, stderr io.Writer, label string) (string, *store.S
 	return dir, st, true
 }
 
-// parseDecisionArgs parses `<task-id> [--by NAME] [--note TEXT]`.
-func parseDecisionArgs(args []string, stderr io.Writer) (id, by, note string, ok bool) {
+// decisionOptions are the parsed arguments of `sop approve` / `sop decline`.
+type decisionOptions struct {
+	id     string
+	by     string
+	note   string
+	choose bool
+	run    bool
+}
+
+// decisionUsage is the one-line usage for a decision command.
+func decisionUsage(allowRun bool) string {
+	if allowRun {
+		return "usage: sop approve [<task-id> | --select] [--by NAME] [--note TEXT] [--run]"
+	}
+	return "usage: sop decline [<task-id> | --select] [--by NAME] [--note TEXT]"
+}
+
+// parseDecisionArgs parses `[<task-id> | --select] [--by NAME] [--note TEXT] [--run]`.
+// An omitted task id and --select are equivalent: both ask for an interactive choice
+// among the applicable gates, which the caller MUST fail closed on when stdin is not
+// a terminal. --run is accepted only for approve (allowRun); for a decline it is a
+// usage error, because a decline never continues execution.
+func parseDecisionArgs(args []string, allowRun bool, stderr io.Writer) (decisionOptions, bool) {
+	var opts decisionOptions
+	fail := func() (decisionOptions, bool) {
+		fmt.Fprintln(stderr, decisionUsage(allowRun))
+		return decisionOptions{}, false
+	}
 	for i := 0; i < len(args); i++ {
-		switch {
-		case args[i] == "--by" && i+1 < len(args):
+		switch a := args[i]; {
+		case a == "--by":
+			if i+1 >= len(args) {
+				return fail()
+			}
 			i++
-			by = args[i]
-		case args[i] == "--note" && i+1 < len(args):
+			opts.by = args[i]
+		case strings.HasPrefix(a, "--by="):
+			opts.by = strings.TrimPrefix(a, "--by=")
+		case a == "--note":
+			if i+1 >= len(args) {
+				return fail()
+			}
 			i++
-			note = args[i]
-		case strings.HasPrefix(args[i], "-"):
-			fmt.Fprintln(stderr, "usage: sop approve|decline <task-id> [--by NAME] [--note TEXT]")
-			return "", "", "", false
-		case id == "":
-			id = args[i]
+			opts.note = args[i]
+		case strings.HasPrefix(a, "--note="):
+			opts.note = strings.TrimPrefix(a, "--note=")
+		case a == "--select":
+			opts.choose = true
+		case a == "--run":
+			if !allowRun {
+				return fail()
+			}
+			opts.run = true
+		case strings.HasPrefix(a, "-"):
+			return fail()
 		default:
-			fmt.Fprintln(stderr, "usage: sop approve|decline <task-id> [--by NAME] [--note TEXT]")
-			return "", "", "", false
+			if opts.id != "" {
+				return fail()
+			}
+			opts.id = a
 		}
 	}
-	if id == "" {
-		fmt.Fprintln(stderr, "usage: sop approve|decline <task-id> [--by NAME] [--note TEXT]")
-		return "", "", "", false
+	// An explicit id and --select are mutually exclusive intents: one names the
+	// task, the other asks to choose one. Neither is silently ignored.
+	if opts.id != "" && opts.choose {
+		return fail()
 	}
-	return id, by, note, true
+	return opts, true
 }
 
 // writeApprovalView renders SOP's approval projection for display.
@@ -363,4 +425,259 @@ func recordHumanApprovalRequest(ctx context.Context, rn *runpkg.Run, task *domai
 		return
 	}
 	activity.FromContext(ctx).Emit(activity.StageApproval, "REQUESTED", oneLine(reason))
+}
+
+// runInteractiveDecision lets a human choose among the applicable gates at a terminal
+// and then records the decision through the SAME application boundary the explicit
+// commands use. It is one authoritative decision operation, not a second mechanism.
+//
+// It fails closed: off a TTY it prints the usage and the gates and records nothing,
+// and a cancel (or a closed stdin) records nothing and exits non-zero. What the human
+// types is a DECISION to relay to the boundary — never a command, a capability, or a
+// lifecycle transition — and the boundary revalidates the gate at mutation time, so a
+// gate that went stale between the listing and the choice is refused.
+func runInteractiveDecision(approve bool, opts decisionOptions, stdout, stderr io.Writer, d deps) int {
+	label, verb := "decline", "Decline"
+	if approve {
+		label, verb = "approve", "Approve"
+	}
+
+	dir, st, ok := openApprovalState(d, stderr, label)
+	if !ok {
+		return exitError
+	}
+	defer st.Close()
+
+	svc := approvalService(st, dir)
+	gates, err := listApplicableGates(svc, st)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s: %v\n", label, err)
+		return exitError
+	}
+	if len(gates) == 0 {
+		fmt.Fprintln(stderr, "no pending approvals")
+		return exitError
+	}
+
+	in := stdinOf(d)
+	if !interactiveInput(d) {
+		// Fail closed: an interactive choice requires a human at a terminal. Print
+		// the usage and the enumerated gates, record nothing, and never guess a
+		// default — a pipe, a CI run, or a redirect is not a decision.
+		fmt.Fprintln(stderr, decisionUsage(approve))
+		fmt.Fprintln(stderr, "interactive selection requires a terminal (stdin is not a TTY); record nothing:")
+		writeGateList(stderr, gates)
+		fmt.Fprintf(stderr, "decide one explicitly with: sop %s <task-id>\n", label)
+		return exitUsage
+	}
+
+	writeGateList(stdout, gates)
+	br := bufio.NewReader(in)
+
+	id := gates[0].TaskID
+	if len(gates) > 1 {
+		fmt.Fprintf(stdout, "%s which task? [1-%d or <task-id>]: ", verb, len(gates))
+		line, _ := readDecisionLine(br)
+		selected, ok := selectGate(strings.TrimSpace(line), gates)
+		if !ok {
+			fmt.Fprintln(stderr, "cancelled: no decision recorded")
+			return exitError
+		}
+		id = selected
+	}
+
+	fmt.Fprintf(stdout, "%s %s? [y/N]: ", verb, id)
+	line, _ := readDecisionLine(br)
+	if !confirmed(line) {
+		fmt.Fprintln(stderr, "cancelled: no decision recorded")
+		return exitError
+	}
+
+	var res approval.Result
+	if approve {
+		res, err = svc.Approve(id, approval.DecisionInput{By: opts.by, Note: opts.note})
+	} else {
+		res, err = svc.Decline(id, approval.DecisionInput{By: opts.by, Note: opts.note})
+	}
+	if err != nil {
+		// A selection that is not (or is no longer) applicable is refused with the
+		// boundary's own error; the CLI never resolves it itself.
+		fmt.Fprintf(stderr, "%s: %v\n", label, err)
+		return exitError
+	}
+	recordApprovalDecisionActivity(dir, id, approve, opts.note)
+	if approve {
+		if res.Idempotent {
+			fmt.Fprintf(stdout, "already approved: %s\n", id)
+		} else {
+			fmt.Fprintf(stdout, "approved %s\n", id)
+			writeApprovalView(stdout, res.View)
+		}
+	} else {
+		if res.Idempotent {
+			fmt.Fprintf(stdout, "already declined: %s\n", id)
+			return exitOK
+		}
+		fmt.Fprintf(stdout, "declined %s\n", id)
+		writeApprovalView(stdout, res.View)
+	}
+	if approve && opts.run {
+		return runRun(nil, stdout, stderr, d)
+	}
+	return exitOK
+}
+
+// listApplicableGates enumerates every task SOP reports at an applicable gate, in
+// store order. It classifies nothing itself: it asks the application boundary, so the
+// listing can never disagree with what a decision would accept.
+func listApplicableGates(svc *approval.Service, st *store.Store) ([]approval.View, error) {
+	tasks, err := st.List()
+	if err != nil {
+		return nil, err
+	}
+	gates := []approval.View{}
+	for _, task := range tasks {
+		view, err := svc.Approval(task.ID)
+		if err != nil {
+			return nil, err
+		}
+		if view.Applicable {
+			gates = append(gates, view)
+		}
+	}
+	return gates, nil
+}
+
+// writeGateList renders the applicable gates for a human, numbered when there is
+// more than one so a selection has an unambiguous target.
+func writeGateList(w io.Writer, gates []approval.View) {
+	for i, g := range gates {
+		if len(gates) > 1 {
+			fmt.Fprintf(w, "%d) %s  %s  %s  %s\n", i+1, g.TaskID, g.Kind, g.Stage, oneLine(g.Reason))
+			continue
+		}
+		fmt.Fprintf(w, "%s  %s  %s  %s\n", g.TaskID, g.Kind, g.Stage, oneLine(g.Reason))
+	}
+}
+
+// selectGate resolves an interactive selection to a task id. A number selects by
+// position; anything else is taken as a task id verbatim, so the application boundary
+// — not the CLI — decides whether it is applicable.
+func selectGate(input string, gates []approval.View) (string, bool) {
+	if input == "" {
+		return "", false
+	}
+	if n, err := strconv.Atoi(input); err == nil {
+		if n < 1 || n > len(gates) {
+			return "", false
+		}
+		return gates[n-1].TaskID, true
+	}
+	return input, true
+}
+
+// readDecisionLine reads one line of interactive input. A missing trailing newline
+// (EOF) still yields the line, so a piped `y` is read the same as a typed one; the
+// caller decides what the text means.
+func readDecisionLine(br *bufio.Reader) (string, error) {
+	line, err := br.ReadString('\n')
+	return strings.TrimSpace(line), err
+}
+
+// confirmed reports whether an interactive answer is an explicit yes. Only "y" or
+// "yes" (case-insensitive) confirms; everything else — including an empty line and
+// EOF — is not a decision.
+func confirmed(line string) bool {
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}
+
+// stdinOf returns the interactive input, defaulting to os.Stdin.
+func stdinOf(d deps) io.Reader {
+	if d.stdin != nil {
+		return d.stdin
+	}
+	return os.Stdin
+}
+
+// interactiveInput reports whether the approval commands may ask a human. It is the
+// real terminal check unless a test injected one.
+func interactiveInput(d deps) bool {
+	r := stdinOf(d)
+	if d.interactive != nil {
+		return d.interactive(r)
+	}
+	return isTerminalReader(r)
+}
+
+// isTerminalReader reports whether r is an interactive terminal (a character
+// device). A bytes.Buffer, a pipe, or a regular file is not, so a piped, redirected,
+// or CI stdin fails closed.
+func isTerminalReader(r io.Reader) bool {
+	f, ok := r.(*os.File)
+	if !ok {
+		return false
+	}
+	info, err := f.Stat()
+	if err != nil {
+		return false
+	}
+	return info.Mode()&os.ModeCharDevice != 0
+}
+
+// printParkedHumanGate renders the human boundary a run stopped at, so an operator
+// needs no SOP internals to know what to do next. It is presentation only: it reads
+// the request SOP recorded and prints the commands that resolve it. When the run has
+// no resolvable gate — an ad-hoc `--task`/`prompt` run whose id is not a stored task —
+// it says so rather than naming a command that would fail.
+func printParkedHumanGate(w io.Writer, id, stage, reason, continuation string, resolvable bool) {
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Run paused: human approval required")
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Task: %s\n", id)
+	if stage != "" {
+		fmt.Fprintf(w, "Stage: %s\n", stage)
+	}
+	if r := oneLine(reason); r != "" {
+		fmt.Fprintf(w, "Reason: %s\n", r)
+	}
+	fmt.Fprintln(w)
+	if !resolvable {
+		fmt.Fprintln(w, "This run has no stored task, so it has no resolvable approval gate.")
+		fmt.Fprintln(w, "Continue with:")
+		fmt.Fprintf(w, "  %s\n", continuation)
+		return
+	}
+	fmt.Fprintln(w, "Inspect:")
+	fmt.Fprintf(w, "  sop approval %s\n", id)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Approve:")
+	fmt.Fprintf(w, "  sop approve %s\n", id)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Decline:")
+	fmt.Fprintf(w, "  sop decline %s\n", id)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "After approving, explicitly continue with:")
+	fmt.Fprintf(w, "  %s\n", continuation)
+}
+
+// printLeftoverGates lists the gates a run left behind, with a pointer at
+// `sop approvals`, so an operator who stops a run can see what still waits on them.
+// It prints nothing when no gate is applicable, and it is best-effort: a listing
+// failure never changes the run's outcome.
+func printLeftoverGates(w io.Writer, dir string, st *store.Store) {
+	gates, err := listApplicableGates(approvalService(st, dir), st)
+	if err != nil || len(gates) == 0 {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Approvals left behind:")
+	for _, g := range gates {
+		fmt.Fprintf(w, "  %s  %s  %s  %s\n", g.TaskID, g.Kind, g.Stage, oneLine(g.Reason))
+	}
+	fmt.Fprintln(w, "List them with: sop approvals")
 }

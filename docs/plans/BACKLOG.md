@@ -212,11 +212,14 @@ Small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation
 ```
 
-The former first candidate is now planned, and its read surface is shipped:
+The former first candidate is now **implemented**:
 [PLAN-Phase-6-Interactive-Approval.md](PLAN-Phase-6-Interactive-Approval.md)
 (Phase 6, `P6-001`–`P6-011`). `sop approvals` and the read-only
 `sop reconcile --list-changed` — the two SOP operations an external consumer needed to
-reach — landed as `P6-001`–`P6-004`; the interactive surface is proposed.
+reach — landed as `P6-001`–`P6-004`; the interactive surface followed: a parked run
+names the gate and the commands that resolve it, the applicable gates can be chosen at
+a terminal (fail-closed off one), and `sop approve <id> --run` records the decision
+before starting the ordinary run. See [../guides/APPROVALS.md](../guides/APPROVALS.md).
 
 ## Known limitations (current)
 
@@ -243,6 +246,11 @@ open" is a claim about the _scheduled_ list above, not about these.
   `scripts/install/install-sop-ollama-agent.sh` rebuilds instead of short-circuiting on a
   revision match. The installer handles it gracefully; a pinned revision that reports
   its revision would make repeated installs a no-op.
+- **Ad-hoc runs have no resolvable approval gate.** `sop run --task TASK.md` and
+  `sop prompt --capability implement` park at a human boundary like a graph run, but
+  their run id is not a stored task, so `sop approvals`/`sop approve`/`sop decline` do
+  not apply to them. They print the boundary and how to continue instead of naming a
+  command that would fail (Phase 6, P6-005).
 - **Capabilities designed but not delivered are documented in place, not here:** the TDD
   test-design stage ([../specs/TASK-LIFECYCLE.md](../specs/TASK-LIFECYCLE.md)),
   `max_parallel_tasks` ([../specs/EXECUTION.md](../specs/EXECUTION.md)), and the CLI-driven

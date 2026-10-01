@@ -157,6 +157,10 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 			printCompletion(stdout, dir, cfg, prepared, final)
 		}
 	}
+	// A run that stopped at a human boundary names the gates it left behind, so an
+	// operator can resolve them with `sop approvals` / `sop approve`. It prints
+	// nothing when no gate is applicable, so a clean run's output is unchanged.
+	printLeftoverGates(stdout, dir, st)
 	return code
 }
 
@@ -603,6 +607,19 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// recorded for this task, or a persisted WAITING_FOR_HUMAN stage. It is the only
 	// input that can produce APPROVAL_REQUIRED; agent prose never can.
 	approval := currentApprovalBoundary(rn, priorStage)
+	// A task parked at a human boundary names its own gate on the way out. The
+	// deferred print reads the request SOP recorded (never a task status or prose) and
+	// prints the commands that resolve it, so the run summary comes first. Presentation
+	// only: it changes neither the task state nor the run's outcome.
+	parked := false
+	defer func() {
+		if !parked {
+			return
+		}
+		if v, ok := rn.Approval(); ok && v.Status == domain.ApprovalPending {
+			printParkedHumanGate(stdout, v.TaskID, v.Stage, v.Reason, "sop run", true)
+		}
+	}()
 	// Attach this task's activity stream (a no-op when reporting is disabled) so
 	// the lifecycle and the in-process agent report what they are doing while it
 	// runs. The recorder carries the task id, so events stay attributed even
@@ -624,6 +641,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		// introduced.
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
 		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
+		parked = true
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
 
@@ -638,6 +656,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if err == nil && humanBoundary(res.stage, res.classification, res.decision) {
 		recordHumanApprovalRequest(ctx, rn, task, res.stage, res.classification.Disposition,
 			firstNonBlank(firstReason(res.gate), res.classification.Reason), res.classification.Reason)
+		parked = true
 	}
 
 	// An error is an agent/infrastructure failure. Classify it and apply the
@@ -657,6 +676,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		if humanBoundary(res.stage, cls, res.decision) {
 			recordHumanApprovalRequest(ctx, rn, task, res.stage, cls.Disposition,
 				firstNonBlank(cls.Reason, err.Error()), cls.Reason)
+			parked = true
 		}
 		if cls.Retryable() {
 			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), cls.Disposition, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)

@@ -3,13 +3,13 @@
 **Type:** Implementation plan (normative for the work it describes; the specifications
 win wherever they disagree).
 
-**Status:** Partially implemented. The **read surface** — `sop approvals`, the read-only
+**Status:** Implemented. The **read surface** — `sop approvals`, the read-only
 `sop reconcile --list-changed`, and the rules and documentation that go with them —
-shipped (`P6-001`–`P6-004`, each declaring `execution_mode: done`). The **interactive
-surface** (`P6-005`–`P6-010`) is proposed, not implemented: running
-`sop run docs/plans/PLAN-Phase-6-Interactive-Approval.md` records the shipped stages as
-satisfied and starts the rest at `PLANNED`. The work items are tracked as `P6-NNN`. The
-rules this plan MUST NOT break are normative in
+shipped (`P6-001`–`P6-004`). The **interactive surface** — a parked run naming its own
+gate, choosing among the applicable gates at a terminal (fail-closed off one), the
+explicit `--run` continuation, and the rules, guide, and tests that go with them —
+shipped (`P6-005`–`P6-011`). Each stage declares `execution_mode: done`. The work items
+are tracked as `P6-NNN`. The rules this plan MUST NOT break are normative in
 [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md); the rules it adds are declared
 there by P6-003 and P6-008. See [../reference/CLI.md](../reference/CLI.md).
 
@@ -146,7 +146,8 @@ approval commands, not in the run.
 
 ### P6-005 — A parked run names its own gate
 
-- **Status:** Not started.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** when `sop run` (graph or `--task`) or `sop prompt --capability implement`
   parks a task at a human boundary, the run MUST print the task id and the exact command
   that resolves it (`sop approval <id>`, `sop approve <id>`), and the end-of-run summary
@@ -163,7 +164,8 @@ approval commands, not in the run.
 
 ### P6-006 — Interactive selection at a terminal
 
-- **Status:** Not started.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** `sop approve` and `sop decline` accept no `<task-id>` (and a `--select`) to
   choose among the applicable gates interactively at a TTY, then capture `--by` and
   `--note` as today. Interactivity MUST fail closed: when stdin is not a terminal, the
@@ -178,7 +180,8 @@ approval commands, not in the run.
 
 ### P6-007 — Record the decision, then continue
 
-- **Status:** Not started.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** add an explicit `--run` to `sop approve <id>` that, **only after the decision
   is recorded**, starts the ordinary run for the requeued task. The decision is persisted
   first, so a failure to start the run leaves the approval recorded and the task
@@ -193,7 +196,8 @@ approval commands, not in the run.
 
 ### P6-008 — Declare the interactive surface in the specification
 
-- **Status:** Not started.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** extend [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md) with the
   normative rules for the interactive surface: a client MUST NOT manufacture approval, an
   interactive client MUST fail closed when it cannot ask a human, and `--run` MUST record
@@ -206,7 +210,8 @@ approval commands, not in the run.
 
 ### P6-009 — Document the interactive surface
 
-- **Status:** Not started.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** add a task-oriented guide, `docs/guides/APPROVALS.md`, that walks a human
   through seeing a gate, reading it, deciding it, and continuing — and states plainly that
   the run stops at the gate and that an approval is not a completion. Update the
@@ -218,22 +223,22 @@ approval commands, not in the run.
 
 ### P6-010 — Deterministic tests for the surface
 
-- **Status:** Partially covered: the read surface shipped with its tests (P6-001, P6-002);
-  the interactive surface has none yet.
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** cover the interactive surface with no terminal and no model: fail-closed
   non-TTY selection, a selected gate that is not applicable, `--run` recording before
   continuing and starting nothing when the decision is refused, and the guarantee that a
   task status or free-form prose alone produces no applicable gate. Reuse the existing
   approval fixtures.
-- **Files:** `internal/cli/approval_test.go`.
+- **Files:** `internal/cli/approval_interactive_test.go`.
 - **Depends on:** P6-005, P6-006, P6-007
 - **Acceptance:** the cases above pass deterministically; a test proves interactivity is
   never exercised from a non-TTY; no test requires a live provider.
 
 ### P6-011 — Wire the phase and validate
 
-- **Status:** Not started (the read surface's wiring is done; the phase completes with the
-  interactive surface).
+- **Status:** Done.
+- **Execution:** done.
 - **Scope:** index this plan and record it in [BACKLOG.md](BACKLOG.md), add the plan to the
   compiler contract in `internal/planner/taskshape_test.go`, and run the full validation
   for the phase.

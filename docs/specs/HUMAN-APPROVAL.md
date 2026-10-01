@@ -89,3 +89,26 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
   its own, and MUST NOT infer an approval from a task status.
 - Reading a gate or listing the gates MUST NOT mutate the repository, the task graph,
   or run history.
+
+## 7. The Interactive Surface and Explicit Continuation
+
+- A client MUST NOT manufacture approval. An interactive client — one that asks a
+  human at a terminal — MUST fail closed when it cannot ask a human: it MUST NOT
+  assume yes, choose a default, read end-of-input as approval, or silently decline.
+- Interactivity MUST be an additional human UX over the single application boundary
+  §6 owns, not a second mechanism. A decision MUST still go through that boundary, and
+  the boundary MUST revalidate the gate at mutation time, so a gate that went stale
+  between being displayed and being decided is refused.
+- A run that stops at a human gate SHOULD name the gate and the command that resolves
+  it, derived from the request SOP recorded — never from a task status or prose.
+- An approval MUST resolve only the gate that raised it. It MUST NOT imply that the
+  task is complete, that validation, review, JEV, or the quality gate passed, or that a
+  commit, push, or merge is allowed; every subsequent lifecycle check still applies.
+  A decline MUST preserve the truthful lifecycle state and MUST NOT manufacture
+  completion.
+- An explicit continuation (`sop approve <task-id> --run`) MUST record the decision
+  BEFORE starting the run, MUST start the ordinary run path, MUST NOT bypass any gate,
+  and MUST NOT be the default. Recording the human decision and continuing execution
+  MUST remain distinct operations.
+- The explicit `sop approve <task-id>` and `sop decline <task-id>` commands MUST remain
+  usable without a terminal, by a human, a script, an MCP client, or a controller.

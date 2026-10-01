@@ -186,6 +186,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage)
 	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", rn.State().ID, tri.Reason)
+		printParkedHumanGate(stdout, rn.State().ID, string(runpkg.WaitingForHuman), tri.Reason, "sop run --task "+file, false)
 		return exitError
 	}
 
@@ -194,7 +195,15 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	if err != nil {
 		return failRun(rn, stderr, err)
 	}
-	return emitRunSummary(stdout, dir, cfg, rn, res)
+	code := emitRunSummary(stdout, dir, cfg, rn, res)
+	// An ad-hoc `--task` run that stops at a human boundary names it too, but it has no
+	// stored task, so there is no resolvable approval gate: it prints the boundary and
+	// how to continue instead of a command that would fail.
+	if humanBoundary(res.stage, res.classification, res.decision) {
+		printParkedHumanGate(stdout, rn.State().ID, string(res.stage),
+			firstNonBlank(firstReason(res.gate), res.classification.Reason), "sop run --task "+file, false)
+	}
+	return code
 }
 
 // lifeResult is the outcome of one local lifecycle.

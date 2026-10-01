@@ -80,6 +80,15 @@ type deps struct {
 	// for an attempt the recovery policy selected. It is per-attempt, so the run
 	// loop resets it before each lifecycle call.
 	attempt *escalationAttempt
+	// stdin is the interactive input the approval commands read when they must
+	// choose among gates (Phase 6). It is os.Stdin in production and a buffer in
+	// tests; prompt text read from it is a DECISION, never a command.
+	stdin io.Reader
+	// interactive reports whether the approval commands may ask a human at all. It
+	// is true only for a real terminal on stdin, and it is injectable so a test can
+	// exercise the interactive path without a pseudo-terminal. A nil value falls
+	// back to the real terminal check, so an unwired process fails closed.
+	interactive func(io.Reader) bool
 }
 
 func defaultDeps() deps {
@@ -130,6 +139,8 @@ func defaultDeps() deps {
 			// treats as non-fatal (never failing the lifecycle).
 			return jev.NewOllamaAnalyzerFromEnv()
 		},
+		stdin:       os.Stdin,
+		interactive: isTerminalReader,
 	}
 }
 
@@ -247,7 +258,9 @@ Commands:
   report    print a concise summary of the latest run
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
   approve   record an approval decision on a task's active human approval gate
+            (no <task-id> or --select chooses interactively; --run continues after)
   decline   record a decline decision on a task's active human approval gate
+            (no <task-id> or --select chooses interactively)
   approval  show SOP's approval request (if any) for a task
   approvals list every task waiting at an approval gate (--json)
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)

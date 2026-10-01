@@ -450,6 +450,14 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 		return failRun(rn, stderr, err)
 	}
 	code := emitRunSummary(progress, dir, cfg, rn, res)
+	// A governed `implement` prompt that stops at a human boundary names it too, but
+	// the prompt is not a stored task, so there is no resolvable approval gate: it
+	// prints the boundary and how to continue instead of a command that would fail.
+	if humanBoundary(res.stage, res.classification, res.decision) {
+		printParkedHumanGate(progress, rn.State().ID, string(res.stage),
+			firstNonBlank(firstReason(res.gate), res.classification.Reason),
+			"sop prompt --capability implement", false)
+	}
 
 	sel := model.Selection{Provider: cfg.Agent.Provider, Model: cfg.Agent.Model}
 	if res.routing != nil {
