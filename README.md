@@ -167,8 +167,9 @@ implementation, bounded review/fix loops, CI and merge gates, durable state,
 resume/recovery, environment bootstrap, and limited parallelism. Above it, model
 routing (3.5), the provider runtime (4), bounded model escalation (5), unified work
 items with `sop prompt` (5.4), and distribution — one installer for macOS/Linux and
-Windows, a native Claude Code plugin, and CI (5.5–5.6) — are implemented; routing and
-escalation are OFF by default. See [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md).
+Windows, a native Claude Code plugin, and CI (5.5–5.6), and an interactive
+human-decision surface (6), are implemented; routing and escalation are OFF by
+default. See [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md).
 
 ## Documentation
 
@@ -192,7 +193,7 @@ Configuration     docs/reference/CONFIGURATION.md
 Performance       docs/reference/PERFORMANCE.md
 Development       docs/guides/DEVELOPMENT.md
 Plans             docs/plans/ · active plan: docs/plans/PLAN-Phase-3.5-Model-Routing.md
-                  latest phase: docs/plans/PLAN-Phase-5.5-Distribution.md
+                  latest phase: docs/plans/PLAN-Phase-6-Interactive-Approval.md
 History           docs/history/
 ```
 
