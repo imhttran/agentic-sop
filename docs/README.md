@@ -60,7 +60,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) — the per-task lifecycle stages, TDD rules, and Git naming conventions.
 - [specs/EXECUTION.md](specs/EXECUTION.md) — `sop run`: planning-source discovery, change detection, artifacts, verify-first, and parallelism.
 - [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) — the unified execution input (**WorkItem**): how tasks and prompts adapt to it, and what it MUST NOT contain.
-- [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md) — **the authoritative home for `sop prompt`**: the command surface, default capability, deterministic routing, capability enforcement, read-only vs. governed `implement` execution, provider validation, artifacts, and the structured result. The SOP skill ([skills/sop/SKILL.md](../skills/sop/SKILL.md)) and its per-agent command aliases call this command; installation is in [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) and [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md).
+- [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md) — **the authoritative home for `sop prompt`**: the command surface, default capability, deterministic routing, capability enforcement, read-only vs. governed `implement` execution, provider validation, artifacts, and the structured result. The SOP skill ([skills/sop/SKILL.md](../skills/sop/SKILL.md)) and its per-agent command aliases call this command; installation starts at [guides/INSTALLATION.md](guides/INSTALLATION.md), with [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md), [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md), and [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md).
 - [specs/AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) — the harness/provider/model boundary, configuration precedence, and structured outcomes.
 - [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) — **the authoritative home for model-routing rules**: the model-class layer (`small`/`medium`/`large`), configuration precedence, the deterministic per-task router, and the routing boundary. The router is **opt-in and OFF by default**, enabled only by `SOP_MODEL_ROUTING_ENABLED=true` (overriding `models.routing_enabled`), with `--model-class` always winning. Every other page links here rather than restating the rules. The implementation seam (non-normative) is recorded in [architecture/model-routing.md](architecture/model-routing.md).
 - [specs/PROVIDERS.md](specs/PROVIDERS.md) — **the authoritative home for the provider/runtime layer** (Phase 4): provider identity, the registry, health, model discovery, typed capabilities, selection validation, failure behavior, and the read-only `sop providers` surface. The provider layer sits underneath model routing and never chooses a class; the seam is recorded (non-normatively) in [architecture/provider-runtime.md](architecture/provider-runtime.md).
@@ -90,23 +90,29 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP skills so Zed exposes `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, and `/sop-implement`, and see how each calls `sop prompt`.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same commands for Claude Code: install the skills so Claude exposes the `/sop*` entry points, and how each delegates to `sop prompt`.
-- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install-skills.sh`.
+- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
 
 ## Plans
 
-- [plans/PLAN-JEV-Implementation.md](plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017); complete. Execute with `sop run docs/plans/PLAN-JEV-Implementation.md`.
-- [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default. **Implemented** (P3-001–P3-015) and committed; P3-016 records the dogfood.
-- [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream.
-- [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — pre-JEV stabilization workstream.
+Implementation plans, newest phase last. A completed plan stays here rather than moving
+to `history/` when SOP or the repository still references its path: the archive under
+`.agent-sdlc/archive/` records these sources, and the example commands in
+`scripts/sop-agent.sh` name one of them. Moving such a plan would break
+`sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
-- [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery.
-- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing (**implemented**; SOP's recorded active plan; router OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`).
-- [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation (**implemented**; off by default; see [specs/PROVIDERS.md](specs/PROVIDERS.md)).
-- [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery (**implemented**; off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`; see [specs/RECOVERY.md](specs/RECOVERY.md) §8).
-- [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill (**implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md)).
-- [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis.
-- [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing.
-- [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates.
+- [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; SOP's recorded active plan (`.agent-sdlc/plan.meta.json`); the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
+- [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation. **Implemented** (off by default); see [specs/PROVIDERS.md](specs/PROVIDERS.md).
+- [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery. **Implemented** (off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`); see [specs/RECOVERY.md](specs/RECOVERY.md) §8.
+- [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill. **Implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
+- [plans/PLAN-Phase-5.5-Distribution.md](plans/PLAN-Phase-5.5-Distribution.md) — Phase 5.5 (P55-001–P55-011): the unified `install.sh`, the per-agent skill installation it delegates, the Claude Code plugin package, and CI. **Implemented**; see [guides/INSTALLATION.md](guides/INSTALLATION.md) and [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md).
+- [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default. **Implemented** (P3-001–P3-015) and committed; P3-016 records the dogfood.
+- [plans/PLAN-JEV-Implementation.md](plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017). **Implemented**; archived by SOP. Execute with `sop run docs/plans/PLAN-JEV-Implementation.md`.
+- [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream. **Implemented**; archived by SOP (`.agent-sdlc/archive/ahv2/`).
+- [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — the pre-JEV stabilization workstream. **Implemented**; archived by SOP.
+- [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery. **Implemented**; archived by SOP.
+- [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing; the shipped behavior is described in [reference/PERFORMANCE.md](reference/PERFORMANCE.md). The plan itself declares no status.
+- [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis. The plan itself declares no status.
 
 ## Historical Documentation
 
@@ -117,14 +123,13 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PHASE-3-DOGFOOD.md](history/PHASE-3-DOGFOOD.md) — the Phase 3 early-JEV dogfood: the deterministic fake-analyzer demonstration and the (not performed) real-provider procedure.
 - [history/PLAN-Model-Routing.md](history/PLAN-Model-Routing.md) — the early, superseded model-routing design (MODELRT001–MODELRT022); the shipped rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [history/](history/) — PREJEV reconciliation, decomposition, baseline, and readiness artifacts.
-- [tasks/](tasks/) — per-task specifications used by SOP (`sop run --task docs/tasks/...`).
 
 ## Canonical Locations and Kept Paths
 
 To keep SOP working, a few paths are intentionally not under the categories above:
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
-- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`.
+- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications, not history.
 
 ## Checking Documentation Links
 

@@ -1,5 +1,11 @@
 # Agent Harness V2
 
+**Type:** Implementation plan (workstream record).
+
+**Status:** Implemented and archived by SOP (`.agent-sdlc/archive/ahv2/`). The path is
+kept because SOP's archive records this source and `scripts/sop-agent.sh` names it as an
+example; see [../README.md](../README.md) for what is current.
+
 ## Project
 
 agentic-sop

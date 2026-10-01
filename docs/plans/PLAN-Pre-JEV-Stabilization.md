@@ -1,5 +1,11 @@
 # Pre-JEV Stabilization Plan
 
+**Type:** Implementation plan (workstream record).
+
+**Status:** Implemented and archived by SOP (`.agent-sdlc/archive/plan-pre-jev-stabilization/`).
+The path is kept because SOP's archive records this source; see [../README.md](../README.md)
+for what is current.
+
 ## Project
 
 agentic-sop

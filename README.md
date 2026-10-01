@@ -163,7 +163,8 @@ SOP V1 is complete: dependency-aware execution, isolated branches, test-first
 implementation, bounded review/fix loops, CI and merge gates, durable state,
 resume/recovery, environment bootstrap, and limited parallelism. Above it, model
 routing (Phase 3.5), the provider runtime (Phase 4), bounded model escalation
-(Phase 5), and unified work items with `sop prompt` (Phase 5.4) are implemented;
+(Phase 5), unified work items with `sop prompt` (Phase 5.4), and distribution — one
+`./install.sh` plus a native Claude Code plugin and CI (Phase 5.5) — are implemented;
 the routing and escalation layers are OFF by default. See
 [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md) for status and roadmap.
 
@@ -175,31 +176,21 @@ Start at the documentation index: **[docs/README.md](docs/README.md)**.
 Getting Started   docs/guides/GETTING-STARTED.md · docs/guides/PROJECT-SETUP.md
 Requirements      docs/PRD.md
 Architecture      docs/architecture/OVERVIEW.md · docs/architecture/SOP-BOUNDARY.md
-Workflow          docs/specs/WORKFLOW.md
-Task Lifecycle    docs/specs/TASK-LIFECYCLE.md
-Execution         docs/specs/EXECUTION.md
-Work Items        docs/specs/WORK-ITEMS.md
-Prompt Execution  docs/specs/PROMPT-EXECUTION.md
-Installation      docs/guides/INSTALLATION.md
-Zed Skills        docs/guides/ZED-SKILLS.md
-Claude Skills     docs/guides/CLAUDE-SKILLS.md
-Claude Plugin     docs/guides/CLAUDE-PLUGIN.md
-Agent Providers   docs/specs/AGENT-PROVIDER.md
-Provider Runtime  docs/specs/PROVIDERS.md
-Model Routing     docs/specs/MODEL-ROUTING.md
-Validation        docs/specs/VALIDATION.md
-Review            docs/specs/REVIEW.md
-OpenJEV           docs/specs/OPENJEV.md
-Quality Gates     docs/specs/QUALITY.md
-Human Approval    docs/specs/HUMAN-APPROVAL.md
-Failure/Recovery  docs/specs/RECOVERY.md
+Workflow          docs/specs/WORKFLOW.md · docs/specs/TASK-LIFECYCLE.md
+Execution         docs/specs/EXECUTION.md · docs/specs/WORK-ITEMS.md · docs/specs/PROMPT-EXECUTION.md
+Validation        docs/specs/VALIDATION.md · docs/specs/REVIEW.md · docs/specs/QUALITY.md
+Providers         docs/specs/AGENT-PROVIDER.md · docs/specs/PROVIDERS.md · docs/specs/MODEL-ROUTING.md
+JEV               docs/specs/OPENJEV.md · docs/reference/JEV-OPERATIONS.md
+Gates/Recovery    docs/specs/HUMAN-APPROVAL.md · docs/specs/RECOVERY.md · docs/reference/STATUS-AND-RECOVERY.md
 Security          docs/specs/SECURITY.md
+Installation      docs/guides/INSTALLATION.md
+Agent Skills      docs/guides/ZED-SKILLS.md · docs/guides/CLAUDE-SKILLS.md · docs/guides/CLAUDE-PLUGIN.md
 CLI Reference     docs/reference/CLI.md
 Configuration     docs/reference/CONFIGURATION.md
-Status/Recovery   docs/reference/STATUS-AND-RECOVERY.md
+Performance       docs/reference/PERFORMANCE.md
 Development       docs/guides/DEVELOPMENT.md
 Plans             docs/plans/ · active plan: docs/plans/PLAN-Phase-3.5-Model-Routing.md
-                  Phase 5 recovery: docs/plans/PLAN-Phase-5-Execution-Recovery.md
+                  latest phase: docs/plans/PLAN-Phase-5.5-Distribution.md
 History           docs/history/
 ```
 
