@@ -35,21 +35,21 @@ Task / Prompt / Skill
 
 ## Deliverables
 
-| ID       | Deliverable                                                             | State |
-| -------- | ----------------------------------------------------------------------- | ----- |
-| P5.4-001 | Fail closed when routing selects a model but no agent factory exists    | Done  |
-| P5.4-002 | `internal/workitem`: `Kind`, `WorkItem`, `Validate`                     | Done  |
-| P5.4-003 | `workitem.FromTask` task → WorkItem adapter                             | Done  |
-| P5.4-004 | `workitem.FromPrompt` prompt → WorkItem creation                        | Done  |
-| P5.4-005 | `sop prompt` (read-only path)                                           | Done  |
-| P5.4-006 | Prompt JEV triage → router → `model.Resolve`                            | Done  |
-| P5.4-007 | Provider validation + capability guard for prompts                      | Done  |
-| P5.4-008 | Prompt artifacts (`prompt.md`, `routing.json`, `result.md`, `metadata.json`) | Done |
-| P5.4-009 | IMPLEMENT prompts reuse the governed implementation lifecycle           | Done  |
-| P5.4-010 | Structured result (`--json` / `metadata.json`)                          | Done  |
-| P5.4-011 | The SOP skill + examples                                                | Done  |
-| P5.4-012 | Skill validation tests                                                  | Done  |
-| P5.4-013 | Regression, boundary, and documentation tests                           | Done  |
+| ID       | Deliverable                                                                  | State |
+| -------- | ---------------------------------------------------------------------------- | ----- |
+| P5.4-001 | Fail closed when routing selects a model but no agent factory exists         | Done  |
+| P5.4-002 | `internal/workitem`: `Kind`, `WorkItem`, `Validate`                          | Done  |
+| P5.4-003 | `workitem.FromTask` task → WorkItem adapter                                  | Done  |
+| P5.4-004 | `workitem.FromPrompt` prompt → WorkItem creation                             | Done  |
+| P5.4-005 | `sop prompt` (read-only path)                                                | Done  |
+| P5.4-006 | Prompt JEV triage → router → `model.Resolve`                                 | Done  |
+| P5.4-007 | Provider validation + capability guard for prompts                           | Done  |
+| P5.4-008 | Prompt artifacts (`prompt.md`, `routing.json`, `result.md`, `metadata.json`) | Done  |
+| P5.4-009 | IMPLEMENT prompts reuse the governed implementation lifecycle                | Done  |
+| P5.4-010 | Structured result (`--json` / `metadata.json`)                               | Done  |
+| P5.4-011 | The SOP skill + examples                                                     | Done  |
+| P5.4-012 | Skill validation tests                                                       | Done  |
+| P5.4-013 | Regression, boundary, and documentation tests                                | Done  |
 
 ## Key decisions
 
@@ -76,6 +76,17 @@ read-only prompts run on text-only providers; `IMPLEMENT` cannot run through an
 incapable provider and uses the governed path; prompt runs are auditable under the
 existing artifact contract; `sop run` is unchanged; the skill invokes SOP; all tests
 pass.
+
+## Known limitations
+
+Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
+
+- **Bounded escalation does not apply to prompt runs.** `sop prompt` never enables
+  the recovery policy ([`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §8);
+  recovery over prompts belongs to a later phase that unifies recovery over the
+  `WorkItem` abstraction.
+- **Prompt run ids are second-resolution** with a collision counter; they are unique
+  locally but not globally across machines.
 
 ## Out of scope
 

@@ -265,7 +265,7 @@ func promptRunID(dir string) string {
 
 // runDirExists reports whether a run directory already exists for id.
 func runDirExists(dir, id string) bool {
-	_, err := os.Stat(filepath.Join(dir, stateDirName, "runs", "prompts", id))
+	_, err := os.Stat(filepath.Join(dir, stateDirName, "runs", promptsDirName, id))
 	return err == nil
 }
 
@@ -446,15 +446,20 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	return code
 }
 
+// promptsDirName is the subdirectory of the runs root holding prompt runs, so they
+// are distinguishable from task runs. It is also the id prefix latestRun uses when
+// a report is addressed by id.
+const promptsDirName = "prompts"
+
 // promptRunDir is the run directory id for a prompt run: prompts are grouped under
 // runs/prompts/ so they are distinguishable from task runs. It uses the existing
 // run storage layout rather than a new one.
-func promptRunDir(id string) string { return "prompts/" + id }
+func promptRunDir(id string) string { return promptsDirName + "/" + id }
 
 // promptRunDirRel is the project-relative path of a prompt run directory, for
 // metadata and CLI output.
 func promptRunDirRel(id string) string {
-	return filepath.Join(stateDirName, "runs", "prompts", id)
+	return filepath.Join(stateDirName, "runs", promptsDirName, id)
 }
 
 // runPromptJEV runs the optional task-triage JEV checkpoint over the prompt's

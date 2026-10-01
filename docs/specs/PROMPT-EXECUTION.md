@@ -10,7 +10,7 @@ command surface, the default capability, routing, capability enforcement, the
 read-only and mutating execution modes, provider validation, artifacts, and the
 structured result.
 
-It does **not** define a second workflow engine. A prompt is a second *input form*
+It does **not** define a second workflow engine. A prompt is a second _input form_
 for the same machinery a task uses. Model-class selection remains
 [`MODEL-ROUTING.md`](MODEL-ROUTING.md); provider behavior remains
 [`PROVIDERS.md`](PROVIDERS.md); the implementation lifecycle remains
@@ -156,7 +156,11 @@ persisted as `metadata.json`:
   "kind": "prompt",
   "capability": "review",
   "status": "completed",
-  "routing": { "class": "medium", "provider": "mlx", "model": "mlx-community/Qwen3-4B-4bit" },
+  "routing": {
+    "class": "medium",
+    "provider": "mlx",
+    "model": "mlx-community/Qwen3-4B-4bit"
+  },
   "report_path": ".agent-sdlc/runs/prompts/prompt-20260930-120000",
   "result_path": ".agent-sdlc/runs/prompts/prompt-20260930-120000/result.md",
   "result": "<model response>"
@@ -168,8 +172,10 @@ persisted as `metadata.json`:
 ## 11. Reporting
 
 **Implemented.** `sop report` inspects a prompt run: `sop report prompts/<run-id>`
-renders the prompt's kind, capability, status, routing, and result path. This reuses
-the existing report command; SOP MUST NOT add a separate prompt reporting system.
+renders the prompt's kind, capability, status, routing, and result path. With no
+argument it reports the newest run of either kind — a task run or a prompt run. This
+reuses the existing report command; SOP MUST NOT add a separate prompt reporting
+system.
 
 ## 12. Security
 

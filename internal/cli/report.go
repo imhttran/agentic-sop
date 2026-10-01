@@ -166,7 +166,18 @@ func loadRunMetrics(dir, planID string) (perf.Run, bool) {
 	return run, true
 }
 
-// latestRun returns the run id whose report.json was written most recently.
+// runCandidate is one run directory considered by latestRun: its id (relative to
+// the runs root, so a prompt run is "prompts/<id>") and the modification time of
+// the file that proves the run is reportable.
+type runCandidate struct {
+	id  string
+	mod int64
+}
+
+// latestRun returns the run id whose report was written most recently. It considers
+// both task runs (a report.json directly under runs/) and prompt runs (a
+// metadata.json under runs/prompts/<id>/), so `sop report` with no argument reports
+// the newest run of either kind.
 func latestRun(runsRoot string) (string, error) {
 	entries, err := os.ReadDir(runsRoot)
 	if err != nil {
@@ -176,20 +187,19 @@ func latestRun(runsRoot string) (string, error) {
 		return "", err
 	}
 
-	type candidate struct {
-		id  string
-		mod int64
-	}
-	var found []candidate
+	var found []runCandidate
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		info, err := os.Stat(filepath.Join(runsRoot, entry.Name(), "report.json"))
-		if err != nil {
+		name := entry.Name()
+		if info, err := os.Stat(filepath.Join(runsRoot, name, "report.json")); err == nil {
+			found = append(found, runCandidate{id: name, mod: info.ModTime().UnixNano()})
 			continue
 		}
-		found = append(found, candidate{id: entry.Name(), mod: info.ModTime().UnixNano()})
+		if name == promptsDirName {
+			found = append(found, promptRunCandidates(filepath.Join(runsRoot, promptsDirName))...)
+		}
 	}
 	if len(found) == 0 {
 		return "", nil
@@ -201,6 +211,30 @@ func latestRun(runsRoot string) (string, error) {
 		return found[i].id < found[j].id
 	})
 	return found[0].id, nil
+}
+
+// promptRunCandidates lists the reportable prompt runs under a runs/prompts root:
+// each is a directory holding a metadata.json (the prompt result document).
+func promptRunCandidates(promptsRoot string) []runCandidate {
+	entries, err := os.ReadDir(promptsRoot)
+	if err != nil {
+		return nil
+	}
+	var out []runCandidate
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		info, err := os.Stat(filepath.Join(promptsRoot, entry.Name(), "metadata.json"))
+		if err != nil {
+			continue
+		}
+		out = append(out, runCandidate{
+			id:  filepath.Join(promptsDirName, entry.Name()),
+			mod: info.ModTime().UnixNano(),
+		})
+	}
+	return out
 }
 
 // writeReport renders the concise summary.

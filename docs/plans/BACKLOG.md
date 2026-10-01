@@ -89,6 +89,23 @@ Candidate fix: classify those paths (they are SOP's own deterministic verdicts, 
 prose) so a stronger model with a smaller change scope can be tried before a human
 is involved. See [../specs/RECOVERY.md](../specs/RECOVERY.md) §8.
 
+## Prompt runs are not selected by `sop report` with no argument
+
+_RESOLVED (Phase 5.4): `latestRun` now also considers `runs/prompts/*/metadata.json`,
+so `sop report` with no argument reports the newest run of either kind. Recorded here
+for traceability; see [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §11._
+
+## Bounded escalation does not apply to prompt runs
+
+Phase 5.4 leaves `sop prompt` execution without automatic `small → medium → large`
+escalation: the prompt path never enables the recovery policy, so a failed
+`sop prompt --capability implement` follows the existing failure behavior rather than
+escalating (`internal/cli/prompt.go`; [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8).
+This is deliberate for this slice — recovery over prompts belongs to a later phase
+that unifies recovery over the `WorkItem` abstraction
+([../specs/WORK-ITEMS.md](../specs/WORK-ITEMS.md) §7) — and it is recorded here so the
+gap is visible rather than forgotten.
+
 ## Status and roadmap
 
 SOP V1 is complete; every V1 stage is implemented and tested:
@@ -122,6 +139,7 @@ MCP server (sop mcp) · Optional decision layer (deterministic + routing)
 Run report command (sop report) · Evaluation harness (sop eval)
 Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
 Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
+Unified work items + governed `sop prompt` (Phase 5.4)
 ```
 
 Next candidates, in the plan's build order:
