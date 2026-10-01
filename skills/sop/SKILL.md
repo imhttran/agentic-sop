@@ -33,6 +33,26 @@ Agent / Assistant
 The skill **calls SOP**. It does not reimplement routing, approval, provider
 selection, or the lifecycle. SOP remains the sole authority.
 
+## Zed slash commands
+
+Installed as a Zed skill, this file is the `/sop` entry point. Thin aliases in the
+same install expose one capability each:
+
+```text
+/sop <request>            general entry point (this skill)
+/sop-prompt <request>     no capability: the CLI's read-only default applies
+/sop-plan <request>       capability: plan
+/sop-review <request>     capability: review
+/sop-diagnose <request>   capability: diagnose_failure
+/sop-test <request>       capability: design_tests
+/sop-implement <request>  capability: implement (governed, mutating)
+```
+
+Each alias is a few lines that call the one command below with its capability fixed;
+none of them carries routing, provider, or lifecycle policy. Install them with
+`make install-skills` (see the project README); `/sop-implement` is hidden from the
+agent's autonomous catalog because repository mutation is an explicit operator choice.
+
 ## The one command
 
 ```bash
@@ -115,6 +135,9 @@ standard run artifacts). Inspect one later with `sop report prompts/<run-id>`.
 - Do not retry indefinitely, suppress SOP failures, or reinterpret a failed result
   as success. Return SOP's result to the operator.
 - Do not add routing, lifecycle, or approval logic to the skill.
+- If `sop` is not on PATH, STOP and tell the operator to install the SOP CLI (see the
+  project README / `make install`). Never answer the request yourself or mutate the
+  repository in SOP's place.
 
 ## Failure behavior
 

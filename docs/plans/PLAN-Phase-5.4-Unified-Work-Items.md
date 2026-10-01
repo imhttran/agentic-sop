@@ -98,6 +98,30 @@ Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
   prompt is a single bounded call with no gate and never escalates. See
   [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §8.
 
+## Follow-up (Phase 5.4 hardening)
+
+- **The Zed command surface (`/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`,
+  `/sop-diagnose`, `/sop-test`, `/sop-implement`).** Zed discovers skills as flat
+  folders under `~/.agents/skills/` or `<project>/.agents/skills/`, and exposes each as
+  a slash command named after the folder. Six one-per-capability aliases ship beside
+  the canonical `skills/sop` skill; each is a few lines that call
+  `sop prompt --capability <capability>` and carry no policy. They install with
+  `make install-skills` (`scripts/install-zed-skills.sh`, idempotent, uninstallable,
+  never overwrites a non-SOP entry, needs no root). `/sop-implement` is hidden from the
+  agent's autonomous catalog. See [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md)
+  and [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §13.
+
+- **The capability guard now applies to the final executing agent.** With routing on,
+  an `IMPLEMENT` prompt is no longer rejected because the _default_ provider lacks
+  `IMPLEMENT` when routing builds a different, tool-capable agent. The guard and
+  provider validation apply to the routed final selection (and to the default agent at
+  the routing seam when no class is selected); `sop run` and `--task` follow the same
+  rule. See [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §4.
+
+- **`--file` is confined against symlink resolution.** A project-local symlink that
+  points outside the project is rejected, not read. See
+  [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §12.
+
 ## Out of scope
 
 Automatic escalation for **read-only** prompts, provider fallback, provider scoring,

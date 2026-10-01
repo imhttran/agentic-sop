@@ -16,13 +16,32 @@ Recovery must not depend on the tool the change is allowed to break.
 
 ## Default config cannot IMPLEMENT (provider/harness split unfinished)
 
-AHV2008 flipped new-project defaults to `harness: tool, provider: ollama`, and
-AHV2002 narrowed the native Ollama provider to text-only capabilities. Until the
-`tool` harness is actually wired beneath the provider, a project on the default
-config fails the up-front `guardCapability(a, IMPLEMENT)` check ("provider cannot
-IMPLEMENT") because the native Ollama provider has no tools. Either wire the tool
-harness end to end, or keep the default `provider: command` until then, so a fresh
-`sop init` project can run a task.
+_RESOLVED (verified during Phase 5.4 hardening): stale._ The Phase 5.4 composition root
+(`defaultDeps().newAgent` in `internal/cli/cli.go`) resolves the effective
+harness/provider pair and, for `harness: tool` + `provider: ollama`, builds the native
+in-process tool agent (`ollamaagent.NativeAgentFromEnv`, wrapped with
+`agent.NewChecked`) which declares every capability including `IMPLEMENT`. A fresh
+`sop init` project therefore passes the up-front `guardCapability(a, IMPLEMENT)` check
+and can run a task; the concern described here no longer holds. Recorded for
+traceability.
+
+## `--file` prompt input could escape the project through a symlink
+
+_RESOLVED (Phase 5.4 hardening): `resolvePromptFile` now resolves both the project root
+and the target with `filepath.EvalSymlinks` before the containment test, so a
+project-local symlink pointing outside the project is rejected rather than read (the
+project root is resolved too, so a project reached through a symlink is not falsely
+rejected). Recorded here for traceability; see
+[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §12._
+
+## An IMPLEMENT prompt was rejected when the default agent lacked IMPLEMENT
+
+_RESOLVED (Phase 5.4 hardening): the capability guard and provider validation now apply
+to the FINAL executing agent (the routed selection), not to a default agent the router
+replaces. With routing on, a read-only default provider with a tool-capable routed
+class runs; the default agent is guarded at the routing seam only when routing selects
+no class. `sop run` and `--task` follow the same rule. See
+[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §4._
 
 ## Local network service (team mode)
 
@@ -135,6 +154,8 @@ Run report command (sop report) · Evaluation harness (sop eval)
 Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
 Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
 Unified work items + governed `sop prompt` (Phase 5.4)
+SOP Zed skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
+`/sop-implement`) + `make install-skills` (Phase 5.4 hardening)
 ```
 
 Next candidates, in the plan's build order:

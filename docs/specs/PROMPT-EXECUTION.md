@@ -26,6 +26,7 @@ for the same machinery a task uses. Model-class selection remains
 - [`RECOVERY.md`](RECOVERY.md) — bounded escalation (not applied to prompts in this slice; see §11).
 - [`../reference/CLI.md`](../reference/CLI.md) — the command surface.
 - [`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md) — the thin skill that calls `sop prompt`.
+- [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md) — installing the Zed command aliases (`/sop-plan`, `/sop-review`, …).
 
 ## Normative Language
 
@@ -70,6 +71,14 @@ read-only, text-oriented capability. A prompt MUST NOT default to `IMPLEMENT`.
 selected agent's declared capabilities (the existing `agent` capability guard). A
 capability the selected model/harness cannot serve MUST fail clearly. SOP MUST NOT
 reinterpret the capability and MUST NOT silently switch provider or model.
+
+**Required.** The check MUST apply to the agent that will actually **execute** — the
+FINAL per-prompt selection, after routing and provider validation (§5, §7) — not to a
+default agent the router will replace. When automatic routing is enabled, the routed
+class builds, validates, and guards its own agent, and the default agent MUST NOT be
+rejected merely because it lacks the capability: a read-only default provider with a
+tool-capable routed class is a valid configuration. When routing is off, the default
+agent is the executing agent and is guarded before any work.
 
 For example, an `IMPLEMENT` prompt against a text-only provider (OpenAI-compatible
 llama.cpp or MLX/oMLX, which declare only `PLAN`, `DESIGN_TESTS`,
@@ -190,12 +199,36 @@ configuration, or provider credentials. Prompt text MUST remain data passed to t
 selected agent. Repository mutation MUST require the existing tool/harness
 authorization path.
 
+**Required.** `--file` MUST be confined to the project directory. The confinement MUST
+be enforced against symlink resolution, not only lexically, so a project-local symlink
+pointing outside the project is rejected rather than read.
+
 ## 13. The Skill
 
 **Implemented.** A thin agent-facing skill (`skills/sop/SKILL.md`) calls
 `sop prompt`. **Required.** The skill MUST NOT invoke a provider directly, MUST NOT
 choose a model class or provider, and MUST NOT reimplement routing, approval, or the
 lifecycle. It is a client of SOP.
+
+**Implemented.** One Zed command alias per capability ships beside the canonical
+skill, each a thin adapter that calls `sop prompt` with its capability fixed:
+
+```text
+/sop          general entry point (the canonical skill)
+/sop-prompt   no capability: the CLI's read-only default applies
+/sop-plan     plan
+/sop-review   review
+/sop-diagnose diagnose_failure
+/sop-test     design_tests (/sop-test is the alias for the canonical design_tests)
+/sop-implement implement (governed; the only mutating command)
+```
+
+**Required.** An alias MUST NOT contain routing, provider, model-class, approval, or
+lifecycle policy, and MUST NOT mutate the repository itself: it selects a capability
+and delegates. It MUST NOT upgrade a read-only request into `implement`, and an
+`implement` request MUST enter the governed lifecycle (§6). When the `sop` CLI is
+unavailable the alias MUST fail closed rather than let the calling agent do the work.
+Installation is described in [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md).
 
 ## 14. Failure Behavior
 

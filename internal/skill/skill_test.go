@@ -14,8 +14,30 @@ import (
 	"testing"
 )
 
-// skillDir is the shipped skill, relative to this package (internal/skill).
+// skillDir is the shipped canonical skill, relative to this package (internal/skill).
+// skillsRoot is the whole shipped Zed skill surface: every direct child is a skill
+// folder, and Zed exposes each as a slash command named after the folder.
 const skillDir = "../../skills/sop"
+const skillsRoot = "../../skills"
+
+// zedSkills is the canonical Zed command surface. Each entry names a folder under
+// skills/ (a Zed slash command) and the delegation its body MUST contain.
+//
+//	capability == ""  -> the command fixes no capability; the CLI's read-only default
+//	                     applies (the default lives in the CLI, not in the skill).
+var zedSkills = []struct {
+	name       string
+	capability string
+	command    string
+}{
+	{"sop", "", "sop prompt --capability"},
+	{"sop-prompt", "", `sop prompt "`},
+	{"sop-plan", "plan", "sop prompt --capability plan"},
+	{"sop-review", "review", "sop prompt --capability review"},
+	{"sop-diagnose", "diagnose_failure", "sop prompt --capability diagnose_failure"},
+	{"sop-test", "design_tests", "sop prompt --capability design_tests"},
+	{"sop-implement", "implement", "sop prompt --capability implement"},
+}
 
 // canonicalCapabilities is the operator-facing capability vocabulary the CLI
 // accepts (internal/cli/prompt.go). Kept here so a new example using a non-canonical
@@ -51,7 +73,7 @@ var capabilityArgRE = regexp.MustCompile(`--capability[= ]([A-Za-z_]+)`)
 func skillFiles(t *testing.T) []string {
 	t.Helper()
 	var files []string
-	err := filepath.Walk(skillDir, func(path string, info os.FileInfo, err error) error {
+	err := filepath.Walk(skillsRoot, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
 		}
@@ -61,10 +83,10 @@ func skillFiles(t *testing.T) []string {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("walk %s: %v", skillDir, err)
+		t.Fatalf("walk %s: %v", skillsRoot, err)
 	}
 	if len(files) == 0 {
-		t.Fatalf("no skill markdown found under %s", skillDir)
+		t.Fatalf("no skill markdown found under %s", skillsRoot)
 	}
 	return files
 }
@@ -147,6 +169,91 @@ func TestSkillDoesNotRestatePolicyOrMutate(t *testing.T) {
 			if strings.Contains(body, cmd) {
 				t.Errorf("%s: skill contains a direct-mutation instruction %q", file, cmd)
 			}
+		}
+	}
+}
+
+// TestZedSkillCommandsExist proves every documented Zed slash command ships as a
+// skill folder whose frontmatter name matches the folder: Zed derives the command
+// from that name, and an invalid or mismatched name fails to load.
+func TestZedSkillCommandsExist(t *testing.T) {
+	for _, s := range zedSkills {
+		path := filepath.Join(skillsRoot, s.name, "SKILL.md")
+		body := read(t, path)
+		if !strings.HasPrefix(body, "---") {
+			t.Errorf("%s: SKILL.md must start with YAML frontmatter", path)
+			continue
+		}
+		if !strings.Contains(body, "name: "+s.name) {
+			t.Errorf("%s: frontmatter name must match the folder (%q)", path, s.name)
+		}
+		if !strings.Contains(body, "description:") {
+			t.Errorf("%s: missing description (the catalog entry Zed shows)", path)
+		}
+	}
+}
+
+// TestZedSkillCapabilityMapping proves each command delegates to `sop prompt` and
+// fixes exactly the capability it advertises. A command that fixes none must not
+// embed a capability: the default belongs to the CLI.
+func TestZedSkillCapabilityMapping(t *testing.T) {
+	for _, s := range zedSkills {
+		body := read(t, filepath.Join(skillsRoot, s.name, "SKILL.md"))
+		if !strings.Contains(body, s.command) {
+			t.Errorf("%s: must delegate with %q", s.name, s.command)
+		}
+		if s.capability == "" && strings.Contains(body, "sop prompt --capability") && s.name != "sop" {
+			t.Errorf("%s: must not fix a capability; the CLI default applies", s.name)
+		}
+	}
+}
+
+// TestSOPEntryPointListsAliases proves the /sop entry point tells the agent about
+// every alias, so a general request can be routed to the right one.
+func TestSOPEntryPointListsAliases(t *testing.T) {
+	body := read(t, filepath.Join(skillsRoot, "sop", "SKILL.md"))
+	for _, s := range zedSkills {
+		if s.name == "sop" {
+			continue
+		}
+		if !strings.Contains(body, "/"+s.name) {
+			t.Errorf("the /sop entry point should list /%s", s.name)
+		}
+	}
+}
+
+// TestZedSkillsFailClosedWithoutSOP proves every command tells the agent to stop
+// rather than answer the request itself when the `sop` CLI is unavailable.
+func TestZedSkillsFailClosedWithoutSOP(t *testing.T) {
+	for _, s := range zedSkills {
+		body := read(t, filepath.Join(skillsRoot, s.name, "SKILL.md"))
+		if !strings.Contains(body, "PATH") {
+			t.Errorf("%s: must instruct the agent to fail closed when `sop` is not on PATH", s.name)
+		}
+	}
+}
+
+// TestImplementCommandDelegatesToGovernedPrompt is the boundary check for the
+// mutating command: /sop-implement must enter SOP's governed implementation
+// lifecycle by calling `sop prompt --capability implement`, never by mutating the
+// repository (the direct-mutation check above covers the shell escape).
+func TestImplementCommandDelegatesToGovernedPrompt(t *testing.T) {
+	body := read(t, filepath.Join(skillsRoot, "sop-implement", "SKILL.md"))
+	if !strings.Contains(body, "sop prompt --capability implement") {
+		t.Error("sop-implement must invoke `sop prompt --capability implement`")
+	}
+	if !strings.Contains(body, "governed implementation lifecycle") {
+		t.Error("sop-implement must state that SOP's governed implementation lifecycle runs")
+	}
+}
+
+// TestInstallerKnowsEverySkill proves the installer's skill list matches the shipped
+// surface: a shell list and the Go catalog drifting apart would install a partial UI.
+func TestInstallerKnowsEverySkill(t *testing.T) {
+	body := read(t, "../../scripts/install-zed-skills.sh")
+	for _, s := range zedSkills {
+		if !strings.Contains(body, s.name) {
+			t.Errorf("scripts/install-zed-skills.sh does not know the %q skill", s.name)
 		}
 	}
 }

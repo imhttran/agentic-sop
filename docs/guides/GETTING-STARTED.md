@@ -53,6 +53,16 @@ agent skill is provided as a global Zed skill at `~/.agents/skills/sop-end-to-en
 so an agent can drive the workflow end to end in any project. `make install` runs
 the same script.
 
+To also get the governed SOP commands in Zed's agent (`/sop`, `/sop-prompt`,
+`/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, `/sop-implement`), run:
+
+```bash
+make install-skills
+```
+
+Each command is a thin alias over `sop prompt`; see
+[ZED-SKILLS.md](ZED-SKILLS.md).
+
 ## One-command run
 
 If the project has a `docs/PLAN.md` (preferred) or a `docs/PRD.md`, you can

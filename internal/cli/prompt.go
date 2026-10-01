@@ -237,6 +237,14 @@ func promptText(dir string, opts promptOptions) (string, error) {
 // resolvePromptFile resolves a prompt file path and confines it to the project
 // directory. An absolute path inside the project is allowed; anything outside is
 // rejected, so skill-supplied input cannot read an arbitrary file.
+//
+// The confinement is enforced against the symlink-RESOLVED paths, not only
+// lexically: a project-local symlink (for example `prompts/input.md` -> a file in
+// /tmp) passes a lexical check but reads outside the project, so both the project
+// root and the target are resolved with filepath.EvalSymlinks before the
+// containment test. The project root is resolved too, so a project reached through
+// a symlink (for example /tmp -> /private/tmp on macOS) does not make a legitimate
+// project-local file look like it escapes.
 func resolvePromptFile(dir, file string) (string, error) {
 	path := file
 	if !filepath.IsAbs(path) {
@@ -250,7 +258,16 @@ func resolvePromptFile(dir, file string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	rel, err := filepath.Rel(absDir, absPath)
+	realDir := absDir
+	if r, rerr := filepath.EvalSymlinks(absDir); rerr == nil {
+		realDir = r
+	}
+	// A missing file is reported by the caller's read, so a resolution failure here
+	// (a non-existent path cannot be resolved) is not itself a confinement failure.
+	if r, rerr := filepath.EvalSymlinks(absPath); rerr == nil {
+		absPath = r
+	}
+	rel, err := filepath.Rel(realDir, absPath)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("prompt file %s is outside the project directory", file)
 	}
@@ -401,13 +418,18 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	if err != nil {
 		return failPrompt(rn, stderr, err)
 	}
-	if err := guardCapability(a, agent.Implement); err != nil {
-		return failPrompt(rn, stderr, err)
-	}
+	// Capability enforcement and validation apply to the agent that will actually
+	// execute. With the automatic per-task router ON, the routed class builds,
+	// validates, and guards its OWN agent at the final-selection seam
+	// (applyTaskRouting), so the default agent MUST NOT be rejected here: it may be a
+	// text-only provider while routing selects a tool-capable one, and rejecting it
+	// before routing would refuse an implementation the routed class could run.
+	// With the router off, the default agent is the executing agent and is guarded
+	// and validated here. Either way the executing agent is guarded exactly once.
 	if !d.routingEnabled {
-		// The run-level/default selection is what executes only when the automatic
-		// per-task router is off; with the router on, the lifecycle validates the
-		// final per-task selection in applyTaskRouting.
+		if err := guardCapability(a, agent.Implement); err != nil {
+			return failPrompt(rn, stderr, err)
+		}
 		if err := validateSelectedModel(context.Background(), cfg, d.routing); err != nil {
 			return failPrompt(rn, stderr, fmt.Errorf("prompt: %w", err))
 		}

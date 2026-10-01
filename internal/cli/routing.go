@@ -145,6 +145,15 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 		return a, nil, err
 	}
 	if !ok {
+		// Routing selected no class, so THIS agent is the one that will execute the
+		// implementation. Guard it here, at the final-selection seam, rather than only at
+		// construction: with routing enabled the default agent is a fallback, and
+		// rejecting it before routing would refuse work whose routed class could have
+		// executed (Phase 5.4 §36). Guarding here keeps the invariant that the agent
+		// which actually runs supports IMPLEMENT, whether it is routed or default.
+		if err := guardCapability(a, agent.Implement); err != nil {
+			return a, nil, err
+		}
 		return a, nil, nil
 	}
 	if d.attempt != nil {

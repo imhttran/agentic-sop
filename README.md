@@ -101,6 +101,29 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
+## Zed
+
+SOP ships Zed skills that expose the same governed path as `/sop` commands. Install
+the CLI and link the skills, then use them from Zed's agent editor in any project:
+
+```bash
+make install          # install the sop CLI
+make install-skills   # link the SOP skills into ~/.agents/skills
+```
+
+```text
+/sop-review review internal/provider for architectural problems
+/sop-plan plan a cache layer for provider model discovery
+/sop-diagnose explain why the current tests are failing
+/sop-test design regression tests for this behavior
+/sop-implement add caching to provider model discovery
+```
+
+Each command is a thin alias over `sop prompt --capability ...`: it picks a capability
+and calls SOP, which still owns routing, provider selection, validation, and approval.
+`/sop-implement` is the only mutating command and runs the governed implementation
+lifecycle. Guide: [docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md).
+
 ## Basic Workflow
 
 ```text
@@ -151,6 +174,7 @@ Task Lifecycle    docs/specs/TASK-LIFECYCLE.md
 Execution         docs/specs/EXECUTION.md
 Work Items        docs/specs/WORK-ITEMS.md
 Prompt Execution  docs/specs/PROMPT-EXECUTION.md
+Zed Skills        docs/guides/ZED-SKILLS.md
 Agent Providers   docs/specs/AGENT-PROVIDER.md
 Provider Runtime  docs/specs/PROVIDERS.md
 Model Routing     docs/specs/MODEL-ROUTING.md

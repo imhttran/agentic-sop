@@ -135,14 +135,15 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: prepared the plan and tasks, but cannot execute: %v\n", agentErr)
 		return exitError
 	}
-	if err := guardCapability(a, agent.Implement); err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
-		return exitError
-	}
 	if !d.routingEnabled {
 		// The run-level/default selection is what executes only when the automatic
 		// per-task router is off. With the router on, each task's final selection is
-		// validated in applyTaskRouting instead.
+		// built, validated, and capability-guarded in applyTaskRouting instead, so the
+		// default agent MUST NOT be rejected here (Phase 5.4 §36).
+		if err := guardCapability(a, agent.Implement); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
 		if err := validateSelectedModel(ctx, cfg, routing); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
 			return exitError

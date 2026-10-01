@@ -1,6 +1,6 @@
 # Execution Seam (implementation)
 
-**Non-normative.** This page describes *how* SOP's execution input is implemented.
+**Non-normative.** This page describes _how_ SOP's execution input is implemented.
 The authoritative rules live in [`../specs/WORK-ITEMS.md`](../specs/WORK-ITEMS.md),
 [`../specs/EXECUTION.md`](../specs/EXECUTION.md), and
 [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); where this page and a
@@ -42,21 +42,23 @@ SOP has three input forms but one execution machinery:
 ```
 
 A planned task enters through `sop run`; a prompt enters through `sop prompt`; the
-SOP skill calls `sop prompt`. None of them owns policy.
+SOP skill and its one-per-capability Zed aliases (`/sop-plan`, `/sop-review`, …) each
+call `sop prompt` with a capability fixed. None of them owns policy.
 
 ## Where the code lives
 
-| Concern                                   | Package / file                                    |
-| ----------------------------------------- | ------------------------------------------------- |
-| Unified input                             | `internal/workitem`                               |
-| Model-class routing                       | `internal/router`, `internal/model`               |
-| Prompt command + prompt routing seam      | `internal/cli/prompt.go`                          |
-| Task lifecycle + routing seam             | `internal/cli/run.go`, `internal/cli/routing.go`  |
-| Capability guard                          | `internal/agent` (`Checked`, `CapabilitiesOf`)    |
-| Provider inspection / validation          | `internal/provider`                               |
-| Early JEV checkpoints (task and prompt)   | `internal/cli/early_jev.go` (`runJEVCheckpoint`)  |
-| Run artifacts                             | `internal/run`                                    |
-| Bounded escalation                        | `internal/recovery`, `internal/cli/escalation.go` |
+| Concern                                 | Package / file                                    |
+| --------------------------------------- | ------------------------------------------------- |
+| Unified input                           | `internal/workitem`                               |
+| Model-class routing                     | `internal/router`, `internal/model`               |
+| Prompt command + prompt routing seam    | `internal/cli/prompt.go`                          |
+| Task lifecycle + routing seam           | `internal/cli/run.go`, `internal/cli/routing.go`  |
+| Capability guard                        | `internal/agent` (`Checked`, `CapabilitiesOf`)    |
+| Provider inspection / validation        | `internal/provider`                               |
+| Early JEV checkpoints (task and prompt) | `internal/cli/early_jev.go` (`runJEVCheckpoint`)  |
+| Run artifacts                           | `internal/run`                                    |
+| Bounded escalation                      | `internal/recovery`, `internal/cli/escalation.go` |
+| Zed command aliases + installation      | `skills/`, `scripts/install-zed-skills.sh`        |
 
 ## Two execution modes for a prompt
 
