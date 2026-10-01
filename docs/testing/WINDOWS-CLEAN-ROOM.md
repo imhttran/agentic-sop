@@ -79,12 +79,18 @@ Record the `claude plugin validate` result if the CLI was present, then
 
 ### 5. Read-only commands
 
-In Claude Code and in Zed:
+Type `/` in the agent to confirm which names are offered, then run:
 
 ```text
 /sop-plan explain how you would add caching to this project
 /sop-review review the current repository for architectural problems
 ```
+
+The name depends on how the integration was installed. The **skills** install
+(`-Skills zed`, `-Skills claude`) exposes the unprefixed `/sop-plan`, `/sop-review`, …
+The **plugin** (`-Plugin claude`) namespaces them as `/sop:sop-plan`,
+`/sop:sop-review`, …, and also registers the unprefixed names when no other skill
+claims them, so in a session with the plugin loaded expect `/sop:sop-plan`.
 
 Record what each returned and where the run was recorded
 (`.agent-sdlc\runs\prompts\<run-id>\`).
@@ -95,8 +101,9 @@ Record what each returned and where the run was recorded
 /sop-implement add a small documented test change
 ```
 
-Confirm it enters SOP's governed implementation lifecycle rather than editing the
-repository directly, and that the change is validated and reviewed.
+(With the plugin loaded, this is `/sop:sop-implement`.) Confirm it enters SOP's
+governed implementation lifecycle rather than editing the repository directly, and
+that the change is validated and reviewed.
 
 ### 7. Update and uninstall
 
