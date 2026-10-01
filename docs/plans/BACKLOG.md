@@ -314,3 +314,25 @@ open" is a claim about the _scheduled_ list above, not about these.
 The project is intentionally built incrementally: sequential correctness and
 recovery come before parallelism, and each stage is usable and tested before the
 next is added.
+
+## Task-Scoped Discovery Budgets
+
+**Priority:** High  
+**Status:** Backlog  
+**Depends on:** Bounded productive IMPLEMENT/FIX discovery (`8f426e2`)
+
+### Problem
+
+IMPLEMENT/FIX currently allow productive discovery through a fixed turn threshold
+before stale/no-progress semantics take over.
+
+This prevents short premature termination, but the fixed threshold still assumes
+different agents/models require roughly the same amount of discovery.
+
+A future agent may legitimately require more discovery turns before mutation.
+
+We should avoid provider/model-specific limits such as:
+
+- Codex = 18 turns
+- DeepSeek = 12 turns
+- Nemotron = 10 turns
