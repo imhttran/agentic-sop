@@ -208,8 +208,10 @@ function Install-Cli([string]$TargetDir) {
     }
 
     # Build beside the destination and move it into place, so a failed build never
-    # truncates a working sop.exe. The move is the step that can fail when sop.exe is
-    # running or locked, and that is reported rather than worked around.
+    # truncates a working sop.exe. An existing sop.exe is deleted immediately before the
+    # move rather than overwritten by it: Windows PowerShell 5.1 cannot move onto an
+    # existing file, and deleting first also means a sop.exe that is running fails here
+    # with the old binary still in place instead of being half-replaced.
     $tmp = Join-Path $TargetDir ('.sop.build.' + [Guid]::NewGuid().ToString('N') + '.exe')
     try {
         Push-Location -LiteralPath $script:RepoDir
@@ -234,16 +236,14 @@ function Install-Cli([string]$TargetDir) {
     }
 
     try {
-        try {
-            Move-Item -LiteralPath $tmp -Destination $dest -Force -ErrorAction Stop
+        if (Test-Path -LiteralPath $dest) {
+            # Delete first, then move. Move-Item's overwrite behaviour differs between
+            # Windows PowerShell 5.1 and PowerShell 7, so the .NET file APIs are used
+            # here: they behave identically on both, and a sop.exe that is running fails
+            # at the delete with the old binary still in place rather than half-replaced.
+            [System.IO.File]::Delete($dest)
         }
-        catch {
-            # Windows PowerShell 5.1 can refuse to overwrite an existing file with
-            # Move-Item; removing it first works there too. A sop.exe that is actually
-            # running fails either way, and is reported rather than worked around.
-            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force -ErrorAction Stop }
-            Move-Item -LiteralPath $tmp -Destination $dest -ErrorAction Stop
-        }
+        [System.IO.File]::Move($tmp, $dest)
         Write-Note "  installed: $dest"
     }
     catch {

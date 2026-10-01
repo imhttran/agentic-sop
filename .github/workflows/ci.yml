@@ -115,13 +115,13 @@ jobs:
           $code = $LASTEXITCODE
           $lines | Write-Host
           if ($code -ne 0) {
-            # The failing test plus the lines that follow it, which carry the installer's
-            # own output.
+            # Go prints a test's diagnostics before its "--- FAIL" summary line, so collect
+            # that block for each failing test.
             $failed = @()
             for ($i = 0; $i -lt $lines.Count; $i++) {
               if ($lines[$i] -like '*--- FAIL: *') {
-                $failed += $lines[$i].Trim()
-                $failed += ($lines[($i + 1)..([Math]::Min($i + 15, $lines.Count - 1))] | ForEach-Object { $_.Trim() })
+                $failed += ($lines[([Math]::Max(0, $i - 25))..$i] | ForEach-Object { $_.Trim() })
+                $failed += ''
               }
             }
             if ($failed.Count -eq 0) { $failed = @('no "--- FAIL:" line in the output') }

@@ -159,6 +159,9 @@ validation is skipped — the steps are printed either way. See
 
 - It never requests elevation, and never writes outside the bin directory and the agent
   skill roots.
+- It replaces an existing `sop.exe` by deleting it immediately before moving the new
+  binary into place, so a `sop.exe` that is running is reported clearly and the
+  installation you already had is left intact.
 - It never edits PATH, the registry, the system environment, or a PowerShell profile.
 - It never overwrites or deletes a skill, file, or plugin it does not own.
 - It installs no provider, no model, and no SOP policy: it names none of them.
