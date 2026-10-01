@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
@@ -340,6 +341,42 @@ const (
 	maxJEVContextBytes     = 32 << 10
 )
 
+// Optional environment overrides for the task-file context bounds. Raising them
+// lets JEV review a larger accumulated change set; an unset, non-numeric, or
+// non-positive value keeps the built-in default, so behavior is unchanged when
+// they are not set. The assembled prompt is separately bounded by
+// SOP_JEV_MAX_PROMPT_RUNES (see internal/jev).
+const (
+	envJEVContextFiles     = "SOP_JEV_CONTEXT_FILES"
+	envJEVContextFileBytes = "SOP_JEV_CONTEXT_FILE_BYTES"
+	envJEVContextBytes     = "SOP_JEV_CONTEXT_TOTAL_BYTES"
+)
+
+// jevContextFiles is how many accumulated files are excerpted.
+func jevContextFiles() int { return positiveEnvInt(envJEVContextFiles, maxJEVContextFiles) }
+
+// jevContextFileBytes is how many bytes of each excerpted file are kept.
+func jevContextFileBytes() int {
+	return positiveEnvInt(envJEVContextFileBytes, maxJEVContextFileBytes)
+}
+
+// jevContextBytes is the total excerpt budget.
+func jevContextBytes() int { return positiveEnvInt(envJEVContextBytes, maxJEVContextBytes) }
+
+// positiveEnvInt returns the named environment variable when it parses as a
+// positive integer, and fallback otherwise (unset, blank, non-numeric, or <= 0).
+func positiveEnvInt(name string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
+
 // taskFileContext renders bounded excerpts of the given repository files for JEV.
 // It reads each file under dir, truncating large files and stopping at the total
 // bound, skips anything unreadable or outside the repository (a deleted file, a
@@ -347,17 +384,20 @@ const (
 // read-only and holds repository content only — never prompts or secrets beyond
 // what the files themselves contain.
 func taskFileContext(dir string, files []string) string {
+	maxFiles := jevContextFiles()
+	maxBytes := jevContextBytes()
+	maxFileBytes := jevContextFileBytes()
 	var b strings.Builder
 	count := 0
 	for _, path := range files {
-		if count >= maxJEVContextFiles || b.Len() >= maxJEVContextBytes {
+		if count >= maxFiles || b.Len() >= maxBytes {
 			break
 		}
 		if !safeRepoPath(path) || isSOPPath(path) {
 			continue
 		}
-		limit := maxJEVContextFileBytes
-		if remaining := maxJEVContextBytes - b.Len(); remaining < limit {
+		limit := maxFileBytes
+		if remaining := maxBytes - b.Len(); remaining < limit {
 			limit = remaining
 		}
 		if limit <= 0 {

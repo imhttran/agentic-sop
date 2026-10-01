@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 	"sync/atomic"
 
@@ -19,6 +21,30 @@ var _ Analyzer = (*OllamaAnalyzer)(nil)
 // read-only snapshots that can be arbitrarily large (a full diff), so the
 // adapter truncates rather than forwarding unbounded input to the model.
 const maxPromptRunes = 48 << 10 // 48 Ki characters
+
+// maxPromptRunesEnv optionally overrides maxPromptRunes. Raising it lets the
+// analyzer review a change set larger than the built-in bound, at the cost of a
+// larger prompt. An unset, non-numeric, or non-positive value keeps the default,
+// so behavior is unchanged when it is not set.
+const maxPromptRunesEnv = "SOP_JEV_MAX_PROMPT_RUNES"
+
+// promptRunesBound returns the effective prompt bound: the environment override
+// when it is a positive integer, otherwise the built-in default.
+func promptRunesBound() int { return positiveEnvInt(maxPromptRunesEnv, maxPromptRunes) }
+
+// positiveEnvInt returns the named environment variable when it parses as a
+// positive integer, and fallback otherwise (unset, blank, non-numeric, or <= 0).
+func positiveEnvInt(name string, fallback int) int {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return fallback
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n <= 0 {
+		return fallback
+	}
+	return n
+}
 
 // maxOutputRunes bounds model output parsed into a Result. Anything beyond this
 // is truncated before parsing so a runaway model cannot retain unbounded memory.
@@ -302,7 +328,7 @@ func (a *OllamaAnalyzer) buildPrompt(req Request) string {
 	writeField("RepositoryContext", req.RepositoryContext)
 	writeField("ValidationResult", req.ValidationResult)
 	writeField("ReviewResult", req.ReviewResult)
-	return truncateRunes(b.String(), maxPromptRunes)
+	return truncateRunes(b.String(), promptRunesBound())
 }
 
 // modelOutput is the JSON shape the adapter expects from the model.
