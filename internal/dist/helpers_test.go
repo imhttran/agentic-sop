@@ -11,7 +11,9 @@ package dist
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -51,4 +53,31 @@ func isDirEmpty(t *testing.T, dir string) bool {
 		return true
 	}
 	return len(entries) == 0
+}
+
+// goEnv reads one value from the Go environment. The tests pin the Go caches with it: the
+// toolchain derives GOPATH and the build/module caches from the home directory, so an
+// isolated HOME would otherwise send every build inside an installer to an empty cache —
+// slow, and it leaves a read-only tree in the scratch home.
+func goEnv(t *testing.T, key string) string {
+	t.Helper()
+	out, err := exec.Command("go", "env", key).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// scratchHome returns a temporary home directory for an installer run. It is deliberately
+// not t.TempDir: a Go build under a fresh HOME can leave a read-only module cache behind,
+// which makes the framework's own TempDir cleanup fail the test. A tolerant cleanup keeps
+// that out of the result, and the callers pin the Go caches elsewhere anyway.
+func scratchHome(t *testing.T) string {
+	t.Helper()
+	home, err := os.MkdirTemp("", "sop-dist-home-")
+	if err != nil {
+		t.Fatalf("scratch home: %v", err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	return home
 }

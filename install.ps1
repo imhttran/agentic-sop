@@ -223,7 +223,16 @@ function Install-Cli([string]$TargetDir) {
         finally {
             Pop-Location
         }
-        Move-Item -LiteralPath $tmp -Destination $dest -Force
+        try {
+            Move-Item -LiteralPath $tmp -Destination $dest -Force -ErrorAction Stop
+        }
+        catch {
+            # Windows PowerShell 5.1 can refuse to overwrite an existing file with
+            # Move-Item; removing it first works there too. A sop.exe that is actually
+            # running fails either way, and is reported rather than worked around.
+            if (Test-Path -LiteralPath $dest) { Remove-Item -LiteralPath $dest -Force -ErrorAction Stop }
+            Move-Item -LiteralPath $tmp -Destination $dest -ErrorAction Stop
+        }
         Write-Note "  installed: $dest"
     }
     catch {
@@ -299,6 +308,10 @@ function Test-SkillCurrent([string]$Source, [string]$Target) {
 
 # Install-SkillRoot copies the canonical skills into one agent's root.
 function Install-SkillRoot([string]$Agent) {
+    if (-not $script:SkillRoots.ContainsKey($Agent)) {
+        Write-Fail "unknown agent: $Agent (want zed or claude)"
+        return
+    }
     $root = $script:SkillRoots[$Agent].Root
     $names = Get-SkillNames
 
@@ -380,6 +393,10 @@ function Install-SkillRoot([string]$Agent) {
 # directories that carry the marker are removed; a skill of the same name that is not
 # SOP's is reported and left where it is.
 function Uninstall-SkillRoot([string]$Agent) {
+    if (-not $script:SkillRoots.ContainsKey($Agent)) {
+        Write-Fail "unknown agent: $Agent (want zed or claude)"
+        return
+    }
     $root = $script:SkillRoots[$Agent].Root
 
     Write-Note ""
@@ -422,6 +439,7 @@ function Uninstall-SkillRoot([string]$Agent) {
 # configuration for an agent the machine does not have); uninstalling considers every
 # agent, because removing what SOP owns needs no environment.
 function Select-Agents([string]$Requested, [bool]$ForInstall) {
+    if ($Requested -eq 'none') { return @() }
     if ($Requested -eq 'all') {
         $agents = @()
         foreach ($agent in $script:AgentOrder) {
@@ -599,8 +617,10 @@ if ($UninstallSkills -ne 'none') {
 }
 else {
     Install-Cli $targetDir
-    foreach ($agent in (Select-Agents $Skills $true)) {
-        Install-SkillRoot $agent
+    if ($Skills -ne 'none') {
+        foreach ($agent in (Select-Agents $Skills $true)) {
+            Install-SkillRoot $agent
+        }
     }
 }
 Prepare-Plugin $Plugin

@@ -70,6 +70,14 @@ func installEnv(t *testing.T, home, pathFirst string, overrides map[string]strin
 	setEnv(env, "USERPROFILE", home)
 	setEnv(env, "HOME", home)
 	unsetEnv(env, "SOP_BIN_DIR")
+	// Pin the Go caches to this machine's real ones: the toolchain derives GOPATH and the
+	// build/module caches from the home directory, so the scratch USERPROFILE above would
+	// otherwise send every `go build` inside the installer to an empty cache.
+	for _, key := range []string{"GOPATH", "GOCACHE", "GOMODCACHE"} {
+		if v := goEnv(t, key); v != "" {
+			setEnv(env, key, v)
+		}
+	}
 	if pathFirst != "" {
 		path := pathFirst
 		if current, ok := env["PATH"]; ok {
@@ -120,7 +128,7 @@ func TestWindowsInstallerParses(t *testing.T) {
 
 // TestWindowsInstallerHelp proves -Help documents every parameter.
 func TestWindowsInstallerHelp(t *testing.T) {
-	home := t.TempDir()
+	home := scratchHome(t)
 	for _, shell := range powershells(t) {
 		out, err := runInstallPS(t, shell, installEnv(t, home, "", nil), "-Help")
 		if err != nil {
@@ -137,7 +145,7 @@ func TestWindowsInstallerHelp(t *testing.T) {
 // TestWindowsInstallerDryRunChangesNothing proves -DryRun reports the whole plan without
 // creating a single file.
 func TestWindowsInstallerDryRunChangesNothing(t *testing.T) {
-	home := t.TempDir()
+	home := scratchHome(t)
 	// The agent directories exist, so -All has an environment to act on rather than
 	// skipping both agents.
 	for _, dir := range []string{".agents", ".claude"} {
@@ -172,7 +180,7 @@ func TestWindowsInstallerDryRunChangesNothing(t *testing.T) {
 // runnable sop.exe, twice over, and gives PATH guidance only when it is needed.
 func TestWindowsInstallerInstallsTheCLI(t *testing.T) {
 	shell := powershells(t)[0]
-	home := t.TempDir()
+	home := scratchHome(t)
 	bin := filepath.Join(home, "bin")
 	env := installEnv(t, home, "", nil)
 
@@ -217,7 +225,7 @@ func TestWindowsInstallerInstallsTheCLI(t *testing.T) {
 // spaces is handled as one path.
 func TestWindowsInstallerBinDirWithSpaces(t *testing.T) {
 	shell := powershells(t)[0]
-	home := t.TempDir()
+	home := scratchHome(t)
 	bin := filepath.Join(home, "SOP Test Home", "bin")
 
 	out, err := runInstallPS(t, shell, installEnv(t, home, "", nil), "-BinDir", bin)
@@ -239,7 +247,7 @@ func TestWindowsInstallerBinDirWithSpaces(t *testing.T) {
 // the canonical skills, marks them as SOP's, and never overwrites a skill SOP does not
 // own.
 func TestWindowsInstallerCopiesSkillsAndPreservesForeign(t *testing.T) {
-	home := t.TempDir()
+	home := scratchHome(t)
 	claudeRoot := filepath.Join(home, ".claude", "skills")
 
 	// A foreign skill at a SOP name, and an unrelated skill.
@@ -316,7 +324,7 @@ func TestWindowsInstallerCopiesSkillsAndPreservesForeign(t *testing.T) {
 // SOP-owned copy is restored from canonical, which is what update means on Windows.
 func TestWindowsInstallerRefreshesSOPOwnedSkills(t *testing.T) {
 	shell := powershells(t)[0]
-	home := t.TempDir()
+	home := scratchHome(t)
 	if err := os.MkdirAll(filepath.Join(home, ".claude"), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +378,7 @@ func TestWindowsInstallerRefreshesSOPOwnedSkills(t *testing.T) {
 // installed and nothing else, even at a SOP name.
 func TestWindowsInstallerUninstallRemovesOnlySOPOwned(t *testing.T) {
 	shell := powershells(t)[0]
-	home := t.TempDir()
+	home := scratchHome(t)
 	claudeRoot := filepath.Join(home, ".claude", "skills")
 
 	// A foreign skill at a SOP name, which uninstall must leave alone.
@@ -410,7 +418,7 @@ func TestWindowsInstallerUninstallRemovesOnlySOPOwned(t *testing.T) {
 // TestWindowsInstallerRequiresGo proves a missing toolchain fails with an actionable
 // message instead of a confusing error.
 func TestWindowsInstallerRequiresGo(t *testing.T) {
-	home := t.TempDir()
+	home := scratchHome(t)
 	env := installEnv(t, home, "", map[string]string{"PATH": filepath.Join(os.Getenv("SystemRoot"), "System32")})
 
 	out, err := runInstallPS(t, powershells(t)[0], env, "-BinDir", filepath.Join(home, "bin"))
@@ -426,7 +434,7 @@ func TestWindowsInstallerRequiresGo(t *testing.T) {
 // and never writes into Claude's configuration.
 func TestWindowsInstallerPluginStepIsSafe(t *testing.T) {
 	shell := powershells(t)[0]
-	home := t.TempDir()
+	home := scratchHome(t)
 
 	out, err := runInstallPS(t, shell, installEnv(t, home, "", nil), "-BinDir", filepath.Join(home, "bin"), "-Plugin", "claude")
 	if err != nil {

@@ -1,3 +1,9 @@
+//go:build !windows
+
+// The skill installer is a POSIX shell script that links the canonical skills with
+// symlinks, so its tests run on every platform except Windows. The Windows installer's
+// skill handling (copies plus the ownership marker) is covered by internal/dist's
+// install_windows_test.go.
 package skill
 
 import (

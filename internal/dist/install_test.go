@@ -15,21 +15,6 @@ import (
 	"github.com/imhttran/agentic-sop/internal/skill"
 )
 
-// scratchHome returns a temporary HOME for an installer run. It is deliberately not
-// t.TempDir: a Go build under a fresh HOME can leave a read-only module cache behind,
-// which makes the framework's own TempDir cleanup fail the test. A tolerant cleanup
-// keeps that out of the test result, and installerEnv pins the Go caches elsewhere
-// anyway.
-func scratchHome(t *testing.T) string {
-	t.Helper()
-	home, err := os.MkdirTemp("", "sop-dist-home-")
-	if err != nil {
-		t.Fatalf("scratch home: %v", err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	return home
-}
-
 // installerEnv builds the environment for a scratch run: a temporary HOME, a PATH that
 // puts the scratch bin directory first, and the developer's real Go caches so a build
 // is fast and no module cache lands in the scratch HOME. SOP_BIN_DIR and GOBIN are
@@ -61,16 +46,6 @@ func installerEnv(t *testing.T, home, binDir string, overrides map[string]string
 		out = append(out, k+"="+v)
 	}
 	return out
-}
-
-// goEnv reads one value from the developer's real Go environment.
-func goEnv(t *testing.T, key string) string {
-	t.Helper()
-	out, err := exec.Command("go", "env", key).Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
 }
 
 // runInstaller runs the root installer from the checkout under test.
