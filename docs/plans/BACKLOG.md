@@ -207,11 +207,15 @@ late-stage cutoff tell the model the invocation is about to end
 Next candidates, in the plan's build order:
 
 ```text
-Interactive approval workflow
 Local network service (team mode)
 Small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation
 ```
+
+The former first candidate is now planned and proposed:
+[PLAN-Phase-6-Interactive-Approval.md](PLAN-Phase-6-Interactive-Approval.md)
+(Phase 6, `P6-001`–`P6-009`) makes the human approval gate operable and discoverable at a
+terminal without moving any authority. It is not implemented.
 
 ## Known limitations (current)
 
