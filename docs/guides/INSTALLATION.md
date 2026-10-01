@@ -21,6 +21,36 @@ do not use:
 ./install.sh --all             # the CLI + every present agent's skills + the plugin
 ```
 
+## Windows
+
+Windows uses a native PowerShell installer — no WSL, Git Bash, Make, or administrator
+rights, and no PowerShell profile is edited:
+
+```powershell
+git clone https://github.com/imhttran/agentic-sop.git
+cd agentic-sop
+.\install.ps1
+sop version
+```
+
+It builds the same `sop` CLI as `sop.exe`, installs it under `<home>\.local\bin`
+unless `-BinDir` (or `SOP_BIN_DIR`) says otherwise, and prints the PATH line to add
+instead of changing PATH for you. The agent skills are **copied** rather than
+symlinked, because symlinks on Windows need Developer Mode or elevation, and each
+copied skill carries a `.sop-managed` marker so a later install can update it and an
+uninstall can remove it without ever touching a skill SOP does not own.
+
+```powershell
+.\install.ps1 -Skills zed       # -Skills claude, -Skills all
+.\install.ps1 -Plugin claude
+.\install.ps1 -All              # the CLI + every present agent's skills + the plugin
+.\install.ps1 -UninstallSkills all
+.\install.ps1 -DryRun
+```
+
+Full detail, including the ownership marker and what the installer never does:
+[WINDOWS-INSTALLATION.md](WINDOWS-INSTALLATION.md).
+
 ## Options
 
 | Option                           | Meaning                                                              |

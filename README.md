@@ -72,12 +72,15 @@ Detailed structure: [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.m
 
 ## Quick Start
 
-Install the CLI:
+Install the CLI (clone the repository and `cd` into it first):
 
 ```bash
-git clone https://github.com/imhttran/agentic-sop.git
-cd agentic-sop
-./install.sh                  # builds sop into a user-writable bin directory
+./install.sh                  # macOS / Linux
+sop version
+```
+
+```powershell
+.\install.ps1                 # Windows (PowerShell)
 sop version
 ```
 
@@ -162,11 +165,10 @@ Detailed state transitions and lifecycle rules live in the specifications:
 SOP V1 is complete: dependency-aware execution, isolated branches, test-first
 implementation, bounded review/fix loops, CI and merge gates, durable state,
 resume/recovery, environment bootstrap, and limited parallelism. Above it, model
-routing (Phase 3.5), the provider runtime (Phase 4), bounded model escalation
-(Phase 5), unified work items with `sop prompt` (Phase 5.4), and distribution — one
-`./install.sh` plus a native Claude Code plugin and CI (Phase 5.5) — are implemented;
-the routing and escalation layers are OFF by default. See
-[docs/plans/BACKLOG.md](docs/plans/BACKLOG.md) for status and roadmap.
+routing (3.5), the provider runtime (4), bounded model escalation (5), unified work
+items with `sop prompt` (5.4), and distribution — one installer for macOS/Linux and
+Windows, a native Claude Code plugin, and CI (5.5–5.6) — are implemented; routing and
+escalation are OFF by default. See [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md).
 
 ## Documentation
 
@@ -183,7 +185,7 @@ Providers         docs/specs/AGENT-PROVIDER.md · docs/specs/PROVIDERS.md · doc
 JEV               docs/specs/OPENJEV.md · docs/reference/JEV-OPERATIONS.md
 Gates/Recovery    docs/specs/HUMAN-APPROVAL.md · docs/specs/RECOVERY.md · docs/reference/STATUS-AND-RECOVERY.md
 Security          docs/specs/SECURITY.md
-Installation      docs/guides/INSTALLATION.md
+Installation      docs/guides/INSTALLATION.md · docs/guides/WINDOWS-INSTALLATION.md
 Agent Skills      docs/guides/ZED-SKILLS.md · docs/guides/CLAUDE-SKILLS.md · docs/guides/CLAUDE-PLUGIN.md
 CLI Reference     docs/reference/CLI.md
 Configuration     docs/reference/CONFIGURATION.md

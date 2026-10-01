@@ -80,3 +80,57 @@ jobs:
           ./install.sh --plugin claude --dry-run
       - name: installer and plugin tests
         run: go test -v ./internal/dist/... ./internal/skill/...
+
+  # Windows: the CLI must build there, and install.ps1 must work on the PowerShell a clean
+  # machine already has. The full test suite stays on Linux — several lifecycle tests
+  # execute POSIX commands (true/false/sh) — so this job covers the build, static
+  # analysis, and the distribution surface, including the Windows installer tests
+  # (internal/dist/install_windows_test.go) under both Windows PowerShell and pwsh.
+  windows:
+    name: windows (install.ps1)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: build
+        run: go build ./...
+      - name: vet
+        run: go vet ./...
+      - name: install.ps1 parses (PowerShell language parser)
+        shell: powershell
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile("$PWD\install.ps1", [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { $_.ToString() }; exit 1 }
+      - name: installer and plugin tests
+        run: go test -v ./internal/dist/... ./internal/skill/...
+      - name: installer smoke (Windows PowerShell, isolated USERPROFILE)
+        shell: powershell
+        run: |
+          .\install.ps1 -Help
+          .\install.ps1 -DryRun
+
+          $home_dir = Join-Path $env:RUNNER_TEMP 'sop-ci-home'
+          New-Item -ItemType Directory -Force -Path $home_dir | Out-Null
+          $bin = Join-Path $env:RUNNER_TEMP 'SOP Test Home\bin'
+
+          .\install.ps1 -BinDir $bin
+          & (Join-Path $bin 'sop.exe') version
+
+          # The agent integrations go into a scratch home, never the runner's own profile.
+          $env:USERPROFILE = $home_dir
+          .\install.ps1 -Skills claude -Plugin claude
+          $skills = Get-ChildItem (Join-Path $home_dir '.claude\skills') -Directory
+          if ($skills.Count -ne 7) { throw "expected 7 installed skills, got $($skills.Count)" }
+          foreach ($skill in $skills) {
+            if (-not (Test-Path (Join-Path $skill.FullName '.sop-managed'))) { throw "no ownership marker in $($skill.Name)" }
+          }
+          Write-Host "installed: $($skills.Name -join ', ')"
+      - name: installer smoke (PowerShell 7)
+        shell: pwsh
+        run: |
+          .\install.ps1 -Help
+          .\install.ps1 -DryRun

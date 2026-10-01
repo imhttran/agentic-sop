@@ -179,6 +179,9 @@ plans use, with explicit dependencies and a load-bearing `Execution:` field
 Unified installer `./install.sh` (CLI + per-agent skills + Claude plugin) and the
 native Claude Code plugin package, generated from `skills/` (Phase 5.5)
 GitHub Actions CI: fmt, vet, build, test, race, doc links, installer + plugin packaging
+Windows distribution: native `install.ps1` (no WSL/Bash/Make/admin, copied skills with a
+`.sop-managed` ownership marker, safe update and uninstall) + a `windows-latest` CI job
+(Phase 5.6; the clean-room test on a real Windows machine is still outstanding)
 SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
 `/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
 ```

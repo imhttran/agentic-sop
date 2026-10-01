@@ -1,11 +1,8 @@
-// Package dist validates SOP's distribution layer as an artifact: the root installer
-// (install.sh), the per-agent skill installation it delegates to, and the Claude Code
-// plugin package under integrations/claude/.
-//
-// Every test runs against temporary directories — a scratch HOME, a scratch bin
-// directory, and (for the plugin) the packaged tree itself. Nothing here touches the
-// developer's real ~/.agents, ~/.claude, or installed sop binary, and nothing edits a
-// shell startup file.
+//go:build !windows
+
+// The Unix installer (install.sh and the scripts it delegates to) needs a POSIX shell,
+// so its tests run on every platform except Windows. The Windows installer is covered
+// by install_windows_test.go.
 package dist
 
 import (
@@ -17,16 +14,6 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/skill"
 )
-
-// repoRoot is the checkout under test (internal/dist -> ../..).
-func repoRoot(t *testing.T) string {
-	t.Helper()
-	root, err := filepath.Abs("../..")
-	if err != nil {
-		t.Fatalf("resolve repo root: %v", err)
-	}
-	return root
-}
 
 // scratchHome returns a temporary HOME for an installer run. It is deliberately not
 // t.TempDir: a Go build under a fresh HOME can leave a read-only module cache behind,
@@ -404,22 +391,4 @@ func TestInstallerPluginStepIsSafeInEveryMode(t *testing.T) {
 			t.Errorf("the installer must not write %s", path)
 		}
 	}
-}
-
-func containsString(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
-}
-
-func isDirEmpty(t *testing.T, dir string) bool {
-	t.Helper()
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return true
-	}
-	return len(entries) == 0
 }

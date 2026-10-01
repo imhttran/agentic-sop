@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -45,15 +46,6 @@ type claudeMarketplace struct {
 		Name   string `json:"name"`
 		Source string `json:"source"`
 	} `json:"plugins"`
-}
-
-func read(t *testing.T, path string) string {
-	t.Helper()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("read %s: %v", path, err)
-	}
-	return string(data)
 }
 
 func manifest(t *testing.T) claudeManifest {
@@ -150,7 +142,13 @@ func TestClaudeMarketplaceListsThePlugin(t *testing.T) {
 // TestClaudePluginMirrorsTheCanonicalSkills proves the plugin's skill files are the
 // canonical skills/, generated rather than hand-maintained. It runs the generator's own
 // check, so drift in either direction fails here.
+//
+// The generator is a POSIX shell script, so the check runs where sh is available; the
+// package's structure and content are validated on every platform regardless.
 func TestClaudePluginMirrorsTheCanonicalSkills(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("scripts/build-claude-plugin.sh needs a POSIX shell; run this on Linux/macOS")
+	}
 	cmd := exec.Command("sh", filepath.Join(repoRoot(t), "scripts", "build-claude-plugin.sh"), "--check")
 	cmd.Dir = repoRoot(t)
 	if out, err := cmd.CombinedOutput(); err != nil {

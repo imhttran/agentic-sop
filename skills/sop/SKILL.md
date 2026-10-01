@@ -50,10 +50,11 @@ Thin aliases in the same install expose one capability each:
 
 Each alias is a few lines that call the one command below with its capability fixed;
 none of them carries routing, provider, or lifecycle policy. Install them with
-`make install-skills-zed` (Zed) or `make install-skills-claude` (Claude Code), or
-`make install-skills` for every supported agent that is present (see the project
-README); `/sop-implement` is hidden from the agent's autonomous catalog because
-repository mutation is an explicit operator choice.
+`./install.sh --skills zed` (Zed) or `./install.sh --skills claude` (Claude Code), or
+`./install.sh --all` for every supported agent plus the Claude Code plugin
+(`.\install.ps1 -Skills zed` on Windows; see the project README). `/sop-implement` is
+hidden from the agent's autonomous catalog because repository mutation is an explicit
+operator choice.
 
 ## The one command
 
@@ -139,7 +140,7 @@ standard run artifacts). Inspect one later with `sop report prompts/<run-id>`.
   as success. Return SOP's result to the operator.
 - Do not add routing, lifecycle, or approval logic to the skill.
 - If `sop` is not on PATH, STOP and tell the operator to install the SOP CLI (see the
-  project README / `make install`). Never answer the request yourself or mutate the
+  project README / `./install.sh`). Never answer the request yourself or mutate the
   repository in SOP's place.
 
 ## Failure behavior
