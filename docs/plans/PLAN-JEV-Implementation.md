@@ -1,5 +1,7 @@
 # PLAN --- JEV Implementation
 
+**Status:** Implemented; archived by SOP (`.agent-sdlc/archive/plan-jev-implementation/`).
+
 ## Project
 
 agentic-sop

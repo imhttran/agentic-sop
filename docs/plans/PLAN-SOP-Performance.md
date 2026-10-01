@@ -1,5 +1,11 @@
 # SOP Performance and Timing
 
+**Status:** Implemented (PERF001–PERF007, PERF009, PERF013, PERF015): stage-level
+measurement (`internal/perf`), persistence, the `sop report` summary, the reproducible
+benchmark fixture, verify-first hardening, safe duplicate-validation and review reuse,
+and the performance guide. PERF008 and PERF010–PERF012, PERF014 are deliberately
+deferred with evidence in [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md).
+
 ## Project
 
 agentic-sop

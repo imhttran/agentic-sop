@@ -115,8 +115,8 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream. **Implemented**; archived by SOP (`.agent-sdlc/archive/ahv2/`).
 - [plans/PLAN-Pre-JEV-Stabilization.md](plans/PLAN-Pre-JEV-Stabilization.md) — the pre-JEV stabilization workstream. **Implemented**; archived by SOP.
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery. **Implemented**; archived by SOP.
-- [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing; the shipped behavior is described in [reference/PERFORMANCE.md](reference/PERFORMANCE.md). The plan itself declares no status.
-- [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis. The plan itself declares no status.
+- [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing. **Implemented** (PERF008 and PERF010–PERF012, PERF014 deferred with evidence); the shipped behavior is described in [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
+- [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis. **Implemented**; PLAN runs the bounded DISCOVERY → tool-free SYNTHESIS lifecycle.
 
 ## Testing
 

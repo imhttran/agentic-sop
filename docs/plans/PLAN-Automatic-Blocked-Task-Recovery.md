@@ -1,5 +1,7 @@
 # PLAN — Automatic Blocked-Task Recovery
 
+**Status:** Implemented; archived by SOP (`.agent-sdlc/archive/plan-automatic-blocked-task-recovery/`).
+
 ## Project
 
 agentic-sop

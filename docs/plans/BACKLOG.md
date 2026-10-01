@@ -213,6 +213,37 @@ Small-device dashboard
 Jev adapter + Jev-vs-deterministic evaluation
 ```
 
+## Known limitations (current)
+
+Deliberate, understood residuals that are not scheduled work. Each is described where
+its behavior is defined; this list exists so none is lost, and so "no backlog items are
+open" is a claim about the _scheduled_ list above, not about these.
+
+- **The Windows clean-room test has not been run** (Phase 5.6, P56-011). CI runs the
+  `windows` job against temporary directories on `windows-latest`; a real machine's
+  `%USERPROFILE%`, PATH, Zed, and Claude Code are unverified. See
+  [../testing/WINDOWS-CLEAN-ROOM.md](../testing/WINDOWS-CLEAN-ROOM.md).
+- **No project-scope skill install on Windows.** `scripts/install/install-skills.sh
+--project [DIR]` installs the skills into a project's `.agents`/`.claude` directory;
+  `install.ps1` has no `-Project` equivalent yet.
+- **The Windows CI job runs a scoped test set, not the full suite.** Several lifecycle
+  tests execute POSIX commands (`true`/`false`/`sh`), so that job covers the build, vet,
+  static PowerShell parsing, and the distribution surface under both Windows PowerShell
+  and `pwsh`; the full suite and `-race` stay on Linux.
+- **Prompt run ids are unique locally, not globally.** `promptRunID` is
+  second-resolution plus a collision counter, so two prompts in the same second never
+  share a directory, but two machines can mint the same id.
+- **`sop-ollama-agent` built from the pinned revision predates the `-version` flag**, so
+  `scripts/install/install-sop-ollama-agent.sh` rebuilds instead of short-circuiting on a
+  revision match. The installer handles it gracefully; a pinned revision that reports
+  its revision would make repeated installs a no-op.
+- **Capabilities designed but not delivered are documented in place, not here:** the TDD
+  test-design stage ([../specs/TASK-LIFECYCLE.md](../specs/TASK-LIFECYCLE.md)),
+  `max_parallel_tasks` ([../specs/EXECUTION.md](../specs/EXECUTION.md)), and the CLI-driven
+  push → PR → CI → merge loop ([../architecture/OVERVIEW.md](../architecture/OVERVIEW.md));
+  the `jev` decision provider is recognized but not implemented
+  (`internal/decision/decision.go`).
+
 The project is intentionally built incrementally: sequential correctness and
 recovery come before parallelism, and each stage is usable and tested before the
 next is added.

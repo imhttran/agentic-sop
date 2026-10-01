@@ -1,5 +1,11 @@
 # Ollama Agent PLAN Discovery and Synthesis
 
+**Status:** Implemented (PLANSYN001–PLANSYN012). PLAN runs the bounded DISCOVERY →
+tool-free SYNTHESIS lifecycle (`internal/ollamaagent/plan.go`; `planDiscoveryTurns` 8,
+`planSynthesisTurns` 2), with deterministic coverage for early completion, forced
+synthesis, denied synthesis tools, synthesis exhaustion, mutation denial, and the
+AHV2006-shaped fixture.
+
 ## Project
 
 agentic-sop
