@@ -68,6 +68,10 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyEscalationEnabled(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to each task run so it is recorded.
 	d.routing = routing
 	if cfg.Workflow.Mode != "local" {
@@ -604,7 +608,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 
 	// A genuine human boundary (the classifier's human disposition, the autonomy

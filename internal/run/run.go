@@ -53,6 +53,12 @@ type Run struct {
 
 // New creates (or reopens) the run directory for id under the project's state
 // dir and records the initial CREATED state.
+//
+// A new run starts a fresh set of per-run diagnostic artifacts: the execution-
+// attempt records under attempts/ describe the attempts THIS run made, so the
+// directory is cleared here. Durable budgets are deliberately NOT reset —
+// attempt.txt and continuations.txt carry across runs so a task's retry and
+// continuation budget survives — and state.db remains the source of task state.
 func New(projectDir, id string) (*Run, error) {
 	if strings.TrimSpace(id) == "" {
 		return nil, errors.New("run: id is required")
@@ -60,6 +66,9 @@ func New(projectDir, id string) (*Run, error) {
 	dir := filepath.Join(projectDir, config.DirName, runsDirName, id)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("run: create %s: %w", dir, err)
+	}
+	if err := os.RemoveAll(filepath.Join(dir, attemptsDirName)); err != nil {
+		return nil, fmt.Errorf("run: reset attempts in %s: %w", dir, err)
 	}
 
 	now := time.Now().UTC()

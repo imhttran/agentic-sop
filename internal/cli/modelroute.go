@@ -6,6 +6,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/dotenv"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/recovery"
 )
 
 // loadDotEnv applies the optional project .env to the process environment.
@@ -56,5 +57,23 @@ func applyRoutingEnabled(d *deps, cfg config.Config) error {
 		return err
 	}
 	d.routingEnabled = on
+	return nil
+}
+
+// applyEscalationEnabled resolves the bounded execution-recovery escalation policy
+// (Phase 5) and records it on d. It is OFF unless SOP_MODEL_ESCALATION_ENABLED (or
+// the config's models.escalation_enabled) turns it on, so an existing
+// installation's execution behavior is unchanged. An unparseable flag or bound is
+// an actionable error.
+func applyEscalationEnabled(d *deps, cfg config.Config) error {
+	on, err := model.EscalationEnabled(cfg.Models, os.Getenv)
+	if err != nil {
+		return err
+	}
+	max, err := model.MaxEscalations(cfg.Models, os.Getenv)
+	if err != nil {
+		return err
+	}
+	d.escalation = recovery.Policy{Enabled: on, MaxEscalations: max}
 	return nil
 }

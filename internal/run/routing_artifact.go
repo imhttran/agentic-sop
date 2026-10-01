@@ -40,13 +40,20 @@ const (
 	RoutingSourceManual RoutingSource = "manual_override"
 	// RoutingSourceDefault: no routing layer applied; the resolved class stands.
 	RoutingSourceDefault RoutingSource = "default"
+	// RoutingSourceEscalation: SOP's bounded execution-recovery policy (Phase 5)
+	// selected a larger class for a retry after the first attempt failed a quality
+	// gate. It records an escalation attempt, never the initial routing decision: an
+	// escalated attempt MUST NOT overwrite the routing.json that records what the
+	// router first chose.
+	RoutingSourceEscalation RoutingSource = "escalation"
 )
 
 // routingSourceRank is the closed set of known routing sources.
 var routingSourceRank = map[RoutingSource]bool{
-	RoutingSourcePolicy:  true,
-	RoutingSourceManual:  true,
-	RoutingSourceDefault: true,
+	RoutingSourcePolicy:     true,
+	RoutingSourceManual:     true,
+	RoutingSourceDefault:    true,
+	RoutingSourceEscalation: true,
 }
 
 // Valid reports whether s is a known routing source.

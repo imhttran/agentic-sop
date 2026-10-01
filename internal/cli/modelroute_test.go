@@ -124,7 +124,10 @@ func TestLoadDotEnvLoadsProjectFile(t *testing.T) {
 // (or another test) cannot leak SOP_MODEL_* into a routing assertion.
 func clearModelEnv(t *testing.T) {
 	t.Helper()
-	keys := []string{model.EnvDefaultClass, model.EnvFallbackClass, model.EnvAllowCloudFallbackForLocal}
+	keys := []string{
+		model.EnvDefaultClass, model.EnvFallbackClass, model.EnvAllowCloudFallbackForLocal,
+		model.EnvRoutingEnabled, model.EnvEscalationEnabled, model.EnvMaxEscalations,
+	}
 	for _, c := range model.Classes {
 		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY"} {
 			keys = append(keys, model.ClassEnvKey(c, f))

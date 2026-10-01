@@ -67,6 +67,11 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	}
 
 	writeReport(stdout, doc)
+	// Execution attempts (Phase 5): when bounded escalation is enabled, the task's
+	// initial routing attempt and each escalated retry are rendered from the run's
+	// persisted attempt records, so the initial class is distinguishable from the
+	// attempts SOP actually made. Nothing is rendered when no attempts were recorded.
+	writeAttemptsReport(stdout, filepath.Join(runsRoot, id))
 	// Early JEV checkpoint evidence (TRIAGE / PRE_EXECUTION) is rendered from the
 	// run's persisted artifact. It renders nothing when no early checkpoint ran, so
 	// a disabled JEV adds no noise. It is human-readable only.

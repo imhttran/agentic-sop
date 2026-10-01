@@ -51,6 +51,19 @@ type taskRouting struct {
 // A manual --model-class override wins: it is recorded as a manual_override
 // decision but never re-derived by the router.
 func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult) (taskRouting, bool, error) {
+	// A recovery-driven escalated attempt outranks both the router and a manual
+	// override: the recovery policy (internal/recovery) already decided this
+	// attempt's class, and escalation is never offered while an override pins the
+	// class (see escalatable). Its provenance is recorded as the escalation source,
+	// never as a router or operator decision.
+	if d.attempt != nil {
+		return taskRouting{
+			Class:     d.attempt.Decision.ToClass,
+			Source:    runpkg.RoutingSourceEscalation,
+			Reasons:   []string{d.attempt.Decision.Reason},
+			Selection: d.attempt.Selection,
+		}, true, nil
+	}
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
 			return taskRouting{
@@ -122,6 +135,10 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 // run-level default — is validated here, before any agent work, so a routed model
 // the runtime cannot serve stops the task instead of failing mid-execution. The
 // validation is read-only and never substitutes a provider or model.
+//
+// An escalated attempt (Phase 5) is the exception: its agent is already built,
+// validated, and guarded by the recovery loop (runAttempts), so this only records
+// the attempt's class and reason. See escalation.go.
 func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult, a agent.Agent, stdout io.Writer) (agent.Agent, *taskRouting, error) {
 	tr, ok, err := routingForTask(cfg, d, spec, tri, pre)
 	if err != nil {
@@ -130,15 +147,24 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 	if !ok {
 		return a, nil, nil
 	}
+	if d.attempt != nil {
+		// An escalated attempt's agent was already built, validated, and guarded by
+		// the recovery loop (runAttempts), so the selected model already equals the
+		// executing model. Rebuilding it here would construct a second agent for the
+		// same class; the routing decision is still recorded so the attempt's class
+		// and reason stay auditable.
+		return a, &tr, nil
+	}
 	// Validate the final routed selection before it runs. This is the selection that
 	// will execute the task, so it is the one provider validation must see.
 	if err := validateSelection(ctx, cfg, tr.Selection); err != nil {
 		return a, nil, fmt.Errorf("class %s selection: %w", tr.Class, err)
 	}
 	if d.newAgent == nil {
-		// Without an agent factory there is nothing to rebuild; leave the existing
-		// agent rather than failing the run.
-		return a, nil, nil
+		// Fail closed (Phase 5 §14): routing selected a different model, but without
+		// an agent factory SOP cannot build it. Silently leaving the previous agent
+		// in place would execute a model other than the one routing selected.
+		return a, nil, fmt.Errorf("model routing: no agent factory is available to build the %s model (%s/%s)", tr.Class, tr.Selection.Provider, tr.Selection.Model)
 	}
 	ta, err := d.newAgent(cfg.Agent.Harness, tr.Selection.Provider, tr.Selection.Model)
 	if err != nil {

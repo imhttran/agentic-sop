@@ -129,6 +129,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyEscalationEnabled(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to the lifecycle so the run records it.
 	d.routing = routing
 
@@ -176,7 +180,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), tri, stdout)
+	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)
@@ -245,8 +249,14 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// than discarding it. The artifact is diagnostic only, so this never changes
 		// the run's already-fixed decision; it is reported so a failed write is not
 		// mistaken for success.
-		if werr := writeRoutingDecisionArtifact(rn, rn.State().ID, res.routing); werr != nil {
-			fmt.Fprintf(stdout, "warning: routing decision artifact not persisted: %v\n", werr)
+		//
+		// An escalated attempt (Phase 5) never overwrites it: routing.json records what
+		// the router FIRST chose, and an escalation is a different fact, recorded in
+		// its own attempt record.
+		if res.routing.Source != runpkg.RoutingSourceEscalation {
+			if werr := writeRoutingDecisionArtifact(rn, rn.State().ID, res.routing); werr != nil {
+				fmt.Fprintf(stdout, "warning: routing decision artifact not persisted: %v\n", werr)
+			}
 		}
 	} else {
 		res.modelSelection = modelSelectionDoc(d.routing)
@@ -450,6 +460,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		input := plan.RenderMarkdown()
 		if failureCtx != "" {
 			input = failureCtx + "\n" + input
+		}
+		// An escalated attempt (Phase 5) is handed the previous attempt's bounded
+		// context, so a stronger model starts from the actual failure instead of
+		// repeating the change that did not pass.
+		if d.attempt != nil && d.attempt.FailureContext != "" {
+			input = d.attempt.FailureContext + "\n" + input
 		}
 		if sig, had := rn.ReadAttempt(); had {
 			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input

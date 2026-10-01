@@ -93,3 +93,22 @@ func TestConfigWithoutModelsIsUnconfigured(t *testing.T) {
 		t.Fatal("models must be unconfigured when the block is omitted")
 	}
 }
+
+// TestParseEscalationBlock pins the Phase 5 escalation configuration: the fields
+// parse, and enabling escalation alone does not make the models block Configured()
+// (so it never activates model routing by itself).
+func TestParseEscalationBlock(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nproject:\n  name: escalated\nmodels:\n  escalation_enabled: true\n  max_escalations: 4\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if c.Models.EscalationEnabled == nil || !*c.Models.EscalationEnabled {
+		t.Errorf("escalation_enabled = %v, want true", c.Models.EscalationEnabled)
+	}
+	if c.Models.MaxEscalations == nil || *c.Models.MaxEscalations != 4 {
+		t.Errorf("max_escalations = %v, want 4", c.Models.MaxEscalations)
+	}
+	if c.Models.Configured() {
+		t.Error("escalation settings alone must not mark the models block configured")
+	}
+}

@@ -199,7 +199,22 @@ type Route struct {
 	// to disabled. It is separate from Configured(): it does not, on its own, change
 	// the class table, and the router is OFF by default so an existing project is
 	// unchanged. SOP_MODEL_ROUTING_ENABLED overrides it.
-	RoutingEnabled *bool       `yaml:"routing_enabled"`
+	RoutingEnabled *bool `yaml:"routing_enabled"`
+	// EscalationEnabled turns on the bounded execution-recovery escalation policy
+	// (Phase 5, internal/recovery): after an attempt fails a quality gate, SOP may
+	// retry the task on the next larger class. It is a pointer so an omitted value
+	// is distinguishable from an explicit false; both resolve to disabled. Like
+	// RoutingEnabled it does NOT make the route table Configured() — enabling
+	// escalation alone neither activates a class table nor changes the agent
+	// selection, and it is OFF by default so an existing project is unchanged.
+	// SOP_MODEL_ESCALATION_ENABLED overrides it.
+	EscalationEnabled *bool `yaml:"escalation_enabled"`
+	// MaxEscalations bounds automatic escalation (Phase 5). It is only consulted
+	// when EscalationEnabled resolves true. It is a pointer so an omitted value is
+	// distinguishable from an explicit 0: an omitted value resolves to
+	// DefaultMaxEscalations, while an explicit 0 disables escalation.
+	// SOP_MODEL_MAX_ESCALATIONS overrides it.
+	MaxEscalations *int        `yaml:"max_escalations"`
 	Small          ClassConfig `yaml:"small"`
 	Medium         ClassConfig `yaml:"medium"`
 	Large          ClassConfig `yaml:"large"`
@@ -282,6 +297,9 @@ func (r Route) Validate() error {
 			return fmt.Errorf("model routing: unknown %s.provider %q (want %s)", c, provider, joinProviders())
 		}
 	}
+	if r.MaxEscalations != nil && *r.MaxEscalations < 0 {
+		return fmt.Errorf("model escalation: max_escalations must not be negative (got %d)", *r.MaxEscalations)
+	}
 	return nil
 }
 
@@ -296,7 +314,18 @@ const (
 	// EnvRoutingEnabled overrides models.routing_enabled (the automatic
 	// model-class router). It defaults to false.
 	EnvRoutingEnabled = "SOP_MODEL_ROUTING_ENABLED"
+	// EnvEscalationEnabled overrides models.escalation_enabled (the bounded
+	// execution-recovery escalation policy). It defaults to false.
+	EnvEscalationEnabled = "SOP_MODEL_ESCALATION_ENABLED"
+	// EnvMaxEscalations overrides models.max_escalations. It defaults to
+	// DefaultMaxEscalations.
+	EnvMaxEscalations = "SOP_MODEL_MAX_ESCALATIONS"
 )
+
+// DefaultMaxEscalations is the built-in bound on automatic escalation (Phase 5):
+// small -> medium -> large is exactly two escalations, after which the existing
+// human/terminal boundary applies.
+const DefaultMaxEscalations = 2
 
 // Class env field names.
 const (
@@ -588,6 +617,54 @@ func RoutingEnabled(config Route, lookup func(string) string) (bool, error) {
 		return *config.RoutingEnabled, nil
 	}
 	return false, nil
+}
+
+// EscalationEnabled resolves the bounded execution-recovery escalation feature
+// flag (Phase 5): the SOP_MODEL_ESCALATION_ENABLED environment overrides the
+// models.escalation_enabled configuration value, and an omitted value on both
+// layers resolves to false. An unparseable environment value is an actionable
+// error.
+//
+// Like RoutingEnabled it is separate from Configured(): enabling escalation does
+// not activate a class table, and it is OFF by default so an existing
+// installation's execution behavior is unchanged.
+func EscalationEnabled(config Route, lookup func(string) string) (bool, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	if v := strings.TrimSpace(lookup(EnvEscalationEnabled)); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return false, fmt.Errorf("model escalation: %s: invalid boolean %q (want true or false)", EnvEscalationEnabled, v)
+		}
+		return b, nil
+	}
+	if config.EscalationEnabled != nil {
+		return *config.EscalationEnabled, nil
+	}
+	return false, nil
+}
+
+// MaxEscalations resolves the escalation bound (Phase 5): the
+// SOP_MODEL_MAX_ESCALATIONS environment overrides models.max_escalations, and an
+// omitted value on both layers resolves to DefaultMaxEscalations. An explicit 0
+// on either layer disables escalation. A non-numeric or negative value is an
+// actionable error.
+func MaxEscalations(config Route, lookup func(string) string) (int, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	if v := strings.TrimSpace(lookup(EnvMaxEscalations)); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("model escalation: %s: invalid count %q (want a non-negative integer)", EnvMaxEscalations, v)
+		}
+		return n, nil
+	}
+	if config.MaxEscalations != nil {
+		return *config.MaxEscalations, nil
+	}
+	return DefaultMaxEscalations, nil
 }
 
 // allowCloudFallback reports whether a local class may fall back to a cloud

@@ -19,6 +19,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	"github.com/imhttran/agentic-sop/internal/recovery"
 	"github.com/imhttran/agentic-sop/internal/resume"
 )
 
@@ -69,6 +70,16 @@ type deps struct {
 	// invocation (SOP_MODEL_ROUTING_ENABLED / models.routing_enabled). It is OFF by
 	// default; the run commands set it after resolution, and only they consult it.
 	routingEnabled bool
+	// escalation is the bounded execution-recovery policy for this invocation
+	// (Phase 5): whether SOP may escalate a failed attempt to the next larger model
+	// class, and how many escalations it may take. It is OFF by default, so an
+	// existing installation's execution behavior is unchanged.
+	escalation recovery.Policy
+	// attempt is the escalation provenance for the lifecycle attempt currently
+	// running: nil for a first attempt (the class comes from routing), and set only
+	// for an attempt the recovery policy selected. It is per-attempt, so the run
+	// loop resets it before each lifecycle call.
+	attempt *escalationAttempt
 }
 
 func defaultDeps() deps {
