@@ -37,12 +37,13 @@
 //
 // Evidence precedence is fixed and structured evidence outranks prose: explicit
 // human boundaries, then an invalid plan, then SOP's OWN deterministic budget/
-// no-change signals (a harness budget exhaustion, or a claimed change with none
-// produced), then deterministic verification (build, tests, lint, findings), then a
-// JEV analysis failure, then an infrastructure error, and only then the agent's own
-// outcome (its structured status plus its free-form summary). A deterministic
-// compiler error is therefore never UNKNOWN merely because the agent's summary did
-// not name it: the structured `go build` result is authoritative.
+// no-change signals (a harness budget exhaustion, a claimed change with none
+// produced, or a change-requiring completion with no repository mutation), then
+// deterministic verification (build, tests, lint, findings), then a JEV analysis
+// failure, then an infrastructure error, and only then the agent's own outcome (its
+// structured status plus its free-form summary). A deterministic compiler error is
+// therefore never UNKNOWN merely because the agent's summary did not name it: the
+// structured `go build` result is authoritative.
 package failure
 
 import (
@@ -105,6 +106,18 @@ const (
 	// failure that a stronger model, or a tighter change scope, may resolve; the
 	// bounded recovery policy may therefore escalate it rather than fail closed.
 	NoChangesProduced Kind = "NO_CHANGES_PRODUCED"
+	// NoChangesDetected: a change-requiring IMPLEMENT ordinary task whose completed
+	// invocation produced no actual governed repository mutation, even though the
+	// configured validation passed. It is SOP's OWN deterministic verdict, derived
+	// from the observed working-tree change against the task's deterministic
+	// change requirement. The model's changes_expected is evidence only: never
+	// authority to waive the mutation the task's acceptance requires. The verdict is
+	// distinct from NoChangesProduced (which is a claimed change with none produced)
+	// and from the harness no-progress signal (IncompleteImplementation, which means
+	// the work is merely unfinished): this is the EARLY false-completion verdict,
+	// reported as the retryable continuation termination=no_changes with
+	// diagnostic IMPLEMENT_NO_CHANGES, and it never invokes the bounded fix loop.
+	NoChangesDetected Kind = "IMPLEMENT_NO_CHANGES"
 	AutoFixExhausted  Kind = "AUTO_FIX_EXHAUSTED"
 	TransientProvider Kind = "TRANSIENT_PROVIDER"
 	EmptyResponse     Kind = "EMPTY_RESPONSE"
@@ -187,6 +200,17 @@ type Evidence struct {
 	// signal (a continuation): the invocation claimed the work was done, so it is an
 	// implementation failure.
 	NoChangesProduced bool
+	// ChangeRequired reports that the task deterministically requires a governed
+	// repository change before it may pass (an ordinary IMPLEMENT task, as opposed
+	// to a verify-first or already-declared-done stage). It is derived from the
+	// task's declared execution mode, never from any model output.
+	ChangeRequired bool
+	// MutationObserved reports whether the task's invocation actually produced a
+	// governed working-tree change, as observed by SOP's own mutation observer.
+	// It is authoritative mutation evidence: narration, tool intent, a write
+	// request, a test run, and a model-guessed git status never qualify. It is only
+	// consulted together with ChangeRequired.
+	MutationObserved bool
 
 	// Authoritative signals, supplied when a caller can determine them. They
 	// select the specific AUTO_FIX kind; their absence does not change the
@@ -276,6 +300,23 @@ func Classify(ev Evidence) Classification {
 	//     escalation enabled, a stronger model — may resolve.
 	if ev.NoChangesProduced {
 		return autoFix(NoChangesProduced, "the invocation reported success but produced no repository changes")
+	}
+
+	// 3c. SOP's own deterministic verdict that a CHANGE-REQUIRING task completed
+	//     an invocation without producing the governed repository change its
+	//     acceptance requires. The model's changes_expected is EVIDENCE only: it can
+	//     never waive the requested mutation. Because no deterministic
+	//     acceptance-verified already-satisfied path exists, this is a bounded,
+	//     retryable continuation of the existing requeue machinery (the SAME
+	//     disposition the harness no-change signal uses), NOT the fix loop and NOT a
+	//     human boundary. It is checked before the deterministic verification
+	//     evidence so a green validation on an unchanged tree cannot be mistaken for
+	//     a pass. This is distinct from NoChangesProduced: there the invocation
+	//     claimed a change it did not make; here the task requires a change and none
+	//     was made (or none was required and none was made).
+	if ev.ChangeRequired && !ev.MutationObserved {
+		return Classification{Kind: NoChangesDetected, Disposition: Continue, Confidence: High,
+			Reason: "the task requires a repository change but the invocation produced no governed mutation; a fresh bounded invocation must make the change"}
 	}
 
 	// 4. Deterministic verification: a build, test, lint, or coverage result (or a

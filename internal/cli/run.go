@@ -376,6 +376,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// so it never affects execution.
 	ar := activity.FromContext(ctx)
 
+	// changeRequired is the task's DETERMINISTIC change requirement: an ordinary
+	// IMPLEMENT task must produce a governed repository change before it may pass.
+	// A verify-first task proves acceptance with the configured validation (no
+	// implementation agent of its own), and an execution_mode done stage's work is
+	// declared already present, so neither requires a change here. The rule reads
+	// only the task's declared execution mode, so no model output (including the
+	// model's changes_expected) can enable or waive it.
+	changeRequired := !spec.ExecutionMode.VerifyFirst() && !spec.ExecutionMode.Done()
+
 	var (
 		plan       *planner.Plan
 		diff       string
@@ -386,6 +395,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// the report, and the performance record read the same counter, so
 		// "fix cycles: n/max" can never disagree with the recorded FIX count.
 		cycles int
+		// implMutation is SOP's OBSERVED mutation evidence for the ordinary
+		// IMPLEMENT invocation: whether the working tree actually changed as a
+		// result of it. It is set from the same working-tree diff the lifecycle
+		// already reads — the existing mutation observer — so no second
+		// mutation-detection mechanism exists. Narration, tool intent, a write
+		// request, a test run, and a model-guessed git status are never evidence.
+		implMutation bool
 		// pendingOutcome is a non-completed mutating (IMPLEMENT/FIX) outcome whose
 		// disposition is deferred until SOP's own deterministic validation has run,
 		// so structured build/test evidence outranks the agent's free-form summary.
@@ -517,8 +533,14 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		recordTaskChanges(rn, taskInvocationChanges(impl.ChangedFiles, diff))
 		_ = rn.Write("diff.patch", diff)
 
+		// The observed working-tree change of THIS invocation is the mutation
+		// evidence the gate below decides on. It comes from the same diff SOP
+		// already read, so a failed or no-op write (which leaves the tree unchanged)
+		// does not qualify, and narration, tool intent, and a write request never do.
+		implMutation = strings.TrimSpace(diff) != ""
+
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
-			if strings.TrimSpace(diff) != "" {
+			if implMutation {
 				// Changes were left behind: defer the disposition until the configured
 				// validation has run, so a broken build the invocation introduced is
 				// classified from evidence rather than from prose.
@@ -530,11 +552,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 
-		// A claimed change with none produced is a failure. A legitimate no-change
-		// completion is allowed, but still runs the configured validation below
-		// before it can pass.
+		// A claimed change with none produced is a failure (SOP's own deterministic
+		// verdict, NoChangesProduced). A model-asserted changes_expected=false is NOT
+		// a waiver for a change-requiring task: it is evidence only, and the
+		// authoritative gate below (green validation on an unchanged tree) routes the
+		// completion to the retryable no_changes/no-progress vocabulary instead of
+		// PASS. A legitimate no-change completion still runs the configured validation
+		// first, as it always has.
 		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
-		if strings.TrimSpace(diff) == "" && changesExpected {
+		if !implMutation && changesExpected {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "IMPLEMENT", "agent reported successful implementation but produced no repository changes"), nil
@@ -729,6 +755,25 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 
 	writeRunJSON(rn, "validation.json", suite)
 	writeRunJSON(rn, "review.json", report)
+
+	// The authoritative finalization gate for a CHANGE-REQUIRING IMPLEMENT task: a
+	// green validation on an unchanged repository is NOT success. The model's
+	// changes_expected is evidence, never authority to waive the requested
+	// mutation, so a completion that produced no governed repository mutation is
+	// routed to the retryable, early false-completion vocabulary rather than PASS.
+	//
+	// This reuses the failure classifier's fixed evidence precedence and the
+	// EXISTING termination vocabulary (termination=no_changes, diagnostic
+	// IMPLEMENT_NO_CHANGES, outcome=CONTINUE), and it is deliberately DISTINCT from
+	// the no-progress guard (IMPLEMENT_NO_PROGRESS after five consecutive
+	// non-mutating turns): this is the EARLY verdict, produced by the same
+	// accounting without a second counter and without a second mechanism. A
+	// verify-first or execution_mode-done stage (whose work needs no change of its
+	// own) is unaffected, and a genuine mutation passes exactly as before.
+	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation {
+		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
+		return noChangesCompletion(cfg, rn, class), nil
+	}
 
 	// Classify the gate failure and apply the configured autonomy policy before the
 	// stage is finalized, so the run report and the driver's recovery decision
@@ -976,6 +1021,32 @@ func noChangesFailure(cfg config.Config, source, reason string) lifeResult {
 	return lifeResult{gate: fail(reason), stage: runpkg.Failed, classification: cls, decision: decideAutonomy(cfg, cls)}
 }
 
+// noChangesCompletion is the authoritative finalization for a change-requiring
+// IMPLEMENT task whose invocation completed against an unchanged repository with
+// the configured validation green. It is NOT a pass and NOT a hard failure: the
+// verdict is a retryable continuation, reported with the existing vocabulary as
+// termination=no_changes, diagnostic=IMPLEMENT_NO_CHANGES, outcome=CONTINUE, so
+// the driver's existing bounded requeue path continues the work on a fresh
+// invocation. It is deliberately distinct from the no-progress guard's
+// IMPLEMENT_NO_PROGRESS (five consecutive non-mutating turns) and shares no
+// second mechanism with it; the model's changes_expected is recorded as evidence
+// and is never consulted here.
+func noChangesCompletion(cfg config.Config, rn *runpkg.Run, cls failure.Classification) lifeResult {
+	decision := decideAutonomy(cfg, cls)
+	reason := cls.Reason
+	// The existing continuation path reports a retryable disposition as CONTINUE at
+	// the FAILED stage, exactly as an agent-requested requeue does, so the driver
+	// requeues through the same bounded recovery path rather than inventing a new
+	// one.
+	_ = rn.SetStage(runpkg.Failed)
+	return lifeResult{
+		gate:           quality.Result{Decision: quality.Continue, Reasons: []string{reason}},
+		stage:          runpkg.Failed,
+		classification: cls,
+		decision:       decision,
+	}
+}
+
 // firstReason returns the gate's first reason, or "" when there is none. It is
 // the short, single-line detail the activity stream attaches to a terminal
 // event; the full reasons remain in the run report.
@@ -1221,7 +1292,7 @@ func hasCategory(suite testrunner.SuiteResult, category testrunner.Category) boo
 // per-category durations, and one validation execution. It is the single place a
 // suite is measured, so counts and timings cannot drift from where validation runs.
 func timedValidation(ctx context.Context, dir string, cfg config.Config, rec *perf.Recorder) testrunner.SuiteResult {
-	// Announce the validation commands before running them, so a slow suite is
+	// Announce the validation commands before they run, so a slow suite is
 	// visible as it runs rather than only after it returns.
 	ar := activity.FromContext(ctx)
 	for _, check := range validate.Checks(cfg.Validation) {
