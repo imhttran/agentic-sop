@@ -53,8 +53,9 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 			fmt.Fprintf(errOut, "sop-ollama-agent: %v\n", err)
 			status := agent.OutcomeFailed
 			var incomplete *changeIncompleteError
-			if errors.As(err, &incomplete) {
-				// The agent never changed the repository: retry, don't block.
+			var stalled *noProgressError
+			if errors.As(err, &incomplete) || errors.As(err, &stalled) {
+				// The agent never made repository progress: retry, don't block.
 				status = agent.OutcomeNeedsHuman
 			}
 			return writeJSON(out, outcomeWire{Status: string(status), Reason: err.Error()})

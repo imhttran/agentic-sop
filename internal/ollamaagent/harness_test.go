@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -570,12 +571,11 @@ func TestUnsupportedToolIsReportedNotFatal(t *testing.T) {
 	}
 }
 
-// TestImplementWithoutMutationStopsAtHardCeiling covers a model that keeps making
-// distinct tool calls without ever changing the repository. It must not claim
-// success: at the late stage it is finalized (tools withdrawn), and a run that
-// still never changes anything ends as a retryable "no change" rather than a hard
-// failure.
-func TestImplementWithoutMutationStopsAtHardCeiling(t *testing.T) {
+// TestImplementWithoutMutationStopsWithNoProgress covers a model that keeps making
+// distinct tool calls without ever changing the repository. It must not run to the
+// ceiling: the repository no-progress guard stops it early with a retryable
+// IMPLEMENT_NO_PROGRESS result rather than a hard failure.
+func TestImplementWithoutMutationStopsWithNoProgress(t *testing.T) {
 	dir := t.TempDir()
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement+4)...)
 	cfg := testConfig(srv.URL)
@@ -583,14 +583,14 @@ func TestImplementWithoutMutationStopsAtHardCeiling(t *testing.T) {
 
 	h := New(cfg, dir)
 	_, err := h.Execute(context.Background(), implementRequest())
-	if err == nil || !strings.Contains(err.Error(), "made no repository change") {
-		t.Fatalf("err = %v, want a no-change termination", err)
+	if err == nil || !strings.Contains(err.Error(), "IMPLEMENT_NO_PROGRESS") {
+		t.Fatalf("err = %v, want an IMPLEMENT_NO_PROGRESS termination", err)
 	}
-	if !strings.Contains(err.Error(), "termination=no_change") {
-		t.Errorf("err = %v, want termination=no_change", err)
+	if !strings.Contains(err.Error(), "termination=no_progress") {
+		t.Errorf("err = %v, want termination=no_progress", err)
 	}
-	if !hasEvent(h.TraceRecords(), implementFinalizeEvent) {
-		t.Error("an unmutated run must be finalized at the late stage, not run to the ceiling")
+	if hasEvent(h.TraceRecords(), implementFinalizeEvent) {
+		t.Error("an unmutated run must be stopped by the no-progress guard, not finalized")
 	}
 }
 
@@ -1280,7 +1280,11 @@ func TestImplementEarlyCompletionSkipsFinalization(t *testing.T) {
 	}
 }
 
-func TestImplementDiscoveryNudge(t *testing.T) {
+// TestImplementUnmutatedRunStopsBeforeDiscoveryNudge proves the discovery nudge
+// (which fires past implementNudgeAfter) is no longer reached by a run that never
+// changes the repository: the no-progress guard stops it first. The nudge remains
+// reachable for a run that has mutated.
+func TestImplementUnmutatedRunStopsBeforeDiscoveryNudge(t *testing.T) {
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", implementNudgeAfter)
 	responses := distinctToolCalls(implementNudgeAfter)
@@ -1290,14 +1294,15 @@ func TestImplementDiscoveryNudge(t *testing.T) {
 	cfg.MaxToolCalls = 100
 
 	h := New(cfg, dir)
-	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
-		t.Fatalf("Execute failed: %v", err)
+	_, err := h.Execute(context.Background(), implementRequest())
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Fatalf("err = %v, want *noProgressError", err)
 	}
-
-	// The nudge is appended to the sixth tool result, so it reaches the model on
-	// the seventh turn's request.
-	if text := messageText(fake.request(implementNudgeAfter)); !strings.Contains(text, "Begin making the requested change now") {
-		t.Errorf("the discovery nudge was not sent:\n%s", text)
+	for i := 0; i < fake.count(); i++ {
+		if strings.Contains(messageText(fake.request(i)), "Begin making the requested change now") {
+			t.Errorf("the discovery nudge was sent to a run stopped for no progress:\n%s", messageText(fake.request(i)))
+		}
 	}
 	if hasEvent(h.TraceRecords(), implementChangeEvent) {
 		t.Error("plain discovery is not a mutation and must not enter CHANGE")
@@ -1444,55 +1449,26 @@ func TestImplementToolRequestDuringFinalizationIsDenied(t *testing.T) {
 	}
 }
 
-// TestImplementThresholdWithoutMutationKeepsToolsAndPushesImplementation is the
-// AHV2008 shape: substantial discovery with no change yet reaches the finalize
-// threshold. The threshold alone must not withdraw the tools or finalize — the
-// model is pushed to implement, keeps its tools, mutates, and only then finalizes.
-func TestImplementThresholdWithoutMutationKeepsToolsAndPushesImplementation(t *testing.T) {
+// TestImplementUnmutatedRunStopsWithNoProgress is the AHV2008 shape minus the
+// mutation: substantial discovery with no change yet no longer reaches the finalize
+// threshold or receives the implement-now steering — the repository no-progress
+// guard stops it early instead. The steering below is reachable only once a run has
+// changed the repository.
+func TestImplementUnmutatedRunStopsWithNoProgress(t *testing.T) {
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", implementFinalizeAfter+2)
-	responses := distinctToolCalls(implementFinalizeAfter) // 18 discovery reads, no mutation
-	responses = append(responses,
-		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
-		`{"tool":"git_diff","args":{}}`,
-		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,
-		`{"status":"completed","summary":"implemented","changes_expected":true}`,
-	)
+	responses := distinctToolCalls(implementFinalizeAfter) // discovery reads, no mutation
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
 
-	h := New(cfg, dir)
-	content, err := h.Execute(context.Background(), implementRequest())
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Fatalf("err = %v, want *noProgressError", err)
 	}
-	if !strings.Contains(content, `"status":"completed"`) {
-		t.Errorf("content = %q", content)
-	}
-	records := h.TraceRecords()
-	if !hasEvent(records, implementContinueEvent) {
-		t.Errorf("the implement-now decision was not traced: %+v", records)
-	}
-	if !hasEvent(records, implementFinalizeEvent) {
-		t.Errorf("finalization was not entered after the mutation: %+v", records)
-	}
-	var b strings.Builder
-	h.FlushTrace(&b)
-	if out := b.String(); !strings.Contains(out, "→ CHANGE_CONTINUE (implementation required before finalization)") {
-		t.Errorf("the continue decision was not rendered in the trace:\n%s", out)
-	}
-	// The implement-now instruction reached the model before it mutated.
-	if text := messageText(fake.request(implementFinalizeAfter)); !strings.Contains(text, "you have not yet made the") {
-		t.Errorf("the implement-now instruction was not sent:\n%s", text)
-	}
-	// Tools stayed enabled until the mutation-triggered finalization: the write and
-	// both targeted follow-ups executed rather than being withdrawn at the threshold.
-	if got := len(h.AuditRecords()); got != implementFinalizeAfter+3 {
-		t.Errorf("executed tools = %d, want %d (no early tool withdrawal)", got, implementFinalizeAfter+3)
-	}
-	if got, _ := os.ReadFile(filepath.Join(dir, "out.txt")); string(got) != "x" {
-		t.Errorf("out.txt = %q, want the mutation applied", got)
+	if got := fake.count(); got >= implementFinalizeAfter {
+		t.Errorf("chat calls = %d, want well under the finalize threshold %d", got, implementFinalizeAfter)
 	}
 }
 
@@ -1526,18 +1502,19 @@ func TestImplementFinalizationExhaustionAfterMutation(t *testing.T) {
 // TestImplementWritingPastThresholdIsNotFinalized covers the AHV2009 shape: a model
 // that keeps writing a multi-file change past the finalize threshold must keep its
 // tools, because an invocation that is still mutating has not finished. It is only
-// finalized once it stops writing (here, by returning its outcome).
+// finalized once it stops writing (here, by returning its outcome). Writes are
+// interleaved with reads so the run never spends more than the repository
+// no-progress bound without changing the repository.
 func TestImplementWritingPastThresholdIsNotFinalized(t *testing.T) {
 	dir := t.TempDir()
-	responses := distinctToolCalls(17) // interactions 1..17, no mutation yet
-	responses = append(responses,
-		`{"tool":"write_file","args":{"path":"a.txt","content":"a"}}`, // 18 -> mutated
-		`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`,            // 19
-		`{"tool":"write_file","args":{"path":"b.txt","content":"b"}}`, // 20
-		`{"tool":"read_file","args":{"path":"pkg/f1.go"}}`,            // 21
-		`{"tool":"write_file","args":{"path":"c.txt","content":"c"}}`, // 22 -> still writing past late-stage
-		`{"status":"completed","summary":"implemented it all","changes_expected":true}`,
-	)
+	var responses []string
+	for i := 0; i < 12; i++ {
+		responses = append(responses,
+			readToolCall(i),
+			fmt.Sprintf(`{"tool":"write_file","args":{"path":"w%d.txt","content":"x"}}`, i),
+		)
+	}
+	responses = append(responses, `{"status":"completed","summary":"implemented it all","changes_expected":true}`)
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
@@ -1555,11 +1532,11 @@ func TestImplementWritingPastThresholdIsNotFinalized(t *testing.T) {
 		t.Errorf("a model still writing must not be finalized: %+v", records)
 	}
 	// Every write executed; none was refused as a finalize turn.
-	if got := len(h.AuditRecords()); got != 22 {
-		t.Errorf("executed tools = %d, want 22", got)
+	if got := len(h.AuditRecords()); got != 24 {
+		t.Errorf("executed tools = %d, want 24", got)
 	}
-	if got, _ := os.ReadFile(filepath.Join(dir, "c.txt")); string(got) != "c" {
-		t.Errorf("c.txt = %q, want the final write applied", got)
+	if got, _ := os.ReadFile(filepath.Join(dir, "w11.txt")); string(got) != "x" {
+		t.Errorf("w11.txt = %q, want the final write applied", got)
 	}
 }
 
@@ -1738,10 +1715,9 @@ func TestImplementAHV2008ShapeFixture(t *testing.T) {
 		`{"tool":"search_files","args":{"pattern":"DefaultAgent"}}`,
 		`{"tool":"read_file","args":{"path":"internal/cli/cli.go"}}`,
 		`{"tool":"read_file","args":{"path":"internal/agent/agent.go"}}`,
-		`{"tool":"git_status","args":{}}`,
 		`{"tool":"write_file","args":{"path":"internal/cli/cli.go","content":"package cli\n// DefaultAgent selected\n"}}`,
 	}
-	responses = append(responses, distinctToolCalls(implementFinalizeAfter-6)...)
+	responses = append(responses, distinctToolCalls(implementFinalizeAfter-5)...)
 	responses = append(responses, `{"status":"completed","summary":"Implemented default agent selection.","changes_expected":true}`)
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)

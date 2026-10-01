@@ -47,6 +47,9 @@ execution code. The built-in defaults are:
 | `medium` | `ollama` | `nemotron-3-super:cloud`    | `cloud`  | —                           |
 | `large`  | `ollama` | `deepseek-v4.1-flash:cloud` | `cloud`  | —                           |
 
+The SMALL fallback runs on the same `ollama` provider as its primary; it is a
+cloud-hosted Ollama model, not a second provider or a separate cloud API.
+
 An unknown class, locality, or provider MUST fail with an actionable error naming
 the accepted values.
 
@@ -91,25 +94,63 @@ SMALL (local)
 
 "Cannot serve" means, and only means:
 
-1. the local runtime is unreachable;
-2. the configured local model is not present in the runtime's own model list; or
-3. the runtime determines the model cannot chat.
+1. the configured local model is not present in the runtime's own model list; or
+2. the runtime determines the model cannot chat (a known required capability is
+   unavailable).
 
 The observation MUST be read-only and MUST NOT spend a generation request. A
 provider that cannot determine reachability or enumerate models MUST NOT be read as
 an outage, so the fallback triggers only on a positive observation. When no
 observation is available, the local model MUST be kept.
 
+### The Ollama runtime itself being unreachable
+
+The availability fallback MUST NOT be applied when the local runtime (Ollama at
+`http://127.0.0.1:11434`) is unreachable. A cloud-hosted Ollama model still uses
+the same Ollama execution path, so changing the model name to
+`nemotron-3-nano:30b-cloud` cannot repair an unreachable Ollama endpoint. This case
+MUST follow the existing provider/runtime-unavailable error path. SOP MUST
+distinguish:
+
+```text
+Ollama runtime unreachable            -> provider/runtime-unavailable error
+Ollama runtime healthy, model absent   -> SMALL cloud availability fallback
+```
+
+No second NVIDIA or Ollama-cloud HTTP integration is introduced.
+
+### Availability fallback vs. quality escalation
+
 The fallback MUST NOT be triggered by a generation failure, a malformed or invalid
 model response, a validation failure, a review finding, a quality-gate failure, an
 application-level error, or a timeout. Those failures MUST continue through the
 existing retry, review, escalation, and error handling: the runtime fallback is an
-environment-availability switch, never a failure-recovery policy.
+environment-availability switch, never a failure-recovery policy. Two distinct
+concepts are involved and MUST NOT be combined:
+
+```text
+availability fallback     SMALL/local -> SMALL/cloud   (pre-generation, availability)
+quality escalation        SMALL -> MEDIUM -> LARGE     (post-failure, Phase 5 recovery)
+```
+
+The availability fallback happens BEFORE normal generation begins. Quality
+escalation is failure-driven execution recovery owned by [RECOVERY.md](RECOVERY.md)
+§8. A SMALL primary that passes availability and then fails generation MUST NOT
+silently become the SMALL cloud fallback; it follows the existing retry/recovery/
+escalation behavior instead.
 
 The fallback MUST keep the selected CLASS — only the concrete provider and model
 change. Applying it MUST record the deterministic source `cloud-fallback` and the
 reason `local runtime unavailable; cloud fallback`, so the switch is auditable. A
 class whose locality is not `local` MUST NOT have a fallback candidate.
+
+### Locality is configuration, never inferred
+
+A model's locality MUST come from configuration. Locality MUST NOT be inferred
+from a model name (a `:cloud` suffix is a naming convention, not a fact about where
+a model runs) and MUST NOT be inferred from the runtime's `/api/tags` model list,
+which does not establish whether a model is local or cloud. `qwen3:4b` is local and
+`nemotron-3-nano:30b-cloud` is cloud solely because configuration says so.
 
 ### Fallback configuration
 
@@ -118,7 +159,54 @@ primary model, and the locality `cloud`. The built-in fallback is the base layer
 the merge, so naming a local model does not remove the built-in cloud fallback; the
 configuration and environment layers override a fallback field by field. The
 environment variables are `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`,
-`SOP_MODEL_<CLASS>_FALLBACK_NAME`, and `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`.
+`SOP_MODEL_<CLASS>_FALLBACK_NAME`, and `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`. An
+explicitly configured fallback overrides the built-in Nano fallback, and an
+explicitly configured SMALL primary remains the primary — the fallback is consulted
+only when that primary cannot be served.
+
+### Interaction with allow_cloud_fallback_for_local
+
+Two mechanisms both concern a local-to-cloud switch, and they are deliberately
+distinct:
+
+- `allow_cloud_fallback_for_local` (`SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL`)
+guards the **config-completeness** fallback (`fallback_class`): a local class that
+has no model at all would otherwise silently use a cloud fallback class. It
+defaults to `false` and MUST continue to govern only that path.
+- The **availability** fallback is authorized by the class's own explicit
+`fallback:` configuration (its built-in default for SMALL included). A class that
+names a fallback has explicitly opted into the local-to-cloud switch for
+availability reasons, so it does not additionally require
+`allow_cloud_fallback_for_local`.
+
+The two are not contradictory: one governs "this class has no model, borrow
+another class's", and the other governs "this class's model exists but the runtime
+cannot serve it". Neither silently weakens the other, and neither is a privacy
+boundary that the other bypasses.
+
+## Availability Resolution Boundary
+
+Resolving which model actually executes MUST happen after the class/model routing
+decision and before generation begins:
+
+```text
+model.Selection
+      |
+      v
+execution-target resolution
+      |
+      +-- primary usable -------> primary
+      |
+      +-- primary unavailable --> configured fallback
+```
+
+The pure configuration resolver (`model.Resolve`) MUST stay pure: it reads
+configuration and environment only, performs no network call, and reports the
+fallback as a candidate (`Result.LocalFallback`). The caller MUST apply the
+candidate only on a positive availability observation, using the existing provider
+abstractions (health, model list, capabilities); it MUST NOT add direct `/api/*`
+HTTP calls outside the provider layer and MUST NOT issue a generation request to
+probe availability.
 
 ## Automatic Router
 
@@ -213,6 +301,20 @@ Each run MUST persist the routing decision as non-secret diagnostic evidence:
 - which early checkpoints informed it, and
 - a typed signal summary (risk, complexity, scope, cross-cutting, requires-context,
   confidence, and the structural counts).
+
+The persisted evidence MUST keep the routing CLASS distinct from the actual
+EXECUTION target. If the router selected `SMALL` and the SMALL availability
+fallback executed, the evidence MUST record:
+
+```text
+class             = SMALL                    (the routing decision)
+model             = nemotron-3-nano:30b-cloud (the actual execution target)
+execution_source  = availability-fallback     (typed provenance)
+```
+
+The routing decision MUST NOT be rewritten (a SMALL decision MUST NOT become
+MEDIUM because a SMALL fallback executed). `execution_source` is a typed value
+(`primary` or `availability-fallback`), never model-generated prose.
 
 The decision is written as `routing.json` beside the run's other artifacts, and is
 surfaced by `sop report`. Persisting it performs no state transition and MUST NOT

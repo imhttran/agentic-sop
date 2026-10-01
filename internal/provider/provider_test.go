@@ -8,7 +8,7 @@ import (
 )
 
 func TestParseIDKnown(t *testing.T) {
-	for _, want := range []provider.ID{provider.Ollama, provider.LlamaCPP, provider.Command, provider.MLX} {
+	for _, want := range []provider.ID{provider.Ollama, provider.LlamaCPP, provider.Command, provider.MLX, provider.OpenaiCompatible} {
 		got, err := provider.ParseID(string(want))
 		if err != nil {
 			t.Fatalf("ParseID(%q): %v", want, err)
@@ -36,7 +36,7 @@ func TestParseIDTrimsWhitespace(t *testing.T) {
 
 func TestKnownIDsCopy(t *testing.T) {
 	ids := provider.KnownIDs()
-	if len(ids) != 4 {
+	if len(ids) != 5 {
 		t.Fatalf("KnownIDs len = %d", len(ids))
 	}
 	ids[0] = "mutated"

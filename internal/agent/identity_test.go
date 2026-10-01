@@ -24,6 +24,7 @@ func TestProviderIdentityIsCanonical(t *testing.T) {
 		{agent.ProviderOllama, provider.Ollama},
 		{agent.ProviderLlamaCpp, provider.LlamaCPP},
 		{agent.ProviderMLX, provider.MLX},
+		{agent.ProviderOpenAICompatible, provider.OpenaiCompatible},
 	}
 	for _, tc := range cases {
 		if tc.name != string(tc.want) {
@@ -36,7 +37,7 @@ func TestProviderIdentityIsCanonical(t *testing.T) {
 
 	// Every canonical id must have an agent-level name; otherwise the agent layer
 	// would reject a provider the rest of SOP accepts.
-	names := []string{agent.ProviderCommand, agent.ProviderOllama, agent.ProviderLlamaCpp, agent.ProviderMLX}
+	names := []string{agent.ProviderCommand, agent.ProviderOllama, agent.ProviderLlamaCpp, agent.ProviderMLX, agent.ProviderOpenAICompatible}
 	for _, id := range provider.KnownIDs() {
 		if !slices.Contains(names, id.String()) {
 			t.Errorf("canonical provider %q has no agent provider constant", id)

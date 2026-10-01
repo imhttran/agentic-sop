@@ -204,6 +204,7 @@ func TestHarnessBudgetSignalsAreContinue(t *testing.T) {
 		"the Ollama agent FIX did not complete after 24 iterations (termination=iteration_limit)",
 		"tool-call limit reached (80 tool calls); the model did not finish",
 		"the Ollama agent IMPLEMENT did not finalize (termination=finalization_limit)",
+		"IMPLEMENT_NO_PROGRESS: the Ollama agent IMPLEMENT made no repository progress after 3 consecutive iterations (model=deepseek-v4.1-flash:cloud, iterations=3, repository_mutations=0, changed_files=0, tool_calls=3, termination=no_progress, last_action=\"read_file pkg/f2.go\"); a retry may succeed",
 	}
 	for _, reason := range reasons {
 		t.Run(reason, func(t *testing.T) {

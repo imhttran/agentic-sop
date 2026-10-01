@@ -38,15 +38,25 @@ const (
 // canonical provider identifiers (internal/provider), so the agent, configuration,
 // and runtime layers cannot drift into separate vocabularies.
 const (
-	ProviderCommand  = string(provider.Command)
-	ProviderOllama   = string(provider.Ollama)
-	ProviderLlamaCpp = string(provider.LlamaCPP)
-	ProviderMLX      = string(provider.MLX)
+	ProviderCommand          = string(provider.Command)
+	ProviderOllama           = string(provider.Ollama)
+	ProviderLlamaCpp         = string(provider.LlamaCPP)
+	ProviderMLX              = string(provider.MLX)
+	ProviderOpenAICompatible = string(provider.OpenaiCompatible)
 )
 
-// providerNames lists every execution provider in a deterministic order for error
-// messages, derived from the canonical identifiers.
-var providerNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOllama}
+// providerNames lists every provider identity in a deterministic order for error
+// messages, derived from the canonical identifiers. It is the vocabulary the
+// agent layer recognizes — identity and configuration, not necessarily execution
+// (openai_compatible is recognized and configurable, but not executable yet).
+var providerNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOpenAICompatible, ProviderOllama}
+
+// executableProviderNames lists the providers the agent layer can actually
+// build and execute. openai_compatible is deliberately absent: Phase 1
+// recognizes and configures it, but selecting it returns the existing
+// unsupported/not-configured behavior with no fallback and no silent
+// substitution to another provider.
+var executableProviderNames = []string{ProviderCommand, ProviderLlamaCpp, ProviderMLX, ProviderOllama}
 
 const (
 	// defaultProviderTimeout bounds a single model call when none is configured.
@@ -87,6 +97,8 @@ func FromConfig(configuredProvider, model string) (Agent, error) {
 			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
 		case ProviderMLX:
 			modelName = strings.TrimSpace(os.Getenv(EnvMLXModel))
+		case ProviderOpenAICompatible:
+			modelName = strings.TrimSpace(os.Getenv(EnvOpenAICompatibleModel))
 		}
 		// If still empty, fall back to configured model
 		if modelName == "" {
@@ -136,6 +148,13 @@ func FromConfig(configuredProvider, model string) (Agent, error) {
 			return nil, errNoModel("mlx", EnvAgentModel)
 		}
 		return NewMLX(baseURL, modelName, os.Getenv(EnvMLXAPIKey), timeout)
+	case ProviderOpenAICompatible:
+		// Phase 1: the generic OpenAI-compatible provider identity is recognized
+		// and configurable (endpoint, model, timeout), but it is NOT executable
+		// yet. Return the existing unsupported/not-configured behavior instead of
+		// constructing an HTTP-backed agent, and never fall back to another
+		// provider.
+		return nil, errProviderNotConfigured(providerName)
 	default:
 		return nil, unknownProviderError(providerName)
 	}
@@ -171,6 +190,8 @@ func HarnessFromConfig(harness, configuredProvider, model string) (Harness, erro
 			modelName = strings.TrimSpace(os.Getenv(EnvLlamaCppModel))
 		case ProviderMLX:
 			modelName = strings.TrimSpace(os.Getenv(EnvMLXModel))
+		case ProviderOpenAICompatible:
+			modelName = strings.TrimSpace(os.Getenv(EnvOpenAICompatibleModel))
 		}
 		// If still empty, fall back to configured model
 		if modelName == "" {
@@ -250,6 +271,11 @@ func HarnessFromConfig(harness, configuredProvider, model string) (Harness, erro
 				return nil, err
 			}
 			return HarnessFunc(agent.Generate), nil
+		case ProviderOpenAICompatible:
+			// Phase 1: recognized and configurable, but not executable. Return the
+			// existing unsupported/not-configured behavior without wrapping any
+			// substituted provider.
+			return nil, errProviderNotConfigured(providerName)
 		default:
 			return nil, unknownProviderError(providerName)
 		}
@@ -449,10 +475,21 @@ func normalizeBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
 }
 
-// unknownProviderError names every supported execution provider in a stable order,
+// unknownProviderError names every recognized provider identity in a stable order,
 // derived from the canonical provider identifiers so the message cannot go stale.
 func unknownProviderError(name string) error {
 	return fmt.Errorf("unknown agent provider %q: want %s", name, strings.Join(providerNames, ", "))
+}
+
+// errProviderNotConfigured reports a recognized but non-executable provider
+// through the established "not configured" behavior: the provider has no
+// runtime configured in this phase, so the caller must configure a different
+// provider. It names the provider explicitly, mirrors the wording of
+// errNoModel's "no ... configured" contract, and never substitutes another
+// provider.
+func errProviderNotConfigured(name string) error {
+	return fmt.Errorf("%s: no provider runtime configured (configured providers: %s)",
+		name, strings.Join(executableProviderNames, ", "))
 }
 
 // errNoModel reports a provider with no model, naming both ways to set one.

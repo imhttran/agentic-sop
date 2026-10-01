@@ -173,10 +173,11 @@ const RoutingReasonManual = "manual model-class override"
 // sync by a test (provider_identity_test.go) that compares it with
 // provider.KnownIDs(). That test, not this comment, is what prevents drift.
 var knownProviders = map[string]bool{
-	"ollama":   true,
-	"llamacpp": true,
-	"command":  true,
-	"mlx":      true,
+	"ollama":            true,
+	"llamacpp":          true,
+	"command":           true,
+	"mlx":               true,
+	"openai_compatible": true,
 }
 
 // KnownProviders returns the provider names a routed class may name, in a stable
@@ -859,5 +860,5 @@ func joinClasses() string {
 
 // joinProviders renders the accepted providers for an error message.
 func joinProviders() string {
-	return "ollama, llamacpp, command"
+	return strings.Join(KnownProviders(), ", ")
 }

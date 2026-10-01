@@ -317,9 +317,14 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			if st.phase == implFinalize {
 				st.finalization.turns++
 			}
-			recovery, terminate := st.progress.observe(narrationFingerprint(req.Capability))
+			recovery, repeatStop := st.progress.observe(narrationFingerprint(req.Capability))
+			progressStop := st.stalled(false)
+			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, "narrate", "", st.progress.label(), recovery, terminate)
 			if terminate {
+				if progressStop {
+					return "", h.implementNoProgressError(req, st, ev, "narrate", "")
+				}
 				return "", h.noProgressError(req, iteration, "narrate", "")
 			}
 			messages = append(messages,
@@ -381,9 +386,14 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			detail := fmt.Sprintf("tool %q is not available for %s; allowed tools: %s", name, req.Capability, describeTools(policy))
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			h.tools.RecordDenied(name, args, detail)
-			recovery, terminate := st.progress.observe(actionFingerprint(name, args, detail, nil))
+			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
+			progressStop := st.stalled(false)
+			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
+				if progressStop {
+					return "", h.implementNoProgressError(req, st, ev, lastTool, lastReq)
+				}
 				return "", h.noProgressError(req, iteration, lastTool, lastReq)
 			}
 			messages = append(messages,
@@ -429,13 +439,18 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			st.countNonMutatingInteraction()
 		}
 
-		recovery, terminate := st.progress.observe(actionFingerprint(name, args, result, toolErr))
+		recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, result, toolErr))
+		progressStop := st.stalled(justMutated)
+		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange
 			h.recordImplementEvent(req, implementChangeEvent, "")
 		}
 		h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 		if terminate {
+			if progressStop {
+				return "", h.implementNoProgressError(req, st, ev, lastTool, lastReq)
+			}
 			return "", h.noProgressError(req, iteration, lastTool, lastReq)
 		}
 
@@ -543,6 +558,34 @@ const terminationNoChange = "no_change"
 type changeIncompleteError struct{ msg string }
 
 func (e *changeIncompleteError) Error() string { return e.msg }
+
+// noProgressError reports that a phased mutating capability spent consecutive
+// iterations without changing the repository and was stopped early, well before
+// its iteration ceiling. Like changeIncompleteError it is a resumable
+// continuation (retry, do not block), but the diagnostic is specific: the run did
+// not stop at the ceiling and did not loop on a repeated action — it made no
+// repository progress at all. The model's narrative is never treated as evidence
+// of progress; only an observed mutation is.
+type noProgressError struct{ msg string }
+
+func (e *noProgressError) Error() string { return e.msg }
+
+// implementNoProgressError builds the capability_NO_PROGRESS diagnostic (for
+// example IMPLEMENT_NO_PROGRESS). It records the observed repository state
+// (successful mutations and changed files), the consecutive non-mutating turns
+// spent, and the last action, so a stalled run is diagnosable without a model
+// self-report. The "a retry may succeed" marker keeps the existing failure
+// classifier's retryable-incomplete disposition (CONTINUE).
+func (h *Harness) implementNoProgressError(req agent.Request, st *executionState, ev *mutationEvidence, lastTool, lastRequest string) error {
+	marker := strings.ToUpper(string(req.Capability)) + "_NO_PROGRESS"
+	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive non-mutating iterations (provider=ollama, model=%s, iterations=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, st.consecutiveNoProgress, st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
+	if inspected := st.inspectedSummary(); inspected != "" {
+		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
+			st.phase.label(), inspected)
+	}
+	return &noProgressError{msg}
+}
 
 // noChangeError builds the retryable "made no repository change" diagnostic. It
 // carries a compact continuation checkpoint (the phase the invocation stopped in

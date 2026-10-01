@@ -70,6 +70,7 @@ workflow:
 #     name: qwen3:4b
 #     locality: local # local | cloud
 #     fallback: # used only when the local runtime cannot serve the local model
+#       provider: ollama
 #       name: nemotron-3-nano:30b-cloud
 #       locality: cloud
 #   medium:
@@ -122,7 +123,7 @@ workflow:
 | `workflow.mode`                         | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
 | `models.default_class`                  | `medium`                 | Default model class (`small`, `medium`, `large`).                                          |
 | `models.fallback_class`                 | selected class           | Class used when the selected class has no model.                                           |
-| `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class to fall back to a cloud model.                                       |
+| `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class **with no model** to fall back to a cloud class (config-completeness).|
 | `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `mlx`, `command`).                             |
 | `models.<class>.name`                   | per class                | Model name for a class (see "Model routing").                                              |
 | `models.<class>.locality`               | per class                | `local` or `cloud` (see "Model routing").                                                  |
@@ -201,7 +202,7 @@ Resolution order, highest first:
 | ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------- |
 | `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                             |
 | `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                          |
-| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class to fall back to a cloud model.                      |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class with **no model** to fall back to a cloud class.    |
 | `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                            |
 | `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt.       |
 | `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                          |
@@ -233,16 +234,25 @@ is present, so an existing project is unchanged.
   incomplete).
 - An unknown class, locality, or provider fails with an actionable error.
 - Locality never silently switches a `local` class to a cloud model: if a `local`
-  class has no model and the fallback is a cloud model, resolution fails unless
-  `allow_cloud_fallback_for_local` is set.
+  class has **no model** and the fallback is a cloud model, resolution fails unless
+  `allow_cloud_fallback_for_local` is set. This guard governs the config-completeness
+  fallback only; the per-class availability `fallback:` below is authorized by its
+  own explicit configuration and does not additionally require the guard. The two are
+  distinct: one covers "this class has no model, borrow another class's", the other
+  "this class's model exists but the runtime cannot serve it".
 - A `local` class that configures a `fallback` model is local-first, not
-  local-only: the fallback runs only when the local runtime cannot SERVE the
-  primary model (Ollama unreachable, the model not installed, or the runtime
-  reports it cannot chat), observed read-only — never because a generation,
-  validation, or review failed. The switch keeps the class and is recorded with
-  the source `cloud-fallback` and the reason `local runtime unavailable; cloud
-fallback`. SMALL's built-in fallback is `nemotron-3-nano:30b-cloud`. See
+  local-only: the fallback runs only when the local runtime can SERVE the primary
+  model but the configured local model is unavailable (the model not installed, or
+  the runtime reports it cannot chat), observed read-only — never because a
+  generation, validation, or review failed. The switch keeps the class and is
+  recorded with the source `cloud-fallback` and the reason `local runtime
+  unavailable; cloud fallback`. SMALL's built-in fallback is
+  `nemotron-3-nano:30b-cloud`. See
   [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
+- An unreachable local runtime (Ollama at `http://127.0.0.1:11434`) is NOT an
+  availability-fallback trigger: a cloud-hosted Ollama model still uses the Ollama
+  execution path, so renaming the model cannot repair an unreachable endpoint. That
+  case follows the existing provider/runtime-unavailable error path.
 - The startup summary records the resolved class, provider, model, locality, the
   layer it came from (`cli`, `env`, `config`, or `default`), and a deterministic
   reason. The reason is one of a fixed set of phrases — `explicit CLI model class`,
@@ -254,6 +264,11 @@ fallback`. SMALL's built-in fallback is `nemotron-3-nano:30b-cloud`. See
   artifact beside it, and the `Model selection:` section of `sop report`. It
   records no credential; `.env` secrets (API keys, tokens) stay in the environment
   and are never written to run artifacts.
+- Routing evidence keeps the routing CLASS distinct from the actual EXECUTION
+  target: if the router selected `SMALL` and the SMALL availability fallback ran,
+  the evidence records `class=SMALL`, `model=nemotron-3-nano:30b-cloud`, and a typed
+  `execution_source` of `availability-fallback` (or `primary` normally). A SMALL
+  routing decision is never rewritten to MEDIUM because a fallback executed.
 
 ## Automatic model routing
 
@@ -341,6 +356,10 @@ small -> medium -> large -> human / blocked
   agent selection: it applies only to a class the run already used (routing on, or a
   run-level class selected). It applies to `sop run` and to an `implement` prompt,
   which runs the same governed lifecycle; a read-only prompt is never escalated.
+- This is failure-driven quality escalation (`SMALL → MEDIUM → LARGE`), distinct
+  from the pre-generation SMALL availability fallback (`SMALL local → SMALL cloud`):
+  the former reacts to a failed attempt, the latter to an unavailable runtime model
+  before generation begins. They are never combined.
 
 ## Early JEV checkpoints
 

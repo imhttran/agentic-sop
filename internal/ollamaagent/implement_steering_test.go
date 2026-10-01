@@ -2,20 +2,19 @@ package ollamaagent
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 )
 
-// Unmutated-run steering lifecycle tests.
+// Unmutated-run no-progress tests.
 //
 // The P3-006 dogfood failure was an IMPLEMENT that spent its whole budget on
-// read-only discovery and wrote nothing: the harness nudged it to implement, the
-// model ignored the one-shot nudge, and the run was finalized having changed
-// nothing. These tests pin the deterministic half of the fix: the unmutated run's
-// steering RECURS past the implement-now threshold instead of firing once, and
-// becomes CLOSING just before the late-stage cutoff so the model is told the
-// consequence of not writing while it can still write. Nothing about the bounds,
-// phases, tool availability, or finalization changes.
+// read-only discovery and wrote nothing. The repository no-progress guard now stops
+// such a run early, so the older implement-now/closing steering is no longer
+// reached by a run that never changes the repository. These tests pin that: an
+// unmutated run stops with a no-progress result and never receives the steering,
+// while a run that changed the repository is never told to implement.
 
 // countAdvice counts the recorded model requests whose transcript carries each
 // unmutated-run steering instruction. Advice is appended to a tool result, so it
@@ -30,14 +29,13 @@ func countAdvice(fake *fakeOllama, want string) int {
 	return n
 }
 
-// TestUnmutatedRunIsSteeredEveryTurn proves the unmutated-run steering recurs: past
-// implementNowAfter the model is told to implement on EVERY interaction, and the
-// interactions just before the late-stage cutoff become closing. A one-shot
-// instruction can be outrun; a re-stated one cannot be stale for more than a turn.
-func TestUnmutatedRunIsSteeredEveryTurn(t *testing.T) {
+// TestUnmutatedRunStopsBeforeSteering proves the unmutated-run implement-now and
+// closing steering is no longer reached: the repository no-progress guard stops a
+// run that never changes the repository before those thresholds, with a distinct
+// no-progress result rather than the CHANGE_CONTINUE steering.
+func TestUnmutatedRunStopsBeforeSteering(t *testing.T) {
 	dir := t.TempDir()
 
-	// Read on every interaction up to the late-stage cutoff, then report truthfully.
 	responses := distinctToolCalls(implementLateStageAfter)
 	responses = append(responses, `{"status":"needs_human","reason":"not yet"}`)
 	fake, srv := newFakeOllama(t, responses...)
@@ -45,28 +43,20 @@ func TestUnmutatedRunIsSteeredEveryTurn(t *testing.T) {
 	cfg.MaxToolCalls = 200
 
 	h := New(cfg, dir)
-	if _, err := h.Execute(context.Background(), implementRequest()); err != nil {
-		t.Fatalf("Execute failed: %v", err)
+	_, err := h.Execute(context.Background(), implementRequest())
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Fatalf("err = %v, want *noProgressError", err)
 	}
 
-	now := countAdvice(fake, "but you have not yet made the")
-	closing := countAdvice(fake, "This invocation is about to end")
-
-	// Every interaction from implementNowAfter up to (but not including)
-	// implementClosingAfter restates the standard instruction.
-	if min := implementClosingAfter - implementNowAfter; now < min {
-		t.Errorf("implement-now instruction seen on %d requests, want at least %d (it must recur, not fire once)", now, min)
+	if now := countAdvice(fake, "but you have not yet made the"); now != 0 {
+		t.Errorf("implement-now steering sent %d times to a run stopped for no progress, want 0", now)
 	}
-	// The closing steering lands in the interactions before the late-stage cutoff,
-	// so it must have reached the model at least once.
-	if min := implementLateStageAfter - implementClosingAfter; closing < min {
-		t.Errorf("closing instruction seen on %d requests, want at least %d", closing, min)
+	if closing := countAdvice(fake, "This invocation is about to end"); closing != 0 {
+		t.Errorf("closing steering sent %d times, want 0", closing)
 	}
-
-	// The phase transition is still recorded exactly once, so the trace is not
-	// flooded by the recurring advice.
-	if got := countEvent(h.TraceRecords(), implementContinueEvent); got != 1 {
-		t.Errorf("%s recorded %d times, want exactly 1", implementContinueEvent, got)
+	if got := countEvent(h.TraceRecords(), implementContinueEvent); got != 0 {
+		t.Errorf("%s recorded %d times, want 0 (the steering thresholds are never reached)", implementContinueEvent, got)
 	}
 }
 

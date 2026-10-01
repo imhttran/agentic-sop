@@ -174,15 +174,13 @@ func TestFixCannotReturnFromFinalizeToChange(t *testing.T) {
 	}
 }
 
-// TestFixLateFirstMutationIsFinalizationFailure covers a mutation that only
-// arrives in the closing turns: FINALIZE is entered late, the loop exhausts in
-// FINALIZE, and the run must still report a finalization-specific failure rather
-// than the generic iteration limit.
-func TestFixLateFirstMutationIsFinalizationFailure(t *testing.T) {
+// TestFixDiscoveryOnlyStopsWithNoProgress covers a FIX that only reads and never
+// mutates: the repository no-progress guard stops it early with a no-progress
+// diagnostic, not the generic iteration limit and not a finalization limit.
+func TestFixDiscoveryOnlyStopsWithNoProgress(t *testing.T) {
 	dir := t.TempDir()
 
-	responses := distinctToolCalls(fixForceFinalizeAfter + 1) // 21 discovery reads, no mutation
-	responses = append(responses, fixMutationWrites("late", 6)...)
+	responses := distinctToolCalls(fixForceFinalizeAfter + 1) // discovery reads, no mutation
 
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
@@ -193,11 +191,12 @@ func TestFixLateFirstMutationIsFinalizationFailure(t *testing.T) {
 		t.Fatal("expected a bounded failure")
 	}
 	if strings.Contains(err.Error(), "iteration_limit") {
-		t.Errorf("FIX exhausting inside FINALIZE must not report iteration_limit: %v", err)
+		t.Errorf("FIX stopped for no progress must not report iteration_limit: %v", err)
 	}
 	for _, want := range []string{
-		"termination=finalization_limit",
-		"mutation_observed=true",
+		"FIX_NO_PROGRESS",
+		"termination=no_progress",
+		"repository_mutations=0",
 	} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("err = %v, want %q", err, want)

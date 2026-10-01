@@ -78,6 +78,19 @@ multi-package tasks" is a routing/configuration choice (routing is off by
 default). The continuation checkpoint and `execution_mode: done` (below) already
 cover the other two symptoms. The original observation is kept for traceability.
 
+_ADDRESSED (no-progress guard): a run that never changes the repository now stops early._ The
+remaining observed shape — the model alternating planning with distinct read-only tool
+calls and never mutating — evaded the repeat guard, which only detected _consecutive_
+identical turns. A deterministic no-progress guard now treats a successful repository
+mutation as the only progress signal: every non-mutating turn increments the counter
+(reads — novel or repeated — searches, narration, and denied tools alike), and after
+`maxNoProgressIterations` (5) the run stops with `termination=no_progress` and an
+`IMPLEMENT_NO_PROGRESS` diagnostic, instead of consuming the whole budget. The guard
+applies while no mutation has been observed, so a run that changed the repository is
+governed by finalization as before. No ceiling was raised. See
+[../specs/AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md) §9. Recorded here for
+traceability.
+
 The bootstrap Ollama agent has a per-capability iteration ceiling and a late-stage
 cutoff for a run that has not mutated (`IMPLEMENT`: 32 iterations,
 `implementLateStageAfter` 22). On a task that spans several packages the model can

@@ -8,6 +8,12 @@
 
 DONE
 
+> **Superseded in part.** A model that never mutates no longer reaches the hard ceiling:
+> the repository no-progress guard stops it early with `termination=no_progress` /
+> `IMPLEMENT_NO_PROGRESS` (see
+> [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md) §9). The stopped-writer finalization
+> described here is otherwise unchanged.
+
 ## Objective
 
 Follow up T063. Mutation-aware finalization fixed the unmutated case, but its

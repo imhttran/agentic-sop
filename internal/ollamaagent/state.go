@@ -25,6 +25,20 @@ type executionState struct {
 	// denied mutation never sets it.
 	mutationObserved bool
 
+	// consecutiveNoProgress counts consecutive IMPLEMENT/FIX turns that did not
+	// change the repository. It is the input to the no-progress guard: a run that
+	// keeps inspecting, searching, narrating, or repeating without ever mutating is
+	// stopped after maxNoProgressIterations such turns, well before its iteration
+	// ceiling. Exploration is not implementation progress, so a novel read counts
+	// here exactly like a repeated one. Only a successful repository mutation resets
+	// it to zero.
+	consecutiveNoProgress int
+
+	// repositoryMutations counts the successful controlled mutations this invocation
+	// performed. It is the authoritative progress signal and is reported in the
+	// no-progress diagnostic; a narrative claim never increments it.
+	repositoryMutations int
+
 	// phase is the invocation's lifecycle phase (for example IMPLEMENT's
 	// DISCOVER/CHANGE/FINALIZE).
 	phase implementPhase
@@ -96,6 +110,32 @@ func newExecutionState() *executionState {
 func (st *executionState) observeMutation() {
 	st.mutationObserved = true
 	st.counters.sinceMutation = 0
+	st.consecutiveNoProgress = 0
+	st.repositoryMutations++
+}
+
+// stalled records one turn's outcome for the no-progress guard and reports whether
+// the run should be stopped. Progress is a successful repository mutation and
+// nothing else: when mutated is true the counter resets to zero; otherwise the
+// turn — a read, a search, an inspection, narration, a denied tool, or a repeat —
+// counts as no progress and increments it. A novel repository action is NOT
+// progress, so a model that reads a new file every turn without ever writing still
+// accumulates no-progress turns.
+//
+// The guard stops a run that has made NO repository progress at all: it fires only
+// while no mutation has been observed. Once the repository has been changed the
+// finalization lifecycle governs the run (a writer keeps its tools), so a mutated
+// run's behavior is unchanged and the unmutated-steering thresholds remain
+// reachable for it. This is deliberately independent of the repetition guard
+// (turnProgress), which detects loops by fingerprint: a run of distinct reads must
+// be caught here even though it never repeats an action.
+func (st *executionState) stalled(mutated bool) bool {
+	if mutated {
+		st.consecutiveNoProgress = 0
+		return false
+	}
+	st.consecutiveNoProgress++
+	return !st.mutationObserved && st.consecutiveNoProgress >= maxNoProgressIterations
 }
 
 // countNonMutatingInteraction advances the invocation's counters after a tool

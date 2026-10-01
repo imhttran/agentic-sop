@@ -19,96 +19,74 @@ import (
 // continuation checkpoint, and it keeps a real mutation opportunity before
 // finalization withdraws its tools.
 
-// TestUnmutatedRunCarriesContinuationCheckpoint proves the no-change diagnostic is
-// a compact, bounded continuation checkpoint: the phase the run stopped in and the
+// TestUnmutatedRunCarriesContinuationCheckpoint proves the no-progress diagnostic
+// is also a compact continuation checkpoint: the phase the run stopped in and the
 // repository paths it already inspected, so the next bounded invocation resumes
 // instead of repeating discovery.
 func TestUnmutatedRunCarriesContinuationCheckpoint(t *testing.T) {
 	dir := t.TempDir()
 
-	// Only inspects; never mutates.
+	// Only inspects; never mutates. The run must stop at the no-progress bound, not
+	// consume the whole iteration budget.
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsImplement)...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 200
 
 	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
 	if err == nil {
-		t.Fatal("expected a bounded no-change termination")
+		t.Fatal("expected a bounded no-progress termination")
 	}
-	var incomplete *changeIncompleteError
-	if !errors.As(err, &incomplete) {
-		t.Fatalf("err = %v, want a resumable *changeIncompleteError", err)
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Fatalf("err = %v, want a resumable *noProgressError", err)
 	}
 	msg := err.Error()
 	for _, want := range []string{
-		"made no repository change", // the deterministic continuation marker
-		"termination=no_change",
+		"IMPLEMENT_NO_PROGRESS",
+		"no repository progress",
+		"termination=no_progress",
 		"continuation checkpoint",
-		"phase=FINALIZE",
 		"inspected=pkg/f0.go",
 	} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("err = %q, want %q", msg, want)
 		}
 	}
-	// The checkpoint is bounded: it renders a few paths and a count of the rest.
-	if !strings.Contains(msg, "(+") {
-		t.Errorf("err = %q, want the checkpoint to summarize the remaining paths", msg)
-	}
 }
 
-// TestMutationOpportunityAfterImplementNow covers requirement 5: once an unmutated
-// run has been told (CHANGE_CONTINUE) to stop exploring and implement, it keeps its
-// tools, so a mutation issued on the very interaction that would otherwise trigger
-// finalization is executed rather than refused by a premature finalization.
-func TestMutationOpportunityAfterImplementNow(t *testing.T) {
+// TestUnmutatedRunStopsBeforeLateMutation replaces the former mutation-opportunity
+// test. With the repository no-progress guard an unmutated run is stopped after
+// maxNoProgressIterations consecutive non-mutating turns, so a write that would
+// only have arrived in the closing turns is never reached.
+func TestUnmutatedRunStopsBeforeLateMutation(t *testing.T) {
 	dir := t.TempDir()
 
-	// Discovery up to one interaction short of the unmutated late-stage threshold,
-	// then a mutation landing exactly on it.
 	responses := distinctToolCalls(implementLateStageAfter - 1)
 	responses = append(responses,
 		`{"tool":"write_file","args":{"path":"out.txt","content":"x"}}`,
 		`{"status":"completed","summary":"did it","changes_expected":true}`,
 	)
 
-	fake, srv := newFakeOllama(t, responses...)
+	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 200
 
-	h := New(cfg, dir)
-	content, err := h.Execute(context.Background(), implementRequest())
-	if err != nil {
-		t.Fatalf("Execute failed: %v", err)
+	_, err := New(cfg, dir).Execute(context.Background(), implementRequest())
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Fatalf("err = %v, want *noProgressError", err)
 	}
-	if !strings.Contains(content, `"status":"completed"`) {
-		t.Errorf("content = %q, want the completed outcome", content)
-	}
-
-	records := h.TraceRecords()
-	if !hasEvent(records, implementContinueEvent) {
-		t.Errorf("the run was never told to implement (no %s): %+v", implementContinueEvent, records)
-	}
-	if hasEvent(records, implementFinalizeEvent) {
-		t.Errorf("finalization must not begin before the mutation opportunity: %+v", records)
-	}
-
-	// The write after the implement-now instruction executed: the mutation
-	// opportunity is real, not merely nominal.
-	allowed, denied := writeFileAudit(h.AuditRecords())
-	if allowed != 1 || denied != 0 {
-		t.Errorf("write_file allowed=%d denied=%d, want 1/0 (tools stay available after %s)", allowed, denied, implementContinueEvent)
-	}
-	if fake.count() == 0 {
-		t.Error("the model was never called")
+	// The late write was never reached: no repository mutation was observed.
+	if !strings.Contains(err.Error(), "repository_mutations=0") {
+		t.Errorf("err = %q, want zero mutations (the late write must not be reached)", err)
 	}
 }
 
-// TestUnmutatedFixIsNoChangeNotFinalizationLimit proves an unmutated FIX stays
-// bounded and reports a no-change (continuation) termination, never the
+// TestUnmutatedFixIsNoProgressNotFinalizationLimit proves an unmutated FIX stops at
+// the repository no-progress bound with a no-progress diagnostic, never the
 // finalization-limit or iteration-limit diagnostics reserved for a run that
 // mutated.
-func TestUnmutatedFixIsNoChangeNotFinalizationLimit(t *testing.T) {
+func TestUnmutatedFixIsNoProgressNotFinalizationLimit(t *testing.T) {
 	dir := t.TempDir()
 
 	_, srv := newFakeOllama(t, distinctToolCalls(maxIterationsFix+4)...)
@@ -117,7 +95,7 @@ func TestUnmutatedFixIsNoChangeNotFinalizationLimit(t *testing.T) {
 
 	_, err := New(cfg, dir).Execute(context.Background(), fixRequest())
 	if err == nil {
-		t.Fatal("expected a bounded no-change termination")
+		t.Fatal("expected a bounded no-progress termination")
 	}
 	msg := err.Error()
 	for _, notWant := range []string{"finalization_limit", "iteration_limit"} {
@@ -125,14 +103,14 @@ func TestUnmutatedFixIsNoChangeNotFinalizationLimit(t *testing.T) {
 			t.Errorf("err = %q, must not report %s for an unmutated run", msg, notWant)
 		}
 	}
-	for _, want := range []string{"made no repository change", "termination=no_change"} {
+	for _, want := range []string{"FIX_NO_PROGRESS", "no repository progress", "termination=no_progress"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("err = %q, want %q", msg, want)
 		}
 	}
-	var incomplete *changeIncompleteError
-	if !errors.As(err, &incomplete) {
-		t.Errorf("err = %v, want a resumable *changeIncompleteError", err)
+	var stalled *noProgressError
+	if !errors.As(err, &stalled) {
+		t.Errorf("err = %v, want a resumable *noProgressError", err)
 	}
 }
 

@@ -36,10 +36,19 @@ const (
 	// MLX: an Apple-Silicon MLX / oMLX runtime behind an OpenAI-compatible HTTP
 	// boundary.
 	MLX ID = "mlx"
+	// OpenaiCompatible: a generic OpenAI-compatible inference endpoint (for
+	// example vLLM, LM Studio, LocalAI, Hugging Face or NVIDIA NIM inference
+	// servers). It speaks the same /v1/models and chat-completions vocabulary as
+	// the specialized mlx and llamacpp adapters, but is not tied to a specific
+	// runtime. It is a distinct identity from mlx and llamacpp, which keep their
+	// own identities and default endpoints.
+	OpenaiCompatible ID = "openai_compatible"
 )
 
-// knownIDs is the canonical, stable set of provider identifiers.
-var knownIDs = []ID{Ollama, LlamaCPP, Command, MLX}
+// knownIDs is the canonical, stable set of provider identifiers. Identity lists
+// in the model, config, agent, and CLI layers derive from or are checked against
+// this set; see internal/model/provider_identity_test.go for the drift guard.
+var knownIDs = []ID{Ollama, LlamaCPP, Command, MLX, OpenaiCompatible}
 
 // ParseID validates a provider name. An empty string is rejected; callers that
 // treat "unset" specially must check for it first.

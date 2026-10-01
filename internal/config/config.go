@@ -74,8 +74,8 @@ var (
 	supportedHarnesses = map[string]bool{"tool": true, "command": true}
 	// supportedProviders is derived from the canonical provider identifiers
 	// (internal/provider), so the configuration, agent, and runtime layers cannot
-	// drift into separate vocabularies. Adding a provider id there (mlx) makes it a
-	// valid agent.provider here automatically.
+	// drift into separate vocabularies. Adding a provider id there (mlx,
+	// openai_compatible) makes it a valid agent.provider here automatically.
 	supportedProviders = providerNameSet()
 	supportedEngines   = map[string]bool{"self": true, "open-code-review": true}
 	supportedSeverity  = map[string]bool{
@@ -146,10 +146,9 @@ type Agent struct {
 	// "command" is the legacy externally-invoked command agent.
 	Harness  string `yaml:"harness"`
 	Provider string `yaml:"provider"`
-	// Model names the model for the selected provider (ollama or llamacpp). It is
-	// ignored by the command provider, and the provider's environment variable
-	// (SOP_OLLAMA_MODEL / SOP_LLAMACPP_MODEL) overrides it when set. It is an
-	// operator-supplied model id, not a harness identity.
+	// Model names the model for the selected provider. It is ignored by the
+	// command provider, and the provider's environment variable overrides it
+	// when set. It is an operator-supplied model id, not a harness identity.
 	Model string `yaml:"model"`
 }
 
@@ -296,8 +295,9 @@ type Workflow struct {
 // Providers configures the optional provider/runtime inspection layer (Phase 4).
 // It is additive: an omitted block leaves existing behavior unchanged. Endpoints
 // can also come from the environment (SOP_OLLAMA_BASE_URL, SOP_LLAMACPP_BASE_URL,
-// SOP_MLX_BASE_URL), which overrides the configured value. Credentials are never
-// configured here — they stay in the environment.
+// SOP_MLX_BASE_URL, SOP_OPENAI_COMPATIBLE_BASE_URL), which overrides the
+// configured value. Credentials are never configured here — they stay in the
+// environment.
 type Providers struct {
 	// Validate turns on pre-execution model-availability validation: before a run
 	// starts a task it checks that the selected provider is reachable and the
@@ -308,6 +308,12 @@ type Providers struct {
 	Ollama   ProviderEndpoint `yaml:"ollama"`
 	LlamaCpp ProviderEndpoint `yaml:"llamacpp"`
 	MLX      ProviderEndpoint `yaml:"mlx"`
+	// OpenaiCompatible configures the generic OpenAI-compatible inference
+	// endpoint. It is a first-class provider identity alongside the specialized
+	// mlx and llamacpp adapters, and keeps its own independent setting;
+	// SOP_OPENAI_COMPATIBLE_BASE_URL overrides it. The key is additive, so a
+	// configuration that predates it keeps loading and behaving identically.
+	OpenaiCompatible ProviderEndpoint `yaml:"openai_compatible"`
 }
 
 // ProviderEndpoint is a provider's base URL.
@@ -726,9 +732,9 @@ agent:
   # model/tool execution. A controller (for example sop-controller) delegates to
   # SOP through this path instead of running its own model tool loop.
   harness: %s
-  # command | ollama | llamacpp
+  # command | ollama | llamacpp | mlx | openai_compatible
   provider: %s
-  # model names the model for ollama/llamacpp; the provider's env var
+  # model names the model for the selected provider; the provider's env var
   # (for example SOP_OLLAMA_MODEL) or SOP_AGENT_MODEL overrides it. The model is
   # an operator-supplied model id, not a harness identity: DeepSeek is a model
   # served by the Ollama provider, not the harness itself.
@@ -844,6 +850,21 @@ autonomy:
 #     provider: ollama
 #     name: deepseek-v4.1-flash:cloud
 #     locality: cloud
+
+# Optional provider/runtime inspection endpoints. Each provider keeps its own
+# independent setting; the environment (for example
+# SOP_OPENAI_COMPATIBLE_BASE_URL) overrides the configured value, and a built-in
+# default fills the rest.
+#
+# providers:
+#   ollama:
+#     endpoint: http://127.0.0.1:11434
+#   llamacpp:
+#     endpoint: http://127.0.0.1:8080
+#   mlx:
+#     endpoint: http://127.0.0.1:8000
+#   openai_compatible:
+#     endpoint: http://127.0.0.1:8000
 
 workflow:
   # local | pull-request
