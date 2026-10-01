@@ -1,6 +1,7 @@
 package ollamaagent
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/toolharness"
@@ -134,4 +135,48 @@ func checkpointPath(name string, args map[string]any) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// inspectionIdentity identifies an operation and its canonical repository target.
+// Search queries distinguish inspections of the same scope; result contents are
+// never retained in progress state or diagnostics.
+type inspectionIdentity struct {
+	tool, path, query string
+}
+
+// discoveryIdentity accepts only successful, informative repository inspections.
+// The controlled tool has already enforced repository access; canonicalizing the
+// successful target prevents ./, absolute paths, and symlinks earning extra credit.
+func discoveryIdentity(root, name string, args map[string]any, result string, err error) (inspectionIdentity, bool) {
+	if err != nil || strings.TrimSpace(result) == "" {
+		return inspectionIdentity{}, false
+	}
+	switch name {
+	case toolharness.ToolReadFile:
+	case toolharness.ToolListFiles:
+		if result == "(empty)" {
+			return inspectionIdentity{}, false
+		}
+	case toolharness.ToolSearchFiles:
+		if result == "(no matches)" {
+			return inspectionIdentity{}, false
+		}
+	default:
+		return inspectionIdentity{}, false
+	}
+	path, _ := args["path"].(string)
+	path = strings.TrimSpace(path)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, path)
+	}
+	path, err = filepath.EvalSymlinks(filepath.Clean(path))
+	if err != nil {
+		return inspectionIdentity{}, false
+	}
+	query := ""
+	if name == toolharness.ToolSearchFiles {
+		query, _ = args["pattern"].(string)
+		query = strings.TrimSpace(query)
+	}
+	return inspectionIdentity{tool: name, path: path, query: query}, true
 }

@@ -292,13 +292,10 @@ func (p implementPhase) label() string {
 // caller can ground changes_expected on observed reality rather than on a model
 // claim.
 //
-// The repository no-progress guard (see executionState.stalled) stops a run that
-// never changes the repository after maxNoProgressIterations non-mutating turns.
-// That bound is far below the DISCOVERY steering and late-stage/finalize
-// thresholds (implementNudgeAfter, implementNowAfter, implementClosingAfter,
-// implementLateStageAfter), so those unmutated-run paths are unreachable in
-// practice. They are kept as the documented steering intent, and for a guard bound
-// configured above them, and each is marked "unreachable" inline below.
+// The no-progress guard permits novel successful inspection through the existing
+// implement-now threshold, then requires mutation within five stale turns. It
+// counts all model turns toward the discovery window, so narration and denials
+// cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
@@ -363,12 +360,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				st.finalization.turns++
 			}
 			recovery, repeatStop := st.progress.observe(narrationFingerprint(req.Capability))
-			progressStop := st.stalled(false)
+			progressStop := st.stalled(false, false)
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, "narrate", "", st.progress.label(), recovery, terminate)
 			if terminate {
 				if progressStop {
-					return "", h.implementNoProgressError(req, st, ev, "narrate", "")
+					return "", h.implementNoProgressError(req, st, ev, iteration, "narrate", "")
 				}
 				return "", h.noProgressError(req, iteration, "narrate", "")
 			}
@@ -432,12 +429,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			h.tools.RecordDenied(name, args, detail)
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
-			progressStop := st.stalled(false)
+			progressStop := st.stalled(false, false)
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
 				if progressStop {
-					return "", h.implementNoProgressError(req, st, ev, lastTool, lastReq)
+					return "", h.implementNoProgressError(req, st, ev, iteration, lastTool, lastReq)
 				}
 				return "", h.noProgressError(req, iteration, lastTool, lastReq)
 			}
@@ -485,7 +482,8 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		}
 
 		recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, result, toolErr))
-		progressStop := st.stalled(justMutated)
+		discovered := st.observeDiscovery(iteration, h.tools.Root(), name, args, result, toolErr)
+		progressStop := st.stalled(justMutated, discovered)
 		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange
@@ -494,7 +492,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 		if terminate {
 			if progressStop {
-				return "", h.implementNoProgressError(req, st, ev, lastTool, lastReq)
+				return "", h.implementNoProgressError(req, st, ev, iteration, lastTool, lastReq)
 			}
 			return "", h.noProgressError(req, iteration, lastTool, lastReq)
 		}
@@ -508,10 +506,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		case justMutated:
 			advice = append(advice, implementChangeInstruction)
 		case st.phase == implDiscover && !st.finalization.nudged && st.counters.interactions >= implementNudgeAfter:
-			// Unreachable: implDiscover implies no mutation, and the no-progress guard stops
-			// an unmutated run after maxNoProgressIterations (5) turns — before
-			// implementNudgeAfter (6) interactions. Kept as the documented steering intent;
-			// see the guard note on executePhased.
+			// Successful bounded discovery can reach this nudge without mutation.
 			st.finalization.nudged = true
 			advice = append(advice, implementNudge)
 		}
@@ -534,10 +529,8 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				}
 				h.recordImplementEvent(req, implementFinalizeEvent, "")
 			case !st.mutationObserved && st.counters.interactions >= implementNowAfter:
-				// Unreachable for a zero-mutation run: the no-progress guard stops it after
-				// maxNoProgressIterations (5) turns — before implementNowAfter (12)
-				// interactions. The recurring implement-now / closing steering below is kept as
-				// the documented intent; see the guard note on executePhased.
+				// Bounded discovery can reach implement-now; subsequent inspections no
+				// longer earn discovery credit and tools remain available for mutation.
 				// An unmutated run is steered on EVERY interaction past the implement-now
 				// threshold, not once. A single instruction is easy to outrun: the model
 				// reads on and the instruction is many turns stale by the time the run
@@ -568,9 +561,8 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		)
 	}
 	if !st.mutationObserved {
-		// Unreachable while maxNoProgressIterations <= policy.MaxIterations: a zero-mutation
-		// run is stopped by the no-progress guard first. Kept as a fallback for a ceiling
-		// configured below the guard bound.
+		// Normally the discovery window plus stale bound stops an unmutated run
+		// first. A configured ceiling below that total still uses this fallback.
 		return "", h.noChangeError(req, policy, st, lastTool, lastReq)
 	}
 	// A mutated run that reached the ceiling still inside FINALIZE never returned
@@ -611,7 +603,7 @@ func (h *Harness) recordImplementEvent(req agent.Request, event, detail string) 
 // repository. With the repository no-progress guard in place this is the fallback
 // path: a zero-mutation run is normally stopped earlier with terminationNoProgress
 // (see executePhased). It remains reachable only when policy.MaxIterations is
-// configured below maxNoProgressIterations.
+// configured below the discovery window plus stale bound.
 const terminationNoChange = "no_change"
 
 // changeIncompleteError reports that a phased mutating capability ended without
@@ -629,21 +621,21 @@ func (e *changeIncompleteError) Error() string { return e.msg }
 // continuation (retry, do not block), but the diagnostic is specific: the run did
 // not stop at the ceiling and did not loop on a repeated action — it made no
 // repository progress at all. The model's narrative is never treated as evidence
-// of progress; only an observed mutation is.
+// of discovery or mutation progress.
 type noProgressError struct{ msg string }
 
 func (e *noProgressError) Error() string { return e.msg }
 
 // implementNoProgressError builds the capability_NO_PROGRESS diagnostic (for
 // example IMPLEMENT_NO_PROGRESS). It records the observed repository state
-// (successful mutations and changed files), the consecutive non-mutating turns
+// (successful mutations and changed files), the consecutive stale turns
 // spent, and the last action, so a stalled run is diagnosable without a model
 // self-report. The "a retry may succeed" marker keeps the existing failure
 // classifier's retryable-incomplete disposition (CONTINUE).
-func (h *Harness) implementNoProgressError(req agent.Request, st *executionState, ev *mutationEvidence, lastTool, lastRequest string) error {
+func (h *Harness) implementNoProgressError(req agent.Request, st *executionState, ev *mutationEvidence, iteration int, lastTool, lastRequest string) error {
 	marker := strings.ToUpper(string(req.Capability)) + "_NO_PROGRESS"
-	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive non-mutating iterations (provider=ollama, model=%s, iterations=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
-		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, st.consecutiveNoProgress, st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
+	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive stale iterations (provider=ollama, model=%s, iterations=%d, discovery_inspections=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, iteration, len(st.discoverySeen), st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
 	if inspected := st.inspectedSummary(); inspected != "" {
 		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
 			st.phase.label(), inspected)

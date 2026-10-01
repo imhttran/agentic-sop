@@ -3,6 +3,9 @@ package ollamaagent
 import (
 	"context"
 	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -17,22 +20,17 @@ import (
 // caught *consecutive identical* turns, and an alternating shape never repeats a
 // fingerprint consecutively.
 //
-// The authoritative progress signal is a successful repository mutation and nothing
-// else. Every non-mutating turn increments the consecutive counter — a read, a
-// search, an inspection, narration, a denied tool, a repeat, and a NOVEL read alike;
-// only a successful mutation resets it. Once the counter reaches
-// maxNoProgressIterations the run stops with a distinct IMPLEMENT_NO_PROGRESS /
-// FIX_NO_PROGRESS diagnostic, well before the iteration ceiling. Repeated behavior
-// is detected independently by turnProgress.
+// Mutation remains the only repository progress signal. Successful novel
+// inspections may reset the stale streak during bounded initial discovery only.
+// Failed inspections, narration, and denials do not earn discovery credit.
 
 // stalledNarration is a plain-prose turn: no tool call and no final object, so the
 // loop treats it as narration (planning/reasoning).
 const stalledNarration = "I am still considering how to implement this change."
 
-// TestImplementDistinctReadsAccumulateNoProgress is the core correction: distinct
-// reads are activity, not progress. A run that reads a new file every turn and never
-// mutates must still stop near the no-progress bound.
-func TestImplementDistinctReadsAccumulateNoProgress(t *testing.T) {
+// TestImplementFailedReadsAccumulateNoProgress uses missing files: distinct
+// failed reads do not earn discovery credit.
+func TestImplementFailedReadsAccumulateNoProgress(t *testing.T) {
 	dir := t.TempDir()
 	// More than the bound, every read a different file.
 	responses := distinctToolCalls(maxNoProgressIterations + 3)
@@ -194,5 +192,194 @@ func TestImplementNoProgressGuardIsSeparateFromCeiling(t *testing.T) {
 	}
 	if maxNoProgressIterations <= 0 || maxNoProgressIterations >= maxIterationsFix {
 		t.Fatalf("maxNoProgressIterations = %d, want a small positive bound below the ceilings", maxNoProgressIterations)
+	}
+}
+
+// The observed five-operation discovery sequence must leave room for a real
+// mutation in both capabilities; discovery itself never supplies mutation evidence.
+func TestPhasedDiscoveryThenMutation(t *testing.T) {
+	for _, req := range []agent.Request{implementRequest(), fixRequest()} {
+		t.Run(string(req.Capability), func(t *testing.T) {
+			dir := t.TempDir()
+			writeFile(t, dir, "internal/sopclient/boundary.go", "package sopclient")
+			writeFile(t, dir, "internal/sopclient/boundary_test.go", "package sopclient")
+			writeFile(t, dir, "docs/history/CTRL001/notes.md", "notes")
+			fake, srv := newFakeOllama(t,
+				`{"tool":"list_files","args":{"path":"internal/sopclient"}}`,
+				`{"tool":"read_file","args":{"path":"internal/sopclient/boundary.go"}}`,
+				`{"tool":"read_file","args":{"path":"internal/sopclient/boundary_test.go"}}`,
+				`{"tool":"list_files","args":{"path":"docs/history"}}`,
+				`{"tool":"list_files","args":{"path":"docs/history/CTRL001"}}`,
+				`{"tool":"write_file","args":{"path":"out.txt","content":"implemented"}}`,
+				`{"status":"completed","summary":"done","changes_expected":true}`,
+			)
+			cfg := testConfig(srv.URL)
+			cfg.MaxToolCalls = 100
+			h := New(cfg, dir)
+			ev := &mutationEvidence{}
+			content, err := h.ExecuteWithEvidence(context.Background(), req, ev)
+			if err != nil || !strings.Contains(content, `"status":"completed"`) {
+				t.Fatalf("content=%q err=%v, want completion after five inspections", content, err)
+			}
+			if fake.count() != 7 || !ev.observed || strings.Join(ev.mutationPaths(), ",") != "out.txt" {
+				t.Errorf("calls=%d evidence=%+v, want seven turns and only out.txt mutation", fake.count(), ev)
+			}
+			if got := countPhase(h.TraceRecords(), "DISCOVER"); got != 5 {
+				t.Errorf("discovery turns=%d, want 5", got)
+			}
+			if got := countPhase(h.TraceRecords(), "CHANGE"); got != 2 {
+				t.Errorf("CHANGE turns=%d, want mutation and final response", got)
+			}
+		})
+	}
+}
+
+func TestPhasedDiscoveryStalls(t *testing.T) {
+	for _, req := range []agent.Request{implementRequest(), fixRequest()} {
+		t.Run(string(req.Capability), func(t *testing.T) {
+			type stallCase struct {
+				name      string
+				responses []string
+				wantCalls int
+			}
+			cases := []stallCase{
+				{"repeated", repeat(`{"tool":"read_file","args":{"path":"pkg/f0.go"}}`, 10), 4},
+				{"alternating", []string{readToolCall(0), readToolCall(1), readToolCall(0), readToolCall(1), readToolCall(0), readToolCall(1), readToolCall(0)}, 7},
+				{"failed", distinctToolCalls(5), 5},
+				{"narration", []string{stalledNarration, readToolCall(0), stalledNarration, readToolCall(1), stalledNarration}, 5},
+			}
+			denied, empty := []string{}, []string{}
+			for i := 0; i < 5; i++ {
+				denied = append(denied, fmt.Sprintf(`{"tool":"read_file","args":{"path":"%s.agent-sdlc/state.db"}}`, strings.Repeat("./", i)))
+				empty = append(empty, fmt.Sprintf(`{"tool":"search_files","args":{"path":"pkg","pattern":"missing-%d"}}`, i))
+			}
+			cases = append(cases,
+				stallCase{"denied", denied, 5},
+				stallCase{"empty search", empty, 5},
+			)
+			for _, tc := range cases {
+				t.Run(tc.name, func(t *testing.T) {
+					dir := t.TempDir()
+					if tc.name != "failed" && tc.name != "narration" {
+						seedToolFiles(t, dir, "pkg", 2)
+					}
+					fake, srv := newFakeOllama(t, tc.responses...)
+					cfg := testConfig(srv.URL)
+					cfg.MaxToolCalls = 100
+					h := New(cfg, dir)
+					ev := &mutationEvidence{}
+					_, err := h.ExecuteWithEvidence(context.Background(), req, ev)
+					if err == nil || !strings.Contains(err.Error(), "termination=no_progress") {
+						t.Fatalf("err=%v, want no_progress", err)
+					}
+					if tc.name != "repeated" && !strings.Contains(err.Error(), string(req.Capability)+"_NO_PROGRESS") {
+						t.Errorf("err=%v, want capability-specific stale diagnostic", err)
+					}
+					if got := fake.count(); got != tc.wantCalls {
+						t.Errorf("model turns=%d, want %d", got, tc.wantCalls)
+					}
+					if ev.observed || len(ev.mutationPaths()) != 0 || hasEvent(h.TraceRecords(), implementChangeEvent) {
+						t.Errorf("non-mutating run supplied mutation evidence: %+v", ev)
+					}
+					if tc.name == "denied" {
+						for _, r := range h.AuditRecords() {
+							if r.Action != "deny" {
+								t.Errorf("audit=%+v, want denied", r)
+							}
+						}
+					}
+				})
+			}
+		})
+	}
+}
+
+func TestPhasedNovelDiscoveryIsBounded(t *testing.T) {
+	for _, req := range []agent.Request{implementRequest(), fixRequest()} {
+		for _, narrate := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/narration=%t", req.Capability, narrate), func(t *testing.T) {
+				dir := t.TempDir()
+				seedToolFiles(t, dir, "pkg", maxIterationsImplement)
+				responses := []string{}
+				for i := 1; i <= maxIterationsImplement; i++ {
+					if narrate && i <= implementNowAfter && i%2 == 1 {
+						responses = append(responses, stalledNarration)
+					} else {
+						responses = append(responses, readToolCall(i-1))
+					}
+				}
+				fake, srv := newFakeOllama(t, responses...)
+				cfg := testConfig(srv.URL)
+				cfg.MaxToolCalls = 100
+				h := New(cfg, dir)
+				ev := &mutationEvidence{}
+				_, err := h.ExecuteWithEvidence(context.Background(), req, ev)
+				var stalled *noProgressError
+				if !errors.As(err, &stalled) {
+					t.Fatalf("err=%v, want resumable noProgressError", err)
+				}
+				if got := fake.count(); got != implementNowAfter+maxNoProgressIterations {
+					t.Errorf("model turns=%d, want %d (window counts narration too)", got, implementNowAfter+maxNoProgressIterations)
+				}
+				if ev.observed || len(ev.mutationPaths()) != 0 || hasEvent(h.TraceRecords(), implementChangeEvent) {
+					t.Errorf("discovery supplied mutation evidence: %+v", ev)
+				}
+				if !narrate && !hasEvent(h.TraceRecords(), implementContinueEvent) {
+					t.Error("productive discovery must reach existing implementation-now guidance")
+				}
+				for _, want := range []string{string(req.Capability) + "_NO_PROGRESS", "repository_mutations=0", "continuation checkpoint", "termination=no_progress"} {
+					if !strings.Contains(err.Error(), want) {
+						t.Errorf("err=%v, want %q", err, want)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestDiscoveryIdentityAndCheckpointIndependence(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "pkg/a.go", "package pkg")
+	if err := os.Symlink(filepath.Join(dir, "pkg/a.go"), filepath.Join(dir, "alias.go")); err != nil {
+		t.Fatal(err)
+	}
+	st := newExecutionState()
+	st.recordInspected("pkg/a.go") // attempted checkpoint entry is not success evidence
+	if st.observeDiscovery(1, dir, "read_file", map[string]any{"path": "pkg/a.go"}, "", errors.New("failed")) || len(st.discoverySeen) != 0 {
+		t.Fatal("failed inspection earned discovery credit")
+	}
+	st.consecutiveNoProgress = 4
+	for i, path := range []string{"pkg/./a.go", "./pkg/a.go", filepath.Join(dir, "pkg/a.go"), "alias.go"} {
+		discovered := st.observeDiscovery(i+1, dir, "read_file", map[string]any{"path": path}, "package pkg", nil)
+		if i == 0 && (st.stalled(false, discovered) || st.consecutiveNoProgress != 0) {
+			t.Error("first successful discovery must reset a stale streak")
+		}
+		if discovered != (i == 0) {
+			t.Errorf("path=%q credit=%t, want first canonical identity only", path, discovered)
+		}
+	}
+	if !st.observeDiscovery(5, dir, "list_files", map[string]any{"path": "pkg"}, "a.go", nil) {
+		t.Error("listing and reading are distinct inspection operations")
+	}
+	for i, query := range []string{"package", "pkg", " package "} {
+		credited := st.observeDiscovery(6+i, dir, "search_files", map[string]any{"path": "./pkg", "pattern": query}, "pkg/a.go:1: package pkg", nil)
+		if credited != (i < 2) {
+			t.Errorf("query=%q credit=%t, want normalized distinct queries only", query, credited)
+		}
+	}
+	if st.mutationObserved || st.repositoryMutations != 0 {
+		t.Fatal("discovery became mutation")
+	}
+	fresh := newExecutionState()
+	if !fresh.observeDiscovery(1, dir, "read_file", map[string]any{"path": "pkg/a.go"}, "package pkg", nil) {
+		t.Error("discovery credit must be invocation-scoped")
+	}
+	st.consecutiveNoProgress = 4
+	if st.observeDiscovery(9, dir, "read_file", map[string]any{"path": "pkg/a.go"}, "", errors.New("failed")) || len(st.discoverySeen) != 4 {
+		t.Error("failed discovery changed successful inspection evidence")
+	}
+	st.observeMutation()
+	if st.consecutiveNoProgress != 0 || !st.mutationObserved || st.repositoryMutations != 1 {
+		t.Errorf("mutation failed to reset progress: %+v", st)
 	}
 }

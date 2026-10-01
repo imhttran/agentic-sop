@@ -119,18 +119,10 @@ const (
 	maxIterationsImplement = 32
 	maxIterationsFix       = 24
 
-	// maxNoProgressIterations bounds how many consecutive non-mutating turns an
-	// IMPLEMENT/FIX run may take before it is stopped. It is NOT the iteration
-	// ceiling and does not raise it: it stops a run that only inspects, searches,
-	// narrates, or repeats without ever changing the repository, which would
-	// otherwise consume the whole budget and be reported as a plain no-change at the
-	// ceiling. Progress is a successful repository mutation and nothing else: every
-	// non-mutating turn increments the counter — including a novel read of a file
-	// not seen before — and only a successful mutation resets it. Exploration is
-	// activity, not implementation progress. The bound is small enough to stop a
-	// stalled run in seconds while leaving room for ordinary inspect-before-edit
-	// work. Repetition of the same action is detected separately by turnProgress.
-	// See executionState.stalled.
+	// maxNoProgressIterations bounds consecutive stale turns before the first
+	// mutation. Novel successful repository inspection may reset the streak only
+	// through implementNowAfter model turns. Afterwards, all non-mutating turns
+	// are stale. The repetition guard independently detects consecutive loops.
 	maxNoProgressIterations = 5
 
 	// Other hard ceilings.

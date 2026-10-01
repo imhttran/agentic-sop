@@ -1372,11 +1372,8 @@ func TestImplementEarlyCompletionSkipsFinalization(t *testing.T) {
 	}
 }
 
-// TestImplementUnmutatedRunStopsBeforeDiscoveryNudge proves the discovery nudge
-// (which fires past implementNudgeAfter) is no longer reached by a run that never
-// changes the repository: the no-progress guard stops it first. The nudge remains
-// reachable for a run that has mutated.
-func TestImplementUnmutatedRunStopsBeforeDiscoveryNudge(t *testing.T) {
+// Productive discovery reaches the existing nudge, but cannot establish mutation.
+func TestImplementDiscoveryReachesNudgeWithoutMutation(t *testing.T) {
 	dir := t.TempDir()
 	seedToolFiles(t, dir, "pkg", implementNudgeAfter)
 	responses := distinctToolCalls(implementNudgeAfter)
@@ -1384,20 +1381,16 @@ func TestImplementUnmutatedRunStopsBeforeDiscoveryNudge(t *testing.T) {
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
-
 	h := New(cfg, dir)
-	_, err := h.Execute(context.Background(), implementRequest())
-	var stalled *noProgressError
-	if !errors.As(err, &stalled) {
-		t.Fatalf("err = %v, want *noProgressError", err)
+	ev := &mutationEvidence{}
+	if _, err := h.ExecuteWithEvidence(context.Background(), implementRequest(), ev); err != nil {
+		t.Fatalf("productive discovery stopped before the nudge: %v", err)
 	}
-	for i := 0; i < fake.count(); i++ {
-		if strings.Contains(messageText(fake.request(i)), "Begin making the requested change now") {
-			t.Errorf("the discovery nudge was sent to a run stopped for no progress:\n%s", messageText(fake.request(i)))
-		}
+	if !strings.Contains(messageText(fake.request(fake.count()-1)), "Begin making the requested change now") {
+		t.Error("the discovery nudge was not sent")
 	}
-	if hasEvent(h.TraceRecords(), implementChangeEvent) {
-		t.Error("plain discovery is not a mutation and must not enter CHANGE")
+	if ev.observed || hasEvent(h.TraceRecords(), implementChangeEvent) {
+		t.Error("plain discovery must not become mutation evidence or enter CHANGE")
 	}
 }
 
