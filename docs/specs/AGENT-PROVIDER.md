@@ -70,6 +70,14 @@ Any other output MUST keep the legacy behaviour, judged by the change produced. 
 
 Bounds MUST be per capability. `DESIGN_TESTS`/`DIAGNOSE_FAILURE` get 12 read-only turns; `PLAN` (8) and `REVIEW` (6) run bounded read-only discovery then a tool-free **synthesis** (2 turns) that MUST produce the document, so neither can fail by exploring forever; `IMPLEMENT` (32) and `FIX` (24) share a phased loop — **discover**, **change** (first write plus targeted checks), **finalize** — so a `FIX` that wrote its repair hands back instead of running the build/tests to the ceiling. Finalization MUST be **mutation-aware**: tools are withdrawn only once a change is observed _and_ the writer has stopped; a write during finalize MUST NOT be refused and resumes change. A run that never changes the repository MUST end with `termination=no_change` and a **retryable** `needs_human` (SOP requeues it); a model reporting `failed` after changing nothing is likewise a retryable no-op, not a hard failure.
 
+The two mutating ceilings are built-in defaults an operator MAY raise:
+`SOP_OLLAMA_IMPLEMENT_ITERATIONS` (default 32) and `SOP_OLLAMA_FIX_ITERATIONS`
+(default 24). Each MUST be a positive integer to take effect; an unset, blank,
+non-numeric, or non-positive value MUST keep the default, so behavior is unchanged
+when it is not set. The soft thresholds (finalize, late-stage, force-finalize) MUST
+scale with the raised ceiling, so a longer loop preserves their relative steering
+position instead of stranding them near the start.
+
 ## 10. Operator-Set Diagnostic Sinks
 
 A failed run — or one reporting a failure or human boundary — SHOULD write a safe per-turn diagnostic trail to stderr (capability, phase, iteration, tool, request, progress, recovery) that MUST NOT contain prompts, file contents, or secrets. The command provider discards that stderr, so the operator MAY set `SOP_OLLAMA_TRACE_LOG` (trace) and `SOP_TOOL_AUDIT_LOG` (tool audit). Both MUST be operator-set sinks; neither MUST be SOP's state database.

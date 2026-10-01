@@ -167,6 +167,11 @@ SOP's state database.
   the environment selected it, and a run rejects a provider that cannot
   `IMPLEMENT` before running any task.
 
+- The `tool` harness's `IMPLEMENT`/`FIX` iteration ceilings can be raised with
+  `SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` (positive integers;
+  an unset or invalid value keeps the built-in ceiling, and the soft thresholds scale
+  with it). See [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md) §9.
+
 - JEV bounds its own input (the excerpted task context and the assembled prompt).
   `SOP_JEV_CONTEXT_FILES`, `SOP_JEV_CONTEXT_FILE_BYTES`, `SOP_JEV_CONTEXT_TOTAL_BYTES`,
   and `SOP_JEV_MAX_PROMPT_RUNES` widen or narrow those bounds; each keeps its built-in
