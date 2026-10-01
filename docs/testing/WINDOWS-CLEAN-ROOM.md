@@ -19,6 +19,70 @@ Results are recorded below exactly as observed. Anything not yet performed stays
 | Claude Code version (`claude --version`), if tested | NOT YET RUN |
 | Zed version, if tested | NOT YET RUN |
 
+## One-shot transcript (Windows PowerShell)
+
+The whole checklist in one paste, so a run is a single copy. Substitute `<REPO>` with the
+clone URL. Go is required; Zed and Claude Code are only needed for the steps that test
+them. The installer needs no administrator rights and never edits PATH or a profile.
+
+This transcript was authored without a Windows machine available; if a line errors, paste
+the error under [Issues discovered](#issues-discovered) rather than silently continuing.
+
+```powershell
+function Section($t) { Write-Host ""; Write-Host "===== $t =====" }
+
+Section "0. Environment"
+"Windows     : $([System.Environment]::OSVersion.VersionString)"
+"PowerShell  : $($PSVersionTable.PSVersion)"
+"USERPROFILE : $env:USERPROFILE"
+"go          : $((Get-Command go -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
+go version
+$claude = Get-Command claude -ErrorAction SilentlyContinue | Select-Object -First 1
+"claude      : $(if ($claude) { $claude.Source } else { '<absent>' })"
+if ($claude) { claude --version }
+
+Section "1. Clone + install the CLI"
+git clone <REPO> agentic-sop
+Set-Location agentic-sop
+.\install.ps1
+$env:Path = "$env:USERPROFILE\.local\bin;$env:Path"   # session-only; the installer never edits PATH
+"resolves to : $((Get-Command sop -ErrorAction SilentlyContinue | Select-Object -First 1).Source)"
+where.exe sop
+sop version
+sop --help
+
+Section "2. Zed skills"
+.\install.ps1 -Skills zed
+Get-ChildItem "$env:USERPROFILE\.agents\skills" -Directory | Where-Object { $_.Name -like 'sop*' } |
+  ForEach-Object { "  $($_.Name): marker=$(Test-Path (Join-Path $_.FullName '.sop-managed'))" }
+
+Section "3. Claude Code skills"
+.\install.ps1 -Skills claude
+Get-ChildItem "$env:USERPROFILE\.claude\skills" -Directory | Where-Object { $_.Name -like 'sop*' } |
+  ForEach-Object { "  $($_.Name): marker=$(Test-Path (Join-Path $_.FullName '.sop-managed'))" }
+
+Section "4. Claude Code plugin package"
+.\install.ps1 -Plugin claude
+
+Section "5. Idempotency + refresh"
+.\install.ps1 -Skills claude           # a second run reports each copy as current
+.\install.ps1 -Skills claude -Force    # refreshes SOP-owned copies
+
+Section "6. Foreign-skill safety"
+.\install.ps1 -UninstallSkills claude  # removes only SOP-owned claude skills
+$foreign = "$env:USERPROFILE\.claude\skills\sop-review"
+New-Item -ItemType Directory -Force -Path $foreign | Out-Null
+Set-Content -Path (Join-Path $foreign 'SKILL.md') -Value 'not managed by SOP'
+.\install.ps1 -Skills claude           # skips sop-review: an existing non-SOP skill uses this name
+"foreign marker?  $(Test-Path (Join-Path $foreign '.sop-managed'))"   # expect False
+.\install.ps1 -UninstallSkills claude  # leaves sop-review: is not SOP-managed; leaving it
+"foreign survived? $(Test-Path $foreign)"                             # expect True
+Remove-Item -Recurse -Force $foreign
+```
+
+Steps 5–6 below (the two read-only commands and the mutating command) are typed in the
+agent panel and are **not** scriptable — do those by hand after the transcript.
+
 ## Checklist
 
 Run each step and record the result. Use a disposable checkout and a disposable project
