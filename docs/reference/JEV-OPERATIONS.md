@@ -204,6 +204,24 @@ A malformed or non-positive timeout (for example `SOP_OLLAMA_TIMEOUT=soon` or
 `0s`) produces a **focused configuration error** at load time, not a silent
 fallback.
 
+### Context and prompt bounds
+
+JEV bounds the input it sends, so a change set can never be dumped into a model
+unbounded. Four optional environment variables widen (or narrow) those bounds. Each
+keeps its built-in default unless it is set to a **positive integer**: an unset,
+blank, non-numeric, or non-positive value changes nothing.
+
+| Variable                      | Bounds                                            | Default |
+| ----------------------------- | ------------------------------------------------- | ------- |
+| `SOP_JEV_CONTEXT_FILES`       | accumulated files excerpted into the task context | `12`    |
+| `SOP_JEV_CONTEXT_FILE_BYTES`  | bytes kept from each excerpted file               | `4096`  |
+| `SOP_JEV_CONTEXT_TOTAL_BYTES` | total task-context excerpt budget                 | `32768` |
+| `SOP_JEV_MAX_PROMPT_RUNES`    | the assembled analyzer prompt, in runes           | `49152` |
+
+Raising them lets JEV review a larger change set at the cost of a larger prompt;
+lowering them tightens the bound. None of them selects a model or changes policy:
+they only widen or narrow the deterministic input bound.
+
 ### Provider failure behavior
 
 Provider failures are surfaced as **focused errors**, classified by kind, and

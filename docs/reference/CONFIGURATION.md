@@ -167,6 +167,11 @@ SOP's state database.
   the environment selected it, and a run rejects a provider that cannot
   `IMPLEMENT` before running any task.
 
+- JEV bounds its own input (the excerpted task context and the assembled prompt).
+  `SOP_JEV_CONTEXT_FILES`, `SOP_JEV_CONTEXT_FILE_BYTES`, `SOP_JEV_CONTEXT_TOTAL_BYTES`,
+  and `SOP_JEV_MAX_PROMPT_RUNES` widen or narrow those bounds; each keeps its built-in
+  default unless set to a positive integer. See [`JEV-OPERATIONS.md`](JEV-OPERATIONS.md).
+
 ## Model routing
 
 The optional `models:` block — or its `SOP_MODEL_*` environment equivalents, which
