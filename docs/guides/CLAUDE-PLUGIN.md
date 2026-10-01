@@ -125,6 +125,10 @@ claude plugin validate --strict integrations/claude
 claude plugin validate .            # the marketplace, and the plugin it lists
 ```
 
-`./install.sh --plugin claude` runs the strict validation for you when the `claude` CLI
-is available. Local packaging is proven here; submitting to Anthropic's directory is a
-later step.
+`./install.sh --plugin claude` (and `.\install.ps1 -Plugin claude` on Windows) runs the
+strict validation for you when the `claude` CLI is available. That validator is Claude
+Code's own command: like any `claude` invocation it may keep its own cache and settings
+backup under your home. The installer itself writes nothing into Claude's configuration —
+it does not register a marketplace, enable a plugin, or edit a settings file.
+
+Local packaging is proven here; submitting to Anthropic's directory is a later step.

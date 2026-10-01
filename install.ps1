@@ -182,12 +182,16 @@ function Test-IsReparsePoint([string]$Path) {
 
 function Install-Cli([string]$TargetDir) {
     $dest = Join-Path $TargetDir 'sop.exe'
-    $goCmd = Get-Command go -CommandType Application -ErrorAction SilentlyContinue
-    if ($null -eq $goCmd) {
+    $goCmds = @(Get-Command go -CommandType Application -ErrorAction SilentlyContinue)
+    if ($goCmds.Count -eq 0) {
         Write-Fail "the Go toolchain ('go') is required to build sop and was not found on PATH"
         Write-Fail "install Go (https://go.dev/dl/), then re-run .\install.ps1"
         return
     }
+    # More than one installation on PATH is normal; the first is the one a shell would
+    # run, so use that. ($goCmds[0].Source is a single path: taking the whole collection
+    # would join several paths into one unusable command.)
+    $go = $goCmds[0].Source
 
     Write-Note "Installing the sop CLI:"
     Write-Note "  from: $($script:RepoDir)"
@@ -210,7 +214,7 @@ function Install-Cli([string]$TargetDir) {
     try {
         Push-Location -LiteralPath $script:RepoDir
         try {
-            & $goCmd.Source build -o $tmp ./cmd/sop
+            & $go build -o $tmp ./cmd/sop
             if ($LASTEXITCODE -ne 0) {
                 Write-Fail "go build failed (exit $LASTEXITCODE); any existing sop.exe was left untouched"
                 return
@@ -223,6 +227,13 @@ function Install-Cli([string]$TargetDir) {
         finally {
             Pop-Location
         }
+    }
+    catch {
+        Write-Fail "go build could not run: $($_.Exception.Message)"
+        return
+    }
+
+    try {
         try {
             Move-Item -LiteralPath $tmp -Destination $dest -Force -ErrorAction Stop
         }
@@ -490,14 +501,14 @@ function Prepare-Plugin([string]$Requested) {
     Write-Note "  marketplace: $marketplace"
 
     if (-not $script:DryRun) {
-        $claudeCmd = Get-Command claude -ErrorAction SilentlyContinue
-        if ($null -ne $claudeCmd) {
+        $claudeCmds = @(Get-Command claude -ErrorAction SilentlyContinue)
+        if ($claudeCmds.Count -gt 0) {
             Write-Note "  validating with the claude CLI:"
             $global:LASTEXITCODE = 0
             $validated = $false
             $ran = $true
             try {
-                & $claudeCmd.Source plugin validate --strict $pluginDir
+                & $claudeCmds[0].Source plugin validate --strict $pluginDir
                 $validated = ($LASTEXITCODE -eq 0)
             }
             catch {
@@ -548,9 +559,9 @@ function Report-Path([string]$TargetDir) {
     if (Test-OnPath $TargetDir) {
         Write-Note ""
         Write-Note "  $TargetDir is on PATH."
-        $found = Get-Command sop.exe -CommandType Application -ErrorAction SilentlyContinue
-        if (($null -ne $found) -and (-not ([string]::Equals($found.Source, $dest, [System.StringComparison]::OrdinalIgnoreCase)))) {
-            Write-Note "  note: 'sop' currently resolves to $($found.Source)"
+        $found = @(Get-Command sop.exe -CommandType Application -ErrorAction SilentlyContinue)
+        if (($found.Count -gt 0) -and (-not ([string]::Equals($found[0].Source, $dest, [System.StringComparison]::OrdinalIgnoreCase)))) {
+            Write-Note "  note: 'sop' currently resolves to $($found[0].Source)"
         }
         return
     }

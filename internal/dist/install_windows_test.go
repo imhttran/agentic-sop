@@ -47,6 +47,18 @@ func setEnv(env map[string]string, key, value string) {
 	env[key] = value
 }
 
+// envValue looks a variable up without depending on its case, because Windows
+// environment variable names are case-insensitive and the inherited environment may
+// spell PATH as "Path".
+func envValue(env map[string]string, key string) string {
+	for k, v := range env {
+		if strings.EqualFold(k, key) {
+			return v
+		}
+	}
+	return ""
+}
+
 func unsetEnv(env map[string]string, key string) {
 	for k := range env {
 		if strings.EqualFold(k, key) {
@@ -80,7 +92,7 @@ func installEnv(t *testing.T, home, pathFirst string, overrides map[string]strin
 	}
 	if pathFirst != "" {
 		path := pathFirst
-		if current, ok := env["PATH"]; ok {
+		if current := envValue(env, "PATH"); current != "" {
 			path = pathFirst + ";" + current
 		}
 		setEnv(env, "PATH", path)
@@ -449,5 +461,43 @@ func TestWindowsInstallerPluginStepIsSafe(t *testing.T) {
 		if _, err := os.Stat(path); !os.IsNotExist(err) {
 			t.Errorf("the installer must not write %s", path)
 		}
+	}
+}
+
+// TestWindowsInstallerWithSeveralGoInstallationsOnPath proves a machine with more than
+// one Go on PATH installs normally. A shell runs the first one, so the installer must
+// too: CI's runner has two, and an earlier version passed the whole Get-Command result
+// to the shell, which joined both paths into one unusable command.
+func TestWindowsInstallerWithSeveralGoInstallationsOnPath(t *testing.T) {
+	shell := powershells(t)[0]
+	realGo, err := exec.LookPath("go")
+	if err != nil {
+		t.Skip("no go on PATH")
+	}
+	home := scratchHome(t)
+
+	// A shim earlier on PATH, so Get-Command sees two installations.
+	shims := filepath.Join(home, "shims")
+	if err := os.MkdirAll(shims, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	shim := filepath.Join(shims, "go.cmd")
+	if err := os.WriteFile(shim, []byte("@echo off\r\n\""+realGo+"\" %*\r\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	bin := filepath.Join(home, "bin")
+	out, err := runInstallPS(t, shell, installEnv(t, home, shims, nil), "-BinDir", bin)
+	if err != nil {
+		t.Fatalf("install with two Go installations on PATH: %v\n%s", err, out)
+	}
+	exe := filepath.Join(bin, "sop.exe")
+	if _, err := os.Stat(exe); err != nil {
+		t.Fatalf("sop.exe was not installed: %v\n%s", err, out)
+	}
+	version := exec.Command(exe, "version")
+	version.Dir = repoRoot(t)
+	if vout, verr := version.CombinedOutput(); verr != nil {
+		t.Errorf("installed sop.exe is not runnable: %v\n%s", verr, vout)
 	}
 }
