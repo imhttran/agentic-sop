@@ -115,11 +115,17 @@ jobs:
           $code = $LASTEXITCODE
           $lines | Write-Host
           if ($code -ne 0) {
-            $failed = @($lines | Select-String -SimpleMatch '--- FAIL: ' | ForEach-Object { $_.Line.Trim() })
+            # The failing test plus the lines that follow it, which carry the installer's
+            # own output.
+            $failed = @()
+            for ($i = 0; $i -lt $lines.Count; $i++) {
+              if ($lines[$i] -like '*--- FAIL: *') {
+                $failed += $lines[$i].Trim()
+                $failed += ($lines[($i + 1)..([Math]::Min($i + 15, $lines.Count - 1))] | ForEach-Object { $_.Trim() })
+              }
+            }
             if ($failed.Count -eq 0) { $failed = @('no "--- FAIL:" line in the output') }
-            $detail = @($lines | Select-String -Pattern '([A-Za-z0-9_]+\.go:\d+:|expected|got )' |
-              Select-Object -First 20 | ForEach-Object { $_.Line.Trim() })
-            $message = (($failed + $detail) -join ' || ')
+            $message = ($failed -join ' || ')
             if ($message.Length -gt 60000) { $message = $message.Substring(0, 60000) }
             Write-Host "::error title=Windows distribution tests failed::$message"
             exit 1
