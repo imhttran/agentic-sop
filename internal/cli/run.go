@@ -114,6 +114,14 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// execution_mode done declares a plan stage whose work already exists, so its
+	// task is recorded as satisfied rather than executed. A single --task invocation
+	// has nothing to record against, so the mode is rejected here instead of being
+	// silently ignored (which would implement work the operator declared done).
+	if spec.ExecutionMode.Done() {
+		fmt.Fprintln(stderr, "run: `--task` always executes a task; execution_mode `done` applies to plan stages")
+		return exitError
+	}
 
 	cfg, err := loadConfigOrDefault(dir)
 	if err != nil {

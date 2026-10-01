@@ -202,8 +202,26 @@ func printStartup(w io.Writer, dir string, cfg config.Config, stack executionSta
 
 	if prepared.TasksCreated > 0 {
 		fmt.Fprintf(w, "Created %d task(s).\n", prepared.TasksCreated)
+		// A stage the plan declares done is recorded as already satisfied rather than
+		// executed, so say so: the run's summary must never look like work happened.
+		if n := countDeclaredDone(tasks); n > 0 {
+			fmt.Fprintf(w, "Declared done in the plan: %d task(s) (recorded complete, no work run).\n", n)
+		}
 	}
 	fmt.Fprintln(w)
+}
+
+// countDeclaredDone tallies the tasks whose plan stage declared the work already
+// exists (execution_mode: done), so a declared completion is visible in the run
+// summary instead of being indistinguishable from work the run performed.
+func countDeclaredDone(tasks []*domain.Task) int {
+	n := 0
+	for _, task := range tasks {
+		if task.ExecutionMode.Done() && task.IsSatisfied() {
+			n++
+		}
+	}
+	return n
 }
 
 // statusCounts tallies completed, ready, and blocked tasks.

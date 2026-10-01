@@ -385,6 +385,17 @@ implement default. A run still checks up front that the provider can `IMPLEMENT`
 so a configured agent remains required even for a graph whose tasks are all
 verify-first.
 
+A third mode, `done`, declares that a stage's work already exists in the tree — it
+lets a plan whose work is already green close out instead of being re-implemented
+and blocked. It is explicit plan metadata, never inferred from a `Status:` line or
+prose, and a plan normalized by a model has it cleared, so only the plan document
+itself can declare a stage complete. A stage declared done is recorded **already
+satisfied** when the task graph is built: its dependants are unblocked, the plan can
+complete, and SOP never selects, gates, or verifies it, because the declaration is
+the record rather than evidence. A single `--task` run rejects the mode (it has no
+plan to close). A stage whose work must be _verified_ is `verify-first`; one whose
+work is _accepted_ is `done`.
+
 ### Fix Loop
 
 When validation fails, or when review leaves blocking findings, the failure is

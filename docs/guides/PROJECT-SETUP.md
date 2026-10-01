@@ -75,6 +75,12 @@ Markdown, or `"execution_mode": "verify-first"` in JSON. A verification-first
 stage runs the configured validation before any agent; omitting it keeps the
 ordinary implement-first behaviour.
 
+A stage whose work already exists is declared `### Execution / - done` instead. Its
+task is recorded as already satisfied when the graph is built, so a plan whose work
+is already green completes instead of being re-implemented and blocked. The task is
+never executed and the declaration is the only record, so use it only for work you
+know is in the tree — `verify-first` is the mode for work you want _checked_.
+
 ## 5. Create the task graph
 
 ```bash

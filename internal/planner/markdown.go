@@ -227,6 +227,16 @@ func (p *Planner) Compile(ctx context.Context, markdown string) (*Plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A model MUST NOT declare work complete. The "done" execution mode is operator
+	// intent read deterministically from the plan document (PlanFromMarkdown); a plan
+	// a model normalized is not that document's own structure, so any such
+	// declaration it returned is ignored and the stage is executed normally. This is
+	// the safe direction: no work is skipped because a model claimed it was done.
+	for i := range plan.Stages {
+		if plan.Stages[i].ExecutionMode.Done() {
+			plan.Stages[i].ExecutionMode = ""
+		}
+	}
 	return acceptPlan(plan)
 }
 

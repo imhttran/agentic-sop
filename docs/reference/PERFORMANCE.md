@@ -75,9 +75,15 @@ proven by the configured commands. It is not broadened to tasks that determinist
 validation cannot prove complete; a failing verify-first validation still takes the
 normal implementation path, and review/human gates still apply.
 
+A stage declared `done` in the plan avoids agent calls for a different reason: its
+task is recorded as already satisfied, so it is never selected at all and no agent
+call is counted against it. A run reports those declarations separately
+(`Declared done in the plan: N task(s)`), so an avoided call is never confused with
+work the run performed.
+
 ## Validation and review reuse (safety rules)
 
-A single run may reuse a prior result, but only when SOP can *prove* the inputs are
+A single run may reuse a prior result, but only when SOP can _prove_ the inputs are
 identical. The identity is:
 
 - validation: the exact command set **and** the working-tree change (`diff`), hashed;
@@ -93,7 +99,7 @@ Rules, in one place (`internal/cli/session.go`):
 - reuse never crosses a run (the cache lives for one invocation) or a plan;
 - a **miss is always safe** — correctness never depends on a hit.
 
-In the common flow there is little to reuse *within* a task (a fix changes the
+In the common flow there is little to reuse _within_ a task (a fix changes the
 tree, so re-validation is genuinely needed). The measured win is across consecutive
 tasks on an unchanged tree, such as a run of already-satisfied verify-first tasks.
 
@@ -140,7 +146,7 @@ These were evaluated and deliberately deferred; none is a correctness shortcut.
   per call and exposes no session to reuse. SOP persisted state remains sufficient
   for resume, and no provider is required to support reuse. Deferred.
 - **Parallel task mutation (PERF012).** The local run shares one working tree and
-  one branch, so parallel *mutation* would race on both. A worktree-isolated
+  one branch, so parallel _mutation_ would race on both. A worktree-isolated
   executor exists (`internal/parallel`) but is not wired into the sequential local
   run; enabling it needs deterministic workspace ownership, per-worktree
   validation, and state-database concurrency rules. Per the plan, deferral with
@@ -153,5 +159,5 @@ These were evaluated and deliberately deferred; none is a correctness shortcut.
 ## Guarantee
 
 Wherever the two conflict, correctness wins over speed. Timing is metadata, reuse
-requires an identical input identity, and verify-first only ever *skips work that
-deterministic validation has already proven unnecessary*.
+requires an identical input identity, and verify-first only ever _skips work that
+deterministic validation has already proven unnecessary_.

@@ -88,6 +88,31 @@ from a task's title or prose. It runs the configured validation **before** any a
 
 Without the mode a task keeps implement-first behaviour. See [VALIDATION.md](VALIDATION.md).
 
+## 6a. Declared-Complete Stages
+
+`execution_mode: done` MUST be explicit plan metadata — never inferred from a task's
+`Status:` line, title, or prose. It declares that a stage's work already exists in
+the tree, so the plan asks SOP not to implement it again:
+
+- the stage's task MUST be recorded **already satisfied** when the task graph is
+  built, so its dependants are unblocked and a plan whose work is already green can
+  complete instead of ending `BLOCKED` through the no-change path;
+- the task MUST NOT be selected for execution, and SOP MUST NOT implement, verify,
+  review, or gate it: the declaration is the record, and there is no evidence SOP
+  could obtain for work it did not perform;
+- the run MUST report the declared completions separately from work it performed, so
+  a completion is never mistaken for work the run did;
+- the declaration MUST NOT be settable by a model. A plan normalized by an agent
+  MUST have the mode cleared, so only the plan document's own structure can declare a
+  stage done (see §3);
+- a single `--task` invocation, which has no plan to close, MUST reject the mode
+  rather than ignore it.
+
+A stage whose work must be _verified_ rather than accepted is `verify-first` (§6); a
+stage with nothing to verify cannot become `done` by implication. A run still requires
+a configured agent, exactly as a graph whose tasks are all `verify-first` does; the
+agent is simply never invoked for a declared-complete task.
+
 ## 7. Fix Loop Bound
 
 When validation fails, or review leaves blocking findings, `sop run` MUST send the

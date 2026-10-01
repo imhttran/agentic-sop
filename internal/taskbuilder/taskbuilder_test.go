@@ -209,3 +209,39 @@ func TestCreateTasksFromPlanRejectsBootstrapCycle(t *testing.T) {
 		t.Error("expected a cycle error")
 	}
 }
+
+// TestBuildDeclaredDoneIsSatisfied proves the plan-level completion marker: a stage
+// declared done (execution_mode: done) has no implementation work left to request,
+// so its task is recorded as already satisfied, keeps the declaration as its record,
+// and is never planned for execution.
+func TestBuildDeclaredDoneIsSatisfied(t *testing.T) {
+	plan := validPlan()
+	plan.Stages[0].ExecutionMode = domain.ExecutionDone
+
+	tasks, err := Build(plan)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+
+	done := tasks[0]
+	if done.Status != domain.LOCAL_DONE {
+		t.Errorf("status = %s, want LOCAL_DONE (recorded as already satisfied)", done.Status)
+	}
+	if !done.IsSatisfied() {
+		t.Error("a declared-done task must be satisfied")
+	}
+	if done.IsRunnable() {
+		t.Error("a declared-done task must never be runnable")
+	}
+	if done.ExecutionMode != domain.ExecutionDone {
+		t.Errorf("execution mode = %q, want %q (the declaration is the record)", done.ExecutionMode, domain.ExecutionDone)
+	}
+
+	// Its dependant is a normal PLANNED task that the satisfied declaration unblocks.
+	if tasks[1].Status != domain.PLANNED {
+		t.Errorf("S002 status = %s, want PLANNED", tasks[1].Status)
+	}
+	if unmet, ok := tasks[1].ResolveDependencies(map[string]*domain.Task{"S001": done, "S002": tasks[1]}); !ok {
+		t.Errorf("S002 dependencies unmet (%v): a declared-done stage must satisfy its dependants", unmet)
+	}
+}

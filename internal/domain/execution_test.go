@@ -10,6 +10,7 @@ func TestVerifyFirst(t *testing.T) {
 		{"", false},
 		{ExecutionImplement, false},
 		{ExecutionVerifyFirst, true},
+		{ExecutionDone, false},
 		{"verify_first", false}, // only the canonical value; parsing normalizes
 	}
 	for _, tc := range cases {
@@ -19,8 +20,25 @@ func TestVerifyFirst(t *testing.T) {
 	}
 }
 
+func TestDone(t *testing.T) {
+	cases := []struct {
+		mode ExecutionMode
+		want bool
+	}{
+		{"", false},
+		{ExecutionImplement, false},
+		{ExecutionVerifyFirst, false},
+		{ExecutionDone, true},
+	}
+	for _, tc := range cases {
+		if got := tc.mode.Done(); got != tc.want {
+			t.Errorf("%q.Done() = %v, want %v", tc.mode, got, tc.want)
+		}
+	}
+}
+
 func TestKnownExecutionMode(t *testing.T) {
-	for _, ok := range []ExecutionMode{"", ExecutionImplement, ExecutionVerifyFirst} {
+	for _, ok := range []ExecutionMode{"", ExecutionImplement, ExecutionVerifyFirst, ExecutionDone} {
 		if !KnownExecutionMode(ok) {
 			t.Errorf("KnownExecutionMode(%q) = false, want true", ok)
 		}
@@ -41,6 +59,12 @@ func TestParseExecutionMode(t *testing.T) {
 		{"verify_first", ExecutionVerifyFirst, true},
 		{"  VERIFY-FIRST  ", ExecutionVerifyFirst, true},
 		{"implement", ExecutionImplement, true},
+		{"done", ExecutionDone, true},
+		{"Done", ExecutionDone, true},
+		{"complete", ExecutionDone, true},
+		{"Completed", ExecutionDone, true},
+		{"already done", ExecutionDone, true},
+		{"implemented", ExecutionDone, true},
 		{"", "", false},
 		{"run the tests", "", false},
 	}

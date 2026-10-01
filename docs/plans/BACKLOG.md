@@ -6,13 +6,18 @@ the running list in between.
 
 ## Bootstrap resilience: run the Ollama agent as a known-good binary
 
-The bootstrap agent can break itself while editing `internal/ollamaagent`: a small
-compile error in that very package removes the agent needed to repair it, because
-SOP builds and runs the harness from the same tree under edit.
+_RESOLVED: implemented._ The bootstrap agent can break itself while editing
+`internal/ollamaagent`: a small compile error in that very package removes the agent
+needed to repair it, because SOP builds and runs the harness from the same tree under
+edit. Recovery must not depend on the tool the change is allowed to break.
 
-Install (and run) a pinned, prebuilt known-good `sop-ollama-agent` binary — outside
-the tree under edit — so a broken working copy can still be repaired by the agent.
-Recovery must not depend on the tool the change is allowed to break.
+A pinned, prebuilt known-good `sop-ollama-agent` binary is therefore installed
+**outside** the tree under edit (`make install-ollama-agent` →
+`scripts/install-sop-ollama-agent.sh`, revision pinned in `scripts/sop-ollama-agent.pin`),
+and the command bootstrap (`scripts/sop-ollama-agent.sh`) invokes that installed binary
+instead of compiling candidate source; `internal/agentbin` resolves it, and
+`internal/ollamaagent` reports the running revision. A broken working copy can still
+be repaired. Recorded here for traceability.
 
 ## Default config cannot IMPLEMENT (provider/harness split unfinished)
 
@@ -72,27 +77,39 @@ turns and the model ignores them, so raising the budget alone is unlikely to hel
 
 Candidate fixes: give the task request a concrete file/work scope so discovery is
 shorter; let a productive-but-unmutated run continue incrementally instead of
-finalizing; or use a stronger model for multi-package tasks. Related: SOP's plan
-normalizer has no `execution_mode` field (`internal/planner/planner.go`), so a plan
-cannot mark an already-implemented task `verify-first` to avoid the re-implement
-loop.
+finalizing; or use a stronger model for multi-package tasks. Related: a plan can now
+mark an already-implemented stage `done` (see below) so it is never re-implemented,
+which removes the re-implement loop for work that already exists in the tree.
 
 ## A fully-implemented plan cannot close through SOP
 
-`sop run <PLAN>.md` regenerates tasks from the plan's stages and starts each at
-`PLANNED` (`internal/taskbuilder/taskbuilder.go`); the plan's per-task `Status:`
-line is documentation only and is not read. When every stage is already
-implemented — for example a plan whose tasks were finished in a prior session —
-the agent finds nothing to change, the run classifies as
-`INCOMPLETE_IMPLEMENTATION` → `CONTINUE` (`internal/failure`), and after the retry
-budget the task ends `BLOCKED`. Work that is already green therefore cannot be
+_RESOLVED: `execution_mode: done` (a declared-complete stage)._ `sop run <PLAN>.md`
+regenerates tasks from the plan's stages and starts each at `PLANNED`
+(`internal/taskbuilder/taskbuilder.go`), reading only the stage's structured metadata.
+When every stage is already implemented the agent finds nothing to change, the run
+classifies as `NO_CHANGES_PRODUCED` → `AUTO_FIX` (`internal/failure`), and after the
+retry budget the task ends `BLOCKED`, so work that is already green could not be
 closed out through the lifecycle.
 
-Options: teach the planner/task builder to honour an explicit completed marker (or
-an `execution_mode: verify-first` / `done` field) so an already-satisfied stage is
-accepted; or provide a `sop reconcile`-style path that records an externally
-finished task. Related: "Bootstrap agent exhausts its budget on multi-package
-tasks" above.
+A plan stage can now declare that its work already exists:
+
+```text
+### Execution
+
+- done
+```
+
+`done` is explicit plan metadata (like `verify-first`), never inferred from a task's
+`Status:` line, title, or prose. Such a stage's task is recorded **already
+satisfied** when the task graph is built, so its dependants are unblocked and a plan
+whose work is already green reports as complete instead of blocking; SOP never
+selects, gates, or verifies it, because the declaration is the record rather than
+evidence. The run reports the declarations separately (`Declared done in the plan: N
+task(s)`), so a completion is never mistaken for work the run performed. A plan
+normalized by a model has the mode cleared, so only the plan document itself can
+declare a stage complete, and a single `--task` run rejects it. Use `verify-first`
+for work that must be _checked_; a stage with nothing to verify cannot become `done`
+by implication. See [../specs/EXECUTION.md](../specs/EXECUTION.md) §6a.
 
 ## A gate failure with no authoritative classification is not escalated
 
@@ -154,6 +171,8 @@ Run report command (sop report) · Evaluation harness (sop eval)
 Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
 Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
 Unified work items + governed `sop prompt` (Phase 5.4)
+Declared-complete plan stages (`execution_mode: done`): a plan whose work already
+exists records its stages as satisfied instead of re-implementing them
 SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
 `/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
 ```

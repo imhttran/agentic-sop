@@ -111,6 +111,60 @@ func TestPlanFromMarkdownExecutionMode(t *testing.T) {
 	}
 }
 
+// TestPlanFromMarkdownDeclaredDone proves the explicit completion marker a plan can
+// carry: a stage whose work already exists is declared with the `done` execution
+// mode, and it round-trips through the rendered plan document unchanged.
+func TestPlanFromMarkdownDeclaredDone(t *testing.T) {
+	doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — Already built\n\nExists.\n\n### Dependencies\n\nNone\n\n### Acceptance Criteria\n\n- it works\n\n### Execution\n\n- done\n"
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown failed: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	if plan.Stages[0].ExecutionMode != domain.ExecutionDone {
+		t.Fatalf("execution mode = %q, want %q", plan.Stages[0].ExecutionMode, domain.ExecutionDone)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("a declared-done stage must validate: %v", err)
+	}
+
+	rendered := plan.RenderMarkdown()
+	if !strings.Contains(rendered, "### Execution") || !strings.Contains(rendered, "- done") {
+		t.Errorf("rendered plan should carry the execution section and its value:\n%s", rendered)
+	}
+	got, err := PlanFromMarkdown(rendered)
+	if err != nil {
+		t.Fatalf("re-parse failed: %v", err)
+	}
+	if got.Stages[0].ExecutionMode != domain.ExecutionDone {
+		t.Errorf("round-tripped execution mode = %q, want %q", got.Stages[0].ExecutionMode, domain.ExecutionDone)
+	}
+}
+
+// TestCompileAgentCannotDeclareDone proves the completion marker is operator intent
+// read from the plan document: a plan a MODEL normalized cannot declare a stage
+// done, so a model can never skip work by claiming it is finished.
+func TestCompileAgentCannotDeclareDone(t *testing.T) {
+	const planJSON = `{"project":"P","summary":"S","stages":[{"id":"S001","title":"One","objective":"o","dependencies":[],"deliverables":["d"],"acceptance_criteria":["a"],"execution_mode":"done"},{"id":"S002","title":"Two","objective":"o","dependencies":[],"deliverables":["d"],"acceptance_criteria":["a"],"execution_mode":"verify-first"}]}`
+
+	got, err := New(fakeAgent{content: planJSON}).Compile(context.Background(), "not a deterministic plan")
+	if err != nil {
+		t.Fatalf("Compile failed: %v", err)
+	}
+	if got.Stages[0].ExecutionMode.Done() {
+		t.Error("a model-normalized plan must not be able to declare a stage done")
+	}
+	if got.Stages[0].ExecutionMode != "" {
+		t.Errorf("stage[0] mode = %q, want the cleared implement default", got.Stages[0].ExecutionMode)
+	}
+	// A model's other modes are preserved: only the completion declaration is refused.
+	if got.Stages[1].ExecutionMode != domain.ExecutionVerifyFirst {
+		t.Errorf("stage[1] mode = %q, want %q", got.Stages[1].ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+}
+
 func TestCompileFallsBackToAgent(t *testing.T) {
 	// A document with no usable stages cannot be compiled deterministically.
 	const planJSON = `{"project":"P","summary":"S","stages":[{"id":"S001","title":"One","objective":"o","dependencies":[],"deliverables":["d"],"acceptance_criteria":["a"]}]}`

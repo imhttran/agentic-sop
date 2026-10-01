@@ -22,7 +22,9 @@ func SerializeAcceptanceCriteria(criteria []string) string {
 
 // Build converts each Plan stage into a domain.Task, preserving IDs, title,
 // objective, acceptance criteria, and dependency IDs. New tasks start in
-// PLANNED with retry defaults applied. Task order follows Plan stage order.
+// PLANNED with retry defaults applied, except a stage the plan declares done
+// (execution_mode: done), whose task is recorded as already satisfied. Task order
+// follows Plan stage order.
 func Build(plan *planner.Plan) ([]*domain.Task, error) {
 	if plan == nil {
 		return nil, errors.New("plan is nil")
@@ -34,13 +36,22 @@ func Build(plan *planner.Plan) ([]*domain.Task, error) {
 	now := time.Now().UTC()
 	tasks := make([]*domain.Task, 0, len(plan.Stages))
 	for _, stage := range plan.Stages {
+		// A stage the plan declares done has no implementation work left to request:
+		// its task is recorded as already satisfied, so its dependants are unblocked,
+		// the plan can complete, and SOP never selects it for execution. The
+		// declaration is explicit plan metadata — never inferred from a title or prose,
+		// and never set by a model — so SOP neither implements nor gates it.
+		status := domain.PLANNED
+		if stage.ExecutionMode.Done() {
+			status = domain.LOCAL_DONE
+		}
 		tasks = append(tasks, &domain.Task{
 			ID:                 stage.ID,
 			Title:              stage.Title,
 			Objective:          stage.Objective,
 			AcceptanceCriteria: SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
 			ExecutionMode:      stage.ExecutionMode,
-			Status:             domain.PLANNED,
+			Status:             status,
 			BlockedReason:      domain.NO_REASON,
 			Attempt:            0,
 			MaxAttempts:        domain.DefaultRetryPolicy().MaxAttempts,
