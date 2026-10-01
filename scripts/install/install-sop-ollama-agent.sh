@@ -2,7 +2,7 @@
 # Install/update the known-good sop-ollama-agent binary outside the tree under
 # edit.
 #
-# SOP's command bootstrap (scripts/sop-ollama-agent.sh) invokes this installed
+# SOP's command bootstrap (scripts/agents/sop-ollama-agent.sh) invokes this installed
 # binary instead of compiling candidate working-tree source, so a compile error
 # in the candidate agent cannot remove the agent needed to repair it:
 #
@@ -12,7 +12,7 @@
 #     -> SOP validates candidate source
 #
 # The binary is built from a pinned source revision recorded in
-# scripts/sop-ollama-agent.pin, so the same revision yields the same binary. It is
+# scripts/agents/sop-ollama-agent.pin, so the same revision yields the same binary. It is
 # installed atomically and re-running is idempotent: when the installed binary
 # already reports the pinned revision, nothing is rebuilt.
 #
@@ -28,14 +28,14 @@
 # Environment:
 #   SOP_OLLAMA_AGENT_HOME  install directory (default $HOME/.local/share/sop/bin)
 #   SOP_OLLAMA_AGENT_BIN   install to this exact path instead of a directory
-#   SOP_OLLAMA_AGENT_PIN   pin file overrides scripts/sop-ollama-agent.pin
+#   SOP_OLLAMA_AGENT_PIN   pin file overrides scripts/agents/sop-ollama-agent.pin
 #
 # Exits non-zero with an actionable message if the build or install cannot
 # complete. Requires Go and Git.
 set -eu
 
-repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-pin_file=${SOP_OLLAMA_AGENT_PIN:-"$repo_dir/scripts/sop-ollama-agent.pin"}
+repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+pin_file=${SOP_OLLAMA_AGENT_PIN:-"$repo_dir/scripts/agents/sop-ollama-agent.pin"}
 binary_name=sop-ollama-agent
 
 fail() {

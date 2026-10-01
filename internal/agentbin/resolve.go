@@ -53,7 +53,7 @@ func Resolve(lookup func(string) string) (string, error) {
 		}
 		return abs, nil
 	}
-	return "", fmt.Errorf("%w; run scripts/install-sop-ollama-agent.sh to install one", ErrNotInstalled)
+	return "", fmt.Errorf("%w; run scripts/install/install-sop-ollama-agent.sh to install one", ErrNotInstalled)
 }
 
 // isExecutableFile reports whether path names a regular file the caller can

@@ -38,7 +38,7 @@ jobs:
       - name: test
         run: go test ./...
       - name: documentation links
-        run: bash scripts/check-doc-links.sh
+        run: bash scripts/checks/check-doc-links.sh
 
   # The suite under the race detector, which the lifecycle and scheduler tests rely on.
   race:
@@ -67,7 +67,7 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: plugin package is current
-        run: scripts/build-claude-plugin.sh --check
+        run: scripts/packaging/build-claude-plugin.sh --check
       - name: installer smoke (isolated HOME, nothing written)
         env:
           HOME: ${{ runner.temp }}/sop-ci-home

@@ -426,7 +426,7 @@ go test ./internal/e2e/harness/ -run 'Adapter'
 
 Verify the known-good `sop-ollama-agent` bootstrap/install path and that runtime
 execution does not self-build candidate source. Package: `internal/agentbin`,
-`scripts/install-sop-ollama-agent.sh`, and `scripts/sop-ollama-agent.sh`. Verify
+`scripts/install/install-sop-ollama-agent.sh`, and `scripts/agents/sop-ollama-agent.sh`. Verify
 existing coverage first, implement only the missing coverage, then validate
 independently.
 

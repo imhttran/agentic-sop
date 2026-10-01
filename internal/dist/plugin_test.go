@@ -147,9 +147,9 @@ func TestClaudeMarketplaceListsThePlugin(t *testing.T) {
 // package's structure and content are validated on every platform regardless.
 func TestClaudePluginMirrorsTheCanonicalSkills(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("scripts/build-claude-plugin.sh needs a POSIX shell; run this on Linux/macOS")
+		t.Skip("scripts/packaging/build-claude-plugin.sh needs a POSIX shell; run this on Linux/macOS")
 	}
-	cmd := exec.Command("sh", filepath.Join(repoRoot(t), "scripts", "build-claude-plugin.sh"), "--check")
+	cmd := exec.Command("sh", filepath.Join(repoRoot(t), "scripts", "packaging", "build-claude-plugin.sh"), "--check")
 	cmd.Dir = repoRoot(t)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("the plugin package has drifted from skills/: %v\n%s", err, out)

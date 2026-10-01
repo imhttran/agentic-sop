@@ -16,12 +16,14 @@
 # names work unprefixed when no other skill claims them.
 #
 # Usage:
-#   scripts/build-claude-plugin.sh          regenerate the mirror
-#   scripts/build-claude-plugin.sh --check  verify the committed mirror is current
+#   scripts/packaging/build-claude-plugin.sh          regenerate the mirror
+#   scripts/packaging/build-claude-plugin.sh --check  verify the committed mirror is current
 set -eu
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+# This script lives at scripts/packaging/build-claude-plugin.sh, so the repository root
+# is two levels up.
+repo_dir=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 
 src="$repo_dir/skills"
 plugin_dir="$repo_dir/integrations/claude"
@@ -34,7 +36,7 @@ case "${1:-}" in
   "") ;;
   *)
     echo "build-claude-plugin: unknown argument: $1" >&2
-    echo "usage: scripts/build-claude-plugin.sh [--check]" >&2
+    echo "usage: scripts/packaging/build-claude-plugin.sh [--check]" >&2
     exit 2
     ;;
 esac
@@ -64,16 +66,16 @@ cp "$script_dir/claude-plugin-README.md" "$stage/README.md"
 if [ "$check" -eq 1 ]; then
   status=0
   if [ ! -d "$dst" ]; then
-    echo "build-claude-plugin: $dst is missing; run scripts/build-claude-plugin.sh" >&2
+    echo "build-claude-plugin: $dst is missing; run scripts/packaging/build-claude-plugin.sh" >&2
     status=1
   elif ! diff -r -q "$dst" "$stage/skills" >/dev/null 2>&1; then
     echo "build-claude-plugin: $dst has drifted from skills/:" >&2
     diff -r -q "$dst" "$stage/skills" 2>&1 | sed 's/^/  /' >&2
-    echo "build-claude-plugin: run scripts/build-claude-plugin.sh" >&2
+    echo "build-claude-plugin: run scripts/packaging/build-claude-plugin.sh" >&2
     status=1
   fi
   if [ ! -f "$readme" ] || ! diff -q "$readme" "$stage/README.md" >/dev/null 2>&1; then
-    echo "build-claude-plugin: $readme is out of date; run scripts/build-claude-plugin.sh" >&2
+    echo "build-claude-plugin: $readme is out of date; run scripts/packaging/build-claude-plugin.sh" >&2
     status=1
   fi
   if [ "$status" -eq 0 ]; then

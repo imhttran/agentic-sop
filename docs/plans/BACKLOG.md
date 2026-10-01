@@ -13,8 +13,8 @@ edit. Recovery must not depend on the tool the change is allowed to break.
 
 A pinned, prebuilt known-good `sop-ollama-agent` binary is therefore installed
 **outside** the tree under edit (`make install-ollama-agent` →
-`scripts/install-sop-ollama-agent.sh`, revision pinned in `scripts/sop-ollama-agent.pin`),
-and the command bootstrap (`scripts/sop-ollama-agent.sh`) invokes that installed binary
+`scripts/install/install-sop-ollama-agent.sh`, revision pinned in `scripts/agents/sop-ollama-agent.pin`),
+and the command bootstrap (`scripts/agents/sop-ollama-agent.sh`) invokes that installed binary
 instead of compiling candidate source; `internal/agentbin` resolves it, and
 `internal/ollamaagent` reports the running revision. A broken working copy can still
 be repaired. Recorded here for traceability.

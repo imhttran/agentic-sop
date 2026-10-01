@@ -8,12 +8,12 @@ import (
 	"testing"
 )
 
-// TestBootstrapWrapperNeverSelfBuilds proves scripts/sop-ollama-agent.sh resolves
+// TestBootstrapWrapperNeverSelfBuilds proves scripts/agents/sop-ollama-agent.sh resolves
 // the installed known-good binary and, when none is installed, fails with an
 // actionable message instead of compiling candidate working-tree source. This pin
 // is what keeps a broken working copy repairable by the agent. S10.
 func TestBootstrapWrapperNeverSelfBuilds(t *testing.T) {
-	script := filepath.Join("..", "..", "scripts", "sop-ollama-agent.sh")
+	script := filepath.Join("..", "..", "scripts", "agents", "sop-ollama-agent.sh")
 	if _, err := os.Stat(script); err != nil {
 		t.Skipf("bootstrap wrapper not found: %v", err)
 	}

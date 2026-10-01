@@ -525,7 +525,7 @@ function Prepare-Plugin([string]$Requested) {
     Write-Note "Preparing the Claude Code plugin:"
     if (-not (Test-Path -LiteralPath $manifest -PathType Leaf)) {
         Write-Fail "the plugin package is missing: $manifest"
-        Write-Fail "regenerate it with scripts/build-claude-plugin.sh (or .\install.ps1 -DryRun to inspect)"
+        Write-Fail "regenerate it with scripts/packaging/build-claude-plugin.sh (or .\install.ps1 -DryRun to inspect)"
         return
     }
     if (-not (Test-Path -LiteralPath $marketplace -PathType Leaf)) {

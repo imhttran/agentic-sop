@@ -3,7 +3,7 @@
 **Type:** Implementation plan (workstream record).
 
 **Status:** Implemented and archived by SOP (`.agent-sdlc/archive/ahv2/`). The path is
-kept because SOP's archive records this source and `scripts/sop-agent.sh` names it as an
+kept because SOP's archive records this source and `scripts/agents/sop-agent.sh` names it as an
 example; see [../README.md](../README.md) for what is current.
 
 ## Project
@@ -270,7 +270,7 @@ For command:
 ``` text
 Harness: command
 Provider: command
-Command: scripts/sop-agent.sh
+Command: scripts/agents/sop-agent.sh
 ```
 
 ### Acceptance Criteria
@@ -289,7 +289,7 @@ SOP
  ↓
 command
  ↓
-scripts/sop-agent.sh
+scripts/agents/sop-agent.sh
  ↓
 Claude Code / other external implementation agent
 ```

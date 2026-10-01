@@ -162,4 +162,4 @@ The dogfood test itself passes even if the model can't fix the bug, because the 
 - `internal/ollamaagent/harness_test.go` — Unit tests with mocked Ollama
 - `internal/toolharness/` — Shared controlled tool definitions
 - `internal/agent/ollama.go` — SOP's Ollama provider
-- `scripts/sop-ollama-agent.sh` — Bootstrap script
+- `scripts/agents/sop-ollama-agent.sh` — Bootstrap script

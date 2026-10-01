@@ -1,13 +1,13 @@
 .DS_Store
 /sop
-# Build outputs the agents leave at the repository root (see scripts/sop-agent.sh);
+# Build outputs the agents leave at the repository root (see scripts/agents/sop-agent.sh);
 # they are large binaries and must never enter a diff or a commit.
 /sop-*
 
 # Local configuration and credentials (commit .env.example instead).
 .env
 
-# Project-local agent skills, created by `scripts/install-skills.sh <agent> --project`.
+# Project-local agent skills, created by `scripts/install/install-skills.sh <agent> --project`.
 # They are symlinks into ./skills/ and are never committed.
 .agents/
 .claude/

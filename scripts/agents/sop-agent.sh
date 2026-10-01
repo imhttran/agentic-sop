@@ -4,7 +4,7 @@
 #
 # SOP invokes this as:
 #   export SOP_AGENT_PROVIDER=command
-#   export SOP_AGENT_COMMAND="sh scripts/sop-agent.sh"
+#   export SOP_AGENT_COMMAND="sh scripts/agents/sop-agent.sh"
 #   sop run docs/plans/PLAN-Agent-Harness-V2.md
 #
 # It reads SOP's JSON request on stdin and writes the response on stdout. Claude

@@ -51,7 +51,7 @@ cd agentic-sop
 ./install.sh --skills claude   # the sop CLI + the SOP skills in ~/.claude/skills
 ```
 
-`./install.sh --skills claude` delegates to `scripts/install-skills.sh`, which links
+`./install.sh --skills claude` delegates to `scripts/install/install-skills.sh`, which links
 each skill folder into `~/.claude/skills/`, so the commands are available in **every**
 project you open Claude Code in. The skills stay
 live against your checkout: editing a `SKILL.md` takes effect without reinstalling.
@@ -59,17 +59,17 @@ live against your checkout: editing a `SKILL.md` takes effect without reinstalli
 Use the script directly for more control:
 
 ```bash
-scripts/install-claude-skills.sh           # personal scope (same as ./install.sh --skills claude)
-scripts/install-skills.sh claude --project # project scope: ./.claude/skills
-scripts/install-skills.sh claude --project ~/work/api
-scripts/install-skills.sh claude --dry-run # print what would change
-scripts/install-skills.sh claude --force   # replace a SOP-named symlink that points elsewhere
+scripts/install/install-claude-skills.sh           # personal scope (same as ./install.sh --skills claude)
+scripts/install/install-skills.sh claude --project # project scope: ./.claude/skills
+scripts/install/install-skills.sh claude --project ~/work/api
+scripts/install/install-skills.sh claude --dry-run # print what would change
+scripts/install/install-skills.sh claude --force   # replace a SOP-named symlink that points elsewhere
 ```
 
 Uninstall (also safe and idempotent):
 
 ```bash
-scripts/install-skills.sh claude --uninstall
+scripts/install/install-skills.sh claude --uninstall
 # make uninstall-skills-claude runs the same thing
 ```
 

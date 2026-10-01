@@ -719,7 +719,7 @@ agent:
   # tool | command
   # tool: the tool-enabled coding agent that edits the repository through
   # controlled tools. command: the legacy externally-invoked command agent
-  # (for example scripts/sop-agent.sh).
+  # (for example scripts/agents/sop-agent.sh).
   #
   # harness: tool with provider: ollama is the stabilized native Agent Harness
   # path: SOP owns the workflow, and this harness performs the controlled

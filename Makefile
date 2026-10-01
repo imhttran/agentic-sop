@@ -1,6 +1,8 @@
 # Developer convenience targets. The documented installation entry point is
 # ./install.sh (see docs/guides/INSTALLATION.md); these targets delegate to it so there
-# is one installation implementation and Make is never a second one.
+# is one installation implementation and Make is never a second one. The scripts under
+# scripts/ are support tooling, grouped by responsibility (install/, packaging/,
+# checks/, agents/).
 
 .PHONY: fmt vet test build check check-plugin install install-all install-ollama-agent \
 	plugin install-plugin \
@@ -24,7 +26,7 @@ check: fmt vet test build check-plugin
 
 # Verify the packaged Claude Code plugin still mirrors the canonical skills/ tree.
 check-plugin:
-	./scripts/build-claude-plugin.sh --check
+	./scripts/packaging/build-claude-plugin.sh --check
 
 # Install the sop CLI (and nothing else). Add `./install.sh --all` for everything.
 install:
@@ -40,30 +42,30 @@ install-plugin:
 
 # Regenerate the packaged Claude Code plugin from skills/ (it is a generated mirror).
 plugin:
-	./scripts/build-claude-plugin.sh
+	./scripts/packaging/build-claude-plugin.sh
 
-# The skill roots are installed by scripts/install-skills.sh, which owns that logic;
-# ./install.sh --skills <agent> delegates to it. Use the script directly for
+# The skill roots are installed by scripts/install/install-skills.sh, which owns that
+# logic; ./install.sh --skills <agent> delegates to it. Use the script directly for
 # --project/--uninstall/--force.
 install-skills:
-	./scripts/install-skills.sh all
+	./scripts/install/install-skills.sh all
 
 install-skills-zed:
-	./scripts/install-skills.sh zed
+	./scripts/install/install-skills.sh zed
 
 install-skills-claude:
-	./scripts/install-skills.sh claude
+	./scripts/install/install-skills.sh claude
 
 uninstall-skills:
-	./scripts/install-skills.sh all --uninstall
+	./scripts/install/install-skills.sh all --uninstall
 
 uninstall-skills-zed:
-	./scripts/install-skills.sh zed --uninstall
+	./scripts/install/install-skills.sh zed --uninstall
 
 uninstall-skills-claude:
-	./scripts/install-skills.sh claude --uninstall
+	./scripts/install/install-skills.sh claude --uninstall
 
 # Install/update the pinned known-good sop-ollama-agent binary outside the tree
 # under edit, so the bootstrap invocation never compiles candidate source.
 install-ollama-agent: check
-	./scripts/install-sop-ollama-agent.sh
+	./scripts/install/install-sop-ollama-agent.sh

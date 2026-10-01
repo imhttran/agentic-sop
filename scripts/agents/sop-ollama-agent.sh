@@ -3,7 +3,7 @@
 #
 # SOP invokes this as:
 #   export SOP_AGENT_PROVIDER=command
-#   export SOP_AGENT_COMMAND="sh scripts/sop-ollama-agent.sh"
+#   export SOP_AGENT_COMMAND="sh scripts/agents/sop-ollama-agent.sh"
 #   sop run docs/plans/PLAN-Agent-Harness-V2.md
 #
 # It reads the JSON agent request on stdin and writes the response on stdout,
@@ -17,7 +17,7 @@
 #     -> the agent edits candidate source
 #     -> SOP validates candidate source
 #
-# Install/update the binary with scripts/install-sop-ollama-agent.sh.
+# Install/update the binary with scripts/install/install-sop-ollama-agent.sh.
 #
 # Environment (shared with SOP's Ollama provider):
 #   SOP_OLLAMA_BASE_URL   default http://127.0.0.1:11434
@@ -74,7 +74,7 @@ EOF
 if [ -z "$bin" ]; then
     echo "$binary_name: no installed known-good binary found; tried:" >&2
     printf '%s' "$tried" >&2
-    echo "$binary_name: install one with scripts/install-sop-ollama-agent.sh (this bootstrap never compiles candidate source)" >&2
+    echo "$binary_name: install one with scripts/install/install-sop-ollama-agent.sh (this bootstrap never compiles candidate source)" >&2
     exit 1
 fi
 

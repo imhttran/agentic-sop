@@ -25,7 +25,7 @@ duplicating SOP policy. The canonical execution boundary stays `sop prompt`.
                          │
         ┌────────────────┼────────────────────┐
         │                │                    │
-  build the CLI   scripts/install-skills.sh   integrations/claude/
+  build the CLI   scripts/install/install-skills.sh   integrations/claude/
   (user bin dir)   ├── zed                    (plugin; generated mirror of skills/)
                    ├── claude
                    └── all                            │
@@ -74,10 +74,10 @@ they carry no policy, name no model, and never touch a provider.
 - **Status:** Done.
 - **Execution:** done.
 - **Scope:** the CLI build is the only thing the root installer implements itself. The
-  agent skills are installed by `scripts/install-skills.sh`, which owns that logic and
+  agent skills are installed by `scripts/install/install-skills.sh`, which owns that logic and
   keeps its existing interface (`zed|claude|all`, `--project`, `--uninstall`,
   `--dry-run`, `--force`), so there is one implementation of skill installation.
-- **Files:** `install.sh`, `scripts/install-skills.sh`.
+- **Files:** `install.sh`, `scripts/install/install-skills.sh`.
 - **Depends on:** P55-001
 - **Acceptance:** `--skills zed|claude|all` land in the right agent roots and nowhere
   else; a `--skills all` with no agent present reports it and still installs the CLI.
@@ -95,7 +95,7 @@ they carry no policy, name no model, and never touch a provider.
   `scripts/install.sh`, `Makefile`.
 - **Depends on:** P55-001
 - **Acceptance:** no document tells a user to install SOP in a way that no longer
-  applies; `scripts/check-doc-links.sh` reports no broken link.
+  applies; `scripts/checks/check-doc-links.sh` reports no broken link.
 
 ### P55-005 — Claude plugin packaging
 
@@ -106,10 +106,10 @@ they carry no policy, name no model, and never touch a provider.
   files under `integrations/claude/skills/`, and the repository as a marketplace
   (`.claude-plugin/marketplace.json`) listing the plugin by a relative path. The plugin's
   skill files are a **generated verbatim mirror** of `skills/`, produced by
-  `scripts/build-claude-plugin.sh`, so `skills/` stays the single source of truth; the
+  `scripts/packaging/build-claude-plugin.sh`, so `skills/` stays the single source of truth; the
   generator also supports `--check` for drift.
 - **Files:** `integrations/claude/`, `.claude-plugin/marketplace.json`,
-  `scripts/build-claude-plugin.sh`, `scripts/claude-plugin-README.md`.
+  `scripts/packaging/build-claude-plugin.sh`, `scripts/packaging/claude-plugin-README.md`.
 - **Depends on:** —
 - **Acceptance:** `claude plugin validate --strict integrations/claude` and
   `claude plugin validate .` both pass; the mirror is byte-identical to `skills/`.
@@ -244,7 +244,7 @@ go build ./...
 go test ./...
 go test -race ./...
 make check
-bash scripts/check-doc-links.sh
+bash scripts/checks/check-doc-links.sh
 ./install.sh --help
 ./install.sh --dry-run
 ```

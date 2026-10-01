@@ -233,7 +233,7 @@ and delegates. It MUST NOT upgrade a read-only request into `implement`, and an
 unavailable the alias MUST fail closed rather than let the calling agent do the work.
 Installation is described in [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md)
 (Zed) and [`../guides/CLAUDE-SKILLS.md`](../guides/CLAUDE-SKILLS.md) (Claude Code); one
-installer (`scripts/install-skills.sh`) links the same canonical tree into whichever
+installer (`scripts/install/install-skills.sh`) links the same canonical tree into whichever
 agent skill root is present, and no adapter is a second source of SOP policy.
 
 ## 14. Failure Behavior

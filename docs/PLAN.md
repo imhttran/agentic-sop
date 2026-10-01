@@ -694,7 +694,7 @@ T070 run REVIEW through the phased discovery → synthesis loop
 T071 a no-change IMPLEMENT/FIX failure is retryable
 T072 bring the implement-now nudge forward (12, so there is budget to finish)
 T073 raise IMPLEMENT's iteration ceiling to 32 (room for explore-then-write)
-T074 add a Claude Code command-agent adapter (scripts/sop-agent.sh)
+T074 add a Claude Code command-agent adapter (scripts/agents/sop-agent.sh)
 T075 requeue a task whose retry budget is spent (sop retry --force)
 ```
 

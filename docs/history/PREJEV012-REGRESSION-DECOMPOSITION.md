@@ -169,8 +169,8 @@ nothing more unless a new gap appears.
 - **Responsibility:** verify the known-good `sop-ollama-agent` bootstrap/install
   path and that runtime execution does not depend on self-building candidate
   source.
-- **Subsystem:** `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`,
-  `scripts/sop-ollama-agent.sh`, `internal/ollamaagent/version.go`.
+- **Subsystem:** `internal/agentbin`, `scripts/install/install-sop-ollama-agent.sh`,
+  `scripts/agents/sop-ollama-agent.sh`, `internal/ollamaagent/version.go`.
 - **Dependencies:** S8, S9.
 - **Execution:** `implement`.
 - **Focused validation:** `go test ./internal/agentbin/...` then

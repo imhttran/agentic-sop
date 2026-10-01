@@ -118,7 +118,7 @@ matches, S11 records that and completes with `changes_expected=false`.
 | IMPLEMENT deterministic           | S3   | `internal/ollamaagent/implement.go`, `internal/ollamaagent/outcome.go`, `internal/ollamaagent` tests                             |
 | REVIEW deterministic              | S4   | `internal/ollamaagent/review.go`, `internal/ollamaagent` tests, `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`                    |
 | Validation ownership proven       | S5   | `internal/cli` (validate/review/fix wiring), `docs/architecture/OVERVIEW.md`, `internal/domain` gates                                    |
-| Bootstrap resilient               | S6   | `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`, `scripts/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`             |
+| Bootstrap resilient               | S6   | `internal/agentbin`, `scripts/install/install-sop-ollama-agent.sh`, `scripts/agents/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`             |
 | Controller aligned                | S7   | controller README/config; `docs/architecture/OVERVIEW.md` boundary                                                                       |
 | Recovery proven                   | S8   | `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`, `internal/resume`                                  |
 | Both projects dogfooded           | S9   | `docs/PREJEV018-DOGFOOD-RESULTS.md` (per-repo `gofmt`/`vet`/`test`/`build` results)                                             |
@@ -230,8 +230,8 @@ source, and SOP validates candidate source. Runtime execution must not self-buil
 candidate source, and the default install directory is outside the working tree.
 Repeat/re-run must not require destructive state manipulation, and a bootstrap
 failure must surface clearly rather than pass silently. Evidence:
-`internal/agentbin`, `scripts/install-sop-ollama-agent.sh`,
-`scripts/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`.
+`internal/agentbin`, `scripts/install/install-sop-ollama-agent.sh`,
+`scripts/agents/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`.
 
 ## Harness/provider/model boundary (Harness V2)
 

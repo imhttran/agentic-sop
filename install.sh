@@ -17,12 +17,12 @@
 #
 # Installation is delegated, not duplicated:
 #   * the CLI is built here (the one place that builds it);
-#   * the agent skills are installed by scripts/install-skills.sh, which owns the
-#     filesystem skill logic for every supported agent;
+#   * the agent skills are installed by scripts/install/install-skills.sh, which owns
+#     the filesystem skill logic for every supported agent;
 #   * the Claude plugin is a committed package under integrations/claude/, generated
-#     from skills/ by scripts/build-claude-plugin.sh. Claude Code registers plugins
-#     from within Claude Code, so this script verifies the package and prints the
-#     exact official steps instead of writing into Claude's settings.
+#     from skills/ by scripts/packaging/build-claude-plugin.sh. Claude Code registers
+#     plugins from within Claude Code, so this script verifies the package and prints
+#     the exact official steps instead of writing into Claude's settings.
 #
 # Every step is idempotent, and only SOP-owned files are ever touched.
 set -eu
@@ -212,9 +212,9 @@ install_skills() {
   echo
   echo "Installing the SOP skills ($requested):"
   if [ "$dry_run" -eq 1 ]; then
-    "$repo_dir/scripts/install-skills.sh" "$requested" --dry-run || failed=1
+    "$repo_dir/scripts/install/install-skills.sh" "$requested" --dry-run || failed=1
   else
-    "$repo_dir/scripts/install-skills.sh" "$requested" || failed=1
+    "$repo_dir/scripts/install/install-skills.sh" "$requested" || failed=1
   fi
 }
 
@@ -228,7 +228,7 @@ prepare_plugin() {
   echo "Preparing the Claude Code plugin:"
   if [ ! -f "$plugin_dir/.claude-plugin/plugin.json" ]; then
     echo "install: the plugin package is missing: $plugin_dir/.claude-plugin/plugin.json" >&2
-    echo "install: regenerate it with scripts/build-claude-plugin.sh" >&2
+    echo "install: regenerate it with scripts/packaging/build-claude-plugin.sh" >&2
     failed=1
     return 0
   fi

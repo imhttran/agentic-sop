@@ -77,7 +77,7 @@ autonomous catalog — a repository change is always an explicit operator choice
 
 ```text
 skills/sop-review/SKILL.md                    ← the single source of truth
-        │  scripts/build-claude-plugin.sh     (a verbatim mirror)
+        │  scripts/packaging/build-claude-plugin.sh     (a verbatim mirror)
         ▼
 integrations/claude/skills/sop-review/SKILL.md
 ```
@@ -86,8 +86,8 @@ integrations/claude/skills/sop-review/SKILL.md
 skill files are a **generated mirror**, so the two can never diverge by hand:
 
 ```bash
-scripts/build-claude-plugin.sh          # regenerate the mirror
-scripts/build-claude-plugin.sh --check  # fail if it has drifted (also in `make check`)
+scripts/packaging/build-claude-plugin.sh          # regenerate the mirror
+scripts/packaging/build-claude-plugin.sh --check  # fail if it has drifted (also in `make check`)
 ```
 
 Only `integrations/claude/skills/` and `integrations/claude/README.md` are generated;

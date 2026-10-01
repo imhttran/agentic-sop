@@ -106,7 +106,7 @@ Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
   a slash command named after the folder. Six one-per-capability aliases ship beside
   the canonical `skills/sop` skill; each is a few lines that call
   `sop prompt --capability <capability>` and carry no policy. They install with
-  `make install-skills` (`scripts/install-zed-skills.sh`, idempotent, uninstallable,
+  `make install-skills` (`scripts/install/install-zed-skills.sh`, idempotent, uninstallable,
   never overwrites a non-SOP entry, needs no root). `/sop-implement` is hidden from the
   agent's autonomous catalog. See [`../guides/ZED-SKILLS.md`](../guides/ZED-SKILLS.md)
   and [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §13.
@@ -128,7 +128,7 @@ Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
   skill the same way — a flat folder containing a `SKILL.md`, exposed as a `/` command
   named after the folder — so the **same** canonical tree under [`skills/`](../../skills)
   serves both and the capability mapping is shared. A single installer
-  (`scripts/install-skills.sh`, with thin `install-zed-skills.sh` /
+  (`scripts/install/install-skills.sh`, with thin `install-zed-skills.sh` /
   `install-claude-skills.sh` wrappers) links the tree into `~/.agents/skills` or
   `~/.claude/skills` (or the project-local equivalents). It is idempotent, touches
   only SOP-owned entries, refuses to clobber a foreign entry at a SOP name, and needs
@@ -154,7 +154,7 @@ make check
 go test -race ./internal/workitem/... ./internal/cli/... ./internal/router/... \
   ./internal/model/... ./internal/provider/... ./internal/agent/... \
   ./internal/jev/... ./internal/run/... ./internal/skill/...
-scripts/check-doc-links.sh
+scripts/checks/check-doc-links.sh
 ```
 
 ## See also

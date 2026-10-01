@@ -90,7 +90,7 @@ is never silently preferred — use `--bin-dir` to install over it.
 
 ## Agent skills
 
-`--skills` delegates to [`scripts/install-skills.sh`](../../scripts/install-skills.sh),
+`--skills` delegates to [`scripts/install/install-skills.sh`](../../scripts/install/install-skills.sh),
 which owns skill installation for every supported agent. It links the canonical skill
 folders from [`skills/`](../../skills) into the agent's skills root, so the checkout
 stays the single source of truth and an edit to a `SKILL.md` takes effect without
@@ -109,10 +109,10 @@ it regardless. The guides are [ZED-SKILLS.md](ZED-SKILLS.md) and
 Use the script directly for a project-local install, a dry run, or removal:
 
 ```bash
-scripts/install-skills.sh zed --project          # ./.agents/skills
-scripts/install-skills.sh claude --project ~/work/api
-scripts/install-skills.sh all --dry-run
-scripts/install-skills.sh zed --uninstall
+scripts/install/install-skills.sh zed --project          # ./.agents/skills
+scripts/install/install-skills.sh claude --project ~/work/api
+scripts/install/install-skills.sh all --dry-run
+scripts/install/install-skills.sh zed --uninstall
 ```
 
 ## The Claude Code plugin
@@ -156,7 +156,7 @@ that calls it keeps working.
 ## Uninstall
 
 ```bash
-scripts/install-skills.sh all --uninstall   # remove the SOP skill links
+scripts/install/install-skills.sh all --uninstall   # remove the SOP skill links
 claude plugin uninstall sop                 # remove the plugin (from Claude Code)
 rm "$(command -v sop)"                      # remove the CLI
 ```
@@ -169,7 +169,7 @@ tree, or the plugin SOP packaged.
 ```bash
 sop version
 ./install.sh --dry-run          # show, without changing, what a run would do
-scripts/build-claude-plugin.sh --check   # the plugin package is current
+scripts/packaging/build-claude-plugin.sh --check   # the plugin package is current
 ```
 
 The installer and the plugin package are covered by

@@ -18,8 +18,8 @@
 # never clobbers an entry it does not own.
 #
 # Usage:
-#   scripts/install-skills.sh [TARGET] [--global | --project [DIR]]
-#                             [--uninstall] [--dry-run] [--force]
+#   scripts/install/install-skills.sh [TARGET] [--global | --project [DIR]]
+#                                     [--uninstall] [--dry-run] [--force]
 #
 #   TARGET          zed | claude | all   (default: all)
 #   --global        install into the target's user-scope skills root (the default)
@@ -31,7 +31,8 @@
 #
 # With `all` in the user scope, a target whose agent directory is absent is skipped;
 # name the target explicitly to install it anyway. Thin wrappers live beside this
-# script: scripts/install-zed-skills.sh and scripts/install-claude-skills.sh.
+# script: scripts/install/install-zed-skills.sh and
+# scripts/install/install-claude-skills.sh.
 set -eu
 
 # The canonical SOP skill set. Keep in sync with internal/skill (the build fails if
@@ -39,13 +40,15 @@ set -eu
 skills="sop sop-prompt sop-plan sop-review sop-diagnose sop-test sop-implement"
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+# This script lives at scripts/install/install-skills.sh, so the repository root is two
+# levels up.
+repo_dir=$(CDPATH= cd -- "$script_dir/../.." && pwd)
 source_dir="$repo_dir/skills"
 
 usage() {
   cat <<'EOF'
-Usage: scripts/install-skills.sh [TARGET] [--global | --project [DIR]]
-                                 [--uninstall] [--dry-run] [--force]
+Usage: scripts/install/install-skills.sh [TARGET] [--global | --project [DIR]]
+                                         [--uninstall] [--dry-run] [--force]
 
   TARGET           zed | claude | all   (default: all)
   --global         install into the target's user-scope skills root (the default)
@@ -60,9 +63,9 @@ Skill roots:
   claude  global  ~/.claude/skills      project  <dir>/.claude/skills
 
 Examples:
-  scripts/install-skills.sh zed
-  scripts/install-skills.sh claude --project ~/work/api
-  scripts/install-skills.sh all --dry-run
+  scripts/install/install-skills.sh zed
+  scripts/install/install-skills.sh claude --project ~/work/api
+  scripts/install/install-skills.sh all --dry-run
 EOF
 }
 

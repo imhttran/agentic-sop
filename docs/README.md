@@ -93,14 +93,14 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP skills so Zed exposes `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, and `/sop-implement`, and see how each calls `sop prompt`.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same commands for Claude Code: install the skills so Claude exposes the `/sop*` entry points, and how each delegates to `sop prompt`.
-- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
+- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
 
 ## Plans
 
 Implementation plans, newest phase last. A completed plan stays here rather than moving
 to `history/` when SOP or the repository still references its path: the archive under
 `.agent-sdlc/archive/` records these sources, and the example commands in
-`scripts/sop-agent.sh` name one of them. Moving such a plan would break
+`scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
@@ -109,7 +109,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery. **Implemented** (off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`); see [specs/RECOVERY.md](specs/RECOVERY.md) §8.
 - [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill. **Implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
 - [plans/PLAN-Phase-5.5-Distribution.md](plans/PLAN-Phase-5.5-Distribution.md) — Phase 5.5 (P55-001–P55-011): the unified `install.sh`, the per-agent skill installation it delegates, the Claude Code plugin package, and CI. **Implemented**; see [guides/INSTALLATION.md](guides/INSTALLATION.md) and [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md).
-- [plans/PLAN-Phase-5.6-Windows-Distribution.md](plans/PLAN-Phase-5.6-Windows-Distribution.md) — Phase 5.6 (P56-001–P56-011): native Windows installation. **Implemented except P56-011**, the clean-room test on a real Windows machine, which has not been run; see [guides/WINDOWS-INSTALLATION.md](guides/WINDOWS-INSTALLATION.md) and [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md).
+- [plans/PLAN-Phase-5.6-Windows-Distribution.md](plans/PLAN-Phase-5.6-Windows-Distribution.md) — Phase 5.6 (P56-001–P56-012): native Windows installation and a script-organization cleanup. **Implemented except P56-011**, the clean-room test on a real Windows machine, which has not been run; see [guides/WINDOWS-INSTALLATION.md](guides/WINDOWS-INSTALLATION.md) and [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md).
 - [plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default. **Implemented** (P3-001–P3-015) and committed; P3-016 records the dogfood.
 - [plans/PLAN-JEV-Implementation.md](plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017). **Implemented**; archived by SOP. Execute with `sop run docs/plans/PLAN-JEV-Implementation.md`.
 - [plans/PLAN-Agent-Harness-V2.md](plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream. **Implemented**; archived by SOP (`.agent-sdlc/archive/ahv2/`).
@@ -145,7 +145,7 @@ Documentation links MUST resolve. Run the repository link check over `docs/**/*.
 and `README.md` and their relative links:
 
 ```bash
-scripts/check-doc-links.sh
+scripts/checks/check-doc-links.sh
 ```
 
 It prints `broken links: <count>` (for example `broken links: 0`) and exits

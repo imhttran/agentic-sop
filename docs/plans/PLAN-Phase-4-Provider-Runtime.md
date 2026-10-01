@@ -134,7 +134,7 @@ Each step is additive and independently reversible; the new surface defaults OFF
 make check
 go test ./internal/provider/...
 go test -race ./internal/provider/... ./internal/model/... ./internal/cli/... ./internal/router/... ./internal/jev/...
-scripts/check-doc-links.sh
+scripts/checks/check-doc-links.sh
 ```
 
 ## Definition of Done

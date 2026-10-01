@@ -2,8 +2,9 @@
 
 **Type:** Implementation plan.
 
-**Status:** Implemented except P56-011. P56-001–P56-010 shipped: the Windows installer,
-its tests, the `windows-latest` CI job, and the documentation. P56-011 is the clean-room
+**Status:** Implemented except P56-011. P56-001–P56-010 and P56-012 shipped: the
+Windows installer, its tests, the `windows-latest` CI job, the documentation, and the
+script-organization cleanup. P56-011 is the clean-room
 test on a real Windows machine, which has **not** been run — CI is not a clean-machine
 test — so that stage carries no `execution_mode: done` and remains open. See
 [../guides/WINDOWS-INSTALLATION.md](../guides/WINDOWS-INSTALLATION.md) and
@@ -26,7 +27,7 @@ it installs call `sop prompt`.
                │                                          │
        ┌───────┴────────┐                    ┌────────────┴────────────┐
        │                │                    │                         │
-  go build →        copy skills/       go build →            scripts/install-skills.sh
+  go build →        copy skills/       go build →            scripts/install/install-skills.sh
   sop.exe           + .sop-managed      sop                   (symlinks)
        │                │                    │                         │
        └────────────────┴────────────────────┴─────────────────────────┘
@@ -237,6 +238,28 @@ The installers are adapters over one CLI and one canonical skill tree
 - **Acceptance:** the results log is filled in from an actual machine, with each step
   marked done or failing; nothing is inferred from CI.
 
+### P56-012 — Script organization cleanup
+
+- **Status:** Done.
+- **Execution:** done.
+- **Objective:** Organize the internal scripts by responsibility without changing any
+  behavior.
+- **Scope:** group the support tooling under `scripts/` — the skill and known-good-agent
+  installers into `scripts/install/`, the Claude plugin generator and its README source
+  into `scripts/packaging/`, the doc link check into `scripts/checks/`, and the
+  command-agent adapters and the pin into `scripts/agents/`. The public entry points
+  (`install.sh`, `install.ps1`) stay at the repository root, and `scripts/install.sh`
+  stays at its historical path as a compatibility-only shim. Every reference is updated
+  to the new canonical paths (the root installers, the Makefile, CI, the Go code and
+  tests, and the documentation), and each moved POSIX script resolves the repository
+  root two levels up.
+- **Files:** `scripts/`, `install.sh`, `install.ps1`, `Makefile`, `.github/workflows/ci.yml`,
+  `.gitignore`, `internal/`, `docs/`.
+- **Depends on:** P56-001
+- **Acceptance:** the public installer UX is unchanged; `make check`, the installer tests,
+  the cross-platform contract tests, and the plugin-packaging check still pass on both
+  platforms; no SOP policy or execution behavior changed.
+
 ## Definition of Done
 
 - A native `install.ps1` exists; Windows needs no Bash, WSL, or Make.
@@ -269,7 +292,7 @@ go build ./...
 go test ./...
 go test -race ./...
 make check
-bash scripts/check-doc-links.sh
+bash scripts/checks/check-doc-links.sh
 GOOS=windows go vet ./...          # the Windows build and test files type-check
 ```
 

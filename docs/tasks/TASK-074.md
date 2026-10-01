@@ -12,13 +12,13 @@ DONE
 The local Ollama models (flash and pro) could not implement the larger plan tasks
 (AHV2011/AHV2012): they explore for most of the budget and only start writing once
 the tools are withdrawn, or narrate instead of acting. The plan already names the
-intended escape hatch — `SOP_AGENT_COMMAND="sh scripts/sop-agent.sh"` → "Claude
+intended escape hatch — `SOP_AGENT_COMMAND="sh scripts/agents/sop-agent.sh"` → "Claude
 Code / other external implementation agent" (AHV2010) — but the script did not
 exist. This adds it.
 
 ## Scope
 
-- `scripts/sop-agent.sh`: reads SOP's JSON request on stdin and writes the response
+- `scripts/agents/sop-agent.sh`: reads SOP's JSON request on stdin and writes the response
   on stdout, delegating to Claude Code (`claude -p --output-format json`).
 - `docs/PLAN.md`.
 
@@ -45,7 +45,7 @@ returned the review JSON.
 
 ## Acceptance Criteria
 
-- [x] `sh scripts/sop-agent.sh` satisfies the command-provider contract.
+- [x] `sh scripts/agents/sop-agent.sh` satisfies the command-provider contract.
 - [x] IMPLEMENT edits the repository and returns the structured outcome.
 - [x] REVIEW returns the review document.
 - [x] The agent cannot commit, push, or modify `.agent-sdlc`.

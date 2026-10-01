@@ -3,8 +3,8 @@
 # tree resolves to an existing file. Reports a broken-link count and exits non-zero
 # when any link is broken.
 #
-# Usage: scripts/check-doc-links.sh [root]
-#   root defaults to the repository root (the script's parent directory).
+# Usage: scripts/checks/check-doc-links.sh [root]
+#   root defaults to the repository root (the script's grandparent directory).
 #
 # Coverage: docs/**/*.md (recursively) and README.md.
 # Reported: "broken links: N" followed by one line per broken link.
@@ -12,7 +12,9 @@
 set -euo pipefail
 
 script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-root="${1:-$(cd "$script_dir/.." && pwd)}"
+# This script lives at scripts/checks/check-doc-links.sh, so the repository root is two
+# levels up.
+root="${1:-$(cd "$script_dir/../.." && pwd)}"
 
 cd "$root"
 

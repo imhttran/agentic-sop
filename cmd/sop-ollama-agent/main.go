@@ -8,7 +8,7 @@
 // adapter only: SOP remains the workflow authority.
 //
 // It is normally installed once as an immutable known-good binary outside the
-// working tree under edit (see scripts/install-sop-ollama-agent.sh) and invoked
+// working tree under edit (see scripts/install/install-sop-ollama-agent.sh) and invoked
 // from there, so a compile error in candidate source cannot take away the agent
 // needed to repair it. Run `sop-ollama-agent -version` to report which binary
 // ran and which source revision it was built from.

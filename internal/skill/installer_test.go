@@ -19,7 +19,7 @@ import (
 // directories are never touched, and prove the installers are idempotent, scoped, and
 // safe against unrelated entries.
 
-const installerScript = "../../scripts/install-skills.sh"
+const installerScript = "../../scripts/install/install-skills.sh"
 
 // scratchHome returns a temporary HOME with the given agent markers created (for
 // example ".agents" for Zed, ".claude" for Claude Code).
@@ -285,8 +285,8 @@ func TestInstallerForwardersDelegate(t *testing.T) {
 		script string
 		target string
 	}{
-		{"../../scripts/install-zed-skills.sh", "zed"},
-		{"../../scripts/install-claude-skills.sh", "claude"},
+		{"../../scripts/install/install-zed-skills.sh", "zed"},
+		{"../../scripts/install/install-claude-skills.sh", "claude"},
 	}
 	for _, c := range cases {
 		out, err := runInstaller(t, home, c.script, "--dry-run")
@@ -315,8 +315,8 @@ func TestInstallerKnowsEveryTargetRoot(t *testing.T) {
 func TestInstallScriptsAreThinAndSafe(t *testing.T) {
 	scripts := []string{
 		installerScript,
-		"../../scripts/install-zed-skills.sh",
-		"../../scripts/install-claude-skills.sh",
+		"../../scripts/install/install-zed-skills.sh",
+		"../../scripts/install/install-claude-skills.sh",
 	}
 	forbidden := append([]string{}, ProviderBinaries...)
 	forbidden = append(forbidden, "git ", "sed -i", "rm -rf", "go install")

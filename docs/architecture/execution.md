@@ -58,7 +58,7 @@ call `sop prompt` with a capability fixed. None of them owns policy.
 | Early JEV checkpoints (task and prompt) | `internal/cli/early_jev.go` (`runJEVCheckpoint`)  |
 | Run artifacts                           | `internal/run`                                    |
 | Bounded escalation                      | `internal/recovery`, `internal/cli/escalation.go` |
-| Command aliases + installation          | `skills/`, `scripts/install-skills.sh`            |
+| Command aliases + installation          | `skills/`, `scripts/install/install-skills.sh`            |
 
 ## Two execution modes for a prompt
 

@@ -6,7 +6,7 @@ PREJEV012-S10
 
 ## Objective
 
-Verify the known-good `sop-ollama-agent` bootstrap/install path and that runtime execution does not depend on self-building candidate working-tree source. Scope is limited to `internal/agentbin`, `scripts/install-sop-ollama-agent.sh`, `scripts/sop-ollama-agent.sh`, and `internal/ollamaagent/version.go`. Do not discover unrelated subsystems.
+Verify the known-good `sop-ollama-agent` bootstrap/install path and that runtime execution does not depend on self-building candidate working-tree source. Scope is limited to `internal/agentbin`, `scripts/install/install-sop-ollama-agent.sh`, `scripts/agents/sop-ollama-agent.sh`, and `internal/ollamaagent/version.go`. Do not discover unrelated subsystems.
 
 This is a verification task: the known-good-binary bootstrap is already implemented from PREJEV010. Existing correct behavior must be validated, not rewritten.
 

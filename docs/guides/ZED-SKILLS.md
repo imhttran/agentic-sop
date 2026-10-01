@@ -42,7 +42,7 @@ cd agentic-sop
 ./install.sh --skills zed   # the sop CLI + the SOP skills in ~/.agents/skills
 ```
 
-`./install.sh --skills zed` delegates to `scripts/install-skills.sh`, which links each
+`./install.sh --skills zed` delegates to `scripts/install/install-skills.sh`, which links each
 skill folder into `~/.agents/skills/`, so the commands are available in **every**
 project you open in Zed. The skills stay live against your checkout: editing a
 `SKILL.md` takes effect without reinstalling. (See
@@ -52,17 +52,17 @@ install-skills-zed` runs the same thing.)
 Use the script directly for more control:
 
 ```bash
-scripts/install-zed-skills.sh             # global (same as ./install.sh --skills zed)
-scripts/install-skills.sh zed --project   # project-local: ./.agents/skills
-scripts/install-skills.sh zed --project ~/work/api
-scripts/install-skills.sh zed --dry-run   # print what would change
-scripts/install-skills.sh zed --force     # replace a SOP-named symlink that points elsewhere
+scripts/install/install-zed-skills.sh             # global (same as ./install.sh --skills zed)
+scripts/install/install-skills.sh zed --project   # project-local: ./.agents/skills
+scripts/install/install-skills.sh zed --project ~/work/api
+scripts/install/install-skills.sh zed --dry-run   # print what would change
+scripts/install/install-skills.sh zed --force     # replace a SOP-named symlink that points elsewhere
 ```
 
 Uninstall (also safe and idempotent):
 
 ```bash
-scripts/install-skills.sh zed --uninstall
+scripts/install/install-skills.sh zed --uninstall
 # make uninstall-skills-zed runs the same thing
 ```
 

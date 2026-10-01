@@ -203,10 +203,10 @@ func TestImplementCommandDelegatesToGovernedPrompt(t *testing.T) {
 // surface: a shell list and the Go catalog drifting apart would install a partial UI.
 // The shared installer owns the list; the per-agent wrappers forward to it.
 func TestInstallerKnowsEverySkill(t *testing.T) {
-	body := read(t, "../../scripts/install-skills.sh")
+	body := read(t, "../../scripts/install/install-skills.sh")
 	for _, c := range Commands {
 		if !strings.Contains(body, c.Name) {
-			t.Errorf("scripts/install-skills.sh does not know the %q skill", c.Name)
+			t.Errorf("scripts/install/install-skills.sh does not know the %q skill", c.Name)
 		}
 	}
 }
