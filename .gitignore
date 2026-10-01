@@ -11,3 +11,7 @@
 # They are symlinks into ./skills/ and are never committed.
 .agents/
 .claude/
+
+# Editor/browser tooling scratch (e.g. Playwright MCP accessibility snapshots);
+# not project content.
+.playwright-mcp/
