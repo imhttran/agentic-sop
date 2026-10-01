@@ -150,8 +150,12 @@ larger model class in the same invocation. The full policy is owned by
   escalated: risk policy outranks model escalation. A transient
   provider/infrastructure failure MUST retry the same class, and unfinished but
   productive work MUST continue, rather than spend a larger model.
-- An attempt whose gate failed without an authoritative failure classification MUST
-  NOT be escalated; it keeps the existing human/block path (fail closed).
+- An attempt MUST be escalated only when the failure classifier produced an
+  authoritative classification for its gate failure. SOP's OWN deterministic verdict
+  that a mutating invocation claimed success without changing the repository MUST be
+  classified (`NO_CHANGES_PRODUCED`, an implementation failure), so it MAY be
+  escalated like any other. A failure with no authoritative classification at all
+  MUST NOT be escalated; it keeps the existing human/block path (fail closed).
 - Every escalated selection MUST be resolved and validated (Phase 4) before it runs,
   and MUST be built and capability-guarded before use: the selected model MUST equal
   the executing model. If the escalated class cannot be resolved, validated, or built,

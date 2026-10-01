@@ -77,17 +77,13 @@ tasks" above.
 
 ## A gate failure with no authoritative classification is not escalated
 
-Phase 5 escalates only a failure the classifier identified (for example
-`COMPILER_ERROR`, `TEST_FAILURE`, `BLOCKING_FINDINGS`, or the bounded
-`AUTO_FIX_EXHAUSTED`). Two lifecycle paths fail the gate **without** producing a
-classification — an agent that claims success but leaves the working tree
-unchanged (`no repository changes`), and a fix that claims success but changes
-nothing. Recovery fails closed there and keeps the existing human/block path, so
-such a task is never retried on a larger model.
-
-Candidate fix: classify those paths (they are SOP's own deterministic verdicts, not
-prose) so a stronger model with a smaller change scope can be tried before a human
-is involved. See [../specs/RECOVERY.md](../specs/RECOVERY.md) §8.
+_RESOLVED (Phase 5 hardening, P5-010): SOP's own deterministic verdict that a
+mutating invocation claimed success while leaving the working tree unchanged is now
+classified (`failure.NoChangesProduced`, an implementation failure) rather than left
+empty, so the bounded recovery policy escalates it like any other classified
+failure. A failure with no authoritative classification at all still fails closed to
+the existing human/block path. Recorded here for traceability; see
+[../specs/RECOVERY.md](../specs/RECOVERY.md) §8._
 
 ## Prompt runs are not selected by `sop report` with no argument
 

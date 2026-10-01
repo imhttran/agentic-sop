@@ -59,6 +59,13 @@ func TestClassifyDispositions(t *testing.T) {
 			ev:          Evidence{Source: "VALIDATE", TestFailed: true, ConflictResolvedByPlan: true},
 			disposition: AutoFix, kind: TestFailure,
 		},
+		{
+			// SOP's own deterministic verdict: a mutating invocation claimed success
+			// but produced no repository change.
+			name:        "claimed change with none produced",
+			ev:          Evidence{Source: "IMPLEMENT", NoChangesProduced: true},
+			disposition: AutoFix, kind: NoChangesProduced,
+		},
 
 		// --- CONTINUE ---
 		{
@@ -205,6 +212,46 @@ func TestHarnessBudgetSignalsAreContinue(t *testing.T) {
 				t.Errorf("disposition = %s (kind=%s), want CONTINUE", got.Disposition, got.Kind)
 			}
 		})
+	}
+}
+
+// TestNoChangesProducedIsAutoFix pins the classification of SOP's own
+// deterministic verdict that a mutating invocation claimed success while leaving
+// the tree unchanged: it is an authoritative implementation failure (AUTO_FIX), not
+// an unclassified human boundary, so the bounded recovery policy may escalate it.
+func TestNoChangesProducedIsAutoFix(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", NoChangesProduced: true})
+	if got.Disposition != AutoFix {
+		t.Errorf("disposition = %s, want AUTO_FIX", got.Disposition)
+	}
+	if got.Kind != NoChangesProduced {
+		t.Errorf("kind = %s, want %s", got.Kind, NoChangesProduced)
+	}
+	if got.Confidence != High {
+		t.Errorf("confidence = %s, want HIGH", got.Confidence)
+	}
+	if got.Reason == "" {
+		t.Error("classification has no reason")
+	}
+}
+
+// TestNoChangesProducedOutranksVerification proves SOP's own deterministic
+// no-change verdict outranks a verification result for the same reason the harness
+// budget/no-change signal does: SOP produced it, so it is authoritative. It is not
+// a continuation, though — the invocation claimed the work was done.
+func TestNoChangesProducedOutranksVerification(t *testing.T) {
+	got := Classify(Evidence{Source: "IMPLEMENT", NoChangesProduced: true, BuildFailed: true, FixCycles: 3, MaxFixCycles: 3})
+	if got.Kind != NoChangesProduced || got.Disposition != AutoFix {
+		t.Errorf("classification = %+v, want %s/AUTO_FIX", got, NoChangesProduced)
+	}
+}
+
+// TestNoChangesProducedNeverHuman proves the no-change verdict is a bounded,
+// non-human failure: it never fails closed to a human on its own.
+func TestNoChangesProducedNeverHuman(t *testing.T) {
+	got := Classify(Evidence{Source: "FIX", NoChangesProduced: true})
+	if got.Disposition == NeedsHuman {
+		t.Errorf("disposition = NEEDS_HUMAN, want a bounded disposition (kind=%s)", got.Kind)
 	}
 }
 

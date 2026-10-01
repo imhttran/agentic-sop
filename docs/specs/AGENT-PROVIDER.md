@@ -64,7 +64,7 @@ needs_human                                               → stop with NEEDS_HU
 failed                                                    → FAIL (terminal)
 ```
 
-Any other output MUST keep the legacy behaviour, judged by the change produced. See [VALIDATION.md](VALIDATION.md), [QUALITY.md](QUALITY.md).
+Any other output MUST keep the legacy behaviour, judged by the change produced. The `claimed changes, produced none` failure is SOP's own deterministic verdict, so it MUST be classified (`NO_CHANGES_PRODUCED`) rather than left unclassified; when bounded escalation is enabled it MAY then be retried on a larger model — see [RECOVERY.md](RECOVERY.md) §8. See also [VALIDATION.md](VALIDATION.md), [QUALITY.md](QUALITY.md).
 
 ## 9. Tool-Harness Bounds and Phases
 

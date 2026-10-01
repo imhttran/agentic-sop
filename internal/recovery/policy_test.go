@@ -36,6 +36,23 @@ func TestDecideLadder(t *testing.T) {
 			wantReason: ReasonImplementationFailed,
 		},
 		{
+			// SOP's own deterministic no-change verdict is a classified implementation
+			// failure, so it escalates rather than failing closed (Phase 5 hardening).
+			name:       "a claimed change with none produced escalates",
+			policy:     on(2),
+			ev:         Evidence{Class: model.ClassSmall, Kind: failure.NoChangesProduced, Disposition: failure.AutoFix, Attempt: 1},
+			wantAction: ActionEscalate,
+			wantTo:     model.ClassMedium,
+			wantReason: ReasonImplementationFailed,
+		},
+		{
+			name:       "a claimed change with none produced cannot escalate past large",
+			policy:     on(2),
+			ev:         Evidence{Class: model.ClassLarge, Kind: failure.NoChangesProduced, Disposition: failure.AutoFix, Attempt: 3},
+			wantAction: ActionHuman,
+			wantReason: ReasonNoLargerClass,
+		},
+		{
 			name:       "medium implementation failure escalates to large",
 			policy:     on(2),
 			ev:         Evidence{Class: model.ClassMedium, Kind: failure.BlockingFindings, Disposition: failure.AutoFix, Stage: "review", Attempt: 1},

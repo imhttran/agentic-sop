@@ -36,12 +36,13 @@
 // Evidence fields are authoritative when a caller can set them.
 //
 // Evidence precedence is fixed and structured evidence outranks prose: explicit
-// human boundaries, then an invalid plan, then deterministic verification (build,
-// tests, lint, findings), then a JEV analysis failure, then an infrastructure
-// error, and only then the agent's own outcome (its structured status plus its
-// free-form summary). A deterministic compiler error is therefore never UNKNOWN
-// merely because the agent's summary did not name it: the structured `go build`
-// result is authoritative.
+// human boundaries, then an invalid plan, then SOP's OWN deterministic budget/
+// no-change signals (a harness budget exhaustion, or a claimed change with none
+// produced), then deterministic verification (build, tests, lint, findings), then a
+// JEV analysis failure, then an infrastructure error, and only then the agent's own
+// outcome (its structured status plus its free-form summary). A deterministic
+// compiler error is therefore never UNKNOWN merely because the agent's summary did
+// not name it: the structured `go build` result is authoritative.
 package failure
 
 import (
@@ -95,10 +96,19 @@ const (
 	Regression               Kind = "REGRESSION"
 	BlockingFindings         Kind = "BLOCKING_FINDINGS"
 	IncompleteImplementation Kind = "INCOMPLETE_IMPLEMENTATION"
-	AutoFixExhausted         Kind = "AUTO_FIX_EXHAUSTED"
-	TransientProvider        Kind = "TRANSIENT_PROVIDER"
-	EmptyResponse            Kind = "EMPTY_RESPONSE"
-	ToolFailure              Kind = "TOOL_FAILURE"
+	// NoChangesProduced: a mutating invocation reported success (or reported that it
+	// had applied a fix) while leaving the working tree unchanged, when SOP expected a
+	// change. It is SOP's OWN deterministic verdict — an empty diff observed against a
+	// claimed completion — never an agent's prose. Unlike the harness budget/no-change
+	// signal (IncompleteImplementation, which means the work is merely unfinished), the
+	// invocation CLAIMED the work was done, so it is a legitimate implementation
+	// failure that a stronger model, or a tighter change scope, may resolve; the
+	// bounded recovery policy may therefore escalate it rather than fail closed.
+	NoChangesProduced Kind = "NO_CHANGES_PRODUCED"
+	AutoFixExhausted  Kind = "AUTO_FIX_EXHAUSTED"
+	TransientProvider Kind = "TRANSIENT_PROVIDER"
+	EmptyResponse     Kind = "EMPTY_RESPONSE"
+	ToolFailure       Kind = "TOOL_FAILURE"
 	// JEVAnalysisFailure: the optional JEV analysis ran but could not produce a
 	// usable result (a malformed/invalid structured output after the bounded
 	// corrective retries, or an INCOMPLETE/ERROR status). It is a bounded,
@@ -169,6 +179,14 @@ type Evidence struct {
 	// a report explains WHY SOP chose the failure kind instead of relying on the
 	// agent's summary. It never changes the disposition.
 	Detail string
+	// NoChangesProduced is SOP's own deterministic verdict that a mutating
+	// invocation reported success (or a fix) while producing no repository change,
+	// when a change was expected. SOP observes it directly from an empty
+	// working-tree diff against a claimed completion, so it is authoritative
+	// evidence — never agent prose. It is distinct from the harness budget/no-change
+	// signal (a continuation): the invocation claimed the work was done, so it is an
+	// implementation failure.
+	NoChangesProduced bool
 
 	// Authoritative signals, supplied when a caller can determine them. They
 	// select the specific AUTO_FIX kind; their absence does not change the
@@ -248,6 +266,16 @@ func Classify(ev Evidence) Classification {
 	//    escalate. A genuine human decision is reported without these markers.
 	if c, ok := fromHarness(ev); ok {
 		return c
+	}
+
+	// 3b. SOP's own deterministic verdict that a mutating invocation CLAIMED success
+	//     without changing the repository. Like the harness signal above, SOP produced
+	//     it so it is authoritative; unlike that signal, the invocation asserted the
+	//     work was done rather than merely running out of budget, so it is an
+	//     implementation failure (AUTO_FIX) that the bounded fix loop — and, with
+	//     escalation enabled, a stronger model — may resolve.
+	if ev.NoChangesProduced {
+		return autoFix(NoChangesProduced, "the invocation reported success but produced no repository changes")
 	}
 
 	// 4. Deterministic verification: a build, test, lint, or coverage result (or a

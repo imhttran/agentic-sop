@@ -460,6 +460,86 @@ func TestAttemptsAreResetPerRun(t *testing.T) {
 	}
 }
 
+// TestEscalationNoChangesProducesEscalates proves SOP's own deterministic no-change
+// verdict participates in bounded recovery: when a SMALL attempt claims success but
+// produces no repository change, the failure is classified (NO_CHANGES_PRODUCED) and
+// escalated to MEDIUM rather than failing closed, while the initial routing decision
+// is preserved.
+func TestEscalationNoChangesProducesEscalates(t *testing.T) {
+	clearProviderEnv(t)
+	t.Setenv(model.EnvRoutingEnabled, "true")
+	t.Setenv(model.EnvEscalationEnabled, "true")
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, preExecRoutingConfig)
+
+	// Attempt 1 changes nothing (diffBefore is empty); the escalated MEDIUM attempt
+	// produces a reviewable diff, so it passes.
+	res := runEscalation(t, dir, "", "diff --git a/a.go b/a.go\n+escalated\n", "glm-5.3-flash:cloud", jev.NewClearFake(), "run", "--task", "TASK.md")
+	if res.code != exitOK {
+		t.Fatalf("code=%d, want ok; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "Task routing: small") {
+		t.Errorf("stdout missing the initial SMALL routing: %q", res.stdout)
+	}
+	if !strings.Contains(res.stdout, "Recovery:") || !strings.Contains(res.stdout, "Action: ESCALATE") {
+		t.Errorf("stdout missing the recovery decision: %q", res.stdout)
+	}
+	// The escalate reason is only produced for a classified implementation failure,
+	// so it proves the no-change verdict was classified rather than failing closed.
+	if !strings.Contains(res.stdout, "Reason: implementation validation failed") {
+		t.Errorf("stdout missing the classified escalation reason: %q", res.stdout)
+	}
+	if !strings.Contains(res.stdout, "Retrying (attempt 2):") {
+		t.Errorf("stdout missing the retry block: %q", res.stdout)
+	}
+
+	attempts := attemptsOf(t, dir, "T001")
+	if len(attempts) != 2 {
+		t.Fatalf("attempts = %+v, want 2", attempts)
+	}
+	if attempts[0].Class != "small" || attempts[0].Model != "qwen3:4b" || attempts[0].Result != runpkg.AttemptFailed {
+		t.Errorf("attempt 1 = %+v, want a failed small/qwen3:4b attempt", attempts[0])
+	}
+	if attempts[0].Action != "escalate" {
+		t.Errorf("attempt 1 action = %q, want escalate (the no-change verdict is now classified)", attempts[0].Action)
+	}
+	if attempts[1].Class != "medium" || attempts[1].Model != "glm-5.3-flash:cloud" || attempts[1].Result != runpkg.AttemptPassed {
+		t.Errorf("attempt 2 = %+v, want a passing medium/glm-5.3-flash:cloud attempt", attempts[1])
+	}
+
+	// The initial routing decision is preserved: an escalation never overwrites it.
+	art := readRoutingArtifact(t, dir)
+	if art.Class != "small" || art.Source != runpkg.RoutingSourcePolicy {
+		t.Errorf("routing.json = %+v, want the initial small/policy decision", art)
+	}
+}
+
+// TestNoChangesClassificationKeepsRecoveryOff proves the no-change classification is
+// additive: with escalation off, the task still stops at the existing boundary and
+// renders no recovery, while the failure is now classified rather than left empty.
+func TestNoChangesClassificationKeepsRecoveryOff(t *testing.T) {
+	clearProviderEnv(t)
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted, ChangesExpected: true}}
+
+	code, stdout, _ := runInjectedCLI(t, dir, "   \n", a, "run", "--task", "TASK.md")
+	if code != exitError {
+		t.Fatalf("code=%d, want error; stdout=%s", code, stdout)
+	}
+	if !strings.Contains(stdout, "no repository changes") {
+		t.Errorf("stdout missing the no-change reason: %q", stdout)
+	}
+	if !strings.Contains(stdout, "classification: AUTO_FIX (NO_CHANGES_PRODUCED") {
+		t.Errorf("the no-change verdict should be classified: %q", stdout)
+	}
+	if strings.Contains(stdout, "Retrying") {
+		t.Errorf("recovery must be silent when escalation is off: %q", stdout)
+	}
+}
+
 // TestEscalationDisabledKeepsReportUnchanged proves an unrouted task's report is
 // unchanged when escalation is off: no attempt section is rendered.
 func TestEscalationDisabledKeepsReportUnchanged(t *testing.T) {

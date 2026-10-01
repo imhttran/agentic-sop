@@ -519,7 +519,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if strings.TrimSpace(diff) == "" && changesExpected {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
-			return lifeResult{gate: fail("agent reported successful implementation but produced no repository changes"), stage: runpkg.Failed}, nil
+			return noChangesFailure(cfg, "IMPLEMENT", "agent reported successful implementation but produced no repository changes"), nil
 		}
 	} else {
 		// Verification-first pass: no agent produced a change, so there is nothing
@@ -704,7 +704,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if strings.TrimSpace(diff) == "" {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
-			return lifeResult{gate: fail("agent reported a fix but produced no repository changes"), stage: runpkg.Failed}, nil
+			return noChangesFailure(cfg, "FIX", "agent reported a fix but produced no repository changes"), nil
 		}
 		_ = rn.Write("diff.patch", diff)
 	}
@@ -944,6 +944,18 @@ func writeAutonomySummary(w io.Writer, d autonomy.Decision) {
 // fail builds a FAIL result carrying a single reason.
 func fail(reason string) quality.Result {
 	return quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+}
+
+// noChangesFailure is the terminal result for SOP's own deterministic verdict that a
+// mutating invocation claimed success while producing no repository change. The
+// verdict is CLASSIFIED (failure.NoChangesProduced) rather than left empty, so the
+// failure is reported like any other and the bounded recovery policy (Phase 5) may
+// escalate it to a stronger model. The AUTO_FIX disposition is an automatically
+// actionable failure, so with recovery off the existing lifecycle path is unchanged:
+// the task still stops and is blocked at the existing boundary.
+func noChangesFailure(cfg config.Config, source, reason string) lifeResult {
+	cls := failure.Classify(failure.Evidence{Source: source, NoChangesProduced: true})
+	return lifeResult{gate: fail(reason), stage: runpkg.Failed, classification: cls, decision: decideAutonomy(cfg, cls)}
 }
 
 // firstReason returns the gate's first reason, or "" when there is none. It is

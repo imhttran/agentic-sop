@@ -115,7 +115,7 @@ func implementationFailure(ev Evidence) bool {
 	switch ev.Kind {
 	case failure.CompilerError, failure.TestFailure, failure.StaleTest,
 		failure.IntegrationWiring, failure.LintFailure, failure.Regression,
-		failure.BlockingFindings, failure.MissingTestCoverage:
+		failure.BlockingFindings, failure.MissingTestCoverage, failure.NoChangesProduced:
 		return true
 	}
 	return ev.Disposition == failure.AutoFix

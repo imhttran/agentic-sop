@@ -31,6 +31,7 @@ P5-006  human / bounded termination at the existing boundary
 P5-007  CLI + report visibility
 P5-008  diagnostic escalation metrics
 P5-009  tests, dogfood scenarios, documentation, full validation
+P5-010  classify the claimed-change verdict (hardening)
 ```
 
 Each step is additive and independently reversible; the new surface defaults OFF.
@@ -140,6 +141,24 @@ Each step is additive and independently reversible; the new surface defaults OFF
   and `make check` all pass; escalation is OFF by default and the non-escalation
   behavior is unchanged.
 
+### P5-010 — Classify the claimed-change verdict (hardening)
+
+- **Status:** Done.
+- **Scope:** SOP's own deterministic verdict that a mutating invocation claimed
+  success while leaving the working tree unchanged (`no repository changes`, on both
+  the IMPLEMENT and FIX paths) is now classified (`failure.NoChangesProduced`, an
+  implementation failure) instead of being left empty, so the failure is reported
+  like any other and the bounded recovery policy MAY escalate it. The disposition is
+  `AUTO_FIX`, so with escalation off the lifecycle still stops at the existing
+  blocked boundary.
+- **Files:** `internal/failure/failure.go`, `internal/recovery/policy.go`,
+  `internal/cli/run.go`.
+- **Depends on:** P5-004, P5-006.
+- **Acceptance:** a SMALL no-change attempt escalates to MEDIUM and is recorded as
+  `escalate`; the verdict is `NO_CHANGES_PRODUCED`/`AUTO_FIX`; a failure with no
+  authoritative classification still fails closed; the task still blocks when
+  escalation is off.
+
 ## Definition of Done
 
 - Recovery uses typed evidence and is deterministic.
@@ -155,10 +174,12 @@ Each step is additive and independently reversible; the new surface defaults OFF
 
 ## Known limitation
 
-A gate failure that produced no authoritative failure classification (for example
-an agent reporting success while changing nothing) is **not** escalated: recovery
-fails closed and keeps the existing human/block path. Extending classification to
-those paths is future work; see [BACKLOG.md](BACKLOG.md).
+None outstanding. The previously-recorded limitation — a gate failure that produced
+no authoritative failure classification (an agent claiming success while changing
+nothing) was not escalated — is **closed** by P5-010: that verdict is now classified
+(`failure.NoChangesProduced`) and participates in bounded recovery. A failure with no
+authoritative classification at all still fails closed to the existing human/block
+path by design (see [../specs/RECOVERY.md](../specs/RECOVERY.md) §8).
 
 ## Out of scope
 

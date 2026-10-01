@@ -296,8 +296,9 @@ small -> medium -> large -> human / blocked
   disables escalation even when the feature flag is on. A negative value is rejected.
 - A safety, approval, destructive-operation, or invalid-plan failure is never
   escalated; a transient provider failure retries the same class; unfinished work
-  continues. A gate failure with no authoritative classification keeps the existing
-  human/block path.
+  continues, and an implementation failure — including SOP's own `NO_CHANGES_PRODUCED`
+  verdict for a claimed change with none produced — escalates one class. A gate
+  failure with no authoritative classification keeps the existing human/block path.
 - A manual `--model-class` override pins the class and disables automatic
   escalation.
 - Every escalated model is resolved, availability-validated (when `providers.validate`
