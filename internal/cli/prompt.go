@@ -189,9 +189,15 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitError
 	}
-	// Bounded escalation is deliberately NOT enabled for prompts (Phase 5.4 §37):
-	// a prompt does not perform automatic SMALL -> MEDIUM -> LARGE escalation in
-	// this slice, so d.escalation keeps its zero (disabled) value.
+	// Bounded execution recovery (Phase 5) applies to a prompt exactly as it does to a
+	// task. The policy is OFF unless the operator opts in (models.escalation_enabled),
+	// and it can only take effect on an `implement` prompt, which runs the governed
+	// implementation lifecycle (runAttempts). A read-only prompt is a single bounded
+	// call with no quality gate, so escalation never applies to it.
+	if err := applyEscalationEnabled(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "prompt: %v\n", err)
+		return exitError
+	}
 
 	// Prompt progress goes to stderr in machine mode so stdout carries only the
 	// structured result document.

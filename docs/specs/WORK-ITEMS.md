@@ -33,7 +33,7 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 
 - **Implemented** — behavior present in the repository today.
 - **Required** — a normative rule the implementation MUST satisfy (including where it already does).
-- **Proposed / future** — not implemented; see §7.
+- **Proposed / future** — not implemented; no section of this specification is currently in this state.
 
 ---
 
@@ -42,13 +42,13 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 **Implemented.** A `WorkItem` (package `internal/workitem`) describes WHAT SOP is
 being asked to process. It is plain data:
 
-| Field        | Meaning                                                          |
-| ------------ | ---------------------------------------------------------------- |
-| `ID`         | Identity for run/report organization. Never influences routing.   |
-| `Kind`       | `task` or `prompt`.                                              |
-| `Capability` | The exact capability requested (`agent.Capability`).             |
-| `Title`      | A short summary for display and metadata.                        |
-| `Content`    | The text to process (rendered task, or the operator's prompt).   |
+| Field        | Meaning                                                         |
+| ------------ | --------------------------------------------------------------- |
+| `ID`         | Identity for run/report organization. Never influences routing. |
+| `Kind`       | `task` or `prompt`.                                             |
+| `Capability` | The exact capability requested (`agent.Capability`).            |
+| `Title`      | A short summary for display and metadata.                       |
+| `Content`    | The text to process (rendered task, or the operator's prompt).  |
 
 **Required.** A `WorkItem` MUST NOT carry lifecycle policy, routing policy, provider
 fallback logic, approval authority, or model-selection logic. Those MUST remain in
@@ -91,19 +91,21 @@ acceptable for a prompt run.
 
 ## 6. Relationship to Routing and Recovery
 
-**Required.** A work item is an *input*. It MUST NOT select a model class, and it
+**Required.** A work item is an _input_. It MUST NOT select a model class, and it
 MUST NOT drive a recovery decision. Routing ([`MODEL-ROUTING.md`](MODEL-ROUTING.md))
 selects the class a work item starts on; recovery ([`RECOVERY.md`](RECOVERY.md))
 decides what to do after an attempt fails. Both are separate from the work item and
 MUST NOT be folded into it.
 
-## 7. Future Work
+## 7. Recovery
 
-**Proposed / future.** Recovery operating uniformly on either work-item form
-(a task or a prompt, including one submitted through the SOP skill) is the intended
-shape of a later Phase 5 slice. The `WorkItem` abstraction is the boundary that
-prepares for it; this specification does not require any recovery behavior change
-now.
+**Implemented.** Bounded model escalation (Phase 5, [`RECOVERY.md`](RECOVERY.md) §8)
+applies uniformly to any work item that runs the governed lifecycle: a task, and an
+`implement` prompt, both go through the same recovery seam, so SOP MAY retry either
+on the next larger model class within the bound. A read-only prompt is a single
+bounded call with no quality gate, so escalation never applies to it. The `WorkItem`
+abstraction is the boundary this reuses: recovery reads the same typed failure
+classification and the same `model.Selection` for a task or a prompt.
 
 ## 8. See Also
 

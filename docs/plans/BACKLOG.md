@@ -93,14 +93,13 @@ for traceability; see [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.m
 
 ## Bounded escalation does not apply to prompt runs
 
-Phase 5.4 leaves `sop prompt` execution without automatic `small → medium → large`
-escalation: the prompt path never enables the recovery policy, so a failed
-`sop prompt --capability implement` follows the existing failure behavior rather than
-escalating (`internal/cli/prompt.go`; [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8).
-This is deliberate for this slice — recovery over prompts belongs to a later phase
-that unifies recovery over the `WorkItem` abstraction
-([../specs/WORK-ITEMS.md](../specs/WORK-ITEMS.md) §7) — and it is recorded here so the
-gap is visible rather than forgotten.
+_RESOLVED (Phase 5 hardening): `sop prompt --capability implement` now runs the
+governed implementation lifecycle through the same bounded-recovery seam a task uses,
+so when `models.escalation_enabled` is on it escalates `small → medium → large`
+exactly like a task, persisting one attempt per try under the prompt run. A read-only
+prompt is a single bounded call with no quality gate, so escalation never applies to
+it. Recorded here for traceability; see
+[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8._
 
 ## Status and roadmap
 

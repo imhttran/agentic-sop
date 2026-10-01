@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -10,9 +11,11 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider/ollama"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
 
 // textOnlyAgent declares exactly the text-generation capabilities the
@@ -247,6 +250,140 @@ func TestPromptImplementReusesGovernedLifecycle(t *testing.T) {
 		if !stateExists(filepath.Join(dirs[0], name)) {
 			t.Errorf("governed prompt run missing %s", name)
 		}
+	}
+}
+
+// runPromptEscalation runs `sop prompt --capability implement` with an injected
+// factory that records the models it builds and a working tree that stays unchanged
+// until the escalated model has been built, so the first attempt fails and the
+// escalated attempt passes.
+func runPromptEscalation(t *testing.T, dir, diffAfter, escalatedModel string, jevFake jev.Analyzer) escalationRun {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	var models []string
+	escalated := false
+	d := deps{
+		getwd: func() (string, error) { return dir, nil },
+		newAgent: func(harness, provider, model string) (agent.Agent, error) {
+			models = append(models, model)
+			if model == escalatedModel {
+				escalated = true
+			}
+			return &scriptedEscalationAgent{marker: "escalated"}, nil
+		},
+		readDiff: func(context.Context, string) (string, error) {
+			if escalated {
+				return diffAfter, nil
+			}
+			return "", nil
+		},
+		commit:         func(context.Context, string, string) error { return nil },
+		newGitHub:      func(string) github.Client { return &fakeGitHub{} },
+		newJEVAnalyzer: fakeJEV(jevFake),
+	}
+	code := run([]string{"prompt", "--capability", "implement", "Add caching to provider discovery"}, &out, &errOut, d)
+	return escalationRun{code: code, stdout: out.String(), stderr: errOut.String(), models: models}
+}
+
+// promptAttempts reads a prompt run's persisted attempt records.
+func promptAttempts(t *testing.T, runDir string) []runpkg.AttemptRecord {
+	t.Helper()
+	return runpkg.ReadAttemptRecordsAt(runDir)
+}
+
+// TestPromptImplementEscalatesWithBoundedRecovery proves bounded escalation now
+// applies to an `implement` prompt exactly as it does to a task: the SMALL attempt
+// fails, SOP retries on MEDIUM in the same invocation, and both attempts are recorded
+// under the prompt run.
+func TestPromptImplementEscalatesWithBoundedRecovery(t *testing.T) {
+	clearProviderEnv(t)
+	t.Setenv(model.EnvRoutingEnabled, "true")
+	t.Setenv(model.EnvEscalationEnabled, "true")
+	dir := t.TempDir()
+	writeConfig(t, dir, triageRoutingConfig)
+
+	res := runPromptEscalation(t, dir, "diff --git a/a.go b/a.go\n+escalated\n", "glm-5.3-flash:cloud", jev.NewClearFake())
+	if res.code != exitOK {
+		t.Fatalf("code=%d, want ok; stdout=%s stderr=%s", res.code, res.stdout, res.stderr)
+	}
+	if !strings.Contains(res.stdout, "Recovery:") || !strings.Contains(res.stdout, "Action: ESCALATE") {
+		t.Errorf("stdout missing the recovery decision: %q", res.stdout)
+	}
+	if !strings.Contains(res.stdout, "Retrying (attempt 2):") {
+		t.Errorf("stdout missing the retry block: %q", res.stdout)
+	}
+
+	dirs := promptRunDirs(t, dir)
+	if len(dirs) != 1 {
+		t.Fatalf("want one prompt run dir, got %v", dirs)
+	}
+	attempts := promptAttempts(t, dirs[0])
+	if len(attempts) != 2 {
+		t.Fatalf("attempts = %+v, want 2", attempts)
+	}
+	if attempts[0].Class != "small" || attempts[0].Result != runpkg.AttemptFailed || attempts[0].Action != "escalate" {
+		t.Errorf("attempt 1 = %+v, want a failed small attempt escalated", attempts[0])
+	}
+	if attempts[1].Class != "medium" || attempts[1].Result != runpkg.AttemptPassed {
+		t.Errorf("attempt 2 = %+v, want a passing medium attempt", attempts[1])
+	}
+
+	// The initial routing decision is preserved: an escalation never overwrites it.
+	var art struct {
+		Class  string               `json:"class"`
+		Source runpkg.RoutingSource `json:"source"`
+	}
+	readRunJSON(t, filepath.Join(dirs[0], "routing.json"), &art)
+	if art.Class != "small" || art.Source != runpkg.RoutingSourcePolicy {
+		t.Errorf("routing.json = %+v, want the initial small/policy decision", art)
+	}
+}
+
+// TestPromptImplementEscalationOffIsUnchanged proves the policy is additive: with
+// escalation off (the default), an implement prompt that fails is not retried on a
+// larger class and writes no attempt records.
+func TestPromptImplementEscalationOffIsUnchanged(t *testing.T) {
+	clearProviderEnv(t)
+	t.Setenv(model.EnvRoutingEnabled, "true")
+	dir := t.TempDir()
+	writeConfig(t, dir, triageRoutingConfig)
+
+	res := runPromptEscalation(t, dir, "", "", jev.NewClearFake())
+	if res.code != exitError {
+		t.Fatalf("code=%d, want error; stdout=%s", res.code, res.stdout)
+	}
+	if strings.Contains(res.stdout, "Recovery:") || strings.Contains(res.stdout, "Retrying") {
+		t.Errorf("escalation must be silent when disabled: %q", res.stdout)
+	}
+	dirs := promptRunDirs(t, dir)
+	if len(dirs) != 1 {
+		t.Fatalf("want one prompt run dir, got %v", dirs)
+	}
+	if _, err := os.Stat(filepath.Join(dirs[0], "attempts")); err == nil {
+		t.Error("attempts/ written while escalation is disabled")
+	}
+}
+
+// TestPromptReadOnlyNeverEscalates proves a read-only prompt is a single bounded call
+// with no quality gate: it never escalates and writes no attempt records, even when
+// the escalation policy is enabled.
+func TestPromptReadOnlyNeverEscalates(t *testing.T) {
+	clearProviderEnv(t)
+	t.Setenv(model.EnvRoutingEnabled, "true")
+	t.Setenv(model.EnvEscalationEnabled, "true")
+	dir := t.TempDir()
+	writeConfig(t, dir, triageRoutingConfig)
+	a := &fakeCapabilityAgent{review: "ok"}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "", a, fakeJEV(jev.NewClearFake()), "prompt", "--capability", "review", "review this")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "Recovery:") || strings.Contains(stdout, "Retrying") {
+		t.Errorf("a read-only prompt must never escalate: %q", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(promptRunDirs(t, dir)[0], "attempts")); err == nil {
+		t.Error("a read-only prompt must not write attempt records")
 	}
 }
 

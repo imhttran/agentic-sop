@@ -61,7 +61,9 @@ Task / Prompt / Skill
   runs the governed implementation lifecycle (a `taskfile.Spec` projected from the
   prompt), so it cannot shortcut to a bare `Generate`.
 - **No automatic escalation for prompts** in this slice; `d.escalation` stays
-  disabled on the prompt path.
+  disabled on the prompt path. _(Superseded by the Phase 5 hardening follow-up below:
+  bounded escalation now applies to an `implement` prompt, which runs the same
+  governed lifecycle; a read-only prompt still never escalates.)_
 - **Reuse, not duplication.** Provider validation, the capability guard, the router,
   and the JEV checkpoint interpretation (`runJEVCheckpoint`) are the same code the
   task path uses.
@@ -81,20 +83,28 @@ pass.
 
 Tracked in [`BACKLOG.md`](BACKLOG.md) rather than left implicit:
 
-- **Bounded escalation does not apply to prompt runs.** `sop prompt` never enables
-  the recovery policy ([`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §8);
-  recovery over prompts belongs to a later phase that unifies recovery over the
-  `WorkItem` abstraction.
+- **Bounded escalation did not apply to prompt runs.** Resolved by the follow-up
+  below: it now applies to an `implement` prompt.
 - **Prompt run ids are second-resolution** with a collision counter; they are unique
   locally but not globally across machines.
 
+## Follow-up (Phase 5 hardening)
+
+- **Bounded escalation now applies to an `implement` prompt.** The prompt path
+  populates the same recovery policy a task uses (`applyEscalationEnabled`), and an
+  `implement` prompt runs the governed lifecycle through the same `runAttempts` seam,
+  so when `models.escalation_enabled` is on it escalates `small → medium → large`
+  within the bound and records one attempt per try under the prompt run. A read-only
+  prompt is a single bounded call with no gate and never escalates. See
+  [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) §8.
+
 ## Out of scope
 
-Automatic escalation for prompts, provider fallback, provider scoring, cheapest/latency
-routing, prompt marketplaces, remote/distributed execution, MCP orchestration,
-arbitrary shell execution from prompt text, LLM-selected capabilities or classes,
-parallel competing models, learned routing, and any separate policy engine in the
-skill.
+Automatic escalation for **read-only** prompts, provider fallback, provider scoring,
+cheapest/latency routing, prompt marketplaces, remote/distributed execution, MCP
+orchestration, arbitrary shell execution from prompt text, LLM-selected capabilities
+or classes, parallel competing models, learned routing, and any separate policy engine
+in the skill.
 
 ## Validation
 

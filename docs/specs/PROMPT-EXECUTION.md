@@ -122,12 +122,16 @@ exactly as a task's is.
 that cannot be served MUST stop the prompt with an actionable error, and no silent
 provider fallback is permitted.
 
-## 8. No Automatic Escalation
+## 8. Automatic Escalation
 
-**Required.** This slice MUST NOT perform automatic `small → medium → large`
-escalation for a prompt. A prompt execution failure follows the existing failure
-behavior. (Bounded escalation is specified in [`RECOVERY.md`](RECOVERY.md) and
-applies to task runs.)
+**Implemented.** A read-only prompt performs **no** automatic `small → medium →
+large` escalation: it is a single bounded call with no quality gate, so there is
+nothing to recover. An `implement` prompt runs the governed implementation lifecycle,
+so when bounded escalation is enabled it follows the **same** policy as a task — SOP
+MAY retry the prompt on the next larger model class within the bound, recording one
+attempt per try. The policy is OFF by default (`models.escalation_enabled`, exactly as
+for a task) and MUST NOT be applied to a read-only prompt. See
+[`RECOVERY.md`](RECOVERY.md) §8.
 
 ## 9. Artifacts
 
@@ -140,7 +144,8 @@ applies to task runs.)
 - `result.md` — the model's result (read-only prompts).
 - `metadata.json` — the structured result document (§10).
 - An `implement` prompt additionally writes the standard run artifacts
-  (`task.md`, `plan.md`, `implementation.md`, `report.json`, …).
+  (`task.md`, `plan.md`, `implementation.md`, `report.json`, …), and — when bounded
+  escalation applies (§8) — one attempt record per try under `attempts/NNN.json`.
 
 **Required.** No artifact MAY contain a credential or hidden reasoning.
 

@@ -63,7 +63,8 @@ logs/artifacts where practical, agent action, and next state; see
 
 When bounded model escalation is enabled (§8), SOP additionally persists one
 **execution-attempt record** per lifecycle attempt as non-secret diagnostic
-evidence under `.agent-sdlc/runs/<task>/attempts/NNN.json`. Each record names the
+evidence under `.agent-sdlc/runs/<run>/attempts/NNN.json` — `<run>` is the task run,
+or `prompts/<id>` for an `implement` prompt (§8). Each record names the
 attempt number, the model class, provider, model, and locality the attempt ran on,
 the deterministic reason its class was chosen, the result, the failure stage, and
 the recovery action SOP applied afterwards. Attempt records:
@@ -131,6 +132,11 @@ fix loops: after an attempt fails a quality gate, SOP MAY retry the task on the 
 larger model class in the same invocation. The full policy is owned by
 `internal/recovery`; model-class selection remains owned by
 [MODEL-ROUTING.md](MODEL-ROUTING.md).
+
+The policy applies wherever the governed lifecycle runs: a task, and an `implement`
+prompt, which runs the same lifecycle ([PROMPT-EXECUTION.md](PROMPT-EXECUTION.md) §8).
+A read-only prompt is a single bounded call with no quality gate, so escalation never
+applies to it.
 
 - Escalation MUST be OFF by default (`SOP_MODEL_ESCALATION_ENABLED` unset and
   `models.escalation_enabled` absent), so an installation that does not opt in

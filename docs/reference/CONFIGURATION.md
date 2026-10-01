@@ -310,8 +310,9 @@ small -> medium -> large -> human / blocked
   metrics. The initial decision in `routing.json` is never overwritten. Neither
   artifact carries a credential.
 - Enabling escalation alone does not activate model routing and does not change the
-  agent selection: it applies only to a class the task already ran with (routing on,
-  or a run-level class selected).
+  agent selection: it applies only to a class the run already used (routing on, or a
+  run-level class selected). It applies to `sop run` and to an `implement` prompt,
+  which runs the same governed lifecycle; a read-only prompt is never escalated.
 
 ## Early JEV checkpoints
 

@@ -86,7 +86,8 @@ With `SOP_MODEL_ROUTING_ENABLED=true` each task's model class is chosen from typ
 evidence and recorded in `routing.json`. With `SOP_MODEL_ESCALATION_ENABLED=true` a
 task that fails the gate may be retried on the next larger class in the same
 invocation (bounded by `SOP_MODEL_MAX_ESCALATIONS`, default 2), and each attempt is
-recorded under `attempts/`. Both are OFF by default. See
+recorded under `attempts/`. Both are OFF by default and apply equally to an
+`implement` prompt. See
 [`CONFIGURATION.md`](CONFIGURATION.md) and [`../specs/RECOVERY.md`](../specs/RECOVERY.md).
 
 ## `sop prompt`
@@ -104,7 +105,10 @@ sop prompt --capability implement "Add caching to provider discovery"
 The first three are read-only: the model produces text and the repository is never
 modified. `--capability implement` runs the governed implementation lifecycle
 (plan → implement → validate → review → gate → fix → approval), exactly as a planned
-task does; it cannot run on a provider that does not declare `IMPLEMENT`.
+task does; it cannot run on a provider that does not declare `IMPLEMENT`. When model
+routing and bounded escalation are enabled it follows the same path as a task,
+including a retry on the next larger class and per-attempt records under
+`.agent-sdlc/runs/prompts/<run-id>/attempts/`.
 
 `--json` prints the structured result document (`work_item_id`, `kind`,
 `capability`, `status`, `routing`, `report_path`, `result_path`, `result`). Every run
