@@ -181,6 +181,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runReview(rest, stdout, stderr, d)
 	case "run":
 		return runRun(rest, stdout, stderr, d)
+	case "prompt":
+		return runPrompt(rest, stdout, stderr, d)
 	case "commit":
 		return runCommit(rest, stdout, stderr, d)
 	case "pr":
@@ -236,6 +238,7 @@ Commands:
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine
   run       run [PLAN.md | --task TASK.md]  (normal entry point)
+  prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json)
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)

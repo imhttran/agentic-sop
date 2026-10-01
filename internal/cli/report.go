@@ -53,6 +53,12 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	data, err := os.ReadFile(filepath.Join(runsRoot, id, "report.json"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			// A read-only prompt run writes metadata.json (not report.json). Render it
+			// through the same prompt result document so `sop report <prompt-run-id>`
+			// inspects a prompt without a second reporting system.
+			if writePromptReport(stdout, filepath.Join(runsRoot, id)) {
+				return exitOK
+			}
 			fmt.Fprintf(stderr, "report: no report for run %s\n", id)
 			return exitError
 		}

@@ -135,6 +135,20 @@ func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec) 
 // rn is the task's run, used only to persist the diagnostic artifact; a nil rn
 // skips persistence and changes nothing else.
 func runEarlyGate(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, rn *runpkg.Run, checkpoint runpkg.Checkpoint) earlyGateResult {
+	return runJEVCheckpoint(ctx, cfg, d, checkpoint, buildEarlyJEVInvocation(checkpoint, spec), spec.ID, rn)
+}
+
+// runJEVCheckpoint runs one early JEV analysis over an arbitrary bounded
+// invocation and applies deterministic policy to the result. It is the shared core
+// of every early checkpoint: runEarlyGate feeds it a task-derived invocation, and
+// the prompt path (sop prompt) feeds it a prompt-derived one, so prompt and task
+// evidence is interpreted identically and never diverges.
+//
+// It is read-only and returns a zero result (a strict no-op) when the checkpoint is
+// disabled, no analyzer is wired, or the analyzer cannot be built — none of which
+// is fatal. An infrastructure/provider failure is recorded distinctly and is never
+// a finding (FR-P3-9, FR-P3-10).
+func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint runpkg.Checkpoint, inv runpkg.JEVInvocation, taskID string, rn *runpkg.Run) earlyGateResult {
 	if !earlyGateEnabled(cfg, checkpoint) {
 		return earlyGateResult{}
 	}
@@ -149,9 +163,9 @@ func runEarlyGate(ctx context.Context, cfg config.Config, d deps, spec *taskfile
 	rec := activity.FromContext(ctx)
 	rec.Emit(earlyStage(checkpoint), "analyzing", earlyGateLabel(checkpoint))
 
-	out := runpkg.RunJEV(ctx, analyzer, buildEarlyJEVInvocation(checkpoint, spec))
+	out := runpkg.RunJEV(ctx, analyzer, inv)
 
-	res := earlyGateResult{Ran: true, Task: spec.ID, Provider: out.Provider}
+	res := earlyGateResult{Ran: true, Task: taskID, Provider: out.Provider}
 	switch {
 	case out.FailClosed() || out.Result.Status == jev.StatusError || out.Result.Status == jev.StatusIncomplete:
 		// An infrastructure/provider failure is recorded distinctly and is never a
@@ -183,7 +197,7 @@ func runEarlyGate(ctx context.Context, cfg config.Config, d deps, spec *taskfile
 		art := runpkg.EarlyArtifact{
 			Version:        runpkg.EarlyArtifactVersion,
 			Checkpoint:     checkpoint,
-			Task:           spec.ID,
+			Task:           taskID,
 			Provider:       out.Provider,
 			Timestamp:      time.Now().UTC().Format(time.RFC3339),
 			ProviderFailed: res.ProviderFailed,

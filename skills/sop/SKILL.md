@@ -1,0 +1,123 @@
+---
+name: sop
+description: |-
+  Invoke Agentic SOP for ad-hoc, governed work.
+  Use for: "review this", "plan this", "why is this failing", "design tests for this",
+  "implement this" when an operator wants SOP's deterministic routing, provider
+  validation, capability guard, and artifacts applied to a request.
+
+  This skill is a thin client of the `sop` CLI. It MUST NOT reproduce SOP policy:
+  it never chooses a model class, a provider, or an approval outcome, and it never
+  edits the repository itself.
+disable-model-invocation: false
+---
+
+# SOP Skill
+
+A thin entry point that lets an AI agent or assistant environment route work
+through Agentic SOP.
+
+```text
+Agent / Assistant
+       ↓
+     Skill            (this file: pick a capability, call `sop prompt`)
+       ↓
+   `sop` CLI
+       ↓
+    WorkItem          (task | prompt)
+       ↓
+   SOP policies       (capability guard, JEV evidence, deterministic routing,
+                       model resolution, provider validation, governed lifecycle)
+```
+
+The skill **calls SOP**. It does not reimplement routing, approval, provider
+selection, or the lifecycle. SOP remains the sole authority.
+
+## The one command
+
+```bash
+sop prompt --capability <capability> "<prompt>"
+```
+
+- `--capability` is **required intent**, chosen by you from the operator's request.
+  The default is `plan` (read-only), so a bare prompt is never treated as an
+  implementation request.
+- `--file <path>` reads the prompt from a file instead of the positional argument.
+- `--json` prints a machine-readable result document (see below).
+- `--model-class small|medium|large` is an **operator-level override** that only the
+  operator should set; do not set it to "help" the model.
+
+Never pass prompt text as a shell command. Prompt content is data: it is passed to
+the selected agent, never interpreted as a command, a lifecycle transition, a model
+class, or configuration.
+
+## Capability map
+
+Choose the capability that matches what the operator asked for. **Do not upgrade it.**
+If the operator asked for a review, use `review` — never `implement`.
+
+| Capability         | Use for                                                           | Mutates? |
+| ------------------ | ----------------------------------------------------------------- | -------- |
+| `plan`             | architecture/implementation planning, design analysis, approaches | no       |
+| `review`           | code, architecture, security, or design review                    | no       |
+| `diagnose_failure` | build/test/lint/runtime/provider/CI failures                      | no       |
+| `design_tests`     | test plans, cases, acceptance coverage, edge-case analysis        | no       |
+| `implement`        | an explicit request to change the repository                      | **yes**  |
+
+Examples: `review.md`, `plan.md`, `diagnose.md`, `implement.md` in `examples/`.
+
+## Read-only vs. mutating
+
+The four read-only capabilities run one bounded model call. They never modify the
+repository, and they can run on a text-only provider.
+
+`implement` runs SOP's **governed implementation lifecycle** — planning,
+implementation, deterministic validation, review, quality gate, bounded fix, and the
+human approval boundary — exactly as a planned task does. It cannot run on a
+provider that does not declare `IMPLEMENT`; SOP fails clearly rather than
+reinterpreting the request.
+
+## Output
+
+- Human output goes to stdout (the model's result for a read-only prompt).
+- `--json` prints a result document with no secrets and no hidden reasoning:
+
+```json
+{
+  "version": 1,
+  "work_item_id": "prompt-20260930-120000",
+  "kind": "prompt",
+  "capability": "review",
+  "status": "completed",
+  "routing": {
+    "class": "medium",
+    "provider": "mlx",
+    "model": "mlx-community/Qwen3-4B-4bit"
+  },
+  "report_path": ".agent-sdlc/runs/prompts/prompt-20260930-120000",
+  "result_path": ".agent-sdlc/runs/prompts/prompt-20260930-120000/result.md",
+  "result": "<model response>"
+}
+```
+
+Every prompt run is recorded under `.agent-sdlc/runs/prompts/<run-id>/`
+(`prompt.md` and `metadata.json`; a read-only prompt also writes `result.md`, and
+`routing.json` is written when routing applies; an `implement` prompt also writes the
+standard run artifacts). Inspect one later with `sop report prompts/<run-id>`.
+
+## What the skill must not do
+
+- Do not call a provider directly (`ollama`, `mlx`, `llama.cpp`, OpenRouter, …).
+  SOP resolves the provider and model.
+- Do not choose a model class, a provider, or an approval outcome.
+- Do not edit the repository directly (no shell/editor/git mutation) to satisfy an
+  `implement` request — call `sop prompt --capability implement`.
+- Do not retry indefinitely, suppress SOP failures, or reinterpret a failed result
+  as success. Return SOP's result to the operator.
+- Do not add routing, lifecycle, or approval logic to the skill.
+
+## Failure behavior
+
+`sop prompt` exits non-zero and reports an actionable error when the capability is
+unsupported by the selected provider, the selected model cannot be validated, or the
+lifecycle does not pass. Surface that error; do not work around it.
