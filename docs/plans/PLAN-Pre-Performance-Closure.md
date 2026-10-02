@@ -214,7 +214,13 @@ flowchart TD
 
 ## CLOSE-001 — Capture Current Repository Baseline
 
-Capture the exact, reproducible baseline (source, configuration and binary) that every later verification and measurement in this plan depends on, for both repositories, without mutating either repository. Record for agentic-sop and sop-controller the branch, HEAD and tracked/untracked status; record uncommitted-patch and untracked inventory in a way that retains user changes; record the Go toolchain (go version), the installed sop binary path/version/build revision and a hash of that binary; record relevant redacted configuration; and record the SMALL/MEDIUM/LARGE resolved provider/model/locality/fallback mapping and routing enabled/disabled state using existing SOP configuration and recorded routing/provider operations. The source SHA/binary hash snapshot is updated after legitimate bounded closure remediation and artifact changes; exact measured fixture patches/config are frozen and logged; there is no implicit branch switch, reset/clean or source replacement, and current branch 1ce9bdb and controller fde492d are starting facts, not everlasting SHAs after authorized closure edits. Deterministic validation for this task is the evidence-producing baseline itself: the recorded source revision and binary hash must be re-derivable by re-running git rev-parse HEAD, git status --short, go version, sop version, and a hash of the sop binary path; the acceptance criteria below must be satisfied by that recorded evidence, not by generic repository tests.
+Capture the exact, reproducible baseline (source, configuration and binary) that every later verification and measurement in this plan depends on, for both repositories, as an IMPLEMENT task whose lifecycle requires exactly one intentional repository mutation. CLOSE-001 creates or updates ONLY docs/reports/pre-performance-closure/CLOSE-001-baseline.md in agentic-sop; that Markdown report is the sole permitted intentional repository mutation and contains all recorded evidence. All other repository contents — application/source code, tests, runtime configuration, SOP configuration, Git branches, existing user changes, sibling repository contents and installed binaries — MUST NOT be mutated by CLOSE-001. sop-controller remains strictly read-only during CLOSE-001, and that whole sibling checkout MUST NOT be mutated. Existing user changes, including report contents, must be preserved: CLOSE-001 does not reset, clean, amend or overwrite unrelated work.
+
+Before writing the report, CLOSE-001 records the initial repository state of both repositories; it then distinguishes those pre-existing changes from the authorized report delta, and after writing verifies that existing changes were preserved and that no other repository contents changed.
+
+The report records secrets-redacted evidence, with no secrets recorded, under four separate headings/sections — agentic-sop, sop-controller, Toolchain/runtime and Model configuration. agentic-sop records: repository path/name; branch; HEAD SHA; divergence from local main where applicable (marked unavailable with reason if absent); verbatim sanitized git status --short; tracked dirty state; untracked inventory; and whether an uncommitted patch exists. sop-controller records the same fields — repository path/name; branch; HEAD SHA; verbatim sanitized git status --short; tracked dirty state; untracked inventory; whether an uncommitted patch exists — with the entire sibling strictly read-only. Toolchain/runtime records the exact `go version` output labeled "Go version"; the actual resolved SOP binary path labeled "SOP binary"; `sop version`; the SOP build/VCS revision when available; the VCS modified state when available; and the SHA-256 hash of the ACTUAL SOP binary. CLOSE-001 records the actual SOP binary identity and any source/binary mismatch without rebuilding, aligning, installing or changing the SOP binary; it does not rebuild or install anything, and it explicitly retains the known binary/source mismatch if still observed, using current evidence rather than claiming historical SHAs are current; unavailable build fields are marked unavailable and never fabricated. Model configuration records the separate configured SMALL, MEDIUM, LARGE mappings, each with provider, model, locality and fallback; routing enabled/disabled; and relevant redacted configuration provenance, keeping the configured mappings distinct from any model actually selected for CLOSE-001 and from runtime availability; availability is recorded only if actually observed, and unobserved availability is recorded as NOT OBSERVED/UNAVAILABLE rather than an implied success. CLOSE-001 does not change mappings or probe providers solely to assert availability.
+
+The source SHA/binary hash snapshot is recorded in that report and is updated only by later authorized bounded remediation under CLOSE-005, which owns rebuilding/aligning/installing/repinning a reproducible binary and is distinct from CLOSE-001; exact measured fixture patches/config are frozen and logged; there is no implicit branch switch, reset/clean or source replacement, and current branch 1ce9bdb and controller fde492d are starting facts, not everlasting SHAs after authorized closure edits. Deterministic validation for this task is the evidence-producing baseline itself: the recorded source revision and binary hash must be re-derivable by re-running git rev-parse HEAD, git status --short, go version, sop version, and a hash of the sop binary path; the acceptance criteria below must be satisfied by that recorded evidence, not by generic repository tests.
 
 ### Dependencies
 
@@ -222,18 +228,45 @@ None
 
 ### Deliverables
 
-- docs/reports/pre-performance-closure/CLOSE-001-baseline.md — sanitized baseline with repo branches/HEADs/status, dirty/untracked inventory, toolchain, binary path/version/revision/hash, redacted config, and routing/provider mapping.
-- docs/reports/pre-performance-closure/CLOSE-001-baseline.json — machine-readable companion holding the same fields for later diffing.
-- A pinned source SHA and binary hash per repository, revalidated and repinned after any authorized closure remediation.
+- docs/reports/pre-performance-closure/CLOSE-001-baseline.md — the sole permitted intentional repository mutation: sanitized baseline with repo branches/HEADs/status, dirty/untracked inventory, toolchain, binary path/version/revision/hash, redacted config, and routing/provider mapping.
+- A pinned source SHA and binary hash per repository, recorded in that report and revalidated/repinned only by CLOSE-005 after any authorized closure remediation.
 
 ### Acceptance Criteria
 
-- Both repositories' branches, HEAD SHAs and tracked status are recorded.
-- Uncommitted-patch and untracked inventory is recorded, with all user changes retained.
-- Go toolchain version, sop binary path, sop version output and binary hash are recorded.
-- The installed sop source/binary mismatch (binary reports sop dev, revision d0af5a475e1be7a89c58571923cdc02896e15990, vcs.modified=true while the tracked HEAD is 1ce9bdb5d5d959fe87b315a5aca5e8cbaab8998f) is explicitly recorded as a known mismatch to be aligned to a known reproducible build before dogfood or measurement.
-- No secrets are recorded; no reset/clean/amend/overwrite and no implicit branch switch occurs. The current checkout is recorded as the default baseline and its divergence from local main is recorded.
-- The resolved SMALL/MEDIUM/LARGE provider/model/locality/fallback mapping and routing enabled/disabled state are recorded, clearly separating configured mapping, actually selected model, runtime availability and missing information.
+- CLOSE-001 passes only when the report exists and is nonempty: docs/reports/pre-performance-closure/CLOSE-001-baseline.md is present and nonempty, and it is the sole permitted intentional repository mutation created or updated by CLOSE-001.
+- Both repository baselines are recorded: the agentic-sop and sop-controller sections record repository path/name, branch, HEAD SHA, verbatim sanitized git status --short, tracked dirty state, untracked inventory and whether an uncommitted patch exists, with agentic-sop divergence from local main where applicable (unavailable with reason if absent).
+- User changes remain untouched: the report records the initial repository state before writing, distinguishes pre-existing changes from the authorized report delta, and verifies after writing that existing changes were preserved and no other repository contents changed; no reset/clean/amend/overwrite of unrelated work occurs.
+- Toolchain/binary identity is recorded: the exact `go version` output labeled "Go version", the actual resolved SOP binary path labeled "SOP binary", `sop version`, SOP build/VCS revision when available, VCS modified state when available, and the SHA-256 hash of the ACTUAL SOP binary are recorded, with unavailable build fields marked unavailable and never fabricated.
+- The actual mismatch is explicitly recorded if still present: the observed SOP binary/source mismatch is recorded from current evidence without claiming historical SHAs are current, and CLOSE-001 does not rebuild, align, install or change the SOP binary.
+- Model mappings and routing are recorded without conflating configuration, selection and availability: separate configured SMALL, MEDIUM and LARGE mappings each record provider, model, locality and fallback; routing enabled/disabled and redacted configuration provenance are recorded; configured mappings are kept distinct from any model actually selected for CLOSE-001 and from runtime availability, which is recorded only if actually observed and otherwise NOT OBSERVED/UNAVAILABLE.
+- No source/config/test/runtime behavior changed: no application/source code, tests, runtime configuration, SOP configuration, Git branch, existing user change, sibling repository content or installed binary is mutated by CLOSE-001, and sop-controller remains strictly read-only.
+- The only intentional repository mutation from CLOSE-001 is its Markdown evidence report docs/reports/pre-performance-closure/CLOSE-001-baseline.md; no separate .json, patch, configuration or other second artifact is required and all evidence lives in the Markdown report.
+- Deterministic presence checks alone are necessary but not sufficient for complete and accurate evidence, and evidence must be observable rather than model assertions; no secrets are recorded and the report is secrets-redacted.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `test -s docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "agentic-sop" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "sop-controller" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "Go version" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "SOP binary" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "SMALL" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "MEDIUM" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+- Run from the agentic-sop root and it must pass; generic repository tests are not a substitute: `grep -q "LARGE" docs/reports/pre-performance-closure/CLOSE-001-baseline.md`.
+
+### Deterministic Validation
+
+Documentation only: these eight commands are also required as self-contained
+acceptance bullets above, so this code block is never the only location. Run each
+from the agentic-sop root:
+
+```bash
+test -s docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "agentic-sop" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "sop-controller" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "Go version" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "SOP binary" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "SMALL" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "MEDIUM" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+grep -q "LARGE" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
+```
 
 ## CLOSE-002 — Reconcile Plans/Status/History
 
@@ -401,7 +434,7 @@ Capture a representative, reproducible pre-performance baseline across real exis
 - docs/reports/pre-performance-closure/CLOSE-009-performance-baseline-raw.json — raw measurements with run ids and artifact paths.
 - docs/reports/pre-performance-closure/CLOSE-009-performance-baseline.md — the four workloads, frozen inputs, acceptance commands, and three runs each in independent disposable copies.
 - Pinned fixture definitions (A/B/C/D) with frozen task/criteria/test-input/config/source/patch hashes and their adapted dogfood scaffolding under docs/reports/pre-performance-closure/workloads/{A,B,C,D}/.
-- A known reproducible SOP build used for measurement (aligned under CLOSE-001), recorded with its build revision and hash.
+- A known reproducible SOP build used for measurement (aligned under CLOSE-005), recorded with its build revision and hash.
 
 ### Acceptance Criteria
 
