@@ -154,3 +154,13 @@ standard run artifacts). Inspect one later with `sop report prompts/<run-id>`.
 `sop prompt` exits non-zero and reports an actionable error when the capability is
 unsupported by the selected provider, the selected model cannot be validated, or the
 lifecycle does not pass. Surface that error; do not work around it.
+
+When reporting BLOCK/BLOCKED, FAIL, or an execution error, include a clickable
+Markdown link to the latest relevant `sop-run.log` from the invocation's project
+(normally `.run/sop-run.log`). Confirm the log belongs to the reported run; do
+not present an older run's error as current. Link the error line when available,
+using an absolute local path, for example `[sop-run.log](/absolute/project/.run/sop-run.log:173)`.
+Include the exact outcome and a short, safe error excerpt. If no matching log
+exists, say `sop-run.log: UNAVAILABLE` and link the applicable existing run/report
+artifact instead; never invent a log or use another project's log. Apply this
+reporting rule to delegated SOP commands and capability aliases as well.
