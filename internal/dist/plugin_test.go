@@ -178,8 +178,8 @@ func TestClaudePluginMirrorsTheCanonicalSkills(t *testing.T) {
 }
 
 // TestClaudePluginExposesTheCommandSurface proves every packaged command delegates to
-// `sop prompt` with the right capability, and that a command which fixes no capability
-// does not embed one.
+// its canonical SOP command, and that a command which fixes no capability does
+// not embed one.
 func TestClaudePluginExposesTheCommandSurface(t *testing.T) {
 	for _, c := range skill.Commands {
 		body := read(t, filepath.Join(pluginDir, "skills", c.Name, "SKILL.md"))
@@ -232,7 +232,7 @@ func TestClaudePluginCarriesNoPolicyOrModelAccess(t *testing.T) {
 	}
 }
 
-// TestClaudePluginImplementIsGoverned proves the one mutating command is exactly that:
+// TestClaudePluginImplementIsGoverned proves the ad-hoc mutating command is governed:
 // it maps only to implement, it states that SOP's governed lifecycle runs, and it is
 // hidden from Claude's autonomous catalog so a repository change is always an explicit
 // operator choice.
@@ -247,8 +247,8 @@ func TestClaudePluginImplementIsGoverned(t *testing.T) {
 	if !strings.Contains(body, "--capability implement") {
 		t.Error("sop-implement must invoke `sop prompt --capability implement`")
 	}
-	// No other command mutates: implement is the capability of exactly one command, and
-	// it is sop-implement. A capability-specific command mentions no other capability, so
+	// Implement is the capability of exactly one prompt command, sop-implement.
+	// Project execution separately delegates to run. A capability alias mentions no other capability, so
 	// a read-only command can never be routed to implementation.
 	implement := 0
 	capabilityRE := regexp.MustCompile(`--capability[= ]([a-z_]+)`)

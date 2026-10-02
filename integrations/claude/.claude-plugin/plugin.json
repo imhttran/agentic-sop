@@ -2,7 +2,7 @@
   "name": "sop",
   "displayName": "Agentic SOP",
   "version": "0.1.0",
-  "description": "Run governed work through Agentic SOP: /sop:sop-plan, /sop:sop-review, /sop:sop-diagnose, /sop:sop-test, and /sop:sop-implement. Every command calls `sop prompt`, so SOP keeps owning routing, providers, validation, and approval.",
+  "description": "Run governed work through Agentic SOP. Capability aliases call `sop prompt`; /sop:sop-end-to-end delegates project execution to `sop run`. SOP owns routing, providers, validation, and approval.",
   "author": {
     "name": "imhttran"
   },

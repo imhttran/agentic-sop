@@ -2,9 +2,10 @@
 
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
-`/sop-test`, and `/sop-implement`, and how each one calls SOP.
+`/sop-test`, `/sop-implement`, and `/sop-end-to-end`, and how each one calls SOP.
 
-The commands are **thin aliases**. They pick a capability and call `sop prompt`; SOP
+The commands are **thin adapters**. Capability aliases call `sop prompt`;
+`/sop-end-to-end` delegates project execution to `sop run`. SOP
 still owns routing, provider selection, validation, the lifecycle, and approval. The
 normative behavior is in
 [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); the skill contract is in
@@ -89,9 +90,11 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-diagnose`  | `diagnose_failure` | no       | build, test, lint, runtime, provider, CI failures  |
 | `/sop-test`      | `design_tests`     | no       | test plans, cases, acceptance coverage, edge cases |
 | `/sop-implement` | `implement`        | **yes**  | an explicit request to change the repository       |
+| `/sop-end-to-end` | _project execution_ | **yes** | execute/resume a plan with `sop run` |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
-default (`plan`) applies. They never become an implementation request on their own.
+default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
+`/sop end-to-end` project-execution requests use `/sop-end-to-end` instead.
 
 Example, from the Claude Code prompt:
 
@@ -105,30 +108,42 @@ Example, from the Claude Code prompt:
 /sop-test design regression tests for provider fallback prevention
 
 /sop-implement add caching to provider model discovery
+
+/sop end-end docs/plans/PLAN-Example.md
 ```
 
-`/sop-implement` is the only mutating command. It enters SOP's governed
+`/sop-implement` handles ad-hoc mutation requests. It enters SOP's governed
 implementation lifecycle (plan → implement → deterministic validation → review →
 quality gate → bounded fix → human approval boundary) exactly as a planned task does,
 and it is hidden from Claude's autonomous catalog so Claude cannot start it on its
 own — you invoke it explicitly.
 
 Claude Code also lets **Claude** invoke a skill automatically when the description
-matches. When it does, the same rules apply: Claude must call `sop prompt` and return
+matches. When it does, the same rules apply: capability aliases must call `sop prompt` and return
 SOP's result, not perform the work itself.
 
-Everything after the command name is prompt data. The aliases place it in SOP's
+`/sop-end-to-end` also requires explicit operator intent. It performs lightweight
+preflight, invokes `sop run` once, observes its state, and reports genuine human
+boundaries. It adds no lifecycle or retry loop. Its contract is
+[the tracked skill](../../skills/sop-end-to-end/SKILL.md), with deterministic
+scenarios in [the evaluation specification](../testing/SOP-END-TO-END.md).
+
+For capability aliases, everything after the command name is prompt data. They place it in SOP's
 `$ARGUMENTS` position and pass it to `sop prompt` as a single argument — it is never
 interpreted as a shell command, a lifecycle transition, or configuration. See
 [Prompt text is untrusted](#prompt-text-is-untrusted).
 
 ## Where the work goes
 
-Each command runs `sop prompt` in the project Claude Code is open on, so:
+Capability aliases run `sop prompt` in the project Claude Code is open on, so:
 
 - runs are recorded under that project's `.agent-sdlc/runs/prompts/<run-id>/`;
 - inspect one with `sop report prompts/<run-id>`, or `sop report` for the latest run;
 - a blocked run in one project never affects another project.
+
+End-to-end execution uses that project's existing plan/task state and standard
+`.agent-sdlc/runs/` reports. Supplied plan paths are passed as data with proper
+argument escaping.
 
 The provider and model are chosen by SOP (see
 [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) and
@@ -152,7 +167,7 @@ this matters most for `/sop-implement`.
 ## Safety of the installer
 
 - **No root.** Skills are per-user; the script warns if it is run as root.
-- **Only SOP-owned entries.** It links the seven SOP commands and never deletes or
+- **Only SOP-owned entries.** It links the SOP commands and never deletes or
   overwrites an unrelated file or skill.
 - **Idempotent.** Re-running reports `ok` for entries already linked.
 - **Conflicts are refused, not clobbered.** If a SOP name already exists as a real

@@ -13,7 +13,7 @@ type Command struct {
 	// exposes for it.
 	Name string
 	// Capability is the capability the command fixes, or "" when it fixes none: the
-	// CLI's own conservative (read-only) default then applies.
+	// CLI's own default applies; end-to-end execution delegates to run instead.
 	Capability string
 	// Delegation is the exact text the command's SKILL.md must contain — the call it
 	// makes into the SOP CLI. A command that fixes no capability must not embed one.
@@ -30,6 +30,7 @@ var Commands = []Command{
 	{Name: "sop-diagnose", Capability: "diagnose_failure", Delegation: "sop prompt --capability diagnose_failure"},
 	{Name: "sop-test", Capability: "design_tests", Delegation: "sop prompt --capability design_tests"},
 	{Name: "sop-implement", Capability: "implement", Delegation: "sop prompt --capability implement"},
+	{Name: "sop-end-to-end", Capability: "", Delegation: "sop run"},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts

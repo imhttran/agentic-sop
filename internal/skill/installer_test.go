@@ -77,7 +77,7 @@ func assertAbsent(t *testing.T, root string) {
 }
 
 // TestInstallerZedIsIdempotent installs for Zed twice: the second run must change
-// nothing and must leave the same seven working links.
+// nothing and must leave the same working links for every shipped command.
 func TestInstallerZedIsIdempotent(t *testing.T) {
 	home := scratchHome(t, ".agents")
 	root := filepath.Join(home, ".agents", "skills")

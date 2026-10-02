@@ -46,10 +46,16 @@ Thin aliases in the same install expose one capability each:
 /sop-diagnose <request>   capability: diagnose_failure
 /sop-test <request>       capability: design_tests
 /sop-implement <request>  capability: implement (governed, mutating)
+/sop-end-to-end <plan>    execute a project plan through `sop run`
 ```
 
-Each alias is a few lines that call the one command below with its capability fixed;
-none of them carries routing, provider, or lifecycle policy. Install them with
+Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
+`sop-end-to-end` skill and `sop run`; do not turn them into an ad-hoc prompt.
+That skill performs lightweight preflight and reports SOP's authoritative state.
+Read-only requests to review or plan end-to-end behavior still use `sop prompt`.
+
+The capability aliases call the command below; the end-to-end entry delegates to
+`sop run`. None carries routing, provider, or lifecycle policy. Install them with
 `./install.sh --skills zed` (Zed) or `./install.sh --skills claude` (Claude Code), or
 `./install.sh --all` for every supported agent plus the Claude Code plugin
 (`.\install.ps1 -Skills zed` on Windows; see the project README). `/sop-implement` is
