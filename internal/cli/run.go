@@ -214,6 +214,7 @@ type lifeResult struct {
 	suite         testrunner.SuiteResult
 	report        review.Report
 	verifiedFirst bool
+	satisfaction  *agent.CompletionEvidence
 	perf          perf.Task
 	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
 	// JEV did not run. It is diagnostic evidence referenced by the report; it is
@@ -293,18 +294,28 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
+	completion := ""
+	var mutations *int
+	if res.satisfaction != nil {
+		completion = agent.AlreadySatisfied
+		zero := 0
+		mutations = &zero
+	}
 	writeRunJSON(rn, "report.json", runReportDoc{
-		ID:            rn.State().ID,
-		Stage:         res.stage,
-		Provider:      cfg.Agent.Provider,
-		Engine:        cfg.Review.Engine,
-		Decision:      res.gate.Decision,
-		Reasons:       res.gate.Reasons,
-		FixCycles:     res.cycles,
-		ExecutionMode: string(spec.ExecutionMode),
-		VerifiedFirst: res.verifiedFirst,
-		Validation:    res.suite.Results,
-		Findings:      res.report.Findings,
+		ID:                  rn.State().ID,
+		Stage:               res.stage,
+		Provider:            cfg.Agent.Provider,
+		Engine:              cfg.Review.Engine,
+		Decision:            res.gate.Decision,
+		Reasons:             res.gate.Reasons,
+		FixCycles:           res.cycles,
+		ExecutionMode:       string(spec.ExecutionMode),
+		VerifiedFirst:       res.verifiedFirst,
+		Validation:          res.suite.Results,
+		AlreadySatisfied:    res.satisfaction,
+		Completion:          completion,
+		RepositoryMutations: mutations,
+		Findings:            res.report.Findings,
 		// JEV is diagnostic evidence, reported in its own section and pointing at
 		// the persisted artifact. It is separate from the validation and review
 		// sections, which remain authoritative.
@@ -401,7 +412,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// already reads — the existing mutation observer — so no second
 		// mutation-detection mechanism exists. Narration, tool intent, a write
 		// request, a test run, and a model-guessed git status are never evidence.
-		implMutation bool
+		implMutation     bool
+		alreadySatisfied bool
+		satisfaction     *agent.CompletionEvidence
 		// pendingOutcome is a non-completed mutating (IMPLEMENT/FIX) outcome whose
 		// disposition is deferred until SOP's own deterministic validation has run,
 		// so structured build/test evidence outranks the agent's free-form summary.
@@ -507,6 +520,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		implStop := rec.Measure(perf.StageImplement)
 		impl, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Implement,
+			AcceptanceCriteria: spec.AcceptanceCriteria,
+			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
 			Input:              input,
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
@@ -517,6 +532,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("implement: %w", err)
 		}
 		_ = rn.Write("implementation.md", impl.Content)
+		alreadySatisfied = impl.VerifiedAlreadySatisfied && impl.Outcome != nil &&
+			impl.Outcome.Status == agent.OutcomeCompleted && impl.Outcome.Completion == agent.AlreadySatisfied
+		if alreadySatisfied {
+			satisfaction = impl.Outcome.Evidence
+		}
 		// Record the invocation's observed changes as task-scoped evidence even when
 		// it did not complete, so the next bounded invocation (and JEV) keeps the
 		// implementation the task already produced.
@@ -557,10 +577,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// a waiver for a change-requiring task: it is evidence only, and the
 		// authoritative gate below (green validation on an unchanged tree) routes the
 		// completion to the retryable no_changes/no-progress vocabulary instead of
-		// PASS. A legitimate no-change completion still runs the configured validation
-		// first, as it always has.
+		// PASS. Only independently verified ALREADY_SATISFIED evidence permits
+		// no-mutation completion; the validation and quality gates still run.
 		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
-		if !implMutation && changesExpected {
+		if !implMutation && changesExpected && !alreadySatisfied {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "IMPLEMENT", "agent reported successful implementation but produced no repository changes"), nil
@@ -713,6 +733,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
+			AcceptanceCriteria: spec.AcceptanceCriteria,
+			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
 			Input:              fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()),
 			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
@@ -723,6 +745,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
+		// A later fix invalidates an earlier already-satisfied verdict. Only the
+		// current proof can be used; a run that implemented changes is not a
+		// zero-mutation completion merely because its final FIX needed no edit.
+		alreadySatisfied = false
+		satisfaction = nil
+		if !implMutation && fix.VerifiedAlreadySatisfied && fix.Outcome != nil && fix.Outcome.Status == agent.OutcomeCompleted && fix.Outcome.Completion == agent.AlreadySatisfied {
+			alreadySatisfied = true
+			satisfaction = fix.Outcome.Evidence
+		}
 		recordTaskChanges(rn, fix.ChangedFiles)
 
 		// Re-read the working tree after the fix so the next classification sees what
@@ -770,7 +801,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// accounting without a second counter and without a second mechanism. A
 	// verify-first or execution_mode-done stage (whose work needs no change of its
 	// own) is unaffected, and a genuine mutation passes exactly as before.
-	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation {
+	// A trusted harness may additionally prove ALREADY_SATISFIED; this waives
+	// only the mutation requirement, after the independent gate has passed.
+	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied {
 		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
 		return noChangesCompletion(cfg, rn, class), nil
 	}
@@ -811,6 +844,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			ar.Emit(activity.StageComplete, string(gate.Decision), "")
 		}
 	}
+	if gate.Decision != quality.Pass {
+		satisfaction = nil
+	}
 	_ = rn.SetStage(stage)
 	return lifeResult{
 		gate:           gate,
@@ -819,6 +855,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		suite:          suite,
 		report:         report,
 		verifiedFirst:  verifiedFirst,
+		satisfaction:   satisfaction,
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
@@ -1385,17 +1422,20 @@ func relDir(base, target string) string {
 
 // runReportDoc is the machine-readable run report.
 type runReportDoc struct {
-	ID            string              `json:"id"`
-	Stage         runpkg.Stage        `json:"stage"`
-	Provider      string              `json:"provider"`
-	Engine        string              `json:"review_engine"`
-	Decision      quality.Decision    `json:"decision"`
-	Reasons       []string            `json:"reasons"`
-	FixCycles     int                 `json:"fix_cycles"`
-	ExecutionMode string              `json:"execution_mode"`
-	VerifiedFirst bool                `json:"verified_first"`
-	Validation    []testrunner.Result `json:"validation"`
-	Findings      []review.Finding    `json:"findings"`
+	Completion          string                    `json:"completion,omitempty"`
+	RepositoryMutations *int                      `json:"repository_mutations,omitempty"`
+	AlreadySatisfied    *agent.CompletionEvidence `json:"already_satisfied,omitempty"`
+	ID                  string                    `json:"id"`
+	Stage               runpkg.Stage              `json:"stage"`
+	Provider            string                    `json:"provider"`
+	Engine              string                    `json:"review_engine"`
+	Decision            quality.Decision          `json:"decision"`
+	Reasons             []string                  `json:"reasons"`
+	FixCycles           int                       `json:"fix_cycles"`
+	ExecutionMode       string                    `json:"execution_mode"`
+	VerifiedFirst       bool                      `json:"verified_first"`
+	Validation          []testrunner.Result       `json:"validation"`
+	Findings            []review.Finding          `json:"findings"`
 	// JEV is the JEV diagnostic evidence section: a distinct, attributed summary
 	// of the JEV result that points at the persisted artifact. It is separate
 	// from Validation and Findings, which remain authoritative, and is omitted
@@ -1429,6 +1469,12 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	fmt.Fprintf(&b, "- Review engine: `%s`\n", cfg.Review.Engine)
 	fmt.Fprintf(&b, "- Stage: `%s`\n", res.stage)
 	fmt.Fprintf(&b, "- Fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
+	if res.satisfaction != nil {
+		b.WriteString("\n- Completion: ALREADY_SATISFIED\n- Repository mutations: 0\n")
+		for _, item := range res.satisfaction.Acceptance {
+			fmt.Fprintf(&b, "- Acceptance: %s — inspected %s\n", item.Criterion, strings.Join(item.Paths, ", "))
+		}
+	}
 	if res.verifiedFirst {
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
@@ -1542,4 +1588,13 @@ func writeClassificationReport(b *strings.Builder, cls failure.Classification) {
 	if reason := strings.TrimSpace(cls.Reason); reason != "" {
 		fmt.Fprintf(b, "- Reason: %s\n", reason)
 	}
+}
+
+// completionValidationCommands is caller-owned policy, not model-selected proof.
+func completionValidationCommands(cfg config.Config) []string {
+	var commands []string
+	for _, check := range validate.Checks(cfg.Validation) {
+		commands = append(commands, check.Command)
+	}
+	return commands
 }

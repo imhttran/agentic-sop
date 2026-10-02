@@ -108,10 +108,12 @@ func (h *CommandHarness) Execute(ctx context.Context, request Request) (Response
 // outcomeWire mirrors the structured execution outcome a command agent may return
 // for a mutating capability.
 type outcomeWire struct {
-	Status          string `json:"status"`
-	Summary         string `json:"summary"`
-	Reason          string `json:"reason"`
-	ChangesExpected *bool  `json:"changes_expected"`
+	Status          string              `json:"status"`
+	Summary         string              `json:"summary"`
+	Reason          string              `json:"reason"`
+	ChangesExpected *bool               `json:"changes_expected"`
+	Completion      string              `json:"completion,omitempty"`
+	Evidence        *CompletionEvidence `json:"evidence,omitempty"`
 }
 
 // ParseOutcome recognizes a structured execution outcome in content. It returns
@@ -145,9 +147,11 @@ func ParseOutcome(content string) *Outcome {
 	}
 
 	outcome := &Outcome{
-		Status:  status,
-		Summary: strings.TrimSpace(wire.Summary),
-		Reason:  strings.TrimSpace(wire.Reason),
+		Status:     status,
+		Summary:    strings.TrimSpace(wire.Summary),
+		Reason:     strings.TrimSpace(wire.Reason),
+		Completion: wire.Completion,
+		Evidence:   wire.Evidence,
 	}
 	// ChangesExpected is meaningful only for a completed outcome; a completed
 	// outcome without the field intends to change the repository (the stricter

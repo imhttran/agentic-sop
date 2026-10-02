@@ -21,7 +21,8 @@ import (
 // the state-database guard), and a non-mutating tool (a read, a search, a git
 // inspection) never do.
 type mutationEvidence struct {
-	observed bool
+	observed         bool
+	alreadySatisfied bool
 	// tools records which controlled mutations were observed, in order. It is
 	// diagnostic only; the observed boolean is the signal.
 	tools []string

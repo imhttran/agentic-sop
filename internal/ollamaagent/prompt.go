@@ -87,7 +87,13 @@ every acceptance criterion yourself.
 When the implementation is complete, return the required final response immediately.
 
 SOP performs independent validation and review after you return. Prefer small,
-targeted edits, and run focused validation (for example "go test ./...").`
+targeted edits, and run focused validation (for example "go test ./...").
+
+Exception: when the task supplies an already-satisfied verification contract,
+you may prove the existing implementation using its required validations and
+inspected files, then explicitly return ALREADY_SATISFIED. Do not manufacture
+an edit to satisfy the mutation requirement. The ordinary progress bounds still
+apply, and SOP independently verifies the proof.`
 	case agent.Plan:
 		return `This is PLAN, not IMPLEMENT.
 
@@ -132,12 +138,18 @@ func outputContract(cap agent.Capability) string {
 	if !wantsOutcome(cap) {
 		return "the JSON document described under \"Output requirements\" in the task below"
 	}
-	return `Return exactly one of these JSON objects:
+	contract := `Return exactly one of these JSON objects:
 {"status": "completed", "summary": "<what you did>", "changes_expected": true}
 {"status": "completed", "summary": "<why no change was needed>", "changes_expected": false}
 {"status": "needs_human", "reason": "<decision a human must make>"}
 {"status": "failed", "reason": "<why the task cannot be completed>"}
 Use "changes_expected": true only when you actually changed repository files.`
+	if cap == agent.Implement || cap == agent.Fix {
+		contract += `
+With a supplied already-satisfied verification contract, a completed outcome may
+add "completion":"ALREADY_SATISFIED" and "evidence":{"acceptance":[{"criterion":"<exact criterion>","paths":["<inspected file>"]}]}, with changes_expected=false. This requires every supplied validation to pass and every criterion to have concrete inspected evidence.`
+	}
+	return contract
 }
 
 // userPrompt renders the task, input, and output requirements from the request.
@@ -149,6 +161,10 @@ func userPrompt(req agent.Request) string {
 	}
 	if s := strings.TrimSpace(req.OutputRequirements); s != "" {
 		fmt.Fprintf(&b, "\nOutput requirements:\n%s\n", s)
+	}
+	if (req.Capability == agent.Implement || req.Capability == agent.Fix) && len(req.AcceptanceCriteria) > 0 && len(req.ValidationCommands) > 0 {
+		fmt.Fprintf(&b, "\nAlready-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
+		b.WriteString(`If the implementation already exists, read the relevant files and run EVERY required validation command successfully. Then explicitly return {"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact supplied criterion>","paths":["<successfully read repository file>"]}]}}. Map EVERY criterion to concrete inspected files. SOP verifies tool results and unchanged repository state. Reads, narration, no-op writes, and model assertions alone cannot establish completion. Existing discovery, stale, and iteration bounds still apply.`)
 	}
 	return b.String()
 }

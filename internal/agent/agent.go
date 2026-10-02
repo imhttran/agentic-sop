@@ -45,6 +45,10 @@ type Request struct {
 	Task               string     `json:"task"`
 	Input              string     `json:"input"`
 	OutputRequirements string     `json:"output_requirements"`
+	// Caller-owned acceptance criteria and validation commands. Model output
+	// cannot supply or replace this verification contract.
+	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
+	ValidationCommands []string `json:"validation_commands,omitempty"`
 }
 
 // Validate rejects requests the transport must not send to a harness.
@@ -72,20 +76,39 @@ const (
 	OutcomeFailed OutcomeStatus = "failed"
 )
 
-// Outcome is the structured execution outcome a command agent returns for a
-// mutating capability. SOP acts on it directly and never infers it from prose, so
-// a harness must state it structurally.
+// AlreadySatisfied identifies verified completion without repository mutation.
+const AlreadySatisfied = "ALREADY_SATISFIED"
+
+// AcceptanceEvidence maps a caller-owned criterion to inspected repository files.
+type AcceptanceEvidence struct {
+	Criterion string   `json:"criterion"`
+	Paths     []string `json:"paths"`
+}
+
+// CompletionEvidence preserves the checks actually executed by the harness.
+type CompletionEvidence struct {
+	Acceptance         []AcceptanceEvidence `json:"acceptance"`
+	ValidationCommands []string             `json:"validation_commands"`
+}
+
+// Outcome is the structured execution outcome a command agent returns.
+// Completion names a no-mutation conclusion; it carries no authority by itself.
 type Outcome struct {
 	Status          OutcomeStatus
 	Summary         string
 	Reason          string
 	ChangesExpected bool
+	Completion      string
+	Evidence        *CompletionEvidence
 }
 
 // Response is the raw content returned by an agent, plus, when the command agent
 // reported one, a structured execution outcome.
 type Response struct {
 	Content string
+	// VerifiedAlreadySatisfied is set only by a trusted executing harness, never
+	// parsed from model or command-provider JSON. The lifecycle still validates.
+	VerifiedAlreadySatisfied bool
 	// Outcome is set when the command agent returned a structured outcome; it is
 	// nil for legacy prose responses and for capabilities that return structured
 	// content (plans, reviews) instead.

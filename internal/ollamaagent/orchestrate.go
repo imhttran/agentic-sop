@@ -304,6 +304,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 	}
 
 	st := newExecutionState()
+	proof := h.satisfactionProof(ctx, req)
 	var (
 		lastTool string
 		lastReq  string
@@ -376,6 +377,18 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			continue
 		}
 		if !isTool {
+			if final["completion"] == agent.AlreadySatisfied {
+				if !h.verifySatisfied(ctx, req, st, proof, final) {
+					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", "acceptance verification failed")
+					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
+					if !st.mutationObserved {
+						return "", &changeIncompleteError{message}
+					}
+					return "", errors.New(message)
+				}
+				ev.alreadySatisfied = true
+				h.recordImplementEvent(req, agent.AlreadySatisfied, "repository_mutations=0; acceptance and validation verified")
+			}
 			h.recordImplementTurn(req, st.phase, iteration, "outcome", "", progressOK, false, false)
 			encoded, err := json.Marshal(final)
 			if err != nil {
@@ -454,6 +467,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		var result string
 		var toolErr error
 		var observation toolharness.MutationObservation
+		commandSucceeded := false
 		if candidate {
 			result, observation, toolErr = h.tools.RunObservedMutation(ctx, name, args)
 			if !observation.Verified {
@@ -463,9 +477,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				h.recordImplementEvent(req, "mutation observation", "failed_operation_repository_changed")
 				result += "\nrepository state changed during failed operation; no successful mutation progress credited"
 			}
+		} else if name == toolharness.ToolRunCommand {
+			result, commandSucceeded, toolErr = h.tools.RunCommandChecked(ctx, args)
 		} else {
 			result, toolErr = h.tools.Run(ctx, name, args)
 		}
+		proof.observe(h.tools.Root(), name, args, result, toolErr, commandSucceeded)
 		lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 
 		// An inspection is remembered in the invocation's continuation checkpoint,
@@ -570,6 +587,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			}
 		}
 
+		if !st.mutationObserved && proof.baseline != "" && len(advice) > 0 {
+			advice = append(advice, alreadySatisfiedInstruction)
+		}
 		content := toolResultMessage(name, result, toolErr)
 		for _, a := range advice {
 			content += "\n\n" + a

@@ -166,10 +166,13 @@ func wantsOutcome(c agent.Capability) bool {
 // outcomeWire is the command-agent outcome as SOP's command provider parses it.
 // The field tags match that wire format exactly.
 type outcomeWire struct {
-	Status          string `json:"status"`
-	Summary         string `json:"summary,omitempty"`
-	Reason          string `json:"reason,omitempty"`
-	ChangesExpected *bool  `json:"changes_expected,omitempty"`
+	Status              string                    `json:"status"`
+	Summary             string                    `json:"summary,omitempty"`
+	Reason              string                    `json:"reason,omitempty"`
+	ChangesExpected     *bool                     `json:"changes_expected,omitempty"`
+	Completion          string                    `json:"completion,omitempty"`
+	Evidence            *agent.CompletionEvidence `json:"evidence,omitempty"`
+	RepositoryMutations *int                      `json:"repository_mutations,omitempty"`
 }
 
 // Harness executes one SOP request against Ollama using controlled tools. It

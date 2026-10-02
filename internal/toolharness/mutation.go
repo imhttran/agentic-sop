@@ -149,3 +149,21 @@ func (r mutationReader) Read(p []byte) (int, error) {
 	}
 	return r.reader.Read(p)
 }
+
+// RepositoryFingerprint observes repository content without Git metadata or SOP
+// runtime state. An unavailable observation must be treated as unknown.
+func (h *Harness) RepositoryFingerprint(ctx context.Context) (string, error) {
+	return h.mutationFingerprint(ctx, h.root)
+}
+
+// RunCommandChecked preserves the command result while exposing its real exit
+// status independently of display text. It executes and audits exactly once.
+func (h *Harness) RunCommandChecked(ctx context.Context, args map[string]any) (string, bool, error) {
+	result, succeeded, err := h.runCommandWithStatus(ctx, args)
+	auditErr := err
+	if auditErr == nil && !succeeded {
+		auditErr = errors.New("command exited unsuccessfully")
+	}
+	h.audit(ToolRunCommand, args, result, auditErr)
+	return result, succeeded, err
+}
