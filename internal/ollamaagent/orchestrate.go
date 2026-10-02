@@ -450,9 +450,23 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		}
 		st.counters.toolCalls++
 
-		result, toolErr := h.tools.Run(ctx, name, args)
+		candidate := controlledMutation(name, args)
+		var result string
+		var toolErr error
+		var observation toolharness.MutationObservation
+		if candidate {
+			result, observation, toolErr = h.tools.RunObservedMutation(ctx, name, args)
+			if !observation.Verified {
+				h.recordImplementEvent(req, "mutation observation", "verification_unavailable")
+				result += "\nmutation verification unavailable; no mutation progress credited"
+			} else if observation.Changed && !observation.Succeeded {
+				h.recordImplementEvent(req, "mutation observation", "failed_operation_repository_changed")
+				result += "\nrepository state changed during failed operation; no successful mutation progress credited"
+			}
+		} else {
+			result, toolErr = h.tools.Run(ctx, name, args)
+		}
 		lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
-		recordToolActivity(ctx, name, args)
 
 		// An inspection is remembered in the invocation's continuation checkpoint,
 		// so a run that stops short of changing the repository can hand the next
@@ -463,11 +477,16 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			st.recordInspected(path)
 		}
 
-		// A successful controlled mutation is the primary execution evidence: it
+		// A successful, independently verified mutation is the execution evidence: it
 		// moves the invocation out of discovery and grounds changes_expected. A
 		// failed or denied write never counts, and neither does a read, a search,
-		// an inspection, or a formatting command that did not run.
-		justMutated := toolErr == nil && controlledMutation(name, args)
+		// an inspection, or a successful operation that left repository state unchanged.
+		justMutated := candidate && toolErr == nil && observation.Succeeded && observation.Verified && observation.Changed
+		// CHANGE activity is later consumed as task change evidence. No-op,
+		// failed, or unverified file attempts remain audited but must not emit it.
+		if !candidate || justMutated || name == toolharness.ToolRunCommand {
+			recordToolActivity(ctx, name, args)
+		}
 		if justMutated {
 			st.observeMutation()
 			st.counters.interactions++

@@ -11,12 +11,13 @@ import (
 //
 // Mutation evidence is the primary execution signal used to ground a mutating
 // capability's outcome: it records whether *this* invocation performed a
-// successful controlled mutation. It is deliberately invocation-scoped (created
-// by, and carried through, a single Complete/Execute call — never stored on the
+// successful controlled mutation verified by before/after repository state.
+// It is invocation-scoped (created by, and carried through, a single
+// Complete/Execute call — never stored on the
 // Harness), so one invocation cannot contaminate the next.
 //
-// Only a successful controlled mutation sets it. A failed execution (a refused
-// path, a protected file, an IO error), a denied tool call (capability policy or
+// Only a successful, verified content/type/mode change sets it. A no-op, failed
+// execution (a refused path, a protected file, an IO error), a denied tool call (capability policy or
 // the state-database guard), and a non-mutating tool (a read, a search, a git
 // inspection) never do.
 type mutationEvidence struct {
@@ -32,8 +33,8 @@ type mutationEvidence struct {
 	paths []string
 }
 
-// record marks that a successful controlled mutation was observed. It is
-// idempotent: the first successful mutation is the evidence; later ones are
+// record marks that a successful controlled mutation was independently verified.
+// It is idempotent: the first successful mutation is the evidence; later ones are
 // recorded for diagnostics only.
 func (m *mutationEvidence) record(tool string) {
 	if m.observed {
@@ -74,10 +75,11 @@ func (m *mutationEvidence) mutationPaths() []string {
 	return append([]string(nil), m.paths...)
 }
 
-// controlledMutation reports whether a successful call to name (with args) is a
-// controlled mutation: a file-mutating tool, or a formatting/mutating command
-// run through run_command. It returns false for any other tool, so a read, a
-// search, an inspection, or an unrelated command is never evidence.
+// controlledMutation reports whether name (with args) is mutation-capable and
+// requires before/after verification: a file tool or an in-place formatting
+// command. Classification alone is never mutation evidence. It returns false
+// for any other tool, so a read, a search, an inspection, or an unrelated command
+// is never evidence.
 func controlledMutation(name string, args map[string]any) bool {
 	switch name {
 	case toolharness.ToolWriteFile, toolharness.ToolCreateFile,
@@ -99,11 +101,15 @@ func commandMutates(command string) bool {
 	if err != nil || len(argv) == 0 {
 		return false
 	}
-	switch strings.TrimSpace(argv[0]) {
+	switch filepath.Base(argv[0]) {
 	case "gofmt":
-		// `gofmt -w`/`-l` both format; treat a successful gofmt run as a
-		// formatting mutation of the invocation's work.
-		return true
+		// Only write mode can change repository content. Listing/printing
+		// formatting differences supplies no mutation evidence.
+		for _, arg := range argv[1:] {
+			if arg == "-w" || arg == "-w=true" {
+				return true
+			}
+		}
 	}
 	return false
 }

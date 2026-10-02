@@ -231,8 +231,12 @@ func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string,
 	if err != nil {
 		return "", err
 	}
-	if _, err := h.exec(ctx, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel}); err != nil {
+	result, succeeded, err := h.execWithStatus(ctx, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel})
+	if err != nil {
 		return "", fmt.Errorf("restore_file: %w", err)
+	}
+	if !succeeded {
+		return "", fmt.Errorf("restore_file: %s", result)
 	}
 	return fmt.Sprintf("restored %s from HEAD", p.rel), nil
 }
@@ -387,19 +391,24 @@ func porcelainPath(line string) string {
 
 // runCommand tokenizes and policy-checks a command before executing it.
 func (h *Harness) runCommand(ctx context.Context, args map[string]any) (string, error) {
+	result, _, err := h.runCommandWithStatus(ctx, args)
+	return result, err
+}
+
+func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any) (string, bool, error) {
 	command, _ := args["command"].(string)
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return "", errors.New(`missing required argument "command"`)
+		return "", false, errors.New(`missing required argument "command"`)
 	}
 	argv, err := SplitCommand(command)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
 	if err := h.CheckCommand(argv); err != nil {
-		return "", err
+		return "", false, err
 	}
-	return h.exec(ctx, argv)
+	return h.execWithStatus(ctx, argv)
 }
 
 // SplitCommand tokenizes a command string, rejecting shell metacharacters and
@@ -510,6 +519,11 @@ func hasDirOverride(argv []string) bool {
 // and stderr. A non-zero exit is reported in the result (the model should see
 // failing tests); only a timeout is a tool error.
 func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
+	result, _, err := h.execWithStatus(ctx, argv)
+	return result, err
+}
+
+func (h *Harness) execWithStatus(ctx context.Context, argv []string) (string, bool, error) {
 	runCtx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
@@ -522,9 +536,9 @@ func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
 	err := cmd.Run()
 	out := buf.String()
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return truncate(out, h.cfg.MaxOutputBytes), fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
+		return truncate(out, h.cfg.MaxOutputBytes), false, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
 	}
-	return fmt.Sprintf("%s\n%s", exitStatus(err), truncate(out, h.cfg.MaxOutputBytes)), nil
+	return fmt.Sprintf("%s\n%s", exitStatus(err), truncate(out, h.cfg.MaxOutputBytes)), err == nil, nil
 }
 
 // exitStatus renders a command's exit state for the model.
