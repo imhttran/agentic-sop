@@ -62,9 +62,9 @@ SOP interprets the structure rather than inferring an outcome from narration.
 
 **Required.** `changes_expected` MUST remain model-provided evidence, not authority
 for waiving a deterministic change requirement. An ordinary change-requiring
-IMPLEMENT task with green validation and no observed implementation mutation
-MUST NOT PASS: its early completion is retryable `CONTINUE` with
-`IMPLEMENT_NO_CHANGES`. Both `changes_expected=true` and `changes_expected=false`
+IMPLEMENT task with green validation, no observed implementation mutation, and no
+verified already-satisfied proof (§8a) MUST NOT PASS: its early completion is
+retryable `CONTINUE` with `IMPLEMENT_NO_CHANGES`. Both `changes_expected=true` and `changes_expected=false`
 are subject to that rule. Validation still runs on the no-change path.
 
 Verify-first and declared-done modes have their own semantics, owned by
@@ -75,13 +75,92 @@ validation, quality, and retry paths; a model-reported failure with no observed
 change is reconciled to a retryable no-op by the tool harness. See
 [RECOVERY.md](RECOVERY.md), [VALIDATION.md](VALIDATION.md), and [QUALITY.md](QUALITY.md).
 
-**Implemented limitation.** The harness reconciles against an invocation-start
-working-tree fingerprint, but successful classified mutation tools still supply
-positive mutation evidence without content-change verification. The outer
-`runStages` completion gate still uses a nonempty diff as its IMPLEMENT mutation
-signal. Same-content writes, formatting no-ops, and dirty-tree attribution at that
-outer gate therefore remain separate correctness work; this specification does
-not claim they are already solved.
+### Verified operation-level mutation
+
+**Implemented / Required.** For IMPLEMENT and FIX, mutation classification MUST
+identify an operation requiring observation, not prove that a mutation occurred.
+`internal/toolharness.RunObservedMutation` snapshots state immediately before and
+after the operation, executing the tool exactly once. Positive mutation evidence
+MUST require successful execution, successful observation, and a state difference.
+
+- Named file operations use their canonical target; commands with unknown affected
+  paths use the repository tree. File creation, deletion, restoration, changed
+  content, and observable type or permission changes can supply evidence.
+- Snapshots use streaming hashes of complete file contents, existence, type, and
+  relevant permission bits. They ignore timestamps and inode identity. Tree
+  comparisons exclude Git metadata and SOP-owned `.agent-sdlc/` runtime state.
+- Identical writes and unchanged formatting MUST NOT reset the stale streak,
+  set `mutationObserved`, produce successful mutation paths, or enter CHANGE.
+  `gofmt -l` is non-mutating; `gofmt -w` requires an actual before/after difference.
+- Failed or denied operations and unavailable snapshots MUST NOT supply positive
+  mutation evidence. A verified partial change left by a failed operation remains
+  visible for diagnostics and reconciliation, without earning successful progress.
+
+**Implemented limitation.** The outer `runStages` IMPLEMENT completion gate still
+uses a nonempty working-tree diff as its mutation signal. Operation-level
+verification does not fix attribution of pre-existing dirty changes at that outer
+gate; that separate work is tracked in
+[the backlog](../plans/BACKLOG.md#invocation-scoped-implement-completion-evidence).
+
+## 8a. Verified Already-Satisfied Completion
+
+**Implemented.** The native Ollama IMPLEMENT/FIX harness can return an explicit
+`completion: ALREADY_SATISFIED` when existing repository content satisfies the
+caller-owned task verification contract. This is completion evidence, not mutation
+progress, and does not enter CHANGE.
+
+**Required.** The harness MUST verify all of the following before accepting the claim:
+
+- The caller supplied nonempty acceptance criteria and validation commands. The
+  model MUST NOT choose substitute criteria or easier checks.
+- The response explicitly has `status: completed` and
+  `completion: ALREADY_SATISFIED`, mapping every exact criterion once to one or more
+  canonical repository files successfully and informatively read in this invocation.
+- Every caller-supplied validation command actually executed successfully in this
+  invocation. Command identities use parsed arguments; success comes from the real
+  exit status, not model output or displayed command text.
+- No verified mutation was observed, and a known invocation-start repository-tree
+  fingerprint equals the fingerprint at completion. Failed or unavailable
+  observation MUST fail closed.
+
+The caller is responsible for configuring checks that prove the task's acceptance;
+the harness verifies the inspection mappings and executed checks, not the semantic
+meaning of arbitrary prose. Reads, narration, no-op writes, formatting no-ops, and
+claimed test results alone MUST NOT qualify. Validation evidence MUST NOT reset
+the stale streak or extend discovery or iteration budgets.
+
+For example, when the caller supplied criterion `Add returns the sum` and command
+`go test ./...`, a candidate outcome is:
+
+```json
+{
+  "status": "completed",
+  "summary": "The existing implementation passed the required check.",
+  "completion": "ALREADY_SATISFIED",
+  "changes_expected": false,
+  "evidence": {
+    "acceptance": [{"criterion": "Add returns the sum", "paths": ["sum.go"]}],
+    "validation_commands": ["go test ./..."]
+  }
+}
+```
+
+This JSON alone has no completion authority. Only the trusted executing harness
+sets `Response.VerifiedAlreadySatisfied` after verification. Parsing model or
+command-provider JSON MUST NOT set that flag; the command-provider path currently
+cannot establish this proof. The harness replaces claimed validation commands
+with the caller-owned commands it observed passing and records
+`repository_mutations: 0` without fabricating changed files.
+
+The lifecycle MUST still run its independent validation and quality gates; a
+verified claim is permission to complete without mutation, not a PASS verdict.
+Reports preserve `completion: ALREADY_SATISFIED`, `repository_mutations: 0`, the
+acceptance mappings, and executed validation commands. A later FIX invalidates an
+earlier proof; a run that implemented changes MUST NOT be reported as a
+zero-mutation completion merely because its final FIX needed no edit.
+
+This outcome is distinct from the operator's `execution_mode: done` declaration
+and the pre-agent `verify-first` path, whose rules remain in [EXECUTION.md](EXECUTION.md).
 
 ## 9. Tool-Harness Bounds and Phases
 
@@ -113,7 +192,8 @@ governed mutation enters CHANGE. Mutation-aware finalization waits for a stopped
 writer after the normal threshold; force-finalization reserves a tool-free outcome
 window at iteration 28 for IMPLEMENT and 20 for FIX. FINALIZE is terminal: all tool
 requests, including writes, are denied. Its allowances are three turns for
-IMPLEMENT and FIX. Mutation classification itself is unchanged by discovery credit.
+IMPLEMENT and FIX. Discovery credit does not affect operation-level mutation
+verification (§8) or already-satisfied proof (§8a).
 
 **Required.** Discovery evidence MUST remain separate from mutation evidence:
 
@@ -130,8 +210,8 @@ IMPLEMENT and FIX. Mutation classification itself is unchanged by discovery cred
   retryable continuation disposition. Consecutive identical behavior remains
   subject to the independent repetition guard and can stop earlier.
 - Successful governed mutation MUST reset the streak and retain the existing
-  CHANGE/finalization behavior. Discovery MUST NOT set mutation evidence or
-  satisfy the completion requirement in §8.
+  CHANGE/finalization behavior. Discovery alone MUST NOT set mutation evidence or
+  satisfy the completion requirement in §8 or already-satisfied proof in §8a.
 
 Continuous novel discovery with no mutation therefore stops by turn 17. Attempted
 inspection checkpoints remain first-seen, deduplicated, and bounded to twelve

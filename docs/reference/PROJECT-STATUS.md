@@ -93,6 +93,65 @@ names the gate and the commands that resolve it, the applicable gates can be cho
 a terminal (fail-closed off one), and `sop approve <id> --run` records the decision
 before starting the ordinary run. See [../guides/APPROVALS.md](../guides/APPROVALS.md).
 
+## Recent correctness closure
+
+- **PLAN/REVIEW synthesis corrections are implemented.** Prohibited synthesis
+  tool requests use a separate bounded correction allowance; ordinary narration
+  still consumes the synthesis-attempt budget. Existing tests verify this work;
+  it is not a new implementation task in the closure plan.
+- **Bounded productive IMPLEMENT/FIX discovery is implemented.** Successful novel
+  inspections can earn discovery credit in the initial window, separately from
+  mutation progress. Task-scoped discovery budgets remain backlog work.
+- **Tool-level repository mutation verification is implemented** (`d0af5a4`).
+  Mutation-capable operations execute once and earn progress only on a successful,
+  verified before/after state change. Same-content writes and unchanged formatting
+  no longer manufacture progress.
+- **Verified already-satisfied IMPLEMENT/FIX completion is implemented** (`1ce9bdb`).
+  An explicit `ALREADY_SATISFIED` outcome requires caller-owned acceptance mappings,
+  successful executed validation, and a known unchanged repository. Reports
+  preserve zero mutations and the proof; a model claim alone has no authority.
+
+The authoritative rules for these fixes are in
+[AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md). This delivery record does not imply
+that the cross-repository closure or performance baseline has passed.
+
+## Next verification plan
+
+[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) is
+**PLANNED**, with CLOSE-001–CLOSE-011 covering source/config capture, reconciliation,
+both repositories' deterministic gates, current controller work, named-plan
+dogfood, human decisions, resume/idempotency, telemetry inventory, four workloads
+with three real-provider repetitions each, and the final readiness verdict.
+The plan has not been executed. It introduces no new performance architecture and
+does not replace the recorded active plan source.
+
+### Current checkout verification (2026-10-02)
+
+At `1ce9bdb` on `fix/verify-repository-mutations`, focused mutation-verification and
+already-satisfied tests pass. The full suite is not green: these twelve CLI/JEV
+tests fail, with the same failures reproduced on predecessor `d0af5a4`:
+
+```text
+TestRunImplementNoChangesStillValidates
+TestJEVNoChangeFinalInvocationReviewsAccumulatedEvidence
+TestJEVTaskEvidenceIsBounded
+TestJEVLegacyBootstrapSkippedWhenEvidenceExists
+TestJEVLegacyBootstrapRecoversActivityEvidence
+TestJEVLegacyBootstrapUnionsInvocations
+TestJEVLegacyBootstrapDeduplicates
+TestJEVLegacyBootstrapBounded
+TestJEVLegacyBootstrapIgnoresUnrelatedDirtyFile
+TestJEVLegacyBootstrapFiltersSOPOwnedPaths
+TestJEVLegacyBootstrapIsIdempotent
+TestJEVLegacyBootstrapDoesNotModifyRepository
+```
+
+These are unresolved closure-gate failures, not permission to weaken mutation or
+completion checks. CLOSE-003 must diagnose the current expectations versus actual
+behavior and record fresh deterministic results before claiming PASS. No baseline
+measurements or cross-repository readiness verdict have been captured by this
+documentation reconciliation.
+
 ## Known limitations (current)
 
 Deliberate, understood residuals that are not scheduled work. Each is described where
@@ -102,6 +161,11 @@ its behavior is defined; this list exists so none is lost, and scheduled future 
   `windows` job against temporary directories on `windows-latest`; a real machine's
   `%USERPROFILE%`, PATH, Zed, and Claude Code are unverified. See
   [../testing/WINDOWS-CLEAN-ROOM.md](../testing/WINDOWS-CLEAN-ROOM.md).
+- **Outer IMPLEMENT completion still uses a dirty-tree diff signal.** Verified
+  tool-level mutation does not by itself attribute that outer evidence to the
+  current invocation. The separate correctness work is tracked in
+  [the backlog](../plans/BACKLOG.md#invocation-scoped-implement-completion-evidence)
+  and described in [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
 - **No project-scope skill install on Windows.** On Unix,
   `scripts/install/install-skills.sh --project [DIR]` installs the skills into a
   project's `.agents`/`.claude` directory; `install.ps1` has no `-Project` equivalent
@@ -140,4 +204,3 @@ its behavior is defined; this list exists so none is lost, and scheduled future 
 The project is intentionally built incrementally: sequential correctness and
 recovery come before parallelism, and each stage is usable and tested before the
 next is added.
-

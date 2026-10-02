@@ -149,6 +149,11 @@ and interactive-approval layers are implemented. Detailed delivery status and
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
+The next closure and measurement plan is
+[Pre-Performance Closure and Baseline](docs/plans/PLAN-Pre-Performance-Closure.md).
+It is planned work; baseline execution and the new performance architecture have
+not started under that plan.
+
 ## Documentation
 
 Start at **[docs/README.md](docs/README.md)** for the complete categorized index.

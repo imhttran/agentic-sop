@@ -80,12 +80,13 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 | --- | --- | --- |
 | Product goals | [PRD.md](PRD.md) | Workstream PRDs under requirements/ |
 | Ownership boundaries | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) | Architecture implementation seams |
-| Outcomes, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
+| Outcomes, verified mutation, already-satisfied proof, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
 | Task execution and execution modes | [EXECUTION.md](specs/EXECUTION.md) | Setup and usage guides |
 | Routing and provider rules | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md) | Configuration reference and architecture seams |
 | Installation | [INSTALLATION.md](guides/INSTALLATION.md) | Platform and agent-specific guides |
 | Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
+| Performance measurements | [PERFORMANCE.md](reference/PERFORMANCE.md) | Closure plan and point-in-time baseline reports |
 
 ## Reference
 
@@ -113,13 +114,14 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 ## Plans
 
-Implementation plans, newest phase last. A completed plan stays here rather than moving
+Implementation and verification plans. A completed plan stays here rather than moving
 to `history/` when SOP or the repository still references its path: the archive under
 `.agent-sdlc/archive/` records these sources, and the example commands in
 `scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
+- [plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md) — **PLANNED**, execution-ready CLOSE-001–CLOSE-011 DAG: reconcile and verify both SOP and sop-controller, dogfood and resume, inventory existing metrics, measure four workloads, and decide readiness. No closure task has been executed by this documentation update; this plan does not start the new performance architecture or replace SOP's recorded active source.
 - [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; SOP's recorded active plan (`.agent-sdlc/plan.meta.json`); the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation. **Implemented** (off by default); see [specs/PROVIDERS.md](specs/PROVIDERS.md).
 - [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery. **Implemented** (off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`); see [specs/RECOVERY.md](specs/RECOVERY.md) §8.
@@ -165,7 +167,7 @@ To keep SOP working, a few paths are intentionally not under the categories abov
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
 - [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) remains the recorded active source in `.agent-sdlc/plan.meta.json`; completed plans referenced by SOP archives also retain their paths.
-- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications, not history.
+- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
 
 ## Checking Documentation Links
 

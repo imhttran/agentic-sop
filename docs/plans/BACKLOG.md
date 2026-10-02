@@ -6,6 +6,36 @@ the running list in between. Completed observations are preserved in
 [RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md); shipped capabilities and known
 limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md).
 
+## Pre-Performance Closure and Baseline
+
+**Status:** Planned, not executed.
+
+[PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) is the next
+closure and measurement DAG for SOP and sop-controller. It verifies existing
+capabilities instead of reimplementing them. Performance implementation waits for
+the plan's evidence-backed readiness gate.
+
+The subsequent architecture remains deferred: Prompt Compiler, Response
+Normalizer, Context Engine, Git-SHA summary cache, repository structural index,
+BM25/vector RAG, Decision Memory, Verification Cache, Prompt Result Cache, Adaptive
+Routing changes, and Automatic Prompt Tuning. The closure plan inventories gaps
+in the existing `internal/perf` contract; it does not build a competing telemetry
+system or implement these candidates.
+
+## Invocation-Scoped IMPLEMENT Completion Evidence
+
+**Status:** Backlog; separate from completed tool-level mutation verification.
+
+The outer `runStages` completion gate still uses a nonempty working-tree diff as
+IMPLEMENT mutation evidence. Pre-existing dirty changes can therefore satisfy
+that signal even when the current invocation did not produce them. A later fix
+should reuse existing state/diff infrastructure to distinguish inherited changes
+from this invocation's work while preserving safe continuation from dirty trees.
+Current behavior and its limitation are owned by
+[AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
+Whether this is a blocking closure defect must be established by the closure
+plan's deterministic evidence, not assumed away for measurements.
+
 ## Local network service (team mode)
 
 Share SOP state and control across a team on the local network.
