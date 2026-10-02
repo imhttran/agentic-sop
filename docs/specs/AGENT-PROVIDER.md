@@ -54,33 +54,102 @@ The boundary MUST expose a provider-neutral interface — conceptually `Execute(
 
 ## 8. Command-Agent Protocol and Structured Outcome
 
-A command agent MUST read JSON requests from stdin and write JSON responses to stdout, implementing the agent interface. For mutating capabilities (`IMPLEMENT`, `FIX`) it MAY return a structured execution outcome — `{"status":"completed","summary":…,"changes_expected":true|false}`, `{"status":"needs_human","reason":…}`, or `{"status":"failed","reason":…}`. SOP's reaction MUST be structural, never inferred by scanning prose:
+**Implemented.** A command agent reads JSON requests from stdin and writes JSON
+responses to stdout. For mutating capabilities (`IMPLEMENT`, `FIX`) the structured
+outcome is `{"status":"completed","summary":…,"changes_expected":true|false}`,
+`{"status":"needs_human","reason":…}`, or `{"status":"failed","reason":…}`.
+SOP interprets the structure rather than inferring an outcome from narration.
 
-```text
-completed + changes_expected true  + non-empty change set → validate → review → gate
-completed + changes_expected true  + no changes           → FAIL (claimed changes, produced none)
-completed + changes_expected false + no changes           → run configured validation, then PASS
-needs_human                                               → stop with NEEDS_HUMAN (requeued)
-failed                                                    → FAIL (terminal)
-```
+**Required.** `changes_expected` MUST remain model-provided evidence, not authority
+for waiving a deterministic change requirement. An ordinary change-requiring
+IMPLEMENT task with green validation and no observed implementation mutation
+MUST NOT PASS: its early completion is retryable `CONTINUE` with
+`IMPLEMENT_NO_CHANGES`. Both `changes_expected=true` and `changes_expected=false`
+are subject to that rule. Validation still runs on the no-change path.
 
-Any other output MUST keep the legacy behaviour, judged by the change produced. The `claimed changes, produced none` failure is SOP's own deterministic verdict, so it MUST be classified (`NO_CHANGES_PRODUCED`) rather than left unclassified; when bounded escalation is enabled it MAY then be retried on a larger model — see [RECOVERY.md](RECOVERY.md) §8. See also [VALIDATION.md](VALIDATION.md), [QUALITY.md](QUALITY.md).
+Verify-first and declared-done modes have their own semantics, owned by
+[EXECUTION.md](EXECUTION.md#6-verify-first-execution-mode) and
+[declared-complete stages](EXECUTION.md#6a-declared-complete-stages).
+`needs_human`, `failed`, and legacy output continue through the existing outcome,
+validation, quality, and retry paths; a model-reported failure with no observed
+change is reconciled to a retryable no-op by the tool harness. See
+[RECOVERY.md](RECOVERY.md), [VALIDATION.md](VALIDATION.md), and [QUALITY.md](QUALITY.md).
+
+**Implemented limitation.** The harness reconciles against an invocation-start
+working-tree fingerprint, but successful classified mutation tools still supply
+positive mutation evidence without content-change verification. The outer
+`runStages` completion gate still uses a nonempty diff as its IMPLEMENT mutation
+signal. Same-content writes, formatting no-ops, and dirty-tree attribution at that
+outer gate therefore remain separate correctness work; this specification does
+not claim they are already solved.
 
 ## 9. Tool-Harness Bounds and Phases
 
-Bounds MUST be per capability. `DESIGN_TESTS`/`DIAGNOSE_FAILURE` get 12 read-only turns; `PLAN` (8) and `REVIEW` (6) run bounded read-only discovery then a tool-free **synthesis** (2 turns) that MUST produce the document, so neither can fail by exploring forever; `IMPLEMENT` (32) and `FIX` (24) share a phased loop — **discover**, **change** (first write plus targeted checks), **finalize** — so a `FIX` that wrote its repair hands back instead of running the build/tests to the ceiling. Finalization MUST be **mutation-aware**: tools are withdrawn only once a change is observed _and_ the writer has stopped; a write during finalize MUST NOT be refused and resumes change.
+**Implemented.** Bounds are per capability in `internal/ollamaagent/policy.go`;
+PLAN/REVIEW use `executeTwoPhase`, while IMPLEMENT/FIX use `executePhased`.
 
-A phased run MUST also carry a deterministic **no-progress guard**, independent of the iteration ceiling. The only progress signal is a **successful repository mutation**: it resets the consecutive counter to zero. Every non-mutating turn increments it — a read, a search, an inspection, narration (a planning turn with no tool call and no final object), a denied tool, a repeat, and a **novel read of a file not seen before** alike. Exploration is activity, not implementation progress. After `maxNoProgressIterations` (default 5) consecutive non-mutating turns the run MUST stop early with `termination=no_progress` and a distinct `IMPLEMENT_NO_PROGRESS` / `FIX_NO_PROGRESS` diagnostic recording the observed state (mutations and changed files) — never by consuming the ceiling, and never by substituting another provider or model. Repetition of the same action is detected independently by the repetition guard. The guard applies while no mutation has been observed: once the repository has been changed the finalization lifecycle governs the run, so a productive run is unchanged.
+### Document-producing capabilities
 
-A run that never changes the repository MUST end as a **retryable** `needs_human` (SOP requeues it), never as a hard failure: the no-progress guard stops it with `termination=no_progress` (above). A model reporting `failed` after changing nothing is likewise a retryable no-op, not a hard failure.
+PLAN permits eight discovery turns, then two ordinary synthesis attempts. REVIEW
+permits eight inspection turns, with a soft wrap-up nudge after six, then two
+ordinary synthesis attempts. A final document can end either phase immediately.
 
-The two mutating ceilings are built-in defaults an operator MAY raise:
-`SOP_OLLAMA_IMPLEMENT_ITERATIONS` (default 32) and `SOP_OLLAMA_FIX_ITERATIONS`
-(default 24). Each MUST be a positive integer to take effect; an unset, blank,
-non-numeric, or non-positive value MUST keep the default, so behavior is unchanged
-when it is not set. The soft thresholds (finalize, late-stage, force-finalize) MUST
-scale with the raised ceiling, so a longer loop preserves their relative steering
-position instead of stranding them near the start.
+**Required.** Tools MUST remain unavailable during synthesis. A prohibited tool
+request MUST be denied and receive the capability's correction prompt, preserving
+all gathered context. The first two requests consume the separate invocation-scoped
+`maxSynthesisCorrections` allowance, not the ordinary synthesis-attempt budget.
+A third MUST terminate with `termination=synthesis_correction_limit`. Narration
+consumes the ordinary budget and exhausts it with `termination=synthesis_limit`.
+Discovery MUST NOT restart and synthesis tools MUST NOT execute during correction.
+Provider-level errors and retries remain separate from those corrections.
+
+DESIGN_TESTS and DIAGNOSE_FAILURE use a twelve-turn bounded loop; diagnostic
+inspection may include allow-listed non-mutating commands.
+
+### Mutating capabilities
+
+IMPLEMENT (32) and FIX (24) share DISCOVER → CHANGE → FINALIZE. The first successful
+governed mutation enters CHANGE. Mutation-aware finalization waits for a stopped
+writer after the normal threshold; force-finalization reserves a tool-free outcome
+window at iteration 28 for IMPLEMENT and 20 for FIX. FINALIZE is terminal: all tool
+requests, including writes, are denied. Its allowances are three turns for
+IMPLEMENT and FIX. Mutation classification itself is unchanged by discovery credit.
+
+**Required.** Discovery evidence MUST remain separate from mutation evidence:
+
+- Through the existing `implementNowAfter` threshold (model turn 12), a successful
+  first informative inspection MAY reset the stale streak.
+- Identities MUST use operation plus canonical target; search identities include
+  normalized scope and query. Each identity earns credit only once per invocation.
+- Failed or denied calls, repeated inspections, narration, empty reads/listings,
+  and searches with no matches MUST NOT receive discovery credit.
+- Every model turn, including narration and denial, counts toward that window.
+  After turn 12, every non-mutating turn MUST increment the stale streak.
+- Five stale turns before the first mutation MUST terminate with the existing
+  `IMPLEMENT_NO_PROGRESS` or `FIX_NO_PROGRESS`, `termination=no_progress`, and
+  retryable continuation disposition. Consecutive identical behavior remains
+  subject to the independent repetition guard and can stop earlier.
+- Successful governed mutation MUST reset the streak and retain the existing
+  CHANGE/finalization behavior. Discovery MUST NOT set mutation evidence or
+  satisfy the completion requirement in §8.
+
+Continuous novel discovery with no mutation therefore stops by turn 17. Attempted
+inspection checkpoints remain first-seen, deduplicated, and bounded to twelve
+paths, with five shown in diagnostics; failed attempts may appear there but MUST
+NOT earn discovery credit merely because they are checkpoint members.
+
+Diagnostics record the actual turn count, credited inspections, mutations, changed
+files, and last action. Early `IMPLEMENT_NO_CHANGES` completion and stalled
+`IMPLEMENT_NO_PROGRESS` execution MUST remain distinct.
+
+The built-in mutating ceilings can still be overridden by positive
+`SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` values. Unset,
+blank, nonnumeric, or nonpositive values retain 32/24. The existing scaled
+finalization thresholds are unchanged; discovery credit remains limited to the
+first twelve model turns.
+
+**Proposed-future.** Task-scoped discovery budgets are tracked in
+[BACKLOG.md](../plans/BACKLOG.md#task-scoped-discovery-budgets); they are not implemented.
 
 ## 10. Operator-Set Diagnostic Sinks
 

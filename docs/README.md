@@ -74,12 +74,27 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
 
+## Topic Ownership
+
+| Topic | Authoritative document | Supporting material |
+| --- | --- | --- |
+| Product goals | [PRD.md](PRD.md) | Workstream PRDs under requirements/ |
+| Ownership boundaries | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) | Architecture implementation seams |
+| Outcomes, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
+| Task execution and execution modes | [EXECUTION.md](specs/EXECUTION.md) | Setup and usage guides |
+| Routing and provider rules | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md) | Configuration reference and architecture seams |
+| Installation | [INSTALLATION.md](guides/INSTALLATION.md) | Platform and agent-specific guides |
+| Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
+| Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
+
 ## Reference
 
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
 - [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, the model-routing classes/precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
 - [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, and severity policy.
+- [reference/PROJECT-STATUS.md](reference/PROJECT-STATUS.md) — implemented capabilities and known limitations, separated from future work.
+- [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
 
 ## Guides
@@ -132,18 +147,29 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/OLLAMA-DOGFOOD.md](history/OLLAMA-DOGFOOD.md) — the Ollama/DeepSeek dogfood test.
 - [history/PHASE-3-DOGFOOD.md](history/PHASE-3-DOGFOOD.md) — the Phase 3 early-JEV dogfood: the deterministic fake-analyzer demonstration and the (not performed) real-provider procedure.
 - [history/PLAN-Model-Routing.md](history/PLAN-Model-Routing.md) — the early, superseded model-routing design (MODELRT001–MODELRT022); the shipped rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
-- [history/](history/) — PREJEV reconciliation, decomposition, baseline, and readiness artifacts.
+- [history/RESOLVED-BACKLOG.md](history/RESOLVED-BACKLOG.md) — completed backlog observations and superseded agent-provider contracts, preserved as non-normative evidence.
+- [history/PREJEV-BASELINE.md](history/PREJEV-BASELINE.md) — read for Pre-JEV Baseline (PREJEV001) evidence and recorded scope.
+- [history/PREJEV004-AHV2009-PROOF.md](history/PREJEV004-AHV2009-PROOF.md) — read for PREJEV004 — AHV2009 End-to-End Proof evidence and recorded scope.
+- [history/PREJEV005-AHV2001-2007-RECONCILE.md](history/PREJEV005-AHV2001-2007-RECONCILE.md) — read for PREJEV005 — Reconcile AHV2001 Through AHV2007 evidence and recorded scope.
+- [history/PREJEV006-AHV2010-2013-RECONCILE.md](history/PREJEV006-AHV2010-2013-RECONCILE.md) — read for PREJEV006 — Complete Remaining Harness V2 Tasks (AHV2010–AHV2013) evidence and recorded scope.
+- [history/PREJEV012-RECONCILE.md](history/PREJEV012-RECONCILE.md) — read for PREJEV012 — Reconciliation State evidence and recorded scope.
+- [history/PREJEV012-REGRESSION-DECOMPOSITION.md](history/PREJEV012-REGRESSION-DECOMPOSITION.md) — read for PREJEV012 — Full Agent Harness Regression Suite (Decomposition) evidence and recorded scope.
+- [history/PREJEV016-RECOVERY-DECOMPOSITION.md](history/PREJEV016-RECOVERY-DECOMPOSITION.md) — read for PREJEV016 — Verify Recovery Paths (Decomposition) evidence and recorded scope.
+- [history/PREJEV017-PERFORMANCE-BASELINE.md](history/PREJEV017-PERFORMANCE-BASELINE.md) — read for PREJEV017 — Pre-JEV Performance Baseline evidence and recorded scope.
+- [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
+- [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
 
 ## Canonical Locations and Kept Paths
 
 To keep SOP working, a few paths are intentionally not under the categories above:
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) remains the recorded active source in `.agent-sdlc/plan.meta.json`; completed plans referenced by SOP archives also retain their paths.
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications, not history.
 
 ## Checking Documentation Links
 
-Documentation links MUST resolve. Run the repository link check over `docs/**/*.md`
+Documentation links and heading anchors are checked before publishing. Run the repository link check over `docs/**/*.md`
 and `README.md` and their relative links:
 
 ```bash
@@ -151,5 +177,4 @@ scripts/checks/check-doc-links.sh
 ```
 
 It prints `broken links: <count>` (for example `broken links: 0`) and exits
-non-zero when any relative link does not resolve. Routing documentation in
-particular MUST pass with `broken links: 0`.
+non-zero when any relative link does not resolve. An anchor-aware check can also be run with the doc-reconcile skill's `scripts/link_check.py`.

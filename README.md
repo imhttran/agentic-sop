@@ -108,32 +108,12 @@ Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
 ## Agent Skills
 
-SOP ships agent skills that expose the same governed path as `/sop` commands in the
-coding agents that support them. Install the CLI, then link the skills into the
-agent(s) you use:
-
-```bash
-./install.sh --skills zed     # the /sop* commands in Zed
-./install.sh --skills claude  # the same commands in Claude Code
-./install.sh --plugin claude  # the Claude Code plugin
-./install.sh --all            # the CLI + every present agent's skills + the plugin
-```
-
-```text
-/sop-review review internal/provider for architectural problems
-/sop-plan plan a cache layer for provider model discovery
-/sop-diagnose explain why the current tests are failing
-/sop-test design regression tests for this behavior
-/sop-implement add caching to provider model discovery
-```
-
-Each command is a thin alias over `sop prompt --capability ...`: it picks a capability
-and calls SOP, which still owns routing, provider selection, validation, and approval.
-`/sop-implement` is the only mutating command and runs the governed implementation
-lifecycle. Guides: [docs/guides/INSTALLATION.md](docs/guides/INSTALLATION.md),
-[docs/guides/ZED-SKILLS.md](docs/guides/ZED-SKILLS.md), and
-[docs/guides/CLAUDE-SKILLS.md](docs/guides/CLAUDE-SKILLS.md); the plugin is
-[docs/guides/CLAUDE-PLUGIN.md](docs/guides/CLAUDE-PLUGIN.md).
+Install the `/sop*` agent commands with `./install.sh --skills zed`,
+`./install.sh --skills claude`, or `./install.sh --all`. Start with
+[the command examples](docs/guides/GETTING-STARTED.md#install-agent-commands),
+[installation](docs/guides/INSTALLATION.md), or
+[the Claude Code plugin guide](docs/guides/CLAUDE-PLUGIN.md).
+SOP owns routing, validation, and approval for every command.
 
 ## Basic Workflow
 
@@ -164,40 +144,24 @@ Detailed state transitions and lifecycle rules live in the specifications:
 
 ## Status
 
-SOP V1 is complete: dependency-aware execution, isolated branches, test-first
-implementation, bounded review/fix loops, CI and merge gates, durable state,
-resume/recovery, environment bootstrap, and limited parallelism. Above it, model
-routing (3.5), the provider runtime (4), bounded model escalation (5), unified work
-items with `sop prompt` (5.4), and distribution — one installer for macOS/Linux and
-Windows, a native Claude Code plugin, and CI (5.5–5.6), and an interactive
-human-decision surface (6), are implemented; routing and escalation are OFF by
-default. See [docs/plans/BACKLOG.md](docs/plans/BACKLOG.md).
+SOP V1 and the later routing, provider-runtime, recovery, prompt, distribution,
+and interactive-approval layers are implemented. Detailed delivery status and
+known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
+future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
 ## Documentation
 
-Start at the documentation index: **[docs/README.md](docs/README.md)**.
+Start at **[docs/README.md](docs/README.md)** for the complete categorized index.
 
-```text
-Getting Started   docs/guides/GETTING-STARTED.md · docs/guides/PROJECT-SETUP.md
-Requirements      docs/PRD.md
-Architecture      docs/architecture/OVERVIEW.md · docs/architecture/SOP-BOUNDARY.md
-Workflow          docs/specs/WORKFLOW.md · docs/specs/TASK-LIFECYCLE.md
-Execution         docs/specs/EXECUTION.md · docs/specs/WORK-ITEMS.md · docs/specs/PROMPT-EXECUTION.md
-Validation        docs/specs/VALIDATION.md · docs/specs/REVIEW.md · docs/specs/QUALITY.md
-Providers         docs/specs/AGENT-PROVIDER.md · docs/specs/PROVIDERS.md · docs/specs/MODEL-ROUTING.md
-JEV               docs/specs/OPENJEV.md · docs/reference/JEV-OPERATIONS.md
-Gates/Recovery    docs/specs/HUMAN-APPROVAL.md · docs/specs/RECOVERY.md · docs/reference/STATUS-AND-RECOVERY.md
-Security          docs/specs/SECURITY.md
-Installation      docs/guides/INSTALLATION.md · docs/guides/WINDOWS-INSTALLATION.md
-Agent Skills      docs/guides/ZED-SKILLS.md · docs/guides/CLAUDE-SKILLS.md · docs/guides/CLAUDE-PLUGIN.md
-CLI Reference     docs/reference/CLI.md
-Configuration     docs/reference/CONFIGURATION.md
-Performance       docs/reference/PERFORMANCE.md
-Development       docs/guides/DEVELOPMENT.md
-Plans             docs/plans/ · active plan: docs/plans/PLAN-Phase-3.5-Model-Routing.md
-                  latest phase: docs/plans/PLAN-Phase-6-Interactive-Approval.md
-History           docs/history/
-```
+| Read about | Start here |
+| --- | --- |
+| Product requirements | [PRD](docs/PRD.md) |
+| Architecture and ownership | [Overview](docs/architecture/OVERVIEW.md), [SOP boundary](docs/architecture/SOP-BOUNDARY.md) |
+| Execution and lifecycle | [Execution](docs/specs/EXECUTION.md), [task lifecycle](docs/specs/TASK-LIFECYCLE.md) |
+| Providers and harnesses | [Agent provider](docs/specs/AGENT-PROVIDER.md), [model routing](docs/specs/MODEL-ROUTING.md) |
+| CLI and configuration | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md) |
+| Usage and development | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
+| Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation) |
 
 ## License
 

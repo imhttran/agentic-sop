@@ -282,17 +282,16 @@ fails clearly rather than being sent to a provider that cannot serve it. A run
 also checks up front that the provider can `IMPLEMENT`, before any task is
 attempted.
 
-For mutating capabilities (`IMPLEMENT`, `FIX`) a command agent may return a
-structured execution outcome — `completed` with `changes_expected`, `needs_human`,
-or `failed`. SOP acts on it directly: a claimed change with none produced is a
-failure, a legitimate no-change completion still runs the configured validation
-before it passes, and a human boundary stops with `NEEDS_HUMAN` (the task is
-requeued — bounded by `max_attempts`, default 3 — so a later run retries it; a
-retry that reproduces the same outcome is “no progress” and spends no attempt,
-while a retry that changes its outcome spends one; a `BLOCKED` task can be
-requeued explicitly with `sop retry <task-id>` or `sop retry --all`, and a retry
-is given the previous attempt's outcome as context). The outcome is never
-inferred from prose.
+For mutating capabilities (`IMPLEMENT`, `FIX`) command agents may return structured
+outcomes. The protocol, deterministic completion
+requirement, and current mutation-evidence limitations are owned by
+[AGENT-PROVIDER.md §8](../specs/AGENT-PROVIDER.md#8-command-agent-protocol-and-structured-outcome).
+The shared phased engine separates bounded discovery credit from repository
+mutation; its budgets and finalization behavior are owned by
+[§9](../specs/AGENT-PROVIDER.md#9-tool-harness-bounds-and-phases).
+Retry/requeue semantics and prior-attempt context belong to
+[RECOVERY.md](../specs/RECOVERY.md); operators use
+[STATUS-AND-RECOVERY.md](../reference/STATUS-AND-RECOVERY.md).
 
 ### Validation Runner
 

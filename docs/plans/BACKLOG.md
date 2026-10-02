@@ -2,51 +2,9 @@
 
 Future work that is known but not yet scheduled into a numbered task. When an item
 is picked up it becomes a `task(T0NN)` entry in [PLAN.md](../PLAN.md); this file is
-the running list in between.
-
-## Bootstrap resilience: run the Ollama agent as a known-good binary
-
-_RESOLVED: implemented._ The bootstrap agent can break itself while editing
-`internal/ollamaagent`: a small compile error in that very package removes the agent
-needed to repair it, because SOP builds and runs the harness from the same tree under
-edit. Recovery must not depend on the tool the change is allowed to break.
-
-A pinned, prebuilt known-good `sop-ollama-agent` binary is therefore installed
-**outside** the tree under edit (`make install-ollama-agent` →
-`scripts/install/install-sop-ollama-agent.sh`, revision pinned in `scripts/agents/sop-ollama-agent.pin`),
-and the command bootstrap (`scripts/agents/sop-ollama-agent.sh`) invokes that installed binary
-instead of compiling candidate source; `internal/agentbin` resolves it, and
-`internal/ollamaagent` reports the running revision. A broken working copy can still
-be repaired. Recorded here for traceability.
-
-## Default config cannot IMPLEMENT (provider/harness split unfinished)
-
-_RESOLVED (verified during Phase 5.4 hardening): stale._ The Phase 5.4 composition root
-(`defaultDeps().newAgent` in `internal/cli/cli.go`) resolves the effective
-harness/provider pair and, for `harness: tool` + `provider: ollama`, builds the native
-in-process tool agent (`ollamaagent.NativeAgentFromEnv`, wrapped with
-`agent.NewChecked`) which declares every capability including `IMPLEMENT`. A fresh
-`sop init` project therefore passes the up-front `guardCapability(a, IMPLEMENT)` check
-and can run a task; the concern described here no longer holds. Recorded for
-traceability.
-
-## `--file` prompt input could escape the project through a symlink
-
-_RESOLVED (Phase 5.4 hardening): `resolvePromptFile` now resolves both the project root
-and the target with `filepath.EvalSymlinks` before the containment test, so a
-project-local symlink pointing outside the project is rejected rather than read (the
-project root is resolved too, so a project reached through a symlink is not falsely
-rejected). Recorded here for traceability; see
-[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §12._
-
-## An IMPLEMENT prompt was rejected when the default agent lacked IMPLEMENT
-
-_RESOLVED (Phase 5.4 hardening): the capability guard and provider validation now apply
-to the FINAL executing agent (the routed selection), not to a default agent the router
-replaces. With routing on, a read-only default provider with a tool-capable routed
-class runs; the default agent is guarded at the routing seam only when routing selects
-no class. `sop run` and `--task` follow the same rule. See
-[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §4._
+the running list in between. Completed observations are preserved in
+[RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md); shipped capabilities and known
+limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md).
 
 ## Local network service (team mode)
 
@@ -60,110 +18,6 @@ A read-only view of SOP state for small devices.
 
 An adapter for the Jev planner, and an evaluation comparing it with the
 deterministic planner.
-
-## Bootstrap agent exhausts its budget on multi-package tasks
-
-_ADDRESSED (steering, T076): the unmutated run's steering now recurs._ The write
-nudges were one-shot (at 6 and 12 interactions), so a model had up to nine
-unsteered interactions (13–21) between being told to implement and the late-stage
-cutoff at 22 — a one-shot instruction is easy for a small model to outrun. The
-implement-now instruction is now re-stated on **every** interaction past
-`implementNowAfter`, and the interactions from `implementClosingAfter` (19) to the
-cutoff become **closing**: the run states that this invocation is about to end, so
-the model is told the consequence while it can still write. No bound, phase, tool
-availability, or finalization changes; the `→ CHANGE_CONTINUE` transition is still
-recorded once. The two candidate fixes left here are not deterministic: a concrete
-file/work scope would have to come from the plan, and "a stronger model for
-multi-package tasks" is a routing/configuration choice (routing is off by
-default). The continuation checkpoint and `execution_mode: done` (below) already
-cover the other two symptoms. The original observation is kept for traceability.
-
-_ADDRESSED (no-progress guard): a run that never changes the repository now stops early._ The
-remaining observed shape — the model alternating planning with distinct read-only tool
-calls and never mutating — evaded the repeat guard, which only detected _consecutive_
-identical turns. A deterministic no-progress guard now treats a successful repository
-mutation as the only progress signal: every non-mutating turn increments the counter
-(reads — novel or repeated — searches, narration, and denied tools alike), and after
-`maxNoProgressIterations` (5) the run stops with `termination=no_progress` and an
-`IMPLEMENT_NO_PROGRESS` diagnostic, instead of consuming the whole budget. The guard
-applies while no mutation has been observed, so a run that changed the repository is
-governed by finalization as before. No ceiling was raised. See
-[../specs/AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md) §9. Recorded here for
-traceability.
-
-The bootstrap Ollama agent has a per-capability iteration ceiling and a late-stage
-cutoff for a run that has not mutated (`IMPLEMENT`: 32 iterations,
-`implementLateStageAfter` 22). On a task that spans several packages the model can
-spend the whole budget on read-only discovery and be finalized having written
-nothing, so SOP records `CONTINUE` and requeues the task. It converges only after a
-re-run, and not at all for a task whose work already exists in the tree.
-
-Observed dogfooding Phase 3 (2026-09-30): P3-006 issued 22 read-only tool calls and
-zero writes across four attempts; P3-009/011/014/017 requeued the same way before
-converging on a later run. The harness already nudges the model to write at 6/12/22
-turns and the model ignores them, so raising the budget alone is unlikely to help.
-
-Candidate fixes: give the task request a concrete file/work scope so discovery is
-shorter; let a productive-but-unmutated run continue incrementally instead of
-finalizing; or use a stronger model for multi-package tasks. Related: a plan can now
-mark an already-implemented stage `done` (see below) so it is never re-implemented,
-which removes the re-implement loop for work that already exists in the tree.
-
-## A fully-implemented plan cannot close through SOP
-
-_RESOLVED: `execution_mode: done` (a declared-complete stage)._ `sop run <PLAN>.md`
-regenerates tasks from the plan's stages and starts each at `PLANNED`
-(`internal/taskbuilder/taskbuilder.go`), reading only the stage's structured metadata.
-When every stage is already implemented the agent finds nothing to change, the run
-classifies as `NO_CHANGES_PRODUCED` → `AUTO_FIX` (`internal/failure`), and after the
-retry budget the task ends `BLOCKED`, so work that is already green could not be
-closed out through the lifecycle.
-
-A plan stage can now declare that its work already exists:
-
-```text
-### Execution
-
-- done
-```
-
-`done` is explicit plan metadata (like `verify-first`), never inferred from a task's
-`Status:` line, title, or prose. Such a stage's task is recorded **already
-satisfied** when the task graph is built, so its dependants are unblocked and a plan
-whose work is already green reports as complete instead of blocking; SOP never
-selects, gates, or verifies it, because the declaration is the record rather than
-evidence. The run reports the declarations separately (`Declared done in the plan: N
-task(s)`), so a completion is never mistaken for work the run performed. A plan
-normalized by a model has the mode cleared, so only the plan document itself can
-declare a stage complete, and a single `--task` run rejects it. Use `verify-first`
-for work that must be _checked_; a stage with nothing to verify cannot become `done`
-by implication. See [../specs/EXECUTION.md](../specs/EXECUTION.md) §6a.
-
-## A gate failure with no authoritative classification is not escalated
-
-_RESOLVED (Phase 5 hardening, P5-010): SOP's own deterministic verdict that a
-mutating invocation claimed success while leaving the working tree unchanged is now
-classified (`failure.NoChangesProduced`, an implementation failure) rather than left
-empty, so the bounded recovery policy escalates it like any other classified
-failure. A failure with no authoritative classification at all still fails closed to
-the existing human/block path. Recorded here for traceability; see
-[../specs/RECOVERY.md](../specs/RECOVERY.md) §8._
-
-## Prompt runs are not selected by `sop report` with no argument
-
-_RESOLVED (Phase 5.4): `latestRun` now also considers `runs/prompts/*/metadata.json`,
-so `sop report` with no argument reports the newest run of either kind. Recorded here
-for traceability; see [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §11._
-
-## Bounded escalation does not apply to prompt runs
-
-_RESOLVED (Phase 5 hardening): `sop prompt --capability implement` now runs the
-governed implementation lifecycle through the same bounded-recovery seam a task uses,
-so when `models.escalation_enabled` is on it escalates `small → medium → large`
-exactly like a task, persisting one attempt per try under the prompt run. A read-only
-prompt is a single bounded call with no quality gate, so escalation never applies to
-it. Recorded here for traceability; see
-[../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8._
 
 ## OpenAI-style tool calling for `openai_compatible` (Phase 3)
 
@@ -192,129 +46,6 @@ Related: `internal/agent/openai.go` (the shared transport), `internal/agent/open
 (the generic identity), `internal/toolharness`, `internal/ollamaagent` (the native
 tool loop to mirror), and [../specs/PROVIDERS.md](../specs/PROVIDERS.md) §2a.
 
-## Status and roadmap
-
-SOP V1 is complete; every V1 stage is implemented and tested:
-
-```text
-Repository / CI · Domain Model · Workflow State Machine · SQLite Persistence
-Persistence Corrections · CLI Foundation · PRD -> Plan · Plan -> Tasks
-Dependency DAG · Scheduler · Git Adapter · Test Runner · Agent Harness
-TDD Task Runner · Structured Self Review · Open Code Review Integration
-Commit / Documentation Gate · GitHub Adapter · GitHub Actions Integration
-CI Remediation · Merge Gate · Completion Loop · Resume / Recovery
-Environment Bootstrap · Controlled Parallel Execution · Documentation Automation
-End-to-End Dogfooding
-```
-
-Implemented on top of the V1 core (wrap-up work):
-
-```text
-Local model providers (Ollama, OpenAI-compatible llama.cpp)
-Project configuration (.agent-sdlc/config.yaml)
-Configuration-driven agent selection
-Markdown task-file loader (sop plan TASK.md)
-Deterministic quality gate · Command policy
-Validation runner (sop validate) · Review stage (sop review)
-Run lifecycle and run state (sop run)
-Bounded fix loop (review -> fix -> re-validate)
-Dependency-aware graph execution (sop run over the task graph)
-Provider capability detection
-Git workflow commands (sop commit, sop pr)
-MCP server (sop mcp) · Optional decision layer (deterministic + routing)
-Run report command (sop report) · Evaluation harness (sop eval)
-Early JEV checkpoints (Phase 3) · Deterministic model-class routing (Phase 3.5)
-Provider runtime + capability discovery (Phase 4) · Bounded model escalation (Phase 5)
-Unified work items + governed `sop prompt` (Phase 5.4)
-Declared-complete plan stages (`execution_mode: done`): a plan whose work already
-exists records its stages as satisfied instead of re-implementing them
-Two plan shapes compile deterministically (no agent): the rendered
-`## <id> — <title>` form, and the `## Tasks` + `### <id> — <title>` form the phase
-plans use, with explicit dependencies and a load-bearing `Execution:` field
-Unified installer `./install.sh` (CLI + per-agent skills + Claude plugin) and the
-native Claude Code plugin package, generated from `skills/` (Phase 5.5)
-GitHub Actions CI: fmt, vet, build, test, race, doc links, installer + plugin packaging
-Windows distribution: native `install.ps1` (no WSL/Bash/Make/admin, copied skills with a
-`.sop-managed` ownership marker, safe update and uninstall) + a `windows-latest` CI job
-(Phase 5.6; the clean-room test on a real Windows machine is still outstanding)
-SOP agent skills (`/sop`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`,
-`/sop-implement`) for Zed and Claude Code + `make install-skills` (Phase 5.4 hardening)
-Recurring, closing steering for an unmutated IMPLEMENT/FIX run (T076): the
-implement-now instruction is re-stated every interaction, and the turns before the
-late-stage cutoff tell the model the invocation is about to end
-Local-first model tiers (routing/configuration hardening): SMALL runs a local
-model and switches to its configured cloud fallback (`nemotron-3-nano:30b-cloud`)
-only when a read-only observation says the local runtime cannot serve it; MEDIUM is
-`nemotron-3-super:cloud` and LARGE is `deepseek-v4.1-flash:cloud`
-```
-
-Next candidates, in the plan's build order:
-
-```text
-OpenAI-style tool calling for openai_compatible (Phase 3)
-Local network service (team mode)
-Small-device dashboard
-Jev adapter + Jev-vs-deterministic evaluation
-```
-
-The former first candidate is now **implemented**:
-[PLAN-Phase-6-Interactive-Approval.md](PLAN-Phase-6-Interactive-Approval.md)
-(Phase 6, `P6-001`–`P6-011`). `sop approvals` and the read-only
-`sop reconcile --list-changed` — the two SOP operations an external consumer needed to
-reach — landed as `P6-001`–`P6-004`; the interactive surface followed: a parked run
-names the gate and the commands that resolve it, the applicable gates can be chosen at
-a terminal (fail-closed off one), and `sop approve <id> --run` records the decision
-before starting the ordinary run. See [../guides/APPROVALS.md](../guides/APPROVALS.md).
-
-## Known limitations (current)
-
-Deliberate, understood residuals that are not scheduled work. Each is described where
-its behavior is defined; this list exists so none is lost, and so "no backlog items are
-open" is a claim about the _scheduled_ list above, not about these.
-
-- **The Windows clean-room test has not been run** (Phase 5.6, P56-011). CI runs the
-  `windows` job against temporary directories on `windows-latest`; a real machine's
-  `%USERPROFILE%`, PATH, Zed, and Claude Code are unverified. See
-  [../testing/WINDOWS-CLEAN-ROOM.md](../testing/WINDOWS-CLEAN-ROOM.md).
-- **No project-scope skill install on Windows.** On Unix,
-  `scripts/install/install-skills.sh --project [DIR]` installs the skills into a
-  project's `.agents`/`.claude` directory; `install.ps1` has no `-Project` equivalent
-  yet.
-- **The Windows CI job runs a scoped test set, not the full suite.** Several lifecycle
-  tests execute POSIX commands (`true`/`false`/`sh`), so that job covers the build, vet,
-  static PowerShell parsing, and the distribution surface under both Windows PowerShell
-  and `pwsh`; the full suite and `-race` stay on Linux.
-- **Prompt run ids are unique locally, not globally.** `promptRunID` is
-  second-resolution plus a collision counter, so two prompts in the same second never
-  share a directory, but two machines can mint the same id.
-- **`sop-ollama-agent` built from the pinned revision predates the `-version` flag**, so
-  `scripts/install/install-sop-ollama-agent.sh` rebuilds instead of short-circuiting on a
-  revision match. The installer handles it gracefully; a pinned revision that reports
-  its revision would make repeated installs a no-op.
-- **Ad-hoc runs have no resolvable approval gate.** `sop run --task TASK.md` and
-  `sop prompt --capability implement` park at a human boundary like a graph run, but
-  their run id is not a stored task, so `sop approvals`/`sop approve`/`sop decline` do
-  not apply to them. They print the boundary and how to continue instead of naming a
-  command that would fail (Phase 6, P6-005).
-- **The local-first fallback applies to the class the router or `--model-class`
-  selects, not to the run-level default agent or an escalation attempt.**
-  `applyModelRouting` (the run-level default) and `escalateTo` (Phase 5) resolve
-  without an availability probe, so a `local` class used as the run-level default
-  (routing off) or reached by escalation runs its local model even when the local
-  runtime cannot serve it. The fallback is owned by the per-task and per-prompt
-  routing seam in `internal/cli`. See
-  [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
-- **Capabilities designed but not delivered are documented in place, not here:** the TDD
-  test-design stage ([../specs/TASK-LIFECYCLE.md](../specs/TASK-LIFECYCLE.md)),
-  `max_parallel_tasks` ([../specs/EXECUTION.md](../specs/EXECUTION.md)), and the CLI-driven
-  push → PR → CI → merge loop ([../architecture/OVERVIEW.md](../architecture/OVERVIEW.md));
-  the `jev` decision provider is recognized but not implemented
-  (`internal/decision/decision.go`).
-
-The project is intentionally built incrementally: sequential correctness and
-recovery come before parallelism, and each stage is usable and tested before the
-next is added.
-
 ## Task-Scoped Discovery Budgets
 
 **Priority:** High  
@@ -336,3 +67,22 @@ We should avoid provider/model-specific limits such as:
 - Codex = 18 turns
 - DeepSeek = 12 turns
 - Nemotron = 10 turns
+
+## Earlier multi-package discovery observations
+
+The original P3-006/P3-009/011/014/017 evidence and successive steering fixes are
+preserved in [the resolved backlog](../history/RESOLVED-BACKLOG.md#bootstrap-agent-exhausts-its-budget-on-multi-package-tasks).
+Remaining candidates were a concrete file/work scope, incremental continuation,
+and a stronger configured model for multi-package tasks. Task-scoped discovery
+budgets above track the next refinement; current bounded discovery behavior is
+owned by [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#9-tool-harness-bounds-and-phases).
+
+## Status and roadmap
+
+See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities
+and [its known limitations](../reference/PROJECT-STATUS.md#known-limitations-current).
+The numbered implementation plans remain in [this directory](.).
+
+## Known limitations (current)
+
+See [the current limitations reference](../reference/PROJECT-STATUS.md#known-limitations-current).

@@ -1,7 +1,7 @@
 # Getting Started
 
 This guide takes you from nothing to a first `sop run`: install the CLI, install
-the bundled end-to-end agent skill, and point SOP at a planning source.
+the bundled agent commands, and point SOP at a planning source.
 
 SOP is a workflow authority that runs locally. It is not a library you import
 into your application, and it is not copied into the projects it manages — it
@@ -42,28 +42,35 @@ sop version
 
 Once installed, `sop` runs from any project directory.
 
-## Install script
+## Install agent commands
+
+Installation options, PATH precedence, update/removal, and platform differences
+are owned by [INSTALLATION.md](INSTALLATION.md). SOP ships agent skills that expose
+the governed path as `/sop` commands in supported coding agents. Once the CLI works,
+install the integrations for the agents you use:
 
 ```bash
-./install.sh
+./install.sh --skills zed     # the /sop* commands in Zed
+./install.sh --skills claude  # the same commands in Claude Code
+./install.sh --plugin claude  # the Claude Code plugin
+./install.sh --all            # the CLI + every present agent's skills + the plugin
 ```
 
-This builds the `sop` CLI from the checkout and writes it to a user-writable bin
-directory. `scripts/install.sh` and `make install` run the same installer; see
-[INSTALLATION.md](INSTALLATION.md) for the options, the PATH guidance, and removal.
-
-To also get the governed SOP commands in an agent (Zed: `/sop`, `/sop-prompt`,
-`/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, `/sop-implement`; Claude Code
-exposes the same commands), install for the agent(s) you use:
-
-```bash
-./install.sh --skills zed      # the /sop* commands in Zed
-./install.sh --skills claude   # the same commands in Claude Code
-./install.sh --all             # the CLI + every present agent's skills + the plugin
+```text
+/sop-review review internal/provider for architectural problems
+/sop-plan plan a cache layer for provider model discovery
+/sop-diagnose explain why the current tests are failing
+/sop-test design regression tests for this behavior
+/sop-implement add caching to provider model discovery
 ```
 
-Each command is a thin alias over `sop prompt`; see
-[ZED-SKILLS.md](ZED-SKILLS.md) and [CLAUDE-SKILLS.md](CLAUDE-SKILLS.md).
+Each command is a thin alias over `sop prompt --capability ...`: it picks a capability
+and calls SOP, which still owns routing, provider selection, validation, and approval.
+`/sop-implement` is the only mutating command and runs the governed implementation
+lifecycle. Guides: [INSTALLATION.md](INSTALLATION.md),
+[ZED-SKILLS.md](ZED-SKILLS.md), and
+[CLAUDE-SKILLS.md](CLAUDE-SKILLS.md); the plugin is
+[CLAUDE-PLUGIN.md](CLAUDE-PLUGIN.md).
 
 ## One-command run
 
