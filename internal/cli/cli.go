@@ -50,8 +50,11 @@ type deps struct {
 	newAgent     func(harness, provider, model string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
-	commit       func(ctx context.Context, dir, message string) error
-	newGitHub    func(dir string) github.Client
+	// snapshotRepository observes file content around IMPLEMENT/FIX for providers
+	// which do not return invocation-scoped mutation paths. It is read-only.
+	snapshotRepository func(context.Context, string) (map[string]string, error)
+	commit             func(ctx context.Context, dir, message string) error
+	newGitHub          func(dir string) github.Client
 	// newJEVAnalyzer builds the optional JEV analyzer from configuration. It is
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.
@@ -145,6 +148,7 @@ func defaultDeps() deps {
 			// detection is not blind to them; exclude SOP's own output.
 			return git.New(dir).DiffAll(ctx, config.DirName, planflow.ReportsDir)
 		},
+		snapshotRepository: snapshotRepository,
 		commit: func(ctx context.Context, dir, message string) error {
 			g := git.New(dir)
 			if err := g.Add(ctx); err != nil {

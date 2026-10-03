@@ -463,11 +463,11 @@ func truncateContent(s string, max int) (string, bool) {
 
 // taskInvocationChanges returns the repository paths to attribute to the task for
 // one invocation: the paths the agent reported changing, or — when the provider
-// cannot report them — the paths derived from the working-tree diff. Preferring
+// cannot report them — the paths supplied by the injected diff observer. Preferring
 // the agent's own evidence keeps unrelated pre-existing dirty files out of the
 // task's change set.
 func taskInvocationChanges(reported []string, diff string) []string {
-	if len(reported) > 0 {
+	if reported != nil {
 		return reported
 	}
 	return changedFiles(diff)

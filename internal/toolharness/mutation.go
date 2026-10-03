@@ -156,6 +156,47 @@ func (h *Harness) RepositoryFingerprint(ctx context.Context) (string, error) {
 	return h.mutationFingerprint(ctx, h.root)
 }
 
+// RepositoryPathFingerprints uses the same content-complete observer to identify
+// individual file mutations across an invocation. It excludes Git/SOP metadata,
+// does not follow symlinks, and ignores directory entries so creating a parent
+// directory for an excluded artifact cannot count as an implementation change.
+func (h *Harness) RepositoryPathFingerprints(ctx context.Context) (map[string]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
+	defer cancel()
+	paths := make(map[string]string)
+	err := filepath.WalkDir(h.root, func(path string, entry fs.DirEntry, walkErr error) error {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if path != h.root && (filepath.Base(path) == ".git" || filepath.Base(path) == stateDirRel) {
+			if entry != nil && entry.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(h.root, path)
+		if err != nil {
+			return err
+		}
+		fingerprint, err := h.mutationFingerprint(ctx, path)
+		if err != nil {
+			return err
+		}
+		paths[filepath.ToSlash(rel)] = fingerprint
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return paths, nil
+}
+
 // RunCommandChecked preserves the command result while exposing its real exit
 // status independently of display text. It executes and audits exactly once.
 func (h *Harness) RunCommandChecked(ctx context.Context, args map[string]any) (string, bool, error) {

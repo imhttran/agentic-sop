@@ -387,13 +387,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// so it never affects execution.
 	ar := activity.FromContext(ctx)
 
-	// changeRequired is the task's DETERMINISTIC change requirement: an ordinary
-	// IMPLEMENT task must produce a governed repository change before it may pass.
+	// Ordinary IMPLEMENT tasks need governed mutation or verified completion
+	// evidence. That evidence may span earlier invocations of the same task.
 	// A verify-first task proves acceptance with the configured validation (no
 	// implementation agent of its own), and an execution_mode done stage's work is
 	// declared already present, so neither requires a change here. The rule reads
-	// only the task's declared execution mode, so no model output (including the
-	// model's changes_expected) can enable or waive it.
+	// only the task's declared execution mode; a model claim alone cannot waive it.
 	changeRequired := !spec.ExecutionMode.VerifyFirst() && !spec.ExecutionMode.Done()
 
 	var (
@@ -407,14 +406,17 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// "fix cycles: n/max" can never disagree with the recorded FIX count.
 		cycles int
 		// implMutation is SOP's OBSERVED mutation evidence for the ordinary
-		// IMPLEMENT invocation: whether the working tree actually changed as a
-		// result of it. It is set from the same working-tree diff the lifecycle
-		// already reads — the existing mutation observer — so no second
-		// mutation-detection mechanism exists. Narration, tool intent, a write
+		// IMPLEMENT/FIX invocations, separate from accumulated task evidence.
+		// Only harness-observed paths or invocation-scoped content changes count.
+		// Narration, pre-existing dirty work, tool intent, a write
 		// request, a test run, and a model-guessed git status are never evidence.
 		implMutation     bool
 		alreadySatisfied bool
 		satisfaction     *agent.CompletionEvidence
+		// Legacy providers may explicitly finish without changes. That completion
+		// still needs actual, successful configured validation and the quality gate;
+		// neither an empty suite nor an unverified ALREADY_SATISFIED claim suffices.
+		legacyNoChange bool
 		// pendingOutcome is a non-completed mutating (IMPLEMENT/FIX) outcome whose
 		// disposition is deferred until SOP's own deterministic validation has run,
 		// so structured build/test evidence outranks the agent's free-form summary.
@@ -517,6 +519,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if sig, had := rn.ReadAttempt(); had {
 			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
 		}
+		var before map[string]string
+		if d.snapshotRepository != nil {
+			before, err = d.snapshotRepository(ctx, dir)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("implement mutation baseline: %w", err)
+			}
+		}
 		implStop := rec.Measure(perf.StageImplement)
 		impl, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Implement,
@@ -550,14 +559,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
-		recordTaskChanges(rn, taskInvocationChanges(impl.ChangedFiles, diff))
+		paths, observed, err := invocationChanges(ctx, dir, d, before, impl.ChangedFiles, diff)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("implement mutation observation: %w", err)
+		}
+		recordTaskChanges(rn, paths)
 		_ = rn.Write("diff.patch", diff)
 
-		// The observed working-tree change of THIS invocation is the mutation
-		// evidence the gate below decides on. It comes from the same diff SOP
-		// already read, so a failed or no-op write (which leaves the tree unchanged)
-		// does not qualify, and narration, tool intent, and a write request never do.
-		implMutation = strings.TrimSpace(diff) != ""
+		implMutation = observed
+		legacyNoChange = impl.Outcome != nil && impl.Outcome.Status == agent.OutcomeCompleted &&
+			!impl.Outcome.ChangesExpected && impl.Outcome.Completion == ""
 
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
 			if implMutation {
@@ -572,15 +583,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 
-		// A claimed change with none produced is a failure (SOP's own deterministic
-		// verdict, NoChangesProduced). A model-asserted changes_expected=false is NOT
-		// a waiver for a change-requiring task: it is evidence only, and the
-		// authoritative gate below (green validation on an unchanged tree) routes the
-		// completion to the retryable no_changes/no-progress vocabulary instead of
-		// PASS. Only independently verified ALREADY_SATISFIED evidence permits
-		// no-mutation completion; the validation and quality gates still run.
+		// A claimed change with no current or accumulated task evidence is a failure.
+		// A final invocation may instead verify earlier governed work; leave that
+		// evidence available to validation/review/JEV without calling it a new change.
 		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
-		if !implMutation && changesExpected && !alreadySatisfied {
+		if !implMutation && changesExpected && !alreadySatisfied && len(taskChangeEvidence(rn)) == 0 {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "IMPLEMENT", "agent reported successful implementation but produced no repository changes"), nil
@@ -730,6 +737,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		ar.Emit(activity.StageFix, "applying fix", "")
 		cycles++
 		rec.FixCycle()
+		var before map[string]string
+		if d.snapshotRepository != nil {
+			before, err = d.snapshotRepository(ctx, dir)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("fix mutation baseline: %w", err)
+			}
+		}
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
@@ -754,6 +768,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			alreadySatisfied = true
 			satisfaction = fix.Outcome.Evidence
 		}
+		legacyNoChange = fix.Outcome != nil && fix.Outcome.Status == agent.OutcomeCompleted &&
+			!fix.Outcome.ChangesExpected && fix.Outcome.Completion == ""
 		recordTaskChanges(rn, fix.ChangedFiles)
 
 		// Re-read the working tree after the fix so the next classification sees what
@@ -762,10 +778,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
-		recordTaskChanges(rn, taskInvocationChanges(fix.ChangedFiles, diff))
+		paths, fixMutation, err := invocationChanges(ctx, dir, d, before, fix.ChangedFiles, diff)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("fix mutation observation: %w", err)
+		}
+		recordTaskChanges(rn, paths)
+		implMutation = implMutation || fixMutation
 
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			if strings.TrimSpace(diff) != "" {
+			if fixMutation {
 				// A fix that did not complete is not trusted on its own prose: re-validate
 				// the tree and let structured evidence decide. The pending check at the top
 				// of the loop then either continues the deterministic repair or reports the
@@ -776,7 +797,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles, approval), nil
 		}
 
-		if strings.TrimSpace(diff) == "" {
+		if !fixMutation && !alreadySatisfied && !legacyNoChange {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "FIX", "agent reported a fix but produced no repository changes"), nil
@@ -787,23 +808,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	writeRunJSON(rn, "validation.json", suite)
 	writeRunJSON(rn, "review.json", report)
 
-	// The authoritative finalization gate for a CHANGE-REQUIRING IMPLEMENT task: a
-	// green validation on an unchanged repository is NOT success. The model's
-	// changes_expected is evidence, never authority to waive the requested
-	// mutation, so a completion that produced no governed repository mutation is
-	// routed to the retryable, early false-completion vocabulary rather than PASS.
-	//
-	// This reuses the failure classifier's fixed evidence precedence and the
-	// EXISTING termination vocabulary (termination=no_changes, diagnostic
-	// IMPLEMENT_NO_CHANGES, outcome=CONTINUE), and it is deliberately DISTINCT from
-	// the no-progress guard (IMPLEMENT_NO_PROGRESS after five consecutive
-	// non-mutating turns): this is the EARLY verdict, produced by the same
-	// accounting without a second counter and without a second mechanism. A
-	// verify-first or execution_mode-done stage (whose work needs no change of its
-	// own) is unaffected, and a genuine mutation passes exactly as before.
-	// A trusted harness may additionally prove ALREADY_SATISFIED; this waives
-	// only the mutation requirement, after the independent gate has passed.
-	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied {
+	// Completion is task-scoped; mutation attribution is invocation-scoped. Prior
+	// governed work remains available to the independent quality/JEV gate. Legacy
+	// no-change completion requires actual green validation, not just model prose
+	// or a vacuously passing empty suite. Explicit ALREADY_SATISFIED still requires
+	// the trusted harness proof above. Missing evidence uses the existing bounded
+	// IMPLEMENT_NO_CHANGES continuation, never an artificial mutation or PASS.
+	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed()
+	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied &&
+		len(taskChangeEvidence(rn)) == 0 && !validatedNoChange {
 		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
 		return noChangesCompletion(cfg, rn, class), nil
 	}
@@ -1486,7 +1499,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	b.WriteString(strings.TrimSpace(spec.Render()))
 	b.WriteString("\n\n## Validation\n\n")
 	if len(res.suite.Results) == 0 {
-		b.WriteString("No validation commands configured.\n")
+		writeNoValidationResults(&b, cfg)
 	} else {
 		for _, r := range res.suite.Results {
 			fmt.Fprintf(&b, "- %s %s `%s`\n", r.Status, r.Category, r.Command)
@@ -1526,6 +1539,24 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	writeClassificationReport(&b, res.classification)
 	writeAutonomyReport(&b, res.decision)
 	return b.String()
+}
+
+// writeNoValidationResults renders the Validation section when the suite produced
+// no results. It distinguishes a suite with configured checks that did not run
+// (the lifecycle stopped before validation) from a project with no checks
+// configured at all, so a report never claims "no validation commands
+// configured" when checks were configured. The executed-results path is
+// unaffected.
+func writeNoValidationResults(b *strings.Builder, cfg config.Config) {
+	checks := validate.Checks(cfg.Validation)
+	if len(checks) == 0 {
+		b.WriteString("No validation commands configured.\n")
+		return
+	}
+	b.WriteString("Validation checks configured but NOT RUN: the lifecycle stopped before validation.\n\n")
+	for _, check := range checks {
+		fmt.Fprintf(b, "- NOT RUN %s `%s`\n", check.Category, check.Command)
+	}
 }
 
 // writeModelSelectionReport renders the resolved model-routing evidence in the

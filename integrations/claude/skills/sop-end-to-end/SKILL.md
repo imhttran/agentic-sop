@@ -140,6 +140,8 @@ Return a concise evidence-backed summary:
 - Routing/provider evidence: actual class, provider, model, fallback/escalation
   reason when recorded; use UNAVAILABLE for missing evidence.
 - Blockers: diagnostic, what SOP attempted, why recovery stopped.
+- BLOCK/BLOCKED, FAIL, or execution error: link the latest relevant `sop-run.log`
+  at the error line, following [SOP failure reporting](../sop/SKILL.md#failure-behavior).
 - Human approval required: actual applicable request/action, or none established.
 - Recommended next action: SOP-provided continuation or exact operator decision.
 
