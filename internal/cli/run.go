@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -380,6 +381,10 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 // verify). It returns the final result and writes the intermediate artifacts.
 func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (res lifeResult, err error) {
 	reports := taskReportDeliverables(spec)
+	if rawOutputEvidence(spec) {
+		_ = os.Setenv(envCommandEvidenceLog, filepath.Join(rn.Dir(), "command-evidence.jsonl"))
+		defer func() { _ = os.Unsetenv(envCommandEvidenceLog) }()
+	}
 	if len(reports) > 0 {
 		readDiff := d.readDiff
 		d.readDiff = func(ctx context.Context, dir string) (string, error) {
@@ -1301,6 +1306,14 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 // command output in its deliverable. It reads the declared acceptance criteria and
 // deliverables — task data — never the artifact content, so it is not a prose
 // heuristic over the produced report.
+// envCommandEvidenceLog names the file the agent appends captured command evidence
+// to (JSONL). SOP sets it for a task that requires raw output, to a path inside the
+// task's run directory, so the captured evidence is SOP-owned; it is unset for every
+// other task, so nothing is captured needlessly.
+const envCommandEvidenceLog = "SOP_COMMAND_EVIDENCE_LOG"
+
+// rawOutputEvidence reports whether a task's contract explicitly requires raw
+// command output in its deliverable.
 func rawOutputEvidence(spec *taskfile.Spec) bool {
 	for _, item := range append(append([]string{}, spec.AcceptanceCriteria...), spec.Deliverables...) {
 		if strings.Contains(strings.ToLower(item), "raw output") {
