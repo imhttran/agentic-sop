@@ -598,14 +598,24 @@ func (h *Harness) checkCommandIn(root authorizedRoot, argv []string) error {
 		return fmt.Errorf("%w: -C/--git-dir/--work-tree overrides are not allowed", errCommandNotAllowed)
 	}
 	for _, a := range argv {
-		if filepath.IsAbs(a) {
-			if _, err := h.resolveIn(root, a, accessRead); err != nil {
-				return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
-			}
-		}
 		if namesStateDB(a) {
 			return fmt.Errorf("%w: %s is protected", ErrProtectedPath, stateDBRel)
 		}
+	}
+	// Confine every path-like argument — relative and absolute alike — to the
+	// selected authorized root, reusing the canonical, symlink-aware resolver.
+	// Flags, package patterns without a separator, and bare identifiers are not
+	// treated as paths.
+	for _, argPath := range commandPathArgs(argv) {
+		if _, err := h.resolveIn(root, argPath, accessRead); err != nil {
+			return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
+		}
+	}
+	// A read-only root must not be writable through command execution. A command
+	// that can intentionally modify repository contents is refused there, the same
+	// way the mutation tools are; the primary (read-write) root is unaffected.
+	if root.mode != RootReadWrite && CommandMutatesRepository(argv) {
+		return fmt.Errorf("%w: %q may modify a read-only repository root", errReadOnlyRoot, strings.Join(argv, " "))
 	}
 
 	if filepath.Base(argv[0]) == "gofmt" {
@@ -619,6 +629,75 @@ func (h *Harness) checkCommandIn(root authorizedRoot, argv []string) error {
 		return fmt.Errorf("%w: %q is %s", errCommandNotAllowed, strings.Join(argv, " "), class)
 	}
 	return nil
+}
+
+// CommandMutatesRepository reports whether argv can intentionally modify tracked
+// repository contents. It is a name-and-flag analysis, not a general safety
+// guarantee: gofmt in write mode and "go fmt" mutate; the read-only inspection
+// commands (go test/build/vet/list and read-only git) do not.
+func CommandMutatesRepository(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	switch filepath.Base(argv[0]) {
+	case "gofmt":
+		return gofmtWrites(argv[1:])
+	case "go":
+		return len(argv) > 1 && argv[1] == "fmt"
+	}
+	return false
+}
+
+// gofmtWrites reports whether gofmt arguments request in-place formatting. Any
+// "-w" form other than an explicit "false" is treated as a write, so an
+// unrecognized variant fails closed rather than being assumed read-only.
+func gofmtWrites(args []string) bool {
+	for _, a := range args {
+		switch {
+		case a == "-w":
+			return true
+		case strings.HasPrefix(a, "-w="):
+			return strings.TrimSpace(strings.TrimPrefix(a, "-w=")) != "false"
+		}
+	}
+	return false
+}
+
+// commandPathArgs returns the arguments of argv that name a filesystem path and
+// must be confined to the authorized root. The program name is skipped; a flag is
+// skipped unless it carries an inline "=value" (for example
+// "-coverprofile=../x"); a bare token is treated as a path only when it looks
+// like one, so package patterns and regexes are not mistaken for paths.
+func commandPathArgs(argv []string) []string {
+	var out []string
+	for i, a := range argv {
+		if i == 0 {
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			eq := strings.IndexByte(a, '=')
+			if eq < 0 {
+				continue
+			}
+			a = a[eq+1:]
+		}
+		if looksLikePath(a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// looksLikePath reports whether a bare argument names a filesystem path rather
+// than a flag value, package pattern, or identifier.
+func looksLikePath(a string) bool {
+	if a == "" {
+		return false
+	}
+	if a == "." || a == ".." || strings.HasPrefix(a, "./") || strings.HasPrefix(a, "../") || strings.HasPrefix(a, "~/") {
+		return true
+	}
+	return strings.ContainsRune(a, os.PathSeparator) || strings.ContainsRune(a, '/')
 }
 
 // namesStateDB reports whether an argument references the state database by a

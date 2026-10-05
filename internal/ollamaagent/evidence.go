@@ -102,17 +102,7 @@ func commandMutates(command string) bool {
 	if err != nil || len(argv) == 0 {
 		return false
 	}
-	switch filepath.Base(argv[0]) {
-	case "gofmt":
-		// Only write mode can change repository content. Listing/printing
-		// formatting differences supplies no mutation evidence.
-		for _, arg := range argv[1:] {
-			if arg == "-w" || arg == "-w=true" {
-				return true
-			}
-		}
-	}
-	return false
+	return toolharness.CommandMutatesRepository(argv)
 }
 
 // mutationPath returns the repository path a mutating tool was asked to change,
