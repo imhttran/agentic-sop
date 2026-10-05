@@ -530,7 +530,39 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	if err := h.checkCommandIn(root, argv); err != nil {
 		return "", false, err
 	}
-	return h.execWithStatus(ctx, root.path, argv)
+	result, succeeded, err := h.execWithStatus(ctx, root.path, argv)
+	if err == nil && noTestsMatched(argv, result) {
+		result += "\n" + noTestMatchDiagnostic
+	}
+	return result, succeeded, err
+}
+
+// noTestMatchDiagnostic is surfaced when a targeted `go test -run ...` invocation
+// matched no tests, so a zero exit status cannot be read as "the selected tests ran
+// and passed". It is derived from the command's own output, never agent prose.
+const noTestMatchDiagnostic = "[no-test-match] the go test -run selection matched no tests; a zero exit status does not establish that the selected tests executed"
+
+// noTestsMatched reports whether argv is a targeted `go test -run ...` whose output
+// shows no matching test actually ran. A full `go test ./...` is unaffected: the
+// stricter check applies only to a named test selection.
+func noTestsMatched(argv []string, output string) bool {
+	if len(argv) < 3 || filepath.Base(argv[0]) != "go" || argv[1] != "test" {
+		return false
+	}
+	targeted := false
+	for _, a := range argv[2:] {
+		if a == "-run" || strings.HasPrefix(a, "-run=") {
+			targeted = true
+			break
+		}
+	}
+	if !targeted {
+		return false
+	}
+	if strings.Contains(output, "no tests to run") {
+		return true
+	}
+	return !strings.Contains(output, "=== RUN")
 }
 
 // SplitCommand tokenizes a command string, rejecting shell metacharacters and
