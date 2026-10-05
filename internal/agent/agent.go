@@ -49,6 +49,11 @@ type Request struct {
 	// cannot supply or replace this verification contract.
 	AcceptanceCriteria []string `json:"acceptance_criteria,omitempty"`
 	ValidationCommands []string `json:"validation_commands,omitempty"`
+	// Deliverables are the exact repository paths the task requires the agent
+	// to create (for example a Markdown report). They are caller-owned task
+	// data: the agent must produce them, but they grant no completion,
+	// validation, or approval by themselves.
+	Deliverables []string `json:"deliverables,omitempty"`
 }
 
 // Validate rejects requests the transport must not send to a harness.

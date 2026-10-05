@@ -86,6 +86,14 @@ every acceptance criterion yourself.
 
 When the implementation is complete, return the required final response immediately.
 
+For a report deliverable, write the requested report using the current caller
+observations and permitted inspections. Missing optional facts must be labelled
+unavailable with a reason; never invent required evidence. Do not spend discovery
+turns repeating observations already supplied by the caller, or attempt commands
+outside the allow-list to rediscover facts the caller has supplied. An explicitly
+requested Markdown report is an implementation mutation: create/update it through
+the file tools, preserving unrelated content, rather than only describing it.
+
 SOP performs independent validation and review after you return. Prefer small,
 targeted edits, and run focused validation (for example "go test ./...").
 
@@ -156,6 +164,9 @@ add "completion":"ALREADY_SATISFIED" and "evidence":{"acceptance":[{"criterion":
 func userPrompt(req agent.Request) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Task:\n%s\n", strings.TrimSpace(req.Task))
+	if len(req.Deliverables) > 0 {
+		fmt.Fprintf(&b, "\n%s", deliverableRequirement(req.Deliverables))
+	}
 	if s := strings.TrimSpace(req.Input); s != "" {
 		fmt.Fprintf(&b, "\nInput:\n%s\n", s)
 	}

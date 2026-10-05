@@ -13,11 +13,9 @@ func snapshotRepository(ctx context.Context, dir string) (map[string]string, err
 	if err != nil {
 		return nil, err
 	}
-	for path := range paths {
-		if isSOPPath(path) {
-			delete(paths, path)
-		}
-	}
+	// Keep report fingerprints until the task-specific filter is applied. The
+	// harness already excludes runtime state and Git metadata. A pre-existing
+	// dirty report still needs a real before/after delta to supply mutation proof.
 	return paths, nil
 }
 
@@ -25,13 +23,13 @@ func snapshotRepository(ctx context.Context, dir string) (map[string]string, err
 // without that evidence use before/after content snapshots, never the dirty-tree
 // diff alone. An unavailable observation fails closed. An injected diff observer
 // retains its existing observation contract; production always supplies snapshots.
-func invocationChanges(ctx context.Context, dir string, d deps, before map[string]string, reported []string, diff string) ([]string, bool, error) {
+func invocationChanges(ctx context.Context, dir string, d deps, before map[string]string, reported []string, diff string, reports ...string) ([]string, bool, error) {
 	if reported != nil {
-		paths := taskChangedFiles(reported)
+		paths := taskChangedFiles(reported, reports...)
 		return paths, len(paths) > 0, nil
 	}
 	if d.snapshotRepository == nil {
-		paths := taskChangedFiles(taskInvocationChanges(nil, diff))
+		paths := taskChangedFiles(taskInvocationChanges(nil, diff), reports...)
 		// An opaque injected diff can carry mutation evidence without file headers.
 		observed := len(paths) > 0 || (len(changedFiles(diff)) == 0 && strings.TrimSpace(diff) != "")
 		return paths, observed, nil
@@ -52,6 +50,6 @@ func invocationChanges(ctx context.Context, dir string, d deps, before map[strin
 		}
 	}
 	sort.Strings(paths)
-	paths = taskChangedFiles(paths)
+	paths = taskChangedFiles(paths, reports...)
 	return paths, len(paths) > 0, nil
 }

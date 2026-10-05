@@ -63,6 +63,9 @@ type deps struct {
 	// the highest-precedence input to the optional model-routing layer and is
 	// empty for every command that does not accept the flag.
 	modelClass string
+	// taskInputs is optional, caller-supplied observation text keyed by task ID.
+	// It supplies context only; it cannot grant tools, mutation or completion.
+	taskInputs map[string]string
 	// routing is the resolved, non-secret model-routing evidence for this
 	// invocation. The run commands set it after resolution; each task run records
 	// it in its artifacts so the model choice stays auditable after the process

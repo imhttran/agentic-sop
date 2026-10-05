@@ -292,8 +292,9 @@ func (p implementPhase) label() string {
 // caller can ground changes_expected on observed reality rather than on a model
 // claim.
 //
-// The no-progress guard permits novel successful inspection through the existing
-// implement-now threshold, then requires mutation within five stale turns. It
+// The no-progress guard permits novel successful discovery -- inspections and
+// non-mutating commands -- through the existing implement-now threshold, then
+// requires mutation within five stale turns. It
 // counts all model turns toward the discovery window, so narration and denials
 // cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
@@ -305,6 +306,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 
 	st := newExecutionState()
 	proof := h.satisfactionProof(ctx, req)
+	deliverables := req.Deliverables
 	var (
 		lastTool string
 		lastReq  string
@@ -435,6 +437,32 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 
 			continue
 		}
+		// A declared deliverable that is still missing at the implement-now
+		// threshold withholds the command and git tools: the invocation owes the
+		// deliverable, and more validation is not progress toward it. File reads
+		// and writes stay available so the agent can compose it.
+		needDeliverable := len(deliverables) > 0 && iteration >= implementNowAfter && h.deliverableMissing(deliverables)
+		if needDeliverable && policy.Allows(name) && !deliverableTool(name) {
+			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+			detail := "a required deliverable is missing; create it with the file tools first"
+			h.tools.RecordDenied(name, args, detail)
+			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
+			progressStop := st.stalled(false, false)
+			terminate := repeatStop || progressStop
+			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
+			if terminate {
+				if progressStop {
+					return "", h.implementNoProgressError(req, st, ev, iteration, lastTool, lastReq)
+				}
+				return "", h.noProgressError(req, iteration, lastTool, lastReq)
+			}
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + "\n\n" + implementDeliverableInstruction(deliverables)},
+			)
+			continue
+		}
+
 		// Capability policy: keep the invariant that a capability only reaches the
 		// tools its policy allows, even though IMPLEMENT currently allows them all.
 		if !policy.Allows(name) {
@@ -551,6 +579,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		// implement, so a run is never finalized before it has changed anything.
 		if st.phase != implFinalize {
 			switch {
+			case needDeliverable:
+				advice = append(advice, implementDeliverableInstruction(deliverables))
+				if !st.finalization.implementInstructed {
+					st.finalization.implementInstructed = true
+					h.recordImplementEvent(req, implementContinueEvent, "a required deliverable must be created")
+				}
 			case st.finalizeEligible(iteration, policy):
 				st.phase = implFinalize
 				st.finalization.entered = true

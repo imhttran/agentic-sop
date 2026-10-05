@@ -594,6 +594,7 @@ func parkRunAtHumanBoundary(rn *runpkg.Run, taskID string, stderr io.Writer) {
 // persisted state.
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
+	spec.Deliverables = planTaskDeliverables(dir, task)
 	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
 	// The previous invocation's run stage is read before New resets state.json, so
 	// a task parked at WAITING_FOR_HUMAN stays a human gate on re-entry.

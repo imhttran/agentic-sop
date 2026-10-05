@@ -120,9 +120,10 @@ const (
 	maxIterationsFix       = 24
 
 	// maxNoProgressIterations bounds consecutive stale turns before the first
-	// mutation. Novel successful repository inspection may reset the streak only
-	// through implementNowAfter model turns. Afterwards, all non-mutating turns
-	// are stale. The repetition guard independently detects consecutive loops.
+	// mutation. Novel successful repository discovery -- an inspection or a
+	// non-mutating command -- may reset the streak only through implementNowAfter
+	// model turns. Afterwards, all non-mutating turns are stale. The repetition
+	// guard independently detects consecutive loops.
 	maxNoProgressIterations = 5
 
 	// Other hard ceilings.

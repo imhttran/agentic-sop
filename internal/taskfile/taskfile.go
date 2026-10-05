@@ -23,6 +23,7 @@ type Spec struct {
 	Title              string
 	Description        string
 	Requirements       []string
+	Deliverables       []string
 	AcceptanceCriteria []string
 	Constraints        []string
 	Dependencies       []string
@@ -106,6 +107,8 @@ func Parse(data []byte) (*Spec, error) {
 			}
 		case "requirements", "requirement":
 			spec.Requirements = append(spec.Requirements, listItems(sec.lines)...)
+		case "deliverables", "deliverable":
+			spec.Deliverables = append(spec.Deliverables, listItems(sec.lines)...)
 		case "acceptance criteria", "acceptance", "acceptance criterion":
 			spec.AcceptanceCriteria = append(spec.AcceptanceCriteria, listItems(sec.lines)...)
 		case "constraints", "constraint", "rules", "rule":
@@ -152,6 +155,7 @@ func (s *Spec) Render() string {
 		fmt.Fprintf(&b, "\n%s\n", desc)
 	}
 	writeList(&b, "Requirements", s.Requirements)
+	writeList(&b, "Deliverables", s.Deliverables)
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
 	writeList(&b, "Constraints", s.Constraints)
 	writeList(&b, "Dependencies", s.Dependencies)

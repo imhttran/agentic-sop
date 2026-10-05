@@ -151,9 +151,12 @@ type inspectionIdentity struct {
 	tool, path, query string
 }
 
-// discoveryIdentity accepts only successful, informative repository inspections.
+// discoveryIdentity accepts only successful, informative repository work: a
+// first-seen file inspection, or a first-seen successful non-mutating command.
 // The controlled tool has already enforced repository access; canonicalizing the
-// successful target prevents ./, absolute paths, and symlinks earning extra credit.
+// successful target prevents ./, absolute paths, and symlinks earning extra
+// credit, and a canonical command key prevents reformatting earning extra credit.
+// A mutating command is never discovery: it is judged by mutation evidence.
 func discoveryIdentity(root, name string, args map[string]any, result string, err error) (inspectionIdentity, bool) {
 	if err != nil || strings.TrimSpace(result) == "" {
 		return inspectionIdentity{}, false
@@ -168,6 +171,16 @@ func discoveryIdentity(root, name string, args map[string]any, result string, er
 		if result == "(no matches)" {
 			return inspectionIdentity{}, false
 		}
+	case toolharness.ToolRunCommand:
+		command, _ := args["command"].(string)
+		if commandMutates(command) {
+			return inspectionIdentity{}, false
+		}
+		identity := commandIdentity(command)
+		if identity == "" {
+			return inspectionIdentity{}, false
+		}
+		return inspectionIdentity{tool: name, query: identity}, true
 	default:
 		return inspectionIdentity{}, false
 	}

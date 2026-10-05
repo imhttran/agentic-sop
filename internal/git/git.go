@@ -249,6 +249,44 @@ func (a *Adapter) DiffAll(ctx context.Context, excludes ...string) (string, erro
 	return b.String(), nil
 }
 
+// DiffFiles includes only the exact requested paths, including new files. It is
+// used when an explicitly declared report is implementation, rather than SOP's
+// generated output. Literal pathspecs cannot widen the caller's path selection.
+func (a *Adapter) DiffFiles(ctx context.Context, paths ...string) (string, error) {
+	if len(paths) == 0 {
+		return "", nil
+	}
+	diff, err := run(ctx, a.dir, append([]string{"--literal-pathspecs", "diff", "--"}, paths...)...)
+	if err != nil {
+		return "", fmt.Errorf("diff files: %w", err)
+	}
+	untracked, err := a.Untracked(ctx)
+	if err != nil {
+		return "", err
+	}
+	root, err := os.OpenRoot(a.dir)
+	if err != nil {
+		return "", err
+	}
+	defer root.Close()
+	var b strings.Builder
+	b.WriteString(diff)
+	for _, file := range untracked {
+		for _, path := range paths {
+			if file != path {
+				continue
+			}
+			data, err := root.ReadFile(file)
+			if err != nil {
+				return "", fmt.Errorf("diff file %s: %w", file, err)
+			}
+			b.WriteString(untrackedDiff(file, data))
+			break
+		}
+	}
+	return b.String(), nil
+}
+
 // excluded reports whether path equals or is under any exclude prefix.
 func excluded(path string, excludes []string) bool {
 	for _, e := range excludes {

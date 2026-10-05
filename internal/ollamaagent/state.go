@@ -25,13 +25,16 @@ type executionState struct {
 	// denied mutation never sets it.
 	mutationObserved bool
 
-	// consecutiveNoProgress counts stale turns. Successful novel inspections reset
-	// it only within the initial discovery window; mutation resets it separately.
+	// consecutiveNoProgress counts stale turns. Successful novel discovery -- a
+	// first-seen inspection or a first-seen successful non-mutating command --
+	// resets it only within the initial discovery window; mutation resets it
+	// separately.
 	consecutiveNoProgress int
 
-	// discoverySeen contains successful inspection identities credited during this
-	// invocation. It is independent of attempted-path checkpoints and mutation
-	// evidence, and grows only within implementNowAfter model turns.
+	// discoverySeen contains successful discovery identities (inspections and
+	// non-mutating commands) credited during this invocation. It is independent of
+	// attempted-path checkpoints and mutation evidence, and grows only within
+	// implementNowAfter model turns.
 	discoverySeen map[inspectionIdentity]bool
 
 	// repositoryMutations counts the successful controlled mutations this invocation
@@ -114,8 +117,9 @@ func (st *executionState) observeMutation() {
 	st.repositoryMutations++
 }
 
-// observeDiscovery credits a successful first inspection only within the initial
-// model-turn window. Narration, failures, and denied calls cannot extend that window.
+// observeDiscovery credits a first-seen successful discovery action -- a file
+// inspection or a non-mutating command -- only within the initial model-turn
+// window. Narration, failures, denied calls, and repeats cannot extend that window.
 func (st *executionState) observeDiscovery(iteration int, root, name string, args map[string]any, result string, err error) bool {
 	if st.mutationObserved || iteration > implementNowAfter {
 		return false
