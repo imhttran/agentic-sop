@@ -203,11 +203,15 @@ func New(cfg Config, root string) *Harness {
 	if path := strings.TrimSpace(lookupEnv(envToolAuditLog)); path != "" {
 		sink = toolharness.NewMultiAuditor(audit, toolharness.NewFileAuditor(path))
 	}
-	tools := toolharness.New(root, toolharness.Config{
+	toolCfg := toolharness.Config{
 		CommandTimeout: cfg.CommandTimeout,
 		MaxOutputBytes: cfg.MaxOutputBytes,
 		Roots:          cfg.Roots,
-	}, sink)
+	}
+	if ev := newEvidenceSink(cfg.CommandEvidencePath); ev != nil {
+		toolCfg.EvidenceSink = ev
+	}
+	tools := toolharness.New(root, toolCfg, sink)
 	return &Harness{
 		cfg:       cfg,
 		client:    newOllamaClient(cfg),

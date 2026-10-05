@@ -87,6 +87,21 @@ type Config struct {
 	// disjoint from the primary root is ignored, so an accidental overlap cannot
 	// widen the primary boundary.
 	Roots []Root
+	// EvidenceSink, when set, receives each executed command's captured evidence
+	// (command, cwd, exit code, and the exact output the harness captured, already
+	// bounded and truncation-marked). It is how a caller that opts a task into raw
+	// output owns that evidence; it never changes the tool result.
+	EvidenceSink func(CommandEvidence)
+}
+
+// CommandEvidence is one executed command's captured evidence for a task that
+// requires raw output. Output is the harness's exact captured stdout+stderr,
+// bounded by MaxOutputBytes and marked when truncated.
+type CommandEvidence struct {
+	Command string
+	Cwd     string
+	Exit    int
+	Output  string
 }
 
 // DefaultConfig returns the built-in execution bounds.
@@ -530,9 +545,12 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	if err := h.checkCommandIn(root, argv); err != nil {
 		return "", false, err
 	}
-	result, succeeded, err := h.execWithStatus(ctx, root.path, argv)
+	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, argv)
 	if err == nil && noTestsMatched(argv, result) {
 		result += "\n" + noTestMatchDiagnostic
+	}
+	if h.cfg.EvidenceSink != nil {
+		h.cfg.EvidenceSink(CommandEvidence{Command: strings.Join(argv, " "), Cwd: root.path, Exit: exit, Output: raw})
 	}
 	return result, succeeded, err
 }
@@ -765,6 +783,13 @@ func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
 }
 
 func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string) (string, bool, error) {
+	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv)
+	return result, succeeded, err
+}
+
+// execCaptured runs argv and returns the display result plus the exact captured
+// output and exit code, so an evidence sink can own the raw evidence.
+func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (result string, succeeded bool, output string, exit int, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
@@ -774,12 +799,24 @@ func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string)
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 
-	err := cmd.Run()
-	out := buf.String()
+	runErr := cmd.Run()
+	out := truncate(buf.String(), h.cfg.MaxOutputBytes)
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return truncate(out, h.cfg.MaxOutputBytes), false, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
+		return out, false, out, -1, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
 	}
-	return fmt.Sprintf("%s\n%s", exitStatus(err), truncate(out, h.cfg.MaxOutputBytes)), err == nil, nil
+	return fmt.Sprintf("%s\n%s", exitStatus(runErr), out), runErr == nil, out, processExitCode(runErr), nil
+}
+
+// processExitCode returns a command's exit code, or 0 on success.
+func processExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // exitStatus renders a command's exit state for the model.

@@ -66,6 +66,11 @@ const (
 	// trusted operator input, not model output: the model can only select an
 	// authorized root by its exact canonical path.
 	envWorkspaceRoots = "SOP_WORKSPACE_ROOTS"
+	// envCommandEvidence optionally names a file to append each executed command's
+	// captured evidence (JSONL: command, cwd, exit, output) to, so a task that
+	// requires raw output has SOP-owned evidence. It is operator/SOP-set; like the
+	// audit sink it is opened separately and is never SOP's state database.
+	envCommandEvidence = "SOP_COMMAND_EVIDENCE_LOG"
 )
 
 // lookupEnv is indirected so tests can supply environment values without
@@ -88,6 +93,8 @@ type Config struct {
 	// Roots are additional task-authorized repository roots (read-only unless a
 	// root is explicitly read-write). They come from trusted configuration/input.
 	Roots []toolharness.Root
+	// CommandEvidencePath, when set, receives captured command evidence as JSONL.
+	CommandEvidencePath string
 }
 
 // ConfigFromEnv reads the harness configuration from the environment. It reuses
@@ -115,6 +122,7 @@ func ConfigFromEnv() (Config, error) {
 		}
 		cfg.Timeout = d
 	}
+	cfg.CommandEvidencePath = strings.TrimSpace(os.Getenv(envCommandEvidence))
 	if v := strings.TrimSpace(os.Getenv(envWorkspaceRoots)); v != "" {
 		roots, err := parseWorkspaceRoots(v)
 		if err != nil {
