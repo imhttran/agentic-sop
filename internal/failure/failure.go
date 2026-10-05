@@ -118,6 +118,16 @@ const (
 	// reported as the retryable continuation termination=no_changes with
 	// diagnostic IMPLEMENT_NO_CHANGES, and it never invokes the bounded fix loop.
 	NoChangesDetected Kind = "IMPLEMENT_NO_CHANGES"
+	// NoProgress: the harness's bounded stale-iteration guard stopped an invocation
+	// that made no repository progress well before its budget. Unlike
+	// IncompleteImplementation (the work is merely unfinished and a fresh bounded
+	// invocation may make progress), a no-progress stop is not productive: it made no
+	// governed mutation and nothing about the environment changes, so an automatic
+	// continuation would simply repeat — it is not auto-continued. A human/operator
+	// decides the next action (a changed capability, scope, or model). The signal is
+	// SOP's own fixed harness diagnostic, never agent prose, and it is not an
+	// approval gate.
+	NoProgress        Kind = "NO_PROGRESS"
 	AutoFixExhausted  Kind = "AUTO_FIX_EXHAUSTED"
 	TransientProvider Kind = "TRANSIENT_PROVIDER"
 	EmptyResponse     Kind = "EMPTY_RESPONSE"
@@ -277,6 +287,18 @@ func Classify(ev Evidence) Classification {
 	if ev.PlanInvalid {
 		return Classification{Kind: ReplanRequired, Disposition: Replan, Confidence: High,
 			Reason: "the task/plan assumptions are invalid and cannot be corrected locally while preserving the acceptance criteria"}
+	}
+
+	// 2b. A bounded no-progress termination. The harness's stale-iteration guard
+	//     emits its own fixed diagnostic when an invocation made no repository
+	//     progress well before its budget. That is decisively different from
+	//     productive-but-unfinished work: no governed mutation was observed and no
+	//     external condition changes, so an automatic continuation would repeat under
+	//     unchanged conditions. It is therefore not auto-continued; a human/operator
+	//     decides the next action. The signal is SOP's own diagnostic, not prose.
+	if r := evidenceReasonText(ev); harnessNoProgress(strings.ToLower(r)) {
+		return Classification{Kind: NoProgress, Disposition: NeedsHuman, Confidence: High,
+			Reason: describe(r, "the invocation made no repository progress within its bounded stale allowance; an automatic continuation would repeat under unchanged conditions and is not taken")}
 	}
 
 	// 3. SOP's own deterministic budget/no-change signal. The agent harness (and the
@@ -555,6 +577,33 @@ var harnessIncompleteMarkers = []string{
 // budget/no-change signal.
 func harnessIncomplete(text string) bool {
 	return matchesAny(text, harnessIncompleteMarkers)
+}
+
+// harnessNoProgressMarkers is the harness's fixed stale-iteration no-progress
+// diagnostic (IMPLEMENT_NO_PROGRESS / FIX_NO_PROGRESS). It is deliberately narrow:
+// only the guard's own wording matches, so ordinary "unfinished work" prose does
+// not become a no-progress stop.
+var harnessNoProgressMarkers = []string{
+	"no repository progress",
+}
+
+// harnessNoProgress reports whether text carries the harness's no-progress stop.
+func harnessNoProgress(text string) bool {
+	return matchesAny(text, harnessNoProgressMarkers)
+}
+
+// evidenceReasonText returns the agent's own termination text to inspect for the
+// harness diagnostic: the outcome reason/summary, or a provider/tool error.
+func evidenceReasonText(ev Evidence) string {
+	if ev.Outcome != nil {
+		if r := strings.TrimSpace(firstNonEmpty(ev.Outcome.Reason, ev.Outcome.Summary)); r != "" {
+			return r
+		}
+	}
+	if ev.Err != nil {
+		return ev.Err.Error()
+	}
+	return ""
 }
 
 // Boundary markers: an explicit human decision/safety boundary inferred from the

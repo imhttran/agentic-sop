@@ -204,8 +204,8 @@ func TestHarnessBudgetSignalsAreContinue(t *testing.T) {
 		"the Ollama agent FIX did not complete after 24 iterations (termination=iteration_limit)",
 		"tool-call limit reached (80 tool calls); the model did not finish",
 		"the Ollama agent IMPLEMENT did not finalize (termination=finalization_limit)",
-		"IMPLEMENT_NO_PROGRESS: the Ollama agent IMPLEMENT made no repository progress after 3 consecutive iterations (model=deepseek-v4.1-flash:cloud, iterations=3, repository_mutations=0, changed_files=0, tool_calls=3, termination=no_progress, last_action=\"read_file pkg/f2.go\"); a retry may succeed",
 	}
+	_ = reasons
 	for _, reason := range reasons {
 		t.Run(reason, func(t *testing.T) {
 			got := Classify(Evidence{Source: "IMPLEMENT", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: reason}})
@@ -878,5 +878,20 @@ func TestExplicitHumanRequestStillNeedsHuman(t *testing.T) {
 				t.Errorf("classification = %+v, want NEEDS_HUMAN", got)
 			}
 		})
+	}
+}
+
+// TestHarnessNoProgressIsNotAutoContinue proves a bounded no-progress stop is not
+// productive incomplete work: it carries the harness's own no-progress diagnostic,
+// so it classifies as NO_PROGRESS with a human disposition and is never continued
+// automatically, while ordinary unfinished work still continues.
+func TestHarnessNoProgressIsNotAutoContinue(t *testing.T) {
+	const reason = "FIX_NO_PROGRESS: the Ollama agent FIX made no repository progress after 5 consecutive stale iterations (iterations=16, repository_mutations=0, changed_files=0, termination=no_progress); a retry may succeed"
+	got := Classify(Evidence{Source: "FIX", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: reason}})
+	if got.Kind != NoProgress {
+		t.Fatalf("kind = %s, want %s", got.Kind, NoProgress)
+	}
+	if got.Disposition == Continue {
+		t.Fatalf("a bounded no-progress stop must not continue automatically: %+v", got)
 	}
 }

@@ -391,3 +391,16 @@ func TestSecurityDecisionRequiresHumanAtEveryLevel(t *testing.T) {
 		}
 	}
 }
+
+// TestNoProgressIsNotAutoContinue proves a bounded no-progress stop is never
+// continued automatically at any autonomy level: it requires a human/operator
+// decision, unlike productive incomplete work.
+func TestNoProgressIsNotAutoContinue(t *testing.T) {
+	c := failure.Classification{Kind: failure.NoProgress, Disposition: failure.NeedsHuman, Confidence: failure.High,
+		Reason: "the invocation made no repository progress within its bounded stale allowance"}
+	for _, level := range []Level{Low, Balanced, High} {
+		if d := Decide(c, PolicyFor(level)); d.Action == ActionAutoContinue {
+			t.Fatalf("%s: a bounded no-progress stop must not auto-continue: %+v", level, d)
+		}
+	}
+}
