@@ -181,6 +181,9 @@ func userPrompt(req agent.Request) string {
 	if len(req.Deliverables) > 0 {
 		fmt.Fprintf(&b, "\n%s", deliverableRequirement(req.Deliverables))
 	}
+	if req.RawOutputEvidence {
+		b.WriteString("\nThis task requires RAW command output in its deliverable. Embed the exact captured stdout/stderr for each required command verbatim. A summary, paraphrase, or placeholder (for example \"...\" or \"all packages ok\") does NOT satisfy the requirement. If a result was truncated at the harness size bound, record it as truncated rather than as complete raw output; never present summarized or invented output as raw.\n")
+	}
 	if s := strings.TrimSpace(req.Input); s != "" {
 		fmt.Fprintf(&b, "\nInput:\n%s\n", s)
 	}

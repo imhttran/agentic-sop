@@ -553,6 +553,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Task:               spec.Render(),
 			Input:              d.taskInput(spec.ID, input),
 			Deliverables:       reports,
+			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		implStop()
@@ -782,6 +783,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Task:               spec.Render(),
 			Input:              d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn())),
 			Deliverables:       reports,
+			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
 		})
 		fixStop()
@@ -1293,6 +1295,19 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 		}
 	}
 	return b.String()
+}
+
+// rawOutputEvidence reports whether a task's contract explicitly requires raw
+// command output in its deliverable. It reads the declared acceptance criteria and
+// deliverables — task data — never the artifact content, so it is not a prose
+// heuristic over the produced report.
+func rawOutputEvidence(spec *taskfile.Spec) bool {
+	for _, item := range append(append([]string{}, spec.AcceptanceCriteria...), spec.Deliverables...) {
+		if strings.Contains(strings.ToLower(item), "raw output") {
+			return true
+		}
+	}
+	return false
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the

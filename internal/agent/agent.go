@@ -54,6 +54,11 @@ type Request struct {
 	// data: the agent must produce them, but they grant no completion,
 	// validation, or approval by themselves.
 	Deliverables []string `json:"deliverables,omitempty"`
+	// RawOutputEvidence reports that the task's contract explicitly requires raw
+	// command output in its deliverable. It is derived from the task data (never the
+	// artifact), and it tells the agent that a summary or placeholder does not
+	// satisfy that requirement.
+	RawOutputEvidence bool `json:"raw_output_evidence,omitempty"`
 }
 
 // Validate rejects requests the transport must not send to a harness.
