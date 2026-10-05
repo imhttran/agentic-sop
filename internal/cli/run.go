@@ -674,6 +674,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// change came from an implementation: a verify-first pass made no change of
 		// its own, so there is nothing for this task to review.
 		report = review.Report{}
+		if rawOutputEvidence(spec) {
+			if ierr := injectCapturedEvidence(dir, reports, rn.Dir()); ierr != nil {
+				return lifeResult{}, fmt.Errorf("captured evidence: %w", ierr)
+			}
+		}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
 			reviewTask := d.taskInput(spec.ID, spec.Render())
 			reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, diff)
