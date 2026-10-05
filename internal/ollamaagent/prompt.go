@@ -11,7 +11,7 @@ import (
 // systemPrompt states the harness's rules, the capability's policy, the tool
 // protocol, and how to finish. It is the only place the model learns which tools
 // it may call and how to conclude.
-func systemPrompt(req agent.Request, policy CapabilityPolicy) string {
+func systemPrompt(req agent.Request, policy CapabilityPolicy, primaryRoot string, externals []toolharness.Root) string {
 	var b strings.Builder
 	b.WriteString(`You are the implementation agent inside an SOP-controlled repository.
 
@@ -36,6 +36,20 @@ Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 {"tool": "<name>", "args": {...}}
 `)
 
+	if len(externals) > 0 {
+		b.WriteString("\n## Authorized repository roots\n")
+		fmt.Fprintf(&b, "Your tools default to the primary repository root (%s).\n", primaryRoot)
+		b.WriteString("This task also authorizes these additional roots; pass the exact path as \"root\" (file tools) or \"cwd\" (run_command):\n")
+		for _, r := range externals {
+			mode := "read-only"
+			if r.Mode == toolharness.RootReadWrite {
+				mode = "read-write"
+			}
+			fmt.Fprintf(&b, "- %s (%s)\n", r.Path, mode)
+		}
+		b.WriteString("Paths outside the primary root and these authorized roots are refused. A read-only root cannot be written. Every command records the working directory it ran in.\n")
+	}
+
 	b.WriteString("\n## This capability\n")
 	b.WriteString(capabilityGuidance(req.Capability))
 
@@ -59,14 +73,14 @@ func toolReference(policy CapabilityPolicy) string {
 
 // toolUsage documents each tool's arguments in one line.
 var toolUsage = map[string]string{
-	toolharness.ToolReadFile:    `{"path": "..."}                        read a file`,
-	toolharness.ToolWriteFile:   `{"path": "...", "content": "..."}   create or overwrite a file`,
-	toolharness.ToolCreateFile:  `{"path": "...", "content": "..."}   fail if the file already exists`,
-	toolharness.ToolListFiles:   `{"path": "..."}                     path optional, defaults to "."`,
-	toolharness.ToolSearchFiles: `{"pattern": "...", "path": "..."}   path optional; substring search`,
-	toolharness.ToolRunCommand:  `{"command": "go test ./..."}        allow-listed commands only`,
-	toolharness.ToolGitStatus:   `{}                                  git status --short --branch`,
-	toolharness.ToolGitDiff:     `{}                                  git diff`,
+	toolharness.ToolReadFile:    `{"path": "...", "root": "..."}                   read a file (root: optional authorized-root path)`,
+	toolharness.ToolWriteFile:   `{"path": "...", "content": "...", "root": "..."}  create or overwrite a file`,
+	toolharness.ToolCreateFile:  `{"path": "...", "content": "...", "root": "..."}  fail if the file already exists`,
+	toolharness.ToolListFiles:   `{"path": "...", "root": "..."}                   list a directory (path/root optional)`,
+	toolharness.ToolSearchFiles: `{"pattern": "...", "path": "...", "root": "..."}  substring search`,
+	toolharness.ToolRunCommand:  `{"command": "go test ./...", "cwd": "..."}       allow-listed commands (cwd: optional authorized-root path)`,
+	toolharness.ToolGitStatus:   `{}                                             git status --short --branch`,
+	toolharness.ToolGitDiff:     `{}                                             git diff`,
 }
 
 // capabilityGuidance tells the model how to finish the specific capability,

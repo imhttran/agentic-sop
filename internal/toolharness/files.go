@@ -24,8 +24,9 @@ const stateDirRel = ".agent-sdlc"
 // resolvedPath is a tool argument resolved to a canonical path inside the
 // repository, together with its repository-relative, slash-separated form.
 type resolvedPath struct {
-	abs string // canonical absolute path
-	rel string // path relative to the repository root, slash-separated
+	abs  string // canonical absolute path
+	rel  string // path relative to the authorized root, slash-separated
+	root string // the authorized root the path was resolved against
 }
 
 // readFile returns the file's contents, bounded by maxBytes.
@@ -140,6 +141,7 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	base := start.root
 
 	var matches []string
 	walkErr := filepath.WalkDir(start.abs, func(p string, d fs.DirEntry, err error) error {
@@ -152,7 +154,7 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 			}
 			return nil
 		}
-		if h.isProtectedPath(h.rel(p)) {
+		if h.isProtectedPath(relFrom(base, p)) {
 			return nil
 		}
 		info, err := d.Info()
@@ -167,7 +169,7 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 			if !strings.Contains(line, pattern) {
 				continue
 			}
-			matches = append(matches, fmt.Sprintf("%s:%d: %s", h.rel(p), i+1, strings.TrimRight(line, "\r")))
+			matches = append(matches, fmt.Sprintf("%s:%d: %s", relFrom(base, p), i+1, strings.TrimRight(line, "\r")))
 			if len(matches) >= maxSearchMatches {
 				return filepath.SkipAll
 			}
@@ -195,27 +197,42 @@ const (
 
 // resolveArg extracts a path argument and resolves it inside the repository.
 func (h *Harness) resolveArg(args map[string]any, key string, required bool, access accessClass) (resolvedPath, error) {
+	root, err := h.selectRoot(rootSelector(args))
+	if err != nil {
+		return resolvedPath{}, err
+	}
 	raw, _ := args[key].(string)
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		if required {
 			return resolvedPath{}, fmt.Errorf("missing required argument %q", key)
 		}
-		return h.resolve(".", access)
+		return h.resolveIn(root, ".", access)
 	}
-	return h.resolve(raw, access)
+	return h.resolveIn(root, raw, access)
 }
 
 // resolve canonicalizes raw against the repository root and enforces the
 // boundary: no escapes above the root (including via symlinks), and the state
 // database is refused for every access class.
 func (h *Harness) resolve(raw string, access accessClass) (resolvedPath, error) {
+	return h.resolveIn(h.roots[0], raw, access)
+}
+
+// resolveIn canonicalizes raw against the selected authorized root and enforces
+// that root's boundary: no escapes above the root (including through symlinks),
+// SOP's state database is refused for every access class, and a write into a
+// read-only root is refused.
+func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass) (resolvedPath, error) {
+	if access == accessWrite && root.mode != RootReadWrite {
+		return resolvedPath{}, fmt.Errorf("%w: %s", errReadOnlyRoot, raw)
+	}
 	if strings.ContainsRune(raw, 0) {
 		return resolvedPath{}, errors.New("path contains a NUL byte")
 	}
 	abs := raw
 	if !filepath.IsAbs(abs) {
-		abs = filepath.Join(h.root, abs)
+		abs = filepath.Join(root.path, abs)
 	}
 	abs = filepath.Clean(abs)
 
@@ -223,7 +240,7 @@ func (h *Harness) resolve(raw string, access accessClass) (resolvedPath, error) 
 	if err != nil {
 		return resolvedPath{}, fmt.Errorf("resolve %s: %w", raw, err)
 	}
-	rel, err := filepath.Rel(h.root, real)
+	rel, err := filepath.Rel(root.path, real)
 	if err != nil || filepath.IsAbs(rel) || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return resolvedPath{}, fmt.Errorf("path escapes the repository: %s", raw)
 	}
@@ -231,7 +248,7 @@ func (h *Harness) resolve(raw string, access accessClass) (resolvedPath, error) 
 	if h.isProtectedPath(rel) {
 		return resolvedPath{}, fmt.Errorf("%w: %s", ErrProtectedPath, raw)
 	}
-	return resolvedPath{abs: real, rel: rel}, nil
+	return resolvedPath{abs: real, rel: rel, root: root.path}, nil
 }
 
 // isProtectedPath reports whether rel names SOP's state database. It compares
@@ -242,9 +259,12 @@ func (h *Harness) isProtectedPath(rel string) bool {
 	return rel == stateDBRel
 }
 
-// rel renders p relative to the repository root.
-func (h *Harness) rel(p string) string {
-	r, err := filepath.Rel(h.root, p)
+// rel renders p relative to the primary repository root.
+func (h *Harness) rel(p string) string { return relFrom(h.root, p) }
+
+// relFrom renders p relative to base, slash-separated.
+func relFrom(base, p string) string {
+	r, err := filepath.Rel(base, p)
 	if err != nil {
 		return p
 	}

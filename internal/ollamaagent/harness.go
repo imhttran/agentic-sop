@@ -206,6 +206,7 @@ func New(cfg Config, root string) *Harness {
 	tools := toolharness.New(root, toolharness.Config{
 		CommandTimeout: cfg.CommandTimeout,
 		MaxOutputBytes: cfg.MaxOutputBytes,
+		Roots:          cfg.Roots,
 	}, sink)
 	return &Harness{
 		cfg:       cfg,
@@ -314,7 +315,7 @@ func (h *Harness) ExecuteWithEvidence(ctx context.Context, req agent.Request, ev
 func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability)
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 

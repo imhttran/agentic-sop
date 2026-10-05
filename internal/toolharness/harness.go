@@ -58,12 +58,35 @@ const (
 	maxSearchFileBytes = 512 << 10
 )
 
+// RootMode is an authorized root's write policy.
+type RootMode string
+
+const (
+	// RootReadWrite permits a root's files to be read and modified.
+	RootReadWrite RootMode = "read-write"
+	// RootReadOnly permits a root's files to be read only; every write tool is
+	// refused there and never counts as repository progress.
+	RootReadOnly RootMode = "read"
+)
+
+// Root is one task-authorized repository root beyond the primary root. Roots are
+// supplied from trusted configuration/input state; model output can only select
+// an authorized root by its exact canonical path, never create one.
+type Root struct {
+	Path string
+	Mode RootMode
+}
+
 // Config is the harness's execution settings.
 type Config struct {
 	// CommandTimeout bounds a single run_command execution.
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
 	MaxOutputBytes int
+	// Roots are additional task-authorized repository roots. Any root that is not
+	// disjoint from the primary root is ignored, so an accidental overlap cannot
+	// widen the primary boundary.
+	Roots []Root
 }
 
 // DefaultConfig returns the built-in execution bounds.
@@ -85,27 +108,118 @@ var (
 	// database. It is exported so adapters and tests can classify a denial with
 	// errors.Is instead of string matching.
 	ErrProtectedPath = errors.New("refusing to access SOP state")
+	// errUnauthorizedRoot is the sentinel for a root selector that does not name
+	// an authorized root: a model-supplied absolute path is never trusted on its
+	// own.
+	errUnauthorizedRoot = errors.New("unauthorized repository root")
+	// errReadOnlyRoot is the sentinel for a write refused because the selected
+	// authorized root is read-only.
+	errReadOnlyRoot = errors.New("repository root is read-only")
 )
 
 // Harness dispatches controlled tool calls inside a repository root. It is safe
 // for sequential use by one agent loop; it is not designed for concurrent calls.
 type Harness struct {
-	root    string // canonical repository root
+	root    string           // canonical primary repository root
+	roots   []authorizedRoot // primary root first, then authorized external roots
 	cfg     Config
 	auditor Auditor
+}
+
+// authorizedRoot is a resolved, authorized execution root.
+type authorizedRoot struct {
+	path    string // canonical absolute path
+	mode    RootMode
+	primary bool
 }
 
 // New returns a Harness rooted at root, using cfg and auditing through auditor.
 // A nil auditor discards audit records.
 func New(root string, cfg Config, auditor Auditor) *Harness {
-	canonical, err := filepath.EvalSymlinks(root)
+	canonical := canonicalDir(root)
+	h := &Harness{
+		root:    canonical,
+		cfg:     cfg,
+		auditor: auditor,
+		roots:   []authorizedRoot{{path: canonical, mode: RootReadWrite, primary: true}},
+	}
+	for _, r := range cfg.Roots {
+		p := canonicalDir(strings.TrimSpace(r.Path))
+		if p == "" || pathWithin(p, canonical) || pathWithin(canonical, p) {
+			continue // empty, or overlapping the primary root: never widen the boundary
+		}
+		mode := r.Mode
+		if mode != RootReadOnly && mode != RootReadWrite {
+			mode = RootReadOnly
+		}
+		h.roots = append(h.roots, authorizedRoot{path: p, mode: mode})
+	}
+	return h
+}
+
+// canonicalDir returns an absolute, symlink-resolved form of p, or "" for empty.
+func canonicalDir(p string) string {
+	if strings.TrimSpace(p) == "" {
+		return ""
+	}
+	c, err := filepath.EvalSymlinks(p)
 	if err != nil {
-		canonical = root
+		c = p
 	}
-	if abs, err := filepath.Abs(canonical); err == nil {
-		canonical = abs
+	if abs, err := filepath.Abs(c); err == nil {
+		c = abs
 	}
-	return &Harness{root: canonical, cfg: cfg, auditor: auditor}
+	return c
+}
+
+// pathWithin reports whether child is parent or lies under it.
+func pathWithin(child, parent string) bool {
+	if child == "" || parent == "" {
+		return false
+	}
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+// selectRoot resolves a root selector (an absolute path naming an authorized
+// root) to that root. An empty selector is the primary root. A selector that does
+// not exactly match an authorized root is refused.
+func (h *Harness) selectRoot(selector string) (authorizedRoot, error) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return h.roots[0], nil
+	}
+	canonical := canonicalDir(selector)
+	for _, r := range h.roots {
+		if r.path == canonical {
+			return r, nil
+		}
+	}
+	return authorizedRoot{}, fmt.Errorf("%w: %q is not an authorized repository root", errUnauthorizedRoot, selector)
+}
+
+// rootSelector returns the optional root/cwd selector from args. run_command uses
+// "cwd"; file tools use "root".
+func rootSelector(args map[string]any) string {
+	for _, key := range []string{"cwd", "root"} {
+		if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// AuthorizedRoots returns the primary root followed by the authorized external
+// roots, as canonical path strings. It is for prompt construction and tests.
+func (h *Harness) AuthorizedRoots() []string {
+	out := make([]string, 0, len(h.roots))
+	for _, r := range h.roots {
+		out = append(out, r.path)
+	}
+	return out
 }
 
 // Root returns the canonical repository root the harness works in.
@@ -175,7 +289,8 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 // isDenial reports whether err is a policy refusal rather than an execution
 // failure, using sentinel errors so classification does not depend on wording.
 func isDenial(err error) bool {
-	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath)
+	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath) ||
+		errors.Is(err, errUnauthorizedRoot) || errors.Is(err, errReadOnlyRoot)
 }
 
 // RecordDenied records a refusal the caller decided (for example a
@@ -201,10 +316,13 @@ func SummarizeRequest(name string, args map[string]any) string {
 	switch name {
 	case ToolRunCommand:
 		command, _ := args["command"].(string)
+		if cwd, ok := args["cwd"].(string); ok && strings.TrimSpace(cwd) != "" {
+			return "cwd=" + strings.TrimSpace(cwd) + " " + strings.TrimSpace(command)
+		}
 		return strings.TrimSpace(command)
 	default:
 		var parts []string
-		for _, key := range []string{"path", "pattern"} {
+		for _, key := range []string{"path", "pattern", "root"} {
 			if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
 				parts = append(parts, key+"="+strings.TrimSpace(v))
 			}
@@ -231,7 +349,7 @@ func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string,
 	if err != nil {
 		return "", err
 	}
-	result, succeeded, err := h.execWithStatus(ctx, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel})
+	result, succeeded, err := h.execWithStatus(ctx, h.root, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel})
 	if err != nil {
 		return "", fmt.Errorf("restore_file: %w", err)
 	}
@@ -405,10 +523,14 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	if err != nil {
 		return "", false, err
 	}
-	if err := h.CheckCommand(argv); err != nil {
+	root, err := h.selectRoot(rootSelector(args))
+	if err != nil {
 		return "", false, err
 	}
-	return h.execWithStatus(ctx, argv)
+	if err := h.checkCommandIn(root, argv); err != nil {
+		return "", false, err
+	}
+	return h.execWithStatus(ctx, root.path, argv)
 }
 
 // SplitCommand tokenizes a command string, rejecting shell metacharacters and
@@ -461,6 +583,14 @@ func SplitCommand(s string) ([]string, error) {
 // they are denied unless an SOP-controlled workflow explicitly authorizes them
 // elsewhere; this harness never authorizes them.
 func (h *Harness) CheckCommand(argv []string) error {
+	return h.checkCommandIn(h.roots[0], argv)
+}
+
+// checkCommandIn applies the command policy with absolute-path arguments resolved
+// against the selected authorized root, so a command run in an authorized
+// external root may name files inside it, while an absolute path outside every
+// authorized root is still refused.
+func (h *Harness) checkCommandIn(root authorizedRoot, argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("command is empty")
 	}
@@ -469,7 +599,7 @@ func (h *Harness) CheckCommand(argv []string) error {
 	}
 	for _, a := range argv {
 		if filepath.IsAbs(a) {
-			if _, err := h.resolve(a, accessRead); err != nil {
+			if _, err := h.resolveIn(root, a, accessRead); err != nil {
 				return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
 			}
 		}
@@ -519,16 +649,16 @@ func hasDirOverride(argv []string) bool {
 // and stderr. A non-zero exit is reported in the result (the model should see
 // failing tests); only a timeout is a tool error.
 func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
-	result, _, err := h.execWithStatus(ctx, argv)
+	result, _, err := h.execWithStatus(ctx, h.root, argv)
 	return result, err
 }
 
-func (h *Harness) execWithStatus(ctx context.Context, argv []string) (string, bool, error) {
+func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string) (string, bool, error) {
 	runCtx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
-	cmd.Dir = h.root
+	cmd.Dir = dir
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf

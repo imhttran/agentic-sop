@@ -16,12 +16,14 @@
 package ollamaagent
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // Defaults for the bootstrap harness. The model settings (base URL, model,
@@ -59,6 +61,11 @@ const (
 	// failure a durable, inspectable trail. Like the audit sink it is operator-set
 	// and never SOP's state database.
 	envToolTraceLog = "SOP_OLLAMA_TRACE_LOG"
+	// envWorkspaceRoots optionally declares additional task-authorized repository
+	// roots as a JSON array of {"path":"<abs>","mode":"read"|"read-write"}. It is
+	// trusted operator input, not model output: the model can only select an
+	// authorized root by its exact canonical path.
+	envWorkspaceRoots = "SOP_WORKSPACE_ROOTS"
 )
 
 // lookupEnv is indirected so tests can supply environment values without
@@ -78,6 +85,9 @@ type Config struct {
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
 	MaxOutputBytes int
+	// Roots are additional task-authorized repository roots (read-only unless a
+	// root is explicitly read-write). They come from trusted configuration/input.
+	Roots []toolharness.Root
 }
 
 // ConfigFromEnv reads the harness configuration from the environment. It reuses
@@ -105,7 +115,39 @@ func ConfigFromEnv() (Config, error) {
 		}
 		cfg.Timeout = d
 	}
+	if v := strings.TrimSpace(os.Getenv(envWorkspaceRoots)); v != "" {
+		roots, err := parseWorkspaceRoots(v)
+		if err != nil {
+			return Config{}, err
+		}
+		cfg.Roots = roots
+	}
 	return cfg, nil
+}
+
+// parseWorkspaceRoots parses envWorkspaceRoots. An unrecognized mode defaults to
+// read-only, so a malformed entry can only narrow access, never widen it.
+func parseWorkspaceRoots(v string) ([]toolharness.Root, error) {
+	var raw []struct {
+		Path string `json:"path"`
+		Mode string `json:"mode"`
+	}
+	if err := json.Unmarshal([]byte(v), &raw); err != nil {
+		return nil, fmt.Errorf("invalid %s: want a JSON array of {\"path\":\"<abs>\",\"mode\":\"read\"|\"read-write\"}", envWorkspaceRoots)
+	}
+	var roots []toolharness.Root
+	for _, r := range raw {
+		path := strings.TrimSpace(r.Path)
+		if path == "" {
+			continue
+		}
+		mode := toolharness.RootMode(strings.ToLower(strings.TrimSpace(r.Mode)))
+		if mode != toolharness.RootReadWrite {
+			mode = toolharness.RootReadOnly
+		}
+		roots = append(roots, toolharness.Root{Path: path, Mode: mode})
+	}
+	return roots, nil
 }
 
 // configSource determines whether a configuration value came from an environment

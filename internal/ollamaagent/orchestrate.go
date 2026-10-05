@@ -57,7 +57,7 @@ type twoPhase struct {
 func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp twoPhase) (string, error) {
 	policy := PolicyFor(req.Capability) // read-only tools
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 
@@ -300,7 +300,7 @@ func (p implementPhase) label() string {
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 
