@@ -138,13 +138,13 @@ func (st *executionState) observeDiscovery(iteration int, root, name string, arg
 // stalled stops unmutated runs after five stale turns. Discovery may reset the
 // streak but never sets mutationObserved. After mutation, the existing CHANGE /
 // finalization lifecycle and repetition guard continue to govern execution.
-func (st *executionState) stalled(mutated, discovered bool) bool {
+func (st *executionState) stalled(mutated, discovered bool, staleLimit int) bool {
 	if mutated || discovered {
 		st.consecutiveNoProgress = 0
 		return false
 	}
 	st.consecutiveNoProgress++
-	return !st.mutationObserved && st.consecutiveNoProgress >= maxNoProgressIterations
+	return !st.mutationObserved && st.consecutiveNoProgress >= staleLimit
 }
 
 // countNonMutatingInteraction advances the invocation's counters after a tool

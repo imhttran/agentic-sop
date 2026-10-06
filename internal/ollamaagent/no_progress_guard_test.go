@@ -351,7 +351,7 @@ func TestDiscoveryIdentityAndCheckpointIndependence(t *testing.T) {
 	st.consecutiveNoProgress = 4
 	for i, path := range []string{"pkg/./a.go", "./pkg/a.go", filepath.Join(dir, "pkg/a.go"), "alias.go"} {
 		discovered := st.observeDiscovery(i+1, dir, "read_file", map[string]any{"path": path}, "package pkg", nil)
-		if i == 0 && (st.stalled(false, discovered) || st.consecutiveNoProgress != 0) {
+		if i == 0 && (st.stalled(false, discovered, maxNoProgressIterations) || st.consecutiveNoProgress != 0) {
 			t.Error("first successful discovery must reset a stale streak")
 		}
 		if discovered != (i == 0) {

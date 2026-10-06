@@ -40,6 +40,13 @@ and an unknown property is an explicit error.
 }
 ```
 
+A fixture may also assert the deterministic execution limits that applied, under
+`budgets`:
+
+```json
+"budgets": { "implement_iterations": { "equal": 32 }, "tool_calls": { "at_least": 1 } }
+```
+
 Counts use `{"equal": N}`, `{"at_least": N}`, or `{"at_most": N}`. `retryable` is
 derived from the recorded disposition by the authoritative failure rule, not stored
 separately.

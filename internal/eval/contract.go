@@ -28,7 +28,17 @@ type Fixture struct {
 type Expectation struct {
 	Execution   *ExecutionExpectation   `json:"execution,omitempty"`
 	Progress    *ProgressExpectation    `json:"progress,omitempty"`
+	Budgets     *BudgetExpectation      `json:"budgets,omitempty"`
 	Termination *TerminationExpectation `json:"termination,omitempty"`
+}
+
+// BudgetExpectation asserts the deterministic execution limits that applied to the
+// run.
+type BudgetExpectation struct {
+	ImplementIterations *CountAssertion `json:"implement_iterations,omitempty"`
+	FixIterations       *CountAssertion `json:"fix_iterations,omitempty"`
+	StaleIterations     *CountAssertion `json:"stale_iterations,omitempty"`
+	ToolCalls           *CountAssertion `json:"tool_calls,omitempty"`
 }
 
 // ExecutionExpectation asserts what executed. Only the identity that is stable
@@ -104,6 +114,12 @@ func (e Expectation) validate() error {
 		counts["progress.repository_mutations"] = p.RepositoryMutations
 		counts["progress.verification"] = p.Verification
 		counts["progress.state_transitions"] = p.StateTransitions
+	}
+	if b := e.Budgets; b != nil {
+		counts["budgets.implement_iterations"] = b.ImplementIterations
+		counts["budgets.fix_iterations"] = b.FixIterations
+		counts["budgets.stale_iterations"] = b.StaleIterations
+		counts["budgets.tool_calls"] = b.ToolCalls
 	}
 	for field, c := range counts {
 		if c == nil {

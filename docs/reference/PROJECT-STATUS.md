@@ -76,7 +76,10 @@ Structured run trace (`trace.json`, schema 2): a versioned, observational record
 of a run's execution identity, iterations, verification, and termination, plus
 structured progress signals — discovery, repository mutation, verification, and
 state transition — that distinguish progress from activity (AGENT-001/AGENT-002)
-Agentic evaluation harness: deterministic fixtures evaluated against a run's `trace.json` (AGENT-003)
+Agentic evaluation harness: deterministic fixtures evaluated against a run's
+`trace.json` (AGENT-003)
+Canonical execution budget: explicit, configurable iteration/stale/tool-call limits
+(`internal/budget`) recorded in `trace.json` (AGENT-004)
 ```
 
 Candidates recorded at the time of this status summary (scheduling remains in
@@ -177,8 +180,8 @@ verification, 2026-10-06).
 AGENT-001 Structured Run Trace     COMPLETE   trace.json (schema 2), observational
 AGENT-002 Progress Signals         COMPLETE   discovery / mutation / verification / transition
 AGENT-003 Evaluation Harness       COMPLETE   deterministic fixtures over trace.json
-AGENT-004 Agent Budgets            NEXT       discovery/iteration budgets
-AGENT-005 Replan Strategy          PLANNED    bounded replanning
+AGENT-004 Agent Budgets            COMPLETE   canonical limits (internal/budget), configurable + traced
+AGENT-005 Replan Strategy          NEXT       bounded replanning
 ```
 
 Evaluations observe completed run evidence; they do not participate in execution or

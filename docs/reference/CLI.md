@@ -85,7 +85,8 @@ execution identity (the routing decision versus the actual execution target), th
 observed iterations, the verification evidence, the termination, and structured
 progress signals (discovery, repository mutation, verification, state transition)
 that separate progress from mere activity. `sop report` renders a concise `Trace:`
-block and a `Progress:` summary from it. It is observational only — nothing reads
+block, a `Progress:` summary, and a `Budgets:` block (the deterministic execution
+limits that applied) from it. It is observational only — nothing reads
 it back to drive a decision — and it is absent for older runs. A
 failing check or blocking finding is sent back to the agent and re-checked, up
 to `quality.max_fix_cycles` times; exhausting the budget yields `NEEDS_HUMAN`.

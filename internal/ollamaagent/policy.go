@@ -2,10 +2,10 @@ package ollamaagent
 
 import (
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -116,15 +116,18 @@ const (
 	// would not stop. IMPLEMENT's ceiling is larger because it may need several
 	// writes plus focused checks within one invocation; FIX arrives with a
 	// diagnosis, so it needs less.
-	maxIterationsImplement = 32
-	maxIterationsFix       = 24
+	// The hard ceilings are the canonical budget defaults: the policy names them,
+	// and the budget owns their operator configuration. They are not independent
+	// numbers.
+	maxIterationsImplement = budget.DefaultImplementIterations
+	maxIterationsFix       = budget.DefaultFixIterations
 
 	// maxNoProgressIterations bounds consecutive stale turns before the first
 	// mutation. Novel successful repository discovery -- an inspection or a
 	// non-mutating command -- may reset the streak only through implementNowAfter
 	// model turns. Afterwards, all non-mutating turns are stale. The repetition
 	// guard independently detects consecutive loops.
-	maxNoProgressIterations = 5
+	maxNoProgressIterations = budget.DefaultStaleIterations
 
 	// Other hard ceilings.
 	maxIterationsDesignTests = 12
@@ -225,22 +228,23 @@ var (
 	)
 )
 
-// Optional operator overrides for the IMPLEMENT/FIX iteration ceilings. Raising a
-// ceiling gives a model that narrates between actions more turns before the
-// ceiling stops the run; the soft thresholds (finalize/late-stage/force-finalize)
-// scale with it so their relative steering position is preserved. An unset,
-// non-numeric, or non-positive value keeps the built-in ceiling, so behavior is
-// unchanged when they are not set.
-const (
-	implementIterationsEnv = "SOP_OLLAMA_IMPLEMENT_ITERATIONS"
-	fixIterationsEnv       = "SOP_OLLAMA_FIX_ITERATIONS"
-)
+// Optional operator overrides for the IMPLEMENT/FIX iteration ceilings now live
+// in the canonical budget (internal/budget), resolved from the SOP_OLLAMA_*
+// environment. Raising a ceiling gives a model that narrates between actions more
+// turns before the ceiling stops the run; the soft thresholds
+// (finalize/late-stage/force-finalize) scale with it so their relative steering
+// position is preserved. An unset, non-numeric, or non-positive value keeps the
+// built-in ceiling, so behavior is unchanged when they are not set.
 
 // implementIterations is the effective IMPLEMENT iteration ceiling.
-func implementIterations() int { return positiveEnvInt(implementIterationsEnv, maxIterationsImplement) }
+func implementIterations(b budget.Budget) int { return b.ImplementIterations }
 
 // fixIterations is the effective FIX iteration ceiling.
-func fixIterations() int { return positiveEnvInt(fixIterationsEnv, maxIterationsFix) }
+func fixIterations(b budget.Budget) int { return b.FixIterations }
+
+// staleIterations is the effective consecutive-stale-turn bound (the no-progress
+// guard), read from the canonical budget.
+func staleIterations(b budget.Budget) int { return b.StaleIterations }
 
 // scaleIterations maps a soft threshold defined against base onto a ceiling of n,
 // rounding up, so a raised ceiling moves every threshold to the same relative
@@ -254,20 +258,6 @@ func scaleIterations(n, threshold, base int) int {
 		scaled = n
 	}
 	return scaled
-}
-
-// positiveEnvInt returns the named environment variable when it parses as a
-// positive integer, and fallback otherwise (unset, blank, non-numeric, or <= 0).
-func positiveEnvInt(name string, fallback int) int {
-	v := strings.TrimSpace(os.Getenv(name))
-	if v == "" {
-		return fallback
-	}
-	n, err := strconv.Atoi(v)
-	if err != nil || n <= 0 {
-		return fallback
-	}
-	return n
 }
 
 // toolset builds a tool-name set.
@@ -286,6 +276,18 @@ func toolset(names ...string) map[string]bool {
 // Each case names the completion policy the capability is expected to reach; the
 // budget (MaxIterations) is only the safety ceiling behind it.
 func PolicyFor(c agent.Capability) CapabilityPolicy {
+	return policyFor(c, resolveBudget())
+}
+
+// resolveBudget resolves the canonical budget from the environment, so a
+// package-level PolicyFor call matches what ConfigFromEnv would enforce.
+func resolveBudget() budget.Budget {
+	return budget.Resolve(os.Getenv, budget.Defaults())
+}
+
+// policyFor returns the capability policy for c under budget b. The hard
+// iteration ceiling comes from b; the soft steering thresholds scale with it.
+func policyFor(c agent.Capability, b budget.Budget) CapabilityPolicy {
 	switch c {
 	case agent.Plan:
 		// Completion: DISCOVERY (bounded read-only) → SYNTHESIS (tool-free)
@@ -304,7 +306,7 @@ func PolicyFor(c agent.Capability) CapabilityPolicy {
 		// Completion: return the final JSON object from the generic bounded loop.
 		return CapabilityPolicy{MaxIterations: maxIterationsDiagnose, ReadOnly: true, AllowedTools: inspectTools}
 	case agent.Implement:
-		n := implementIterations()
+		n := implementIterations(b)
 		return CapabilityPolicy{
 			MaxIterations:      n,
 			AllowedTools:       allTools,
@@ -315,7 +317,7 @@ func PolicyFor(c agent.Capability) CapabilityPolicy {
 			FinalizeTurns:      implementFinalizeTurns,
 		}
 	case agent.Fix:
-		n := fixIterations()
+		n := fixIterations(b)
 		return CapabilityPolicy{
 			MaxIterations:      n,
 			AllowedTools:       allTools,

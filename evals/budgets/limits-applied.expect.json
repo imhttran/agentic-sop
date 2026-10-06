@@ -1,0 +1,12 @@
+{
+  "name": "budget-limits-applied",
+  "description": "A run's trace records the deterministic execution limits that applied.",
+  "expected": {
+    "budgets": {
+      "implement_iterations": { "equal": 32 },
+      "fix_iterations": { "equal": 24 },
+      "stale_iterations": { "equal": 5 },
+      "tool_calls": { "equal": 80 }
+    }
+  }
+}

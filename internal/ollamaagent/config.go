@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -39,8 +40,9 @@ const (
 	defaultTimeout        = 120 * time.Second
 	defaultCommandTimeout = 120 * time.Second
 	// defaultMaxToolCalls is a secondary bound on tool executions, independent of
-	// the per-capability iteration budget.
-	defaultMaxToolCalls   = 80
+	// the per-capability iteration budget. It mirrors the canonical budget default
+	// so the two cannot drift.
+	defaultMaxToolCalls   = budget.DefaultToolCalls
 	defaultMaxOutputBytes = 256 << 10 // 256 KiB of tool output kept per call
 
 	// defaultMaxAuditRecords bounds the in-memory audit trail kept per run.
@@ -86,6 +88,10 @@ type Config struct {
 	Timeout time.Duration
 	// MaxToolCalls bounds tool executions across the whole run.
 	MaxToolCalls int
+	// Budget is the canonical deterministic execution budget (iteration and
+	// tool-call limits). It is resolved from the environment; a Config built
+	// directly may leave it zero, and EffectiveBudget then supplies the defaults.
+	Budget budget.Budget
 	// CommandTimeout bounds a single run_command execution.
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
@@ -95,6 +101,20 @@ type Config struct {
 	Roots []toolharness.Root
 	// CommandEvidencePath, when set, receives captured command evidence as JSONL.
 	CommandEvidencePath string
+}
+
+// EffectiveBudget returns the budget this harness enforces. A Config that was
+// built directly and carries no budget uses the built-in defaults, with its
+// explicit MaxToolCalls preserved, so nothing silently resets.
+func (c Config) EffectiveBudget() budget.Budget {
+	b := c.Budget
+	if b == (budget.Budget{}) {
+		b = budget.Defaults()
+	}
+	if c.MaxToolCalls > 0 {
+		b.ToolCalls = c.MaxToolCalls
+	}
+	return b
 }
 
 // ConfigFromEnv reads the harness configuration from the environment. It reuses
@@ -122,6 +142,11 @@ func ConfigFromEnv() (Config, error) {
 		}
 		cfg.Timeout = d
 	}
+	// Resolve the canonical budget (iteration/tool-call limits) from the
+	// environment. A non-positive value keeps the built-in default, so a malformed
+	// override never disables a limit.
+	cfg.Budget = budget.Resolve(os.Getenv, budget.Defaults())
+	cfg.MaxToolCalls = cfg.Budget.ToolCalls
 	cfg.CommandEvidencePath = strings.TrimSpace(os.Getenv(envCommandEvidence))
 	if v := strings.TrimSpace(os.Getenv(envWorkspaceRoots)); v != "" {
 		roots, err := parseWorkspaceRoots(v)

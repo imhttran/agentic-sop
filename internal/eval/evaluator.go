@@ -58,6 +58,13 @@ func Evaluate(t runtrace.Trace, f Fixture) Result {
 		checkCount("progress.state_transitions", p.StateTransitions, t.ProgressSummary.StateTransitions, add)
 	}
 
+	if b := f.Expected.Budgets; b != nil {
+		checkCount("budgets.implement_iterations", b.ImplementIterations, t.Budgets.ImplementIterations, add)
+		checkCount("budgets.fix_iterations", b.FixIterations, t.Budgets.FixIterations, add)
+		checkCount("budgets.stale_iterations", b.StaleIterations, t.Budgets.StaleIterations, add)
+		checkCount("budgets.tool_calls", b.ToolCalls, t.Budgets.ToolCalls, add)
+	}
+
 	if te := f.Expected.Termination; te != nil {
 		if te.Stage != nil && string(t.Termination.Stage) != *te.Stage {
 			add("termination.stage", strconv.Quote(*te.Stage), strconv.Quote(string(t.Termination.Stage)))

@@ -118,6 +118,24 @@ func TestEvaluateRetryableDerivedFromDisposition(t *testing.T) {
 	}
 }
 
+// TestEvaluateBudgetMismatchFails proves a budget expectation is evaluated and a
+// mismatch is a deterministic diagnostic.
+func TestEvaluateBudgetMismatchFails(t *testing.T) {
+	tr := runtrace.Build(runtrace.Inputs{Budgets: runtrace.BudgetLimits{ImplementIterations: 32, ToolCalls: 80}})
+	ok := Fixture{Name: "ok", Expected: Expectation{Budgets: &BudgetExpectation{ImplementIterations: &CountAssertion{Equal: intptr(32)}}}}
+	if got := Evaluate(tr, ok); !got.Passed {
+		t.Errorf("matching budget must pass: %+v", got.Diagnostics)
+	}
+	bad := Fixture{Name: "bad", Expected: Expectation{Budgets: &BudgetExpectation{ToolCalls: &CountAssertion{Equal: intptr(5)}}}}
+	got := Evaluate(tr, bad)
+	if got.Passed {
+		t.Fatal("a mismatched budget must fail")
+	}
+	if d := got.Diagnostics[0]; d.Field != "budgets.tool_calls" || d.Expected != "5" || d.Actual != "80" {
+		t.Errorf("diagnostic = %+v", d)
+	}
+}
+
 func TestEvaluateDiagnosticContains(t *testing.T) {
 	tr := runtrace.Build(runtrace.Inputs{Termination: runtrace.Termination{Diagnostic: "IMPLEMENT_NO_PROGRESS: made no progress"}})
 	ok := Fixture{Name: "ok", Expected: Expectation{Termination: &TerminationExpectation{DiagnosticContains: strptr("IMPLEMENT_NO_PROGRESS")}}}

@@ -317,7 +317,7 @@ func (h *Harness) ExecuteWithEvidence(ctx context.Context, req agent.Request, ev
 // a model that repeats non-progressing turns, gives it one recovery instruction,
 // and then stops with a diagnostic rather than burning the whole budget.
 func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, error) {
-	policy := PolicyFor(req.Capability)
+	policy := policyFor(req.Capability, h.cfg.EffectiveBudget())
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
