@@ -80,11 +80,13 @@ still prevents starting a _different_ task.
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
 `review.json`, `report.md`, `report.json`, `metrics.json`, `trace.json`,
-`state.json`). `trace.json` is the versioned structured run trace (schema 1): the
-run's execution identity (the routing decision versus the actual execution
-target), the observed iterations, the verification evidence, and the termination.
-`sop report` renders a concise `Trace:` summary from it. It is observational only
-— nothing reads it back to drive a decision — and it is absent for older runs. A
+`state.json`). `trace.json` is the versioned structured run trace (schema 2): the run's
+execution identity (the routing decision versus the actual execution target), the
+observed iterations, the verification evidence, the termination, and structured
+progress signals (discovery, repository mutation, verification, state transition)
+that separate progress from mere activity. `sop report` renders a concise `Trace:`
+block and a `Progress:` summary from it. It is observational only — nothing reads
+it back to drive a decision — and it is absent for older runs. A
 failing check or blocking finding is sent back to the agent and re-checked, up
 to `quality.max_fix_cycles` times; exhausting the budget yields `NEEDS_HUMAN`.
 `sop run` stops at the human gate and never commits, pushes, or merges. When JEV

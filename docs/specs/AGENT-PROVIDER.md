@@ -228,6 +228,15 @@ blank, nonnumeric, or nonpositive values retain 32/24. The existing scaled
 finalization thresholds are unchanged; discovery credit remains limited to the
 first twelve model turns.
 
+**Observational progress signals.** The harness marks the activity events it emits
+with the progress it has already substantiated — a first-seen inspection
+(`discovery.novel`) or a verified mutation (`mutation.verified`) — so the
+structured run trace can distinguish progress from mere activity. These markers
+are observation-only: they MUST NOT change the stale streak, discovery credit,
+retry policy, budgets, human boundaries, or termination. See
+[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) and the trace artifact
+(`.agent-sdlc/runs/<id>/trace.json`).
+
 **Proposed-future.** Task-scoped discovery budgets are tracked in
 [BACKLOG.md](../plans/BACKLOG.md#task-scoped-discovery-budgets); they are not implemented.
 

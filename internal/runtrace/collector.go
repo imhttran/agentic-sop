@@ -47,6 +47,7 @@ func (c *Collector) Emit(e activity.Event) {
 		Action:             OneLine(e.Action),
 		Observation:        OneLine(e.Detail),
 		RepositoryMutation: e.Stage == activity.StageChange,
+		Signal:             e.Signal,
 	}
 	if iter.Timestamp.IsZero() {
 		iter.Timestamp = c.now()

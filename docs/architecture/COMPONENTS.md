@@ -248,9 +248,12 @@ the task, provider, validation results, findings, fix cycles, and the final gate
 A run that terminates for any reason stays inspectable. A verify-first run records
 `verified_first: true` (the deterministic validation passed without invoking an
 implementation agent). `trace.json` is the versioned structured run trace
-(schema 1): the execution identity, the observed iterations, the verification
-evidence, and the termination. It observes execution and never controls it;
-`sop report` renders a concise summary from it.
+(schema 2): the execution identity, the observed iterations, the verification
+evidence, the termination, and structured progress signals (discovery,
+repository mutation, verification, state transition) that distinguish progress
+from activity. It observes execution and never controls it — the signals do not
+alter the stale streak, retry policy, budgets, or termination — and `sop report`
+renders a concise summary from it.
 
 ## Execution Modes
 

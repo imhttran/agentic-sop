@@ -37,7 +37,7 @@ func TestRunTraceSuccessRecordsIdentityTrajectoryAndVerification(t *testing.T) {
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
 
-	code, _, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "--task", "TASK.md")
+	code, _, stderr := runInjectedCLI(t, dir, "diff --git a/pkg/x.go b/pkg/x.go\n--- a/pkg/x.go\n+++ b/pkg/x.go\n@@ -0,0 +1 @@\n+hello\n", a, "run", "--task", "TASK.md")
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
@@ -59,6 +59,20 @@ func TestRunTraceSuccessRecordsIdentityTrajectoryAndVerification(t *testing.T) {
 	}
 	if len(tr.Iterations) == 0 {
 		t.Errorf("agent trajectory not captured")
+	}
+	// AGENT-002: the successful run carries progress signals (a mutation, the
+	// passing verifications, and the lifecycle transitions).
+	if tr.SchemaVersion != 2 {
+		t.Errorf("schema = %d, want 2", tr.SchemaVersion)
+	}
+	if tr.ProgressSummary.RepositoryMutations == 0 {
+		t.Errorf("no repository-mutation progress signal: %+v", tr.ProgressSummary)
+	}
+	if tr.ProgressSummary.Verification == 0 {
+		t.Errorf("no verification progress signal: %+v", tr.ProgressSummary)
+	}
+	if tr.ProgressSummary.StateTransitions == 0 {
+		t.Errorf("no state-transition progress signal: %+v", tr.ProgressSummary)
 	}
 }
 
@@ -99,6 +113,14 @@ func TestRunTraceNoProgressPreservesSemantics(t *testing.T) {
 	if !strings.Contains(tr.Termination.Diagnostic, "IMPLEMENT_NO_PROGRESS") {
 		t.Errorf("diagnostic = %q, want it to carry IMPLEMENT_NO_PROGRESS", tr.Termination.Diagnostic)
 	}
+	// AGENT-002: the richer trace explains what happened without changing why SOP
+	// stopped — zero verified mutations and zero verification signals remain.
+	if tr.ProgressSummary.RepositoryMutations != 0 {
+		t.Errorf("no-progress run recorded mutation progress: %+v", tr.ProgressSummary)
+	}
+	if tr.ProgressSummary.Verification != 0 {
+		t.Errorf("no-progress run recorded verification progress: %+v", tr.ProgressSummary)
+	}
 }
 
 // TestRunTraceMutationAttribution proves the trace records the invocation
@@ -110,7 +132,7 @@ func TestRunTraceMutationAttribution(t *testing.T) {
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
 
-	if code, _, stderr := runInjectedCLI(t, dir, "diff --git a/pkg/x.go b/pkg/x.go\n", a, "run", "--task", "TASK.md"); code != exitOK {
+	if code, _, stderr := runInjectedCLI(t, dir, "diff --git a/pkg/x.go b/pkg/x.go\n--- a/pkg/x.go\n+++ b/pkg/x.go\n@@ -0,0 +1 @@\n+hello\n", a, "run", "--task", "TASK.md"); code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
 	// A no-op invocation (empty diff) must not attribute any change.
@@ -172,7 +194,7 @@ func TestRunTracePersistsNoSecrets(t *testing.T) {
 	t.Setenv("SOP_OLLAMA_API_KEY", "super-secret-token-xyz")
 	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
 
-	if code, _, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "--task", "TASK.md"); code != exitOK {
+	if code, _, stderr := runInjectedCLI(t, dir, "diff --git a/pkg/x.go b/pkg/x.go\n--- a/pkg/x.go\n+++ b/pkg/x.go\n@@ -0,0 +1 @@\n+hello\n", a, "run", "--task", "TASK.md"); code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, stderr)
 	}
 	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", "T001", runtrace.FileName))

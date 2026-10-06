@@ -15,7 +15,7 @@ const maxActivityDetail = 120
 // consumer is registered. It reports a short summary — a path, a search pattern,
 // or a command — never raw arguments, file contents, model output, or environment
 // values, and it never affects execution.
-func recordToolActivity(ctx context.Context, name string, args map[string]any) {
+func recordToolActivity(ctx context.Context, name string, args map[string]any, signal string) {
 	rec := activity.FromContext(ctx)
 	if !rec.Enabled() {
 		return
@@ -24,7 +24,22 @@ func recordToolActivity(ctx context.Context, name string, args map[string]any) {
 	if stage == "" {
 		return
 	}
-	rec.Emit(stage, action, detail)
+	rec.EmitSignal(stage, action, detail, signal)
+}
+
+// toolTurnSignal names the progress the harness already substantiated for a tool
+// turn: a verified mutation or a first-seen discovery, or none. A read, a repeat,
+// a no-op write, or a plain command carries no signal, so activity is never
+// mistaken for progress. It is observation-only.
+func toolTurnSignal(mutated, discovered bool) string {
+	switch {
+	case mutated:
+		return activity.SignalMutationVerified
+	case discovered:
+		return activity.SignalDiscoveryNovel
+	default:
+		return ""
+	}
 }
 
 // recordFinalizeActivity reports that a mutating capability has entered its
