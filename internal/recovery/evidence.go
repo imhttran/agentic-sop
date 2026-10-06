@@ -12,8 +12,9 @@ import (
 // class is the model class the failed attempt used; stage names where it failed
 // (build, test, lint, review, provider) when known; escalations is how many
 // escalations the task has already taken; attempt is the 1-based number of the
-// attempt that failed.
-func EvidenceFrom(cls failure.Classification, class model.Class, stage string, escalations, attempt int) Evidence {
+// attempt that failed; replans is how many times the task has already changed
+// strategy.
+func EvidenceFrom(cls failure.Classification, class model.Class, stage string, escalations, attempt, replans int) Evidence {
 	return Evidence{
 		Class:       class,
 		Kind:        cls.Kind,
@@ -21,5 +22,6 @@ func EvidenceFrom(cls failure.Classification, class model.Class, stage string, e
 		Stage:       stage,
 		Escalations: escalations,
 		Attempt:     attempt,
+		Replans:     replans,
 	}
 }

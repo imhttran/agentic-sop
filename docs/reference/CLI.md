@@ -80,11 +80,12 @@ still prevents starting a _different_ task.
 Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
 `review.json`, `report.md`, `report.json`, `metrics.json`, `trace.json`,
-`state.json`). `trace.json` is the versioned structured run trace (schema 2): the run's
+`state.json`). `trace.json` is the versioned structured run trace (schema 4): the run's
 execution identity (the routing decision versus the actual execution target), the
-observed iterations, the verification evidence, the termination, and structured
+observed iterations, the verification evidence, the termination, structured
 progress signals (discovery, repository mutation, verification, state transition)
-that separate progress from mere activity. `sop report` renders a concise `Trace:`
+that separate progress from mere activity, and any bounded strategy changes
+(`replans[]`). `sop report` renders a concise `Trace:`
 block, a `Progress:` summary, and a `Budgets:` block (the deterministic execution
 limits that applied) from it. It is observational only — nothing reads
 it back to drive a decision — and it is absent for older runs. A
@@ -97,8 +98,10 @@ runs after validation and review and feeds the same gate and fix loop.
 With `SOP_MODEL_ROUTING_ENABLED=true` each task's model class is chosen from typed
 evidence and recorded in `routing.json`. With `SOP_MODEL_ESCALATION_ENABLED=true` a
 task that fails the gate may be retried on the next larger class in the same
-invocation (bounded by `SOP_MODEL_MAX_ESCALATIONS`, default 2), and each attempt is
-recorded under `attempts/`. Both are OFF by default and apply equally to an
+invocation (bounded by `SOP_MODEL_MAX_ESCALATIONS`, default 2). With
+`SOP_MODEL_REPLAN_ENABLED=true` a recoverable failure may instead change strategy
+once on the same class (bounded by `SOP_MODEL_MAX_REPLANS`, default 1). Each attempt
+is recorded under `attempts/`. All three are OFF by default and apply equally to an
 `implement` prompt. See
 [`CONFIGURATION.md`](CONFIGURATION.md) and [`../specs/RECOVERY.md`](../specs/RECOVERY.md).
 
@@ -135,8 +138,9 @@ The first three are read-only: the model produces text and the repository is nev
 modified. `--capability implement` runs the governed implementation lifecycle
 (plan → implement → validate → review → gate → fix → approval), exactly as a planned
 task does; it cannot run on a provider that does not declare `IMPLEMENT`. When model
-routing and bounded escalation are enabled it follows the same path as a task,
-including a retry on the next larger class and per-attempt records under
+routing, bounded escalation, and strategy replanning are enabled it follows the same
+path as a task, including a retry on the next larger class or a strategy change on
+the same class, and per-attempt records under
 `.agent-sdlc/runs/prompts/<run-id>/attempts/`.
 
 `--json` prints the structured result document (`work_item_id`, `kind`,

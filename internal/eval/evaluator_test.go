@@ -184,3 +184,38 @@ func contains(ss []string, s string) bool {
 	}
 	return false
 }
+
+// TestEvaluateReplans asserts the AGENT-005 replan expectation reads the trace's
+// bounded strategy changes, including a reason substring, and fails on a mismatch.
+func TestEvaluateReplans(t *testing.T) {
+	tr := runtrace.Build(runtrace.Inputs{Replans: []runtrace.ReplanRecord{
+		{Sequence: 1, Reason: "review failure", FromAttempt: 1, ToAttempt: 2},
+	}})
+	ok := Fixture{Name: "ok", Expected: Expectation{Replans: &ReplansExpectation{
+		Count:  &CountAssertion{Equal: intptr(1)},
+		Reason: strptr("review failure"),
+	}}}
+	if got := Evaluate(tr, ok); !got.Passed {
+		t.Errorf("replans should match: %+v", got.Diagnostics)
+	}
+
+	none := Fixture{Name: "none", Expected: Expectation{Replans: &ReplansExpectation{Count: &CountAssertion{Equal: intptr(0)}}}}
+	if got := Evaluate(tr, none); got.Passed {
+		t.Error("a count mismatch must fail")
+	} else if !contains(diagFields(got), "replans.count") {
+		t.Errorf("diagnostic fields = %v", diagFields(got))
+	}
+
+	badReason := Fixture{Name: "reason", Expected: Expectation{Replans: &ReplansExpectation{Reason: strptr("build failure")}}}
+	if got := Evaluate(tr, badReason); got.Passed {
+		t.Error("a reason mismatch must fail")
+	} else if !contains(diagFields(got), "replans.reason") {
+		t.Errorf("diagnostic fields = %v", diagFields(got))
+	}
+}
+
+func TestParseFixtureRejectsUnboundedReplanCount(t *testing.T) {
+	if _, err := ParseFixture([]byte(`{"name":"x","expected":{"replans":{"count":{}}}}`)); err == nil {
+		t.Fatal("an unbounded replan count must be an error")
+	}
+}

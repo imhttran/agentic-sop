@@ -74,7 +74,7 @@ const maxEscalationAttempts = 4
 // infrastructure error, a manual override, or a decision other than ESCALATE all
 // return after exactly one lifecycle — the pre-Phase-5 behavior.
 func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (lifeResult, error) {
-	if !escalatable(d) {
+	if !recoverableLoop(d) {
 		return executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	}
 
@@ -83,6 +83,7 @@ func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Age
 	var res lifeResult
 	var err error
 	escalations := 0
+	replans := 0
 
 	for attempt := 1; attempt <= maxEscalationAttempts; attempt++ {
 		curD.attempt = esc
@@ -94,18 +95,35 @@ func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Age
 		var dec recovery.Decision
 		applies := false
 		if class := attemptClass(curD, res); class != "" {
-			dec, applies = escalationDecisionFor(curD, res, err, class, escalations, attempt)
+			dec, applies = escalationDecisionFor(curD, res, err, class, escalations, replans, attempt)
 		}
 
-		if !applies || dec.Action != recovery.ActionEscalate {
+		if !applies || (dec.Action != recovery.ActionEscalate && dec.Action != recovery.ActionReplan) {
 			if applies {
 				printRecoveryDecision(stdout, dec)
 			}
 			// Persist this attempt's non-secret evidence, so every attempt — the initial
-			// routing attempt and each escalated retry — is recorded. A write failure is
-			// surfaced but never changes the decision.
+			// routing attempt, each replan, and each escalated retry — is recorded. A
+			// write failure is surfaced but never changes the decision.
 			recordAttempt(rn, curD, res, dec, attempt, stdout)
 			return res, err
+		}
+
+		// A bounded replan: change the strategy, not the resource. The SAME agent
+		// (class) runs the next attempt, handed the failed attempt's evidence and a
+		// strategy-change instruction. The per-invocation budget is intentionally a
+		// fresh invocation scope (AGENT-004); the run-level bound is MaxReplans plus
+		// the attempt-loop backstop, so a replan cannot multiply the envelope.
+		if dec.Action == recovery.ActionReplan {
+			recordAttempt(rn, curD, res, dec, attempt, stdout)
+			printReplan(stdout, dec, attempt+1)
+			replans++
+			esc = &escalationAttempt{
+				Decision:       dec,
+				Selection:      attemptSelection(curD, res),
+				FailureContext: boundedReplanContext(res, curD, dec),
+			}
+			continue
 		}
 
 		// The decision is to escalate. Resolve, validate, build, and guard the escalated
@@ -175,6 +193,14 @@ func escalationNotApplied(dec recovery.Decision) recovery.Decision {
 	return recovery.Decision{FromClass: dec.FromClass, Attempt: dec.Attempt}
 }
 
+// recoverableLoop reports whether the bounded attempt loop applies at all: the
+// recovery policy must permit a recovery action (escalation or replanning). With
+// both off — the default — a single executeLifecycle runs, so behavior is
+// unchanged.
+func recoverableLoop(d deps) bool {
+	return escalatable(d) || d.escalation.Replan
+}
+
 // escalatable reports whether the bounded-escalation policy applies to this
 // invocation at all: it must be enabled, and no explicit --model-class override
 // may be pinning the class.
@@ -192,9 +218,16 @@ func escalatable(d deps) bool {
 // produced a deterministic gate failure (not an infrastructure error), and a class
 // is known for the attempt — so an infrastructure failure and an unrouted task keep
 // their existing recovery exactly.
-func escalationDecisionFor(d deps, res lifeResult, err error, class model.Class, escalations, attempt int) (recovery.Decision, bool) {
-	if !escalatable(d) {
+func escalationDecisionFor(d deps, res lifeResult, err error, class model.Class, escalations, replans, attempt int) (recovery.Decision, bool) {
+	if !recoverableLoop(d) {
 		return recovery.Decision{}, false
+	}
+	// An explicit --model-class override pins the class and disables ESCALATION (the
+	// operator's choice is never silently replaced by a stronger model). It does not
+	// disable a replan, which keeps the class and only changes the strategy.
+	p := d.escalation
+	if !escalatable(d) {
+		p.Enabled = false
 	}
 	if err != nil {
 		// An agent/infrastructure error is not a quality-gate failure; the existing
@@ -205,8 +238,8 @@ func escalationDecisionFor(d deps, res lifeResult, err error, class model.Class,
 	if res.gate.Decision == quality.Pass {
 		return recovery.Decision{}, false
 	}
-	ev := recovery.EvidenceFrom(res.classification, class, attemptFailureStage(res), escalations, attempt)
-	return recovery.Decide(d.escalation, ev), true
+	ev := recovery.EvidenceFrom(res.classification, class, attemptFailureStage(res), escalations, attempt, replans)
+	return recovery.Decide(p, ev), true
 }
 
 // attemptClass returns the model class the attempt ran on: the recovery-selected
@@ -383,6 +416,39 @@ func recoveryActionText(a recovery.Action) string {
 // classText renders a model class in the operator-facing upper-case style.
 func classText(c model.Class) string {
 	return strings.ToUpper(string(c))
+}
+
+// printReplan announces a bounded strategy change: the same class runs again,
+// with a new approach and the failed attempt's evidence. SOP never changes the
+// model for a replan (that is escalation) and never resets a budget.
+func printReplan(stdout io.Writer, dec recovery.Decision, attempt int) {
+	fmt.Fprintf(stdout, "Recovery: replanning (attempt %d) on the same class %s: %s\n", attempt, classText(dec.ToClass), dec.Reason)
+}
+
+// boundedReplanContext builds the bounded context handed to a replanned attempt:
+// why the previous attempt failed, so the model can change approach rather than
+// repeat it. It is evidence and an instruction, never authority: it grants no
+// budget, no class change, no tool permission, and no approval.
+func boundedReplanContext(res lifeResult, d deps, dec recovery.Decision) string {
+	var b strings.Builder
+	b.WriteString("# Replan\n\n")
+	b.WriteString("A previous attempt at this task did not pass. Change strategy: do not repeat the same approach as before.\n\n")
+	b.WriteString("## Why the previous attempt failed\n\n")
+	b.WriteString(string(res.gate.Decision))
+	for _, r := range res.gate.Reasons {
+		b.WriteString("\n- ")
+		b.WriteString(r)
+	}
+	if stage := attemptFailureStage(res); stage != "" {
+		b.WriteString("\n- failure stage: ")
+		b.WriteString(stage)
+	}
+	b.WriteString("\n")
+	out := b.String()
+	if len(out) > escalationContextMax {
+		out = out[:escalationContextMax] + "\n… (truncated)\n"
+	}
+	return out
 }
 
 // boundedEscalationContext builds the bounded context handed forward to an

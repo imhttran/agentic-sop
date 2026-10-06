@@ -8,8 +8,8 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 
 ## Agentic reliability and evaluation (AGENT-001–005)
 
-**Status:** In progress. After the pre-Phase-6 closeout (complete): AGENT-001 and
-AGENT-001 through AGENT-004 are delivered; AGENT-005 is next. Remaining:
+**Status:** Complete. After the pre-Phase-6 closeout (complete), AGENT-001 through
+AGENT-005 are delivered:
 
 - **AGENT-001 Structured Run Trace** — **delivered**: a versioned observational
   `trace.json` (schema 1) per run, summarized by `sop report`.
@@ -22,7 +22,10 @@ AGENT-001 through AGENT-004 are delivered; AGENT-005 is next. Remaining:
 - **AGENT-004 Agent Budgets** — **delivered**: the canonical execution budget
   (`internal/budget`: iteration, stale, tool-call limits), configurable via
   `SOP_OLLAMA_*` and recorded in `trace.json`.
-- **AGENT-005 Replan Strategy** — bounded replanning.
+- **AGENT-005 Replan Strategy** — **delivered**: opt-in, deterministic permission
+  to change strategy once on the same class after a recoverable failure
+  (`internal/recovery`; `models.replan_enabled` / `models.max_replans`), recorded in
+  `trace.json` (schema 4) and asserted by `evals/replan/`.
 - **Task-Scoped Discovery Budgets** (see
   [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)) — deferred; the
   discovery allowance remains fixed (a soft threshold, not a hard budget).

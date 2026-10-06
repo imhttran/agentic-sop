@@ -150,6 +150,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyReplanPolicy(&d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to the lifecycle so the run records it.
 	d.routing = routing
 

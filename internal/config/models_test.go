@@ -148,3 +148,26 @@ func TestParseRejectsUnknownFallbackValues(t *testing.T) {
 		})
 	}
 }
+
+// TestParseReplanBlock pins the Phase 7 strategy-replanning configuration: the
+// fields parse, a negative bound is rejected, and enabling replanning alone does not
+// make the models block Configured() (so it never activates model routing by itself).
+func TestParseReplanBlock(t *testing.T) {
+	c, err := Parse([]byte("version: 1\nproject:\n  name: replan\nmodels:\n  replan_enabled: true\n  max_replans: 2\n"))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if c.Models.ReplanEnabled == nil || !*c.Models.ReplanEnabled {
+		t.Errorf("replan_enabled = %v, want true", c.Models.ReplanEnabled)
+	}
+	if c.Models.MaxReplans == nil || *c.Models.MaxReplans != 2 {
+		t.Errorf("max_replans = %v, want 2", c.Models.MaxReplans)
+	}
+	if c.Models.Configured() {
+		t.Error("replan settings alone must not mark the models block configured")
+	}
+
+	if _, err := Parse([]byte("version: 1\nproject:\n  name: bad\nmodels:\n  max_replans: -1\n")); err == nil {
+		t.Error("a negative max_replans must be rejected")
+	}
+}

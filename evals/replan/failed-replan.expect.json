@@ -1,0 +1,7 @@
+{
+  "name": "replan-failed-then-stop",
+  "description": "A permitted replan that also fails does not replan again: the bound is spent and the existing terminal behavior applies.",
+  "expected": {
+    "replans": { "count": { "equal": 1 } }
+  }
+}

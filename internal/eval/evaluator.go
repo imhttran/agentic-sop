@@ -65,6 +65,19 @@ func Evaluate(t runtrace.Trace, f Fixture) Result {
 		checkCount("budgets.tool_calls", b.ToolCalls, t.Budgets.ToolCalls, add)
 	}
 
+	if rp := f.Expected.Replans; rp != nil {
+		checkCount("replans.count", rp.Count, len(t.Replans), add)
+		if rp.Reason != nil {
+			actual := ""
+			if len(t.Replans) > 0 {
+				actual = t.Replans[0].Reason
+			}
+			if !strings.Contains(actual, *rp.Reason) {
+				add("replans.reason", strconv.Quote(*rp.Reason), strconv.Quote(actual))
+			}
+		}
+	}
+
 	if te := f.Expected.Termination; te != nil {
 		if te.Stage != nil && string(t.Termination.Stage) != *te.Stage {
 			add("termination.stage", strconv.Quote(*te.Stage), strconv.Quote(string(t.Termination.Stage)))

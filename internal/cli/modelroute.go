@@ -77,3 +77,26 @@ func applyEscalationEnabled(d *deps, cfg config.Config) error {
 	d.escalation = recovery.Policy{Enabled: on, MaxEscalations: max}
 	return nil
 }
+
+// applyReplanPolicy resolves the bounded strategy-replanning recovery policy
+// (Phase 7) and records it on d.escalation, the recovery policy for this
+// invocation. It is OFF unless SOP_MODEL_REPLAN_ENABLED (or the config's
+// models.replan_enabled) turns it on, so an existing installation's execution
+// behavior is unchanged. An unparseable flag or bound is an actionable error.
+//
+// Replanning is a distinct recovery from escalation: it keeps the model class and
+// only changes the strategy. The two flags compose — with both on, a recoverable
+// failure may replan once (same class) and then escalate.
+func applyReplanPolicy(d *deps, cfg config.Config) error {
+	on, err := model.ReplanEnabled(cfg.Models, os.Getenv)
+	if err != nil {
+		return err
+	}
+	max, err := model.MaxReplans(cfg.Models, os.Getenv)
+	if err != nil {
+		return err
+	}
+	d.escalation.Replan = on
+	d.escalation.MaxReplans = max
+	return nil
+}

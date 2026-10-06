@@ -135,9 +135,10 @@ quality escalation        SMALL -> MEDIUM -> LARGE     (post-failure, Phase 5 re
 
 The availability fallback happens BEFORE normal generation begins. Quality
 escalation is failure-driven execution recovery owned by [RECOVERY.md](RECOVERY.md)
-§8. A SMALL primary that passes availability and then fails generation MUST NOT
-silently become the SMALL cloud fallback; it follows the existing retry/recovery/
-escalation behavior instead.
+§8, and Phase 7 strategy replanning (which keeps the class and changes only the
+strategy) is owned by [RECOVERY.md](RECOVERY.md) §9. A SMALL primary that passes
+availability and then fails generation MUST NOT silently become the SMALL cloud
+fallback; it follows the existing retry/recovery/escalation behavior instead.
 
 The fallback MUST keep the selected CLASS — only the concrete provider and model
 change. Applying it MUST record the deterministic source `cloud-fallback` and the
@@ -346,9 +347,10 @@ The configuration table, the automatic router, the decision rules above, manual
 overrides, the local-first fallback for a local class, persistence
 (`routing.json`), report visibility, and Phase 4 pre-execution availability
 validation are **implemented**. Bounded, deterministic escalation
-after a failed attempt (Phase 5) is implemented too; it is owned by
-[RECOVERY.md](RECOVERY.md) §8, not by this specification — routing selects the
-class a task starts on, and recovery decides what to do after an attempt fails.
+after a failed attempt (Phase 5) and bounded strategy replanning (Phase 7) are
+implemented too; they are owned by [RECOVERY.md](RECOVERY.md) §8/§9, not by this
+specification — routing selects the class a task starts on, escalation changes that
+class, replanning keeps it, and recovery decides what to do after an attempt fails.
 
 ## Proposed / Future Behavior
 
