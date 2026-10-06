@@ -23,7 +23,9 @@ func TestRunGraphNoProgressBlocksWithoutApproval(t *testing.T) {
 	}
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: noProgressReason}}
+	// The harness maps a no-progress stop to a needs_human outcome; use that real
+	// status so the test covers the path that previously parked at WAITING_FOR_HUMAN.
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: noProgressReason}}
 
 	code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 	if code != exitError {

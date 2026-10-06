@@ -1251,7 +1251,11 @@ func classifiedOutcome(cfg config.Config, rn *runpkg.Run, outcome *agent.Outcome
 		_ = rn.SetStage(runpkg.Failed)
 		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.Failed, classification: class, decision: decision}
 	}
-	if outcome.Status == agent.OutcomeNeedsHuman {
+	// A BLOCK disposition (a bounded no-progress stop) is neither a resumable
+	// continuation nor a human decision: it must NOT park the run at
+	// WAITING_FOR_HUMAN, because the approval subsystem treats that stage as a
+	// genuine human boundary and would create an approve/decline gate.
+	if outcome.Status == agent.OutcomeNeedsHuman && class.Disposition != failure.Block {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
 		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.WaitingForHuman, classification: class, decision: decision}
 	}
