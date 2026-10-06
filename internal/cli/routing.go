@@ -2,18 +2,22 @@ package cli
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
+	"github.com/imhttran/agentic-sop/internal/adaptiveroute"
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/runtrace"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
 
@@ -109,6 +113,18 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 	}
 
 	dec := router.Decide(sig)
+	// CTX-011 adaptive routing: adapt the deterministic router's class using accumulated
+	// evaluation evidence. The harness chooses the class; a model never chooses itself.
+	// With no evidence (or too little) the baseline is unchanged, so this is a no-op until
+	// enough evidence accrues.
+	if adapted := adaptiveroute.Route(adaptiveroute.Input{
+		Baseline:   dec.Class,
+		Capability: agent.Implement,
+		Evidence:   routingEvidence(routingDir(d)),
+	}); adapted.Class != dec.Class {
+		dec.Class = adapted.Class
+		dec.Reasons = append(dec.Reasons, adapted.Reason+" ("+adapted.Evidence+")")
+	}
 	res, err := model.Resolve(model.Inputs{
 		Config:       cfg.Models,
 		Lookup:       os.Getenv,
@@ -369,4 +385,65 @@ func evidenceFrom(g earlyGateResult) *jev.Evidence {
 	}
 	ev := g.Evidence
 	return &ev
+}
+
+// routingDir resolves the project directory for evidence harvesting.
+func routingDir(d deps) string {
+	if d.getwd == nil {
+		return ""
+	}
+	dir, err := d.getwd()
+	if err != nil {
+		return ""
+	}
+	return dir
+}
+
+// routingEvidence harvests deterministic routing evidence from completed runs: the model
+// class each run executed at, its capability, and whether it reached a successful
+// terminal. It reads only recorded evidence and invents nothing.
+func routingEvidence(dir string) []adaptiveroute.Outcome {
+	if strings.TrimSpace(dir) == "" {
+		return nil
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, stateDirName, "runs"))
+	if err != nil {
+		return nil
+	}
+	var out []adaptiveroute.Outcome
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		out = append(out, outcomesFromTrace(filepath.Join(dir, stateDirName, "runs", entry.Name(), runtrace.FileName))...)
+	}
+	return out
+}
+
+// outcomesFromTrace reads one run trace and yields its routing outcome, when it recorded
+// a run at a known model class.
+func outcomesFromTrace(path string) []adaptiveroute.Outcome {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	var tr runtrace.Trace
+	if err := json.Unmarshal(data, &tr); err != nil {
+		return nil
+	}
+	class := model.Class(strings.ToLower(strings.TrimSpace(tr.Execution.ModelClass)))
+	if !class.Valid() {
+		return nil
+	}
+	capability := agent.Capability(strings.ToUpper(strings.TrimSpace(tr.Execution.Capability)))
+	if capability == "" {
+		return nil
+	}
+	return []adaptiveroute.Outcome{{Class: class, Capability: capability, Success: traceSucceeded(tr)}}
+}
+
+// traceSucceeded reports whether a trace reached a successful terminal. Only the PASSED
+// stage counts, so a FAILED, BLOCKED, or human-boundary run is never counted as a success.
+func traceSucceeded(tr runtrace.Trace) bool {
+	return strings.EqualFold(strings.TrimSpace(tr.Termination.Stage), "PASSED")
 }

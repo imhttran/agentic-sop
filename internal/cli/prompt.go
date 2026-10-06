@@ -46,7 +46,7 @@ import (
 // used, and no automatic escalation is performed for prompts (Phase 5.4 37).
 
 // promptUsage is the one-line usage for `sop prompt`.
-const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--file PATH | PROMPT]"
+const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--cache] [--file PATH | PROMPT]"
 
 // defaultPromptCapability is the conservative, read-only default: a bare prompt is
 // never treated as an implementation request (Phase 5.4 8).
@@ -85,6 +85,7 @@ type promptOptions struct {
 	prompt     string
 	modelClass string
 	json       bool
+	cache      bool
 }
 
 // parsePromptArgs parses the prompt command's flags and positional prompt. At most
@@ -122,6 +123,8 @@ func parsePromptArgs(args []string, stderr io.Writer) (promptOptions, bool) {
 			opts.file = strings.TrimPrefix(a, "--file=")
 		case a == "--json":
 			opts.json = true
+		case a == "--cache":
+			opts.cache = true
 		case strings.HasPrefix(a, "-") && a != "-":
 			fmt.Fprintf(stderr, "unknown flag %s\n%s\n", a, promptUsage)
 			return promptOptions{}, false
@@ -343,11 +346,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 
 	renderPromptRouting(progress, wi, tr, sel)
 
-	resp, err := a.Generate(ctx, agent.Request{
-		Capability:         wi.Capability,
-		Task:               wi.Content,
-		OutputRequirements: promptOutputRequirements(wi.Capability),
-	})
+	content, err := promptGenerate(ctx, dir, a, wi, sel, opts.cache)
 	if err != nil {
 		if opts.json {
 			_ = writePromptJSON(stdout, stderr, promptResultDoc{
@@ -372,7 +371,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: %s: %w", wi.Capability, err))
 	}
 
-	_ = rn.Write("result.md", resp.Content)
+	_ = rn.Write("result.md", content)
 	writePromptRoutingArtifact(rn, wi, tr, sel)
 
 	doc := promptResultDoc{
@@ -384,14 +383,14 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		Routing:    promptRoutingDoc(tr, sel),
 		ReportPath: promptRunDirRel(wi.ID),
 		ResultPath: filepath.Join(promptRunDirRel(wi.ID), "result.md"),
-		Result:     resp.Content,
+		Result:     content,
 	}
 	_ = writePromptMetadata(rn, doc)
 
 	if opts.json {
 		return writePromptJSON(stdout, stderr, doc)
 	}
-	fmt.Fprint(stdout, renderPromptResult(wi, tr, sel, resp.Content))
+	fmt.Fprint(stdout, renderPromptResult(wi, tr, sel, content))
 	return exitOK
 }
 
