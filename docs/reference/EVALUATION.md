@@ -54,6 +54,14 @@ substring of the first replan's reason:
 "replans": { "count": { "equal": 1 }, "reason": "review failure" }
 ```
 
+And the Context Engine's supplied-context summary, under `context` — the item, file,
+and byte counts, whether a limit truncated it, and the sources that must be present:
+
+```json
+"context": { "items": { "at_least": 1 }, "bytes": { "at_least": 1 },
+             "truncated": false, "sources": ["task", "execution"] }
+```
+
 Counts use `{"equal": N}`, `{"at_least": N}`, or `{"at_most": N}`. `retryable` is
 derived from the recorded disposition by the authoritative failure rule, not stored
 separately.
@@ -70,6 +78,7 @@ evals/
   replan/           success-after-replan.expect.json, failed-replan.expect.json,
                     no-replan.expect.json, human-boundary-no-replan.expect.json,
                     no-progress-no-replan.expect.json
+  context/          supplied.expect.json
 ```
 
 Future categories (planning, routing, termination, …) add directories without

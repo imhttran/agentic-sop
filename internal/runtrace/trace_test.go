@@ -110,3 +110,50 @@ func TestBuildPersistsReplans(t *testing.T) {
 		t.Errorf("trace.json must omit replans when none occurred: %s", eData)
 	}
 }
+
+// TestBuildPersistsContext proves the Context Engine's observational summary is
+// recorded and round-trips through the versioned artifact.
+func TestBuildPersistsContext(t *testing.T) {
+	dir := t.TempDir()
+	tr := Build(Inputs{
+		RunID:     "T001",
+		StartedAt: time.Unix(1000, 0).UTC(),
+		Context: ContextInfo{
+			Items: 3, Files: 1, Bytes: 42, Truncated: true,
+			Sources: []SourceCount{{Source: "task", Items: 2, Bytes: 30}, {Source: "execution", Items: 1, Bytes: 12}},
+		},
+	})
+	if err := Write(dir, tr); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if !strings.Contains(string(data), `"context"`) {
+		t.Errorf("trace.json must record the context summary: %s", data)
+	}
+	var got Trace
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if got.Context.Items != 3 || got.Context.Files != 1 || got.Context.Bytes != 42 || !got.Context.Truncated {
+		t.Errorf("context = %+v", got.Context)
+	}
+	if len(got.Context.Sources) != 2 || got.Context.Sources[0].Source != "task" {
+		t.Errorf("sources = %+v", got.Context.Sources)
+	}
+}
+
+// TestSchemaFourTraceRemainsReadable proves an older (schema 4) trace without a
+// context summary still parses, so readers tolerate prior versions.
+func TestSchemaFourTraceRemainsReadable(t *testing.T) {
+	old := `{"schema_version":4,"run_id":"T001","execution":{},"termination":{"stage":"PASSED"}}`
+	var tr Trace
+	if err := json.Unmarshal([]byte(old), &tr); err != nil {
+		t.Fatalf("a schema-4 trace must remain readable: %v", err)
+	}
+	if tr.SchemaVersion != 4 || tr.Context.Items != 0 || tr.Context.Truncated {
+		t.Errorf("schema-4 trace parsed as %+v", tr)
+	}
+}

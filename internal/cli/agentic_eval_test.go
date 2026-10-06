@@ -111,3 +111,18 @@ func TestAgenticEvalVerificationFailure(t *testing.T) {
 	t.Logf("verification-failure termination=%+v progress=%+v", tr.Termination, tr.ProgressSummary)
 	runEvalFixture(t, "verification/failure.expect.json", tr)
 }
+
+// TestAgenticEvalContextSupplied proves the harness supplies a canonical, bounded
+// context and records its summary in the real trace: task and execution evidence at
+// least, nothing truncated, and no model invoked to build the context.
+func TestAgenticEvalContextSupplied(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
+
+	if code, _, stderr := runInjectedCLI(t, dir, evalDiff, a, "run", "--task", "TASK.md"); code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	runEvalFixture(t, "context/supplied.expect.json", loadEvalTrace(t, dir, "T001"))
+}

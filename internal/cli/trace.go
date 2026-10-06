@@ -26,6 +26,7 @@ func writeRunTrace(rn *runpkg.Run, res lifeResult, cfg config.Config, tc *runtra
 		Execution:    traceExecution(res, cfg),
 		Budgets:      traceBudgets(),
 		Replans:      traceReplans(rn),
+		Context:      traceContext(res),
 		ChangedFiles: rn.ChangedFiles(),
 		Verification: traceVerification(res.suite.Results),
 		Termination:  traceTermination(res),
@@ -164,4 +165,25 @@ func traceTermination(res lifeResult) runtrace.Termination {
 		Diagnostic:    runtrace.OneLine(res.classification.Reason),
 		HumanRequired: res.decision.RequiresHuman,
 	}
+}
+
+// traceContext summarizes the canonical context the harness supplied for the run's
+// last implementation attempt. It is observation-only: the trace records the sizes and
+// sources, and nothing reads them back to drive a decision.
+func traceContext(res lifeResult) runtrace.ContextInfo {
+	c := res.ctx
+	info := runtrace.ContextInfo{
+		Items:     len(c.Items()),
+		Files:     c.Files(),
+		Bytes:     c.Bytes(),
+		Truncated: c.Truncated(),
+	}
+	for _, s := range c.Sources() {
+		info.Sources = append(info.Sources, runtrace.SourceCount{
+			Source: string(s.Source),
+			Items:  s.Items,
+			Bytes:  s.Bytes,
+		})
+	}
+	return info
 }

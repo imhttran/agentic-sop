@@ -21,7 +21,7 @@ import (
 
 // SchemaVersion is the version of the persisted trace contract. It makes future
 // trace evolution explicit; AGENT-001 only defines this initial version.
-const SchemaVersion = 4
+const SchemaVersion = 5
 
 // FileName is the run artifact holding the structured trace.
 const FileName = "trace.json"
@@ -66,6 +66,32 @@ type Trace struct {
 	// observation-only: the harness owns replan eligibility and the bound, and
 	// nothing reads this back to drive a decision.
 	Replans []ReplanRecord `json:"replans,omitempty"`
+
+	// Context records the Context Engine's observational summary: how much context
+	// the harness supplied, from which sources, and whether a limit truncated it. It
+	// is observation-only: the model cannot select its own context and nothing reads
+	// this back to drive a decision.
+	Context ContextInfo `json:"context"`
+}
+
+// ContextInfo is the observational summary of the context supplied to the agent.
+type ContextInfo struct {
+	// Items, Files, and Bytes are the retained context sizes: item count, distinct
+	// repository file identities, and content bytes.
+	Items int `json:"items"`
+	Files int `json:"files"`
+	Bytes int `json:"bytes"`
+	// Truncated reports whether a context limit dropped or shortened any item.
+	Truncated bool `json:"truncated"`
+	// Sources is the per-source contribution, in the canonical source order.
+	Sources []SourceCount `json:"sources,omitempty"`
+}
+
+// SourceCount is one context source's contribution to the supplied context.
+type SourceCount struct {
+	Source string `json:"source"`
+	Items  int    `json:"items"`
+	Bytes  int    `json:"bytes"`
 }
 
 // ReplanRecord is one bounded strategy change.
@@ -169,6 +195,8 @@ type Inputs struct {
 	Budgets BudgetLimits
 
 	Replans []ReplanRecord
+
+	Context ContextInfo
 }
 
 // Build assembles a versioned Trace from the supplied evidence.
@@ -190,6 +218,7 @@ func Build(in Inputs) Trace {
 		ProgressSummary:     summarize(progress),
 		Budgets:             in.Budgets,
 		Replans:             in.Replans,
+		Context:             in.Context,
 	}
 }
 
