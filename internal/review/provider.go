@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/normalize"
 )
 
 // reviewOutputSchema is the output contract for the REVIEW capability.
@@ -57,8 +58,12 @@ type reportWire struct {
 // parseReport deterministically parses an agent review response. Malformed
 // output or an unknown severity is an error, never a silent pass.
 func parseReport(content string) (Report, error) {
+	data, err := normalize.JSON(content)
+	if err != nil {
+		return Report{}, fmt.Errorf("parse review response: %w", err)
+	}
 	var wire reportWire
-	if err := json.Unmarshal([]byte(content), &wire); err != nil {
+	if err := json.Unmarshal(data, &wire); err != nil {
 		return Report{}, fmt.Errorf("parse review response: %w", err)
 	}
 

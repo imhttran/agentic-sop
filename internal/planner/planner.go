@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/normalize"
 )
 
 // planTaskPrompt is the stable instruction sent to the agent. It is an
@@ -170,8 +171,12 @@ func (p *Planner) generateValid(ctx context.Context, req agent.Request) (*Plan, 
 // (ids, references, cycles, non-empty). It is the deterministic authority on
 // plan validity; no model is consulted.
 func decodePlan(content string) (*Plan, error) {
+	data, err := normalize.JSON(content)
+	if err != nil {
+		return nil, fmt.Errorf("parse agent response: %w", err)
+	}
 	var plan Plan
-	if err := json.Unmarshal([]byte(content), &plan); err != nil {
+	if err := json.Unmarshal(data, &plan); err != nil {
 		return nil, fmt.Errorf("parse agent response: %w", err)
 	}
 	if err := plan.Validate(); err != nil {

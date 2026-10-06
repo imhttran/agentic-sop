@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/normalize"
 )
 
 // EnvAgentCommand names the environment variable that configures the
@@ -124,13 +126,13 @@ type outcomeWire struct {
 // It is exported so the native in-process harness path parses outcomes with
 // exactly the same rules as the command provider.
 func ParseOutcome(content string) *Outcome {
-	trimmed := strings.TrimSpace(content)
-	if trimmed == "" || trimmed[0] != '{' {
+	data, err := normalize.JSON(content)
+	if err != nil || len(data) == 0 || data[0] != '{' {
 		return nil
 	}
 
 	var wire outcomeWire
-	if err := json.Unmarshal([]byte(trimmed), &wire); err != nil {
+	if err := json.Unmarshal(data, &wire); err != nil {
 		return nil
 	}
 
