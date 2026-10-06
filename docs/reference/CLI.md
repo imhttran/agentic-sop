@@ -189,3 +189,25 @@ interrupted, blocked, or changed work. Their next-action, requeue, and
 reconciliation semantics are in
 [`docs/specs/RECOVERY.md`](../specs/RECOVERY.md) and summarized in
 [`STATUS-AND-RECOVERY.md`](STATUS-AND-RECOVERY.md).
+
+## Context efficiency caches and memory
+
+The Phase 8 context-efficiency facilities are opt-in and correctness-first.
+
+`sop validate --cache` consults the CTX-007 Verification Cache before running the
+configured checks. The cache is keyed on the repository identity, the command set,
+the relevant environment, and the SOP version; it is only consulted for a clean
+working tree, and any difference is a miss, so a stale result is never reused.
+
+`sop prompt --cache` (read-only capabilities only) consults the CTX-008 Prompt Result
+Cache, keyed on the compiled prompt, the model identity, and the compiler version. A
+mutating capability is never cached, and a cache hit is only a replay of model output,
+never task success.
+
+`sop memory add --decision <text> --reason <text> [--scope <scope>] [--source <id>]
+[--evidence <text>]` records a durable engineering decision, and `sop memory list`
+prints the decisions applicable to the current repository identity; a decision recorded
+under another state is reported as stale and is never applied.
+
+The artifacts live under `.agent-sdlc/context/`. Default behavior is unchanged: no
+cache is consulted and no memory is applied unless these flags are used.

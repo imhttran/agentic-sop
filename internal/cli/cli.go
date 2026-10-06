@@ -269,6 +269,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runRetrieve(rest, stdout, stderr, d)
 	case "gate":
 		return runGate(rest, stdout, stderr, d)
+	case "memory":
+		return runMemory(rest, stdout, stderr, d)
 	case "providers":
 		return runProviders(rest, stdout, stderr, d)
 	default:
@@ -299,10 +301,10 @@ Commands:
   task <id> show details; task complete <id> --external records an external completion
   plan      generate PLAN.md, or sop plan activate|supersede|complete PLAN.md
   tasks     build and persist tasks from .agent-sdlc/plan.json
-  validate  run the configured build/test/lint commands
+  validate  run the configured build/test/lint commands (--cache reuses an identical verification)
   review    review the current changes with the configured engine
   run       run [PLAN.md | --task TASK.md]  (normal entry point)
-  prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json)
+  prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json, --cache)
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
@@ -317,6 +319,7 @@ Commands:
   index     build the deterministic Structural Repository Index (.agent-sdlc/context/index.json)
   retrieve  rank repository evidence lexically (deterministic BM25)
   gate      evaluate Phase 8 evidence gates (sop gate retrieve|vector), model-free
+  memory    record and list durable engineering decisions (CTX-010 decision memory)
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
   providers inspect configured provider runtimes and their models (--models)
   eval      run a corpus of task files and report benchmark metrics
