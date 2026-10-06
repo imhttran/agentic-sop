@@ -100,7 +100,15 @@ plan, even one with unfinished work, archiving the previous plan as `SUPERSEDED`
 (under `.agent-sdlc/archive/<plan-id>/`, with a `lifecycle.json`) while preserving its
 task states, run evidence, and approvals verbatim — supersession never fabricates a
 PASS or an approval. `sop status` prints the active plan's identity and state before
-the task list. `sop run` stops at the human gate and never commits, pushes, or merges. When JEV
+the task list. `sop task complete <task-id> --external [--commit <sha>]` records the completion of a task
+whose work was performed and merged **outside** the SOP execution — an explicit, model-free
+operator action. It fails closed unless the evidence establishes completion: the task exists
+in the active plan and is not already complete, its dependencies are satisfied, the claimed
+`--commit` (default HEAD) is contained by HEAD, and the configured validation passes. It
+records the task in the local terminal state (`LOCAL_DONE`) and writes provenance
+(`.agent-sdlc/runs/<task-id>/external-completion.json`); it fabricates no attempt, no model
+run, and no approval, and it never touches retry, human-boundary, or approval state.
+`sop run` stops at the human gate and never commits, pushes, or merges. When JEV
 is enabled (`quality.jev.enabled: true`), an optional read-only analysis stage
 runs after validation and review and feeds the same gate and fix loop.
 

@@ -267,7 +267,32 @@ attempt or left the pre-execution states (PLANNED, READY). A READY task that has
 run is therefore a safe update or removal, not a removed-executed task that needs an
 approval; removing a genuinely executed task still stops with `NEEDS_HUMAN`.
 
-## 11. See Also
+## 11. External Completion
+
+SOP records a task's completion when its own lifecycle runs the task and produces verified
+work. When the work was performed **outside** the SOP execution — for example implemented and
+merged directly by an operator or a coding agent — `sop task complete <task-id> --external`
+records that completion as an explicit, model-free operator action.
+
+- External completion MUST be explicit (`--external`); a task completed by the SOP lifecycle
+  records its own completion, so external completion is never an implicit fallback.
+- It MUST fail closed unless the evidence establishes completion: the task exists in the
+  active plan and is not already complete; its dependencies satisfy existing policy; the
+  claimed implementation commit (`--commit`, default `HEAD`) is contained by `HEAD`; and the
+  configured validation gates pass. It MUST reuse the harness's validation stage rather than a
+  weaker second verifier, and MUST NOT require repository mutation merely to prove the work.
+- It MUST record the task in the existing local terminal state (`LOCAL_DONE`) through a domain
+  decision, so normal dependency resolution then treats it like any other completed work. It
+  MUST NOT invent a new terminal task state.
+- It MUST NOT fabricate a normal IMPLEMENT run, a model trace entry, an attempt, or an
+  approval. It MUST NOT become a generic escape hatch: it requires sufficient evidence and an
+  explicit operator decision, and it leaves retry, `NO_PROGRESS`→`BLOCK`, human-boundary,
+  budget, replan, routing, activation, supersession, and historicalization semantics unchanged.
+- It records non-secret provenance beside the run artifacts
+  (`.agent-sdlc/runs/<task-id>/external-completion.json`: `completion_source`, `task_id`,
+  `repository_head`, `implementation_commit`, `verification`, `recorded_by`, `recorded_at`).
+
+## 12. See Also
 
 - [MODEL-ROUTING.md](MODEL-ROUTING.md) — class selection and the routing table.
 - [PROVIDERS.md](PROVIDERS.md) — provider capability and availability evidence.

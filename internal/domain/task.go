@@ -159,6 +159,23 @@ func (t *Task) IsDone() bool {
 // its work is finished locally (LOCAL_DONE), integrated into shared history
 // (MERGED), or fully done (DONE). It is the single definition of "complete",
 // shared by dependency resolution, the run summary, and completed-plan handoff.
+// CompleteExternally records the task as completed locally by an explicit external
+// completion: its work was performed and merged outside this SOP execution. It is the one
+// authority for that transition, so the external path is a domain decision rather than a
+// direct status edit. It fails closed on a task that is already complete, records no
+// attempt, and never fabricates a model run or an approval. The task moves to the existing
+// local terminal state (LOCAL_DONE), so dependency resolution treats it exactly like any
+// other completed work.
+func (t *Task) CompleteExternally() error {
+	if t.IsSatisfied() {
+		return fmt.Errorf("task %s is already complete (%s)", t.ID, t.Status)
+	}
+	t.Status = LOCAL_DONE
+	t.BlockedReason = NO_REASON
+	t.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
 func (t *Task) IsSatisfied() bool {
 	switch t.Status {
 	case MERGED, DONE, LOCAL_DONE:

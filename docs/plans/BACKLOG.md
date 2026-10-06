@@ -175,7 +175,12 @@ LOW priority; must not block CTX-001.
 
 ## SOP-EXTERNAL-COMPLETION
 
-**Status:** Backlog (MEDIUM). SOP records a task's completion only when its own lifecycle
+**Status:** Delivered. `sop task complete <task-id> --external` records a task completed
+outside the SOP execution as an explicit, model-free operator action backed by repository and
+validation evidence (see `RECOVERY.md` §11). The description below is preserved for the
+history of why it was needed.
+
+SOP records a task's completion only when its own lifecycle
 runs the task and produces a verified repository mutation (or a verified `ALREADY_SATISFIED`
 claim). When the work was performed outside the SOP runtime — for example by a coding agent
 that implemented and merged it directly — `sop run` cannot complete the task: the model
