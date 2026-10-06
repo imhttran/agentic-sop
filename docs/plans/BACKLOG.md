@@ -10,10 +10,11 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 
 **Status:** Complete (executed). All eleven CLOSE tasks are `LOCAL_DONE` and the plan's final gate passed; the closure verdicts are under [../reports/pre-performance-closure/](../reports/pre-performance-closure/) with the published baseline at [../reports/PERFORMANCE-BASELINE.md](../reports/PERFORMANCE-BASELINE.md).
 
-[PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) is the next
-closure and measurement DAG for SOP and sop-controller. It verifies existing
-capabilities instead of reimplementing them. Performance implementation waits for
-the plan's evidence-backed readiness gate.
+[PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) was the
+closure and measurement DAG for SOP and sop-controller. It verified existing
+capabilities instead of reimplementing them. Performance implementation remains
+deferred behind the plan's evidence-backed readiness gate (see
+[CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)).
 
 The subsequent architecture remains deferred: Prompt Compiler, Response
 Normalizer, Context Engine, Git-SHA summary cache, repository structural index,

@@ -127,9 +127,15 @@ does not replace the recorded active plan source.
 
 ### Current checkout verification (2026-10-02)
 
+> **Superseded.** This records a point-in-time check at `1ce9bdb`. The twelve
+> CLI/JEV no-change tests below now pass and the pre-performance closure is
+> complete (CLOSE-001–CLOSE-011 `LOCAL_DONE`, final gate passed); see
+> [BACKLOG.md](../plans/BACKLOG.md) and the
+> [closure reports](../reports/pre-performance-closure/).
+
 At `1ce9bdb` on `fix/verify-repository-mutations`, focused mutation-verification and
-already-satisfied tests pass. The full suite is not green: these twelve CLI/JEV
-tests fail, with the same failures reproduced on predecessor `d0af5a4`:
+already-satisfied tests passed while the full suite was not green: these twelve
+CLI/JEV tests failed, reproduced on predecessor `d0af5a4`:
 
 ```text
 TestRunImplementNoChangesStillValidates
@@ -146,11 +152,10 @@ TestJEVLegacyBootstrapIsIdempotent
 TestJEVLegacyBootstrapDoesNotModifyRepository
 ```
 
-These are unresolved closure-gate failures, not permission to weaken mutation or
-completion checks. CLOSE-003 must diagnose the current expectations versus actual
-behavior and record fresh deterministic results before claiming PASS. No baseline
-measurements or cross-repository readiness verdict have been captured by this
-documentation reconciliation.
+At that revision they were unresolved closure-gate failures, not permission to
+weaken mutation or completion checks. Under the completed closure the changed
+expectations are reconciled and all twelve tests pass in the current deterministic
+gate; this historical record asserts no baseline measurement or readiness verdict.
 
 ## Known limitations (current)
 

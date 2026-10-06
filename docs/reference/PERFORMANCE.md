@@ -6,12 +6,14 @@ guide weakens a gate**: timing metadata never drives a workflow decision, and
 faster execution never comes from skipping validation, review, provenance, or a
 human approval boundary.
 
-The next cross-repository closure and BEFORE measurement is specified in
+The cross-repository closure and BEFORE measurement is specified in
 [PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md)
-(planned, not executed). Its telemetry inventory and four workloads extend the
-use of this existing evidence contract; no new performance architecture is
-implemented there. The future output `docs/reports/PERFORMANCE-BASELINE.md` is
-not yet a captured baseline.
+(**COMPLETE**: CLOSE-001–CLOSE-011 `LOCAL_DONE`, final gate passed). Its telemetry
+inventory and four workloads extend the use of this existing evidence contract; no
+new performance architecture is implemented there. The output is now captured at
+[PERFORMANCE-BASELINE.md](../reports/PERFORMANCE-BASELINE.md); where CLOSE-009
+recorded a metric `UNAVAILABLE`, the baseline reports that honestly rather than
+inferring a number.
 
 ## The measurement model
 
