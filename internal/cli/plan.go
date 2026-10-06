@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -31,10 +32,12 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 			return runPlanSupersede(args[1:], stdout, stderr, d)
 		case "complete":
 			return runPlanComplete(args[1:], stdout, stderr, d)
+		case "historicalize":
+			return runPlanHistoricalize(args[1:], stdout, stderr, d)
 		}
 	}
 	if len(args) > 1 {
-		fmt.Fprintln(stderr, "usage: sop plan [TASK.md] | sop plan activate <PLAN.md> | sop plan supersede <PLAN.md> | sop plan complete")
+		fmt.Fprintln(stderr, "usage: sop plan [TASK.md] | sop plan activate <PLAN.md> | sop plan supersede <PLAN.md> | sop plan complete | sop plan historicalize [<PLAN.md>]")
 		return exitUsage
 	}
 
@@ -399,4 +402,201 @@ func displayOr(s, fallback string) string {
 		return fallback
 	}
 	return s
+}
+
+// --- Plan historicalization -------------------------------------------------
+//
+// Historicalization is the deterministic, model-free lifecycle transition that
+// moves a completed (or explicitly disposed) plan from ACTIVE into its historical
+// record. `sop plan historicalize` performs it; `--check` reports readiness only.
+// The operation validates the plan's terminal state, task dispositions, pending
+// approvals, and verification evidence before mutating, is idempotent
+// (ALREADY_HISTORICALIZED), and refuses a plan that changed since readiness. It
+// never executes a task and never runs a model.
+
+// runPlanHistoricalize archives the active plan, preserving its task outcomes,
+// verification evidence, approvals, and terminal disposition. It reuses the
+// planflow archive the plan lifecycle already owns; it never archives the wrong
+// plan and never fabricates completion.
+func runPlanHistoricalize(args []string, stdout, stderr io.Writer, d deps) int {
+	const usage = "usage: sop plan historicalize [<PLAN.md>] [--disposition COMPLETE|SUPERSEDED] [--check] [--json]"
+	var plan, disposition string
+	check, jsonOut := false, false
+	for i := 0; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--check":
+			check = true
+		case a == "--json":
+			jsonOut = true
+		case a == "--disposition":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, "plan historicalize: --disposition requires a value")
+				fmt.Fprintln(stderr, usage)
+				return exitUsage
+			}
+			disposition = args[i+1]
+			i++
+		case strings.HasPrefix(a, "--disposition="):
+			disposition = strings.TrimPrefix(a, "--disposition=")
+		case strings.HasPrefix(a, "-"):
+			fmt.Fprintf(stderr, "plan historicalize: unknown flag %s\n", a)
+			fmt.Fprintln(stderr, usage)
+			return exitUsage
+		case plan == "":
+			plan = a
+		default:
+			fmt.Fprintln(stderr, usage)
+			return exitUsage
+		}
+	}
+
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	path := statePath(dir)
+	if !requireState(path, stderr) {
+		return exitError
+	}
+	st, err := store.Open(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "plan historicalize: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+
+	if check {
+		ready, err := planflow.EvaluateHistoricalization(dir, st, plan, disposition)
+		if err != nil {
+			fmt.Fprintln(stderr, err)
+			return exitError
+		}
+		if jsonOut {
+			writeHistoricalizationJSON(stdout, ready)
+		} else {
+			printHistoricalizationReadiness(stdout, ready)
+		}
+		if !ready.Eligible {
+			fmt.Fprintf(stderr, "plan historicalize: the plan is not eligible; see the readiness report (%s)\n", ready.Reason)
+			return exitError
+		}
+		return exitOK
+	}
+
+	res, err := planflow.Historicalize(planflow.HistoricalizeOptions{Dir: dir, Store: st, Plan: plan, Disposition: disposition})
+	if err != nil {
+		if errors.Is(err, planflow.ErrHistoricalizationIneligible) && res.Readiness.State != "" {
+			if jsonOut {
+				writeHistoricalizationJSON(stdout, res.Readiness)
+			} else {
+				printHistoricalizationReadiness(stdout, res.Readiness)
+				fmt.Fprintln(stdout, "No mutation performed.")
+			}
+		}
+		fmt.Fprintln(stderr, err)
+		return exitError
+	}
+	if jsonOut {
+		writeHistoricalizationResultJSON(stdout, res)
+		return exitOK
+	}
+	printHistoricalizationResult(stdout, res)
+	return exitOK
+}
+
+// printHistoricalizationReadiness renders a readiness evaluation for an operator.
+func printHistoricalizationReadiness(w io.Writer, r planflow.HistoricalizationReadiness) {
+	fmt.Fprintf(w, "Plan: %s\n", displayOr(r.PlanID, "(unknown)"))
+	if r.Source != "" {
+		fmt.Fprintf(w, "Source: %s\n", r.Source)
+	}
+	fmt.Fprintf(w, "State: %s\n", r.State)
+	fmt.Fprintf(w, "Disposition: %s\n", r.Disposition)
+	fmt.Fprintf(w, "Tasks: %d\n", r.TotalTasks)
+	if len(r.TaskCounts) > 0 {
+		fmt.Fprintf(w, "By state: %s\n", formatHistoricalizationCounts(r.TaskCounts))
+	}
+	fmt.Fprintf(w, "Eligible: %s\n", historicalizationYesNo(r.Eligible))
+	if r.Reason != "" {
+		fmt.Fprintf(w, "Reason: %s\n", r.Reason)
+	}
+	if len(r.UnresolvedTasks) > 0 {
+		fmt.Fprintf(w, "Unresolved tasks: %s\n", strings.Join(r.UnresolvedTasks, ", "))
+	}
+	if len(r.UnresolvedApprovals) > 0 {
+		fmt.Fprintf(w, "Unresolved approvals: %s\n", strings.Join(r.UnresolvedApprovals, ", "))
+	}
+	if len(r.UnresolvedVerification) > 0 {
+		fmt.Fprintf(w, "Unresolved verification: %s\n", strings.Join(r.UnresolvedVerification, ", "))
+	}
+	if r.Archived != "" {
+		fmt.Fprintf(w, "Archive: %s\n", r.Archived)
+	}
+}
+
+// printHistoricalizationResult renders the outcome of a historicalization.
+func printHistoricalizationResult(w io.Writer, res planflow.HistoricalizeResult) {
+	printHistoricalizationReadiness(w, res.Readiness)
+	switch res.Outcome {
+	case planflow.OutcomeAlreadyHistoricalized:
+		fmt.Fprintln(w, "Already historicalized: no change.")
+	default:
+		if res.Archived != "" {
+			fmt.Fprintf(w, "Historicalized (%s): %s\n", res.Readiness.Disposition, res.Archived)
+		}
+		fmt.Fprintf(w, "Preserved %d task record(s) as history.\n", res.Tasks)
+		fmt.Fprintln(w, "State: HISTORICALIZED (removed from ACTIVE selection).")
+	}
+}
+
+// formatHistoricalizationCounts renders task counts by state in a stable order.
+func formatHistoricalizationCounts(counts map[string]int) string {
+	keys := make([]string, 0, len(counts))
+	for k := range counts {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	parts := make([]string, 0, len(keys))
+	for _, k := range keys {
+		parts = append(parts, fmt.Sprintf("%s %d", k, counts[k]))
+	}
+	return strings.Join(parts, ", ")
+}
+
+func historicalizationYesNo(b bool) string {
+	if b {
+		return "yes"
+	}
+	return "no"
+}
+
+// writeHistoricalizationJSON renders a readiness evaluation as a JSON document.
+func writeHistoricalizationJSON(w io.Writer, r planflow.HistoricalizationReadiness) {
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(historicalizationDocFrom(r))
+}
+
+// writeHistoricalizationResultJSON renders a historicalization outcome as JSON.
+func writeHistoricalizationResultJSON(w io.Writer, res planflow.HistoricalizeResult) {
+	doc := struct {
+		planflow.HistoricalizationReadiness
+		Outcome string `json:"outcome"`
+		Tasks   int    `json:"tasks"`
+	}{historicalizationDocFrom(res.Readiness), res.Outcome, res.Tasks}
+	enc := json.NewEncoder(w)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(doc)
+}
+
+// historicalizationDocFrom normalizes a readiness value so empty categories render
+// as [] rather than null.
+func historicalizationDocFrom(r planflow.HistoricalizationReadiness) planflow.HistoricalizationReadiness {
+	r.UnresolvedTasks = idsOrEmpty(r.UnresolvedTasks)
+	r.UnresolvedApprovals = idsOrEmpty(r.UnresolvedApprovals)
+	r.UnresolvedVerification = idsOrEmpty(r.UnresolvedVerification)
+	if r.TaskCounts == nil {
+		r.TaskCounts = map[string]int{}
+	}
+	return r
 }

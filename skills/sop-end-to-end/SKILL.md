@@ -144,6 +144,7 @@ Return a concise evidence-backed summary:
   at the error line, following [SOP failure reporting](../sop/SKILL.md#failure-behavior).
 - Human approval required: actual applicable request/action, or none established.
 - Recommended next action: SOP-provided continuation or exact operator decision.
+- Historicalization (optional, never automatic): when every task is satisfied and no gate is pending, the plan is a candidate for historicalization as a separate, explicit operator step (`/sop-historicalize`). End-to-end execution does not historicalize a plan automatically and never crosses a human approval boundary.
 
 Link relevant existing run artifacts under `.agent-sdlc/runs/`. Do not fabricate
 evidence, claim historical validation ran again, expose secrets, or dump full

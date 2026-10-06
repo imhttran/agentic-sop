@@ -597,6 +597,17 @@ verification evidence.
 The verification cache (`sop validate --cache`) and the prompt result cache
 (`sop prompt --cache`) are enabled per invocation, not in configuration.
 
+## Plan historicalization
+
+`sop run` does not historicalize a plan by default. Set
+`SOP_HISTORICALIZE_ON_COMPLETION=true` to enable the opt-in final lifecycle stage:
+after a run finishes with every task satisfied, SOP historicalizes the active plan
+(see [`../specs/PLAN-HISTORICALIZATION.md`](../specs/PLAN-HISTORICALIZATION.md)).
+The stage runs only when readiness is eligible, so a pending human approval gate —
+or any other blocker — leaves the plan ACTIVE, and a historicalization problem
+never fails the run. It is OFF unless explicitly enabled, so an existing
+installation's behavior is unchanged.
+
 ## Validity
 
 An invalid file — malformed YAML, an unknown key, an unknown

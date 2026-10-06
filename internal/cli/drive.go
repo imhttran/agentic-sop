@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -159,6 +160,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	if code == exitOK {
 		if final, err := st.List(); err == nil && domain.AllSatisfied(final) {
 			printCompletion(stdout, dir, cfg, prepared, final)
+			historicalizeOnCompletion(dir, st, stdout, stderr)
 		}
 	}
 	// A run that stopped at a human boundary names the gates it left behind, so an
@@ -166,6 +168,49 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	// nothing when no gate is applicable, so a clean run's output is unchanged.
 	printLeftoverGates(stdout, dir, st)
 	return code
+}
+
+// historicalizationOnCompletionEnv is the opt-in switch for `sop run`'s final
+// lifecycle stage. It is OFF unless explicitly enabled, so an existing
+// installation's behavior is unchanged.
+const historicalizationOnCompletionEnv = "SOP_HISTORICALIZE_ON_COMPLETION"
+
+// historicalizationOnCompletionEnabled reports whether the operator opted in.
+func historicalizationOnCompletionEnabled() bool {
+	v := strings.TrimSpace(os.Getenv(historicalizationOnCompletionEnv))
+	if v == "" {
+		return false
+	}
+	on, err := strconv.ParseBool(v)
+	return err == nil && on
+}
+
+// historicalizeOnCompletion is the opt-in final lifecycle stage of `sop run`. It
+// runs only after a run finished with every task satisfied, and only when the
+// operator enabled it. It historicalizes the plan only when readiness says the
+// plan is eligible: a pending human approval gate (or any other blocker) is never
+// crossed, so automatic completion preserves the existing approval semantics and
+// leaves the plan ACTIVE when a gate remains. It never executes a task and never
+// runs a model; a historicalization problem is reported and never fails the run.
+func historicalizeOnCompletion(dir string, st *store.Store, stdout, stderr io.Writer) {
+	if !historicalizationOnCompletionEnabled() {
+		return
+	}
+	ready, err := planflow.EvaluateHistoricalization(dir, st, "", "")
+	if err != nil {
+		fmt.Fprintf(stderr, "run: historicalization readiness: %v\n", err)
+		return
+	}
+	if !ready.Eligible {
+		fmt.Fprintf(stdout, "Historicalization: skipped (%s)\n", ready.Reason)
+		return
+	}
+	res, err := planflow.Historicalize(planflow.HistoricalizeOptions{Dir: dir, Store: st})
+	if err != nil {
+		fmt.Fprintf(stderr, "run: historicalization: %v\n", err)
+		return
+	}
+	fmt.Fprintf(stdout, "Historicalized (%s): %s\n", res.Readiness.Disposition, res.Archived)
 }
 
 // projectName is the configured project name, or the directory's base name.

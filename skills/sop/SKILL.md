@@ -47,6 +47,8 @@ Thin aliases in the same install expose one capability each:
 /sop-test <request>       capability: design_tests
 /sop-implement <request>  capability: implement (governed, mutating)
 /sop-end-to-end <plan>    execute a project plan through `sop run`
+/sop-historicalize <plan> historicalize a completed or disposed plan
+                          (`sop plan historicalize`)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the

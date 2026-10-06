@@ -65,6 +65,7 @@ Where new documentation belongs:
 Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 - [specs/WORKFLOW.md](specs/WORKFLOW.md) — task state vocabulary, legal transitions, remediation, scheduling, and plan handoff.
+- [specs/PLAN-HISTORICALIZATION.md](specs/PLAN-HISTORICALIZATION.md) — the deterministic, model-free transition that moves a completed or explicitly disposed plan into its historical record: readiness, eligibility, dispositions, atomicity, idempotency, and the `/sop-historicalize` skill.
 - [specs/TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) — the per-task lifecycle stages, TDD rules, and Git naming conventions.
 - [specs/EXECUTION.md](specs/EXECUTION.md) — `sop run`: planning-source discovery, change detection, artifacts, verify-first, and parallelism.
 - [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) — the unified execution input (**WorkItem**): how tasks and prompts adapt to it, and what it MUST NOT contain.
