@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -39,6 +40,21 @@ func runStatus(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	if err != nil {
 		fmt.Fprintf(stderr, "status: %v\n", err)
 		return exitError
+	}
+
+	// The canonical active-plan reference, so the run state is unambiguous: at most
+	// one plan is ACTIVE, and its identity comes from recorded provenance rather than
+	// a scan of Markdown files.
+	if id, source, ok := planflow.ActivePlanID(dir); ok {
+		if id == "" {
+			id = "(unnamed)"
+		}
+		fmt.Fprintf(stdout, "Plan: %s\n", id)
+		if source != "" {
+			fmt.Fprintf(stdout, "Source: %s\n", source)
+		}
+		fmt.Fprintln(stdout, "State: ACTIVE")
+		fmt.Fprintln(stdout)
 	}
 
 	for _, task := range tasks {

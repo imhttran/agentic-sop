@@ -227,7 +227,47 @@ Replanning MUST stay distinct from the other recoveries:
   the attempt record carries the `replan` action. Neither is read back to drive a
   decision.
 
-## 10. See Also
+## 10. Plan Lifecycle: Activation, Supersession, Historicalization
+
+SOP separates a plan's lifecycle from execution. The deterministic harness owns the
+lifecycle state; the presence or location of a Markdown plan file never makes a plan
+active, and moving a file never changes lifecycle state. There is one canonical
+active-plan reference, recorded beside the machine plan in `.agent-sdlc/plan.meta.json`
+(plan id, source path, and content hash); SOP never scans Markdown to guess the active
+plan, and `sop status` reports it.
+
+- **Activation (`sop plan activate <PLAN.md>`)** validates a plan and installs its task
+  graph as the ACTIVE plan, then stops. It MUST NOT execute the first task and MUST NOT
+  invoke a task lifecycle capability (PLAN, IMPLEMENT, REVIEW, FIX, VALIDATE) or record a
+  task attempt; a plan is activated once and executed later with `sop run`. Activation
+  does not require a model or provider for a well-formed or already-recorded plan;
+  compiling a document that is not a recognizable plan is a plan-reading step, not task
+  execution.
+- **Execution (`sop run`)** remains a separate operator action: it selects the next
+  runnable task (the scheduler promotes PLANNED → READY when it selects it) and runs the
+  governed lifecycle. `sop run <PLAN.md>` is preserved and activates-then-executes.
+- **Completion** is determined only by the existing task completion semantics: a plan is
+  COMPLETE when every task `IsSatisfied` (LOCAL_DONE, MERGED, or DONE). Completion never
+  weakens task acceptance and preserves task state, run artifacts, evaluations,
+  approvals, and trace evidence.
+- **Supersession (`sop plan supersede <PLAN.md>`)** is the operator's explicit "abandon
+  / replace" transition: it replaces the active plan even when work remains. The previous
+  plan is archived under `.agent-sdlc/archive/<plan-id>/` with a `lifecycle.json`
+  disposition of `SUPERSEDED` (a completed plan that hands off is archived `COMPLETE`).
+  Supersession MUST NOT turn an unfinished task into PASS, a FAILED task into PASS, or a
+  `NEEDS_HUMAN` record into an approval; it preserves those states as history. It never
+  executes a task and never fabricates a model run.
+- **Historicalization:** an archived plan is evidence, not runnable work. Its disposition
+  (`COMPLETE`/`SUPERSEDED`) and its task snapshot are recorded in the archive, so a
+  historical plan never becomes active merely because a Markdown file exists.
+
+Reconciliation distinguishes executed from never-executed tasks using authoritative
+lifecycle evidence (`domain.Task.Executed`): a task is executed only if it recorded an
+attempt or left the pre-execution states (PLANNED, READY). A READY task that has never
+run is therefore a safe update or removal, not a removed-executed task that needs an
+approval; removing a genuinely executed task still stops with `NEEDS_HUMAN`.
+
+## 11. See Also
 
 - [MODEL-ROUTING.md](MODEL-ROUTING.md) — class selection and the routing table.
 - [PROVIDERS.md](PROVIDERS.md) — provider capability and availability evidence.

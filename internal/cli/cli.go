@@ -291,7 +291,7 @@ Commands:
   init      initialize project state (.agent-sdlc/state.db)
   status    list persisted tasks
   task <id> show details for a single task
-  plan      generate PLAN.md from PRD.md or a task file
+  plan      generate PLAN.md, or sop plan activate|supersede PLAN.md
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine
