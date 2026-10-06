@@ -220,6 +220,17 @@ Surfaced when CTX-001 (Context Engine) was implemented and merged by a coding ag
 repository change, and the task was classified `IMPLEMENT_NO_PROGRESS` and blocked.
 
 
+## Phase 9 (not started)
+
+**Status:** Backlog (not authorized). Phase 8 (Context & Execution Efficiency) is
+complete and closed, and is not reopened. Phase 9 has no plan or specification yet:
+no PRD, no task graph, and no authorization to begin. It must not start without a
+governed plan.
+
+The post-Phase-8 governance pass (POST8-001) is complete. The remaining Phase 8
+follow-up is the persistent cross-run verification cache, tracked above as
+`VERIFCACHE-PERSISTENCE`.
+
 ## Status and roadmap
 
 See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities
