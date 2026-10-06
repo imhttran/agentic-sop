@@ -545,12 +545,21 @@ func isSOPPath(path string, reports ...string) bool {
 			}
 		}
 	}
-	for _, prefix := range []string{config.DirName, planflow.ReportsDir} {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") {
-			return true
-		}
+	// SOP's own runtime state is always SOP-owned.
+	if path == config.DirName || strings.HasPrefix(path, config.DirName+"/") {
+		return true
 	}
-	return false
+	// SOP's generated human-readable report is a TOP-LEVEL docs/reports/<id>.md file.
+	// A directory tree UNDER docs/reports/ is task/operator content — a task's report
+	// subtree plus its fixtures and artifacts (for example a workload tree) — so it is
+	// NOT SOP-owned and a task's writes there are its own mutation evidence. This
+	// narrows the SOP-owned boundary to exactly what SOP generates; it does not widen
+	// task authority over SOP state.
+	if strings.HasPrefix(path, planflow.ReportsDir+"/") {
+		rest := strings.TrimPrefix(path, planflow.ReportsDir+"/")
+		return !strings.Contains(rest, "/")
+	}
+	return path == planflow.ReportsDir
 }
 
 // jevEvidence maps a JEV outcome to gate evidence. It fails closed: an analyzer
