@@ -38,6 +38,21 @@ Prompt Compiler, Response Normalizer, Context Engine, Git-SHA summary cache,
 repository structural index, BM25/vector RAG, Decision Memory, Verification Cache,
 Prompt Result Cache, Adaptive Routing changes, and Automatic Prompt Tuning.
 
+## Performance telemetry gaps
+
+**Status:** Backlog (low). `internal/perf` records stage durations and counts but
+not every measurement the baselines would like. Documented gaps (recorded as
+`UNAVAILABLE` rather than invented in the baselines):
+
+- a tool-call count — `Counts` has no field (only the JEV record has `ToolCalls`);
+- a per-category (`build`/`test`/`lint`) `validation_ms` breakdown for a safely
+  *reused* validation;
+- per-step PLAN timing (a slow plan is one number, not a profile).
+
+Sources: `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` and the PREJEV018
+remaining-issues register (I4–I6).
+
+
 ## Local network service (team mode)
 
 Share SOP state and control across a team on the local network.
