@@ -133,6 +133,10 @@ type Config struct {
 	// the live execution path. It is additive: an omitted block leaves existing behavior
 	// unchanged.
 	ContextEfficiency ContextEfficiency `yaml:"context"`
+	// Orchestration configures the opt-in Phase 9 multi-agent execution path
+	// (ORCH-011). It is OFF by default: an omitted block leaves single-agent
+	// execution unchanged, so introducing Phase 9 changes no default behavior.
+	Orchestration Orchestration `yaml:"orchestration"`
 }
 
 // Project holds project metadata.
@@ -304,6 +308,28 @@ type Features struct {
 // "pull-request" is reserved for the remote lifecycle.
 type Workflow struct {
 	Mode string `yaml:"mode"`
+}
+
+// Orchestration configures the opt-in Phase 9 multi-agent execution path (ORCH-011).
+// It is OFF by default: an omitted block leaves single-agent execution unchanged,
+// so no default model-routing or provider behavior changes merely by introducing
+// Phase 9. Every bound is finite: a zero value selects the canonical orchestration
+// package's documented bounded default, so enabling the path can never create an
+// unbounded fan-out.
+type Orchestration struct {
+	// Enabled turns on the opt-in multi-agent execution path. It is false by
+	// default, so an existing installation's single-agent behavior is unchanged.
+	Enabled bool `yaml:"enabled"`
+	// MaxAssignments, MaxWorkers, MaxActiveWorkers, and MaxConcurrency bound the
+	// orchestration fan-out (the ORCH-008 envelope). A zero value keeps the
+	// canonical bounded default.
+	MaxAssignments   int `yaml:"max_assignments"`
+	MaxWorkers       int `yaml:"max_workers"`
+	MaxActiveWorkers int `yaml:"max_active_workers"`
+	MaxConcurrency   int `yaml:"max_concurrency"`
+	// DecompositionLimit bounds how many work units one orchestration run may emit
+	// (ORCH-003). A zero value keeps the canonical bounded default.
+	DecompositionLimit int `yaml:"decomposition_limit"`
 }
 
 // Providers configures the optional provider/runtime inspection layer (Phase 4).

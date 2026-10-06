@@ -273,6 +273,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runMemory(rest, stdout, stderr, d)
 	case "providers":
 		return runProviders(rest, stdout, stderr, d)
+	case "orchestrate":
+		return runOrchestrate(rest, stdout, stderr, d)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", command)
 		fmt.Fprintln(stderr, "run `sop --help` for usage")
@@ -321,6 +323,7 @@ Commands:
   gate      evaluate Phase 8 evidence gates (sop gate retrieve|vector), model-free
   memory    record and list durable engineering decisions (CTX-010 decision memory)
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
+  orchestrate  run the opt-in multi-agent orchestration path for one task (default off)
   providers inspect configured provider runtimes and their models (--models)
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
