@@ -25,6 +25,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/review"
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/runtrace"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
 	"github.com/imhttran/agentic-sop/internal/validate"
@@ -296,6 +297,9 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		writeClassificationArtifact(rn, res.classification, res.decision)
 	}
 	if err != nil {
+		// Persist the trace for a stopped run too: its trajectory and the attached
+		// classification are exactly what a reader needs. Best-effort observation.
+		writeRunTrace(rn, res, cfg, runtrace.CollectorFromContext(ctx))
 		// Return the partial result alongside the error so a caller can still act
 		// on any classification the lifecycle attached before it stopped.
 		return res, err
@@ -337,6 +341,10 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
 	})
+	// Persist the canonical structured run trace beside the report. It composes the
+	// evidence already produced above; it is best-effort observation and never
+	// changes the run outcome.
+	writeRunTrace(rn, res, cfg, runtrace.CollectorFromContext(ctx))
 	return res, nil
 }
 

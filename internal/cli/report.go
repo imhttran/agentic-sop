@@ -84,6 +84,9 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	writeEarlyReport(stdout, filepath.Join(runsRoot, id))
 	writeApprovalReport(stdout, dir, id)
 	writePerformance(stdout, dir, doc)
+	// Structured run trace summary, when the run persisted one. It renders nothing
+	// for an older run with no trace, so existing behavior is unchanged.
+	writeTraceReport(stdout, filepath.Join(runsRoot, id))
 	return exitOK
 }
 

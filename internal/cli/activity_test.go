@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
+	"github.com/imhttran/agentic-sop/internal/runtrace"
 )
 
 func TestRenderActivityLine(t *testing.T) {
@@ -80,11 +81,28 @@ func TestActivityEnabledHonorsEnv(t *testing.T) {
 	}
 }
 
-func TestTaskActivityContextDisabled(t *testing.T) {
+func TestTaskActivityContextDisabledSilencesHumanOutput(t *testing.T) {
 	t.Setenv(envActivity, "off")
-	ctx := taskActivityContext(context.Background(), t.TempDir(), &bytes.Buffer{}, "TASK", "title")
-	if activity.FromContext(ctx) != nil {
-		t.Error("taskActivityContext registered a recorder while disabled")
+	dir := t.TempDir()
+	var buf bytes.Buffer
+	ctx := taskActivityContext(context.Background(), dir, &buf, "TASK", "title")
+	// The trace collector is always attached (AGENT-001 structured run trace
+	// observes the trajectory independently of the human-facing stream), but the
+	// CLI renderer and the persisted activity artifact stay disabled, exactly as
+	// before. Only the in-memory collector is present.
+	if runtrace.CollectorFromContext(ctx) == nil {
+		t.Fatal("taskActivityContext did not attach the trace collector")
+	}
+	if rec := activity.FromContext(ctx); rec == nil {
+		t.Fatal("taskActivityContext registered no recorder for the trace collector")
+	} else {
+		rec.Emit(activity.StageChange, "editing", "a.go")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("disabled activity rendered to stdout: %q", buf.String())
+	}
+	if _, err := os.Stat(filepath.Join(dir, activityArtifactName)); !os.IsNotExist(err) {
+		t.Errorf("disabled activity persisted an artifact (err=%v)", err)
 	}
 }
 

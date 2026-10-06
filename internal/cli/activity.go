@@ -13,6 +13,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/activity"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/runtrace"
 )
 
 // activityArtifactName is the run artifact holding the task's activity stream. It
@@ -108,16 +109,23 @@ func elapsedClock(d time.Duration) string {
 // consumers from one event stream: the CLI renderer (when stdout is interactive)
 // and the persisted run artifact (so a controller/API can read it later).
 func taskActivityContext(ctx context.Context, runDir string, stdout io.Writer, taskID, title string) context.Context {
-	if !activityEnabled(stdout) {
-		return ctx
-	}
-	sinks := activity.Multi{newActivityStream(stdout, time.Now())}
-	if runDir != "" {
-		sinks = append(sinks, newActivityArtifact(filepath.Join(runDir, activityArtifactName)))
+	// Always attach the trace collector, so the structured run trace observes the
+	// trajectory independently of whether the human-facing stream is enabled. The
+	// CLI renderer and the persisted activity artifact stay gated exactly as before
+	// (redirection and non-interactive runs are unchanged); only the in-memory
+	// collector - written to trace.json later - is always present. It observes the
+	// same events and feeds no decision.
+	collector := runtrace.NewCollector(time.Now)
+	sinks := activity.Multi{collector}
+	if activityEnabled(stdout) {
+		sinks = append(sinks, newActivityStream(stdout, time.Now()))
+		if runDir != "" {
+			sinks = append(sinks, newActivityArtifact(filepath.Join(runDir, activityArtifactName)))
+		}
 	}
 	rec := activity.New(taskID, sinks)
 	rec.Emit(activity.StageStart, title, "")
-	return activity.WithRecorder(ctx, rec)
+	return runtrace.WithCollector(activity.WithRecorder(ctx, rec), collector)
 }
 
 // activityArtifact persists activity events as JSON lines. It is best-effort:

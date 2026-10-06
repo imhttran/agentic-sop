@@ -11,7 +11,8 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 **Status:** Backlog (next workstream). Begins after the pre-Phase-6 closeout
 (complete). Candidate tasks:
 
-- **AGENT-001 Structured Run Trace** — a structured, machine-readable trace of a run.
+- **AGENT-001 Structured Run Trace** — **delivered**: a versioned observational
+  `trace.json` (schema 1) per run, summarized by `sop report`.
 - **AGENT-002 Progress Signals** — progress signals richer than repository mutation.
 - **AGENT-003 Evaluation Harness** — evaluate harness/agent behavior.
 - **AGENT-004 Agent Budgets** — refine discovery/iteration budgets (see

@@ -72,6 +72,8 @@ Local-first model tiers (routing/configuration hardening): SMALL runs a local
 model and switches to its configured cloud fallback (`nemotron-3-nano:30b-cloud`)
 only when a read-only observation says the local runtime cannot serve it; MEDIUM is
 `nemotron-3-super:cloud` and LARGE is `deepseek-v4.1-flash:cloud`
+Structured run trace (`trace.json`, schema 1): a versioned, observational record
+of a run's execution identity, iterations, verification, and termination (AGENT-001)
 ```
 
 Candidates recorded at the time of this status summary (scheduling remains in

@@ -240,14 +240,17 @@ decides whether they block.
 
 ```text
 task.md  plan.md  implementation.md  diff.patch
-validation.json  review.json  report.md  report.json  state.json
+validation.json  review.json  report.md  report.json  state.json  trace.json
 ```
 
 `state.json` records the lifecycle stage (`CREATED`…`FAILED`); the report records
 the task, provider, validation results, findings, fix cycles, and the final gate.
 A run that terminates for any reason stays inspectable. A verify-first run records
 `verified_first: true` (the deterministic validation passed without invoking an
-implementation agent).
+implementation agent). `trace.json` is the versioned structured run trace
+(schema 1): the execution identity, the observed iterations, the verification
+evidence, and the termination. It observes execution and never controls it;
+`sop report` renders a concise summary from it.
 
 ## Execution Modes
 
