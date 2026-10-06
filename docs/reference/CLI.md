@@ -91,7 +91,15 @@ limits that applied) from it. It is observational only — nothing reads
 it back to drive a decision — and it is absent for older runs. A
 failing check or blocking finding is sent back to the agent and re-checked, up
 to `quality.max_fix_cycles` times; exhausting the budget yields `NEEDS_HUMAN`.
-`sop run` stops at the human gate and never commits, pushes, or merges. When JEV
+Plan lifecycle is explicit. `sop plan activate <PLAN.md>` validates and installs a
+plan's task graph as the active plan and stops — it never executes the first task,
+so activation and execution are separate operator actions; `sop run` then executes
+the next runnable task. `sop plan supersede <PLAN.md>` explicitly replaces the active
+plan, even one with unfinished work, archiving the previous plan as `SUPERSEDED`
+(under `.agent-sdlc/archive/<plan-id>/`, with a `lifecycle.json`) while preserving its
+task states, run evidence, and approvals verbatim — supersession never fabricates a
+PASS or an approval. `sop status` prints the active plan's identity and state before
+the task list. `sop run` stops at the human gate and never commits, pushes, or merges. When JEV
 is enabled (`quality.jev.enabled: true`), an optional read-only analysis stage
 runs after validation and review and feeds the same gate and fix loop.
 

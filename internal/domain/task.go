@@ -167,6 +167,25 @@ func (t *Task) IsSatisfied() bool {
 	return false
 }
 
+// Executed reports whether authoritative lifecycle evidence shows the task's
+// execution actually began. It is the single definition of "executed", shared by
+// plan reconciliation's changed/removed classification: a task is never mistaken
+// for executed merely because it exists in an installed graph, was scheduled, or
+// changed metadata. A task is executed when it recorded at least one attempt, or
+// when it left the pre-execution states (PLANNED, READY). Readiness means
+// "dependencies met, work not yet started", so a READY task with no attempts has
+// NOT executed.
+func (t *Task) Executed() bool {
+	if t.Attempt > 0 || len(t.Attempts) > 0 {
+		return true
+	}
+	switch t.Status {
+	case PLANNED, READY:
+		return false
+	}
+	return true
+}
+
 // IsRunnable reports whether the task is in the one state `sop run` may pick up
 // and execute: PLANNED. A PLANNED task still has to satisfy its dependencies
 // (see ResolveDependencies) before the scheduler will promote it. Every other

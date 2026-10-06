@@ -53,6 +53,8 @@ const (
 	archiveDirName = "archive"
 	// archivedTasksFile is the task-record snapshot written into a plan archive.
 	archivedTasksFile = "tasks.json"
+	// lifecycleFile records a plan's terminal disposition inside its archive.
+	lifecycleFile = "lifecycle.json"
 )
 
 // Source kinds reported by Prepare.
@@ -261,7 +263,7 @@ func handOff(ctx context.Context, opts Options, meta Metadata, tasks []*domain.T
 
 	// The requested plan is viable: preserve the completed plan, then release
 	// its active association so the new graph can be created without mixing.
-	if err := archiveCompletedPlan(opts.Dir, meta, tasks, planPath, metaPath); err != nil {
+	if _, err := archivePlan(opts.Dir, meta, tasks, planPath, metaPath, DispositionComplete); err != nil {
 		return res, err
 	}
 	if err := opts.Store.ClearTasks(); err != nil {
@@ -282,17 +284,50 @@ func handOff(ctx context.Context, opts Options, meta Metadata, tasks []*domain.T
 	return res, nil
 }
 
-// archiveCompletedPlan preserves a completed plan's task records and provenance
-// under DirName/archive/<plan-id>/ before its active association is released, so
-// the previous plan's history stays readable after handoff.
-func archiveCompletedPlan(dir string, meta Metadata, tasks []*domain.Task, planPath, metaPath string) error {
+// Plan archive dispositions. A plan reaches its archive either COMPLETE (its work
+// finished and a new plan took over) or SUPERSEDED (the operator intentionally
+// replaced it while work remained). Recording the disposition keeps a historical
+// plan unambiguous evidence: it is never runnable work, and a supersession is never
+// mistaken for a completion or an approval.
+const (
+	DispositionComplete   = "COMPLETE"
+	DispositionSuperseded = "SUPERSEDED"
+)
+
+// ActivePlanID reads the recorded active plan's id and source, or ("", false) when
+// none is recorded. It is the one canonical active-plan reference: SOP records it
+// beside the machine plan, so lifecycle state never depends on scanning Markdown.
+func ActivePlanID(dir string) (id, source string, ok bool) {
+	meta := readMetadata(filepath.Join(dir, config.DirName, metaFileName))
+	id = strings.TrimSpace(meta.PlanID)
+	source = strings.TrimSpace(meta.Source)
+	if id == "" && source == "" {
+		return "", "", false
+	}
+	return id, source, true
+}
+
+// Lifecycle records a plan's terminal disposition, written into its archive beside
+// the task-record snapshot and provenance.
+type Lifecycle struct {
+	PlanID      string    `json:"plan_id"`
+	Source      string    `json:"source,omitempty"`
+	Disposition string    `json:"disposition"`
+	RecordedAt  time.Time `json:"recorded_at"`
+}
+
+// archivePlan preserves a plan's task records, provenance, and terminal
+// disposition under DirName/archive/<plan-id>/ before its active association is
+// released, so the previous plan's history stays readable and its lifecycle state
+// stays unambiguous. It returns the archive directory it wrote.
+func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, metaPath, disposition string) (string, error) {
 	id := strings.TrimSpace(meta.PlanID)
 	if id == "" {
 		id = "plan"
 	}
 	root := filepath.Join(dir, config.DirName, archiveDirName, id)
 	if err := os.MkdirAll(root, 0o755); err != nil {
-		return err
+		return "", err
 	}
 
 	for _, file := range []struct{ src, dst string }{
@@ -304,18 +339,35 @@ func archiveCompletedPlan(dir string, meta Metadata, tasks []*domain.Task, planP
 			continue
 		}
 		if err != nil {
-			return err
+			return "", err
 		}
 		if err := atomicWrite(file.dst, data); err != nil {
-			return err
+			return "", err
 		}
 	}
 
 	data, err := json.MarshalIndent(tasks, "", "  ")
 	if err != nil {
-		return fmt.Errorf("planflow: encode archived tasks: %w", err)
+		return "", fmt.Errorf("planflow: encode archived tasks: %w", err)
 	}
-	return atomicWrite(filepath.Join(root, archivedTasksFile), append(data, '\n'))
+	if err := atomicWrite(filepath.Join(root, archivedTasksFile), append(data, '\n')); err != nil {
+		return "", err
+	}
+
+	life := Lifecycle{
+		PlanID:      meta.PlanID,
+		Source:      meta.Source,
+		Disposition: disposition,
+		RecordedAt:  time.Now().UTC(),
+	}
+	lifeDoc, err := json.MarshalIndent(life, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("planflow: encode plan lifecycle: %w", err)
+	}
+	if err := atomicWrite(filepath.Join(root, lifecycleFile), append(lifeDoc, '\n')); err != nil {
+		return "", err
+	}
+	return root, nil
 }
 
 // --- Explicit reconciliation ---------------------------------------------
@@ -536,6 +588,31 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 		return res, reconcilePlan{}, nil, nil, fmt.Errorf("NEEDS_HUMAN: no persisted plan to reconcile against\n\n%s is missing or unreadable. Run `sop run` to establish the active plan first", filepath.Join(config.DirName, planFileName))
 	}
 
+	// An unchanged active source is a deterministic no-op. SOP must not regenerate
+	// the machine plan merely to compare it with itself: plan generation is not
+	// guaranteed byte-stable, so re-deriving an unchanged plan can report a spurious
+	// plan_changed. Reconciliation exists to apply a source CHANGE, so when the
+	// requested source is the active plan's recorded source and its content hash is
+	// unchanged, reuse the recorded plan and report nothing to change.
+	// --accept-changed is a human decision about a CHANGED definition, so an approval
+	// request always takes the full path (which validates it); the no-op shortcut
+	// applies only when no approval is requested.
+	meta := readMetadata(filepath.Join(opts.Dir, config.DirName, metaFileName))
+	if len(opts.AcceptChanged) == 0 && meta.Source == rel && meta.SourceSHA256 == fingerprint(data) {
+		active, aerr := opts.Store.List()
+		if aerr != nil {
+			return res, reconcilePlan{}, nil, nil, aerr
+		}
+		unchanged := make([]string, 0, len(active))
+		for _, t := range active {
+			unchanged = append(unchanged, t.ID)
+		}
+		sort.Strings(unchanged)
+		res.PlanChanged = false
+		res.Unchanged = unchanged
+		return res, reconcilePlan{unchanged: unchanged}, recorded, data, nil
+	}
+
 	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, KindPlan, string(data))
 	if err != nil {
 		if errors.Is(err, errNoAgent) {
@@ -752,11 +829,14 @@ func sameTaskDefinition(a, b *domain.Task) bool {
 		sameStringSet(a.DependencyIDs, b.DependencyIDs)
 }
 
-// hasExecution reports whether a task has left the pre-execution state: it has
-// been attempted, or it has progressed beyond PLANNED. Only a task that has never
-// executed may have its definition replaced or be removed.
+// hasExecution reports whether authoritative lifecycle evidence shows the task's
+// execution began. Only a task that has never executed may have its definition
+// replaced or be removed. It defers to domain.Task.Executed so the classification
+// is defined once: a READY task that has never run is NOT executed, so a READY task
+// with a changed definition is a safe update and a removed READY task needs no
+// approval.
 func hasExecution(t *domain.Task) bool {
-	return t.Attempt > 0 || len(t.Attempts) > 0 || t.Status != domain.PLANNED
+	return t.Executed()
 }
 
 // autoReconcile consults the autonomy callback for a changed executed task. It
@@ -1131,6 +1211,89 @@ func buildPlan(ctx context.Context, a agent.Agent, onRepair planner.RepairFunc, 
 		return nil, errNoAgent
 	}
 	return p.Generate(ctx, content)
+}
+
+// --- Explicit supersession --------------------------------------------------
+
+// SupersedeResult reports what Supersede did.
+type SupersedeResult struct {
+	SupersededSource string // relative path of the plan that was active; "" when none
+	SupersededPlanID string // plan id of the superseded plan; "" when none
+	Source           string // relative path of the newly active plan
+	PlanID           string // plan id of the newly active plan
+	Archived         string // archive directory written for the superseded plan; "" when none
+	TasksCreated     int    // tasks created for the newly active plan
+}
+
+// Supersede explicitly replaces the active plan with a validated new plan, even
+// when the active plan still has unresolved work. It is the operator's intentional
+// "abandon / replace" transition, distinct from completing a plan (handoff) and
+// from the automatic refusal to switch away from unfinished work.
+//
+// The previous plan is archived as SUPERSEDED with its task records, run evidence,
+// and approvals preserved verbatim; the new plan is installed ACTIVE with its first
+// task READY. It fabricates nothing: an unfinished task stays unfinished, a FAILED
+// task stays FAILED, and a NEEDS_HUMAN record is historical evidence, never an
+// approval. It never executes a task and never runs the lifecycle for one.
+func Supersede(ctx context.Context, opts Options) (SupersedeResult, error) {
+	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
+	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
+
+	docPath, docKind := requestedSource(opts)
+	if strings.TrimSpace(docPath) == "" {
+		return SupersedeResult{}, errors.New("supersede: a plan path is required")
+	}
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		return SupersedeResult{}, fmt.Errorf("planflow: read %s: %w", docPath, err)
+	}
+	rel := relOf(opts.Dir, docPath)
+	res := SupersedeResult{Source: rel, PlanID: planID(rel)}
+
+	// Build and validate the requested plan BEFORE any mutation, so a plan that
+	// cannot initialize leaves the active plan and its evidence intact.
+	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, docKind, string(data))
+	if err != nil {
+		if errors.Is(err, errNoAgent) {
+			return res, err
+		}
+		return res, planError(rel, err)
+	}
+	if err := plan.Validate(); err != nil {
+		return res, planError(rel, err)
+	}
+
+	// Preserve the currently active plan (if any) as SUPERSEDED, then release its
+	// graph so the new plan can be created without mixing the two.
+	meta := readMetadata(metaPath)
+	active, err := opts.Store.List()
+	if err != nil {
+		return res, err
+	}
+	if len(active) > 0 || strings.TrimSpace(meta.Source) != "" || strings.TrimSpace(meta.PlanID) != "" {
+		root, aerr := archivePlan(opts.Dir, meta, active, planPath, metaPath, DispositionSuperseded)
+		if aerr != nil {
+			return res, aerr
+		}
+		res.SupersededSource = meta.Source
+		res.SupersededPlanID = meta.PlanID
+		res.Archived = relOf(opts.Dir, root)
+		if err := opts.Store.ClearTasks(); err != nil {
+			return res, err
+		}
+	}
+
+	// Install the new plan ACTIVE with its first task READY. No task is executed and
+	// no model run is recorded.
+	if _, err := persistPlan(opts, plan, docPath, docKind, data, planPath, metaPath); err != nil {
+		return res, err
+	}
+	created, err := ensureTasks(rel, plan, opts.Store)
+	if err != nil {
+		return res, err
+	}
+	res.TasksCreated = created
+	return res, nil
 }
 
 // discoverPlanningSource returns the first human planning document by precedence:
