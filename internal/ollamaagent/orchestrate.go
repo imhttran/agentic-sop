@@ -364,7 +364,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				st.finalization.turns++
 			}
 			recovery, repeatStop := st.progress.observe(narrationFingerprint(req.Capability))
-			progressStop := st.stalled(false, false, b.StaleIterations)
+			progressStop := st.stalled(false, false, h.staleLimitFor(deliverables, st, b.StaleIterations))
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, "narrate", "", st.progress.label(), recovery, terminate)
 			if terminate {
@@ -448,7 +448,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			detail := "a required deliverable is missing; create it with the file tools first"
 			h.tools.RecordDenied(name, args, detail)
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
-			progressStop := st.stalled(false, false, b.StaleIterations)
+			progressStop := st.stalled(false, false, h.staleLimitFor(deliverables, st, b.StaleIterations))
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
@@ -471,7 +471,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			h.tools.RecordDenied(name, args, detail)
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
-			progressStop := st.stalled(false, false, b.StaleIterations)
+			progressStop := st.stalled(false, false, h.staleLimitFor(deliverables, st, b.StaleIterations))
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
@@ -562,7 +562,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		if !candidate || justMutated || name == toolharness.ToolRunCommand {
 			recordToolActivity(ctx, name, args, toolTurnSignal(justMutated, discovered))
 		}
-		progressStop := st.stalled(justMutated, discovered, b.StaleIterations)
+		progressStop := st.stalled(justMutated, discovered, h.staleLimitFor(deliverables, st, b.StaleIterations))
 		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange
@@ -661,6 +661,33 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		return "", h.finalizeLimitError(req, st, lastTool, lastReq)
 	}
 	return "", h.implementExhaustedError(req, policy, st, lastTool, lastReq)
+}
+
+// staleLimitFor returns the consecutive-stale bound that actually applies to this
+// invocation. Its configured value alone is not coherent for a declared
+// deliverable: a missing deliverable owes the invocation a write, and the harness
+// escalates that write only at implementNowAfter, so a stale bound below that
+// point would end the run NO_PROGRESS before the escalation could ever fire —
+// the invocation would never be told to create the deliverable that is blocking
+// it.
+//
+// While a declared deliverable is missing and the escalation has not yet been
+// issued, the bound is therefore raised to the escalation point so the write
+// opportunity happens first. This is not a global relaxation: with no declared
+// deliverable, with the deliverable already present, or once the instruction has
+// been sent, the configured bound applies unchanged, so a run that still produces
+// no mutation after its opportunity still ends NO_PROGRESS.
+func (h *Harness) staleLimitFor(deliverables []string, st *executionState, configured int) int {
+	if len(deliverables) == 0 || st.finalization.implementInstructed {
+		return configured
+	}
+	if !h.deliverableMissing(deliverables) {
+		return configured
+	}
+	if configured < implementNowAfter {
+		return implementNowAfter
+	}
+	return configured
 }
 
 // recordImplementTurn appends one safe trace entry for a phased turn.
