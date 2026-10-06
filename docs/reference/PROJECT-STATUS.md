@@ -128,7 +128,7 @@ that the cross-repository closure or performance baseline has passed.
 
 ## Pre-performance closure (complete)
 
-[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) is
+[PLAN-Pre-Performance-Closure.md](../history/plans/PLAN-Pre-Performance-Closure.md) is
 **COMPLETE**, with CLOSE-001–CLOSE-011 covering source/config capture, reconciliation,
 both repositories' deterministic gates, current controller work, named-plan
 dogfood, human decisions, resume/idempotency, telemetry inventory, four workloads

@@ -638,7 +638,7 @@ works with bounded human intervention.
 ## Goal
 
 Adopt the forward roadmap in [`PRD-JEV.md`](requirements/PRD-JEV.md) and
-[`PLAN-JEV-Implementation.md`](plans/PLAN-JEV-Implementation.md) on top of the V1 core, one task at a time, each with
+[`PLAN-JEV-Implementation.md`](history/plans/PLAN-JEV-Implementation.md) on top of the V1 core, one task at a time, each with
 a spec under [`docs/tasks/`](tasks/) and tests.
 
 ## Delivered

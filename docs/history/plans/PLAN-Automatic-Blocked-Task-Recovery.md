@@ -1,5 +1,7 @@
 # PLAN — Automatic Blocked-Task Recovery
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Status:** Implemented; archived by SOP (`.agent-sdlc/archive/plan-automatic-blocked-task-recovery/`).
 
 ## Project

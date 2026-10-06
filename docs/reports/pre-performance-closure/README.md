@@ -3,7 +3,7 @@
 **Type:** Descriptive index
 
 Index of the evidence for the executed closure plan
-[PLAN-Pre-Performance-Closure.md](../../plans/PLAN-Pre-Performance-Closure.md)
+[PLAN-Pre-Performance-Closure.md](../../history/plans/PLAN-Pre-Performance-Closure.md)
 (complete: `CLOSE-001…CLOSE-011` are `LOCAL_DONE`). The single readiness verdict,
 including the two explicit deferrals, is
 [CLOSE-011-readiness.md](CLOSE-011-readiness.md).

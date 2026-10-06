@@ -151,7 +151,7 @@ known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
 The pre-performance closure and measurement plan,
-[Pre-Performance Closure and Baseline](docs/plans/PLAN-Pre-Performance-Closure.md),
+[Pre-Performance Closure and Baseline](docs/history/plans/PLAN-Pre-Performance-Closure.md),
 is **COMPLETE**: `CLOSE-001…CLOSE-011` are `LOCAL_DONE`. The published baseline is
 [PERFORMANCE-BASELINE.md](docs/reports/PERFORMANCE-BASELINE.md); representative
 workload measurements remain to be captured, and no new performance architecture is

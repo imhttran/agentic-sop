@@ -1,10 +1,12 @@
 # Agent Harness V2
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Type:** Implementation plan (workstream record).
 
 **Status:** Implemented and archived by SOP (`.agent-sdlc/archive/ahv2/`). The path is
 kept because SOP's archive records this source and `scripts/agents/sop-agent.sh` names it as an
-example; see [../README.md](../README.md) for what is current.
+example; see [../README.md](../../README.md) for what is current.
 
 ## Project
 

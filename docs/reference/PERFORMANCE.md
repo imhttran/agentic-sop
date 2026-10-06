@@ -7,7 +7,7 @@ faster execution never comes from skipping validation, review, provenance, or a
 human approval boundary.
 
 The cross-repository closure and BEFORE measurement is specified in
-[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md)
+[PLAN-Pre-Performance-Closure.md](../history/plans/PLAN-Pre-Performance-Closure.md)
 (**COMPLETE**: CLOSE-001–CLOSE-011 `LOCAL_DONE`, final gate passed). Its telemetry
 inventory and four workloads extend the use of this existing evidence contract; no
 new performance architecture is implemented there. The output is now captured at

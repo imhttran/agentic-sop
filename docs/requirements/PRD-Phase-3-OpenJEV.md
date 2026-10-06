@@ -3,7 +3,7 @@
 **Type:** Product requirements
 
 **Status:** Implemented. The early JEV checkpoints (task triage and pre-execution)
-shipped in Phase 3 — see [../plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md)
+shipped in Phase 3 — see [../plans/PLAN-Phase-3-OpenJEV.md](../history/plans/PLAN-Phase-3-OpenJEV.md)
 and [../specs/OPENJEV.md](../specs/OPENJEV.md) §18. The required _behavior_ is
 owned by the [specifications](../specs/), and the _work_ by the plan; where this
 document disagrees with either, they win. Items this document records as future
@@ -35,7 +35,7 @@ execution before expensive agent work occurs.
   recovery, and safety.
 - [../architecture/SOP-BOUNDARY.md](../architecture/SOP-BOUNDARY.md) --- the
   ownership model this phase must preserve.
-- [../plans/PLAN-JEV-Implementation.md](../plans/PLAN-JEV-Implementation.md) --- the V1 JEV
+- [../plans/PLAN-JEV-Implementation.md](../history/plans/PLAN-JEV-Implementation.md) --- the V1 JEV
   plan (JEV001--JEV016), which is complete and is the baseline Phase 3 extends.
 
 ## 1. Problem

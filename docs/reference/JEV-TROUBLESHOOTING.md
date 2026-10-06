@@ -100,4 +100,4 @@ plan.
 Auxiliary documentation of architecture, severity policy, lifecycle placement,
 and terminology is provided above and is consistent with
 [`docs/specs/OPENJEV.md`](../specs/OPENJEV.md) and
-[`docs/plans/PLAN-JEV-Implementation.md`](../plans/PLAN-JEV-Implementation.md).
+[`docs/plans/PLAN-JEV-Implementation.md`](../history/plans/PLAN-JEV-Implementation.md).

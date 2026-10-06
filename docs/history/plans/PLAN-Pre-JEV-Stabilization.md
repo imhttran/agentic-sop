@@ -1,9 +1,11 @@
 # Pre-JEV Stabilization Plan
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Type:** Implementation plan (workstream record).
 
 **Status:** Implemented and archived by SOP (`.agent-sdlc/archive/plan-pre-jev-stabilization/`).
-The path is kept because SOP's archive records this source; see [../README.md](../README.md)
+The path is kept because SOP's archive records this source; see [../README.md](../../README.md)
 for what is current.
 
 ## Project

@@ -264,7 +264,7 @@ remains reproducible with no network, provider, or LLM.
 
 ## See Also
 
-- [docs/plans/PLAN-Phase-3-OpenJEV.md](../plans/PLAN-Phase-3-OpenJEV.md) — the
+- [docs/plans/PLAN-Phase-3-OpenJEV.md](plans/PLAN-Phase-3-OpenJEV.md) — the
   Phase 3 plan (P3-001–P3-017), including P3-016.
 - [docs/specs/OPENJEV.md](../specs/OPENJEV.md) — the normative JEV boundary and
   early-checkpoint specification.

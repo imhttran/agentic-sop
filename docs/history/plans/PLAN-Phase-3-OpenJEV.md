@@ -1,11 +1,13 @@
 # PLAN --- Phase 3: Early OpenJEV Decision Layer
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Type:** Implementation plan (proposed, for review)
 
 **Status:** Implemented (P3-001–P3-015) and committed; P3-016 records the dogfood.
 The tasks whose implementation already exists are marked `verify-first` so SOP verifies
 the committed work rather than re-implementing it. This plan describes the work needed
-to satisfy [../requirements/PRD-Phase-3-OpenJEV.md](../requirements/PRD-Phase-3-OpenJEV.md).
+to satisfy [../requirements/PRD-Phase-3-OpenJEV.md](../../requirements/PRD-Phase-3-OpenJEV.md).
 It MUST NOT override the specifications; where it and a specification disagree, the
 specification wins.
 
@@ -80,11 +82,11 @@ acceptance criteria, and validation.
 
 - **Objective:** Make the specifications authoritative for Phase 3 and remove the
   current ambiguity, without changing behavior.
-- **Scope:** Update [../specs/OPENJEV.md](../specs/OPENJEV.md) to define the three
+- **Scope:** Update [../specs/OPENJEV.md](../../specs/OPENJEV.md) to define the three
   analysis purposes, the structured evidence model, the early checkpoints (marked
   as required once enabled, disabled by default), and the analysis-result vs
-  provider-failure distinction. Reconcile [../specs/QUALITY.md](../specs/QUALITY.md)
-  with the autonomy architecture. Update [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)
+  provider-failure distinction. Reconcile [../specs/QUALITY.md](../../specs/QUALITY.md)
+  with the autonomy architecture. Update [../reference/CONFIGURATION.md](../../reference/CONFIGURATION.md)
   for the new keys. Cross-reference rather than duplicate.
 - **Depends on:** P3-002.
 - **Likely files:** `docs/specs/OPENJEV.md`, `docs/specs/QUALITY.md`,

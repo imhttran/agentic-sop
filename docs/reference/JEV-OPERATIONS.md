@@ -10,7 +10,7 @@ boundaries; troubleshooting and reference are in
 It is documentation only. It does not implement or change any JEV behavior.
 The authoritative boundary specification is
 [`docs/specs/OPENJEV.md`](../specs/OPENJEV.md); the implementation plan is
-[`docs/plans/PLAN-JEV-Implementation.md`](../plans/PLAN-JEV-Implementation.md); the original
+[`docs/plans/PLAN-JEV-Implementation.md`](../history/plans/PLAN-JEV-Implementation.md); the original
 requirements are in [`docs/requirements/PRD-JEV.md`](../requirements/PRD-JEV.md).
 
 > **Core rule**
@@ -101,7 +101,7 @@ type Analyzer interface {
 This document does not restate the boundary inconsistently; the authoritative
 role model, allowed/forbidden operations, and interface are specified in
 [`docs/specs/OPENJEV.md`](../specs/OPENJEV.md) and the Architecture section of
-[`docs/plans/PLAN-JEV-Implementation.md`](../plans/PLAN-JEV-Implementation.md).
+[`docs/plans/PLAN-JEV-Implementation.md`](../history/plans/PLAN-JEV-Implementation.md).
 
 **SOP keeps execution authority. JEV only provides analysis.**
 

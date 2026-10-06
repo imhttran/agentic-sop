@@ -3,7 +3,7 @@
 > **Historical / superseded — non-normative.** This is the early, broader model-routing
 > design (MODELRT001–MODELRT022). The shipped, authoritative specification is
 > [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md); the work that actually
-> delivered it is [`../plans/PLAN-Phase-3.5-Model-Routing.md`](../plans/PLAN-Phase-3.5-Model-Routing.md).
+> delivered it is [`../plans/PLAN-Phase-3.5-Model-Routing.md`](plans/PLAN-Phase-3.5-Model-Routing.md).
 > This file is kept for traceability only and does not define current behavior.
 
 ## Project

@@ -1,5 +1,7 @@
 # PLAN --- JEV Implementation
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Status:** Implemented; archived by SOP (`.agent-sdlc/archive/plan-jev-implementation/`).
 
 ## Project

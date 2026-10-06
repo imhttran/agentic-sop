@@ -10,7 +10,7 @@
 ## Pre-Performance Closure and Baseline
 
 _RESOLVED: executed._ The closure and measurement plan
-[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) ran to
+[PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md) ran to
 completion: all eleven CLOSE tasks are `LOCAL_DONE`, both repositories'
 deterministic gates are green, and the readiness verdict is recorded in
 [CLOSE-011-readiness.md](../reports/pre-performance-closure/CLOSE-011-readiness.md)

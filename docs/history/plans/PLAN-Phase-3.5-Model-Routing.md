@@ -1,11 +1,13 @@
 # PLAN --- Phase 3.5: JEV-Guided Model Routing & Stabilization
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
 **Type:** Implementation plan
 
 **Status:** Implemented and committed. The plan records the work that connects the
 Phase 2.5 model-class layer with the Phase 3 early-JEV evidence, so a reviewer can
 see the tasks, their scope, and how the acceptance criteria map to
-[../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md). It MUST NOT override the
+[../specs/MODEL-ROUTING.md](../../specs/MODEL-ROUTING.md). It MUST NOT override the
 specifications; where it and a specification disagree, the specification wins.
 
 ## Summary
@@ -220,5 +222,5 @@ can be disabled with a feature flag, leaving existing workflows unchanged.
 Dynamic cost optimization, automatic provider switching, benchmark- or
 performance-driven model selection, learned routing, LLM-controlled routing, remote
 SOP Hub, MCP orchestration, distributed execution, and automatic downgrade/escalation
-loops. See [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) for what remains
+loops. See [../specs/MODEL-ROUTING.md](../../specs/MODEL-ROUTING.md) for what remains
 proposed.
