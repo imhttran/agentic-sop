@@ -50,6 +50,17 @@ Prompt Compiler, Response Normalizer, Context Engine, Git-SHA summary cache,
 repository structural index, BM25/vector RAG, Decision Memory, Verification Cache,
 Prompt Result Cache, Adaptive Routing changes, and Automatic Prompt Tuning.
 
+## Persistent cross-run verification cache (VERIFCACHE-PERSISTENCE)
+
+**Status:** Backlog (deferred). The Phase 8 verification cache (`internal/verifcache`,
+CTX-007) is reachable today only as the per-invocation `sop validate --cache`, which is
+consulted for a clean working tree. A persistent, cross-run verification cache is
+deliberately **not** wired: it would reuse verification evidence across execution
+sessions, repository states, and environments, a different trust boundary from the
+existing in-session `sessionValidation` reuse. It requires a separate, evidence-gated
+design (identity inputs, invalidation, and false-hit analysis) and is recorded here as
+`VERIFCACHE-PERSISTENCE` rather than implemented.
+
 ## Performance telemetry gaps
 
 **Status:** Backlog (low). `internal/perf` records stage durations and counts but
