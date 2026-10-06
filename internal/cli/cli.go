@@ -263,6 +263,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runApprovals(rest, stdout, stderr, d)
 	case "reconcile":
 		return runReconcile(rest, stdout, stderr, d)
+	case "index":
+		return runIndex(rest, stdout, stderr, d)
 	case "providers":
 		return runProviders(rest, stdout, stderr, d)
 	default:
@@ -308,6 +310,7 @@ Commands:
             (no <task-id> or --select chooses interactively)
   approval  show SOP's approval request (if any) for a task
   approvals list every task waiting at an approval gate (--json)
+  index     build the deterministic Structural Repository Index (.agent-sdlc/context/index.json)
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
   providers inspect configured provider runtimes and their models (--models)
   eval      run a corpus of task files and report benchmark metrics

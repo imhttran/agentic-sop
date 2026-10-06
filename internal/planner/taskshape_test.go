@@ -20,8 +20,8 @@ type repoPlan struct {
 // stages are named "### <id> — <title>" under "## Tasks"; a plan that moves or changes
 // shape updates this list deliberately. See docs/specs/EXECUTION.md §3.
 var repoPlans = []repoPlan{
-	{"../../docs/plans/PLAN-Phase-3-OpenJEV.md", 17},
-	{"../../docs/plans/PLAN-Phase-3.5-Model-Routing.md", 8},
+	{"../../docs/history/plans/PLAN-Phase-3-OpenJEV.md", 17},
+	{"../../docs/history/plans/PLAN-Phase-3.5-Model-Routing.md", 8},
 	{"../../docs/plans/PLAN-Phase-4-Provider-Runtime.md", 9},
 	{"../../docs/plans/PLAN-Phase-5-Execution-Recovery.md", 10},
 	{"../../docs/plans/PLAN-Phase-5.5-Distribution.md", 11},
@@ -66,7 +66,7 @@ func TestPlanFromMarkdownCompilesRepoPlans(t *testing.T) {
 // is load-bearing: the already-implemented Phase 3 stages declare verify-first, and
 // that instruction is read from the document as written instead of being lost.
 func TestPlanFromMarkdownRepoPlansHonourExecutionMode(t *testing.T) {
-	data, err := os.ReadFile("../../docs/plans/PLAN-Phase-3-OpenJEV.md")
+	data, err := os.ReadFile("../../docs/history/plans/PLAN-Phase-3-OpenJEV.md")
 	if err != nil {
 		t.Fatalf("read plan: %v", err)
 	}
