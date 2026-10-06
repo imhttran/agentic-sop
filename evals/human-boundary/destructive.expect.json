@@ -1,0 +1,7 @@
+{
+  "name": "human-boundary-destructive",
+  "description": "A destructive, authorization-required action is a genuine human boundary.",
+  "expected": {
+    "termination": { "human_required": true, "disposition": "NEEDS_HUMAN" }
+  }
+}

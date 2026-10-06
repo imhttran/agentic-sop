@@ -107,6 +107,7 @@ single owner. This table is that map.
 | Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
 | Performance measurements | [PERFORMANCE.md](reference/PERFORMANCE.md) | Closure plan and point-in-time baseline reports |
+| Reliability evaluation | [EVALUATION.md](reference/EVALUATION.md) | Run trace (`trace.json`) and progress signals |
 
 ## Reference
 
@@ -120,6 +121,7 @@ single owner. This table is that map.
 - [reference/PROJECT-STATUS.md](reference/PROJECT-STATUS.md) — implemented capabilities and known limitations, separated from future work.
 - [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
+- [reference/EVALUATION.md](reference/EVALUATION.md) — the deterministic evaluation harness: fixture contract, layout, and the failure → regression workflow.
 
 ## Guides
 

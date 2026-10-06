@@ -1,0 +1,17 @@
+{
+  "name": "implementation-no-progress",
+  "description": "Repeated activity with no repository mutation blocks for operator intervention - not a human decision - with the diagnostic preserved.",
+  "expected": {
+    "progress": {
+      "repository_mutations": { "equal": 0 },
+      "verification": { "equal": 0 }
+    },
+    "termination": {
+      "kind": "NO_PROGRESS",
+      "disposition": "BLOCK",
+      "retryable": false,
+      "human_required": false,
+      "diagnostic_contains": "IMPLEMENT_NO_PROGRESS"
+    }
+  }
+}

@@ -145,7 +145,8 @@ Detailed state transitions and lifecycle rules live in the specifications:
 ## Status
 
 SOP V1 and the later routing, provider-runtime, recovery, prompt, distribution,
-and interactive-approval layers are implemented. Detailed delivery status and
+interactive-approval, and agentic reliability/evaluation layers (structured run
+trace, progress signals, evaluation harness) are implemented. Detailed delivery status and
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
