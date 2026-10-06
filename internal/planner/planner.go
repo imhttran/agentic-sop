@@ -184,6 +184,27 @@ func decodePlan(content string) (*Plan, error) {
 // error that rejected it, and asks for a corrected plan. The original task,
 // input, and output contract are preserved so the correction still answers the
 // original request.
+// declaredCapabilityNames returns, best-effort, the capability names the rejected
+// plan declared, so a repair can tell the agent exactly which names a stage's
+// "requires" entry may use. A plan that does not parse yields none.
+func declaredCapabilityNames(rejected string) []string {
+	var p struct {
+		Capabilities []struct {
+			Name string `json:"name"`
+		} `json:"capabilities"`
+	}
+	if json.Unmarshal([]byte(rejected), &p) != nil {
+		return nil
+	}
+	var names []string
+	for _, c := range p.Capabilities {
+		if n := strings.TrimSpace(c.Name); n != "" {
+			names = append(names, n)
+		}
+	}
+	return names
+}
+
 func planRepairRequest(original agent.Request, rejected string, cause error) agent.Request {
 	var b strings.Builder
 	if origin := strings.TrimSpace(original.Input); origin != "" {
@@ -194,6 +215,13 @@ func planRepairRequest(original agent.Request, rejected string, cause error) age
 		b.WriteString("The plan you returned was:\n\n")
 		b.WriteString(r)
 		b.WriteString("\n\n")
+	}
+	if names := declaredCapabilityNames(rejected); len(names) > 0 {
+		b.WriteString("The plan declares these capabilities:\n")
+		for _, n := range names {
+			fmt.Fprintf(&b, "  - %s\n", n)
+		}
+		b.WriteString("A stage's \"requires\" entries must name one of these capabilities exactly, or be removed.\n\n")
 	}
 	fmt.Fprintf(&b, `That plan was rejected by deterministic validation:
 
