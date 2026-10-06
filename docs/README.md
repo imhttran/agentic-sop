@@ -76,13 +76,30 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 ## Topic Ownership
 
+Every fact has **one** authoritative home; other documents link to it rather than
+restating it, so adding or changing a command, config key, or state means editing a
+single owner. This table is that map.
+
 | Topic | Authoritative document | Supporting material |
 | --- | --- | --- |
 | Product goals | [PRD.md](PRD.md) | Workstream PRDs under requirements/ |
+| Architecture structure and the state graph | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) |
 | Ownership boundaries | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) | Architecture implementation seams |
+| Commands and flags | [CLI.md](reference/CLI.md) | The specs that own each command's semantics |
+| Configuration keys and defaults | [CONFIGURATION.md](reference/CONFIGURATION.md) | The specs that own each block's policy |
+| Task statuses, transitions, scheduling | [WORKFLOW.md](specs/WORKFLOW.md) | OVERVIEW §5–§6 (authoritative graph); [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) |
+| Per-task lifecycle, TDD rules, Git naming | [TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) | OVERVIEW §7 |
 | Outcomes, verified mutation, already-satisfied proof, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
+| Prompt execution and work items | [PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md), [WORK-ITEMS.md](specs/WORK-ITEMS.md) | CLI.md |
 | Task execution and execution modes | [EXECUTION.md](specs/EXECUTION.md) | Setup and usage guides |
+| Validation runner and evidence | [VALIDATION.md](specs/VALIDATION.md) | CONFIGURATION.md (`validation.*`) |
+| Review pipeline and severities | [REVIEW.md](specs/REVIEW.md) | QUALITY.md |
+| Quality gate and fix loop | [QUALITY.md](specs/QUALITY.md) | REVIEW.md |
+| Human approval | [HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) | [APPROVALS.md](guides/APPROVALS.md) |
+| Recovery, retry, and resume | [RECOVERY.md](specs/RECOVERY.md) | [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) |
+| Security, command policy, secrets | [SECURITY.md](specs/SECURITY.md) | OVERVIEW §14 |
 | Routing and provider rules | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md) | Configuration reference and architecture seams |
+| JEV / OpenJEV analysis | [OPENJEV.md](specs/OPENJEV.md) | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) |
 | Installation | [INSTALLATION.md](guides/INSTALLATION.md) | Platform and agent-specific guides |
 | Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
