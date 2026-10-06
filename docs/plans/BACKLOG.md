@@ -146,6 +146,33 @@ human approval" definition. Add an explicit terminal case plus a test. Surfaced 
 the pre-Phase-6 closeout; currently unreachable.
 
 
+## PLAN-LIFECYCLE-FOLLOWUP
+
+**Status:** Backlog (LOW). PLAN-001 separated plan activation from execution, added
+explicit supersession (`sop plan supersede`) and historicalization
+(`.agent-sdlc/archive/<plan-id>/lifecycle.json`), and made reconciliation's executed
+classification authoritative (`domain.Task.Executed`). One operation remains: there is
+no way to historicalize/close an ACTIVE plan **without** installing a replacement plan,
+so a dangling active plan (for example one whose source file moved) can only be cleared
+by superseding it with another plan.
+
+Provide a deterministic operation to historicalize/close an active plan without
+requiring a replacement plan. Requirements:
+
+```text
+model-free
+no task execution
+preserve task/run/approval/evaluation evidence
+unfinished tasks remain historically unfinished
+no fabricated PASS
+no fabricated approval
+clear active-plan authority safely
+historical plan cannot become runnable accidentally
+```
+
+LOW priority; must not block CTX-001.
+
+
 ## Status and roadmap
 
 See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities
