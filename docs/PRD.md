@@ -362,7 +362,6 @@ Failure transitions may move a task into:
 
 ```text
 FIX_REQUIRED
-RETRY_WAIT
 BLOCKED
 ```
 

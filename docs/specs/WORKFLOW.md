@@ -35,7 +35,7 @@ A task MUST be in exactly one of these named states at a time: `PLANNED`,
 `READY`, `BRANCH_CREATED`, `TESTS_WRITTEN`, `RED_VERIFIED`, `IMPLEMENTING`,
 `LOCAL_TESTS_PASS`, `REVIEW`, `REVIEW_PASS`, `PR_OPEN`, `CI_RUNNING`, `CI_PASS`,
 `MERGED`, `DONE`. Local completion adds `LOCAL_DONE`; failure and recovery add
-`FIX_REQUIRED`, `RETRY_WAIT`, and `BLOCKED`. `NEEDS_HUMAN` is a human boundary,
+`FIX_REQUIRED` and `BLOCKED`. `NEEDS_HUMAN` is a human boundary,
 not a happy-path task state.
 
 The authoritative legal-transition graph and its exact edges are defined in
