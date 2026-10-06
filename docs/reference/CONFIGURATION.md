@@ -93,6 +93,10 @@ workflow:
 #   escalation_enabled: false # bounded escalation after a failed attempt (see
 #                             # "Bounded model escalation"); OFF by default
 #   max_escalations: 2 # small -> medium -> large is exactly two; 0 disables it
+#   replan_enabled: false # bounded strategy change on the same class after a
+#                         # recoverable failure (see "Bounded strategy
+#                         # replanning"); OFF by default
+#   max_replans: 1 # change strategy at most once; 0 disables it
 #   small:
 #     provider: ollama # ollama | llamacpp | mlx | command
 #     name: qwen3:4b
@@ -261,6 +265,8 @@ Resolution order, highest first:
 | `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                            |
 | `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt.       |
 | `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                          |
+| `models.replan_enabled` / `SOP_MODEL_REPLAN_ENABLED`                                 | `false`            | Enable bounded strategy replanning (same class) after a recoverable failure. |
+| `models.max_replans` / `SOP_MODEL_MAX_REPLANS`                                       | `1`                | Bound on strategy replanning (`0` disables it).                           |
 | `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                                |
 | `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                                 |
 | `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                       |
@@ -415,6 +421,54 @@ small -> medium -> large -> human / blocked
   from the pre-generation SMALL availability fallback (`SMALL local → SMALL cloud`):
   the former reacts to a failed attempt, the latter to an unavailable runtime model
   before generation begins. They are never combined.
+
+## Bounded strategy replanning
+
+Bounded strategy replanning is a second, opt-in recovery layer, independent of
+escalation. After an attempt fails a quality gate with a **recoverable**
+implementation failure, SOP may change **strategy** — the approach — once, on the
+**same** model class, within the same bounded attempt loop. It is **OFF by default**,
+so an installation that does not opt in behaves exactly as before. Enable it with:
+
+```dotenv
+SOP_MODEL_REPLAN_ENABLED=true
+SOP_MODEL_MAX_REPLANS=1
+```
+
+or, equivalently, in `config.yaml`:
+
+```yaml
+models:
+  replan_enabled: true
+  max_replans: 1
+```
+
+The environment overrides the configuration. Retry, replan, and escalate are
+distinct: a **retry** re-runs the same strategy, a **replan** changes the strategy,
+and an **escalation** changes the execution resource (a larger class).
+
+- `max_replans` bounds how many times a task may change strategy (default `1`). `0`
+  disables replanning even when the feature flag is on. A negative value is
+  rejected. The attempt loop's fixed backstop additionally bounds total attempts, so
+  a replan can never multiply the run's execution envelope.
+- Only a genuinely recoverable implementation failure may replan. A `BLOCK`
+  (including `IMPLEMENT_NO_PROGRESS`), a `NEEDS_HUMAN` or safety/approval boundary,
+  an invalid plan, and an unclassified failure are never replanned; they keep their
+  existing disposition. A replan is **not** a way to obtain more budget.
+- A replan keeps the class: it never changes the provider or model, and never
+  bypasses a tool permission, validation, review, or human approval. The model
+  cannot authorize or extend its own replan; the harness owns eligibility and the
+  bound.
+- The replanned attempt receives bounded context (a `# Replan` instruction and the
+  deterministic failure evidence), so the model addresses the failure instead of
+  repeating the same change.
+- `sop report` shows the recovery decision, and `trace.json` (schema 4) records each
+  bounded strategy change under `replans[]` (sequence, reason, from/to attempt). The
+  per-attempt records live under `.agent-sdlc/runs/<task>/attempts/NNN.json` with the
+  `replan` action. Neither artifact carries a credential, and neither is read back
+  to drive a decision.
+- With escalation also enabled, the two compose: a recoverable failure may replan
+  once on the same class and then escalate.
 
 ## Early JEV checkpoints
 

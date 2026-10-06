@@ -257,10 +257,24 @@ type Route struct {
 	// distinguishable from an explicit 0: an omitted value resolves to
 	// DefaultMaxEscalations, while an explicit 0 disables escalation.
 	// SOP_MODEL_MAX_ESCALATIONS overrides it.
-	MaxEscalations *int        `yaml:"max_escalations"`
-	Small          ClassConfig `yaml:"small"`
-	Medium         ClassConfig `yaml:"medium"`
-	Large          ClassConfig `yaml:"large"`
+	MaxEscalations *int `yaml:"max_escalations"`
+	// ReplanEnabled turns on the bounded strategy-replanning recovery policy
+	// (Phase 7, internal/recovery): after an attempt fails a quality gate, SOP may
+	// change strategy once on the same class instead of repeating the same approach
+	// or escalating. It is a pointer so an omitted value is distinguishable from an
+	// explicit false; both resolve to disabled. Like EscalationEnabled it does NOT
+	// make the route table Configured(), and it is OFF by default so an existing
+	// project is unchanged. SOP_MODEL_REPLAN_ENABLED overrides it.
+	ReplanEnabled *bool `yaml:"replan_enabled"`
+	// MaxReplans bounds strategy replanning (Phase 7). It is only consulted when
+	// ReplanEnabled resolves true. It is a pointer so an omitted value is
+	// distinguishable from an explicit 0: an omitted value resolves to
+	// DefaultMaxReplans, while an explicit 0 disables replanning.
+	// SOP_MODEL_MAX_REPLANS overrides it.
+	MaxReplans *int        `yaml:"max_replans"`
+	Small      ClassConfig `yaml:"small"`
+	Medium     ClassConfig `yaml:"medium"`
+	Large      ClassConfig `yaml:"large"`
 }
 
 // DefaultRoute is the built-in routing table: the default class, and the
@@ -358,6 +372,9 @@ func (r Route) Validate() error {
 	if r.MaxEscalations != nil && *r.MaxEscalations < 0 {
 		return fmt.Errorf("model escalation: max_escalations must not be negative (got %d)", *r.MaxEscalations)
 	}
+	if r.MaxReplans != nil && *r.MaxReplans < 0 {
+		return fmt.Errorf("model replan: max_replans must not be negative (got %d)", *r.MaxReplans)
+	}
 	return nil
 }
 
@@ -378,12 +395,23 @@ const (
 	// EnvMaxEscalations overrides models.max_escalations. It defaults to
 	// DefaultMaxEscalations.
 	EnvMaxEscalations = "SOP_MODEL_MAX_ESCALATIONS"
+	// EnvReplanEnabled overrides models.replan_enabled (the bounded strategy
+	// replanning recovery policy). It defaults to false.
+	EnvReplanEnabled = "SOP_MODEL_REPLAN_ENABLED"
+	// EnvMaxReplans overrides models.max_replans. It defaults to DefaultMaxReplans.
+	EnvMaxReplans = "SOP_MODEL_MAX_REPLANS"
 )
 
 // DefaultMaxEscalations is the built-in bound on automatic escalation (Phase 5):
 // small -> medium -> large is exactly two escalations, after which the existing
 // human/terminal boundary applies.
 const DefaultMaxEscalations = 2
+
+// DefaultMaxReplans is the built-in bound on strategy replanning (Phase 7): a
+// single strategy change is enough to prove the architecture, after which
+// escalation (when enabled) or the existing human/terminal boundary applies. One
+// replan is deliberately the smallest bound that keeps the loop finite.
+const DefaultMaxReplans = 1
 
 // Class env field names.
 const (
@@ -835,6 +863,52 @@ func MaxEscalations(config Route, lookup func(string) string) (int, error) {
 		return *config.MaxEscalations, nil
 	}
 	return DefaultMaxEscalations, nil
+}
+
+// ReplanEnabled resolves the bounded strategy-replanning recovery feature flag
+// (Phase 7): the SOP_MODEL_REPLAN_ENABLED environment overrides the
+// models.replan_enabled configuration value, and an omitted value on both layers
+// resolves to false. An unparseable environment value is an actionable error.
+//
+// Like EscalationEnabled it is separate from Configured(): enabling replanning
+// does not activate a class table, and it is OFF by default so an existing
+// installation's execution behavior is unchanged.
+func ReplanEnabled(config Route, lookup func(string) string) (bool, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	if v := strings.TrimSpace(lookup(EnvReplanEnabled)); v != "" {
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return false, fmt.Errorf("model replan: %s: invalid boolean %q (want true or false)", EnvReplanEnabled, v)
+		}
+		return b, nil
+	}
+	if config.ReplanEnabled != nil {
+		return *config.ReplanEnabled, nil
+	}
+	return false, nil
+}
+
+// MaxReplans resolves the replan bound (Phase 7): the SOP_MODEL_MAX_REPLANS
+// environment overrides models.max_replans, and an omitted value on both layers
+// resolves to DefaultMaxReplans. An explicit 0 on either layer disables
+// replanning. A non-numeric or negative value is an actionable error.
+func MaxReplans(config Route, lookup func(string) string) (int, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	if v := strings.TrimSpace(lookup(EnvMaxReplans)); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil || n < 0 {
+			return 0, fmt.Errorf("model replan: %s: invalid count %q (want a non-negative integer)", EnvMaxReplans, v)
+		}
+		return n, nil
+	}
+	if config.MaxReplans != nil {
+		return *config.MaxReplans, nil
+	}
+	return DefaultMaxReplans, nil
 }
 
 // allowCloudFallback reports whether a local class may fall back to a cloud

@@ -61,8 +61,8 @@ Each attempt SHOULD record its operation, start/end, result, failure summary,
 logs/artifacts where practical, agent action, and next state; see
 [WORKFLOW.md](WORKFLOW.md) §2 and [../architecture/OVERVIEW.md](../architecture/OVERVIEW.md) §12.
 
-When bounded model escalation is enabled (§8), SOP additionally persists one
-**execution-attempt record** per lifecycle attempt as non-secret diagnostic
+When bounded model escalation or strategy replanning is enabled (§8, §9), SOP
+additionally persists one **execution-attempt record** per lifecycle attempt as non-secret diagnostic
 evidence under `.agent-sdlc/runs/<run>/attempts/NNN.json` — `<run>` is the task run,
 or `prompts/<id>` for an `implement` prompt (§8). Each record names the
 attempt number, the model class, provider, model, and locality the attempt ran on,
@@ -182,10 +182,57 @@ applies to it.
 - Escalation MUST NOT grant authority: it selects a stronger model only, and MUST NOT
   bypass approval, safety, validation, review, or quality gates.
 
-## 9. See Also
+## 9. Bounded Strategy Replanning
+
+Phase 7 adds a second deterministic, bounded recovery action: after an attempt fails
+a quality gate with a **recoverable** implementation failure, SOP MAY change
+**strategy** — the approach — once, on the **same** model class, within the same
+bounded attempt loop. The policy is owned by `internal/recovery` (`ActionReplan`).
+
+Replanning MUST stay distinct from the other recoveries:
+
+- **retry** re-runs the same strategy on the same class;
+- **replan** changes the strategy before another attempt, on the same class;
+- **escalate** changes the execution resource (a larger class);
+- **needs-human** and **block** end automated recovery.
+
+- Replanning MUST be OFF by default (`SOP_MODEL_REPLAN_ENABLED` unset and
+  `models.replan_enabled` absent), so an installation that does not opt in behaves
+  exactly as before.
+- Replanning MUST be bounded by `models.max_replans` (default **1**). `0` disables it
+  on either layer; a negative value MUST be rejected. The attempt loop's own
+  backstop (`maxEscalationAttempts`) additionally bounds total attempts, so a replan
+  MUST NOT multiply the run's execution envelope.
+- Only a genuinely recoverable implementation failure MAY replan — the same
+  condition the escalation policy already treats as recoverable. A `BLOCK`
+  (including `IMPLEMENT_NO_PROGRESS`), a `NEEDS_HUMAN` boundary, a
+  safety/approval/destructive boundary, an invalid plan, a transient
+  provider/infrastructure failure, and a failure with no authoritative
+  classification MUST NOT replan; the existing disposition applies. Replanning MUST
+  NOT be used to obtain more budget.
+- A replan MUST keep the model class: it MUST NOT change the provider or model,
+  increase a budget, expand a tool permission, bypass validation, bypass review, or
+  bypass human approval. The model MUST NOT be able to authorize or extend its own
+  replan; the harness owns eligibility and the bound. AGENT-004's execution limits
+  are per-invocation; a replan runs a new bounded invocation like any other attempt,
+  and the fixed attempt-loop backstop bounds the total, so the combined envelope
+  stays finite.
+- A replanned attempt MUST receive bounded context from the failed attempt (a
+  `# Replan` instruction and the deterministic failure evidence) rather than
+  restarting from zero, so the model changes approach instead of repeating it.
+- Replanning and escalation MAY compose: with both enabled, a recoverable failure
+  MAY replan once on the same class and then, if it fails again, escalate.
+- The replan MUST be recorded observationally: `trace.json` (schema 4) records each
+  bounded strategy change under `replans[]` (sequence, reason, from/to attempt), and
+  the attempt record carries the `replan` action. Neither is read back to drive a
+  decision.
+
+## 10. See Also
 
 - [MODEL-ROUTING.md](MODEL-ROUTING.md) — class selection and the routing table.
 - [PROVIDERS.md](PROVIDERS.md) — provider capability and availability evidence.
 - [QUALITY.md](QUALITY.md) — the gate and the bounded fix loop.
 - [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md) — the human boundary the ladder ends at.
 - [WORKFLOW.md](WORKFLOW.md) — state vocabulary and terminal states.
+- [../reference/EVALUATION.md](../reference/EVALUATION.md) — the deterministic
+  evaluation harness and the `replans` expectation.

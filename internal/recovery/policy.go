@@ -25,6 +25,23 @@ import (
 func Decide(p Policy, ev Evidence) Decision {
 	d := Decision{FromClass: ev.Class, Attempt: ev.Attempt}
 
+	if !p.Enabled && !p.Replan {
+		d.Action, d.Reason = ActionNone, ReasonDisabled
+		return d
+	}
+
+	// 1b. A bounded replan (opt-in, independent of escalation): a recoverable
+	//     implementation failure may change strategy once, on the same class,
+	//     before a larger model or a human is considered. implementationFailure
+	//     excludes every non-eligible case (a boundary, BLOCK/NO_PROGRESS, a
+	//     plan-invalid disposition, unfinished work), so only a genuine
+	//     implementation failure can replan.
+	if p.Replan && ev.Replans < p.MaxReplans && implementationFailure(ev) {
+		d.Action, d.ToClass, d.Reason = ActionReplan, ev.Class, ReasonReplan
+		return d
+	}
+	// 1c. With replanning off (or its bounded replan spent) and escalation
+	//     disabled, the caller keeps its existing behavior exactly.
 	if !p.Enabled {
 		d.Action, d.Reason = ActionNone, ReasonDisabled
 		return d

@@ -6,6 +6,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/recovery"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/runtrace"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
@@ -24,6 +25,7 @@ func writeRunTrace(rn *runpkg.Run, res lifeResult, cfg config.Config, tc *runtra
 		CompletedAt:  rn.State().UpdatedAt,
 		Execution:    traceExecution(res, cfg),
 		Budgets:      traceBudgets(),
+		Replans:      traceReplans(rn),
 		ChangedFiles: rn.ChangedFiles(),
 		Verification: traceVerification(res.suite.Results),
 		Termination:  traceTermination(res),
@@ -40,6 +42,40 @@ func writeRunTrace(rn *runpkg.Run, res lifeResult, cfg config.Config, tc *runtra
 		in.RepositoryMutations = len(in.ChangedFiles)
 	}
 	_ = runtrace.Write(rn.Dir(), runtrace.Build(in))
+}
+
+// traceReplans reads the bounded strategy changes from the run attempt records,
+// so the trace answers whether replanning occurred, why, and how many. It is
+// observation-only and fabricates nothing when no attempt records exist.
+func traceReplans(rn *runpkg.Run) []runtrace.ReplanRecord {
+	if rn == nil {
+		return nil
+	}
+	var out []runtrace.ReplanRecord
+	recs, _ := rn.ReadAttemptRecords()
+	for _, a := range recs {
+		if a.Action != string(recovery.ActionReplan) {
+			continue
+		}
+		out = append(out, runtrace.ReplanRecord{
+			Sequence:    len(out) + 1,
+			Reason:      replanReason(a.FailureStage),
+			FromAttempt: a.Attempt,
+			ToAttempt:   a.Attempt + 1,
+		})
+	}
+	return out
+}
+
+// replanReason names why a bounded strategy change was permitted, from the
+// deterministic failure cause SOP already recorded for the attempt. It is
+// observation-only and fabricates nothing: with no recorded stage it falls back to
+// the recovery policy reason.
+func replanReason(stage string) string {
+	if stage == "" {
+		return recovery.ReasonReplan
+	}
+	return runtrace.OneLine(stage + " failure")
 }
 
 // traceBudgets returns the deterministic execution limits that applied to the

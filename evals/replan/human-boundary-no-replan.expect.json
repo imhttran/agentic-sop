@@ -1,0 +1,8 @@
+{
+  "name": "replan-none-on-human-boundary",
+  "description": "A safety/authorization boundary is a human decision and never replans.",
+  "expected": {
+    "replans": { "count": { "equal": 0 } },
+    "termination": { "human_required": true }
+  }
+}

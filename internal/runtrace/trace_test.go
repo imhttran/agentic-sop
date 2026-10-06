@@ -66,3 +66,47 @@ func TestOneLineCollapsesAndCaps(t *testing.T) {
 		t.Errorf("OneLine length = %d, want capped at %d", len(got), maxText)
 	}
 }
+
+// TestBuildPersistsReplans proves the bounded strategy changes are recorded
+// observationally and round-trip through the versioned artifact, and that none are
+// fabricated when no replan occurred.
+func TestBuildPersistsReplans(t *testing.T) {
+	dir := t.TempDir()
+	tr := Build(Inputs{
+		RunID:       "T001",
+		StartedAt:   time.Unix(1000, 0).UTC(),
+		CompletedAt: time.Unix(1002, 0).UTC(),
+		Replans:     []ReplanRecord{{Sequence: 1, Reason: "review failure", FromAttempt: 1, ToAttempt: 2}},
+	})
+	if err := Write(dir, tr); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatalf("read %s: %v", FileName, err)
+	}
+	var got Trace
+	if err := json.Unmarshal(data, &got); err != nil {
+		t.Fatalf("trace.json is not valid JSON: %v", err)
+	}
+	if len(got.Replans) != 1 || got.Replans[0] != tr.Replans[0] {
+		t.Errorf("replans = %+v, want %+v", got.Replans, tr.Replans)
+	}
+
+	// With no replans the field is omitted rather than fabricated as an empty list.
+	empty := Build(Inputs{RunID: "T002"})
+	if empty.Replans != nil {
+		t.Errorf("replans = %+v, want nil when none occurred", empty.Replans)
+	}
+	edir := t.TempDir()
+	if err := Write(edir, empty); err != nil {
+		t.Fatalf("Write: %v", err)
+	}
+	eData, err := os.ReadFile(filepath.Join(edir, FileName))
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if strings.Contains(string(eData), `"replans"`) {
+		t.Errorf("trace.json must omit replans when none occurred: %s", eData)
+	}
+}

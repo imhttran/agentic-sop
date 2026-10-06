@@ -1,0 +1,11 @@
+{
+  "name": "replan-success-after-one",
+  "description": "A recoverable implementation failure is permitted one bounded strategy change on the same class, and the replanned attempt passes without a human decision.",
+  "expected": {
+    "replans": {
+      "count": { "equal": 1 },
+      "reason": "review failure"
+    },
+    "termination": { "stage": "PASSED", "human_required": false }
+  }
+}

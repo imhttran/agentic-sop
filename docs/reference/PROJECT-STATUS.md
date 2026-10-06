@@ -15,8 +15,8 @@ resume/recovery, environment bootstrap, and limited parallelism. Above it, model
 routing (3.5), the provider runtime (4), bounded model escalation (5), unified work
 items with `sop prompt` (5.4), and distribution — one installer for macOS/Linux and
 Windows, a native Claude Code plugin, and CI (5.5–5.6), and an interactive
-human-decision surface (6), are implemented; routing and escalation are OFF by
-default. See [docs/plans/BACKLOG.md](../plans/BACKLOG.md).
+human-decision surface (6), are implemented; routing, escalation, and replanning
+are OFF by default. See [docs/plans/BACKLOG.md](../plans/BACKLOG.md).
 
 ## Implemented work
 
@@ -72,7 +72,7 @@ Local-first model tiers (routing/configuration hardening): SMALL runs a local
 model and switches to its configured cloud fallback (`nemotron-3-nano:30b-cloud`)
 only when a read-only observation says the local runtime cannot serve it; MEDIUM is
 `nemotron-3-super:cloud` and LARGE is `deepseek-v4.1-flash:cloud`
-Structured run trace (`trace.json`, schema 2): a versioned, observational record
+Structured run trace (`trace.json`, schema 4): a versioned, observational record
 of a run's execution identity, iterations, verification, and termination, plus
 structured progress signals — discovery, repository mutation, verification, and
 state transition — that distinguish progress from activity (AGENT-001/AGENT-002)
@@ -80,6 +80,9 @@ Agentic evaluation harness: deterministic fixtures evaluated against a run's
 `trace.json` (AGENT-003)
 Canonical execution budget: explicit, configurable iteration/stale/tool-call limits
 (`internal/budget`) recorded in `trace.json` (AGENT-004)
+Bounded strategy replanning: an opt-in, deterministic permission to change strategy
+once on the same class after a recoverable failure, recorded observationally in
+`trace.json` (AGENT-005)
 ```
 
 Candidates recorded at the time of this status summary (scheduling remains in
@@ -177,11 +180,11 @@ verification, 2026-10-06).
 ## Phase 7 — Agentic reliability and evaluation
 
 ```text
-AGENT-001 Structured Run Trace     COMPLETE   trace.json (schema 2), observational
+AGENT-001 Structured Run Trace     COMPLETE   trace.json (schema 4), observational
 AGENT-002 Progress Signals         COMPLETE   discovery / mutation / verification / transition
 AGENT-003 Evaluation Harness       COMPLETE   deterministic fixtures over trace.json
 AGENT-004 Agent Budgets            COMPLETE   canonical limits (internal/budget), configurable + traced
-AGENT-005 Replan Strategy          NEXT       bounded replanning
+AGENT-005 Replan Strategy          COMPLETE   opt-in bounded strategy change (internal/recovery), traced + evaluated
 ```
 
 Evaluations observe completed run evidence; they do not participate in execution or

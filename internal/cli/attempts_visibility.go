@@ -101,7 +101,10 @@ func writeAttemptMetrics(w io.Writer, attempts []runpkg.AttemptRecord) {
 			fmt.Fprintf(w, "  escalated %s→%s: %d\n", classText(t.from), classText(t.to), n)
 		}
 	}
-	if len(attempts) > 1 && attempts[len(attempts)-1].Result == runpkg.AttemptPassed {
+	// "success after escalation" is claimed only when a class escalation actually
+	// occurred: a bounded strategy replan keeps the class, so a replan that succeeds
+	// is not an escalation and MUST NOT be reported as one.
+	if total > 0 && attempts[len(attempts)-1].Result == runpkg.AttemptPassed {
 		fmt.Fprintln(w, "  success after escalation: yes")
 	}
 }

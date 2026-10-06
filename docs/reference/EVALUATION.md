@@ -47,6 +47,13 @@ A fixture may also assert the deterministic execution limits that applied, under
 "budgets": { "implement_iterations": { "equal": 32 }, "tool_calls": { "at_least": 1 } }
 ```
 
+And the bounded strategy changes a run recorded, under `replans` — the count, and a
+substring of the first replan's reason:
+
+```json
+"replans": { "count": { "equal": 1 }, "reason": "review failure" }
+```
+
 Counts use `{"equal": N}`, `{"at_least": N}`, or `{"at_most": N}`. `retryable` is
 derived from the recorded disposition by the authoritative failure rule, not stored
 separately.
@@ -59,6 +66,10 @@ evals/
   verification/     failure.expect.json
   human-boundary/   destructive.expect.json
   progress/         repeated-discovery.expect.json
+  budgets/          limits-applied.expect.json, configured.expect.json
+  replan/           success-after-replan.expect.json, failed-replan.expect.json,
+                    no-replan.expect.json, human-boundary-no-replan.expect.json,
+                    no-progress-no-replan.expect.json
 ```
 
 Future categories (planning, routing, termination, …) add directories without

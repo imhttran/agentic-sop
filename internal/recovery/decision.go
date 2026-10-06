@@ -55,12 +55,18 @@ const (
 	// ActionBlock: the task must not be retried. Reserved for the caller's
 	// terminal automation path; Decide does not currently produce it.
 	ActionBlock Action = "block"
+	// ActionReplan: retry the task on the SAME class with a changed strategy, in
+	// this invocation, with the failed attempt's bounded context handed forward.
+	// Replanning changes the approach, never the resource: it is not escalation,
+	// not a retry of the same strategy, and it never resets a budget. It is OFF by
+	// default (Policy.Replan) and bounded by Policy.MaxReplans.
+	ActionReplan Action = "replan"
 )
 
 // Valid reports whether a is a known action.
 func (a Action) Valid() bool {
 	switch a {
-	case ActionNone, ActionRetrySame, ActionEscalate, ActionHuman, ActionBlock:
+	case ActionNone, ActionRetrySame, ActionEscalate, ActionHuman, ActionBlock, ActionReplan:
 		return true
 	default:
 		return false
@@ -95,6 +101,9 @@ const (
 	// ReasonUnclassified: no authoritative failure classification was available, so
 	// recovery fails closed rather than escalating.
 	ReasonUnclassified = "the failure was not classified; a human decision is required"
+	// ReasonReplan: a recoverable implementation failure may change strategy once,
+	// on the same class, before a larger model or a human is considered.
+	ReasonReplan = "a recoverable failure may change strategy once"
 )
 
 // Evidence is the typed evidence a recovery decision is made from. It reuses the
@@ -116,6 +125,8 @@ type Evidence struct {
 	Escalations int
 	// Attempt is the 1-based attempt number that failed.
 	Attempt int
+	// Replans is how many times this task has already changed strategy.
+	Replans int
 }
 
 // Decision is the deterministic recovery outcome for one failed attempt.
@@ -141,6 +152,13 @@ type Policy struct {
 	// MaxEscalations bounds how many times a task may be escalated in one attempt
 	// ladder. 0 disables escalation even when Enabled is true.
 	MaxEscalations int
+	// Replan turns bounded strategy replanning on. It is OFF by default, so an
+	// existing installation's behavior is unchanged. Replanning is a distinct
+	// recovery from escalation: it keeps the class and changes the strategy.
+	Replan bool
+	// MaxReplans bounds how many times a task may change strategy in one attempt
+	// ladder. 0 disables replanning even when Replan is true.
+	MaxReplans int
 }
 
 // NextClass returns the class one step above c on the model-class ladder, and

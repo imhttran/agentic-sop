@@ -29,7 +29,18 @@ type Expectation struct {
 	Execution   *ExecutionExpectation   `json:"execution,omitempty"`
 	Progress    *ProgressExpectation    `json:"progress,omitempty"`
 	Budgets     *BudgetExpectation      `json:"budgets,omitempty"`
+	Replans     *ReplansExpectation     `json:"replans,omitempty"`
 	Termination *TerminationExpectation `json:"termination,omitempty"`
+}
+
+// ReplansExpectation asserts the AGENT-005 bounded strategy changes the run
+// recorded. It is observation-only: it reads the trace, never an execution state,
+// and is never read by the lifecycle.
+type ReplansExpectation struct {
+	// Count asserts how many bounded replans the run performed.
+	Count *CountAssertion `json:"count,omitempty"`
+	// Reason asserts a substring of the first replan's recorded reason.
+	Reason *string `json:"reason,omitempty"`
 }
 
 // BudgetExpectation asserts the deterministic execution limits that applied to the
@@ -120,6 +131,9 @@ func (e Expectation) validate() error {
 		counts["budgets.fix_iterations"] = b.FixIterations
 		counts["budgets.stale_iterations"] = b.StaleIterations
 		counts["budgets.tool_calls"] = b.ToolCalls
+	}
+	if r := e.Replans; r != nil {
+		counts["replans.count"] = r.Count
 	}
 	for field, c := range counts {
 		if c == nil {

@@ -21,7 +21,7 @@ import (
 
 // SchemaVersion is the version of the persisted trace contract. It makes future
 // trace evolution explicit; AGENT-001 only defines this initial version.
-const SchemaVersion = 3
+const SchemaVersion = 4
 
 // FileName is the run artifact holding the structured trace.
 const FileName = "trace.json"
@@ -61,6 +61,20 @@ type Trace struct {
 	// It is observation-only: the harness owns and enforces the budgets, and
 	// nothing reads this back to drive a decision.
 	Budgets BudgetLimits `json:"budgets"`
+
+	// Replans records the bounded strategy changes that occurred, in order. It is
+	// observation-only: the harness owns replan eligibility and the bound, and
+	// nothing reads this back to drive a decision.
+	Replans []ReplanRecord `json:"replans,omitempty"`
+}
+
+// ReplanRecord is one bounded strategy change.
+
+type ReplanRecord struct {
+	Sequence    int    `json:"sequence"`
+	Reason      string `json:"reason,omitempty"`
+	FromAttempt int    `json:"from_attempt"`
+	ToAttempt   int    `json:"to_attempt"`
 }
 
 // BudgetLimits is the applied budget: the deterministic execution limits the
@@ -153,6 +167,8 @@ type Inputs struct {
 	Termination  Termination
 
 	Budgets BudgetLimits
+
+	Replans []ReplanRecord
 }
 
 // Build assembles a versioned Trace from the supplied evidence.
@@ -173,6 +189,7 @@ func Build(in Inputs) Trace {
 		Progress:            progress,
 		ProgressSummary:     summarize(progress),
 		Budgets:             in.Budgets,
+		Replans:             in.Replans,
 	}
 }
 
