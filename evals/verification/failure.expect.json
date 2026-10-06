@@ -1,0 +1,16 @@
+{
+  "name": "verification-failure",
+  "description": "A failing deterministic check is not counted as verification progress, and the outcome follows the current lifecycle semantics (a bounded fix loop that cannot resolve it parks at a human boundary).",
+  "expected": {
+    "progress": {
+      "verification": { "equal": 0 },
+      "repository_mutations": { "at_least": 1 }
+    },
+    "termination": {
+      "stage": "WAITING_FOR_HUMAN",
+      "kind": "AUTO_FIX_EXHAUSTED",
+      "disposition": "NEEDS_HUMAN",
+      "human_required": true
+    }
+  }
+}

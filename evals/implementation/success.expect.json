@@ -1,0 +1,13 @@
+{
+  "name": "implementation-success",
+  "description": "A bounded implementation that changes the repository passes without a human decision.",
+  "expected": {
+    "execution": { "capability": "implement" },
+    "progress": {
+      "repository_mutations": { "at_least": 1 },
+      "verification": { "at_least": 1 },
+      "state_transitions": { "at_least": 1 }
+    },
+    "termination": { "stage": "PASSED", "human_required": false }
+  }
+}

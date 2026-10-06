@@ -76,6 +76,7 @@ Structured run trace (`trace.json`, schema 2): a versioned, observational record
 of a run's execution identity, iterations, verification, and termination, plus
 structured progress signals — discovery, repository mutation, verification, and
 state transition — that distinguish progress from activity (AGENT-001/AGENT-002)
+Agentic evaluation harness: deterministic fixtures evaluated against a run's `trace.json` (AGENT-003)
 ```
 
 Candidates recorded at the time of this status summary (scheduling remains in
@@ -169,6 +170,19 @@ boundary, and both repositories' build/test matrices are verified, and the
 remaining-issues register carries no CRITICAL or HIGH issue. See
 [PREJEV018-READINESS-GATE.md](../history/PREJEV018-READINESS-GATE.md) (Current
 verification, 2026-10-06).
+
+## Phase 7 — Agentic reliability and evaluation
+
+```text
+AGENT-001 Structured Run Trace     COMPLETE   trace.json (schema 2), observational
+AGENT-002 Progress Signals         COMPLETE   discovery / mutation / verification / transition
+AGENT-003 Evaluation Harness       COMPLETE   deterministic fixtures over trace.json
+AGENT-004 Agent Budgets            NEXT       discovery/iteration budgets
+AGENT-005 Replan Strategy          PLANNED    bounded replanning
+```
+
+Evaluations observe completed run evidence; they do not participate in execution or
+lifecycle decisions. See [EVALUATION.md](../reference/EVALUATION.md).
 
 ## Known limitations (current)
 

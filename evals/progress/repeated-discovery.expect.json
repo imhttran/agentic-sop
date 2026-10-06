@@ -1,0 +1,11 @@
+{
+  "name": "repeated-discovery-is-bounded",
+  "description": "A repeated identical inspection does not manufacture additional discovery progress, and repeated activity is not repository progress.",
+  "expected": {
+    "progress": {
+      "discovery": { "equal": 2 },
+      "repository_mutations": { "equal": 0 },
+      "verification": { "equal": 0 }
+    }
+  }
+}
