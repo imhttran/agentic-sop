@@ -69,6 +69,15 @@ none is assumed present.
 | CLOSE-009 | `docs/reports/pre-performance-closure/CLOSE-009-performance-baseline.md` + `CLOSE-009-performance-baseline-raw.json` | **INCOMPLETE / MEASUREMENTS UNAVAILABLE** | Raw JSON: `"capture_status": "UNAVAILABLE"`, `"runs": []` for every workload A/B/C/D; `build-pin.md` records revision and binary hash `UNAVAILABLE`. Workloads defined/frozen but no real-provider repetition values captured. |
 | CLOSE-010 | `docs/reports/PERFORMANCE-BASELINE.md` | **NOT PRODUCED / NOT EXECUTED** | CLOSE-002 §3 records CLOSE-010 as BACKLOG ("file not yet captured"); no `docs/reports/PERFORMANCE-BASELINE.md` artifact is present in the predecessor evidence. |
 
+> **Post-closure reconciliation (2026-10-06).** Since this verdict was written, the
+> CLOSE-003 deterministic baseline report has been produced
+> ([CLOSE-003-sop-deterministic-baseline.md](CLOSE-003-sop-deterministic-baseline.md))
+> with a fresh all-green gate captured at the then-current revision, and the twelve
+> CLI/JEV no-change tests pass in the current deterministic gate. The CLOSE-010
+> published baseline ([../PERFORMANCE-BASELINE.md](../PERFORMANCE-BASELINE.md)) also
+> exists. The rows above record the state observed at readiness time; CLOSE-009's
+> measurement capture remains `UNAVAILABLE`.
+
 ### 2.1 Missing / unresolvable evidence (explicitly labelled, never assumed)
 
 - **CLOSE-003 report**: not located; recorded as **missing evidence**, not as a passing

@@ -164,7 +164,7 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 
 ## Canonical Locations and Kept Paths
 
-- **`docs/plans/PLAN-Wrap-Up.md` is referenced but absent.** The closure plan ([plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md)) names it conditionally, but no such file exists; the historical implementation plan is [history/PLAN-wrapup.md](history/PLAN-wrapup.md). Reconciled as **NOT LOCATED** in [reports/pre-performance-closure/CLOSE-002-status-reconciliation.md](reports/pre-performance-closure/CLOSE-002-status-reconciliation.md), CLOSE-005 and CLOSE-006. The closure plan path is left unedited because it is SOP's recorded active plan source and editing it changes the recorded fingerprint.
+- **The closure plan's wrap-up reference targets the located historical plan.** [plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md) formerly named the absent `docs/plans/PLAN-Wrap-Up.md`; it now points to the located wrap-up plan [history/PLAN-wrapup.md](history/PLAN-wrapup.md). Earlier reconciliation recorded the old path as **NOT LOCATED** in [reports/pre-performance-closure/CLOSE-002-status-reconciliation.md](reports/pre-performance-closure/CLOSE-002-status-reconciliation.md), CLOSE-005 and CLOSE-006. The correction was reconciled through SOP (`sop reconcile … --accept-changed CLOSE-002 --accept-changed CLOSE-006`), so the recorded plan fingerprint matches the file and no executed task changed state.
 
 To keep SOP working, a few paths are intentionally not under the categories above:
 
