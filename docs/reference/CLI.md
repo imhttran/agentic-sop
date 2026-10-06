@@ -211,3 +211,7 @@ under another state is reported as stale and is never applied.
 
 The artifacts live under `.agent-sdlc/context/`. Default behavior is unchanged: no
 cache is consulted and no memory is applied unless these flags are used.
+
+Decision memory can also inform the run context: setting `context.decision_memory: true`
+includes applicable decisions in the context supplied to the implementation agent. It is
+off by default, and a decision recorded under another repository state is never applied.
