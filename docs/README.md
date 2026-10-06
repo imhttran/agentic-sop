@@ -102,7 +102,7 @@ single owner. This table is that map.
 | Recovery, retry, and resume | [RECOVERY.md](specs/RECOVERY.md) | [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) |
 | Security, command policy, secrets | [SECURITY.md](specs/SECURITY.md) | OVERVIEW §14 |
 | Routing and provider rules | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md) | Configuration reference and architecture seams |
-| JEV / OpenJEV analysis | [OPENJEV.md](specs/OPENJEV.md) | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) |
+| JEV / OpenJEV analysis | [OPENJEV.md](specs/OPENJEV.md) | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md); [JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md) |
 | Installation | [INSTALLATION.md](guides/INSTALLATION.md) | Platform and agent-specific guides |
 | Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
@@ -113,7 +113,10 @@ single owner. This table is that map.
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
 - [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, the model-routing classes/precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
-- [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, and severity policy.
+- [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, severity
+  policy, lifecycle placement, and safety boundaries.
+- [reference/JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md) — diagnosing JEV: failure behavior, report/artifact
+  locations, the terminology glossary, and JEV015 traceability.
 - [reference/PROJECT-STATUS.md](reference/PROJECT-STATUS.md) — implemented capabilities and known limitations, separated from future work.
 - [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
