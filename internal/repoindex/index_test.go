@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -194,19 +195,21 @@ func TestBuildFailsWithoutRoot(t *testing.T) {
 	}
 }
 
-// TestBuildControllerFixture proves SOP lifecycle authority beats filesystem convention on
-// a real second repository: the ACTIVE controller plan lives at docs/PLAN-SOP-Controller.md
-// (not under docs/plans/) yet must classify current/active via SOP metadata, and every plan
-// under docs/history/plans/ must be historical. It skips when the fixture is unavailable and
-// never mutates that repository (it only reads).
+// TestBuildControllerFixture proves SOP lifecycle authority beats filesystem convention on a
+// repository following the controller layout: the ACTIVE plan lives at
+// docs/PLAN-SOP-Controller.md (not under docs/plans/) yet must classify current/active via SOP
+// metadata, and every plan under docs/history/plans/ must be historical. The fixture is
+// self-contained in a temporary directory, so the test neither reads nor mutates any live
+// checkout and does not depend on another repository's current lifecycle state.
 func TestBuildControllerFixture(t *testing.T) {
-	root := os.Getenv("SOP_REPOINDEX_CONTROLLER_FIXTURE")
-	if root == "" {
-		root = "/Users/imhttran/agentic-workspace/projects/sop-controller"
-	}
-	if _, err := os.Stat(filepath.Join(root, ".agent-sdlc", "plan.meta.json")); err != nil {
-		t.Skip("sop-controller fixture not available")
-	}
+	root := t.TempDir()
+	write(t, root, "go.mod", "module example.com/controller\n\ngo 1.21\n")
+	write(t, root, "main.go", "package main\n\nfunc main() {}\n")
+	write(t, root, "docs/PLAN-SOP-Controller.md", "# Controller plan\n")
+	write(t, root, "docs/plans/PLAN-Other.md", "# Other plan\n")
+	write(t, root, "docs/history/plans/PLAN-Retired.md", "# Retired plan\n")
+	write(t, root, ".agent-sdlc/plan.meta.json", `{"source":"docs/PLAN-SOP-Controller.md","plan_id":"controller","source_kind":"plan"}`)
+
 	idx := build(t, root)
 
 	d := docByPath(idx, "docs/PLAN-SOP-Controller.md")
@@ -217,7 +220,7 @@ func TestBuildControllerFixture(t *testing.T) {
 		t.Errorf("docs/PLAN-SOP-Controller.md = %+v, want current/active via sop", *d)
 	}
 	for _, doc := range idx.Documents {
-		if len(doc.Path) > len("docs/history/plans/") && doc.Path[:len("docs/history/plans/")] == "docs/history/plans/" {
+		if strings.HasPrefix(doc.Path, "docs/history/plans/") {
 			if doc.Authority != AuthorityHistorical {
 				t.Errorf("%s = %s, want historical", doc.Path, doc.Authority)
 			}
