@@ -1,7 +1,11 @@
 # POST8-001 — Phase 8 Live-Path Integration Governance & Acceptance
 
-**Status:** Active. Post-Phase-8 governance: validate the already-merged Phase 8
-live-path integration. This plan does not reopen or reimplement Phase 8.
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed governance work, not current planning authority.
+
+**Status:** Complete. POST8-001 validated the already-merged Phase 8 live-path integration
+and was archived by SOP (`sop plan complete`,
+`.agent-sdlc/archive/post8-001-phase-8-live-path-integration-governance/`). Phase 8 was not
+reopened.
 
 ## Project
 
