@@ -1,5 +1,7 @@
 # CLOSE-007 — Resume / Idempotency
 
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+
 Prove resume and idempotency for the named plan: re-run the identical named plan after
 a successful execution and verify the same identity, no recreated DAG, no completed task
 rerun, no phantom work and preserved history/approval state; snapshot before/after via

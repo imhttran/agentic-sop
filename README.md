@@ -149,10 +149,12 @@ and interactive-approval layers are implemented. Detailed delivery status and
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
-The next closure and measurement plan is
-[Pre-Performance Closure and Baseline](docs/plans/PLAN-Pre-Performance-Closure.md).
-It is planned work; baseline execution and the new performance architecture have
-not started under that plan.
+The pre-performance closure and measurement plan,
+[Pre-Performance Closure and Baseline](docs/plans/PLAN-Pre-Performance-Closure.md),
+is **COMPLETE**: `CLOSE-001…CLOSE-011` are `LOCAL_DONE`. The published baseline is
+[PERFORMANCE-BASELINE.md](docs/reports/PERFORMANCE-BASELINE.md); representative
+workload measurements remain to be captured, and no new performance architecture is
+started by that plan.
 
 ## Documentation
 

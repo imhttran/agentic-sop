@@ -1,7 +1,8 @@
 # Pre-Performance Closure and Baseline
 
-**Status:** PLANNED — execution-ready; no CLOSE task has been run by creating or
-reconciling this document. This is a new named plan, not SOP's recorded active plan.
+**Status:** COMPLETE — executed; all eleven `CLOSE` tasks are `LOCAL_DONE` and each
+stage gate passed. The readiness verdict and the two explicit deferrals are recorded in
+`docs/reports/pre-performance-closure/CLOSE-011-readiness.md`.
 
 ## Project
 

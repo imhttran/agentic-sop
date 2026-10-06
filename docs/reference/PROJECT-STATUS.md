@@ -115,7 +115,7 @@ The authoritative rules for these fixes are in
 [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md). This delivery record does not imply
 that the cross-repository closure or performance baseline has passed.
 
-## Next verification plan
+## Pre-performance closure (complete)
 
 [PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) is
 **COMPLETE**, with CLOSE-001–CLOSE-011 covering source/config capture, reconciliation,

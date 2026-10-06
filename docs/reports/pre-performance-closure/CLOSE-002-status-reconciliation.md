@@ -1,5 +1,7 @@
 # CLOSE-002 — Plans/Status/History Reconciliation (Single Truth View)
 
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+
 One truthful status view reconciling agentic-sop and sop-controller plans, phases,
 status and history. This Markdown report is the sole authorized evidence mutation
 created by CLOSE-002; no executable, configuration or other documentation change is
