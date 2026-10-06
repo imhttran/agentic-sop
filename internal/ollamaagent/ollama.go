@@ -314,16 +314,20 @@ func normalizeToolCalls(raw []ollamaToolCall) []toolCall {
 
 // toolArguments decodes a native call's arguments. The model mirrors the prompt's
 // {"tool":...,"args":...} shape, so it often wraps the real arguments under a
-// single "args" key; that wrapper is unwrapped here.
+// single "args" key; that wrapper is unwrapped here. The wrapper's value and the
+// top-level arguments may each be either a JSON object or a JSON string holding
+// one, and either form must decode to the same arguments: a shape that loses them
+// makes the tool fail with "missing required argument" on a call the model
+// believes is correct.
 func toolArguments(raw json.RawMessage) map[string]any {
 	if len(raw) == 0 {
 		return map[string]any{}
 	}
-	var m map[string]any
-	if err := json.Unmarshal(raw, &m); err != nil {
+	m, err := decodeArgumentsObject(raw)
+	if err != nil {
 		var s string
 		if json.Unmarshal(raw, &s) == nil {
-			_ = json.Unmarshal([]byte(s), &m)
+			m, _ = decodeArgumentsObject([]byte(s))
 		}
 	}
 	if m == nil {
@@ -332,7 +336,29 @@ func toolArguments(raw json.RawMessage) map[string]any {
 	if inner, ok := m["args"].(map[string]any); ok {
 		return inner
 	}
+	if s, ok := m["args"].(string); ok {
+		if inner, derr := decodeArgumentsObject([]byte(s)); derr == nil && inner != nil {
+			return inner
+		}
+	}
 	return m
+}
+
+// decodeArgumentsObject unmarshals one JSON object, first escaping raw control
+// characters inside its strings. A model routinely writes a multi-line file body
+// with literal newlines, which strict JSON rejects; the content parser already
+// applies this leniency, and the native tool-call path must behave the same or
+// those arguments are silently lost.
+func decodeArgumentsObject(data []byte) (map[string]any, error) {
+	var m map[string]any
+	if err := json.Unmarshal(data, &m); err == nil {
+		return m, nil
+	}
+	var escaped map[string]any
+	if err := json.Unmarshal([]byte(escapeControlChars(string(data))), &escaped); err != nil {
+		return nil, err
+	}
+	return escaped, nil
 }
 
 // rawErrorMessage extracts a message from Ollama's "error" field, which may be a

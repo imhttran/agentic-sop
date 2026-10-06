@@ -499,10 +499,20 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		commandSucceeded := false
 		if candidate {
 			result, observation, toolErr = h.tools.RunObservedMutation(ctx, name, args)
-			if !observation.Verified {
+			switch {
+			case toolErr != nil:
+				// The operation did not execute (a missing or invalid argument, a policy
+				// refusal, or a refused write). Report the failure rather than an
+				// observation gap: reserving "verification_unavailable" for an executed
+				// operation keeps the diagnostic truthful, and the model must see that
+				// the mutation did not happen so it can correct the call instead of
+				// repeating it. It is never credited as progress.
+				h.recordImplementEvent(req, "mutation observation", "mutation_failed")
+				result += "\nmutation did not execute; no mutation progress credited"
+			case !observation.Verified:
 				h.recordImplementEvent(req, "mutation observation", "verification_unavailable")
 				result += "\nmutation verification unavailable; no mutation progress credited"
-			} else if observation.Changed && !observation.Succeeded {
+			case observation.Changed && !observation.Succeeded:
 				h.recordImplementEvent(req, "mutation observation", "failed_operation_repository_changed")
 				result += "\nrepository state changed during failed operation; no successful mutation progress credited"
 			}
