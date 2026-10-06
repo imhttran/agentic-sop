@@ -176,7 +176,7 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 			} else {
 				result, toolErr := h.tools.Run(ctx, name, args)
 				discovered++
-				recordToolActivity(ctx, name, args)
+				recordToolActivity(ctx, name, args, "")
 				h.recordTwoPhaseTurn(req, tp.discoverLabel, discovery, name, summary)
 				detail = toolResultMessage(name, result, toolErr)
 			}
@@ -527,11 +527,6 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		// failed or denied write never counts, and neither does a read, a search,
 		// an inspection, or a successful operation that left repository state unchanged.
 		justMutated := candidate && toolErr == nil && observation.Succeeded && observation.Verified && observation.Changed
-		// CHANGE activity is later consumed as task change evidence. No-op,
-		// failed, or unverified file attempts remain audited but must not emit it.
-		if !candidate || justMutated || name == toolharness.ToolRunCommand {
-			recordToolActivity(ctx, name, args)
-		}
 		if justMutated {
 			st.observeMutation()
 			st.counters.interactions++
@@ -547,6 +542,15 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 
 		recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, result, toolErr))
 		discovered := st.observeDiscovery(iteration, h.tools.Root(), name, args, result, toolErr)
+		// CHANGE activity is later consumed as task change evidence. No-op, failed,
+		// or unverified file attempts remain audited but must not emit it. The
+		// emitted event carries the progress signal the harness already
+		// substantiated (a verified mutation or a first-seen discovery), so the
+		// trace can distinguish progress from mere activity. The classification
+		// above is unchanged; only the emit moves after it.
+		if !candidate || justMutated || name == toolharness.ToolRunCommand {
+			recordToolActivity(ctx, name, args, toolTurnSignal(justMutated, discovered))
+		}
 		progressStop := st.stalled(justMutated, discovered)
 		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {

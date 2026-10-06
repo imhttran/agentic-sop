@@ -21,7 +21,7 @@ import (
 
 // SchemaVersion is the version of the persisted trace contract. It makes future
 // trace evolution explicit; AGENT-001 only defines this initial version.
-const SchemaVersion = 1
+const SchemaVersion = 2
 
 // FileName is the run artifact holding the structured trace.
 const FileName = "trace.json"
@@ -50,6 +50,12 @@ type Trace struct {
 	Iterations   []Iteration    `json:"iterations"`
 	Verification []Verification `json:"verification"`
 	Termination  Termination    `json:"termination"`
+
+	// Progress classifies the evidence above into objectively-backed forms of
+	// progress, with a deterministic summary. It is observation-only: it never
+	// feeds a stale counter, a lifecycle decision, or a termination reason.
+	Progress        []ProgressSignal `json:"progress,omitempty"`
+	ProgressSummary ProgressCounts   `json:"progress_summary"`
 }
 
 // Execution records what actually executed, keeping the routing DECISION (the
@@ -85,6 +91,8 @@ type Iteration struct {
 	RepositoryMutation bool      `json:"repository_mutation"`
 	ChangedFiles       []string  `json:"changed_files,omitempty"`
 	DurationMS         int64     `json:"duration_ms,omitempty"`
+	// Signal is the producer-set progress marker for this iteration, when any.
+	Signal string `json:"signal,omitempty"`
 }
 
 // Verification is one deterministic check the run performed.
@@ -128,6 +136,7 @@ type Inputs struct {
 
 // Build assembles a versioned Trace from the supplied evidence.
 func Build(in Inputs) Trace {
+	progress := classifyProgress(in)
 	return Trace{
 		SchemaVersion:       SchemaVersion,
 		RunID:               in.RunID,
@@ -140,6 +149,8 @@ func Build(in Inputs) Trace {
 		Iterations:          in.Iterations,
 		Verification:        in.Verification,
 		Termination:         in.Termination,
+		Progress:            progress,
+		ProgressSummary:     summarize(progress),
 	}
 }
 

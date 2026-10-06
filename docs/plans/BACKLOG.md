@@ -13,7 +13,9 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 
 - **AGENT-001 Structured Run Trace** — **delivered**: a versioned observational
   `trace.json` (schema 1) per run, summarized by `sop report`.
-- **AGENT-002 Progress Signals** — progress signals richer than repository mutation.
+- **AGENT-002 Progress Signals** — **delivered**: observational progress signals
+  (discovery, repository mutation, verification, state transition) in `trace.json`
+  (schema 2), summarized by `sop report`; they do not change lifecycle decisions.
 - **AGENT-003 Evaluation Harness** — evaluate harness/agent behavior.
 - **AGENT-004 Agent Budgets** — refine discovery/iteration budgets (see
   [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)).

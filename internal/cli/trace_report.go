@@ -60,6 +60,16 @@ func writeTraceReport(w io.Writer, runDir string) {
 	fmt.Fprintf(w, "  %-22s %d\n", "Changed files:", len(t.ChangedFiles))
 	fmt.Fprintf(w, "  %-22s %s\n", "Verification:", verificationSummary(t.Verification))
 	fmt.Fprintf(w, "  %-22s %s\n", "Termination:", terminationSummary(t.Termination))
+
+	// Progress signals are the deterministic classification of the observed
+	// evidence into forms of progress. They are observational and never drive the
+	// disposition, so this block explains what happened, not why SOP stopped.
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Progress:")
+	fmt.Fprintf(w, "  %-22s %d\n", "Discovery:", t.ProgressSummary.Discovery)
+	fmt.Fprintf(w, "  %-22s %d\n", "Repository mutations:", t.ProgressSummary.RepositoryMutations)
+	fmt.Fprintf(w, "  %-22s %d\n", "Verification:", t.ProgressSummary.Verification)
+	fmt.Fprintf(w, "  %-22s %d\n", "State transitions:", t.ProgressSummary.StateTransitions)
 }
 
 // toolActions counts the iterations whose phase is a tool phase (discovery,

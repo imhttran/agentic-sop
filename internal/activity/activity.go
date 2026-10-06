@@ -81,9 +81,27 @@ type Event struct {
 	Action string `json:"action,omitempty"`
 	// Detail qualifies the action (for example the path being read).
 	Detail string `json:"detail,omitempty"`
+	// Signal is an optional, typed progress marker the producer sets when it
+	// already knows the activity is a form of progress (see the Signal*
+	// constants). It is set by the producer, never inferred by a consumer, and
+	// uses a small closed vocabulary; empty means the event carries no progress
+	// claim. It is observation-only and never feeds a decision.
+	Signal string `json:"signal,omitempty"`
 	// Timestamp is when the event was emitted (UTC).
 	Timestamp time.Time `json:"timestamp"`
 }
+
+// Progress signal markers. A producer sets Signal on an event only when the
+// activity is a form of progress it can already substantiate, so a consumer
+// never has to infer progress from activity. They are observation-only.
+const (
+	// SignalDiscoveryNovel marks a first-seen, informative inspection (a novel
+	// discovery), as determined by the harness's own discovery classification.
+	SignalDiscoveryNovel = "discovery.novel"
+	// SignalMutationVerified marks a repository mutation the harness verified by
+	// a before/after state change. A no-op or unverified write never sets it.
+	SignalMutationVerified = "mutation.verified"
+)
 
 // Sink consumes activity events. Implementations must tolerate being called from
 // multiple goroutines.
@@ -138,10 +156,17 @@ func WithClock(taskID string, sink Sink, now func() time.Time) *Recorder {
 // Emit records one activity event. It is a no-op on a nil Recorder or when no
 // sink is registered, so a disabled reporter never changes execution.
 func (r *Recorder) Emit(stage, action, detail string) {
+	r.EmitSignal(stage, action, detail, "")
+}
+
+// EmitSignal records one activity event carrying an optional progress signal
+// (see the Signal* constants). It is identical to Emit otherwise. The signal is
+// producer-set observation only; a consumer never infers progress from it.
+func (r *Recorder) EmitSignal(stage, action, detail, signal string) {
 	if r == nil || r.sink == nil {
 		return
 	}
-	e := Event{TaskID: r.taskID, Stage: stage, Action: action, Detail: detail, Timestamp: r.now()}
+	e := Event{TaskID: r.taskID, Stage: stage, Action: action, Detail: detail, Signal: signal, Timestamp: r.now()}
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.sink.Emit(e)
