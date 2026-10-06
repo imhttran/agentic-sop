@@ -6,6 +6,24 @@ the running list in between. Completed observations are preserved in
 [RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md); shipped capabilities and known
 limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md).
 
+## Agentic reliability and evaluation (AGENT-001–005)
+
+**Status:** Backlog (next workstream). Begins after the pre-Phase-6 closeout
+(complete). Candidate tasks:
+
+- **AGENT-001 Structured Run Trace** — a structured, machine-readable trace of a run.
+- **AGENT-002 Progress Signals** — progress signals richer than repository mutation.
+- **AGENT-003 Evaluation Harness** — evaluate harness/agent behavior.
+- **AGENT-004 Agent Budgets** — refine discovery/iteration budgets (see
+  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)).
+- **AGENT-005 Replan Strategy** — bounded replanning.
+
+Metrics to capture: run latency, token and tool-call counts, and reliability
+measurements. This is distinct from the earlier, already-implemented
+`PLAN-Phase-6-Interactive-Approval`; it is the reliability/evaluation workstream
+that follows the closeout.
+
+
 ## Deferred performance architecture
 
 **Status:** Backlog (deferred).
@@ -90,6 +108,16 @@ Remaining candidates were a concrete file/work scope, incremental continuation,
 and a stronger configured model for multi-package tasks. Task-scoped discovery
 budgets above track the next refinement; current bounded discovery behavior is
 owned by [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#9-tool-harness-bounds-and-phases).
+
+## Autonomy `BLOCK` hardening
+
+**Status:** Backlog (defensive). `autonomy.Decide` has no `case failure.Block`:
+only `NoProgress` produces `Disposition: BLOCK` today and is handled explicitly by
+the `Kind == NoProgress` branch. A future non-`NoProgress` `BLOCK` classification
+would fall through to a human boundary, contradicting `BLOCK`'s documented "not a
+human approval" definition. Add an explicit terminal case plus a test. Surfaced by
+the pre-Phase-6 closeout; currently unreachable.
+
 
 ## Status and roadmap
 
