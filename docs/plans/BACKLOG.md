@@ -211,12 +211,43 @@ Surfaced when CTX-001 (Context Engine) was implemented and merged by a coding ag
 repository change, and the task was classified `IMPLEMENT_NO_PROGRESS` and blocked.
 
 
-## Phase 9 (not started)
+## Phase 10 — Dynamic Worker Action Space
 
-**Status:** Backlog (not authorized). Phase 8 (Context & Execution Efficiency) is
-complete and closed, and is not reopened. Phase 9 has no plan or specification yet:
-no PRD, no task graph, and no authorization to begin. It must not start without a
-governed plan.
+**Priority:** Low
+**Status:** Backlog (evidence-gated). Deliberately **not** scheduled or implemented.
+
+Phase 10 would give every worker assignment a deterministic, harness-derived
+**action space** — the bounded operations, tools, read scope, write scope, and
+compatible targets the harness derives from authoritative inputs
+(`WorkAssignment + RepositoryState + TaskState + Scope + Policy + WorkerCapabilities + Budget`)
+— with execution-time revalidation and stale-action rejection. A model would propose
+within that space; the harness would validate the proposal and grant authority. The
+invariant is unchanged: a model-generated action is **data until the harness validates
+it against the current worker action space**, and a worker can never gain authority by
+naming a tool, operation, path, target, or provider command.
+
+This is deferred until **real Phase 9 usage shows a measurable limitation** that the
+current static orchestration cannot absorb. Revisit it when run evidence records any of:
+
+- repeated `BLOCK` / `NO_PROGRESS` caused by static orchestration;
+- manual replanning an operator performs by hand today;
+- undiscovered dependencies between decomposed work units;
+- another measurable orchestration limitation.
+
+No orchestration complexity is added ahead of that evidence. Until then, static
+orchestration under the existing Phase 9 boundaries remains the design. Design
+inspiration only — no dependency, no code reuse: the constrained-action architecture of
+`browser-use/jev-ultrafast`. Provider/model neutrality, the existing Context Engine, the
+single lifecycle authority, and the single-agent defaults are all preserved.
+
+## Phase 9 (complete)
+
+**Status:** Complete. Phase 9 (Multi-Agent Orchestration) shipped as ORCH-001–ORCH-012;
+all twelve tasks are `LOCAL_DONE`. The deterministic adoption gate
+([PHASE-9-MULTI-AGENT-ADOPTION.md](../reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps
+multi-agent execution **opt-in**, so default execution stays single-agent and Phase 9
+changes no default behavior. Plan:
+[PHASE-9-MULTI-AGENT-ORCHESTRATION.md](PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 
 The post-Phase-8 governance pass (POST8-001) is complete. The remaining Phase 8
 follow-up is the persistent cross-run verification cache, tracked above as
