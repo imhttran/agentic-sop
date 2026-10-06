@@ -2,6 +2,7 @@ package eval
 
 import (
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -128,6 +129,10 @@ func Evaluate(t runtrace.Trace, f Fixture) Result {
 		}
 	}
 
+	if o := f.Expected.Orchestration; o != nil {
+		checkOrchestration(o, t.OrchestrationEvents, add)
+	}
+
 	return Result{Name: f.Name, Passed: len(diags) == 0, Diagnostics: diags}
 }
 
@@ -145,4 +150,95 @@ func checkCount(field string, a *CountAssertion, actual int, add func(field, exp
 	if a.AtMost != nil && actual > *a.AtMost {
 		add(field, "at most "+strconv.Itoa(*a.AtMost), strconv.Itoa(actual))
 	}
+}
+
+// checkOrchestration asserts the composed orchestration graph described by the
+// events. It counts kinds, statuses, and distinct assignments, checks required
+// reason substrings, and verifies the sequence invariant. It is pure and
+// deterministic: the same events and expectation always yield the same result.
+func checkOrchestration(e *OrchestrationExpectation, events []runtrace.OrchestrationEvent, add func(field, expected, actual string)) {
+	kinds := map[string]int{}
+	statuses := map[string]int{}
+	assignments := map[string]struct{}{}
+	var reasons []string
+	integrationInputs := 0
+	for _, ev := range events {
+		kinds[string(ev.Kind)]++
+		if ev.Status != "" {
+			statuses[ev.Status]++
+		}
+		if ev.AssignmentID != "" {
+			assignments[ev.AssignmentID] = struct{}{}
+		}
+		if ev.Reason != "" {
+			reasons = append(reasons, ev.Reason)
+		}
+		if ev.Kind == runtrace.EventIntegrationStarted && len(ev.Parents) > integrationInputs {
+			integrationInputs = len(ev.Parents)
+		}
+	}
+	for _, kind := range sortedCountKeys(e.Kinds) {
+		checkCount("orchestration.kinds."+kind, e.Kinds[kind], kinds[kind], add)
+	}
+	for _, status := range sortedCountKeys(e.Statuses) {
+		checkCount("orchestration.statuses."+status, e.Statuses[status], statuses[status], add)
+	}
+	checkCount("orchestration.assignments", e.Assignments, len(assignments), add)
+	checkCount("orchestration.integration_inputs", e.IntegrationInputs, integrationInputs, add)
+	for _, want := range e.ReasonContains {
+		found := false
+		for _, r := range reasons {
+			if strings.Contains(r, want) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			add("orchestration.reason_contains", strconv.Quote(want), "not present")
+		}
+	}
+	if s := e.Sequence; s != nil {
+		total, unique := sequenceProperties(events)
+		if s.Total != nil && total != *s.Total {
+			add("orchestration.sequence.total", strconv.FormatBool(*s.Total), strconv.FormatBool(total))
+		}
+		if s.Unique != nil && unique != *s.Unique {
+			add("orchestration.sequence.unique", strconv.FormatBool(*s.Unique), strconv.FormatBool(unique))
+		}
+	}
+}
+
+// sequenceProperties reports whether the events' sequence numbers are exactly
+// 1..N (total) and free of duplicates (unique). Both make the graph
+// reconstructable from the trace alone.
+func sequenceProperties(events []runtrace.OrchestrationEvent) (total, unique bool) {
+	unique = true
+	seen := make(map[int]bool, len(events))
+	for _, ev := range events {
+		if seen[ev.Sequence] {
+			unique = false
+		}
+		seen[ev.Sequence] = true
+	}
+	total = unique
+	if total {
+		for i := 1; i <= len(events); i++ {
+			if !seen[i] {
+				total = false
+				break
+			}
+		}
+	}
+	return total, unique
+}
+
+// sortedCountKeys returns the map keys in deterministic order, so diagnostics are
+// stable across runs.
+func sortedCountKeys(m map[string]*CountAssertion) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
 }

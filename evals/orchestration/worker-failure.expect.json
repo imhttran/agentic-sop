@@ -1,0 +1,36 @@
+{
+  "name": "orchestration-worker-failure",
+  "description": "One accepted worker and one failed worker: the failure is a rejected result and a failed completion, distinct from success.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "worker_completed": {
+          "equal": 2
+        },
+        "result_accepted": {
+          "equal": 1
+        },
+        "result_rejected": {
+          "equal": 1
+        }
+      },
+      "assignments": {
+        "equal": 2
+      },
+      "statuses": {
+        "completed": {
+          "equal": 1
+        },
+        "failed": {
+          "equal": 1
+        },
+        "accepted": {
+          "equal": 1
+        },
+        "rejected": {
+          "equal": 1
+        }
+      }
+    }
+  }
+}

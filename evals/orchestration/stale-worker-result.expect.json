@@ -1,0 +1,16 @@
+{
+  "name": "orchestration-stale-worker-result",
+  "description": "A worker result invalidated by a repository identity change is rejected as stale, never accepted.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "result_rejected": {
+          "equal": 1
+        }
+      },
+      "reason_contains": [
+        "stale"
+      ]
+    }
+  }
+}

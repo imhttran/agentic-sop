@@ -1,0 +1,22 @@
+{
+  "name": "orchestration-integration-failure",
+  "description": "An integration pass that fails records a started and a completed event carrying the failure reason, distinct from a verified integration.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "integration_started": {
+          "equal": 1
+        },
+        "integration_completed": {
+          "equal": 1
+        }
+      },
+      "integration_inputs": {
+        "equal": 1
+      },
+      "reason_contains": [
+        "integration failed"
+      ]
+    }
+  }
+}

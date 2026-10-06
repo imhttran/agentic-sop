@@ -1,0 +1,47 @@
+{
+  "name": "orchestration-single-worker-success",
+  "description": "A single accepted worker reconstructs the full orchestration graph: assignment, worker selection, model-class decision, provider resolution, start, complete, and accept.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "assignment_created": {
+          "equal": 1
+        },
+        "worker_selected": {
+          "equal": 1
+        },
+        "model_class_selected": {
+          "equal": 1
+        },
+        "provider_resolved": {
+          "equal": 1
+        },
+        "worker_started": {
+          "equal": 1
+        },
+        "worker_completed": {
+          "equal": 1
+        },
+        "result_accepted": {
+          "equal": 1
+        },
+        "result_rejected": {
+          "equal": 0
+        },
+        "integration_started": {
+          "equal": 0
+        },
+        "termination": {
+          "equal": 1
+        }
+      },
+      "assignments": {
+        "equal": 1
+      },
+      "sequence": {
+        "total": true,
+        "unique": true
+      }
+    }
+  }
+}

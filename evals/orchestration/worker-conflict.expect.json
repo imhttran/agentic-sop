@@ -1,0 +1,19 @@
+{
+  "name": "orchestration-worker-conflict",
+  "description": "A worker whose result conflicts with another accepted result is rejected with a conflict reason.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "result_accepted": {
+          "equal": 1
+        },
+        "result_rejected": {
+          "equal": 1
+        }
+      },
+      "reason_contains": [
+        "conflict"
+      ]
+    }
+  }
+}

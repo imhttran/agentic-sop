@@ -1,0 +1,37 @@
+{
+  "name": "orchestration-parallel-independent-workers",
+  "description": "Three independent workers all produce accepted results, with no rejection and no conflict.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "assignment_created": {
+          "equal": 3
+        },
+        "worker_completed": {
+          "equal": 3
+        },
+        "result_accepted": {
+          "equal": 3
+        },
+        "result_rejected": {
+          "equal": 0
+        },
+        "termination": {
+          "equal": 1
+        }
+      },
+      "assignments": {
+        "equal": 3
+      },
+      "statuses": {
+        "rejected": {
+          "equal": 0
+        }
+      },
+      "sequence": {
+        "total": true,
+        "unique": true
+      }
+    }
+  }
+}

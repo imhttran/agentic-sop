@@ -1,0 +1,22 @@
+{
+  "name": "orchestration-bounded-retry",
+  "description": "A retried attempt is a rejected result followed by an accepted result for the same task, with the retry recorded in the rejection reason.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "result_rejected": {
+          "equal": 1
+        },
+        "result_accepted": {
+          "equal": 1
+        }
+      },
+      "assignments": {
+        "equal": 2
+      },
+      "reason_contains": [
+        "retry"
+      ]
+    }
+  }
+}

@@ -1,0 +1,30 @@
+{
+  "name": "orchestration-worker-no-progress",
+  "description": "A worker that made no repository progress is rejected with a no-progress reason, and the composed termination carries a non-retryable BLOCK disposition.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "result_accepted": {
+          "equal": 0
+        },
+        "result_rejected": {
+          "equal": 1
+        },
+        "termination": {
+          "equal": 1
+        }
+      },
+      "statuses": {
+        "BLOCK": {
+          "equal": 1
+        },
+        "rejected": {
+          "equal": 1
+        }
+      },
+      "reason_contains": [
+        "no progress"
+      ]
+    }
+  }
+}

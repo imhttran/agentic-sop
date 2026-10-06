@@ -1,0 +1,25 @@
+{
+  "name": "orchestration-bounded-replan",
+  "description": "A bounded replan is recorded exactly once, with the rejected-then-accepted orchestration evidence and the replan's recorded reason.",
+  "expected": {
+    "orchestration": {
+      "kinds": {
+        "result_rejected": {
+          "equal": 1
+        },
+        "result_accepted": {
+          "equal": 1
+        }
+      },
+      "reason_contains": [
+        "replan"
+      ]
+    },
+    "replans": {
+      "count": {
+        "equal": 1
+      },
+      "reason": "strategy change"
+    }
+  }
+}

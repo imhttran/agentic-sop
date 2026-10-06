@@ -32,6 +32,9 @@ type Expectation struct {
 	Replans     *ReplansExpectation     `json:"replans,omitempty"`
 	Context     *ContextExpectation     `json:"context,omitempty"`
 	Termination *TerminationExpectation `json:"termination,omitempty"`
+	// Orchestration asserts the ORCH-009 orchestration graph described by the
+	// composed orchestration events (see OrchestrationExpectation).
+	Orchestration *OrchestrationExpectation `json:"orchestration,omitempty"`
 }
 
 // ContextExpectation asserts the Context Engine's supplied-context summary. Every
@@ -102,6 +105,42 @@ type TerminationExpectation struct {
 	DiagnosticContains *string `json:"diagnostic_contains,omitempty"`
 }
 
+// OrchestrationExpectation asserts the ORCH-009 orchestration graph described by
+// the composed orchestration events. Every field is optional: a fixture asserts
+// only the properties it names. It lets a deterministic, model-free fixture prove
+// the orchestration trace producer works, without naming a live provider or model.
+type OrchestrationExpectation struct {
+	// Kinds asserts, per orchestration event kind (assignment_created,
+	// worker_selected, model_class_selected, provider_resolved, worker_started,
+	// worker_completed, result_accepted, result_rejected, integration_started,
+	// integration_completed, verification_result, termination), how many events
+	// occurred. A kind named with a zero bound asserts its absence.
+	Kinds map[string]*CountAssertion `json:"kinds,omitempty"`
+	// Statuses asserts, per status label (completed, failed, accepted, rejected,
+	// PASS, FAIL, and the termination disposition), how many events carry it.
+	Statuses map[string]*CountAssertion `json:"statuses,omitempty"`
+	// Assignments asserts the number of distinct assignment nodes.
+	Assignments *CountAssertion `json:"assignments,omitempty"`
+	// IntegrationInputs asserts the number of worker-result references the largest
+	// integration pass consumed (the integration_started event's inputs). It proves
+	// a multi-worker integration consumed more than one worker result.
+	IntegrationInputs *CountAssertion `json:"integration_inputs,omitempty"`
+	// ReasonContains asserts substrings that must appear in the reason of some
+	// event (for example a rejection or integration outcome label).
+	ReasonContains []string `json:"reason_contains,omitempty"`
+	// Sequence asserts the ordering invariant that makes the graph reconstructable:
+	// the events form a total, unique ordering.
+	Sequence *SequenceExpectation `json:"sequence,omitempty"`
+}
+
+// SequenceExpectation asserts the orchestration event ordering invariant.
+type SequenceExpectation struct {
+	// Total asserts the sequence numbers are exactly 1..N.
+	Total *bool `json:"total,omitempty"`
+	// Unique asserts no two events share a sequence number.
+	Unique *bool `json:"unique,omitempty"`
+}
+
 // ParseFixture parses a fixture from JSON. Unknown fields are rejected, so a
 // fixture that names an unsupported expectation fails loudly.
 func ParseFixture(data []byte) (Fixture, error) {
@@ -154,12 +193,38 @@ func (e Expectation) validate() error {
 		counts["context.bytes"] = c.Bytes
 	}
 	for field, c := range counts {
-		if c == nil {
-			continue
+		if err := checkCountBounds(field, c); err != nil {
+			return err
 		}
-		if c.Equal == nil && c.AtLeast == nil && c.AtMost == nil {
-			return fmt.Errorf("eval: %s names no bound (equal, at_least, or at_most)", field)
+	}
+	if o := e.Orchestration; o != nil {
+		for kind, c := range o.Kinds {
+			if err := checkCountBounds("orchestration.kinds."+kind, c); err != nil {
+				return err
+			}
 		}
+		for status, c := range o.Statuses {
+			if err := checkCountBounds("orchestration.statuses."+status, c); err != nil {
+				return err
+			}
+		}
+		if err := checkCountBounds("orchestration.assignments", o.Assignments); err != nil {
+			return err
+		}
+		if err := checkCountBounds("orchestration.integration_inputs", o.IntegrationInputs); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// checkCountBounds rejects a named count assertion that names no bound.
+func checkCountBounds(field string, c *CountAssertion) error {
+	if c == nil {
+		return nil
+	}
+	if c.Equal == nil && c.AtLeast == nil && c.AtMost == nil {
+		return fmt.Errorf("eval: %s names no bound (equal, at_least, or at_most)", field)
 	}
 	return nil
 }
