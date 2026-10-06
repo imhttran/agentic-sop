@@ -177,6 +177,26 @@ it. Recorded here for traceability; see
 [../specs/PROMPT-EXECUTION.md](../specs/PROMPT-EXECUTION.md) §8._
 
 
+## PLAN-LIFECYCLE-FOLLOWUP — DELIVERED
+
+_RESOLVED: `sop plan complete` (a deterministic, model-free plan-completion operation)._
+PLAN-001 separated plan activation from execution and added explicit supersession
+(`sop plan supersede`) and historicalization
+(`.agent-sdlc/archive/<plan-id>/lifecycle.json`), but there was no way to
+historicalize/close an ACTIVE plan **without** installing a replacement plan: a dangling
+active plan could only be cleared by superseding it with another plan. `sop plan complete`
+closes an ACTIVE plan directly.
+
+The operation is model-free (it takes no agent and invokes no model) and executes no
+task. It fails closed unless every task is satisfied, so a plan with unresolved work is
+never completed. It archives the plan as `COMPLETE` with its task records preserved
+verbatim (`.agent-sdlc/archive/<plan-id>/`, `lifecycle.json`), clears the task graph,
+removes the machine plan, and releases the active-plan association, so the completed plan
+is no longer ACTIVE and cannot be re-activated by `sop tasks` reading a stale `plan.json`.
+It fabricates no PASS and no approval. POST8-001 exercised the operation end to end, and
+the Phase 8 plan was closed the same way. See [../reference/CLI.md](../reference/CLI.md)
+and [plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md](plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md).
+
 ## Superseded agent-provider contracts
 
 The following text was replaced to describe the implemented completion gate,

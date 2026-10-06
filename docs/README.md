@@ -176,6 +176,8 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PHASE-3-DOGFOOD.md](history/PHASE-3-DOGFOOD.md) — the Phase 3 early-JEV dogfood: the deterministic fake-analyzer demonstration and the (not performed) real-provider procedure.
 - [history/PLAN-Model-Routing.md](history/PLAN-Model-Routing.md) — the early, superseded model-routing design (MODELRT001–MODELRT022); the shipped rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [history/RESOLVED-BACKLOG.md](history/RESOLVED-BACKLOG.md) — completed backlog observations and superseded agent-provider contracts, preserved as non-normative evidence.
+- [history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md](history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md) — Phase 8 (Context & Execution Efficiency): **COMPLETE**; all twelve CTX tasks reached a terminal state and SOP archived the plan via `sop plan complete`.
+- [history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md](history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md) — POST8-001: **COMPLETE** post-Phase-8 governance that validated the merged live-path integration before Phase 9.
 - [history/PREJEV-BASELINE.md](history/PREJEV-BASELINE.md) — read for Pre-JEV Baseline (PREJEV001) evidence and recorded scope.
 - [history/PREJEV004-AHV2009-PROOF.md](history/PREJEV004-AHV2009-PROOF.md) — read for PREJEV004 — AHV2009 End-to-End Proof evidence and recorded scope.
 - [history/PREJEV005-AHV2001-2007-RECONCILE.md](history/PREJEV005-AHV2001-2007-RECONCILE.md) — read for PREJEV005 — Reconcile AHV2001 Through AHV2007 evidence and recorded scope.
