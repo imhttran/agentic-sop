@@ -14,6 +14,7 @@ plans/          What work needs to happen?
 reference/      What are the exact commands, states, and values?
 guides/         How do I use or develop it?
 testing/        How was it verified on a real machine?
+reports/        What was measured or decided at a point in time?
 history/        What happened previously?
 ```
 
@@ -32,6 +33,7 @@ Where new documentation belongs:
 - task-oriented instructions → `guides/`
 - completed/superseded artifacts → `history/`
 - clean-room test checklists and their results → `testing/`
+- point-in-time measurement or decision evidence → `reports/`
 
 ## Getting Started
 
@@ -56,6 +58,7 @@ Where new documentation belongs:
 - [architecture/model-routing.md](architecture/model-routing.md) — the **non-normative** implementation seam for per-task model routing (how the lifecycle selects the task's model); the authoritative rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
 - [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
+- [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 
 ## Specifications
 
@@ -108,6 +111,7 @@ single owner. This table is that map.
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
 | Performance measurements | [PERFORMANCE.md](reference/PERFORMANCE.md) | Closure plan and point-in-time baseline reports |
 | Reliability evaluation | [EVALUATION.md](reference/EVALUATION.md) | Run trace (`trace.json`) and progress signals |
+| Multi-agent orchestration | [architecture/orchestration.md](architecture/orchestration.md) | [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md); adoption record in [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) |
 
 ## Reference
 
@@ -133,6 +137,7 @@ single owner. This table is that map.
 - [guides/SOP-CONTROLLER-DASHBOARD.md](guides/SOP-CONTROLLER-DASHBOARD.md) — run and control a SOP run from a local dashboard (and phone).
 - [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP prompt aliases and `/sop-end-to-end` project entry point for Zed.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
+- [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, and inspection.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
@@ -146,6 +151,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
+- [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Active**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
 - [plans/PLAN-Pre-Performance-Closure.md](history/plans/PLAN-Pre-Performance-Closure.md) — **COMPLETE**: the executed CLOSE-001–CLOSE-011 DAG reconciled and verified both SOP and sop-controller, dogfooded and resumed, inventoried existing metrics, measured four workloads, and recorded the readiness verdict. All eleven tasks are `LOCAL_DONE` and the plan's final gate passed; it introduces no new performance architecture and does not start the performance phase.
 - [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; retained under `plans/` because SOP's plan archives reference its path; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation. **Implemented** (off by default); see [specs/PROVIDERS.md](specs/PROVIDERS.md).
@@ -166,6 +172,16 @@ to `history/` when SOP or the repository still references its path: the archive 
 
 - [testing/SOP-END-TO-END.md](testing/SOP-END-TO-END.md) — end-to-end skill assessment, authoritative delegation contract, twelve deterministic scenarios, and host-assistant evaluation limits.
 - [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
+
+## Reports
+
+Point-in-time evidence reports produced by a task. They record what was measured or
+decided at a moment in time and are non-normative: the current behavior they concern
+is owned by the documents they link.
+
+- [reports/PERFORMANCE-BASELINE.md](reports/PERFORMANCE-BASELINE.md) — the pre-performance baseline (CLOSE-010): the measured numbers future performance work is compared against. The measurement model is [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
+- [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) — the Phase 9 adoption decision (ORCH-012): multi-agent orchestration is verified, and the deterministic gate keeps it **opt-in** — default execution stays single-agent.
+- [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
 
 ## Historical Documentation
 

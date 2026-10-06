@@ -336,7 +336,7 @@ JEV results are persisted as **diagnostic run artifacts distinct from
 validation and review evidence**. They are not workflow state: SOP's persisted
 task state remains authoritative, and JEV artifacts can be ignored or removed
 without changing a decision. See
-[Troubleshooting](#troubleshooting-and-failure-behavior) for artifact locations.
+[Troubleshooting](JEV-TROUBLESHOOTING.md#troubleshooting-and-failure-behavior) for artifact locations.
 
 ---
 

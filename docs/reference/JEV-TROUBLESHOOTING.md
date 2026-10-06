@@ -91,11 +91,11 @@ plan.
 
 | JEV015 acceptance criterion                             | Where it is satisfied                                                                                                                                  |
 | ------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| New user can enable JEV without reading implementation. | [Quick path](#quick-path-from-default-disabled-to-jev-enabled) and [Enabling and disabling JEV](#enabling-and-disabling-jev).                          |
-| Default disabled behavior clear.                        | [Enabling and disabling JEV](#enabling-and-disabling-jev) — disabled by default, no noise, existing configs compatible.                                |
+| New user can enable JEV without reading implementation. | [Quick path](JEV-OPERATIONS.md#quick-path-from-default-disabled-to-jev-enabled) and [Enabling and disabling JEV](JEV-OPERATIONS.md#enabling-and-disabling-jev).                          |
+| Default disabled behavior clear.                        | [Enabling and disabling JEV](JEV-OPERATIONS.md#enabling-and-disabling-jev) — disabled by default, no noise, existing configs compatible.                                |
 | Failure behavior documented.                            | [Troubleshooting and failure behavior](#troubleshooting-and-failure-behavior) — fail-closed table, never becomes `PASS`.                               |
-| Provider configuration documented.                      | [Provider behavior and configuration](#provider-behavior-and-configuration) — reused abstraction, configuration-driven model, focused errors.          |
-| Safety boundaries documented.                           | [Safety boundaries and the core rule](#safety-boundaries-and-the-core-rule) — read-only, only SOP writes state, safety invariants, core rule verbatim. |
+| Provider configuration documented.                      | [Provider behavior and configuration](JEV-OPERATIONS.md#provider-behavior-and-configuration) — reused abstraction, configuration-driven model, focused errors.          |
+| Safety boundaries documented.                           | [Safety boundaries and the core rule](JEV-OPERATIONS.md#safety-boundaries-and-the-core-rule) — read-only, only SOP writes state, safety invariants, core rule verbatim. |
 
 Auxiliary documentation of architecture, severity policy, lifecycle placement,
 and terminology is provided above and is consistent with
