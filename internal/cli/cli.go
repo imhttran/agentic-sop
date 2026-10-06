@@ -316,7 +316,7 @@ Commands:
   approvals list every task waiting at an approval gate (--json)
   index     build the deterministic Structural Repository Index (.agent-sdlc/context/index.json)
   retrieve  rank repository evidence lexically (deterministic BM25)
-  gate      evaluate the CTX-004 retrieval gate (sop gate retrieve), model-free
+  gate      evaluate Phase 8 evidence gates (sop gate retrieve|vector), model-free
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
   providers inspect configured provider runtimes and their models (--models)
   eval      run a corpus of task files and report benchmark metrics

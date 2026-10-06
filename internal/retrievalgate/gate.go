@@ -72,8 +72,8 @@ func Evaluate(corpus []Case, candidates []retrieval.Candidate, k int) Report {
 	base := Counts{}
 	cand := Counts{}
 	for _, c := range corpus {
-		base = base.add(measure(baselineOrder(c, candidates), c.Relevant, k, candidates))
-		cand = cand.add(measure(bm25IDs(bm25, c.Query), c.Relevant, k, candidates))
+		base = base.add(Measure(baselineOrder(c, candidates), c.Relevant, k, candidates))
+		cand = cand.add(Measure(bm25IDs(bm25, c.Query), c.Relevant, k, candidates))
 	}
 	n := float64(len(corpus))
 	if n > 0 {
@@ -105,8 +105,11 @@ func Evaluate(corpus []Case, candidates []retrieval.Candidate, k int) Report {
 	return rep
 }
 
-// measure computes precision@k, recall@k, MRR, and the bytes of the retrieved items.
-func measure(ids []string, relevant []string, k int, candidates []retrieval.Candidate) Counts {
+// Measure computes precision@k, recall@k, MRR, and the bytes of the retrieved items
+// for a ranked id list against the ground-truth relevant ids. It is exported so other
+// retrieval evaluations reuse exactly the CTX-004 metric rather than a weaker second
+// implementation.
+func Measure(ids []string, relevant []string, k int, candidates []retrieval.Candidate) Counts {
 	rel := map[string]bool{}
 	for _, id := range relevant {
 		rel[id] = true

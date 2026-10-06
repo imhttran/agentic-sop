@@ -7,13 +7,17 @@ import (
 	"strconv"
 
 	"github.com/imhttran/agentic-sop/internal/retrievalgate"
+	"github.com/imhttran/agentic-sop/internal/vectoreval"
 )
 
-// runGate is the CTX-004 Retrieval Evaluation Gate entry point for operators. It compares
-// the deterministic baseline (unranked lexical matches in stable-path order) against the
-// structural-index + BM25 candidate over a hermetic, deterministic corpus, and prints
-// RETRIEVAL_GATE = PASS or FAIL. It is model-free and read-only and writes no artifact. It
-// exits non-zero when the gate does not pass, so callers can gate on the decision.
+// runGate is the Phase 8 evidence-gate entry point for operators. Subcommands:
+//
+//	retrieve  the CTX-004 Retrieval Evaluation Gate (baseline vs structural + BM25)
+//	vector    the CTX-009 Vector Retrieval Evaluation (BM25 vs vector vs hybrid)
+//
+// Both are model-free and read-only and write no artifact. `gate retrieve` exits
+// non-zero when retrieval does not pass; `gate vector` reports its ADOPT/REJECT
+// decision and always exits zero, because a rejection is a valid outcome.
 func runGate(args []string, stdout, stderr io.Writer, _ deps) int {
 	sub := "retrieve"
 	var rest []string
@@ -23,47 +27,26 @@ func runGate(args []string, stdout, stderr io.Writer, _ deps) int {
 	switch sub {
 	case "retrieve":
 		return runGateRetrieve(rest, stdout, stderr)
+	case "vector":
+		return runGateVector(rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown gate: %s\n", sub)
-		fmt.Fprintln(stderr, "usage: sop gate retrieve [--k N] [--json]")
+		fmt.Fprintln(stderr, "usage: sop gate retrieve|vector [--k N] [--json]")
 		return exitUsage
 	}
 }
 
 // runGateRetrieve evaluates the CTX-004 gate over the built-in corpus.
 func runGateRetrieve(args []string, stdout, stderr io.Writer) int {
-	k := 5
-	asJSON := false
-	for i := 0; i < len(args); i++ {
-		switch args[i] {
-		case "--k":
-			if i+1 >= len(args) {
-				fmt.Fprintln(stderr, "usage: sop gate retrieve [--k N] [--json]")
-				return exitUsage
-			}
-			i++
-			n, err := strconv.Atoi(args[i])
-			if err != nil || n <= 0 {
-				fmt.Fprintf(stderr, "gate: invalid --k %q\n", args[i])
-				return exitUsage
-			}
-			k = n
-		case "--json":
-			asJSON = true
-		default:
-			fmt.Fprintln(stderr, "usage: sop gate retrieve [--k N] [--json]")
-			return exitUsage
-		}
+	k, asJSON, ok := parseEvidenceGateArgs(args, stderr)
+	if !ok {
+		return exitUsage
 	}
-
 	rep := retrievalgate.Evaluate(retrievalgate.Corpus(), retrievalgate.Candidates(), k)
 	if asJSON {
-		data, err := json.MarshalIndent(rep, "", "  ")
-		if err != nil {
-			fmt.Fprintf(stderr, "gate: %v\n", err)
+		if !writeGateJSON(stdout, stderr, rep) {
 			return exitError
 		}
-		fmt.Fprintf(stdout, "%s\n", data)
 	} else {
 		fmt.Fprint(stdout, rep.String())
 	}
@@ -71,4 +54,60 @@ func runGateRetrieve(args []string, stdout, stderr io.Writer) int {
 		return exitError
 	}
 	return exitOK
+}
+
+// runGateVector evaluates the CTX-009 gate over the built-in corpus. A REJECT is a
+// successful outcome, so it always exits zero.
+func runGateVector(args []string, stdout, stderr io.Writer) int {
+	k, asJSON, ok := parseEvidenceGateArgs(args, stderr)
+	if !ok {
+		return exitUsage
+	}
+	rep := vectoreval.Evaluate(retrievalgate.Corpus(), retrievalgate.Candidates(), k)
+	if asJSON {
+		if !writeGateJSON(stdout, stderr, rep) {
+			return exitError
+		}
+		return exitOK
+	}
+	fmt.Fprint(stdout, rep.String())
+	return exitOK
+}
+
+// parseEvidenceGateArgs parses the shared --k and --json flags.
+func parseEvidenceGateArgs(args []string, stderr io.Writer) (k int, asJSON, ok bool) {
+	k = 5
+	for i := 0; i < len(args); i++ {
+		switch args[i] {
+		case "--k":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, "usage: sop gate retrieve|vector [--k N] [--json]")
+				return 0, false, false
+			}
+			i++
+			n, err := strconv.Atoi(args[i])
+			if err != nil || n <= 0 {
+				fmt.Fprintf(stderr, "gate: invalid --k %q\n", args[i])
+				return 0, false, false
+			}
+			k = n
+		case "--json":
+			asJSON = true
+		default:
+			fmt.Fprintln(stderr, "usage: sop gate retrieve|vector [--k N] [--json]")
+			return 0, false, false
+		}
+	}
+	return k, asJSON, true
+}
+
+// writeGateJSON prints rep as indented JSON, reporting success.
+func writeGateJSON(stdout, stderr io.Writer, rep any) bool {
+	data, err := json.MarshalIndent(rep, "", "  ")
+	if err != nil {
+		fmt.Fprintf(stderr, "gate: %v\n", err)
+		return false
+	}
+	fmt.Fprintf(stdout, "%s\n", data)
+	return true
 }
