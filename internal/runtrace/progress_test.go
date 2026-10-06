@@ -96,8 +96,8 @@ func TestBuildIncludesProgressAndSummary(t *testing.T) {
 		Iterations:   []Iteration{{Sequence: 1, Phase: "PLAN"}, {Sequence: 2, Phase: "CHANGE", Observation: "a.go", Signal: "mutation.verified"}},
 		Verification: []Verification{{Command: "true", Status: "PASS"}},
 	})
-	if tr.SchemaVersion != 2 {
-		t.Errorf("schema version = %d, want 2", tr.SchemaVersion)
+	if tr.SchemaVersion != SchemaVersion {
+		t.Errorf("schema version = %d, want %d", tr.SchemaVersion, SchemaVersion)
 	}
 	if tr.ProgressSummary.StateTransitions != 1 || tr.ProgressSummary.RepositoryMutations != 1 || tr.ProgressSummary.Verification != 1 {
 		t.Errorf("summary = %+v", tr.ProgressSummary)

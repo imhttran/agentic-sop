@@ -213,6 +213,22 @@ SOP's state database.
   the environment selected it, and a run rejects a provider that cannot
   `IMPLEMENT` before running any task.
 
+- **Execution budget.** The harness's deterministic execution limits are canonical
+  (`internal/budget`) and configurable with `SOP_OLLAMA_*` variables. An unset,
+  blank, non-numeric, or non-positive value keeps the built-in default, so a
+  malformed override can never disable a limit:
+
+  | Variable | Limit | Default |
+  | --- | --- | --- |
+  | `SOP_OLLAMA_IMPLEMENT_ITERATIONS` | IMPLEMENT iteration ceiling | `32` |
+  | `SOP_OLLAMA_FIX_ITERATIONS` | FIX iteration ceiling | `24` |
+  | `SOP_OLLAMA_STALE_ITERATIONS` | consecutive-stale-turn bound (no-progress guard) | `5` |
+  | `SOP_OLLAMA_TOOL_CALLS` | tool calls per invocation | `80` |
+
+  A negative limit is rejected. The applied limits are recorded in each run's
+  `trace.json` and shown by `sop report`. The harness owns and enforces the budget;
+  the model never sets or extends it.
+
 - The `tool` harness's `IMPLEMENT`/`FIX` iteration ceilings can be raised with
   `SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` (positive integers;
   an unset or invalid value keeps the built-in ceiling, and the soft thresholds scale

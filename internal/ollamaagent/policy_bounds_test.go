@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 )
 
 // TestIterationCeilingsFromEnv proves the IMPLEMENT/FIX ceilings can be raised by
@@ -24,23 +25,23 @@ func TestIterationCeilingsFromEnv(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run("implement/"+tc.name, func(t *testing.T) {
-			t.Setenv(implementIterationsEnv, tc.val)
-			if got := implementIterations(); got != tc.want {
-				t.Errorf("implementIterations() = %d, want %d", got, tc.want)
+			t.Setenv(budget.EnvImplementIterations, tc.val)
+			if got := resolveBudget().ImplementIterations; got != tc.want {
+				t.Errorf("resolved IMPLEMENT ceiling = %d, want %d", got, tc.want)
 			}
 		})
 	}
 
 	t.Run("fix valid", func(t *testing.T) {
-		t.Setenv(fixIterationsEnv, "48")
-		if got := fixIterations(); got != 48 {
-			t.Errorf("fixIterations() = %d, want 48", got)
+		t.Setenv(budget.EnvFixIterations, "48")
+		if got := resolveBudget().FixIterations; got != 48 {
+			t.Errorf("resolved FIX ceiling = %d, want 48", got)
 		}
 	})
 	t.Run("fix invalid keeps the default", func(t *testing.T) {
-		t.Setenv(fixIterationsEnv, "nope")
-		if got := fixIterations(); got != maxIterationsFix {
-			t.Errorf("fixIterations() = %d, want the default %d", got, maxIterationsFix)
+		t.Setenv(budget.EnvFixIterations, "nope")
+		if got := resolveBudget().FixIterations; got != maxIterationsFix {
+			t.Errorf("resolved FIX ceiling = %d, want the default %d", got, maxIterationsFix)
 		}
 	})
 }
@@ -78,7 +79,7 @@ func TestPolicyForHonoursIterationEnv(t *testing.T) {
 		t.Fatalf("default IMPLEMENT ceiling = %d, want %d", def.MaxIterations, maxIterationsImplement)
 	}
 
-	t.Setenv(implementIterationsEnv, "64")
+	t.Setenv(budget.EnvImplementIterations, "64")
 	p := PolicyFor(agent.Implement)
 	if p.MaxIterations != 64 {
 		t.Fatalf("IMPLEMENT ceiling = %d, want 64", p.MaxIterations)

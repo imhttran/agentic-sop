@@ -21,7 +21,7 @@ import (
 
 // SchemaVersion is the version of the persisted trace contract. It makes future
 // trace evolution explicit; AGENT-001 only defines this initial version.
-const SchemaVersion = 2
+const SchemaVersion = 3
 
 // FileName is the run artifact holding the structured trace.
 const FileName = "trace.json"
@@ -56,6 +56,25 @@ type Trace struct {
 	// feeds a stale counter, a lifecycle decision, or a termination reason.
 	Progress        []ProgressSignal `json:"progress,omitempty"`
 	ProgressSummary ProgressCounts   `json:"progress_summary"`
+
+	// Budgets records the deterministic execution limits that applied to the run.
+	// It is observation-only: the harness owns and enforces the budgets, and
+	// nothing reads this back to drive a decision.
+	Budgets BudgetLimits `json:"budgets"`
+}
+
+// BudgetLimits is the applied budget: the deterministic execution limits the
+// harness enforced for this run. It answers "how much execution was allowed?"; it
+// never answers "why did execution stop?" (that is Termination) or "did useful
+// evidence appear?" (that is Progress).
+type BudgetLimits struct {
+	// ImplementIterations and FixIterations are the hard iteration ceilings.
+	ImplementIterations int `json:"implement_iterations"`
+	FixIterations       int `json:"fix_iterations"`
+	// StaleIterations is the consecutive-stale-turn bound (the no-progress guard).
+	StaleIterations int `json:"stale_iterations"`
+	// ToolCalls bounds executed tool calls in one invocation.
+	ToolCalls int `json:"tool_calls"`
 }
 
 // Execution records what actually executed, keeping the routing DECISION (the
@@ -132,6 +151,8 @@ type Inputs struct {
 	Iterations   []Iteration
 	Verification []Verification
 	Termination  Termination
+
+	Budgets BudgetLimits
 }
 
 // Build assembles a versioned Trace from the supplied evidence.
@@ -151,6 +172,7 @@ func Build(in Inputs) Trace {
 		Termination:         in.Termination,
 		Progress:            progress,
 		ProgressSummary:     summarize(progress),
+		Budgets:             in.Budgets,
 	}
 }
 

@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/model"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -20,6 +23,7 @@ func writeRunTrace(rn *runpkg.Run, res lifeResult, cfg config.Config, tc *runtra
 		StartedAt:    rn.State().CreatedAt,
 		CompletedAt:  rn.State().UpdatedAt,
 		Execution:    traceExecution(res, cfg),
+		Budgets:      traceBudgets(),
 		ChangedFiles: rn.ChangedFiles(),
 		Verification: traceVerification(res.suite.Results),
 		Termination:  traceTermination(res),
@@ -36,6 +40,19 @@ func writeRunTrace(rn *runpkg.Run, res lifeResult, cfg config.Config, tc *runtra
 		in.RepositoryMutations = len(in.ChangedFiles)
 	}
 	_ = runtrace.Write(rn.Dir(), runtrace.Build(in))
+}
+
+// traceBudgets returns the deterministic execution limits that applied to the
+// run, resolved from the environment the same way the harness resolves them. It
+// is observation-only.
+func traceBudgets() runtrace.BudgetLimits {
+	b := budget.Resolve(os.Getenv, budget.Defaults())
+	return runtrace.BudgetLimits{
+		ImplementIterations: b.ImplementIterations,
+		FixIterations:       b.FixIterations,
+		StaleIterations:     b.StaleIterations,
+		ToolCalls:           b.ToolCalls,
+	}
 }
 
 // traceExecution records what actually executed, keeping the routing DECISION

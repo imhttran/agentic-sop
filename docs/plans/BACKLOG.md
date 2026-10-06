@@ -9,7 +9,7 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 ## Agentic reliability and evaluation (AGENT-001–005)
 
 **Status:** In progress. After the pre-Phase-6 closeout (complete): AGENT-001 and
-AGENT-002 are delivered; AGENT-003 is delivered; AGENT-004 is next. Remaining:
+AGENT-001 through AGENT-004 are delivered; AGENT-005 is next. Remaining:
 
 - **AGENT-001 Structured Run Trace** — **delivered**: a versioned observational
   `trace.json` (schema 1) per run, summarized by `sop report`.
@@ -19,9 +19,13 @@ AGENT-002 are delivered; AGENT-003 is delivered; AGENT-004 is next. Remaining:
 - **AGENT-003 Evaluation Harness** — **delivered**: deterministic fixtures over
   `trace.json` under `evals/`, evaluated by `internal/eval` (see
   [EVALUATION.md](../reference/EVALUATION.md)).
-- **AGENT-004 Agent Budgets** — refine discovery/iteration budgets (see
-  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)).
+- **AGENT-004 Agent Budgets** — **delivered**: the canonical execution budget
+  (`internal/budget`: iteration, stale, tool-call limits), configurable via
+  `SOP_OLLAMA_*` and recorded in `trace.json`.
 - **AGENT-005 Replan Strategy** — bounded replanning.
+- **Task-Scoped Discovery Budgets** (see
+  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)) — deferred; the
+  discovery allowance remains fixed (a soft threshold, not a hard budget).
 
 Metrics to capture: run latency, token and tool-call counts, and reliability
 measurements. This is distinct from the earlier, already-implemented

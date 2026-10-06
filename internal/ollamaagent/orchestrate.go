@@ -55,7 +55,7 @@ type twoPhase struct {
 // All phase/counter state below belongs to this single invocation; none of it is
 // stored on the shared Harness.
 func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp twoPhase) (string, error) {
-	policy := PolicyFor(req.Capability) // read-only tools
+	policy := policyFor(req.Capability, h.cfg.EffectiveBudget()) // read-only tools
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
@@ -298,7 +298,8 @@ func (p implementPhase) label() string {
 // counts all model turns toward the discovery window, so narration and denials
 // cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
-	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
+	b := h.cfg.EffectiveBudget()
+	policy := policyFor(req.Capability, b) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
@@ -363,7 +364,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				st.finalization.turns++
 			}
 			recovery, repeatStop := st.progress.observe(narrationFingerprint(req.Capability))
-			progressStop := st.stalled(false, false)
+			progressStop := st.stalled(false, false, b.StaleIterations)
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, "narrate", "", st.progress.label(), recovery, terminate)
 			if terminate {
@@ -447,7 +448,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			detail := "a required deliverable is missing; create it with the file tools first"
 			h.tools.RecordDenied(name, args, detail)
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
-			progressStop := st.stalled(false, false)
+			progressStop := st.stalled(false, false, b.StaleIterations)
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
@@ -470,7 +471,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			h.tools.RecordDenied(name, args, detail)
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
-			progressStop := st.stalled(false, false)
+			progressStop := st.stalled(false, false, b.StaleIterations)
 			terminate := repeatStop || progressStop
 			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
 			if terminate {
@@ -551,7 +552,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		if !candidate || justMutated || name == toolharness.ToolRunCommand {
 			recordToolActivity(ctx, name, args, toolTurnSignal(justMutated, discovered))
 		}
-		progressStop := st.stalled(justMutated, discovered)
+		progressStop := st.stalled(justMutated, discovered, b.StaleIterations)
 		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange

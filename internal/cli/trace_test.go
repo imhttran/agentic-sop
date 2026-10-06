@@ -62,8 +62,8 @@ func TestRunTraceSuccessRecordsIdentityTrajectoryAndVerification(t *testing.T) {
 	}
 	// AGENT-002: the successful run carries progress signals (a mutation, the
 	// passing verifications, and the lifecycle transitions).
-	if tr.SchemaVersion != 2 {
-		t.Errorf("schema = %d, want 2", tr.SchemaVersion)
+	if tr.SchemaVersion != runtrace.SchemaVersion {
+		t.Errorf("schema = %d, want %d", tr.SchemaVersion, runtrace.SchemaVersion)
 	}
 	if tr.ProgressSummary.RepositoryMutations == 0 {
 		t.Errorf("no repository-mutation progress signal: %+v", tr.ProgressSummary)

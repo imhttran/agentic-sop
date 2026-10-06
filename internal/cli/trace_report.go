@@ -70,6 +70,15 @@ func writeTraceReport(w io.Writer, runDir string) {
 	fmt.Fprintf(w, "  %-22s %d\n", "Repository mutations:", t.ProgressSummary.RepositoryMutations)
 	fmt.Fprintf(w, "  %-22s %d\n", "Verification:", t.ProgressSummary.Verification)
 	fmt.Fprintf(w, "  %-22s %d\n", "State transitions:", t.ProgressSummary.StateTransitions)
+
+	// Budgets are the deterministic execution limits that applied. They are
+	// observation-only and never drive the disposition.
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Budgets:")
+	fmt.Fprintf(w, "  %-22s %d\n", "Implement iterations:", t.Budgets.ImplementIterations)
+	fmt.Fprintf(w, "  %-22s %d\n", "Fix iterations:", t.Budgets.FixIterations)
+	fmt.Fprintf(w, "  %-22s %d\n", "Stale iterations:", t.Budgets.StaleIterations)
+	fmt.Fprintf(w, "  %-22s %d\n", "Tool calls:", t.Budgets.ToolCalls)
 }
 
 // toolActions counts the iterations whose phase is a tool phase (discovery,
