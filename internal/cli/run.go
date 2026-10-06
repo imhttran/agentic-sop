@@ -17,6 +17,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
+	"github.com/imhttran/agentic-sop/internal/decisionmemory"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/model"
@@ -31,6 +32,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
 	"github.com/imhttran/agentic-sop/internal/validate"
+	"github.com/imhttran/agentic-sop/internal/verifcache"
 )
 
 // runRun drives the local lifecycle. With a task file it runs that one task; with
@@ -1766,13 +1768,57 @@ func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, c
 		changed = rn.ChangedFiles()
 	}
 
+	// The task, acceptance criteria, and execution identity are carried by the agent
+	// request's own fields or the execution item; the context carries the plan and the
+	// evidence, so the compiled prompt does not duplicate the task. Decision memory is
+	// included only when opted in.
+	var memory []sopctx.Item
+	if cfg.ContextEfficiency.DecisionMemory {
+		memory = applicableDecisionItems(d)
+	}
 	return sopctx.FromInputs(sopctx.Inputs{
 		TaskID:       spec.ID,
 		Plan:         plan.RenderMarkdown(),
 		ChangedFiles: changed,
 		Execution:    []sopctx.Item{execution},
 		Recovery:     recovery,
+		Memory:       memory,
 	}, sopctx.DefaultLimits())
+}
+
+// applicableDecisionItems returns the durable decisions applicable to the current
+// repository as canonical context items (CTX-010). A decision recorded under another
+// repository state is never returned, so memory cannot override current evidence. The
+// items carry the lowest priority and are purely informational.
+func applicableDecisionItems(d deps) []sopctx.Item {
+	if d.getwd == nil {
+		return nil
+	}
+	dir, err := d.getwd()
+	if err != nil {
+		return nil
+	}
+	head, dirty := repoState(dir)
+	repository := verifcache.RepositoryIdentity(head, dirty, "")
+	store := loadDecisionStore(dir)
+
+	var items []sopctx.Item
+	for _, scope := range []decisionmemory.Scope{
+		decisionmemory.ScopeRepository,
+		decisionmemory.ScopeProject,
+		decisionmemory.ScopeArchitecture,
+	} {
+		for _, r := range store.Applicable(scope, repository) {
+			items = append(items, sopctx.Item{
+				Source:   sopctx.SourceMemory,
+				Identity: r.ID(),
+				Reason:   "durable decision applicable to this repository",
+				Priority: sopctx.PriorityGeneric,
+				Text:     r.Decision + " - " + r.Reason,
+			})
+		}
+	}
+	return items
 }
 
 // executionContextText renders the resolved execution identity deterministically: the

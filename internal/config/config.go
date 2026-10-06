@@ -129,6 +129,10 @@ type Config struct {
 	// per-provider endpoints and the opt-in pre-execution model validation. An
 	// omitted block leaves existing behavior unchanged.
 	Providers Providers `yaml:"providers"`
+	// ContextEfficiency configures the opt-in Phase 8 context-efficiency facilities on
+	// the live execution path. It is additive: an omitted block leaves existing behavior
+	// unchanged.
+	ContextEfficiency ContextEfficiency `yaml:"context"`
 }
 
 // Project holds project metadata.
@@ -157,6 +161,16 @@ type Validation struct {
 	Build []string `yaml:"build"`
 	Test  []string `yaml:"test"`
 	Lint  []string `yaml:"lint"`
+}
+
+// ContextEfficiency configures the opt-in Phase 8 context-efficiency facilities on the
+// live execution path. Every field defaults to false, so behavior is unchanged unless an
+// operator opts in.
+type ContextEfficiency struct {
+	// DecisionMemory includes durable, applicable engineering decisions as execution
+	// context (CTX-010). A decision recorded under another repository state is never
+	// applied.
+	DecisionMemory bool `yaml:"decision_memory"`
 }
 
 // Review selects the review engine and whether it delegates semantic review.

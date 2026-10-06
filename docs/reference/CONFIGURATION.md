@@ -578,6 +578,25 @@ configuration (the `models:` block and the `SOP_MODEL_*` variables) for its
 pre-execution model validation. Its capability is supplied on the command line, not
 in configuration. See [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md).
 
+## Context efficiency
+
+The Phase 8 context-efficiency facilities are opt-in and default off, so an omitted
+block leaves existing behavior unchanged.
+
+```yaml
+context:
+  decision_memory: false
+```
+
+`context.decision_memory` includes durable engineering decisions recorded for the
+current repository as execution context. Record and list decisions with `sop memory`;
+a decision recorded under another repository state is never applied, and memory carries
+the lowest context priority, so it never overrides current repository, lifecycle, or
+verification evidence.
+
+The verification cache (`sop validate --cache`) and the prompt result cache
+(`sop prompt --cache`) are enabled per invocation, not in configuration.
+
 ## Validity
 
 An invalid file — malformed YAML, an unknown key, an unknown

@@ -17,8 +17,8 @@ import (
 	"unicode/utf8"
 )
 
-// Source is the deterministic category a context item comes from. The four sources
-// are the canonical organization of the context supplied to an agent.
+// Source is the deterministic category a context item comes from. The sources are the
+// canonical organization of the context supplied to an agent.
 type Source string
 
 const (
@@ -35,12 +35,17 @@ const (
 	// SourceRecovery is the failure, continuation, escalation, and replan evidence
 	// handed to another attempt.
 	SourceRecovery Source = "recovery"
+	// SourceMemory is durable decision memory: engineering decisions applicable to the
+	// current repository, supplied as evidence. It is guidance, not authority: it carries
+	// the lowest priority and never overrides current repository, lifecycle, or
+	// verification evidence.
+	SourceMemory Source = "memory"
 )
 
 // Valid reports whether s is a known source.
 func (s Source) Valid() bool {
 	switch s {
-	case SourceTask, SourceRepository, SourceExecution, SourceRecovery:
+	case SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory:
 		return true
 	}
 	return false
@@ -231,7 +236,7 @@ type SourceCount struct {
 }
 
 // sourceOrder is the canonical, stable order of sources in a summary.
-var sourceOrder = []Source{SourceTask, SourceRepository, SourceExecution, SourceRecovery}
+var sourceOrder = []Source{SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory}
 
 // Sources returns the per-source counts in the canonical source order. Only sources
 // that contributed an item are returned, so the summary is deterministic.
@@ -287,12 +292,16 @@ type Inputs struct {
 	// from failure/continuation/escalation/replan evidence.
 	Execution []Item
 	Recovery  []Item
+	// Memory is the durable decision memory already identified as applicable to this
+	// repository. It is included verbatim and carries the lowest priority; it never
+	// overrides current repository, lifecycle, or verification evidence.
+	Memory []Item
 }
 
 // FromInputs assembles the canonical items from already-known evidence and returns
 // the ordered, bounded Context. Selection is deterministic: task and plan evidence
 // carries lifecycle priority, changed-file paths carry repository priority, and the
-// caller's execution and recovery items are included verbatim.
+// caller's execution, recovery, and memory items are included verbatim.
 func FromInputs(in Inputs, lim Limits) Context {
 	var items []Item
 
@@ -343,5 +352,6 @@ func FromInputs(in Inputs, lim Limits) Context {
 
 	items = append(items, in.Execution...)
 	items = append(items, in.Recovery...)
+	items = append(items, in.Memory...)
 	return Build(items, lim)
 }
