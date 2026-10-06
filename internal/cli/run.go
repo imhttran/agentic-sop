@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planner"
@@ -42,6 +44,12 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitUsage
 	}
 	d.modelClass = opts.modelClass
+	var err error
+	d.taskInputs, err = loadTaskInputs()
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	if opts.taskArg != "" {
 		return runSingleTask(opts.taskArg, stdout, stderr, d)
 	}
@@ -214,6 +222,7 @@ type lifeResult struct {
 	suite         testrunner.SuiteResult
 	report        review.Report
 	verifiedFirst bool
+	satisfaction  *agent.CompletionEvidence
 	perf          perf.Task
 	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
 	// JEV did not run. It is diagnostic evidence referenced by the report; it is
@@ -293,18 +302,28 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
+	completion := ""
+	var mutations *int
+	if res.satisfaction != nil {
+		completion = agent.AlreadySatisfied
+		zero := 0
+		mutations = &zero
+	}
 	writeRunJSON(rn, "report.json", runReportDoc{
-		ID:            rn.State().ID,
-		Stage:         res.stage,
-		Provider:      cfg.Agent.Provider,
-		Engine:        cfg.Review.Engine,
-		Decision:      res.gate.Decision,
-		Reasons:       res.gate.Reasons,
-		FixCycles:     res.cycles,
-		ExecutionMode: string(spec.ExecutionMode),
-		VerifiedFirst: res.verifiedFirst,
-		Validation:    res.suite.Results,
-		Findings:      res.report.Findings,
+		ID:                  rn.State().ID,
+		Stage:               res.stage,
+		Provider:            cfg.Agent.Provider,
+		Engine:              cfg.Review.Engine,
+		Decision:            res.gate.Decision,
+		Reasons:             res.gate.Reasons,
+		FixCycles:           res.cycles,
+		ExecutionMode:       string(spec.ExecutionMode),
+		VerifiedFirst:       res.verifiedFirst,
+		Validation:          res.suite.Results,
+		AlreadySatisfied:    res.satisfaction,
+		Completion:          completion,
+		RepositoryMutations: mutations,
+		Findings:            res.report.Findings,
 		// JEV is diagnostic evidence, reported in its own section and pointing at
 		// the persisted artifact. It is separate from the validation and review
 		// sections, which remain authoritative.
@@ -361,6 +380,22 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 // only when that validation fails (or when there is nothing configured to
 // verify). It returns the final result and writes the intermediate artifacts.
 func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (res lifeResult, err error) {
+	reports := taskReportDeliverables(spec)
+	if rawOutputEvidence(spec) {
+		_ = os.Setenv(envCommandEvidenceLog, filepath.Join(rn.Dir(), "command-evidence.jsonl"))
+		defer func() { _ = os.Unsetenv(envCommandEvidenceLog) }()
+	}
+	if len(reports) > 0 {
+		readDiff := d.readDiff
+		d.readDiff = func(ctx context.Context, dir string) (string, error) {
+			diff, err := readDiff(ctx, dir)
+			if err != nil {
+				return "", err
+			}
+			declared, err := git.New(dir).DiffFiles(ctx, reports...)
+			return diff + declared, err
+		}
+	}
 	rec := perf.NewRecorder(rn.State().ID)
 	// trouting holds the per-task routing decision once it is made, so the deferred
 	// assignment records it even when the lifecycle returns through a literal.
@@ -376,13 +411,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// so it never affects execution.
 	ar := activity.FromContext(ctx)
 
-	// changeRequired is the task's DETERMINISTIC change requirement: an ordinary
-	// IMPLEMENT task must produce a governed repository change before it may pass.
+	// Ordinary IMPLEMENT tasks need governed mutation or verified completion
+	// evidence. That evidence may span earlier invocations of the same task.
 	// A verify-first task proves acceptance with the configured validation (no
 	// implementation agent of its own), and an execution_mode done stage's work is
 	// declared already present, so neither requires a change here. The rule reads
-	// only the task's declared execution mode, so no model output (including the
-	// model's changes_expected) can enable or waive it.
+	// only the task's declared execution mode; a model claim alone cannot waive it.
 	changeRequired := !spec.ExecutionMode.VerifyFirst() && !spec.ExecutionMode.Done()
 
 	var (
@@ -396,12 +430,17 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// "fix cycles: n/max" can never disagree with the recorded FIX count.
 		cycles int
 		// implMutation is SOP's OBSERVED mutation evidence for the ordinary
-		// IMPLEMENT invocation: whether the working tree actually changed as a
-		// result of it. It is set from the same working-tree diff the lifecycle
-		// already reads — the existing mutation observer — so no second
-		// mutation-detection mechanism exists. Narration, tool intent, a write
+		// IMPLEMENT/FIX invocations, separate from accumulated task evidence.
+		// Only harness-observed paths or invocation-scoped content changes count.
+		// Narration, pre-existing dirty work, tool intent, a write
 		// request, a test run, and a model-guessed git status are never evidence.
-		implMutation bool
+		implMutation     bool
+		alreadySatisfied bool
+		satisfaction     *agent.CompletionEvidence
+		// Legacy providers may explicitly finish without changes. That completion
+		// still needs actual, successful configured validation and the quality gate;
+		// neither an empty suite nor an unverified ALREADY_SATISFIED claim suffices.
+		legacyNoChange bool
 		// pendingOutcome is a non-completed mutating (IMPLEMENT/FIX) outcome whose
 		// disposition is deferred until SOP's own deterministic validation has run,
 		// so structured build/test evidence outranks the agent's free-form summary.
@@ -426,7 +465,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// The task's change evidence is recorded before the agent-less validation,
 		// so a verify-first pass still contributes to the task's accumulated
 		// implementation evidence.
-		recordTaskChanges(rn, changedFiles(diff))
+		recordTaskChanges(rn, changedFiles(diff), reports...)
 		suite := sessionValidation(ctx, dir, cfg, diff, rec, sess)
 		switch {
 		case len(suite.Results) == 0:
@@ -449,7 +488,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			rec.PlanRepair()
 			rec.AgentCall()
 			fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
-		}).Generate(ctx, spec.Render())
+		}).Generate(ctx, d.taskInput(spec.ID, spec.Render()))
 		stop()
 		rec.AgentCall()
 		if err != nil {
@@ -504,11 +543,22 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if sig, had := rn.ReadAttempt(); had {
 			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
 		}
+		var before map[string]string
+		if d.snapshotRepository != nil {
+			before, err = d.snapshotRepository(ctx, dir)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("implement mutation baseline: %w", err)
+			}
+		}
 		implStop := rec.Measure(perf.StageImplement)
 		impl, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Implement,
+			AcceptanceCriteria: spec.AcceptanceCriteria,
+			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
-			Input:              input,
+			Input:              d.taskInput(spec.ID, input),
+			Deliverables:       reports,
+			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		implStop()
@@ -517,10 +567,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("implement: %w", err)
 		}
 		_ = rn.Write("implementation.md", impl.Content)
+		alreadySatisfied = impl.VerifiedAlreadySatisfied && impl.Outcome != nil &&
+			impl.Outcome.Status == agent.OutcomeCompleted && impl.Outcome.Completion == agent.AlreadySatisfied
+		if alreadySatisfied {
+			satisfaction = impl.Outcome.Evidence
+		}
 		// Record the invocation's observed changes as task-scoped evidence even when
 		// it did not complete, so the next bounded invocation (and JEV) keeps the
 		// implementation the task already produced.
-		recordTaskChanges(rn, impl.ChangedFiles)
+		recordTaskChanges(rn, impl.ChangedFiles, reports...)
 
 		// The working tree is read before a non-completed outcome is classified. SOP's
 		// own deterministic validation runs against it below, and a structured build
@@ -530,14 +585,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
-		recordTaskChanges(rn, taskInvocationChanges(impl.ChangedFiles, diff))
+		paths, observed, err := invocationChanges(ctx, dir, d, before, impl.ChangedFiles, diff, reports...)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("implement mutation observation: %w", err)
+		}
+		recordTaskChanges(rn, paths, reports...)
 		_ = rn.Write("diff.patch", diff)
 
-		// The observed working-tree change of THIS invocation is the mutation
-		// evidence the gate below decides on. It comes from the same diff SOP
-		// already read, so a failed or no-op write (which leaves the tree unchanged)
-		// does not qualify, and narration, tool intent, and a write request never do.
-		implMutation = strings.TrimSpace(diff) != ""
+		implMutation = observed
+		legacyNoChange = impl.Outcome != nil && impl.Outcome.Status == agent.OutcomeCompleted &&
+			!impl.Outcome.ChangesExpected && impl.Outcome.Completion == ""
 
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
 			if implMutation {
@@ -552,15 +609,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 
-		// A claimed change with none produced is a failure (SOP's own deterministic
-		// verdict, NoChangesProduced). A model-asserted changes_expected=false is NOT
-		// a waiver for a change-requiring task: it is evidence only, and the
-		// authoritative gate below (green validation on an unchanged tree) routes the
-		// completion to the retryable no_changes/no-progress vocabulary instead of
-		// PASS. A legitimate no-change completion still runs the configured validation
-		// first, as it always has.
+		// A claimed change with no current or accumulated task evidence is a failure.
+		// A final invocation may instead verify earlier governed work; leave that
+		// evidence available to validation/review/JEV without calling it a new change.
 		changesExpected := impl.Outcome == nil || impl.Outcome.ChangesExpected
-		if !implMutation && changesExpected {
+		if !implMutation && changesExpected && !alreadySatisfied && len(taskChangeEvidence(rn, reports...)) == 0 {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "IMPLEMENT", "agent reported successful implementation but produced no repository changes"), nil
@@ -621,8 +674,14 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// change came from an implementation: a verify-first pass made no change of
 		// its own, so there is nothing for this task to review.
 		report = review.Report{}
+		if rawOutputEvidence(spec) {
+			if ierr := injectCapturedEvidence(dir, reports, rn.Dir()); ierr != nil {
+				return lifeResult{}, fmt.Errorf("captured evidence: %w", ierr)
+			}
+		}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
-			reviewKey := reviewIdentity(cfg.Review.Engine, spec.Render(), diff)
+			reviewTask := d.taskInput(spec.ID, spec.Render())
+			reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, diff)
 			if cached, ok := sess.cachedReview(reviewKey); ok {
 				rec.ReviewReused()
 				report = cached
@@ -634,7 +693,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 					return lifeResult{}, fmt.Errorf("review: %w", perr)
 				}
 				revStop := rec.Measure(perf.StageReview)
-				report, err = provider.Review(ctx, review.Request{Task: spec.Render(), Diff: diff})
+				report, err = provider.Review(ctx, review.Request{Task: reviewTask, Diff: diff})
 				revStop()
 				rec.ReviewRun()
 				if err != nil {
@@ -686,6 +745,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		})
 		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 
+		// Persist validation, review, and gate evidence as soon as the gate is
+		// evaluated, not only after the loop. A later FIX cycle that fails before it
+		// re-validates must not erase the evidence explaining why the gate failed:
+		// the blocking review findings and the gate's own reasons must survive so
+		// the failure is diagnosable. These are diagnostics; nothing reads them back.
+		writeRunJSON(rn, "validation.json", suite)
+		writeRunJSON(rn, "review.json", report)
+		writeRunJSON(rn, "gate.json", gate)
+
 		// A failing check is actionable in its own right: the bounded repair loop must
 		// run for it, not only for blocking review findings. A blocking JEV finding
 		// is actionable the same way and enters this same loop (it is not a second
@@ -710,11 +778,22 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		ar.Emit(activity.StageFix, "applying fix", "")
 		cycles++
 		rec.FixCycle()
+		var before map[string]string
+		if d.snapshotRepository != nil {
+			before, err = d.snapshotRepository(ctx, dir)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("fix mutation baseline: %w", err)
+			}
+		}
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
+			AcceptanceCriteria: spec.AcceptanceCriteria,
+			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
-			Input:              fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()),
+			Input:              d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn())),
+			Deliverables:       reports,
+			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
 		})
 		fixStop()
@@ -723,7 +802,18 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
-		recordTaskChanges(rn, fix.ChangedFiles)
+		// A later fix invalidates an earlier already-satisfied verdict. Only the
+		// current proof can be used; a run that implemented changes is not a
+		// zero-mutation completion merely because its final FIX needed no edit.
+		alreadySatisfied = false
+		satisfaction = nil
+		if !implMutation && fix.VerifiedAlreadySatisfied && fix.Outcome != nil && fix.Outcome.Status == agent.OutcomeCompleted && fix.Outcome.Completion == agent.AlreadySatisfied {
+			alreadySatisfied = true
+			satisfaction = fix.Outcome.Evidence
+		}
+		legacyNoChange = fix.Outcome != nil && fix.Outcome.Status == agent.OutcomeCompleted &&
+			!fix.Outcome.ChangesExpected && fix.Outcome.Completion == ""
+		recordTaskChanges(rn, fix.ChangedFiles, reports...)
 
 		// Re-read the working tree after the fix so the next classification sees what
 		// the fix actually produced.
@@ -731,10 +821,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("diff: %w", err)
 		}
-		recordTaskChanges(rn, taskInvocationChanges(fix.ChangedFiles, diff))
+		paths, fixMutation, err := invocationChanges(ctx, dir, d, before, fix.ChangedFiles, diff, reports...)
+		if err != nil {
+			return lifeResult{}, fmt.Errorf("fix mutation observation: %w", err)
+		}
+		recordTaskChanges(rn, paths, reports...)
+		implMutation = implMutation || fixMutation
 
 		if fix.Outcome != nil && fix.Outcome.Status != agent.OutcomeCompleted {
-			if strings.TrimSpace(diff) != "" {
+			if fixMutation {
 				// A fix that did not complete is not trusted on its own prose: re-validate
 				// the tree and let structured evidence decide. The pending check at the top
 				// of the loop then either continues the deterministic repair or reports the
@@ -745,7 +840,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles, approval), nil
 		}
 
-		if strings.TrimSpace(diff) == "" {
+		if !fixMutation && !alreadySatisfied && !legacyNoChange {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
 			return noChangesFailure(cfg, "FIX", "agent reported a fix but produced no repository changes"), nil
@@ -753,24 +848,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		_ = rn.Write("diff.patch", diff)
 	}
 
-	writeRunJSON(rn, "validation.json", suite)
-	writeRunJSON(rn, "review.json", report)
-
-	// The authoritative finalization gate for a CHANGE-REQUIRING IMPLEMENT task: a
-	// green validation on an unchanged repository is NOT success. The model's
-	// changes_expected is evidence, never authority to waive the requested
-	// mutation, so a completion that produced no governed repository mutation is
-	// routed to the retryable, early false-completion vocabulary rather than PASS.
-	//
-	// This reuses the failure classifier's fixed evidence precedence and the
-	// EXISTING termination vocabulary (termination=no_changes, diagnostic
-	// IMPLEMENT_NO_CHANGES, outcome=CONTINUE), and it is deliberately DISTINCT from
-	// the no-progress guard (IMPLEMENT_NO_PROGRESS after five consecutive
-	// non-mutating turns): this is the EARLY verdict, produced by the same
-	// accounting without a second counter and without a second mechanism. A
-	// verify-first or execution_mode-done stage (whose work needs no change of its
-	// own) is unaffected, and a genuine mutation passes exactly as before.
-	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation {
+	// Completion is task-scoped; mutation attribution is invocation-scoped. Prior
+	// governed work remains available to the independent quality/JEV gate. Legacy
+	// no-change completion requires actual green validation, not just model prose
+	// or a vacuously passing empty suite. Explicit ALREADY_SATISFIED still requires
+	// the trusted harness proof above. Missing evidence uses the existing bounded
+	// IMPLEMENT_NO_CHANGES continuation, never an artificial mutation or PASS.
+	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed()
+	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied &&
+		len(taskChangeEvidence(rn, reports...)) == 0 && !validatedNoChange {
 		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
 		return noChangesCompletion(cfg, rn, class), nil
 	}
@@ -811,6 +897,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			ar.Emit(activity.StageComplete, string(gate.Decision), "")
 		}
 	}
+	if gate.Decision != quality.Pass {
+		satisfaction = nil
+	}
 	_ = rn.SetStage(stage)
 	return lifeResult{
 		gate:           gate,
@@ -819,6 +908,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		suite:          suite,
 		report:         report,
 		verifiedFirst:  verifiedFirst,
+		satisfaction:   satisfaction,
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
@@ -1161,7 +1251,11 @@ func classifiedOutcome(cfg config.Config, rn *runpkg.Run, outcome *agent.Outcome
 		_ = rn.SetStage(runpkg.Failed)
 		return lifeResult{gate: quality.Result{Decision: quality.Continue, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.Failed, classification: class, decision: decision}
 	}
-	if outcome.Status == agent.OutcomeNeedsHuman {
+	// A BLOCK disposition (a bounded no-progress stop) is neither a resumable
+	// continuation nor a human decision: it must NOT park the run at
+	// WAITING_FOR_HUMAN, because the approval subsystem treats that stage as a
+	// genuine human boundary and would create an approve/decline gate.
+	if outcome.Status == agent.OutcomeNeedsHuman && class.Disposition != failure.Block {
 		_ = rn.SetStage(runpkg.WaitingForHuman)
 		return lifeResult{gate: quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}, cycles: cycles, stage: runpkg.WaitingForHuman, classification: class, decision: decision}
 	}
@@ -1215,6 +1309,27 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 		}
 	}
 	return b.String()
+}
+
+// rawOutputEvidence reports whether a task's contract explicitly requires raw
+// command output in its deliverable. It reads the declared acceptance criteria and
+// deliverables — task data — never the artifact content, so it is not a prose
+// heuristic over the produced report.
+// envCommandEvidenceLog names the file the agent appends captured command evidence
+// to (JSONL). SOP sets it for a task that requires raw output, to a path inside the
+// task's run directory, so the captured evidence is SOP-owned; it is unset for every
+// other task, so nothing is captured needlessly.
+const envCommandEvidenceLog = "SOP_COMMAND_EVIDENCE_LOG"
+
+// rawOutputEvidence reports whether a task's contract explicitly requires raw
+// command output in its deliverable.
+func rawOutputEvidence(spec *taskfile.Spec) bool {
+	for _, item := range append(append([]string{}, spec.AcceptanceCriteria...), spec.Deliverables...) {
+		if strings.Contains(strings.ToLower(item), "raw output") {
+			return true
+		}
+	}
+	return false
 }
 
 // fixContext renders the bounded context a fix is given: the plan, the
@@ -1385,17 +1500,20 @@ func relDir(base, target string) string {
 
 // runReportDoc is the machine-readable run report.
 type runReportDoc struct {
-	ID            string              `json:"id"`
-	Stage         runpkg.Stage        `json:"stage"`
-	Provider      string              `json:"provider"`
-	Engine        string              `json:"review_engine"`
-	Decision      quality.Decision    `json:"decision"`
-	Reasons       []string            `json:"reasons"`
-	FixCycles     int                 `json:"fix_cycles"`
-	ExecutionMode string              `json:"execution_mode"`
-	VerifiedFirst bool                `json:"verified_first"`
-	Validation    []testrunner.Result `json:"validation"`
-	Findings      []review.Finding    `json:"findings"`
+	Completion          string                    `json:"completion,omitempty"`
+	RepositoryMutations *int                      `json:"repository_mutations,omitempty"`
+	AlreadySatisfied    *agent.CompletionEvidence `json:"already_satisfied,omitempty"`
+	ID                  string                    `json:"id"`
+	Stage               runpkg.Stage              `json:"stage"`
+	Provider            string                    `json:"provider"`
+	Engine              string                    `json:"review_engine"`
+	Decision            quality.Decision          `json:"decision"`
+	Reasons             []string                  `json:"reasons"`
+	FixCycles           int                       `json:"fix_cycles"`
+	ExecutionMode       string                    `json:"execution_mode"`
+	VerifiedFirst       bool                      `json:"verified_first"`
+	Validation          []testrunner.Result       `json:"validation"`
+	Findings            []review.Finding          `json:"findings"`
 	// JEV is the JEV diagnostic evidence section: a distinct, attributed summary
 	// of the JEV result that points at the persisted artifact. It is separate
 	// from Validation and Findings, which remain authoritative, and is omitted
@@ -1429,6 +1547,12 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	fmt.Fprintf(&b, "- Review engine: `%s`\n", cfg.Review.Engine)
 	fmt.Fprintf(&b, "- Stage: `%s`\n", res.stage)
 	fmt.Fprintf(&b, "- Fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
+	if res.satisfaction != nil {
+		b.WriteString("\n- Completion: ALREADY_SATISFIED\n- Repository mutations: 0\n")
+		for _, item := range res.satisfaction.Acceptance {
+			fmt.Fprintf(&b, "- Acceptance: %s — inspected %s\n", item.Criterion, strings.Join(item.Paths, ", "))
+		}
+	}
 	if res.verifiedFirst {
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
@@ -1440,7 +1564,7 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	b.WriteString(strings.TrimSpace(spec.Render()))
 	b.WriteString("\n\n## Validation\n\n")
 	if len(res.suite.Results) == 0 {
-		b.WriteString("No validation commands configured.\n")
+		writeNoValidationResults(&b, cfg)
 	} else {
 		for _, r := range res.suite.Results {
 			fmt.Fprintf(&b, "- %s %s `%s`\n", r.Status, r.Category, r.Command)
@@ -1480,6 +1604,24 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	writeClassificationReport(&b, res.classification)
 	writeAutonomyReport(&b, res.decision)
 	return b.String()
+}
+
+// writeNoValidationResults renders the Validation section when the suite produced
+// no results. It distinguishes a suite with configured checks that did not run
+// (the lifecycle stopped before validation) from a project with no checks
+// configured at all, so a report never claims "no validation commands
+// configured" when checks were configured. The executed-results path is
+// unaffected.
+func writeNoValidationResults(b *strings.Builder, cfg config.Config) {
+	checks := validate.Checks(cfg.Validation)
+	if len(checks) == 0 {
+		b.WriteString("No validation commands configured.\n")
+		return
+	}
+	b.WriteString("Validation checks configured but NOT RUN: the lifecycle stopped before validation.\n\n")
+	for _, check := range checks {
+		fmt.Fprintf(b, "- NOT RUN %s `%s`\n", check.Category, check.Command)
+	}
 }
 
 // writeModelSelectionReport renders the resolved model-routing evidence in the
@@ -1542,4 +1684,13 @@ func writeClassificationReport(b *strings.Builder, cls failure.Classification) {
 	if reason := strings.TrimSpace(cls.Reason); reason != "" {
 		fmt.Fprintf(b, "- Reason: %s\n", reason)
 	}
+}
+
+// completionValidationCommands is caller-owned policy, not model-selected proof.
+func completionValidationCommands(cfg config.Config) []string {
+	var commands []string
+	for _, check := range validate.Checks(cfg.Validation) {
+		commands = append(commands, check.Command)
+	}
+	return commands
 }

@@ -11,7 +11,7 @@ import (
 // systemPrompt states the harness's rules, the capability's policy, the tool
 // protocol, and how to finish. It is the only place the model learns which tools
 // it may call and how to conclude.
-func systemPrompt(req agent.Request, policy CapabilityPolicy) string {
+func systemPrompt(req agent.Request, policy CapabilityPolicy, primaryRoot string, externals []toolharness.Root) string {
 	var b strings.Builder
 	b.WriteString(`You are the implementation agent inside an SOP-controlled repository.
 
@@ -36,6 +36,20 @@ Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 {"tool": "<name>", "args": {...}}
 `)
 
+	if len(externals) > 0 {
+		b.WriteString("\n## Authorized repository roots\n")
+		fmt.Fprintf(&b, "Your tools default to the primary repository root (%s).\n", primaryRoot)
+		b.WriteString("This task also authorizes these additional roots; pass the exact path as \"root\" (file tools) or \"cwd\" (run_command):\n")
+		for _, r := range externals {
+			mode := "read-only"
+			if r.Mode == toolharness.RootReadWrite {
+				mode = "read-write"
+			}
+			fmt.Fprintf(&b, "- %s (%s)\n", r.Path, mode)
+		}
+		b.WriteString("Paths outside the primary root and these authorized roots are refused. A read-only root cannot be written. Every command records the working directory it ran in.\n")
+	}
+
 	b.WriteString("\n## This capability\n")
 	b.WriteString(capabilityGuidance(req.Capability))
 
@@ -59,14 +73,14 @@ func toolReference(policy CapabilityPolicy) string {
 
 // toolUsage documents each tool's arguments in one line.
 var toolUsage = map[string]string{
-	toolharness.ToolReadFile:    `{"path": "..."}                        read a file`,
-	toolharness.ToolWriteFile:   `{"path": "...", "content": "..."}   create or overwrite a file`,
-	toolharness.ToolCreateFile:  `{"path": "...", "content": "..."}   fail if the file already exists`,
-	toolharness.ToolListFiles:   `{"path": "..."}                     path optional, defaults to "."`,
-	toolharness.ToolSearchFiles: `{"pattern": "...", "path": "..."}   path optional; substring search`,
-	toolharness.ToolRunCommand:  `{"command": "go test ./..."}        allow-listed commands only`,
-	toolharness.ToolGitStatus:   `{}                                  git status --short --branch`,
-	toolharness.ToolGitDiff:     `{}                                  git diff`,
+	toolharness.ToolReadFile:    `{"path": "...", "root": "..."}                   read a file (root: optional authorized-root path)`,
+	toolharness.ToolWriteFile:   `{"path": "...", "content": "...", "root": "..."}  create or overwrite a file`,
+	toolharness.ToolCreateFile:  `{"path": "...", "content": "...", "root": "..."}  fail if the file already exists`,
+	toolharness.ToolListFiles:   `{"path": "...", "root": "..."}                   list a directory (path/root optional)`,
+	toolharness.ToolSearchFiles: `{"pattern": "...", "path": "...", "root": "..."}  substring search`,
+	toolharness.ToolRunCommand:  `{"command": "go test ./...", "cwd": "..."}       allow-listed commands (cwd: optional authorized-root path)`,
+	toolharness.ToolGitStatus:   `{}                                             git status --short --branch`,
+	toolharness.ToolGitDiff:     `{}                                             git diff`,
 }
 
 // capabilityGuidance tells the model how to finish the specific capability,
@@ -86,8 +100,22 @@ every acceptance criterion yourself.
 
 When the implementation is complete, return the required final response immediately.
 
+For a report deliverable, write the requested report using the current caller
+observations and permitted inspections. Missing optional facts must be labelled
+unavailable with a reason; never invent required evidence. Do not spend discovery
+turns repeating observations already supplied by the caller, or attempt commands
+outside the allow-list to rediscover facts the caller has supplied. An explicitly
+requested Markdown report is an implementation mutation: create/update it through
+the file tools, preserving unrelated content, rather than only describing it.
+
 SOP performs independent validation and review after you return. Prefer small,
-targeted edits, and run focused validation (for example "go test ./...").`
+targeted edits, and run focused validation (for example "go test ./...").
+
+Exception: when the task supplies an already-satisfied verification contract,
+you may prove the existing implementation using its required validations and
+inspected files, then explicitly return ALREADY_SATISFIED. Do not manufacture
+an edit to satisfy the mutation requirement. The ordinary progress bounds still
+apply, and SOP independently verifies the proof.`
 	case agent.Plan:
 		return `This is PLAN, not IMPLEMENT.
 
@@ -132,23 +160,39 @@ func outputContract(cap agent.Capability) string {
 	if !wantsOutcome(cap) {
 		return "the JSON document described under \"Output requirements\" in the task below"
 	}
-	return `Return exactly one of these JSON objects:
+	contract := `Return exactly one of these JSON objects:
 {"status": "completed", "summary": "<what you did>", "changes_expected": true}
 {"status": "completed", "summary": "<why no change was needed>", "changes_expected": false}
 {"status": "needs_human", "reason": "<decision a human must make>"}
 {"status": "failed", "reason": "<why the task cannot be completed>"}
 Use "changes_expected": true only when you actually changed repository files.`
+	if cap == agent.Implement || cap == agent.Fix {
+		contract += `
+With a supplied already-satisfied verification contract, a completed outcome may
+add "completion":"ALREADY_SATISFIED" and "evidence":{"acceptance":[{"criterion":"<exact criterion>","paths":["<inspected file>"]}]}, with changes_expected=false. This requires every supplied validation to pass and every criterion to have concrete inspected evidence.`
+	}
+	return contract
 }
 
 // userPrompt renders the task, input, and output requirements from the request.
 func userPrompt(req agent.Request) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Task:\n%s\n", strings.TrimSpace(req.Task))
+	if len(req.Deliverables) > 0 {
+		fmt.Fprintf(&b, "\n%s", deliverableRequirement(req.Deliverables))
+	}
+	if req.RawOutputEvidence {
+		b.WriteString("\nThis task requires RAW command output in its deliverable. Embed the exact captured stdout/stderr for each required command verbatim. A summary, paraphrase, or placeholder (for example \"...\" or \"all packages ok\") does NOT satisfy the requirement. If a result was truncated at the harness size bound, record it as truncated rather than as complete raw output; never present summarized or invented output as raw.\n")
+	}
 	if s := strings.TrimSpace(req.Input); s != "" {
 		fmt.Fprintf(&b, "\nInput:\n%s\n", s)
 	}
 	if s := strings.TrimSpace(req.OutputRequirements); s != "" {
 		fmt.Fprintf(&b, "\nOutput requirements:\n%s\n", s)
+	}
+	if (req.Capability == agent.Implement || req.Capability == agent.Fix) && len(req.AcceptanceCriteria) > 0 && len(req.ValidationCommands) > 0 {
+		fmt.Fprintf(&b, "\nAlready-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
+		b.WriteString(`If the implementation already exists, read the relevant files and run EVERY required validation command successfully. Then explicitly return {"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact supplied criterion>","paths":["<successfully read repository file>"]}]}}. Map EVERY criterion to concrete inspected files. SOP verifies tool results and unchanged repository state. Reads, narration, no-op writes, and model assertions alone cannot establish completion. Existing discovery, stale, and iteration bounds still apply.`)
 	}
 	return b.String()
 }

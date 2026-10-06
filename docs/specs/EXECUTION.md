@@ -92,6 +92,13 @@ Every stage SHOULD write an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 terminates MUST stay inspectable. Each task SHOULD end with a concise performance
 line; see [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md).
 
+For a verified no-mutation completion, the IMPLEMENT/FIX outcome contract and
+evidence requirements are owned by
+[AGENT-PROVIDER.md §8a](AGENT-PROVIDER.md#8a-verified-already-satisfied-completion).
+The lifecycle's reports preserve that completion and its evidence alongside the
+independent validation and quality verdicts. This does not declare a plan stage
+`done` or change the verify-first mode below.
+
 When model routing applies, `routing.json` records the routing decision, and when
 bounded escalation applies, `attempts/NNN.json` records one execution attempt per
 try. Both are non-secret diagnostic evidence: neither is read back to drive a

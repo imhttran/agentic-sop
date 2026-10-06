@@ -5,6 +5,13 @@ verification. Their existing `docs/tasks/` paths are retained because plans and
 commands depend on them. This index does not declare completion or change SOP state.
 For current behavior, start at [the specifications](../README.md#specifications).
 
+Task documents record the contract and evidence at the time of that task; later
+fixes can supersede their outcome or budget expectations. In particular,
+TASK-050's model-provided no-change claims, TASK-059's synthesis budgets, and
+TASK-060/TASK-069's mutation classification are not current authority. Use
+[AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md) for verified mutation,
+already-satisfied completion, bounded discovery, and synthesis corrections.
+
 - [TASK-000](../tasks/TASK-000.md) — read for T000 — Bootstrap Go Project and CI objectives and acceptance criteria.
 - [TASK-001](../tasks/TASK-001.md) — read for T001 — Domain Model and State Machine objectives and acceptance criteria.
 - [TASK-001A](../tasks/TASK-001A.md) — read for T001A — Align Workflow State Machine objectives and acceptance criteria.

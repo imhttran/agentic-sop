@@ -62,10 +62,12 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 	// implementation predates changed-file persistence bootstraps it here from the
 	// run's activity stream, so the whole task is visible to JEV instead of only the
 	// (possibly empty) current invocation.
-	taskFiles := taskChangeEvidence(rn)
+	taskFiles := taskChangeEvidence(rn, taskReportDeliverables(spec)...)
 
 	activity.FromContext(ctx).Emit(activity.StageJEV, "analyzing changes", "")
-	outcome := runpkg.RunJEV(ctx, analyzer, buildJEVInvocation(spec, diff, suite, report, taskFiles, dir))
+	invocation := buildJEVInvocation(spec, diff, suite, report, taskFiles, dir)
+	invocation.Task = d.taskInput(spec.ID, invocation.Task)
+	outcome := runpkg.RunJEV(ctx, analyzer, invocation)
 	ev := jevEvidence(outcome)
 	if ev == nil {
 		return nil
@@ -296,7 +298,7 @@ func buildJEVInvocation(spec *taskfile.Spec, diff string, suite testrunner.Suite
 		Task:              spec.Render(),
 		Criteria:          strings.Join(spec.AcceptanceCriteria, "\n"),
 		ChangedFiles:      taskFiles,
-		RepositoryContext: jevRepositoryContext(dir, diff, taskFiles),
+		RepositoryContext: jevRepositoryContext(dir, diff, taskFiles, taskReportDeliverables(spec)...),
 		ValidationResult:  suiteSummary(suite),
 		ReviewResult:      reviewSummary(report),
 	}
@@ -310,7 +312,7 @@ func buildJEVInvocation(spec *taskfile.Spec, diff string, suite testrunner.Suite
 // final invocation of a task whose earlier work was committed, the diff is empty
 // and the excerpts carry the accumulated implementation, so JEV still reviews the
 // task rather than an empty change set. A nil/empty result degrades to the diff.
-func jevRepositoryContext(dir, diff string, taskFiles []string) string {
+func jevRepositoryContext(dir, diff string, taskFiles []string, reports ...string) string {
 	covered := make(map[string]bool)
 	for _, f := range changedFiles(diff) {
 		covered[f] = true
@@ -321,7 +323,7 @@ func jevRepositoryContext(dir, diff string, taskFiles []string) string {
 			uncovered = append(uncovered, f)
 		}
 	}
-	excerpts := taskFileContext(dir, uncovered)
+	excerpts := taskFileContext(dir, uncovered, reports...)
 	switch {
 	case excerpts == "":
 		return diff
@@ -383,7 +385,12 @@ func positiveEnvInt(name string, fallback int) int {
 // directory, an escaping path), and returns "" when nothing could be read. It is
 // read-only and holds repository content only — never prompts or secrets beyond
 // what the files themselves contain.
-func taskFileContext(dir string, files []string) string {
+func taskFileContext(dir string, files []string, reports ...string) string {
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return ""
+	}
+	defer root.Close()
 	maxFiles := jevContextFiles()
 	maxBytes := jevContextBytes()
 	maxFileBytes := jevContextFileBytes()
@@ -393,7 +400,7 @@ func taskFileContext(dir string, files []string) string {
 		if count >= maxFiles || b.Len() >= maxBytes {
 			break
 		}
-		if !safeRepoPath(path) || isSOPPath(path) {
+		if !safeRepoPath(path) || isSOPPath(path, reports...) {
 			continue
 		}
 		limit := maxFileBytes
@@ -403,7 +410,7 @@ func taskFileContext(dir string, files []string) string {
 		if limit <= 0 {
 			break
 		}
-		content, ok := readFileHead(filepath.Join(dir, filepath.FromSlash(path)), limit)
+		content, ok := readRootFileHead(root, filepath.FromSlash(path), limit)
 		if !ok {
 			continue
 		}
@@ -421,19 +428,16 @@ func taskFileContext(dir string, files []string) string {
 	return strings.TrimSpace("task implementation files (accumulated across the task's invocations):\n\n" + b.String())
 }
 
-// readFileHead reads at most limit+1 bytes of a file, so a very large file is not
-// read in full merely to be truncated. It reports whether the file could be read.
-func readFileHead(path string, limit int) (string, bool) {
-	f, err := os.Open(path)
+// Confine accumulated report excerpts even if a provider leaves an escaping
+// symlink. An unreadable/escaping file supplies no review context.
+func readRootFileHead(root *os.Root, path string, limit int) (string, bool) {
+	f, err := root.Open(path)
 	if err != nil {
 		return "", false
 	}
 	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
-	if err != nil {
-		return "", false
-	}
-	return string(data), true
+	return string(data), err == nil
 }
 
 // safeRepoPath reports whether path is a repository-relative path the context
@@ -463,11 +467,11 @@ func truncateContent(s string, max int) (string, bool) {
 
 // taskInvocationChanges returns the repository paths to attribute to the task for
 // one invocation: the paths the agent reported changing, or — when the provider
-// cannot report them — the paths derived from the working-tree diff. Preferring
+// cannot report them — the paths supplied by the injected diff observer. Preferring
 // the agent's own evidence keeps unrelated pre-existing dirty files out of the
 // task's change set.
 func taskInvocationChanges(reported []string, diff string) []string {
-	if len(reported) > 0 {
+	if reported != nil {
 		return reported
 	}
 	return changedFiles(diff)
@@ -475,14 +479,14 @@ func taskInvocationChanges(reported []string, diff string) []string {
 
 // recordTaskChanges persists the given paths as task-scoped change evidence in the
 // run directory, so a later invocation still knows what the task changed. SOP's
-// own state and output paths are dropped first, so a dirty .agent-sdlc/config.yaml
+// own state and generated output paths are dropped first, so a dirty .agent-sdlc/config.yaml
 // (an intentional user-owned edit) or a generated report is never attributed to
 // the task. It is best-effort: a write failure never changes the run outcome.
-func recordTaskChanges(rn *runpkg.Run, paths []string) {
+func recordTaskChanges(rn *runpkg.Run, paths []string, reports ...string) {
 	if rn == nil {
 		return
 	}
-	changed := taskChangedFiles(paths)
+	changed := taskChangedFiles(paths, reports...)
 	if len(changed) == 0 {
 		return
 	}
@@ -491,11 +495,11 @@ func recordTaskChanges(rn *runpkg.Run, paths []string) {
 
 // taskChangeEvidence returns the task's accumulated changed files, bootstrapping
 // legacy evidence first when none has been recorded. A nil run yields none.
-func taskChangeEvidence(rn *runpkg.Run) []string {
+func taskChangeEvidence(rn *runpkg.Run, reports ...string) []string {
 	if rn == nil {
 		return nil
 	}
-	bootstrapTaskChangeEvidence(rn)
+	bootstrapTaskChangeEvidence(rn, reports...)
 	return rn.ChangedFiles()
 }
 
@@ -506,21 +510,21 @@ func taskChangeEvidence(rn *runpkg.Run) []string {
 // never turned into claimed ownership. The recovered paths are filtered and
 // persisted exactly like live evidence, so they become normal provenance for
 // future invocations.
-func bootstrapTaskChangeEvidence(rn *runpkg.Run) {
+func bootstrapTaskChangeEvidence(rn *runpkg.Run, reports ...string) {
 	if rn == nil || len(rn.ChangedFiles()) > 0 {
 		return
 	}
-	recordTaskChanges(rn, rn.ActivityChangePaths())
+	recordTaskChanges(rn, rn.ActivityChangePaths(), reports...)
 }
 
 // taskChangedFiles drops the paths SOP owns from a task's change set, so SOP's own
 // state and output directories are never attributed to a task however the paths
 // were derived (agent-reported or diff-derived).
-func taskChangedFiles(paths []string) []string {
+func taskChangedFiles(paths []string, reports ...string) []string {
 	var out []string
 	for _, p := range paths {
 		p = strings.TrimSpace(p)
-		if p == "" || isSOPPath(p) {
+		if p == "" || isSOPPath(p, reports...) {
 			continue
 		}
 		out = append(out, p)
@@ -528,17 +532,34 @@ func taskChangedFiles(paths []string) []string {
 	return out
 }
 
-// isSOPPath reports whether a repository path is SOP's own state or output,
-// which is never a task's change. It is the single definition of the SOP-owned
-// prefixes, so filtering recorded paths and filtering context excerpts agree.
-func isSOPPath(path string) bool {
+// isSOPPath reports whether a path is SOP-owned state or generated output. Exact
+// caller-declared report deliverables are task-owned; runtime state is never so.
+func isSOPPath(path string, reports ...string) bool {
 	path = filepath.ToSlash(path)
-	for _, prefix := range []string{config.DirName, planflow.ReportsDir} {
-		if path == prefix || strings.HasPrefix(path, prefix+"/") {
-			return true
+	// Runtime state is always protected. Only an exact, caller-declared report
+	// deliverable can be task-owned; neighbouring/generated reports stay excluded.
+	if path != config.DirName && !strings.HasPrefix(path, config.DirName+"/") {
+		for _, report := range reports {
+			if path == report {
+				return false
+			}
 		}
 	}
-	return false
+	// SOP's own runtime state is always SOP-owned.
+	if path == config.DirName || strings.HasPrefix(path, config.DirName+"/") {
+		return true
+	}
+	// SOP's generated human-readable report is a TOP-LEVEL docs/reports/<id>.md file.
+	// A directory tree UNDER docs/reports/ is task/operator content — a task's report
+	// subtree plus its fixtures and artifacts (for example a workload tree) — so it is
+	// NOT SOP-owned and a task's writes there are its own mutation evidence. This
+	// narrows the SOP-owned boundary to exactly what SOP generates; it does not widen
+	// task authority over SOP state.
+	if strings.HasPrefix(path, planflow.ReportsDir+"/") {
+		rest := strings.TrimPrefix(path, planflow.ReportsDir+"/")
+		return !strings.Contains(rest, "/")
+	}
+	return path == planflow.ReportsDir
 }
 
 // jevEvidence maps a JEV outcome to gate evidence. It fails closed: an analyzer

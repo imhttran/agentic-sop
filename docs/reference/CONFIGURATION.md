@@ -54,6 +54,34 @@ human:
 workflow:
   mode: local # local | pull-request
 
+# Optional risk-based autonomy policy: how much recovery SOP performs without a
+# human. Omitted => balanced (the conservative default). See "Decision layer and
+# autonomy policy".
+# autonomy:
+#   level: balanced # low | balanced | high
+#   # Optional explicit overrides of the level's built-in settings; an omitted
+#   # value keeps the level's setting. Leave commented unless you need to pin one.
+#   # auto_retry: true
+#   # auto_continue: true
+#   # auto_fix: true
+#   # auto_reconcile_safe_changes: true
+#   # max_continuations: 4
+
+# Optional decision layer (off by default; the deterministic rules are the
+# baseline).
+# decision:
+#   provider: deterministic # deterministic | jev
+#   enabled: false
+#   thresholds:
+#     route_to_strong_model: 0.7
+#     require_human: 0.4
+
+# Optional capability toggles.
+# features:
+#   jev_decisions: false
+
+
+
 
 # Optional model routing. Off unless this block (or a SOP_MODEL_* variable, or
 # --model-class) is set, so an existing project is unchanged. See "Model routing".
@@ -121,6 +149,17 @@ workflow:
 | `early_jev.fail_on`                     | `quality.fail_on`        | Severities that escalate an early-JEV result to a human boundary.                          |
 | `human.approval_before_commit`          | `true`                   | When on, `sop commit` / `sop pr` require `--yes`.                                          |
 | `workflow.mode`                         | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
+| `decision.provider`                     | `deterministic`          | Optional decision layer: `deterministic` (baseline rules) or `jev` (JEV adapter).          |
+| `decision.enabled`                      | `false`                  | Enable the optional decision layer.                                                        |
+| `decision.thresholds.route_to_strong_model` | `0.7`               | Confidence below this uses the stronger model class; must be within `[0,1]`.               |
+| `decision.thresholds.require_human`     | `0.4`                    | Confidence below this (or a HIGH choice) needs a human boundary; must be within `[0,1]`.   |
+| `features.jev_decisions`                | `false`                  | Pre-existing decision-layer signal (selects the decision layer; does not itself enable JEV).|
+| `autonomy.level`                        | `balanced`               | `low`, `balanced`, or `high`: how much recovery SOP performs without a human boundary.     |
+| `autonomy.auto_retry`                   | level setting            | Optional explicit override: bounded retries of transient failures.                         |
+| `autonomy.auto_continue`                | level setting            | Optional explicit override: bounded continuation of productive incomplete work.            |
+| `autonomy.auto_fix`                     | level setting            | Optional explicit override: the bounded deterministic fix loop.                            |
+| `autonomy.auto_reconcile_safe_changes`  | level setting            | Optional explicit override: automatic reconciliation of semantically safe plan changes.     |
+| `autonomy.max_continuations`            | level setting            | Optional explicit override: bound automatic continuation (separate from the retry budget). |
 | `models.default_class`                  | `medium`                 | Default model class (`small`, `medium`, `large`).                                          |
 | `models.fallback_class`                 | selected class           | Class used when the selected class has no model.                                           |
 | `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class **with no model** to fall back to a cloud class (config-completeness).|
@@ -435,6 +474,31 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
   as its known identity — never as a discovery result.
 - Credentials are never configured here (and never printed by `sop providers`);
   they stay in the environment, exactly as for the agent path.
+
+
+## Decision layer and autonomy policy
+
+Two optional policy blocks describe how SOP decides to proceed without a human.
+
+- `decision` is the optional decision layer. It is **off by default**: the
+  deterministic rules are the baseline, and a JEV adapter must demonstrate value
+  before it is trusted. `decision.provider` is `deterministic` (default) or `jev`;
+  `decision.thresholds` route a low-confidence decision to the stronger model
+  (`route_to_strong_model`, default `0.7`) or to a human (`require_human`, default
+  `0.4`). `features.jev_decisions` is a pre-existing signal that selects the
+  decision layer; it does not by itself enable JEV.
+- `autonomy` is the risk-based policy for how much **recovery** SOP performs
+  without asking a human. An omitted block resolves to the conservative `balanced`
+  default, so no project is silently switched to maximum autonomy. `level` is
+  `low`, `balanced`, or `high`; the boolean and integer fields are optional
+  explicit overrides of the level's built-in settings, so an omitted value keeps
+  the level's setting and an explicit `false` stays expressible. An unknown
+  `autonomy.level` is rejected at load time.
+
+Human approval is required for a **risk** or authority boundary or unresolved
+human intent, never merely because automation failed. See
+[`../PRD.md`](../PRD.md) (Bounded autonomy) and `internal/autonomy`.
+
 
 ## Prompts
 

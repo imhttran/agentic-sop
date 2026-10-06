@@ -46,10 +46,16 @@ Thin aliases in the same install expose one capability each:
 /sop-diagnose <request>   capability: diagnose_failure
 /sop-test <request>       capability: design_tests
 /sop-implement <request>  capability: implement (governed, mutating)
+/sop-end-to-end <plan>    execute a project plan through `sop run`
 ```
 
-Each alias is a few lines that call the one command below with its capability fixed;
-none of them carries routing, provider, or lifecycle policy. Install them with
+Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
+`sop-end-to-end` skill and `sop run`; do not turn them into an ad-hoc prompt.
+That skill performs lightweight preflight and reports SOP's authoritative state.
+Read-only requests to review or plan end-to-end behavior still use `sop prompt`.
+
+The capability aliases call the command below; the end-to-end entry delegates to
+`sop run`. None carries routing, provider, or lifecycle policy. Install them with
 `./install.sh --skills zed` (Zed) or `./install.sh --skills claude` (Claude Code), or
 `./install.sh --all` for every supported agent plus the Claude Code plugin
 (`.\install.ps1 -Skills zed` on Windows; see the project README). `/sop-implement` is
@@ -148,3 +154,13 @@ standard run artifacts). Inspect one later with `sop report prompts/<run-id>`.
 `sop prompt` exits non-zero and reports an actionable error when the capability is
 unsupported by the selected provider, the selected model cannot be validated, or the
 lifecycle does not pass. Surface that error; do not work around it.
+
+When reporting BLOCK/BLOCKED, FAIL, or an execution error, include a clickable
+Markdown link to the latest relevant `sop-run.log` from the invocation's project
+(normally `.run/sop-run.log`). Confirm the log belongs to the reported run; do
+not present an older run's error as current. Link the error line when available,
+using an absolute local path, for example `[sop-run.log](/absolute/project/.run/sop-run.log:173)`.
+Include the exact outcome and a short, safe error excerpt. If no matching log
+exists, say `sop-run.log: UNAVAILABLE` and link the applicable existing run/report
+artifact instead; never invent a log or use another project's log. Apply this
+reporting rule to delegated SOP commands and capability aliases as well.

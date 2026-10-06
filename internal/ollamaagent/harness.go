@@ -166,10 +166,13 @@ func wantsOutcome(c agent.Capability) bool {
 // outcomeWire is the command-agent outcome as SOP's command provider parses it.
 // The field tags match that wire format exactly.
 type outcomeWire struct {
-	Status          string `json:"status"`
-	Summary         string `json:"summary,omitempty"`
-	Reason          string `json:"reason,omitempty"`
-	ChangesExpected *bool  `json:"changes_expected,omitempty"`
+	Status              string                    `json:"status"`
+	Summary             string                    `json:"summary,omitempty"`
+	Reason              string                    `json:"reason,omitempty"`
+	ChangesExpected     *bool                     `json:"changes_expected,omitempty"`
+	Completion          string                    `json:"completion,omitempty"`
+	Evidence            *agent.CompletionEvidence `json:"evidence,omitempty"`
+	RepositoryMutations *int                      `json:"repository_mutations,omitempty"`
 }
 
 // Harness executes one SOP request against Ollama using controlled tools. It
@@ -200,10 +203,15 @@ func New(cfg Config, root string) *Harness {
 	if path := strings.TrimSpace(lookupEnv(envToolAuditLog)); path != "" {
 		sink = toolharness.NewMultiAuditor(audit, toolharness.NewFileAuditor(path))
 	}
-	tools := toolharness.New(root, toolharness.Config{
+	toolCfg := toolharness.Config{
 		CommandTimeout: cfg.CommandTimeout,
 		MaxOutputBytes: cfg.MaxOutputBytes,
-	}, sink)
+		Roots:          cfg.Roots,
+	}
+	if ev := newEvidenceSink(cfg.CommandEvidencePath); ev != nil {
+		toolCfg.EvidenceSink = ev
+	}
+	tools := toolharness.New(root, toolCfg, sink)
 	return &Harness{
 		cfg:       cfg,
 		client:    newOllamaClient(cfg),
@@ -311,7 +319,7 @@ func (h *Harness) ExecuteWithEvidence(ctx context.Context, req agent.Request, ev
 func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, error) {
 	policy := PolicyFor(req.Capability)
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 

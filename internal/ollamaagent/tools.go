@@ -30,6 +30,7 @@ func newToolbox(root string, cfg Config) *toolbox {
 		h: toolharness.New(root, toolharness.Config{
 			CommandTimeout: cfg.CommandTimeout,
 			MaxOutputBytes: cfg.MaxOutputBytes,
+			Roots:          cfg.Roots,
 		}, sink),
 		audit: audit,
 	}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -36,7 +37,7 @@ func TestCommandAgentSerializesCapability(t *testing.T) {
 	if err := json.Unmarshal([]byte(resp.Content), &got); err != nil {
 		t.Fatalf("stdin was not the JSON request: %v (%q)", err, resp.Content)
 	}
-	if got != req {
+	if !reflect.DeepEqual(got, req) {
 		t.Errorf("round-tripped request = %+v, want %+v", got, req)
 	}
 	if got.Capability != DesignTests {
@@ -278,5 +279,21 @@ func TestCommandHarnessExecutePreservesOutcome(t *testing.T) {
 	}
 	if resp.Outcome.Summary != "done" {
 		t.Errorf("Summary = %q, want done", resp.Outcome.Summary)
+	}
+}
+
+func TestCommandAlreadySatisfiedClaimIsNotVerified(t *testing.T) {
+	content := `{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"works","paths":["a.go"]}],"validation_commands":["go test ./..."]}}`
+	response, err := NewCommandAgent("printf '%s' '"+content+"'").Generate(context.Background(), Request{Capability: Implement, Task: "verify"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The parser preserves diagnostics but cannot create trusted execution proof.
+	outcome := response.Outcome
+	if outcome == nil || outcome.Completion != AlreadySatisfied || outcome.Evidence == nil {
+		t.Fatalf("outcome=%+v", outcome)
+	}
+	if response.VerifiedAlreadySatisfied {
+		t.Fatal("command provider manufactured verification")
 	}
 }

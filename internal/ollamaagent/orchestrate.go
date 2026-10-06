@@ -57,7 +57,7 @@ type twoPhase struct {
 func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp twoPhase) (string, error) {
 	policy := PolicyFor(req.Capability) // read-only tools
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 
@@ -292,18 +292,21 @@ func (p implementPhase) label() string {
 // caller can ground changes_expected on observed reality rather than on a model
 // claim.
 //
-// The no-progress guard permits novel successful inspection through the existing
-// implement-now threshold, then requires mutation within five stale turns. It
+// The no-progress guard permits novel successful discovery -- inspections and
+// non-mutating commands -- through the existing implement-now threshold, then
+// requires mutation within five stale turns. It
 // counts all model turns toward the discovery window, so narration and denials
 // cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
 	policy := PolicyFor(req.Capability) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
-		{Role: "system", Content: systemPrompt(req, policy)},
+		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
 		{Role: "user", Content: userPrompt(req)},
 	}
 
 	st := newExecutionState()
+	proof := h.satisfactionProof(ctx, req)
+	deliverables := req.Deliverables
 	var (
 		lastTool string
 		lastReq  string
@@ -376,6 +379,18 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			continue
 		}
 		if !isTool {
+			if final["completion"] == agent.AlreadySatisfied {
+				if !h.verifySatisfied(ctx, req, st, proof, final) {
+					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", "acceptance verification failed")
+					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
+					if !st.mutationObserved {
+						return "", &changeIncompleteError{message}
+					}
+					return "", errors.New(message)
+				}
+				ev.alreadySatisfied = true
+				h.recordImplementEvent(req, agent.AlreadySatisfied, "repository_mutations=0; acceptance and validation verified")
+			}
 			h.recordImplementTurn(req, st.phase, iteration, "outcome", "", progressOK, false, false)
 			encoded, err := json.Marshal(final)
 			if err != nil {
@@ -422,6 +437,32 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 
 			continue
 		}
+		// A declared deliverable that is still missing at the implement-now
+		// threshold withholds the command and git tools: the invocation owes the
+		// deliverable, and more validation is not progress toward it. File reads
+		// and writes stay available so the agent can compose it.
+		needDeliverable := len(deliverables) > 0 && iteration >= implementNowAfter && h.deliverableMissing(deliverables)
+		if needDeliverable && policy.Allows(name) && !deliverableTool(name) {
+			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+			detail := "a required deliverable is missing; create it with the file tools first"
+			h.tools.RecordDenied(name, args, detail)
+			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, detail, nil))
+			progressStop := st.stalled(false, false)
+			terminate := repeatStop || progressStop
+			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
+			if terminate {
+				if progressStop {
+					return "", h.implementNoProgressError(req, st, ev, iteration, lastTool, lastReq)
+				}
+				return "", h.noProgressError(req, iteration, lastTool, lastReq)
+			}
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + "\n\n" + implementDeliverableInstruction(deliverables)},
+			)
+			continue
+		}
+
 		// Capability policy: keep the invariant that a capability only reaches the
 		// tools its policy allows, even though IMPLEMENT currently allows them all.
 		if !policy.Allows(name) {
@@ -450,9 +491,27 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		}
 		st.counters.toolCalls++
 
-		result, toolErr := h.tools.Run(ctx, name, args)
+		candidate := controlledMutation(name, args)
+		var result string
+		var toolErr error
+		var observation toolharness.MutationObservation
+		commandSucceeded := false
+		if candidate {
+			result, observation, toolErr = h.tools.RunObservedMutation(ctx, name, args)
+			if !observation.Verified {
+				h.recordImplementEvent(req, "mutation observation", "verification_unavailable")
+				result += "\nmutation verification unavailable; no mutation progress credited"
+			} else if observation.Changed && !observation.Succeeded {
+				h.recordImplementEvent(req, "mutation observation", "failed_operation_repository_changed")
+				result += "\nrepository state changed during failed operation; no successful mutation progress credited"
+			}
+		} else if name == toolharness.ToolRunCommand {
+			result, commandSucceeded, toolErr = h.tools.RunCommandChecked(ctx, args)
+		} else {
+			result, toolErr = h.tools.Run(ctx, name, args)
+		}
+		proof.observe(h.tools.Root(), name, args, result, toolErr, commandSucceeded)
 		lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
-		recordToolActivity(ctx, name, args)
 
 		// An inspection is remembered in the invocation's continuation checkpoint,
 		// so a run that stops short of changing the repository can hand the next
@@ -463,11 +522,16 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			st.recordInspected(path)
 		}
 
-		// A successful controlled mutation is the primary execution evidence: it
+		// A successful, independently verified mutation is the execution evidence: it
 		// moves the invocation out of discovery and grounds changes_expected. A
 		// failed or denied write never counts, and neither does a read, a search,
-		// an inspection, or a formatting command that did not run.
-		justMutated := toolErr == nil && controlledMutation(name, args)
+		// an inspection, or a successful operation that left repository state unchanged.
+		justMutated := candidate && toolErr == nil && observation.Succeeded && observation.Verified && observation.Changed
+		// CHANGE activity is later consumed as task change evidence. No-op,
+		// failed, or unverified file attempts remain audited but must not emit it.
+		if !candidate || justMutated || name == toolharness.ToolRunCommand {
+			recordToolActivity(ctx, name, args)
+		}
 		if justMutated {
 			st.observeMutation()
 			st.counters.interactions++
@@ -515,6 +579,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		// implement, so a run is never finalized before it has changed anything.
 		if st.phase != implFinalize {
 			switch {
+			case needDeliverable:
+				advice = append(advice, implementDeliverableInstruction(deliverables))
+				if !st.finalization.implementInstructed {
+					st.finalization.implementInstructed = true
+					h.recordImplementEvent(req, implementContinueEvent, "a required deliverable must be created")
+				}
 			case st.finalizeEligible(iteration, policy):
 				st.phase = implFinalize
 				st.finalization.entered = true
@@ -551,6 +621,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			}
 		}
 
+		if !st.mutationObserved && proof.baseline != "" && len(advice) > 0 {
+			advice = append(advice, alreadySatisfiedInstruction)
+		}
 		content := toolResultMessage(name, result, toolErr)
 		for _, a := range advice {
 			content += "\n\n" + a

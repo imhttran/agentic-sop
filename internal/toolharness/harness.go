@@ -58,12 +58,50 @@ const (
 	maxSearchFileBytes = 512 << 10
 )
 
+// RootMode is an authorized root's write policy.
+type RootMode string
+
+const (
+	// RootReadWrite permits a root's files to be read and modified.
+	RootReadWrite RootMode = "read-write"
+	// RootReadOnly permits a root's files to be read only; every write tool is
+	// refused there and never counts as repository progress.
+	RootReadOnly RootMode = "read"
+)
+
+// Root is one task-authorized repository root beyond the primary root. Roots are
+// supplied from trusted configuration/input state; model output can only select
+// an authorized root by its exact canonical path, never create one.
+type Root struct {
+	Path string
+	Mode RootMode
+}
+
 // Config is the harness's execution settings.
 type Config struct {
 	// CommandTimeout bounds a single run_command execution.
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
 	MaxOutputBytes int
+	// Roots are additional task-authorized repository roots. Any root that is not
+	// disjoint from the primary root is ignored, so an accidental overlap cannot
+	// widen the primary boundary.
+	Roots []Root
+	// EvidenceSink, when set, receives each executed command's captured evidence
+	// (command, cwd, exit code, and the exact output the harness captured, already
+	// bounded and truncation-marked). It is how a caller that opts a task into raw
+	// output owns that evidence; it never changes the tool result.
+	EvidenceSink func(CommandEvidence)
+}
+
+// CommandEvidence is one executed command's captured evidence for a task that
+// requires raw output. Output is the harness's exact captured stdout+stderr,
+// bounded by MaxOutputBytes and marked when truncated.
+type CommandEvidence struct {
+	Command string
+	Cwd     string
+	Exit    int
+	Output  string
 }
 
 // DefaultConfig returns the built-in execution bounds.
@@ -85,27 +123,118 @@ var (
 	// database. It is exported so adapters and tests can classify a denial with
 	// errors.Is instead of string matching.
 	ErrProtectedPath = errors.New("refusing to access SOP state")
+	// errUnauthorizedRoot is the sentinel for a root selector that does not name
+	// an authorized root: a model-supplied absolute path is never trusted on its
+	// own.
+	errUnauthorizedRoot = errors.New("unauthorized repository root")
+	// errReadOnlyRoot is the sentinel for a write refused because the selected
+	// authorized root is read-only.
+	errReadOnlyRoot = errors.New("repository root is read-only")
 )
 
 // Harness dispatches controlled tool calls inside a repository root. It is safe
 // for sequential use by one agent loop; it is not designed for concurrent calls.
 type Harness struct {
-	root    string // canonical repository root
+	root    string           // canonical primary repository root
+	roots   []authorizedRoot // primary root first, then authorized external roots
 	cfg     Config
 	auditor Auditor
+}
+
+// authorizedRoot is a resolved, authorized execution root.
+type authorizedRoot struct {
+	path    string // canonical absolute path
+	mode    RootMode
+	primary bool
 }
 
 // New returns a Harness rooted at root, using cfg and auditing through auditor.
 // A nil auditor discards audit records.
 func New(root string, cfg Config, auditor Auditor) *Harness {
-	canonical, err := filepath.EvalSymlinks(root)
+	canonical := canonicalDir(root)
+	h := &Harness{
+		root:    canonical,
+		cfg:     cfg,
+		auditor: auditor,
+		roots:   []authorizedRoot{{path: canonical, mode: RootReadWrite, primary: true}},
+	}
+	for _, r := range cfg.Roots {
+		p := canonicalDir(strings.TrimSpace(r.Path))
+		if p == "" || pathWithin(p, canonical) || pathWithin(canonical, p) {
+			continue // empty, or overlapping the primary root: never widen the boundary
+		}
+		mode := r.Mode
+		if mode != RootReadOnly && mode != RootReadWrite {
+			mode = RootReadOnly
+		}
+		h.roots = append(h.roots, authorizedRoot{path: p, mode: mode})
+	}
+	return h
+}
+
+// canonicalDir returns an absolute, symlink-resolved form of p, or "" for empty.
+func canonicalDir(p string) string {
+	if strings.TrimSpace(p) == "" {
+		return ""
+	}
+	c, err := filepath.EvalSymlinks(p)
 	if err != nil {
-		canonical = root
+		c = p
 	}
-	if abs, err := filepath.Abs(canonical); err == nil {
-		canonical = abs
+	if abs, err := filepath.Abs(c); err == nil {
+		c = abs
 	}
-	return &Harness{root: canonical, cfg: cfg, auditor: auditor}
+	return c
+}
+
+// pathWithin reports whether child is parent or lies under it.
+func pathWithin(child, parent string) bool {
+	if child == "" || parent == "" {
+		return false
+	}
+	rel, err := filepath.Rel(parent, child)
+	if err != nil {
+		return false
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)))
+}
+
+// selectRoot resolves a root selector (an absolute path naming an authorized
+// root) to that root. An empty selector is the primary root. A selector that does
+// not exactly match an authorized root is refused.
+func (h *Harness) selectRoot(selector string) (authorizedRoot, error) {
+	selector = strings.TrimSpace(selector)
+	if selector == "" {
+		return h.roots[0], nil
+	}
+	canonical := canonicalDir(selector)
+	for _, r := range h.roots {
+		if r.path == canonical {
+			return r, nil
+		}
+	}
+	return authorizedRoot{}, fmt.Errorf("%w: %q is not an authorized repository root", errUnauthorizedRoot, selector)
+}
+
+// rootSelector returns the optional root/cwd selector from args. run_command uses
+// "cwd"; file tools use "root".
+func rootSelector(args map[string]any) string {
+	for _, key := range []string{"cwd", "root"} {
+		if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+// AuthorizedRoots returns the primary root followed by the authorized external
+// roots, as canonical path strings. It is for prompt construction and tests.
+func (h *Harness) AuthorizedRoots() []string {
+	out := make([]string, 0, len(h.roots))
+	for _, r := range h.roots {
+		out = append(out, r.path)
+	}
+	return out
 }
 
 // Root returns the canonical repository root the harness works in.
@@ -175,7 +304,8 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 // isDenial reports whether err is a policy refusal rather than an execution
 // failure, using sentinel errors so classification does not depend on wording.
 func isDenial(err error) bool {
-	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath)
+	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath) ||
+		errors.Is(err, errUnauthorizedRoot) || errors.Is(err, errReadOnlyRoot)
 }
 
 // RecordDenied records a refusal the caller decided (for example a
@@ -201,10 +331,13 @@ func SummarizeRequest(name string, args map[string]any) string {
 	switch name {
 	case ToolRunCommand:
 		command, _ := args["command"].(string)
+		if cwd, ok := args["cwd"].(string); ok && strings.TrimSpace(cwd) != "" {
+			return "cwd=" + strings.TrimSpace(cwd) + " " + strings.TrimSpace(command)
+		}
 		return strings.TrimSpace(command)
 	default:
 		var parts []string
-		for _, key := range []string{"path", "pattern"} {
+		for _, key := range []string{"path", "pattern", "root"} {
 			if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
 				parts = append(parts, key+"="+strings.TrimSpace(v))
 			}
@@ -231,8 +364,12 @@ func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string,
 	if err != nil {
 		return "", err
 	}
-	if _, err := h.exec(ctx, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel}); err != nil {
+	result, succeeded, err := h.execWithStatus(ctx, h.root, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel})
+	if err != nil {
 		return "", fmt.Errorf("restore_file: %w", err)
+	}
+	if !succeeded {
+		return "", fmt.Errorf("restore_file: %s", result)
 	}
 	return fmt.Sprintf("restored %s from HEAD", p.rel), nil
 }
@@ -387,19 +524,63 @@ func porcelainPath(line string) string {
 
 // runCommand tokenizes and policy-checks a command before executing it.
 func (h *Harness) runCommand(ctx context.Context, args map[string]any) (string, error) {
+	result, _, err := h.runCommandWithStatus(ctx, args)
+	return result, err
+}
+
+func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any) (string, bool, error) {
 	command, _ := args["command"].(string)
 	command = strings.TrimSpace(command)
 	if command == "" {
-		return "", errors.New(`missing required argument "command"`)
+		return "", false, errors.New(`missing required argument "command"`)
 	}
 	argv, err := SplitCommand(command)
 	if err != nil {
-		return "", err
+		return "", false, err
 	}
-	if err := h.CheckCommand(argv); err != nil {
-		return "", err
+	root, err := h.selectRoot(rootSelector(args))
+	if err != nil {
+		return "", false, err
 	}
-	return h.exec(ctx, argv)
+	if err := h.checkCommandIn(root, argv); err != nil {
+		return "", false, err
+	}
+	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, argv)
+	if err == nil && noTestsMatched(argv, result) {
+		result += "\n" + noTestMatchDiagnostic
+	}
+	if h.cfg.EvidenceSink != nil {
+		h.cfg.EvidenceSink(CommandEvidence{Command: strings.Join(argv, " "), Cwd: root.path, Exit: exit, Output: raw})
+	}
+	return result, succeeded, err
+}
+
+// noTestMatchDiagnostic is surfaced when a targeted `go test -run ...` invocation
+// matched no tests, so a zero exit status cannot be read as "the selected tests ran
+// and passed". It is derived from the command's own output, never agent prose.
+const noTestMatchDiagnostic = "[no-test-match] the go test -run selection matched no tests; a zero exit status does not establish that the selected tests executed"
+
+// noTestsMatched reports whether argv is a targeted `go test -run ...` whose output
+// shows no matching test actually ran. A full `go test ./...` is unaffected: the
+// stricter check applies only to a named test selection.
+func noTestsMatched(argv []string, output string) bool {
+	if len(argv) < 3 || filepath.Base(argv[0]) != "go" || argv[1] != "test" {
+		return false
+	}
+	targeted := false
+	for _, a := range argv[2:] {
+		if a == "-run" || strings.HasPrefix(a, "-run=") {
+			targeted = true
+			break
+		}
+	}
+	if !targeted {
+		return false
+	}
+	if strings.Contains(output, "no tests to run") {
+		return true
+	}
+	return !strings.Contains(output, "=== RUN")
 }
 
 // SplitCommand tokenizes a command string, rejecting shell metacharacters and
@@ -452,6 +633,14 @@ func SplitCommand(s string) ([]string, error) {
 // they are denied unless an SOP-controlled workflow explicitly authorizes them
 // elsewhere; this harness never authorizes them.
 func (h *Harness) CheckCommand(argv []string) error {
+	return h.checkCommandIn(h.roots[0], argv)
+}
+
+// checkCommandIn applies the command policy with absolute-path arguments resolved
+// against the selected authorized root, so a command run in an authorized
+// external root may name files inside it, while an absolute path outside every
+// authorized root is still refused.
+func (h *Harness) checkCommandIn(root authorizedRoot, argv []string) error {
 	if len(argv) == 0 {
 		return errors.New("command is empty")
 	}
@@ -459,14 +648,24 @@ func (h *Harness) CheckCommand(argv []string) error {
 		return fmt.Errorf("%w: -C/--git-dir/--work-tree overrides are not allowed", errCommandNotAllowed)
 	}
 	for _, a := range argv {
-		if filepath.IsAbs(a) {
-			if _, err := h.resolve(a, accessRead); err != nil {
-				return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
-			}
-		}
 		if namesStateDB(a) {
 			return fmt.Errorf("%w: %s is protected", ErrProtectedPath, stateDBRel)
 		}
+	}
+	// Confine every path-like argument — relative and absolute alike — to the
+	// selected authorized root, reusing the canonical, symlink-aware resolver.
+	// Flags, package patterns without a separator, and bare identifiers are not
+	// treated as paths.
+	for _, argPath := range commandPathArgs(argv) {
+		if _, err := h.resolveIn(root, argPath, accessRead); err != nil {
+			return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
+		}
+	}
+	// A read-only root must not be writable through command execution. A command
+	// that can intentionally modify repository contents is refused there, the same
+	// way the mutation tools are; the primary (read-write) root is unaffected.
+	if root.mode != RootReadWrite && CommandMutatesRepository(argv) {
+		return fmt.Errorf("%w: %q may modify a read-only repository root", errReadOnlyRoot, strings.Join(argv, " "))
 	}
 
 	if filepath.Base(argv[0]) == "gofmt" {
@@ -480,6 +679,75 @@ func (h *Harness) CheckCommand(argv []string) error {
 		return fmt.Errorf("%w: %q is %s", errCommandNotAllowed, strings.Join(argv, " "), class)
 	}
 	return nil
+}
+
+// CommandMutatesRepository reports whether argv can intentionally modify tracked
+// repository contents. It is a name-and-flag analysis, not a general safety
+// guarantee: gofmt in write mode and "go fmt" mutate; the read-only inspection
+// commands (go test/build/vet/list and read-only git) do not.
+func CommandMutatesRepository(argv []string) bool {
+	if len(argv) == 0 {
+		return false
+	}
+	switch filepath.Base(argv[0]) {
+	case "gofmt":
+		return gofmtWrites(argv[1:])
+	case "go":
+		return len(argv) > 1 && argv[1] == "fmt"
+	}
+	return false
+}
+
+// gofmtWrites reports whether gofmt arguments request in-place formatting. Any
+// "-w" form other than an explicit "false" is treated as a write, so an
+// unrecognized variant fails closed rather than being assumed read-only.
+func gofmtWrites(args []string) bool {
+	for _, a := range args {
+		switch {
+		case a == "-w":
+			return true
+		case strings.HasPrefix(a, "-w="):
+			return strings.TrimSpace(strings.TrimPrefix(a, "-w=")) != "false"
+		}
+	}
+	return false
+}
+
+// commandPathArgs returns the arguments of argv that name a filesystem path and
+// must be confined to the authorized root. The program name is skipped; a flag is
+// skipped unless it carries an inline "=value" (for example
+// "-coverprofile=../x"); a bare token is treated as a path only when it looks
+// like one, so package patterns and regexes are not mistaken for paths.
+func commandPathArgs(argv []string) []string {
+	var out []string
+	for i, a := range argv {
+		if i == 0 {
+			continue
+		}
+		if strings.HasPrefix(a, "-") {
+			eq := strings.IndexByte(a, '=')
+			if eq < 0 {
+				continue
+			}
+			a = a[eq+1:]
+		}
+		if looksLikePath(a) {
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// looksLikePath reports whether a bare argument names a filesystem path rather
+// than a flag value, package pattern, or identifier.
+func looksLikePath(a string) bool {
+	if a == "" {
+		return false
+	}
+	if a == "." || a == ".." || strings.HasPrefix(a, "./") || strings.HasPrefix(a, "../") || strings.HasPrefix(a, "~/") {
+		return true
+	}
+	return strings.ContainsRune(a, os.PathSeparator) || strings.ContainsRune(a, '/')
 }
 
 // namesStateDB reports whether an argument references the state database by a
@@ -510,21 +778,45 @@ func hasDirOverride(argv []string) bool {
 // and stderr. A non-zero exit is reported in the result (the model should see
 // failing tests); only a timeout is a tool error.
 func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
+	result, _, err := h.execWithStatus(ctx, h.root, argv)
+	return result, err
+}
+
+func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string) (string, bool, error) {
+	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv)
+	return result, succeeded, err
+}
+
+// execCaptured runs argv and returns the display result plus the exact captured
+// output and exit code, so an evidence sink can own the raw evidence.
+func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (result string, succeeded bool, output string, exit int, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
-	cmd.Dir = h.root
+	cmd.Dir = dir
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
 
-	err := cmd.Run()
-	out := buf.String()
+	runErr := cmd.Run()
+	out := truncate(buf.String(), h.cfg.MaxOutputBytes)
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
-		return truncate(out, h.cfg.MaxOutputBytes), fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
+		return out, false, out, -1, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
 	}
-	return fmt.Sprintf("%s\n%s", exitStatus(err), truncate(out, h.cfg.MaxOutputBytes)), nil
+	return fmt.Sprintf("%s\n%s", exitStatus(runErr), out), runErr == nil, out, processExitCode(runErr), nil
+}
+
+// processExitCode returns a command's exit code, or 0 on success.
+func processExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // exitStatus renders a command's exit state for the model.

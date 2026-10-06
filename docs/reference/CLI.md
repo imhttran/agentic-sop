@@ -94,6 +94,23 @@ recorded under `attempts/`. Both are OFF by default and apply equally to an
 `implement` prompt. See
 [`CONFIGURATION.md`](CONFIGURATION.md) and [`../specs/RECOVERY.md`](../specs/RECOVERY.md).
 
+## `sop run`: caller observations and report deliverables
+
+For tasks that need operator-observed facts outside the native agent's repository
+boundary, `sop run` accepts optional `SOP_TASK_INPUTS`: a JSON object mapping task
+IDs to redacted observation text (32 KiB maximum). For example:
+`{"CLOSE-001":"Observed sibling HEAD: ...; captured at ..."}`. Only the matching
+task receives that context, in planning, implementation, review/JEV and fixes.
+Do not include credentials. The observations are data: they grant no commands,
+completion, approval, or additional iterations. Mutation, validation and review
+remain required. Unset input preserves normal execution.
+
+A task's `Deliverables` section is retained in its execution request. An exact
+Markdown report declared under a `docs/reports/` subdirectory is task-owned
+implementation evidence when actually mutated by the invocation. Unrelated
+reports, SOP-generated `docs/reports/<plan-id>.md`, and `.agent-sdlc/` remain
+excluded. Pre-existing dirty reports do not establish a new mutation.
+
 ## `sop prompt`
 
 `sop prompt` runs an ad-hoc request through the same governed machinery a task

@@ -6,6 +6,53 @@ the running list in between. Completed observations are preserved in
 [RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md); shipped capabilities and known
 limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md).
 
+## Agentic reliability and evaluation (AGENT-001–005)
+
+**Status:** Backlog (next workstream). Begins after the pre-Phase-6 closeout
+(complete). Candidate tasks:
+
+- **AGENT-001 Structured Run Trace** — a structured, machine-readable trace of a run.
+- **AGENT-002 Progress Signals** — progress signals richer than repository mutation.
+- **AGENT-003 Evaluation Harness** — evaluate harness/agent behavior.
+- **AGENT-004 Agent Budgets** — refine discovery/iteration budgets (see
+  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)).
+- **AGENT-005 Replan Strategy** — bounded replanning.
+
+Metrics to capture: run latency, token and tool-call counts, and reliability
+measurements. This is distinct from the earlier, already-implemented
+`PLAN-Phase-6-Interactive-Approval`; it is the reliability/evaluation workstream
+that follows the closeout.
+
+
+## Deferred performance architecture
+
+**Status:** Backlog (deferred).
+
+The pre-performance closure and baseline is complete (recorded in
+[RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md) and
+[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md)). It deliberately did not begin
+the new performance architecture, which remains deferred behind the readiness gate
+([CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)):
+
+Prompt Compiler, Response Normalizer, Context Engine, Git-SHA summary cache,
+repository structural index, BM25/vector RAG, Decision Memory, Verification Cache,
+Prompt Result Cache, Adaptive Routing changes, and Automatic Prompt Tuning.
+
+## Performance telemetry gaps
+
+**Status:** Backlog (low). `internal/perf` records stage durations and counts but
+not every measurement the baselines would like. Documented gaps (recorded as
+`UNAVAILABLE` rather than invented in the baselines):
+
+- a tool-call count — `Counts` has no field (only the JEV record has `ToolCalls`);
+- a per-category (`build`/`test`/`lint`) `validation_ms` breakdown for a safely
+  *reused* validation;
+- per-step PLAN timing (a slow plan is one number, not a profile).
+
+Sources: `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` and the PREJEV018
+remaining-issues register (I4–I6).
+
+
 ## Local network service (team mode)
 
 Share SOP state and control across a team on the local network.
@@ -76,6 +123,16 @@ Remaining candidates were a concrete file/work scope, incremental continuation,
 and a stronger configured model for multi-package tasks. Task-scoped discovery
 budgets above track the next refinement; current bounded discovery behavior is
 owned by [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#9-tool-harness-bounds-and-phases).
+
+## Autonomy `BLOCK` hardening
+
+**Status:** Backlog (defensive). `autonomy.Decide` has no `case failure.Block`:
+only `NoProgress` produces `Disposition: BLOCK` today and is handled explicitly by
+the `Kind == NoProgress` branch. A future non-`NoProgress` `BLOCK` classification
+would fall through to a human boundary, contradicting `BLOCK`'s documented "not a
+human approval" definition. Add an explicit terminal case plus a test. Surfaced by
+the pre-Phase-6 closeout; currently unreachable.
+
 
 ## Status and roadmap
 

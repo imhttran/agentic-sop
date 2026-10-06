@@ -6,6 +6,15 @@ guide weakens a gate**: timing metadata never drives a workflow decision, and
 faster execution never comes from skipping validation, review, provenance, or a
 human approval boundary.
 
+The cross-repository closure and BEFORE measurement is specified in
+[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md)
+(**COMPLETE**: CLOSE-001–CLOSE-011 `LOCAL_DONE`, final gate passed). Its telemetry
+inventory and four workloads extend the use of this existing evidence contract; no
+new performance architecture is implemented there. The output is now captured at
+[PERFORMANCE-BASELINE.md](../reports/PERFORMANCE-BASELINE.md); where CLOSE-009
+recorded a metric `UNAVAILABLE`, the baseline reports that honestly rather than
+inferring a number.
+
 ## The measurement model
 
 One package, `internal/perf`, is the single representation of perf data. It records:
@@ -18,6 +27,14 @@ One package, `internal/perf`, is the single representation of perf data. It reco
 
 Timing wraps existing operations in `runStages` (`internal/cli/run.go`); it does not
 add a parallel state machine or change any lifecycle transition.
+
+An agent-call count is a lifecycle operation count, not the number of provider
+generation requests or provider retries. Agent-stage duration includes harness
+and tool overhead; it is not exact LLM time. This metrics schema does not currently
+record input/output tokens, individual tool timings or calls, context sizes, or
+repeated-file-read counts. A baseline should report unmeasured values as
+`UNAVAILABLE`; CLOSE-008 inventories additional coverage from existing artifacts
+before any later instrumentation work is planned.
 
 ## Where it is persisted
 

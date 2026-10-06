@@ -111,7 +111,7 @@ func TestHarnessReportsOnlyMutationsItMade(t *testing.T) {
 func TestCommandMutationNamesNoPath(t *testing.T) {
 	dir := t.TempDir()
 	gitInit(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n\nvar x = 1\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\nvar x=1\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 

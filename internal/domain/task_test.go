@@ -369,3 +369,35 @@ func TestAllSatisfied(t *testing.T) {
 		t.Error("one unresolved task must make the plan incomplete")
 	}
 }
+
+// TestContinuationRequeueDoesNotSpendAttempt documents the plan-run/task-store
+// separation behind "sop task <id>" showing Attempts: 0 after a run reached a
+// nonzero continuation number: a CONTINUE returns the task to PLANNED without
+// spending a retry attempt (the bounded continuation budget is separate and lives
+// in the run), whereas a retry requeue increments the attempt counter. This is
+// intentional, not stale state.
+func TestContinuationRequeueDoesNotSpendAttempt(t *testing.T) {
+	base := &Task{ID: "T", Status: READY, MaxAttempts: 3}
+
+	cont := *base
+	if err := cont.RequeueWithoutSpending(); err != nil {
+		t.Fatalf("RequeueWithoutSpending: %v", err)
+	}
+	if cont.Status != PLANNED {
+		t.Errorf("status = %s, want PLANNED", cont.Status)
+	}
+	if cont.Attempt != 0 {
+		t.Errorf("attempt = %d, want 0 (a continuation must not spend a retry attempt)", cont.Attempt)
+	}
+
+	retry := *base
+	if err := retry.Requeue(); err != nil {
+		t.Fatalf("Requeue: %v", err)
+	}
+	if retry.Status != PLANNED {
+		t.Errorf("status = %s, want PLANNED", retry.Status)
+	}
+	if retry.Attempt != 1 {
+		t.Errorf("attempt = %d, want 1 (a retry spends an attempt)", retry.Attempt)
+	}
+}

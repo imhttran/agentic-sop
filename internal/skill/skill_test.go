@@ -145,8 +145,8 @@ func TestZedSkillCommandsExist(t *testing.T) {
 	}
 }
 
-// TestZedSkillCapabilityMapping proves each command delegates to `sop prompt` and
-// fixes exactly the capability it advertises. A command that fixes none must not
+// TestZedSkillCapabilityMapping proves each command delegates to its canonical SOP
+// command and fixes exactly the capability it advertises. A command that fixes none must not
 // embed a capability: the default belongs to the CLI.
 func TestZedSkillCapabilityMapping(t *testing.T) {
 	for _, c := range Commands {

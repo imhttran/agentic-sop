@@ -48,7 +48,10 @@ Where new documentation belongs:
 
 ## Architecture
 
-- [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — components, responsibilities, data model, and the state-machine/retry/TDD/review/CI/security design.
+- [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — the architecture: goal, system context, component map, the
+  state-machine/retry/TDD/review/CI design, data model, and evolution.
+- [architecture/COMPONENTS.md](architecture/COMPONENTS.md) — the top-level components and their responsibilities, one
+  per section (the detail behind OVERVIEW §3–§4).
 - [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) — what SOP owns vs what agents, models, and optional capabilities own; the single-source-of-truth rule.
 - [architecture/model-routing.md](architecture/model-routing.md) — the **non-normative** implementation seam for per-task model routing (how the lifecycle selects the task's model); the authoritative rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
@@ -76,23 +79,44 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 
 ## Topic Ownership
 
+Every fact has **one** authoritative home; other documents link to it rather than
+restating it, so adding or changing a command, config key, or state means editing a
+single owner. This table is that map.
+
 | Topic | Authoritative document | Supporting material |
 | --- | --- | --- |
 | Product goals | [PRD.md](PRD.md) | Workstream PRDs under requirements/ |
+| Architecture structure and the state graph | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | [COMPONENTS.md](architecture/COMPONENTS.md); [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) |
 | Ownership boundaries | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) | Architecture implementation seams |
-| Outcomes, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
+| Commands and flags | [CLI.md](reference/CLI.md) | The specs that own each command's semantics |
+| Configuration keys and defaults | [CONFIGURATION.md](reference/CONFIGURATION.md) | The specs that own each block's policy |
+| Task statuses, transitions, scheduling | [WORKFLOW.md](specs/WORKFLOW.md) | OVERVIEW §5–§6 (authoritative graph); [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) |
+| Per-task lifecycle, TDD rules, Git naming | [TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) | OVERVIEW §7 |
+| Outcomes, verified mutation, already-satisfied proof, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) | Resolved backlog observations in history/ |
+| Prompt execution and work items | [PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md), [WORK-ITEMS.md](specs/WORK-ITEMS.md) | CLI.md |
 | Task execution and execution modes | [EXECUTION.md](specs/EXECUTION.md) | Setup and usage guides |
+| Validation runner and evidence | [VALIDATION.md](specs/VALIDATION.md) | CONFIGURATION.md (`validation.*`) |
+| Review pipeline and severities | [REVIEW.md](specs/REVIEW.md) | QUALITY.md |
+| Quality gate and fix loop | [QUALITY.md](specs/QUALITY.md) | REVIEW.md |
+| Human approval | [HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) | [APPROVALS.md](guides/APPROVALS.md) |
+| Recovery, retry, and resume | [RECOVERY.md](specs/RECOVERY.md) | [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) |
+| Security, command policy, secrets | [SECURITY.md](specs/SECURITY.md) | OVERVIEW §14 |
 | Routing and provider rules | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md) | Configuration reference and architecture seams |
+| JEV / OpenJEV analysis | [OPENJEV.md](specs/OPENJEV.md) | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md); [JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md) |
 | Installation | [INSTALLATION.md](guides/INSTALLATION.md) | Platform and agent-specific guides |
 | Delivery status and limitations | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md) | Historical completion evidence |
 | Future work | [BACKLOG.md](plans/BACKLOG.md) | Numbered implementation plans |
+| Performance measurements | [PERFORMANCE.md](reference/PERFORMANCE.md) | Closure plan and point-in-time baseline reports |
 
 ## Reference
 
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
 - [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, the model-routing classes/precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
-- [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, and severity policy.
+- [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, severity
+  policy, lifecycle placement, and safety boundaries.
+- [reference/JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md) — diagnosing JEV: failure behavior, report/artifact
+  locations, the terminology glossary, and JEV015 traceability.
 - [reference/PROJECT-STATUS.md](reference/PROJECT-STATUS.md) — implemented capabilities and known limitations, separated from future work.
 - [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
@@ -105,22 +129,23 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md) — building, testing, and developing SOP.
 - [guides/LESSONS.md](guides/LESSONS.md) — engineering lessons from building SOP V1 (working notes).
 - [guides/SOP-CONTROLLER-DASHBOARD.md](guides/SOP-CONTROLLER-DASHBOARD.md) — run and control a SOP run from a local dashboard (and phone).
-- [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP skills so Zed exposes `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`, `/sop-test`, and `/sop-implement`, and see how each calls `sop prompt`.
+- [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP prompt aliases and `/sop-end-to-end` project entry point for Zed.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
-- [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same commands for Claude Code: install the skills so Claude exposes the `/sop*` entry points, and how each delegates to `sop prompt`.
+- [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
 
 ## Plans
 
-Implementation plans, newest phase last. A completed plan stays here rather than moving
+Implementation and verification plans. A completed plan stays here rather than moving
 to `history/` when SOP or the repository still references its path: the archive under
 `.agent-sdlc/archive/` records these sources, and the example commands in
 `scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
-- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; SOP's recorded active plan (`.agent-sdlc/plan.meta.json`); the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
+- [plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md) — **COMPLETE**: the executed CLOSE-001–CLOSE-011 DAG reconciled and verified both SOP and sop-controller, dogfooded and resumed, inventoried existing metrics, measured four workloads, and recorded the readiness verdict. All eleven tasks are `LOCAL_DONE` and the plan's final gate passed; it introduces no new performance architecture and does not start the performance phase.
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; retained under `plans/` because SOP's plan archives reference its path; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation. **Implemented** (off by default); see [specs/PROVIDERS.md](specs/PROVIDERS.md).
 - [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery. **Implemented** (off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`); see [specs/RECOVERY.md](specs/RECOVERY.md) §8.
 - [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill. **Implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
@@ -137,6 +162,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 
 ## Testing
 
+- [testing/SOP-END-TO-END.md](testing/SOP-END-TO-END.md) — end-to-end skill assessment, authoritative delegation contract, twelve deterministic scenarios, and host-assistant evaluation limits.
 - [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
 
 ## Historical Documentation
@@ -158,14 +184,17 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PREJEV017-PERFORMANCE-BASELINE.md](history/PREJEV017-PERFORMANCE-BASELINE.md) — read for PREJEV017 — Pre-JEV Performance Baseline evidence and recorded scope.
 - [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
 - [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
+- [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
 
 ## Canonical Locations and Kept Paths
+
+- **The closure plan's wrap-up reference targets the located historical plan.** [plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md) formerly named the absent `docs/plans/PLAN-Wrap-Up.md`; it now points to the located wrap-up plan [history/PLAN-wrapup.md](history/PLAN-wrapup.md). Earlier reconciliation recorded the old path as **NOT LOCATED** in [history/pre-performance-closure/CLOSE-002-status-reconciliation.md](history/pre-performance-closure/CLOSE-002-status-reconciliation.md), CLOSE-005 and CLOSE-006. The correction was reconciled through SOP (`sop reconcile … --accept-changed CLOSE-002 --accept-changed CLOSE-006`), so the recorded plan fingerprint matches the file and no executed task changed state.
 
 To keep SOP working, a few paths are intentionally not under the categories above:
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
-- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) remains the recorded active source in `.agent-sdlc/plan.meta.json`; completed plans referenced by SOP archives also retain their paths.
-- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications, not history.
+- [plans/PLAN-Phase-3.5-Model-Routing.md](plans/PLAN-Phase-3.5-Model-Routing.md) is retained because SOP's plan archives reference its path; completed plans referenced by SOP archives also retain their paths.
+- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
 
 ## Checking Documentation Links
 

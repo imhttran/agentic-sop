@@ -383,3 +383,36 @@ func TestDiscoveryIdentityAndCheckpointIndependence(t *testing.T) {
 		t.Errorf("mutation failed to reset progress: %+v", st)
 	}
 }
+
+// TestDiscoveryIdentityCreditsNonMutatingCommands proves a first-seen successful
+// non-mutating command earns bounded discovery, while repeats, mutating commands,
+// failed commands, and past-window commands do not. Discovery never becomes
+// mutation evidence.
+func TestDiscoveryIdentityCreditsNonMutatingCommands(t *testing.T) {
+	dir := t.TempDir()
+	st := newExecutionState()
+	cmd := func(c string) map[string]any { return map[string]any{"command": c} }
+	ok := "exit 0\nok"
+
+	if !st.observeDiscovery(1, dir, "run_command", cmd("go test ./..."), ok, nil) {
+		t.Error("a first-seen successful non-mutating command must earn discovery")
+	}
+	if st.observeDiscovery(2, dir, "run_command", cmd("go test ./..."), ok, nil) {
+		t.Error("an identical command must not earn discovery twice")
+	}
+	if !st.observeDiscovery(3, dir, "run_command", cmd("go vet ./..."), ok, nil) {
+		t.Error("a distinct successful command must earn discovery")
+	}
+	if st.observeDiscovery(implementNowAfter+1, dir, "run_command", cmd("go build ./..."), ok, nil) {
+		t.Error("commands past the discovery window must not earn credit")
+	}
+	if st.observeDiscovery(4, dir, "run_command", cmd("gofmt -w a.go"), ok, nil) {
+		t.Error("a mutating command is mutation, not discovery")
+	}
+	if st.observeDiscovery(5, dir, "run_command", cmd("go test ./broken"), "exit 1", errors.New("exit 1")) {
+		t.Error("a failed command is not discovery")
+	}
+	if st.mutationObserved || st.repositoryMutations != 0 {
+		t.Fatalf("discovery became mutation: %+v", st)
+	}
+}

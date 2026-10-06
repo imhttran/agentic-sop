@@ -167,6 +167,13 @@ func Decide(c failure.Classification, p Policy) Decision {
 		return humanDecision(c, p, risk, reasonOr(c.Reason, "the failure crosses an authority boundary that requires a human"))
 	}
 
+	// 1b. A bounded no-progress stop is a terminal automation state at every level:
+	//     no human decision exists (there is nothing to approve or decline), but the
+	//     task must not continue automatically under unchanged conditions either.
+	if c.Kind == failure.NoProgress {
+		return auto(ActionTerminal, c, p, RiskLow, "no repository progress under unchanged conditions; the task is blocked for operator intervention, not a human approval")
+	}
+
 	// 2. Bounded automation exhaustion. Under the high level it is a terminal
 	//    automation state — SOP tried and stopped; no human decision exists. The
 	//    conservative levels keep the human boundary, so an operator who never opted

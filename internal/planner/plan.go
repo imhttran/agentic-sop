@@ -125,6 +125,12 @@ func (p *Plan) Validate() error {
 // and every stage requirement names a declared capability. A stage may not
 // depend on a capability whose status is UNKNOWN, so synthesis cannot silently
 // treat an unverified capability as if it exists.
+// normalizeCapabilityName case-folds and collapses internal whitespace so a stage
+// requirement matches a declared capability by a cosmetic name variant.
+func normalizeCapabilityName(s string) string {
+	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
+}
+
 func (p *Plan) validateCapabilities() error {
 	status := make(map[string]CapabilityStatus, len(p.Capabilities))
 	for i, c := range p.Capabilities {
@@ -150,9 +156,23 @@ func (p *Plan) validateCapabilities() error {
 		}
 	}
 
+	normalized := make(map[string]string, len(status))
+	for name := range status {
+		key := normalizeCapabilityName(name)
+		if prev, ok := normalized[key]; ok {
+			return fmt.Errorf("plan: capabilities %q and %q differ only by case or whitespace", prev, name)
+		}
+		normalized[key] = name
+	}
+
 	for _, stage := range p.Stages {
 		for _, name := range stage.Requires {
 			st, ok := status[name]
+			if !ok {
+				if exact, ok2 := normalized[normalizeCapabilityName(name)]; ok2 {
+					st, ok = status[exact], true
+				}
+			}
 			if !ok {
 				return fmt.Errorf("plan: stage %s requires undeclared capability %q", stage.ID, name)
 			}
