@@ -173,6 +173,37 @@ historical plan cannot become runnable accidentally
 LOW priority; must not block CTX-001.
 
 
+## SOP-EXTERNAL-COMPLETION
+
+**Status:** Backlog (MEDIUM). SOP records a task's completion only when its own lifecycle
+runs the task and produces a verified repository mutation (or a verified `ALREADY_SATISFIED`
+claim). When the work was performed outside the SOP runtime — for example by a coding agent
+that implemented and merged it directly — `sop run` cannot complete the task: the model
+discovers that the work already exists, makes no mutation, and the stale guard classifies
+`IMPLEMENT_NO_PROGRESS` (a spurious BLOCK). There is no model-free way to record the
+completion, so the task's SOP state cannot reflect the merged work.
+
+Provide a deterministic, model-free operation to record a task as complete against
+authoritative evidence (for example a merged change plus a green validation), so SOP's task
+state can reflect work performed outside its runtime without bypassing the lifecycle,
+fabricating a PASS, or re-running the model.
+
+Requirements:
+
+```text
+model-free
+no task execution
+requires authoritative evidence (merged change + green validation)
+no fabricated PASS
+no fabricated approval
+does not advance dependent tasks beyond what the evidence supports
+```
+
+Surfaced when CTX-001 (Context Engine) was implemented and merged by a coding agent and
+`sop run` could not record it: the model recognized the existing implementation, produced no
+repository change, and the task was classified `IMPLEMENT_NO_PROGRESS` and blocked.
+
+
 ## Status and roadmap
 
 See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities
