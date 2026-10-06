@@ -48,7 +48,10 @@ Where new documentation belongs:
 
 ## Architecture
 
-- [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — components, responsibilities, data model, and the state-machine/retry/TDD/review/CI/security design.
+- [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — the architecture: goal, system context, component map, the
+  state-machine/retry/TDD/review/CI design, data model, and evolution.
+- [architecture/COMPONENTS.md](architecture/COMPONENTS.md) — the top-level components and their responsibilities, one
+  per section (the detail behind OVERVIEW §3–§4).
 - [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) — what SOP owns vs what agents, models, and optional capabilities own; the single-source-of-truth rule.
 - [architecture/model-routing.md](architecture/model-routing.md) — the **non-normative** implementation seam for per-task model routing (how the lifecycle selects the task's model); the authoritative rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
 - [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
@@ -83,7 +86,7 @@ single owner. This table is that map.
 | Topic | Authoritative document | Supporting material |
 | --- | --- | --- |
 | Product goals | [PRD.md](PRD.md) | Workstream PRDs under requirements/ |
-| Architecture structure and the state graph | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) |
+| Architecture structure and the state graph | [architecture/OVERVIEW.md](architecture/OVERVIEW.md) | [COMPONENTS.md](architecture/COMPONENTS.md); [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) |
 | Ownership boundaries | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) | Architecture implementation seams |
 | Commands and flags | [CLI.md](reference/CLI.md) | The specs that own each command's semantics |
 | Configuration keys and defaults | [CONFIGURATION.md](reference/CONFIGURATION.md) | The specs that own each block's policy |
