@@ -61,12 +61,12 @@ retained as a point-in-time record.
 | Stage | Artifact | Final status | Note |
 | --- | --- | --- | --- |
 | CLOSE-001 | `CLOSE-001-baseline.md` | COMPLETE | Repo/toolchain/model pins; sop-controller read-only; "sole intentional repository mutation". |
-| CLOSE-002 | `CLOSE-002-status-reconciliation.md` | COMPLETE | Single truth view. Its recorded twelve CLI/JEV failures and CLOSE-010-backlog item are resolved (tests pass; baseline published). |
+| CLOSE-002 | `docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md` | COMPLETE | Single truth view. Its recorded twelve CLI/JEV failures and CLOSE-010-backlog item are resolved (tests pass; baseline published). |
 | CLOSE-003 | `CLOSE-003-sop-deterministic-baseline.md` | COMPLETE | All five Go gates green; `gofmt -l .` empty; CI/doc/packaging checks PASS (report §3). |
 | CLOSE-004 | `CLOSE-004-controller-deterministic-baseline.md` | COMPLETE | Controller gate all green at controller HEAD `a51b0c6a6563033821ed4ae1e51890ab10479bbd` (read-only). |
-| CLOSE-005 | `CLOSE-005-controller-work-verdicts.md` | COMPLETE | Per-item controller verdicts: human-decision and performance visibility COMPLETE; wrap-up/hardening/approval reconciliation recorded `NEEDS_HUMAN`. Retained as point-in-time. |
-| CLOSE-006 | `CLOSE-006-named-plan-dogfood.md` | COMPLETE (recorded `NEEDS_HUMAN`) | Controller-root dogfood / HUMAN flow not observed; deferred (§0.2). |
-| CLOSE-007 | `CLOSE-007-resume-idempotency.md` | COMPLETE | SOP named-plan resume/idempotency SATISFIED; controller-root same-identity re-run recorded `NEEDS_HUMAN`; deferred. |
+| CLOSE-005 | `docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md` | COMPLETE | Per-item controller verdicts: human-decision and performance visibility COMPLETE; wrap-up/hardening/approval reconciliation recorded `NEEDS_HUMAN`. Retained as point-in-time. |
+| CLOSE-006 | `docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md` | COMPLETE (recorded `NEEDS_HUMAN`) | Controller-root dogfood / HUMAN flow not observed; deferred (§0.2). |
+| CLOSE-007 | `docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md` | COMPLETE | SOP named-plan resume/idempotency SATISFIED; controller-root same-identity re-run recorded `NEEDS_HUMAN`; deferred. |
 | CLOSE-008 | `CLOSE-008-telemetry-inventory.md` | COMPLETE | Inventories `internal/perf`; gaps and future-phase N/A separated. |
 | CLOSE-009 | `CLOSE-009-performance-baseline.md` + raw JSON | COMPLETE (measurements `UNAVAILABLE`) | `capture_status: UNAVAILABLE`, `runs[]` empty for A/B/C/D; deferred (§0.1). |
 | CLOSE-010 | `docs/reports/PERFORMANCE-BASELINE.md` | COMPLETE | Published baseline; values trace to CLOSE-009 as `UNAVAILABLE`. |

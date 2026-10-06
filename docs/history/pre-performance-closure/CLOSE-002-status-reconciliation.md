@@ -1,6 +1,6 @@
 # CLOSE-002 — Plans/Status/History Reconciliation (Single Truth View)
 
-> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](../../reports/pre-performance-closure/CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
 > The wrap-up plan path cited in this record (`docs/plans/PLAN-Wrap-Up.md`) now resolves to the located historical plan `docs/history/PLAN-wrapup.md`; the closure plan references that path.
 
@@ -234,7 +234,7 @@ is named.
 
 ### Authorized mutation (sole intentional repository mutation of CLOSE-002)
 
-- Added: `docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md`
+- Added: `docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md`
   (this file).
 
 The parent directory `docs/reports/pre-performance-closure/` already existed

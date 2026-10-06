@@ -21,17 +21,15 @@ including the two explicit deferrals, is
 | [workloads/](workloads/) | Frozen A/B/C/D fixtures and [build-pin.md](workloads/build-pin.md). |
 | [../PERFORMANCE-BASELINE.md](../PERFORMANCE-BASELINE.md) | Published CLOSE-010 baseline. |
 
-## Superseded interim reports
+## Superseded interim reports (moved to history)
 
-These record a point-in-time verdict from an earlier attempt and are **not** the
-current state; each carries a "Final status" banner. They stay in this directory
-because the closure plan declares these exact paths as its stage deliverables and
-`internal/taskbuilder/closure_plan_test.go` pins them, so they are indexed here
-rather than relocated.
+These recorded a point-in-time verdict from an earlier attempt and are superseded;
+each carries a "Final status" banner. They now live under
+[`../../history/pre-performance-closure/`](../../history/pre-performance-closure/).
 
 | Artifact | Interim verdict (superseded) | Current state |
 | --- | --- | --- |
-| [CLOSE-002-status-reconciliation.md](CLOSE-002-status-reconciliation.md) | twelve CLI/JEV failures `BLOCKED`; CLOSE-010 in backlog | Resolved — tests pass, baseline published (CLOSE-011). |
-| [CLOSE-005-controller-work-verdicts.md](CLOSE-005-controller-work-verdicts.md) | controller work `NEEDS_HUMAN`; gate not re-run | See CLOSE-011 §2–§3. |
-| [CLOSE-006-named-plan-dogfood.md](CLOSE-006-named-plan-dogfood.md) | `NEEDS_HUMAN` (controller dogfood) | Deferred (CLOSE-011 §0.2, §4). |
-| [CLOSE-007-resume-idempotency.md](CLOSE-007-resume-idempotency.md) | controller-root re-run `NEEDS_HUMAN` | Deferred (CLOSE-011 §3). |
+| [CLOSE-002-status-reconciliation.md](../../history/pre-performance-closure/CLOSE-002-status-reconciliation.md) | twelve CLI/JEV failures `BLOCKED`; CLOSE-010 in backlog | Resolved — tests pass, baseline published. |
+| [CLOSE-005-controller-work-verdicts.md](../../history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md) | controller work `NEEDS_HUMAN`; gate not re-run | See [CLOSE-011](CLOSE-011-readiness.md) §2–§3. |
+| [CLOSE-006-named-plan-dogfood.md](../../history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md) | `NEEDS_HUMAN` (controller dogfood) | Deferred ([CLOSE-011](CLOSE-011-readiness.md) §0.2, §4). |
+| [CLOSE-007-resume-idempotency.md](../../history/pre-performance-closure/CLOSE-007-resume-idempotency.md) | controller-root re-run `NEEDS_HUMAN` | Deferred ([CLOSE-011](CLOSE-011-readiness.md) §3). |

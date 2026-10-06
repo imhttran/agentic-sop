@@ -271,7 +271,7 @@ grep -q "LARGE" docs/reports/pre-performance-closure/CLOSE-001-baseline.md
 
 ## CLOSE-002 — Reconcile Plans/Status/History
 
-Produce one truthful status view across both repositories. Classify each plan/phase as ACTIVE/COMPLETE/HISTORICAL/BACKLOG/BLOCKED/NEEDS_HUMAN using code, tests or authoritative SOP state as evidence; reconcile sop-controller docs/PLAN-SOP-Controller.md, the located historical wrap-up plan docs/history/PLAN-wrapup.md, both hardening-plan locations/reports, the human-decision integration and the performance/observability work; reconcile agentic-sop project status/backlog/recent synthesis-discovery/provider-routing/known limitations. The single status view is written to docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md; creating or updating that one report is the authorized evidence mutation for this task. Deterministic validation: the classification must be backed by a cited artifact or authoritative SOP output for each item, and no completed phase may be rescheduled or active recorded plan moved; acceptance is satisfied by the recorded classification with evidence, not by repository tests.
+Produce one truthful status view across both repositories. Classify each plan/phase as ACTIVE/COMPLETE/HISTORICAL/BACKLOG/BLOCKED/NEEDS_HUMAN using code, tests or authoritative SOP state as evidence; reconcile sop-controller docs/PLAN-SOP-Controller.md, the located historical wrap-up plan docs/history/PLAN-wrapup.md, both hardening-plan locations/reports, the human-decision integration and the performance/observability work; reconcile agentic-sop project status/backlog/recent synthesis-discovery/provider-routing/known limitations. The single status view is written to docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md; creating or updating that one report is the authorized evidence mutation for this task. Deterministic validation: the classification must be backed by a cited artifact or authoritative SOP output for each item, and no completed phase may be rescheduled or active recorded plan moved; acceptance is satisfied by the recorded classification with evidence, not by repository tests.
 
 ### Dependencies
 
@@ -279,13 +279,13 @@ Produce one truthful status view across both repositories. Classify each plan/ph
 
 ### Deliverables
 
-- docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md — the single status view with per-item classification, evidence citation and label.
+- docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md — the single status view with per-item classification, evidence citation and label.
 - A record of the controller's recorded active plan and its fingerprint (docs/PLAN-SOP-Controller.md, plan_id plan-sop-controller, source_sha256 42f48315b3d567813eefb8b635a76fc80f4b068276b92d90b4a37fadc2ce36f1) as imported evidence, not as a plan moved by this master.
 
 ### Acceptance Criteria
 
 - Every reconciled item carries a classification and code/test/authoritative-SOP evidence; recorded task status is distinguished from actual implementation.
-- The one truth view is recorded in docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md: that report is created or updated with the per-item classification and evidence, and no other repository contents are mutated.
+- The one truth view is recorded in docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md: that report is created or updated with the per-item classification and evidence, and no other repository contents are mutated.
 - No active recorded plan is moved and no fingerprint changed without proper SOP reconciliation.
 - No executable change is made merely to clean documentation.
 - Completed phases are never rescheduled; the controller's CTRL001–CTRL017 status and the historical NOT READY report are recorded as-is, not relabeled.
@@ -338,7 +338,7 @@ Establish the sop-controller deterministic baseline with exact evidence and the 
 
 ## CLOSE-005 — Finish or Verify Current Controller Work
 
-Derive the current controller work state from current code, tests and SOP provenance rather than stale wrap-up status, then finish only genuinely incomplete intended work bounded to closure defects. Verify wrap-up, hardening, human-decision integration, approval reconciliation and performance visibility; for each item record COMPLETE, BLOCKED or NEEDS_HUMAN with concrete evidence. Closure remediation invalidates earlier test evidence: after any remedy, re-run both deterministic gates (CLOSE-003 and CLOSE-004), record new source/config/patch/binary hashes, and rebuild/re-pin the exact SOP binary that later stages will use. If an existing operator binary or script proves incompatible, report it as a closure defect with a bounded remedy, never fake operations. The per-item verdicts and the recorded re-run results are written to docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md. Deterministic validation: each COMPLETE/BLOCKED/NEEDS_HUMAN verdict must cite a current code/test/provenance artifact; both gates must be re-run after any remedy and recorded green; and new source/config/patch/binary hashes must be recorded so no earlier test evidence is reused. The verdicts cannot rest on stale status documents or on generic repository tests alone.
+Derive the current controller work state from current code, tests and SOP provenance rather than stale wrap-up status, then finish only genuinely incomplete intended work bounded to closure defects. Verify wrap-up, hardening, human-decision integration, approval reconciliation and performance visibility; for each item record COMPLETE, BLOCKED or NEEDS_HUMAN with concrete evidence. Closure remediation invalidates earlier test evidence: after any remedy, re-run both deterministic gates (CLOSE-003 and CLOSE-004), record new source/config/patch/binary hashes, and rebuild/re-pin the exact SOP binary that later stages will use. If an existing operator binary or script proves incompatible, report it as a closure defect with a bounded remedy, never fake operations. The per-item verdicts and the recorded re-run results are written to docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md. Deterministic validation: each COMPLETE/BLOCKED/NEEDS_HUMAN verdict must cite a current code/test/provenance artifact; both gates must be re-run after any remedy and recorded green; and new source/config/patch/binary hashes must be recorded so no earlier test evidence is reused. The verdicts cannot rest on stale status documents or on generic repository tests alone.
 
 ### Dependencies
 
@@ -348,13 +348,13 @@ Derive the current controller work state from current code, tests and SOP proven
 
 ### Deliverables
 
-- docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md — per-item verdict with evidence, plus named external actions where a genuine external action remains.
+- docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md — per-item verdict with evidence, plus named external actions where a genuine external action remains.
 - Recorded re-run results for both deterministic gates with new source/config/patch/binary hashes after any closure remediation.
 
 ### Acceptance Criteria
 
 - Each wrap-up/hardening/human-decision/approval-reconciliation/performance-visibility item is COMPLETE, BLOCKED or NEEDS_HUMAN with concrete evidence.
-- The per-item verdicts and the recorded re-run gate results with new source/config/patch/binary hashes are recorded in docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md, which the stage creates or updates.
+- The per-item verdicts and the recorded re-run gate results with new source/config/patch/binary hashes are recorded in docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md, which the stage creates or updates.
 - Only genuinely incomplete intended work is finished, bounded to closure defects; no hidden new architecture, no automatic repository-wide redesign and no unrequested commit/push.
 - Any closure remediation invalidates earlier test evidence and is followed by re-running both deterministic gates, recording new source/config/patch/binary hashes, and rebuilding/re-pinning the exact SOP binary before CLOSE-006 and any measurements; the re-runs are recorded green.
 - The historical hardening report claim (multi-minute waits were an external operator workflow, no invented production fix required) is recorded as evidence, not turned into new work.
@@ -362,7 +362,7 @@ Derive the current controller work state from current code, tests and SOP proven
 
 ## CLOSE-006 — Named-Plan Dogfood/Human Decision
 
-Exercise the current authoritative named plan end to end from the controller checkout, using the plan identified in CLOSE-002, and observe real human gates — including an explicit controller HUMAN flow. Prefer the recorded docs/PLAN-SOP-Controller.md if it remains authoritative, and use sop run docs/history/PLAN-wrapup.md only when evidence/provenance makes it appropriate; preserve existing task IDs, history and runtime state; exercise named resolution, identity/fingerprint, bootstrap, DAG dependencies, implementation or verified already-satisfied completion, validation, review, bounded remediation, human gates, approval list, approve/decline, reconcile and truthful reporting. Explicitly test the controller HUMAN flow using the existing script scripts/c2-009-dogfood.sh in a disposable project with a real SOP binary, producing readiness/scenarios/transcript artifacts and recording the actual controller HTTP action and delegation observations; a historical C2-009 NOT READY result is not fresh verification. The run transcript, observed gates, human-decision outcomes, controller HTTP action/delegation observations and any NEEDS_HUMAN/FAIL verdict are recorded in docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md; the disposable controlled fixture projects (including the c2-009 dogfood disposable project) keep their own readiness/scenarios/transcript artifacts. Do not execute fabricated mutations or assign PASS/task states manually. For destructive/manual/denial scenarios use disposable controlled projects with a real SOP binary and preserve the actual controller project's authoritative state. Preserve operator-configured provider/model/classes/routing/fallback and choose no class manually; existing human policies remain operative and exact real required approvals cannot be automated away. Separate generation time from human wait. Real controller named-plan execution and the controller HTTP human flow remain CLOSE-006 and are not replaced by fixtures. Deterministic validation: the run's own SOP outputs (status, approvals, reconcile, report) must be captured as evidence; genuine external approval blocked states must be reported as NEEDS_HUMAN with the exact action, and any defect must be reported as FAIL, not masked as PASS.
+Exercise the current authoritative named plan end to end from the controller checkout, using the plan identified in CLOSE-002, and observe real human gates — including an explicit controller HUMAN flow. Prefer the recorded docs/PLAN-SOP-Controller.md if it remains authoritative, and use sop run docs/history/PLAN-wrapup.md only when evidence/provenance makes it appropriate; preserve existing task IDs, history and runtime state; exercise named resolution, identity/fingerprint, bootstrap, DAG dependencies, implementation or verified already-satisfied completion, validation, review, bounded remediation, human gates, approval list, approve/decline, reconcile and truthful reporting. Explicitly test the controller HUMAN flow using the existing script scripts/c2-009-dogfood.sh in a disposable project with a real SOP binary, producing readiness/scenarios/transcript artifacts and recording the actual controller HTTP action and delegation observations; a historical C2-009 NOT READY result is not fresh verification. The run transcript, observed gates, human-decision outcomes, controller HTTP action/delegation observations and any NEEDS_HUMAN/FAIL verdict are recorded in docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md; the disposable controlled fixture projects (including the c2-009 dogfood disposable project) keep their own readiness/scenarios/transcript artifacts. Do not execute fabricated mutations or assign PASS/task states manually. For destructive/manual/denial scenarios use disposable controlled projects with a real SOP binary and preserve the actual controller project's authoritative state. Preserve operator-configured provider/model/classes/routing/fallback and choose no class manually; existing human policies remain operative and exact real required approvals cannot be automated away. Separate generation time from human wait. Real controller named-plan execution and the controller HTTP human flow remain CLOSE-006 and are not replaced by fixtures. Deterministic validation: the run's own SOP outputs (status, approvals, reconcile, report) must be captured as evidence; genuine external approval blocked states must be reported as NEEDS_HUMAN with the exact action, and any defect must be reported as FAIL, not masked as PASS.
 
 ### Dependencies
 
@@ -370,7 +370,7 @@ Exercise the current authoritative named plan end to end from the controller che
 
 ### Deliverables
 
-- docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md — the run transcript (commands, sanitized outputs), observed gates, human-decision outcomes, controller HTTP action/delegation observations, and any NEEDS_HUMAN/FAIL verdict with the exact blocking action.
+- docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md — the run transcript (commands, sanitized outputs), observed gates, human-decision outcomes, controller HTTP action/delegation observations, and any NEEDS_HUMAN/FAIL verdict with the exact blocking action.
 - Disposable controlled fixture projects (including the c2-009 dogfood disposable project) with their own readiness/scenarios/transcript artifacts and a fresh real SOP binary run.
 
 ### Acceptance Criteria
@@ -378,13 +378,13 @@ Exercise the current authoritative named plan end to end from the controller che
 - The authoritative current named plan is resolved by evidence from CLOSE-002 and its identity/fingerprint is confirmed.
 - The named plan exercises named resolution, identity/fingerprint, bootstrap, DAG dependencies, implementation or verified already-satisfied completion, validation, review, bounded remediation, human gates, approval list and truthful reporting.
 - The controller HUMAN flow is explicitly tested with existing scripts (scripts/c2-009-dogfood.sh) in a disposable project using a real SOP binary, with readiness/scenarios/transcript artifacts and actual controller HTTP action/delegation observations recorded; historical C2-009 NOT READY is not treated as fresh verification.
-- The run transcript, observed gates, human-decision outcomes and any NEEDS_HUMAN/FAIL verdict are recorded in docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md; disposable fixture projects are used for destructive/manual/denial scenarios without mutating the authoritative controller state.
+- The run transcript, observed gates, human-decision outcomes and any NEEDS_HUMAN/FAIL verdict are recorded in docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md; disposable fixture projects are used for destructive/manual/denial scenarios without mutating the authoritative controller state.
 - No fabricated mutation occurs and no PASS/task state is manually assigned; genuinely incomplete intended work is finished only bounded to closure defects.
 - A real external approval block is reported as NEEDS_HUMAN with the exact action; defects are reported as FAIL; the historical NOT READY result is kept historical and not relabeled without a fresh real run.
 
 ## CLOSE-007 — Resume/Idempotency
 
-Prove resume and idempotency for the named plan. Re-run the identical named plan after a successful execution and verify the same identity, no recreated DAG, no completed task rerun, no phantom work and preserved history/approval state; snapshot before/after via read-only SOP outputs, checksums and artifacts without mutating SQLite directly; verify controlled incomplete-state resume with existing tests or a disposable real-SOP fixture, without manufacturing live task statuses. The before/after snapshots, artifact checksums and resume/idempotency verdict are recorded in docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md. Deterministic validation: the before/after read-only snapshots and checksums must be captured and shown identical where idempotency is claimed, and the resume proof must come from real SOP behavior or existing tests, not a hand-edited state database.
+Prove resume and idempotency for the named plan. Re-run the identical named plan after a successful execution and verify the same identity, no recreated DAG, no completed task rerun, no phantom work and preserved history/approval state; snapshot before/after via read-only SOP outputs, checksums and artifacts without mutating SQLite directly; verify controlled incomplete-state resume with existing tests or a disposable real-SOP fixture, without manufacturing live task statuses. The before/after snapshots, artifact checksums and resume/idempotency verdict are recorded in docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md. Deterministic validation: the before/after read-only snapshots and checksums must be captured and shown identical where idempotency is claimed, and the resume proof must come from real SOP behavior or existing tests, not a hand-edited state database.
 
 ### Dependencies
 
@@ -392,13 +392,13 @@ Prove resume and idempotency for the named plan. Re-run the identical named plan
 
 ### Deliverables
 
-- docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md — before/after read-only snapshots, artifact checksums and the resume/idempotency verdict with evidence.
+- docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md — before/after read-only snapshots, artifact checksums and the resume/idempotency verdict with evidence.
 
 ### Acceptance Criteria
 
 - Re-running the identical named plan yields the same identity with no recreated DAG, no completed task rerun and no phantom work.
 - History and approval state are preserved across the re-run.
-- Before/after snapshots are captured through read-only SOP outputs and artifact checksums are recorded in docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md, which the stage creates or updates.
+- Before/after snapshots are captured through read-only SOP outputs and artifact checksums are recorded in docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md, which the stage creates or updates.
 - Controlled incomplete-state resume is verified via existing tests or a disposable real-SOP fixture; no live task status is manufactured and SQLite is not mutated directly.
 
 ## CLOSE-008 — Inventory Performance Telemetry

@@ -1,6 +1,6 @@
 # CLOSE-007 — Resume / Idempotency
 
-> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](../../reports/pre-performance-closure/CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
 Prove resume and idempotency for the named plan: re-run the identical named plan after
 a successful execution and verify the same identity, no recreated DAG, no completed task
@@ -230,7 +230,7 @@ the SOP-produced artifacts and read-only outputs, run from the same binary and f
 
 ### Authorized mutation (sole intentional repository mutation of CLOSE-007)
 
-- Added: `docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md` (this file).
+- Added: `docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md` (this file).
 
 No other repository file is created or updated by CLOSE-007. No commit or push is
 performed. No application/source code, test, runtime configuration, SOP configuration or
@@ -254,7 +254,7 @@ files remain present and untouched: `docs/reference/CLI.md`, `internal/cli/cli.g
 `internal/cli/run.go`, `internal/git/git.go`, `internal/ollamaagent/prompt.go`,
 `internal/taskfile/taskfile.go`; untracked `internal/cli/report_deliverable.go`,
 `internal/cli/report_deliverable_test.go`, `internal/cli/task_input.go`,
-`docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`.
+`docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`.
 
 ### Read-only sop-controller
 

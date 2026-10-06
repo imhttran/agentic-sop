@@ -1,6 +1,6 @@
 # CLOSE-005 — Controller Work Verdicts (Finish or Verify Current Controller Work)
 
-> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](../../reports/pre-performance-closure/CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
 > The wrap-up plan path cited in this record (`docs/plans/PLAN-Wrap-Up.md`) now resolves to the located historical plan `docs/history/PLAN-wrapup.md`; the closure plan references that path.
 
@@ -278,7 +278,7 @@ CLOSE-001 pins where the tree changed.
 | agentic-sop HEAD SHA | `c11e14fb0a43dd5840fa5c034e1d8e6fd999af28` | current `git rev-parse HEAD` (re-derived this invocation); differs from CLOSE-001's `79634dc6…` |
 | agentic-sop branch | `fix/verify-repository-mutations` | current |
 | agentic-sop tracked dirty state | true (pre-existing user-owned) | preserved, per CLOSE-001 §1 |
-| agentic-sop untracked inventory | `internal/cli/report_deliverable.go`, `internal/cli/report_deliverable_test.go`, `internal/cli/task_input.go` (pre-existing) + this report (new) | `git status --porcelain` shows the pre-existing untracked files plus `?? docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md` |
+| agentic-sop untracked inventory | `internal/cli/report_deliverable.go`, `internal/cli/report_deliverable_test.go`, `internal/cli/task_input.go` (pre-existing) + this report (new) | `git status --porcelain` shows the pre-existing untracked files plus `?? docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md` |
 | agentic-sop tracked patch SHA-256 | recorded below (see "Patch hash" row) | distinct from CLOSE-001 `a10f0df7…` if the tree changed |
 | sop-controller HEAD SHA | `a51b0c6a6563033821ed4ae1e51890ab10479bbd` | unchanged (no controller remedy applied; not re-verified this invocation) |
 | sop-controller tracked dirty state | false | unchanged (per CLOSE-001 §2) |
@@ -358,9 +358,9 @@ None of these is turned into new work, auto-approved, or marked PASS.
 
 ### Authorized mutation (sole intentional repository mutation of CLOSE-005)
 
-- Added/updated: `docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`
+- Added/updated: `docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`
   (this file). As of this run it is **untracked** (shown by `git status --porcelain` as
-  `?? docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`); no
+  `?? docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`); no
   commit or push is performed.
 
 The parent directory already existed (created by CLOSE-001). No other repository file

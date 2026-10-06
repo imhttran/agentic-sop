@@ -5,7 +5,7 @@
 - Raw measurements: `docs/reports/pre-performance-closure/CLOSE-009-performance-baseline-raw.json`
 - Frozen fixtures: `docs/reports/pre-performance-closure/workloads/{A,B,C,D}/`
 - Telemetry contract: `docs/reports/pre-performance-closure/CLOSE-008-telemetry-inventory.md`
-- Pinned SOP build: aligned under CLOSE-005 (`docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`)
+- Pinned SOP build: aligned under CLOSE-005 (`docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`)
 
 This report defines four pinned, task-sized SOP workloads (A/B/C/D) and records a
 pre-performance baseline of THREE real-provider repetitions per workload. Every

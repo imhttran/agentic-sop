@@ -27,12 +27,12 @@ type closureStage struct {
 // deliberately.
 var closureStages = []closureStage{
 	{"CLOSE-001", []string{"docs/reports/pre-performance-closure/CLOSE-001-baseline.md"}},
-	{"CLOSE-002", []string{"docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md"}},
+	{"CLOSE-002", []string{"docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md"}},
 	{"CLOSE-003", []string{"docs/reports/pre-performance-closure/CLOSE-003-sop-deterministic-baseline.md"}},
 	{"CLOSE-004", []string{"docs/reports/pre-performance-closure/CLOSE-004-controller-deterministic-baseline.md"}},
-	{"CLOSE-005", []string{"docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md"}},
-	{"CLOSE-006", []string{"docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md"}},
-	{"CLOSE-007", []string{"docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md"}},
+	{"CLOSE-005", []string{"docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md"}},
+	{"CLOSE-006", []string{"docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md"}},
+	{"CLOSE-007", []string{"docs/history/pre-performance-closure/CLOSE-007-resume-idempotency.md"}},
 	{"CLOSE-008", []string{"docs/reports/pre-performance-closure/CLOSE-008-telemetry-inventory.md"}},
 	{"CLOSE-009", []string{
 		"docs/reports/pre-performance-closure/CLOSE-009-performance-baseline-raw.json",

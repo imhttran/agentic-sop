@@ -1,6 +1,6 @@
 # CLOSE-006 — Named-Plan Dogfood / Human Decision
 
-> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
+> **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](../../reports/pre-performance-closure/CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
 > The wrap-up plan path cited in this record (`docs/plans/PLAN-Wrap-Up.md`) now resolves to the located historical plan `docs/history/PLAN-wrapup.md`; the closure plan references that path.
 
@@ -44,7 +44,7 @@ actions are enumerated in §5. No PASS is claimed and no task state is assigned 
 
 ## 1. Authoritative named plan and identity / fingerprint (C006-01)
 
-Resolved by evidence from CLOSE-002 (`docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md` §1 and §4) and the master plan.
+Resolved by evidence from CLOSE-002 (`docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md` §1 and §4) and the master plan.
 
 | Field | Value | Evidence citation |
 | --- | --- | --- |
@@ -194,7 +194,7 @@ CLOSE-006 dogfood verdict can be produced. Until performed, CLOSE-006 remains **
 | # | Command | cwd | Exit | Observed output (sanitized) |
 | --- | --- | --- | --- | --- |
 | 1 | `go build ./...` | agentic-sop root | 0 | empty (no compile errors) |
-| 2 | `git status --short --branch` | agentic-sop root | 0 | `## fix/verify-repository-mutations...origin/fix/verify-repository-mutations` then `?? docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md` |
+| 2 | `git status --short --branch` | agentic-sop root | 0 | `## fix/verify-repository-mutations...origin/fix/verify-repository-mutations` then `?? docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md` |
 | 3 | `list_files scripts/` | agentic-sop root | — | `agents/`, `checks/`, `install/`, `install.sh`, `packaging/`, `sop-deepseek-agent.sh` (no `c2-009-dogfood.sh`) |
 | 4 | `search_files "c2-009-dogfood"` | agentic-sop root | — | only documentation references; no repository script path |
 
@@ -211,7 +211,7 @@ CLOSE-006 dogfood verdict can be produced. Until performed, CLOSE-006 remains **
 
 | Acceptance claim | Verdict | Captured SOP output / evidence path |
 | --- | --- | --- |
-| Authoritative named plan resolved; identity/fingerprint confirmed | VERIFIED (recorded) | `docs/reports/pre-performance-closure/CLOSE-002-status-reconciliation.md` §1/§4; `docs/plans/PLAN-Pre-Performance-Closure.md` |
+| Authoritative named plan resolved; identity/fingerprint confirmed | VERIFIED (recorded) | `docs/history/pre-performance-closure/CLOSE-002-status-reconciliation.md` §1/§4; `docs/plans/PLAN-Pre-Performance-Closure.md` |
 | Named-plan exercises the full lifecycle | NOT OBSERVED | §2, §3, §5 (no authorized controller root / real run) |
 | Controller HUMAN flow tested via `scripts/c2-009-dogfood.sh` in a disposable project | NEEDS_HUMAN (contract UNVERIFIED) | §3; `list_files scripts/`, `search_files c2-009-dogfood` |
 | Transcript / gates / human-decision outcomes / HTTP observations / verdict recorded here | RECORDED | §4, §6, §7 (this file) |
@@ -224,7 +224,7 @@ CLOSE-006 dogfood verdict can be produced. Until performed, CLOSE-006 remains **
 
 ### Authorized mutation (sole intentional repository mutation of CLOSE-006)
 
-- Added: `docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md` (this file).
+- Added: `docs/history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md` (this file).
 
 No other repository file is created or updated by CLOSE-006. No commit or push is
 performed.
@@ -248,7 +248,7 @@ modifications and untracked files remain present and untouched:
   `internal/taskfile/taskfile.go`.
 - Untracked files: `internal/cli/report_deliverable.go`,
   `internal/cli/report_deliverable_test.go`, `internal/cli/task_input.go`,
-  `docs/reports/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`.
+  `docs/history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md`.
 
 ### Operator-configured provider/model/classes/routing/fallback — preserved, unmodified
 
