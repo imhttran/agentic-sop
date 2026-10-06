@@ -2,6 +2,8 @@
 
 > **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
+> The wrap-up plan path cited in this record (`docs/plans/PLAN-Wrap-Up.md`) now resolves to the located historical plan `docs/history/PLAN-wrapup.md`; the closure plan references that path.
+
 One truthful status view reconciling agentic-sop and sop-controller plans, phases,
 status and history. This Markdown report is the sole authorized evidence mutation
 created by CLOSE-002; no executable, configuration or other documentation change is
@@ -81,7 +83,7 @@ recorded as NOT LOCATED / NEEDS_HUMAN with the search scope stated.
 | Bounded productive IMPLEMENT/FIX discovery | COMPLETE (as recorded) | Implemented; task-scoped budgets remain backlog | `docs/reference/PROJECT-STATUS.md` §"Recent correctness closure" bullet 2; `docs/plans/BACKLOG.md` §"Task-Scoped Discovery Budgets" | `docs/reference/PROJECT-STATUS.md`; `docs/plans/BACKLOG.md` |
 | Tool-level repository mutation verification (`d0af5a4`) | COMPLETE (as recorded) | Implemented | `docs/reference/PROJECT-STATUS.md` §"Recent correctness closure" bullet 3 | `docs/reference/PROJECT-STATUS.md` §"Recent correctness closure" |
 | Verified already-satisfied IMPLEMENT/FIX completion (`1ce9bdb`) | COMPLETE (as recorded) | Implemented | `docs/reference/PROJECT-STATUS.md` §"Recent correctness closure" bullet 4 | `docs/reference/PROJECT-STATUS.md` §"Recent correctness closure" |
-| `docs/plans/PLAN-Pre-Performance-Closure.md` (CLOSE-001–CLOSE-011) | ACTIVE (planned, not executed) — recorded status PLANNED | Planned, not executed; not SOP's recorded active plan | `docs/plans/PLAN-Pre-Performance-Closure.md` header: "Status: PLANNED — execution-ready"; also `docs/plans/BACKLOG.md` §"Pre-Performance Closure and Baseline" and `docs/reference/PROJECT-STATUS.md` §"Next verification plan" | `docs/plans/PLAN-Pre-Performance-Closure.md`; `docs/plans/BACKLOG.md`; `docs/reference/PROJECT-STATUS.md` |
+| `docs/plans/PLAN-Pre-Performance-Closure.md` (CLOSE-001–CLOSE-011) | ACTIVE (planned, not executed) — recorded status PLANNED | Planned, not executed; not SOP's recorded active plan | `docs/plans/PLAN-Pre-Performance-Closure.md` header: "Status: PLANNED — execution-ready"; also `docs/plans/BACKLOG.md` §"Pre-Performance Closure and Baseline" and `docs/reference/PROJECT-STATUS.md` §"Pre-performance closure (complete)" | `docs/plans/PLAN-Pre-Performance-Closure.md`; `docs/plans/BACKLOG.md`; `docs/reference/PROJECT-STATUS.md` |
 | CLOSE-003 — SOP deterministic baseline | BACKLOG (planned, not executed) | Planned | `docs/plans/PLAN-Pre-Performance-Closure.md` stage CLOSE-003 (defined; not run) | `docs/plans/PLAN-Pre-Performance-Closure.md` |
 | CLOSE-004 — Controller deterministic baseline | BACKLOG (planned, not executed) | Planned | `docs/plans/PLAN-Pre-Performance-Closure.md` stage CLOSE-004 | `docs/plans/PLAN-Pre-Performance-Closure.md` |
 | CLOSE-005 — Controller work verdicts / repin | BACKLOG (planned, not executed) | Planned | `docs/plans/PLAN-Pre-Performance-Closure.md` stage CLOSE-005 | `docs/plans/PLAN-Pre-Performance-Closure.md` |

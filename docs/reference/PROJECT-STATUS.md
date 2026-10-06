@@ -123,7 +123,7 @@ both repositories' deterministic gates, current controller work, named-plan
 dogfood, human decisions, resume/idempotency, telemetry inventory, four workloads
 with three real-provider repetitions each, and the final readiness verdict.
 The plan has been executed: all eleven CLOSE tasks are `LOCAL_DONE` and the plan's final gate passed. It introduces no new performance architecture and
-does not replace the recorded active plan source.
+does not start the performance phase.
 
 ### Current checkout verification (2026-10-02)
 

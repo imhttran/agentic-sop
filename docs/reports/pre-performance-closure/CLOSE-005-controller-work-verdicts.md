@@ -2,6 +2,8 @@
 
 > **Final status (2026-10-06).** This is a point-in-time record of its stage. The pre-performance closure is complete (`CLOSE-001…CLOSE-011` `LOCAL_DONE`). Where this record states a `NEEDS_HUMAN`, `BLOCKED`, `PARTIAL` or `ABSENT` finding, see [CLOSE-011-readiness.md](CLOSE-011-readiness.md) for the final verdict and the explicit deferrals.
 
+> The wrap-up plan path cited in this record (`docs/plans/PLAN-Wrap-Up.md`) now resolves to the located historical plan `docs/history/PLAN-wrapup.md`; the closure plan references that path.
+
 Per-item verdicts for the current sop-controller work state, derived from live
 code/tests/SOP provenance rather than stale wrap-up or status documents, together
 with the recorded re-run of both deterministic gates (CLOSE-003 SOP, CLOSE-004

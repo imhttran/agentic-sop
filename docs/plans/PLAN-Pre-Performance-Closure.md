@@ -34,7 +34,7 @@ document does not execute its validation gates or capture a performance baseline
 
 ### SOP named-plan resolution/identity/fingerprint/bootstrap/DAG — EXISTS
 
-- Evidence: docs/plans/PLAN-Phase-3.5-Model-Routing.md exists with a Task list, Dependency Graph and validation section (read during planning); recorded active plan provenance is plan_id plan-phase-3-5-model-routing, source_sha256 32f6f783c07d5b74ff80e378f529a6e0f96bdd7d950a0d9f3e1531d32f36a518 in .agent-sdlc/plan.meta.json.
+- Evidence: docs/plans/PLAN-Phase-3.5-Model-Routing.md exists with a Task list, Dependency Graph and validation section (read during planning); recorded active plan provenance at planning time was plan_id plan-phase-3-5-model-routing, source_sha256 32f6f783c07d5b74ff80e378f529a6e0f96bdd7d950a0d9f3e1531d32f36a518 in .agent-sdlc/plan.meta.json.
 
 ### SOP human approval gate (list/decide/reconcile) — EXISTS
 
