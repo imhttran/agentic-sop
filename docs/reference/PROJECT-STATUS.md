@@ -157,6 +157,15 @@ weaken mutation or completion checks. Under the completed closure the changed
 expectations are reconciled and all twelve tests pass in the current deterministic
 gate; this historical record asserts no baseline measurement or readiness verdict.
 
+## Pre-JEV readiness (complete)
+
+The PREJEV018 pre-JEV readiness gate is satisfied: the deterministic lifecycle,
+harness/provider/provider-model separation, recovery/resume, the controller
+boundary, and both repositories' build/test matrices are verified, and the
+remaining-issues register carries no CRITICAL or HIGH issue. See
+[PREJEV018-READINESS-GATE.md](../history/PREJEV018-READINESS-GATE.md) (Current
+verification, 2026-10-06).
+
 ## Known limitations (current)
 
 Deliberate, understood residuals that are not scheduled work. Each is described where

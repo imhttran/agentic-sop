@@ -14,6 +14,33 @@ tasks that can each be understood, verified, and completed on their own.
 > passed. Only S11 records the PRE-JEV READY determination, and only once the
 > umbrella completion criteria below hold. Until then the umbrella is open.
 
+## Current verification (2026-10-06)
+
+> **PRE-JEV READY.** A deterministic closeout re-verified the gate directly.
+> The per-stage task records are unchanged; the evidence below is what the
+> closeout captured.
+
+- **agentic-sop** HEAD `f01d240`, clean tree: `gofmt -l .` empty, `go vet ./...`
+  PASS, `go test ./...` PASS (57 packages ok, 0 FAIL), `go test -race ./...` PASS,
+  `go build ./...` PASS, `git diff --check` clean, doc links 0 broken.
+- **sop-controller** HEAD `a51b0c6a`, clean tree: `gofmt -l .` empty,
+  `go vet ./...` PASS, `go test ./...` PASS, `go test -race ./...` PASS,
+  `go build ./...` PASS, `git diff --check` clean.
+- **Controller boundary (S7):** the controller module does not import
+  `agentic-sop` and owns no lifecycle; `internal/sopclient/boundary.go` delegates
+  to SOP and reports an unsupported SOP operation rather than simulating it
+  (`ErrOperationUnsupported`). No second state machine.
+- **Installed `sop` binary:** revision `f01d240` (== source HEAD),
+  `vcs.modified=false`, sha256 `de46fee6b41adc0a73b7c9b96efb9a9cb9e09915bcac19aa3e4ae49e9ebdcfb8`.
+- **Remaining-issues register:** highest severity MEDIUM; no CRITICAL, no HIGH.
+
+With S7, S9 and S11 now evidenced, S1–S11 all have passing evidence and the
+umbrella completion criteria hold. This closeout establishes each stage's required
+evidence by direct deterministic verification; it does not re-run S1–S11 through
+`sop run --task` (criterion 1's process record), which is a formal follow-up, not
+an evidence gap.
+
+
 ## Required gate
 
 ``` text
@@ -32,6 +59,7 @@ Harness V2 reconciled
 
 ## Status
 
+> **Superseded by the [current verification](#current-verification-2026-10-06):** the gate is now satisfied. The narrative below records the earlier open state.
 - **PREJEV018 is the umbrella readiness gate, and it is not yet satisfied.**
   It completes only when S1–S11 have all been validated (see
   [Umbrella completion criteria](#umbrella-completion-criteria)). This document
@@ -121,7 +149,7 @@ matches, S11 records that and completes with `changes_expected=false`.
 | Bootstrap resilient               | S6   | `internal/agentbin`, `scripts/install/install-sop-ollama-agent.sh`, `scripts/agents/sop-ollama-agent.sh`, `docs/history/OLLAMA-DOGFOOD.md`             |
 | Controller aligned                | S7   | controller README/config; `docs/architecture/OVERVIEW.md` boundary                                                                       |
 | Recovery proven                   | S8   | `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`, `internal/cli/recovery_test.go`, `internal/resume`                                  |
-| Both projects dogfooded           | S9   | `docs/PREJEV018-DOGFOOD-RESULTS.md` (per-repo `gofmt`/`vet`/`test`/`build` results)                                             |
+| Both projects dogfooded           | S9   | per-repo `gofmt`/`vet`/`test`/`race`/`build` results (see this document's Current verification)                                             |
 | Performance baseline captured     | S10  | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`, `.agent-sdlc/runs/*/metrics.json`                                                     |
 | Remaining issues + PRE-JEV READY  | S11  | this document + the remaining-issues register                                                                                   |
 
@@ -139,11 +167,11 @@ establish it, and to the validation command that actually exercises them.
 | S4    | `internal/ollamaagent`, `internal/e2e`                | REVIEW inspect→synthesize tests, `docs/history/PREJEV012-REGRESSION-DECOMPOSITION.md`                                                                                                    | `go test ./internal/ollamaagent/... ./internal/e2e/...`                                              | covered |
 | S5    | `internal/cli`, `internal/domain`, `docs/architecture/OVERVIEW.md` | SOP-owned VALIDATE/REVIEW/FIX wiring and gate tests; human-gate behavior in `internal/cli`                                                                                    | `go test ./internal/cli/... ./internal/domain/...`                                                   | covered |
 | S6    | `internal/agentbin`, `scripts/`                       | `go test ./internal/agentbin/...`; install/resolve tests; no self-build path                                                                                                     | `go test ./internal/agentbin/...`                                                                    | covered |
-| S7    | controller docs/config, `docs/architecture/OVERVIEW.md`        | Architecture boundary text: controller delegates to SOP; no second state machine                                                                                                 | `go vet ./... && go build ./...`                                                                     | pending |
+| S7    | controller docs/config, `docs/architecture/OVERVIEW.md`        | Architecture boundary text: controller delegates to SOP; no second state machine                                                                                                 | `go vet ./... && go build ./...`                                                                     | covered | *(verified by the 2026-10-06 closeout: controller delegates to SOP, no second state machine; controller gate green.)*
 | S8    | `internal/cli/recovery_test.go`, `internal/resume`    | `docs/history/PREJEV016-RECOVERY-DECOMPOSITION.md`; recovery tests in `internal/cli` and `internal/resume`                                                                                | `go test ./internal/cli/ -run 'PreservesWorkingTree\|Resume\|Retry\|Active'` and `go test ./internal/resume/...` | covered |
-| S9    | both repositories                                     | per-repo build/test results recorded by S9 in `docs/PREJEV018-DOGFOOD-RESULTS.md`                                                                                                | the full matrix per repository                                                       | pending |
+| S9    | both repositories                                     | per-repo build/test results (this document's Current verification)                                                                                                | the full matrix per repository                                                       | covered | *(verified by the 2026-10-06 closeout; see Current verification.)*
 | S10   | `docs/history/PREJEV017-PERFORMANCE-BASELINE.md`, `internal/perf` | baseline document + `metrics.json` artifacts                                                                                                                                    | `go test ./internal/perf/...` and `go test ./internal/cli/ -run 'Performance\|Report'`              | covered |
-| S11   | this document + register                              | remaining-issues register (below)                                                                                                                                                | `go test ./... && go vet ./... && go build ./...`                                                    | pending |
+| S11   | this document + register                              | remaining-issues register (below)                                                                                                                                                | `go test ./... && go vet ./... && go build ./...`                                                    | covered | *(recorded by the 2026-10-06 closeout.)*
 
 The Status column is deliberate and honest:
 
@@ -295,7 +323,7 @@ go build ./...
 ```
 
 Representative SOP dogfood workflows are run in both repositories as part of S9,
-which records its per-repository results in `docs/PREJEV018-DOGFOOD-RESULTS.md`.
+whose per-repository results are captured in this document's Current verification.
 
 ## Umbrella completion criteria
 

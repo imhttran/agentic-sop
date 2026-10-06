@@ -183,8 +183,8 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PREJEV016-RECOVERY-DECOMPOSITION.md](history/PREJEV016-RECOVERY-DECOMPOSITION.md) — read for PREJEV016 — Verify Recovery Paths (Decomposition) evidence and recorded scope.
 - [history/PREJEV017-PERFORMANCE-BASELINE.md](history/PREJEV017-PERFORMANCE-BASELINE.md) — read for PREJEV017 — Pre-JEV Performance Baseline evidence and recorded scope.
 - [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
-- [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md)
-- [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md). — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
+- [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
+- [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
 
 ## Canonical Locations and Kept Paths
 
