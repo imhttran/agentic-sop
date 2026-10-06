@@ -108,6 +108,12 @@ in the active plan and is not already complete, its dependencies are satisfied, 
 records the task in the local terminal state (`LOCAL_DONE`) and writes provenance
 (`.agent-sdlc/runs/<task-id>/external-completion.json`); it fabricates no attempt, no model
 run, and no approval, and it never touches retry, human-boundary, or approval state.
+Deterministic lexical retrieval (CTX-003) ranks the Structural Repository Index against
+query terms with a fixed BM25 ranker: `sop retrieve <term>...` prints ranked candidates
+(`rank`, `score`, `source`, `id`). Ranking is deterministic — scores are aggregate term
+statistics and ties break by stable candidate identity, so filesystem iteration order never
+affects the result. It is model-free and read-only and writes no artifact; the ranker is
+also available programmatically (`internal/retrieval`) as a Context Engine input source.
 `sop run` stops at the human gate and never commits, pushes, or merges. When JEV
 is enabled (`quality.jev.enabled: true`), an optional read-only analysis stage
 runs after validation and review and feeds the same gate and fix loop.
