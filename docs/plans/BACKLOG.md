@@ -36,19 +36,37 @@ measurements. This is distinct from the earlier, already-implemented
 that follows the closeout.
 
 
-## Deferred performance architecture
+## Post-performance architecture (Phase 8) — delivered
 
-**Status:** Backlog (deferred).
+**Status:** Delivered (Phase 8). The pre-performance closure and baseline completed
+(recorded in [RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md) and
+[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md)) and deferred the new performance
+architecture behind the readiness gate
+([CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)). That
+architecture then shipped as **Phase 8 (Context & Execution Efficiency)**, which is
+complete and closed. The capabilities this section once listed as deferred are now:
 
-The pre-performance closure and baseline is complete (recorded in
-[RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md) and
-[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md)). It deliberately did not begin
-the new performance architecture, which remains deferred behind the readiness gate
-([CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)):
+- **DELIVERED** — Context Engine (CTX-001), structural repository index
+  (CTX-002), BM25 retrieval (CTX-003), retrieval evaluation gate (CTX-004), prompt
+  compiler (CTX-005), response normalizer (CTX-006), verification cache (CTX-007),
+  prompt result cache (CTX-008), decision memory (CTX-010), adaptive routing (CTX-011),
+  automatic prompt tuning (CTX-012).
+- **EVALUATED / REJECTED** — vector retrieval (CTX-009): a deterministic
+  evaluation found no improvement over BM25, so BM25 is retained and no vector
+  retrieval shipped.
+- **DELIVERED BUT OPT-IN** — the verification cache (`sop validate --cache`),
+  the prompt result cache (`sop prompt --cache`), and decision memory on the run
+  path (`context.decision_memory`); adaptive routing is live within the opt-in
+  routing path.
+- **DEFERRED FOLLOW-UP** — a persistent cross-run verification cache, tracked
+  below as VERIFCACHE-PERSISTENCE.
 
-Prompt Compiler, Response Normalizer, Context Engine, Git-SHA summary cache,
-repository structural index, BM25/vector RAG, Decision Memory, Verification Cache,
-Prompt Result Cache, Adaptive Routing changes, and Automatic Prompt Tuning.
+The Git-SHA summary cache once named here was not shipped as a distinct component; the
+structural repository index (CTX-002) and the verification cache (CTX-007) carry
+repository-state identity instead. Phase 8 evidence:
+[history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md](../history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md);
+post-Phase-8 governance:
+[history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md](../history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md).
 
 ## Persistent cross-run verification cache (VERIFCACHE-PERSISTENCE)
 
@@ -155,33 +173,6 @@ the `Kind == NoProgress` branch. A future non-`NoProgress` `BLOCK` classificatio
 would fall through to a human boundary, contradicting `BLOCK`'s documented "not a
 human approval" definition. Add an explicit terminal case plus a test. Surfaced by
 the pre-Phase-6 closeout; currently unreachable.
-
-
-## PLAN-LIFECYCLE-FOLLOWUP
-
-**Status:** Backlog (LOW). PLAN-001 separated plan activation from execution, added
-explicit supersession (`sop plan supersede`) and historicalization
-(`.agent-sdlc/archive/<plan-id>/lifecycle.json`), and made reconciliation's executed
-classification authoritative (`domain.Task.Executed`). One operation remains: there is
-no way to historicalize/close an ACTIVE plan **without** installing a replacement plan,
-so a dangling active plan (for example one whose source file moved) can only be cleared
-by superseding it with another plan.
-
-Provide a deterministic operation to historicalize/close an active plan without
-requiring a replacement plan. Requirements:
-
-```text
-model-free
-no task execution
-preserve task/run/approval/evaluation evidence
-unfinished tasks remain historically unfinished
-no fabricated PASS
-no fabricated approval
-clear active-plan authority safely
-historical plan cannot become runnable accidentally
-```
-
-LOW priority; must not block CTX-001.
 
 
 ## SOP-EXTERNAL-COMPLETION

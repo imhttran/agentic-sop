@@ -190,6 +190,36 @@ AGENT-005 Replan Strategy          COMPLETE   opt-in bounded strategy change (in
 Evaluations observe completed run evidence; they do not participate in execution or
 lifecycle decisions. See [EVALUATION.md](../reference/EVALUATION.md).
 
+## Phase 8 — Context and execution efficiency
+
+Phase 8 (Context & Execution Efficiency) is **COMPLETE** and closed, and is not
+reopened. Its twelve CTX tasks shipped the deterministic, model-free context and
+execution-efficiency layer:
+
+```text
+CTX-001 Context Engine               COMPLETE    canonical deterministic context (internal/context)
+CTX-002 Structural Repository Index  COMPLETE    deterministic index + identity (internal/repoindex; sop index)
+CTX-003 BM25 Retrieval               COMPLETE    deterministic lexical ranking (internal/retrieval; sop retrieve)
+CTX-004 Retrieval Evaluation Gate    COMPLETE    PASS: BM25 beats the unranked baseline (sop gate retrieve)
+CTX-005 Prompt Compiler              COMPLETE    bounded, deterministic model input (internal/prompt)
+CTX-006 Response Normalizer          COMPLETE    structural, fail-closed normalization (internal/normalize)
+CTX-007 Verification Cache           COMPLETE    opt-in per invocation (sop validate --cache)
+CTX-008 Prompt Result Cache          COMPLETE    opt-in, read-only capabilities (sop prompt --cache)
+CTX-009 Vector Retrieval Evaluation  EVALUATED   REJECTED: no improvement over BM25; not shipped
+CTX-010 Decision Memory              COMPLETE    operator CLI + opt-in run context (context.decision_memory)
+CTX-011 Adaptive Routing             COMPLETE    evidence-driven class selection (internal/adaptiveroute)
+CTX-012 Automatic Prompt Tuning      COMPLETE    evaluation-gated promotion (internal/prompttuning)
+```
+
+Provider/model neutrality of the Phase 8 core is enforced by an architecture test
+(`internal/archtest`): no Phase 8 core package imports a provider implementation, and
+the context → retrieval → prompt → agent → normalize pipeline is adapter-independent.
+The live-path integration is complete (POST8-001). The plan lifecycle gained a
+deterministic, model-free `sop plan complete`. A persistent cross-run verification cache
+remains deferred (VERIFCACHE-PERSISTENCE) and is not a Phase 8 gap. See
+[BACKLOG.md](../plans/BACKLOG.md) and
+[history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md](../history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md).
+
 ## Known limitations (current)
 
 Deliberate, understood residuals that are not scheduled work. Each is described where
