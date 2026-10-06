@@ -44,9 +44,12 @@ func taskReportDeliverables(spec *taskfile.Spec) []string {
 			continue
 		}
 		path := strings.Trim(fields[0], "`")
+		// An exact Markdown path under docs/reports/ that the task explicitly
+		// declares is a task deliverable, whether in a subdirectory or at the top
+		// level (for example docs/reports/PERFORMANCE-BASELINE.md). SOP's own
+		// generated docs/reports/<plan-id>.md is only task-owned if a task declares it.
 		if !safeRepoPath(path) || filepath.ToSlash(filepath.Clean(path)) != path ||
 			!strings.HasPrefix(path, planflow.ReportsDir+"/") ||
-			filepath.ToSlash(filepath.Dir(path)) == planflow.ReportsDir ||
 			filepath.Ext(path) != ".md" {
 			continue
 		}

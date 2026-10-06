@@ -126,8 +126,12 @@ func TestReportScopeAndAccumulatedJEVContext(t *testing.T) {
 		"docs/reports", "docs/reports/baseline/../other.md", "/tmp/external.md",
 	}}
 	paths := taskReportDeliverables(spec)
-	if !sameStrings(paths, []string{report}) {
-		t.Fatalf("report scope=%v", paths)
+	// A declared Markdown report is task-owned whether in a subdirectory or at the
+	// top level (docs/reports/plan.md); a non-declared top-level report and SOP state
+	// stay SOP-owned.
+	want := []string{report, "docs/reports/plan.md"}
+	if !sameStrings(paths, want) {
+		t.Fatalf("report scope=%v, want %v", paths, want)
 	}
 	if got := taskChangedFiles([]string{report, "docs/reports/generated.md", ".agent-sdlc/state.db"}, paths...); !sameStrings(got, paths) {
 		t.Fatalf("SOP output/state entered task evidence: %v", got)
