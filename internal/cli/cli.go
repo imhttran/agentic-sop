@@ -297,7 +297,7 @@ Commands:
   init      initialize project state (.agent-sdlc/state.db)
   status    list persisted tasks
   task <id> show details; task complete <id> --external records an external completion
-  plan      generate PLAN.md, or sop plan activate|supersede PLAN.md
+  plan      generate PLAN.md, or sop plan activate|supersede|complete PLAN.md
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands
   review    review the current changes with the configured engine

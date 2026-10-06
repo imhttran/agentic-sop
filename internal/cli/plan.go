@@ -29,10 +29,12 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 			return runPlanActivate(args[1:], stdout, stderr, d)
 		case "supersede":
 			return runPlanSupersede(args[1:], stdout, stderr, d)
+		case "complete":
+			return runPlanComplete(args[1:], stdout, stderr, d)
 		}
 	}
 	if len(args) > 1 {
-		fmt.Fprintln(stderr, "usage: sop plan [TASK.md] | sop plan activate <PLAN.md> | sop plan supersede <PLAN.md>")
+		fmt.Fprintln(stderr, "usage: sop plan [TASK.md] | sop plan activate <PLAN.md> | sop plan supersede <PLAN.md> | sop plan complete")
 		return exitUsage
 	}
 
@@ -281,6 +283,49 @@ func runPlanSupersede(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintln(stdout, "No active plan to supersede; activating the requested plan.")
 	}
 	printActivation(stdout, planflow.Result{Source: res.Source, PlanID: res.PlanID, PlanRebuilt: true, TasksCreated: res.TasksCreated}, st)
+	return exitOK
+}
+
+// runPlanComplete archives the active plan as COMPLETE and releases it, without
+// installing a successor. It fails closed when the plan still has unresolved work.
+// It never executes a task and never runs a model.
+func runPlanComplete(args []string, stdout, stderr io.Writer, d deps) int {
+	if len(args) != 0 {
+		fmt.Fprintln(stderr, "usage: sop plan complete")
+		return exitUsage
+	}
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	path := statePath(dir)
+	if !requireState(path, stderr) {
+		return exitError
+	}
+	st, err := store.Open(path)
+	if err != nil {
+		fmt.Fprintf(stderr, "plan complete: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+
+	res, err := planflow.Complete(planflow.Options{Dir: dir, Store: st})
+	if err != nil {
+		fmt.Fprintln(stderr, err)
+		return exitError
+	}
+	if res.Source != "" {
+		fmt.Fprintf(stdout, "Completed plan: %s\n", res.Source)
+	} else {
+		fmt.Fprintln(stdout, "Completed active plan")
+	}
+	if res.PlanID != "" {
+		fmt.Fprintf(stdout, "Plan id: %s\n", res.PlanID)
+	}
+	if res.Archived != "" {
+		fmt.Fprintf(stdout, "Archived (COMPLETE): %s\n", res.Archived)
+	}
+	fmt.Fprintf(stdout, "Preserved %d task record(s) as history.\n", res.Tasks)
 	return exitOK
 }
 
