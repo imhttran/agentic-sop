@@ -1,5 +1,10 @@
 # Phase 8 --- Context & Execution Efficiency
 
+> **Document class:** plan · **Lifecycle:** complete · **Authority:** historical — a record of completed work, not current planning authority.
+
+**Status:** Implemented; all twelve CTX tasks reached a terminal state and the plan was
+archived by SOP (`sop plan complete`, `.agent-sdlc/archive/phase-8-context-execution-efficiency/`).
+
 ## Status
 
 ``` text
@@ -7,7 +12,7 @@ PHASE 7 — AGENTIC RELIABILITY & EVALUATION
 COMPLETE
 
 PHASE 8 — CONTEXT & EXECUTION EFFICIENCY
-PLANNED
+COMPLETE
 ```
 
 Phase 8 builds on the completed reliability foundation:
