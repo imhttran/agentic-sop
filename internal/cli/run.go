@@ -22,6 +22,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/prompt"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
 	"github.com/imhttran/agentic-sop/internal/router"
@@ -551,23 +552,27 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 
 		_ = rn.SetStage(runpkg.Implementing)
 		ar.Emit(activity.StageImplement, "implementing", "")
-		input := plan.RenderMarkdown()
-		if failureCtx != "" {
-			input = failureCtx + "\n" + input
-		}
-		// An escalated attempt (Phase 5) is handed the previous attempt's bounded
-		// context, so a stronger model starts from the actual failure instead of
-		// repeating the change that did not pass.
-		if d.attempt != nil && d.attempt.FailureContext != "" {
-			input = d.attempt.FailureContext + "\n" + input
-		}
-		if sig, had := rn.ReadAttempt(); had {
-			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
-		}
 		// The canonical context the harness supplies to the agent, built from evidence
 		// it already holds. It is deterministic and model-free; the trace records its
 		// summary and nothing reads it back to drive a decision.
 		ctxSummary = implementContext(spec, plan, rn, cfg, trouting, failureCtx, d)
+		// The Prompt Compiler (CTX-005) owns the structure of the model input: it turns
+		// the canonical context, the prior attempt, and caller observations into
+		// deterministic, bounded, provenance-carrying evidence. It invokes no model.
+		var attemptBlock string
+		if sig, had := rn.ReadAttempt(); had {
+			attemptBlock = "A previous attempt at this task did not complete:\n\n" + sig
+		}
+		compiled := prompt.Compile(prompt.Input{
+			Capability:         agent.Implement,
+			Class:              promptClass(trouting, d),
+			Task:               spec.Render(),
+			Context:            ctxSummary,
+			Attempt:            attemptBlock,
+			Observations:       d.taskInputs[spec.ID],
+			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
+		})
+		input := compiled.Evidence()
 		var before map[string]string
 		if d.snapshotRepository != nil {
 			before, err = d.snapshotRepository(ctx, dir)
@@ -581,7 +586,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			AcceptanceCriteria: spec.AcceptanceCriteria,
 			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
-			Input:              d.taskInput(spec.ID, input),
+			Input:              input,
 			Deliverables:       reports,
 			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
@@ -1762,13 +1767,11 @@ func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, c
 	}
 
 	return sopctx.FromInputs(sopctx.Inputs{
-		TaskID:             spec.ID,
-		Task:               spec.Render(),
-		Plan:               plan.RenderMarkdown(),
-		AcceptanceCriteria: spec.AcceptanceCriteria,
-		ChangedFiles:       changed,
-		Execution:          []sopctx.Item{execution},
-		Recovery:           recovery,
+		TaskID:       spec.ID,
+		Plan:         plan.RenderMarkdown(),
+		ChangedFiles: changed,
+		Execution:    []sopctx.Item{execution},
+		Recovery:     recovery,
 	}, sopctx.DefaultLimits())
 }
 
@@ -1788,4 +1791,21 @@ func executionContextText(cfg config.Config, trouting *taskRouting, d deps) stri
 		return fmt.Sprintf("class=%s provider=%s model=%s", class, provider, model)
 	}
 	return fmt.Sprintf("provider=%s model=%s", provider, model)
+}
+
+// promptClass selects the Prompt Compiler's byte-bound class from the same routing
+// evidence the execution identity uses. It never selects a provider or model; it only
+// sizes the bounded model input. With no routing evidence it returns MEDIUM.
+func promptClass(trouting *taskRouting, d deps) prompt.Class {
+	class := ""
+	switch {
+	case trouting != nil:
+		class = string(trouting.Selection.Class)
+	case d.routing.Active:
+		class = string(d.routing.Selection.Class)
+	}
+	if c, ok := prompt.ParseClass(class); ok {
+		return c
+	}
+	return prompt.Medium
 }
