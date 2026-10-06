@@ -16,6 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
+	sopctx "github.com/imhttran/agentic-sop/internal/context"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/model"
@@ -256,6 +257,10 @@ type lifeResult struct {
 	// selection, and the typed signals used. It is diagnostic evidence; it never
 	// feeds a decision beyond the model choice it already recorded.
 	routing *taskRouting
+	// ctx is the canonical context the harness supplied to the agent for the last
+	// implementation attempt. It is diagnostic evidence: the trace records its
+	// summary, and nothing reads it back to drive a decision.
+	ctx sopctx.Context
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -393,6 +398,10 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 // verify). It returns the final result and writes the intermediate artifacts.
 func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (res lifeResult, err error) {
 	reports := taskReportDeliverables(spec)
+	// ctxSummary is the canonical context built for the last implementation attempt,
+	// carried to the run trace. The harness owns its selection and limits; the model
+	// never selects its own context.
+	var ctxSummary sopctx.Context
 	if rawOutputEvidence(spec) {
 		_ = os.Setenv(envCommandEvidenceLog, filepath.Join(rn.Dir(), "command-evidence.jsonl"))
 		defer func() { _ = os.Unsetenv(envCommandEvidenceLog) }()
@@ -555,6 +564,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if sig, had := rn.ReadAttempt(); had {
 			input = "# Previous attempt\n\nA previous attempt at this task did not complete:\n\n" + sig + "\n\n" + input
 		}
+		// The canonical context the harness supplies to the agent, built from evidence
+		// it already holds. It is deterministic and model-free; the trace records its
+		// summary and nothing reads it back to drive a decision.
+		ctxSummary = implementContext(spec, plan, rn, cfg, trouting, failureCtx, d)
 		var before map[string]string
 		if d.snapshotRepository != nil {
 			before, err = d.snapshotRepository(ctx, dir)
@@ -925,6 +938,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
 		decision:       decision,
+		ctx:            ctxSummary,
 	}, nil
 }
 
@@ -1705,4 +1719,73 @@ func completionValidationCommands(cfg config.Config) []string {
 		commands = append(commands, check.Command)
 	}
 	return commands
+}
+
+// implementContext builds the canonical context the harness supplies to the agent for
+// one implementation attempt, from evidence it already holds: the task and its plan,
+// the run's already-attributed changed files, the resolved execution identity, and any
+// recovery evidence handed to this attempt. It is deterministic and model-free: the
+// harness owns selection, ordering, provenance, and limits, and the model never selects
+// its own context.
+func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) sopctx.Context {
+	execution := sopctx.Item{
+		Source:   sopctx.SourceExecution,
+		Identity: "execution",
+		Reason:   "the selected execution target for this attempt",
+		Priority: sopctx.PriorityExecution,
+		Text:     executionContextText(cfg, trouting, d),
+	}
+
+	var recovery []sopctx.Item
+	if d.attempt != nil && d.attempt.FailureContext != "" {
+		recovery = append(recovery, sopctx.Item{
+			Source:   sopctx.SourceRecovery,
+			Identity: "attempt-context",
+			Reason:   "the previous attempt's bounded failure context",
+			Priority: sopctx.PriorityRecovery,
+			Text:     d.attempt.FailureContext,
+		})
+	}
+	if failureCtx != "" {
+		recovery = append(recovery, sopctx.Item{
+			Source:   sopctx.SourceRecovery,
+			Identity: "validation-context",
+			Reason:   "the deterministic validation failure carried into this attempt",
+			Priority: sopctx.PriorityRecovery,
+			Text:     failureCtx,
+		})
+	}
+
+	var changed []string
+	if rn != nil {
+		changed = rn.ChangedFiles()
+	}
+
+	return sopctx.FromInputs(sopctx.Inputs{
+		TaskID:             spec.ID,
+		Task:               spec.Render(),
+		Plan:               plan.RenderMarkdown(),
+		AcceptanceCriteria: spec.AcceptanceCriteria,
+		ChangedFiles:       changed,
+		Execution:          []sopctx.Item{execution},
+		Recovery:           recovery,
+	}, sopctx.DefaultLimits())
+}
+
+// executionContextText renders the resolved execution identity deterministically: the
+// routing class when one applied, plus the provider and model.
+func executionContextText(cfg config.Config, trouting *taskRouting, d deps) string {
+	provider, model, class := cfg.Agent.Provider, cfg.Agent.Model, ""
+	switch {
+	case trouting != nil:
+		provider, model = trouting.Selection.Provider, trouting.Selection.Model
+		class = string(trouting.Selection.Class)
+	case d.routing.Active:
+		provider, model = d.routing.Selection.Provider, d.routing.Selection.Model
+		class = string(d.routing.Selection.Class)
+	}
+	if class != "" {
+		return fmt.Sprintf("class=%s provider=%s model=%s", class, provider, model)
+	}
+	return fmt.Sprintf("provider=%s model=%s", provider, model)
 }

@@ -219,3 +219,25 @@ func TestParseFixtureRejectsUnboundedReplanCount(t *testing.T) {
 		t.Fatal("an unbounded replan count must be an error")
 	}
 }
+
+// TestEvaluateContext asserts the context expectation reads the trace's context
+// summary and fails on a mismatch.
+func TestEvaluateContext(t *testing.T) {
+	tr := runtrace.Build(runtrace.Inputs{Context: runtrace.ContextInfo{
+		Items: 3, Files: 1, Bytes: 42, Truncated: false,
+		Sources: []runtrace.SourceCount{{Source: "task", Items: 2, Bytes: 30}, {Source: "execution", Items: 1, Bytes: 12}},
+	}})
+	ok := Fixture{Name: "ok", Expected: Expectation{Context: &ContextExpectation{
+		Items: &CountAssertion{AtLeast: intptr(1)}, Bytes: &CountAssertion{AtLeast: intptr(1)},
+		Truncated: boolptr(false), Sources: []string{"task", "execution"},
+	}}}
+	if got := Evaluate(tr, ok); !got.Passed {
+		t.Errorf("context should match: %+v", got.Diagnostics)
+	}
+	miss := Fixture{Name: "miss", Expected: Expectation{Context: &ContextExpectation{Sources: []string{"repository"}}}}
+	if got := Evaluate(tr, miss); got.Passed {
+		t.Error("a missing required source must fail")
+	} else if !contains(diagFields(got), "context.sources") {
+		t.Errorf("diagnostic fields = %v", diagFields(got))
+	}
+}

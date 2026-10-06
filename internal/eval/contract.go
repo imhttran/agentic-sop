@@ -30,7 +30,20 @@ type Expectation struct {
 	Progress    *ProgressExpectation    `json:"progress,omitempty"`
 	Budgets     *BudgetExpectation      `json:"budgets,omitempty"`
 	Replans     *ReplansExpectation     `json:"replans,omitempty"`
+	Context     *ContextExpectation     `json:"context,omitempty"`
 	Termination *TerminationExpectation `json:"termination,omitempty"`
+}
+
+// ContextExpectation asserts the Context Engine's supplied-context summary. Every
+// field is optional. Sources lists source names that must be present; extra sources
+// are permitted, so a fixture asserts what it requires without over-constraining the
+// harness's selection.
+type ContextExpectation struct {
+	Items     *CountAssertion `json:"items,omitempty"`
+	Files     *CountAssertion `json:"files,omitempty"`
+	Bytes     *CountAssertion `json:"bytes,omitempty"`
+	Truncated *bool           `json:"truncated,omitempty"`
+	Sources   []string        `json:"sources,omitempty"`
 }
 
 // ReplansExpectation asserts the AGENT-005 bounded strategy changes the run
@@ -134,6 +147,11 @@ func (e Expectation) validate() error {
 	}
 	if r := e.Replans; r != nil {
 		counts["replans.count"] = r.Count
+	}
+	if c := e.Context; c != nil {
+		counts["context.items"] = c.Items
+		counts["context.files"] = c.Files
+		counts["context.bytes"] = c.Bytes
 	}
 	for field, c := range counts {
 		if c == nil {

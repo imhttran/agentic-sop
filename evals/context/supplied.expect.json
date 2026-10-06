@@ -1,0 +1,12 @@
+{
+  "name": "context-supplied",
+  "description": "The harness supplies a canonical, bounded context and records its summary in the trace: task, repository, execution and recovery evidence.",
+  "expected": {
+    "context": {
+      "items": { "at_least": 1 },
+      "bytes": { "at_least": 1 },
+      "truncated": false,
+      "sources": ["task", "execution"]
+    }
+  }
+}

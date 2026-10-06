@@ -78,6 +78,30 @@ func Evaluate(t runtrace.Trace, f Fixture) Result {
 		}
 	}
 
+	if cx := f.Expected.Context; cx != nil {
+		checkCount("context.items", cx.Items, t.Context.Items, add)
+		checkCount("context.files", cx.Files, t.Context.Files, add)
+		checkCount("context.bytes", cx.Bytes, t.Context.Bytes, add)
+		if cx.Truncated != nil && t.Context.Truncated != *cx.Truncated {
+			add("context.truncated", strconv.FormatBool(*cx.Truncated), strconv.FormatBool(t.Context.Truncated))
+		}
+		if len(cx.Sources) > 0 {
+			actual := make(map[string]bool, len(t.Context.Sources))
+			for _, s := range t.Context.Sources {
+				actual[s.Source] = true
+			}
+			var missing []string
+			for _, want := range cx.Sources {
+				if !actual[want] {
+					missing = append(missing, want)
+				}
+			}
+			if len(missing) > 0 {
+				add("context.sources", "includes "+strings.Join(cx.Sources, ","), "missing "+strings.Join(missing, ","))
+			}
+		}
+	}
+
 	if te := f.Expected.Termination; te != nil {
 		if te.Stage != nil && string(t.Termination.Stage) != *te.Stage {
 			add("termination.stage", strconv.Quote(*te.Stage), strconv.Quote(string(t.Termination.Stage)))

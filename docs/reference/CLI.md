@@ -84,8 +84,9 @@ Every stage writes an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 execution identity (the routing decision versus the actual execution target), the
 observed iterations, the verification evidence, the termination, structured
 progress signals (discovery, repository mutation, verification, state transition)
-that separate progress from mere activity, and any bounded strategy changes
-(`replans[]`). `sop report` renders a concise `Trace:`
+that separate progress from mere activity, any bounded strategy changes (`replans[]`),
+and the Context Engine's supplied-context summary (`context`: items, files, bytes,
+truncated, sources). `sop report` renders a concise `Trace:`
 block, a `Progress:` summary, and a `Budgets:` block (the deterministic execution
 limits that applied) from it. It is observational only — nothing reads
 it back to drive a decision — and it is absent for older runs. A
