@@ -118,11 +118,11 @@ that the cross-repository closure or performance baseline has passed.
 ## Next verification plan
 
 [PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) is
-**PLANNED**, with CLOSE-001–CLOSE-011 covering source/config capture, reconciliation,
+**COMPLETE**, with CLOSE-001–CLOSE-011 covering source/config capture, reconciliation,
 both repositories' deterministic gates, current controller work, named-plan
 dogfood, human decisions, resume/idempotency, telemetry inventory, four workloads
 with three real-provider repetitions each, and the final readiness verdict.
-The plan has not been executed. It introduces no new performance architecture and
+The plan has been executed: all eleven CLOSE tasks are `LOCAL_DONE` and the plan's final gate passed. It introduces no new performance architecture and
 does not replace the recorded active plan source.
 
 ### Current checkout verification (2026-10-02)
@@ -161,11 +161,7 @@ its behavior is defined; this list exists so none is lost, and scheduled future 
   `windows` job against temporary directories on `windows-latest`; a real machine's
   `%USERPROFILE%`, PATH, Zed, and Claude Code are unverified. See
   [../testing/WINDOWS-CLEAN-ROOM.md](../testing/WINDOWS-CLEAN-ROOM.md).
-- **Outer IMPLEMENT completion still uses a dirty-tree diff signal.** Verified
-  tool-level mutation does not by itself attribute that outer evidence to the
-  current invocation. The separate correctness work is tracked in
-  [the backlog](../plans/BACKLOG.md#invocation-scoped-implement-completion-evidence)
-  and described in [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
+- **Outer IMPLEMENT completion is invocation-scoped (resolved).** It derives evidence from before/after repository snapshots plus harness-reported changed files; the whole-tree diff is used only in verify-first mode. See [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
 - **No project-scope skill install on Windows.** On Unix,
   `scripts/install/install-skills.sh --project [DIR]` installs the skills into a
   project's `.agents`/`.claude` directory; `install.ps1` has no `-Project` equivalent

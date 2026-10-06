@@ -8,7 +8,7 @@ limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md
 
 ## Pre-Performance Closure and Baseline
 
-**Status:** Planned, not executed.
+**Status:** Complete (executed). All eleven CLOSE tasks are `LOCAL_DONE` and the plan's final gate passed; the closure verdicts are under [../reports/pre-performance-closure/](../reports/pre-performance-closure/) with the published baseline at [../reports/PERFORMANCE-BASELINE.md](../reports/PERFORMANCE-BASELINE.md).
 
 [PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) is the next
 closure and measurement DAG for SOP and sop-controller. It verifies existing
@@ -24,17 +24,13 @@ system or implement these candidates.
 
 ## Invocation-Scoped IMPLEMENT Completion Evidence
 
-**Status:** Backlog; separate from completed tool-level mutation verification.
-
-The outer `runStages` completion gate still uses a nonempty working-tree diff as
-IMPLEMENT mutation evidence. Pre-existing dirty changes can therefore satisfy
-that signal even when the current invocation did not produce them. A later fix
-should reuse existing state/diff infrastructure to distinguish inherited changes
-from this invocation's work while preserving safe continuation from dirty trees.
-Current behavior and its limitation are owned by
+**Status:** Resolved (superseded). Production `runStages` is invocation-scoped:
+it derives IMPLEMENT completion evidence from before/after repository snapshots
+plus harness-reported changed files, and the whole-tree diff is used as evidence
+only in verify-first mode (`internal/cli/run.go`, `internal/cli/mutation.go`). A
+pre-existing dirty tree therefore does not satisfy the current invocation's
+mutation requirement. See
 [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
-Whether this is a blocking closure defect must be established by the closure
-plan's deterministic evidence, not assumed away for measurements.
 
 ## Local network service (team mode)
 

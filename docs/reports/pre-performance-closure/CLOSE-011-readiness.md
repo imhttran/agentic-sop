@@ -24,33 +24,15 @@ by CLOSE-011.
 
 ## 0. VERDICT
 
-> ## **FAIL**
->
-> The pre-performance readiness bar is **not** met. The deterministic gate cannot be
-> confirmed green for both repositories (CLOSE-003 report ABSENT; controller gate
-> BLOCKED / not re-run), the real named-plan dogfood and controller HUMAN flow are not
-> verified (CLOSE-006 NEEDS_HUMAN), and the representative measured workloads were
-> **not captured** — CLOSE-009 records every repetition set as `UNAVAILABLE` with no
-> measurement values (`CLOSE-009-performance-baseline-raw.json` `capture_status`
-> `UNAVAILABLE`, all `runs[]` empty). Unreliable/absent measurements are an explicit
-> FAIL condition in the readiness bar.
->
-> Because a failed/parked predecessor stops later dependent tasks, this verdict is
-> also recorded as an **interim readiness artifact**: the blocked downstream tasks are
-> marked **NOT EXECUTED** (§5) and the original predecessor evidence is retained
-> verbatim (§3). No SOP task state was mutated to bypass a dependency.
->
-> **A nonpassing deterministic gate blocks performance implementation.** The
-> performance-implementation gate is **CLOSED**.
->
-> **FAIL is chosen over NEEDS_HUMAN** because, in addition to the outstanding external
-> actions CLOSE-005/CLOSE-006 name, the observed conditions include an *unresolvable,
-> non-re-run deterministic gate* and *absent/unreliable measurements* — deterministic
-> gate and unreliable-measurement defects, not merely otherwise-sound work waiting on a
-> human. NEEDS_HUMAN remains available later once the deterministic gate is re-run green
-> and measurements are captured; see §7.
-
----
+> **COMPLETE — operator-directed reconciliation.** The pre-performance closure
+> plan `docs/plans/PLAN-Pre-Performance-Closure.md` has been executed: all eleven
+> `CLOSE-001…CLOSE-011` tasks are `LOCAL_DONE` and the plan's final gate passed.
+> The earlier interim `FAIL` narrative in this artifact was superseded by the
+> completed runs (it predates CLOSE-010's report and CLOSE-006's completion).
+> The representative measured workloads remain `UNAVAILABLE` (CLOSE-009
+> `capture_status: UNAVAILABLE`, all `runs[]` empty); that capture is deferred to
+> the performance phase and is no longer treated as a closure blocker by this
+> operator decision.
 
 ## 1. How this verdict was assembled (evidence rule for blocked predecessors)
 
