@@ -1296,6 +1296,64 @@ func Supersede(ctx context.Context, opts Options) (SupersedeResult, error) {
 	return res, nil
 }
 
+// CompleteResult reports what Complete did.
+type CompleteResult struct {
+	PlanID   string // stable identity of the completed plan
+	Source   string // relative path of the plan's human source, if known
+	Archived string // archive directory written, relative to the project
+	Tasks    int    // task records preserved as history
+}
+
+// Complete archives the active plan as COMPLETE and releases its active association,
+// without installing a successor. It is the operator's terminal "the plan's work is
+// done" transition: distinct from handoff (which requires a successor plan to take
+// over) and from supersede (which abandons unfinished work).
+//
+// It fails closed: it refuses unless the active plan's work is fully satisfied, so a
+// plan with any unresolved task cannot be completed. It fabricates nothing — the
+// archived records are the task snapshot verbatim — and it never executes a task or
+// runs a model.
+func Complete(opts Options) (CompleteResult, error) {
+	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
+	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
+	meta := readMetadata(metaPath)
+
+	tasks, err := opts.Store.List()
+	if err != nil {
+		return CompleteResult{}, err
+	}
+	if len(tasks) == 0 && strings.TrimSpace(meta.Source) == "" && strings.TrimSpace(meta.PlanID) == "" {
+		return CompleteResult{}, errors.New("complete: no active plan to complete")
+	}
+	if len(tasks) > 0 && !domain.AllSatisfied(tasks) {
+		return CompleteResult{}, errors.New("complete: the active plan still has unresolved work; refusing to complete it")
+	}
+
+	root, err := archivePlan(opts.Dir, meta, tasks, planPath, metaPath, DispositionComplete)
+	if err != nil {
+		return CompleteResult{}, err
+	}
+	if err := opts.Store.ClearTasks(); err != nil {
+		return CompleteResult{}, err
+	}
+	// Release the active association and remove the machine plan, so the completed
+	// plan is no longer ACTIVE and cannot be re-activated by `sop tasks` reading a
+	// stale plan.json.
+	if err := writeMetadata(metaPath, Metadata{}); err != nil {
+		return CompleteResult{}, err
+	}
+	if err := os.Remove(planPath); err != nil && !os.IsNotExist(err) {
+		return CompleteResult{}, err
+	}
+
+	return CompleteResult{
+		PlanID:   meta.PlanID,
+		Source:   meta.Source,
+		Archived: relOf(opts.Dir, root),
+		Tasks:    len(tasks),
+	}, nil
+}
+
 // discoverPlanningSource returns the first human planning document by precedence:
 // a PLAN is preferred over a PRD.
 func discoverPlanningSource(dir string) (path, kind string) {
