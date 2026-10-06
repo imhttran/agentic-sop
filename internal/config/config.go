@@ -178,7 +178,7 @@ type Quality struct {
 // JEV is the JEV feature flag (conceptually quality.jev.enabled).
 //
 // JEV is an optional, read-only engineering-analysis capability (see
-// docs/specs/OPENJEV.md and docs/plans/PLAN-JEV-Implementation.md). It is DISABLED BY DEFAULT: the
+// docs/specs/OPENJEV.md and docs/history/plans/PLAN-JEV-Implementation.md). It is DISABLED BY DEFAULT: the
 // flag is a pointer so an omitted value is distinguishable from an explicit
 // false, and both resolve to disabled. Enabling JEV requires explicit
 // configuration — there is no inference that turns it on. A project that

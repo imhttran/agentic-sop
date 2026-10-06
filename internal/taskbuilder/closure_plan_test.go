@@ -11,7 +11,7 @@ import (
 // closurePlanPath is the named closure plan this regression protects. It lives
 // outside the package, so the test reads it through the repository-relative
 // path the other repo-plan tests use.
-const closurePlanPath = "../../docs/plans/PLAN-Pre-Performance-Closure.md"
+const closurePlanPath = "../../docs/history/plans/PLAN-Pre-Performance-Closure.md"
 
 // closureStage is one CLOSE stage's expected shape under the task projection.
 type closureStage struct {
