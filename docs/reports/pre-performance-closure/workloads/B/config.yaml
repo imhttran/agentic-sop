@@ -1,0 +1,10 @@
+# Workload B config (frozen)
+#
+# Operator-configured provider/model/classes/routing/fallback preserved as-is;
+# no class chosen manually. Records only deterministic acceptance checks.
+
+checks:
+  - gofmt -l .
+  - go vet ./...
+  - go test ./...
+  - go build ./...

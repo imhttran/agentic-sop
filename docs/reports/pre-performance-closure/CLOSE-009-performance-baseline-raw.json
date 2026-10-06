@@ -1,0 +1,119 @@
+{
+  "schema": "close-009-performance-baseline",
+  "version": 1,
+  "task": "CLOSE-009",
+  "plan": "docs/plans/PLAN-Pre-Performance-Closure.md",
+  "disclaimer": "Real-provider governed task-sized integration fixtures. NOT actual controller latency. Does not replace real controller named-plan execution or the CLOSE-006 controller HTTP human flow. Synthetic fixture results are never presented as controller performance data.",
+  "telemetry_contract": "docs/reports/pre-performance-closure/CLOSE-008-telemetry-inventory.md",
+  "pinned_build": {
+    "reference": "docs/reports/pre-performance-closure/workloads/build-pin.md",
+    "revision": "UNAVAILABLE",
+    "revision_reason": "The reproducible SOP build revision aligned under CLOSE-005 was not resolvable from repository inspection on this run.",
+    "binary_hash": "UNAVAILABLE",
+    "hash_reason": "No pinned binary hash was observed for the measurement build on this run."
+  },
+  "providers": {
+    "operator_configured": true,
+    "mapping": "Preserved as-is from operator configuration (.env / .env.example / integrations/).",
+    "manual_class_chosen": false,
+    "reroute_or_escalation_outside_policy": false,
+    "availability_observation": "UNAVAILABLE"
+  },
+  "metric_contract": [
+    {"metric": "stage_durations", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#stages_ms", "unit": "ms", "scope": "per task", "availability": "AVAILABLE"},
+    {"metric": "validation_breakdown", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#validation_ms", "unit": "ms", "scope": "per task", "availability": "AVAILABLE"},
+    {"metric": "task_total_wall_time", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#total_ms", "unit": "ms", "scope": "per task", "availability": "AVAILABLE"},
+    {"metric": "stage_agent_calls", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#counts.agent_calls", "unit": "count", "scope": "lifecycle operation count", "availability": "AVAILABLE", "note": "NOT individual provider/model generation calls."},
+    {"metric": "validation_runs", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#counts.validation_runs", "unit": "count", "scope": "per task", "availability": "AVAILABLE"},
+    {"metric": "review_runs", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#counts.review_runs", "unit": "count", "scope": "per task", "availability": "AVAILABLE"},
+    {"metric": "fix_cycles", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#counts.fix_cycles", "unit": "count", "scope": "per task (lifecycle repairs, not provider retries)", "availability": "AVAILABLE"},
+    {"metric": "plan_repairs", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#counts.plan_repairs", "unit": "count", "scope": "per task (lifecycle repairs, not provider retries)", "availability": "AVAILABLE"},
+    {"metric": "provider_model_generation_calls", "source_artifact": null, "unit": "count", "scope": "per provider call", "availability": "UNAVAILABLE", "reason": "Not recorded; agent_calls is a lifecycle count, not provider generation calls."},
+    {"metric": "exact_llm_generation_time", "source_artifact": null, "unit": "ms", "scope": "per provider call", "availability": "UNAVAILABLE", "reason": "Stage durations include orchestration/tool overhead and are not exact LLM time."},
+    {"metric": "input_output_tokens", "source_artifact": null, "unit": "count", "scope": "per call", "availability": "UNAVAILABLE", "reason": "No token field exists in telemetry; never inferred from text size."},
+    {"metric": "tool_calls", "source_artifact": ".agent-sdlc/runs/<id>/metrics.json#jev.tool_calls", "unit": "count", "scope": "JEV only", "availability": "PARTIAL", "reason": "JEV-only; no general per-stage tool-call counter."},
+    {"metric": "provider_retries", "source_artifact": null, "unit": "count", "scope": "per provider", "availability": "UNAVAILABLE", "reason": "No provider retry counter; fix_cycles/plan_repairs are lifecycle counts."},
+    {"metric": "files_repeated_reads", "source_artifact": null, "unit": "count", "scope": "per task", "availability": "UNAVAILABLE", "reason": "Not recorded."},
+    {"metric": "context_size", "source_artifact": null, "unit": "bytes_or_tokens", "scope": "per request", "availability": "UNAVAILABLE", "reason": "Context is built but not measured; never inferred from text length."},
+    {"metric": "provider_model_class", "source_artifact": ".agent-sdlc/runs/<id>/model-selection.json", "unit": "name", "scope": "per run (routing artifacts, not perf)", "availability": "PARTIAL"}
+  ],
+  "workloads": {
+    "A": {
+      "description": "Isolated single-package IMPLEMENT/FIX",
+      "module": "example.com/sop-baseline/a",
+      "capability_command": "sop run <named plan PLAN-Workload-A.md>",
+      "governed_stages": ["plan", "implement", "validation", "review", "fix", "gate"],
+      "fixture_dir": "docs/reports/pre-performance-closure/workloads/A/",
+      "frozen_hashes": {
+        "task": "see workloads/A/HASHES.md",
+        "criteria": "see workloads/A/HASHES.md",
+        "test_input": "see workloads/A/HASHES.md",
+        "config": "see workloads/A/HASHES.md",
+        "source": "see workloads/A/HASHES.md",
+        "fixture_patch": "n/a"
+      },
+      "initial_acceptance": {"ran": true, "result": "FAIL", "meaning": "intended missing implementation (Add returns 0)"},
+      "repetitions": 3,
+      "independent_disposable_copies": true,
+      "runs": []
+    },
+    "B": {
+      "description": "Two-package Add/Total IMPLEMENT/FIX",
+      "module": "example.com/sop-baseline/b",
+      "capability_command": "sop run <named plan PLAN-Workload-B.md>",
+      "governed_stages": ["plan", "implement", "validation", "review", "fix", "gate"],
+      "fixture_dir": "docs/reports/pre-performance-closure/workloads/B/",
+      "frozen_hashes": {
+        "task": "see workloads/B/HASHES.md",
+        "criteria": "see workloads/B/HASHES.md",
+        "test_input": "see workloads/B/HASHES.md",
+        "config": "see workloads/B/HASHES.md",
+        "source": "see workloads/B/HASHES.md",
+        "fixture_patch": "n/a"
+      },
+      "initial_acceptance": {"ran": true, "result": "FAIL", "meaning": "intended missing implementation (Add and Total return 0)"},
+      "repetitions": 3,
+      "independent_disposable_copies": true,
+      "runs": []
+    },
+    "C": {
+      "description": "PLAN synthesis from exact INITIAL B tree + B task request",
+      "command": "sop prompt --capability plan --file workload-C.md --json",
+      "fixture_dir": "docs/reports/pre-performance-closure/workloads/C/",
+      "mutates_repository": false,
+      "frozen_hashes": {"input": "see workloads/C/HASHES.md", "b_source_refs": "see workloads/C/HASHES.md"},
+      "repetitions": 3,
+      "independent_disposable_copies": true,
+      "runs": []
+    },
+    "D": {
+      "description": "REVIEW: known-good B BASELINE + intentionally defective frozen PATCH (Add returns a-b)",
+      "command": "sop prompt --capability review --file workload-D.md --json",
+      "fixture_dir": "docs/reports/pre-performance-closure/workloads/D/",
+      "mutates_repository": false,
+      "defective_patch": {"file": "internal/sum/sum.go", "change": "Add returns a-b"},
+      "baseline_label": "known-good",
+      "patch_label": "intentionally-defective",
+      "frozen_hashes": {"input": "see workloads/D/HASHES.md", "fixture_patch": "see workloads/D/HASHES.md"},
+      "repetitions": 3,
+      "independent_disposable_copies": true,
+      "runs": []
+    }
+  },
+  "first_run_vs_repeat_run": {
+    "recorded_separately": true,
+    "cache_cold_warm_labeled": false,
+    "cache_label_reason": "Warm/cold state was not observed; labelled UNAVAILABLE."
+  },
+  "failures": {
+    "retained": true,
+    "silently_dropped": false,
+    "note": "All failed attempts are retained; provider availability is recorded; no reroute/escalation outside SOP policy."
+  },
+  "capture_status": "UNAVAILABLE",
+  "capture_status_reason": "Real-provider repetitions on the pinned build could not be observed from repository inspection this run; measurement values are recorded UNAVAILABLE rather than estimated.",
+  "provisional_needs_human": {
+    "recorded": false,
+    "condition": "Only if externally unavailable models prevent capture AND deterministic correctness is otherwise sound."
+  }
+}

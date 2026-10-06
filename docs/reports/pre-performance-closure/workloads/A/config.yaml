@@ -1,0 +1,11 @@
+# Workload A config (frozen)
+#
+# The operator-configured provider/model/classes/routing/fallback are preserved
+# as-is; no class is chosen manually. This file records only the deterministic
+# acceptance checks for the fixture.
+
+checks:
+  - gofmt -l .
+  - go vet ./...
+  - go test ./...
+  - go build ./...
