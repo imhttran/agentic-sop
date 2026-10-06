@@ -55,10 +55,10 @@ func TestCoordinatorSourceImportsOnlyAgentAndStdlib(t *testing.T) {
 		t.Fatalf("parse coordinator.go: %v", err)
 	}
 	allowed := map[string]bool{
-		"context":      true,
-		"errors":       true,
-		"sort":         true,
-		"sync":         true,
+		"context": true,
+		"errors":  true,
+		"sort":    true,
+		"sync":    true,
 		"github.com/imhttran/agentic-sop/internal/agent": true,
 	}
 	for _, imp := range f.Imports {

@@ -440,9 +440,9 @@ var conflictPriority = map[ConflictClass]int{
 	ConflictStaleRepositoryIdentity: 6,
 	ConflictStaleWorkerResult:       6,
 	ConflictIncompatiblePatches:     5,
-	ConflictOverlappingSymbols:     4,
-	ConflictOverlappingFiles:       3,
-	ConflictDependencyChanged:      2,
+	ConflictOverlappingSymbols:      4,
+	ConflictOverlappingFiles:        3,
+	ConflictDependencyChanged:       2,
 }
 
 // decisionForClass maps one conflict class to its canonical, total decision.

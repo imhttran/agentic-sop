@@ -36,7 +36,7 @@ package orchestration
 //
 // CONSISTENT EVIDENCE FOR PROGRESS
 //
-// FromReport carries each outcome's evidence (EvidenceStrings / 
+// FromReport carries each outcome's evidence (EvidenceStrings /
 // WorkerOutcomeFindings) into the WorkerClaim's Findings field, and Integrate
 // appends those same strings verbatim into IntegratedView.ConsolidatedFindings.
 // Task and integration progress therefore compare the SAME evidence strings as

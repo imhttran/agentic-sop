@@ -5,7 +5,7 @@
 //
 // plus the deterministic SINGLE / SEQUENTIAL / PARALLEL execution decision.
 //
-// SINGLE-LIFECYCLE-AUTHORITY INVARIANT
+// # SINGLE-LIFECYCLE-AUTHORITY INVARIANT
 //
 // Exactly one authoritative SOP lifecycle lives in internal/domain. The
 // orchestration package observes lifecycle state and reads domain values

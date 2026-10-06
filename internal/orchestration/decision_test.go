@@ -11,7 +11,7 @@ func allCaps() agent.Capabilities { return agent.AllCapabilities() }
 
 func TestDecideSingleForLoneTask(t *testing.T) {
 	got := Decide(Request{
-		Units:   []Unit{{ID: "t1", Capability: agent.Implement}},
+		Units:     []Unit{{ID: "t1", Capability: agent.Implement}},
 		Available: allCaps(),
 	})
 	if got != ModeSingle {

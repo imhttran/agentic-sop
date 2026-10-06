@@ -243,17 +243,17 @@ func ComposeOrchestrationEvents(run OrchestrationRun) []OrchestrationEvent {
 		inputs := append([]string(nil), pass.Inputs...)
 		sort.Strings(inputs)
 		add(OrchestrationEvent{
-			Kind:         EventIntegrationStarted,
-			Timestamp:    pass.Started,
-			TaskID:       pass.TaskID,
-			Parents:      inputs,
+			Kind:      EventIntegrationStarted,
+			Timestamp: pass.Started,
+			TaskID:    pass.TaskID,
+			Parents:   inputs,
 		})
 		add(OrchestrationEvent{
-			Kind:         EventIntegrationCompleted,
-			Timestamp:    pass.Completed,
-			TaskID:       pass.TaskID,
-			Status:       "completed",
-			Reason:       pass.Reason,
+			Kind:      EventIntegrationCompleted,
+			Timestamp: pass.Completed,
+			TaskID:    pass.TaskID,
+			Status:    "completed",
+			Reason:    pass.Reason,
 		})
 	}
 

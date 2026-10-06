@@ -175,8 +175,16 @@ func TestDetectConflictsPerClass(t *testing.T) {
 // reported as stale_repository_identity and never conflict-free.
 func TestStaleIdentityRejected(t *testing.T) {
 	cases := []ConflictInput{
-		func() ConflictInput { in := cleanInput(); in.Units[0].RepositoryIdentity = RepositoryIdentity{}; return in }(),
-		func() ConflictInput { in := cleanInput(); in.Units[0].RepositoryIdentity = RepositoryIdentity{Revision: "old"}; return in }(),
+		func() ConflictInput {
+			in := cleanInput()
+			in.Units[0].RepositoryIdentity = RepositoryIdentity{}
+			return in
+		}(),
+		func() ConflictInput {
+			in := cleanInput()
+			in.Units[0].RepositoryIdentity = RepositoryIdentity{Revision: "old"}
+			return in
+		}(),
 		func() ConflictInput { in := cleanInput(); in.CurrentIdentity = RepositoryIdentity{}; return in }(),
 	}
 	for i, in := range cases {
