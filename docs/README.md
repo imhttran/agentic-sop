@@ -164,6 +164,8 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 
 ## Canonical Locations and Kept Paths
 
+- **`docs/plans/PLAN-Wrap-Up.md` is referenced but absent.** The closure plan ([plans/PLAN-Pre-Performance-Closure.md](plans/PLAN-Pre-Performance-Closure.md)) names it conditionally, but no such file exists; the historical implementation plan is [history/PLAN-wrapup.md](history/PLAN-wrapup.md). Reconciled as **NOT LOCATED** in [reports/pre-performance-closure/CLOSE-002-status-reconciliation.md](reports/pre-performance-closure/CLOSE-002-status-reconciliation.md), CLOSE-005 and CLOSE-006. The closure plan path is left unedited because it is SOP's recorded active plan source and editing it changes the recorded fingerprint.
+
 To keep SOP working, a few paths are intentionally not under the categories above:
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
