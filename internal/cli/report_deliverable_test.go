@@ -133,7 +133,7 @@ func TestReportScopeAndAccumulatedJEVContext(t *testing.T) {
 	if !sameStrings(paths, want) {
 		t.Fatalf("report scope=%v, want %v", paths, want)
 	}
-	if got := taskChangedFiles([]string{report, "docs/reports/generated.md", ".agent-sdlc/state.db"}, paths...); !sameStrings(got, paths) {
+	if got := taskChangedFiles([]string{report, "docs/reports/generated.md", ".agent-sdlc/state.db"}, paths...); !sameStrings(got, []string{report}) {
 		t.Fatalf("SOP output/state entered task evidence: %v", got)
 	}
 	writeRepoFile(t, dir, report, "current observed evidence\n")
