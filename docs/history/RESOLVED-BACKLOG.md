@@ -7,6 +7,27 @@
 > [project status](../reference/PROJECT-STATUS.md), or
 > [agent specification](../specs/AGENT-PROVIDER.md).
 
+## Pre-Performance Closure and Baseline
+
+_RESOLVED: executed._ The closure and measurement plan
+[PLAN-Pre-Performance-Closure.md](../plans/PLAN-Pre-Performance-Closure.md) ran to
+completion: all eleven CLOSE tasks are `LOCAL_DONE`, both repositories'
+deterministic gates are green, and the readiness verdict is recorded in
+[CLOSE-011-readiness.md](../reports/pre-performance-closure/CLOSE-011-readiness.md)
+with two explicit deferrals (representative workload measurements; the
+controller-root dogfood). The new performance architecture it deferred remains in
+the [current backlog](../plans/BACKLOG.md).
+
+## Invocation-Scoped IMPLEMENT Completion Evidence
+
+_RESOLVED: implemented._ The outer `runStages` IMPLEMENT completion gate is
+invocation-scoped: it derives evidence from before/after repository snapshots plus
+harness-reported changed files (the whole-tree diff is used only in verify-first
+mode), so a pre-existing dirty tree does not satisfy the current invocation's
+mutation requirement (`internal/cli/run.go`, `internal/cli/mutation.go`). Recorded in
+[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md#known-limitations-current) and
+[AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
+
 ## Bootstrap resilience: run the Ollama agent as a known-good binary
 
 _RESOLVED: implemented._ The bootstrap agent can break itself while editing

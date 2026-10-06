@@ -96,11 +96,11 @@ MUST require successful execution, successful observation, and a state differenc
   mutation evidence. A verified partial change left by a failed operation remains
   visible for diagnostics and reconciliation, without earning successful progress.
 
-**Implemented limitation.** The outer `runStages` IMPLEMENT completion gate still
-uses a nonempty working-tree diff as its mutation signal. Operation-level
-verification does not fix attribution of pre-existing dirty changes at that outer
-gate; that separate work is tracked in
-[the backlog](../plans/BACKLOG.md#invocation-scoped-implement-completion-evidence).
+**Implemented.** The outer `runStages` IMPLEMENT completion gate is
+invocation-scoped: it derives evidence from before/after repository snapshots plus
+harness-reported changed files, so a pre-existing dirty tree does not satisfy the
+current invocation's mutation requirement. The whole-tree diff is used as evidence
+only in verify-first mode (`internal/cli/run.go`, `internal/cli/mutation.go`).
 
 ## 8a. Verified Already-Satisfied Completion
 

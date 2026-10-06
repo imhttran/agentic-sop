@@ -6,32 +6,19 @@ the running list in between. Completed observations are preserved in
 [RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md); shipped capabilities and known
 limitations are catalogued in [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md).
 
-## Pre-Performance Closure and Baseline
+## Deferred performance architecture
 
-**Status:** Complete (executed). All eleven CLOSE tasks are `LOCAL_DONE` and the plan's final gate passed; the closure verdicts are under [../reports/pre-performance-closure/](../reports/pre-performance-closure/) with the published baseline at [../reports/PERFORMANCE-BASELINE.md](../reports/PERFORMANCE-BASELINE.md).
+**Status:** Backlog (deferred).
 
-[PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) was the
-closure and measurement DAG for SOP and sop-controller. It verified existing
-capabilities instead of reimplementing them. Performance implementation remains
-deferred behind the plan's evidence-backed readiness gate (see
-[CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)).
+The pre-performance closure and baseline is complete (recorded in
+[RESOLVED-BACKLOG.md](../history/RESOLVED-BACKLOG.md) and
+[PROJECT-STATUS.md](../reference/PROJECT-STATUS.md)). It deliberately did not begin
+the new performance architecture, which remains deferred behind the readiness gate
+([CLOSE-011](../reports/pre-performance-closure/CLOSE-011-readiness.md)):
 
-The subsequent architecture remains deferred: Prompt Compiler, Response
-Normalizer, Context Engine, Git-SHA summary cache, repository structural index,
-BM25/vector RAG, Decision Memory, Verification Cache, Prompt Result Cache, Adaptive
-Routing changes, and Automatic Prompt Tuning. The closure plan inventories gaps
-in the existing `internal/perf` contract; it does not build a competing telemetry
-system or implement these candidates.
-
-## Invocation-Scoped IMPLEMENT Completion Evidence
-
-**Status:** Resolved (superseded). Production `runStages` is invocation-scoped:
-it derives IMPLEMENT completion evidence from before/after repository snapshots
-plus harness-reported changed files, and the whole-tree diff is used as evidence
-only in verify-first mode (`internal/cli/run.go`, `internal/cli/mutation.go`). A
-pre-existing dirty tree therefore does not satisfy the current invocation's
-mutation requirement. See
-[AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md#verified-operation-level-mutation).
+Prompt Compiler, Response Normalizer, Context Engine, Git-SHA summary cache,
+repository structural index, BM25/vector RAG, Decision Memory, Verification Cache,
+Prompt Result Cache, Adaptive Routing changes, and Automatic Prompt Tuning.
 
 ## Local network service (team mode)
 
