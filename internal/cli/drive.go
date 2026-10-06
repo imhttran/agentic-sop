@@ -700,7 +700,11 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			decision = decideAutonomy(cfg, res.classification)
 		}
 		if decision.Action == autonomy.ActionTerminal {
-			if err := blockTask(saver, task, domain.RETRIES_EXHAUSTED); err != nil {
+			reason := domain.RETRIES_EXHAUSTED
+			if res.classification.Kind == failure.NoProgress {
+				reason = domain.NO_PROGRESS
+			}
+			if err := blockTask(saver, task, reason); err != nil {
 				fmt.Fprintf(stderr, "run: %v\n", err)
 			}
 			_ = rn.RecordAttempt(outcomeSignature(res.gate))

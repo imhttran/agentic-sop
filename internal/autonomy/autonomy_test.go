@@ -396,11 +396,15 @@ func TestSecurityDecisionRequiresHumanAtEveryLevel(t *testing.T) {
 // continued automatically at any autonomy level: it requires a human/operator
 // decision, unlike productive incomplete work.
 func TestNoProgressIsNotAutoContinue(t *testing.T) {
-	c := failure.Classification{Kind: failure.NoProgress, Disposition: failure.NeedsHuman, Confidence: failure.High,
+	c := failure.Classification{Kind: failure.NoProgress, Disposition: failure.Block, Confidence: failure.High,
 		Reason: "the invocation made no repository progress within its bounded stale allowance"}
 	for _, level := range []Level{Low, Balanced, High} {
-		if d := Decide(c, PolicyFor(level)); d.Action == ActionAutoContinue {
+		d := Decide(c, PolicyFor(level))
+		if d.Action == ActionAutoContinue {
 			t.Fatalf("%s: a bounded no-progress stop must not auto-continue: %+v", level, d)
+		}
+		if d.Action != ActionTerminal || d.RequiresHuman {
+			t.Fatalf("%s: a bounded no-progress stop must be TERMINAL and not require a human approval: %+v", level, d)
 		}
 	}
 }

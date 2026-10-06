@@ -73,6 +73,11 @@ const (
 	Replan Disposition = "REPLAN"
 	// NeedsHuman: genuinely ambiguous, or an explicit approval/safety boundary.
 	NeedsHuman Disposition = "NEEDS_HUMAN"
+	// Block: automated execution cannot productively continue under unchanged
+	// conditions (for example the no-progress guard stopped it). The task is blocked
+	// for operator intervention; it is deliberately NOT a human approval, so no
+	// approve/decline decision is created.
+	Block Disposition = "BLOCK"
 )
 
 // Confidence records how strong the classification's evidence is.
@@ -297,7 +302,7 @@ func Classify(ev Evidence) Classification {
 	//     unchanged conditions. It is therefore not auto-continued; a human/operator
 	//     decides the next action. The signal is SOP's own diagnostic, not prose.
 	if r := evidenceReasonText(ev); harnessNoProgress(strings.ToLower(r)) {
-		return Classification{Kind: NoProgress, Disposition: NeedsHuman, Confidence: High,
+		return Classification{Kind: NoProgress, Disposition: Block, Confidence: High,
 			Reason: describe(r, "the invocation made no repository progress within its bounded stale allowance; an automatic continuation would repeat under unchanged conditions and is not taken")}
 	}
 

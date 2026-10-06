@@ -49,4 +49,7 @@ const (
 	// was stuck, not a human decision — so the task is terminally stuck and is not
 	// automatically recovered again.
 	CONTINUATION_EXHAUSTED BlockedReason = "CONTINUATION_EXHAUSTED"
+	// NO_PROGRESS: the execution agent made no governed repository progress within
+	// its bounded allowance. It is a blocked-for-operator state, not a human approval.
+	NO_PROGRESS BlockedReason = "NO_PROGRESS"
 )

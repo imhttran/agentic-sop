@@ -891,7 +891,7 @@ func TestHarnessNoProgressIsNotAutoContinue(t *testing.T) {
 	if got.Kind != NoProgress {
 		t.Fatalf("kind = %s, want %s", got.Kind, NoProgress)
 	}
-	if got.Disposition == Continue {
-		t.Fatalf("a bounded no-progress stop must not continue automatically: %+v", got)
+	if got.Disposition != Block {
+		t.Fatalf("disposition = %s, want BLOCK (blocked for operator, not a human approval)", got.Disposition)
 	}
 }
