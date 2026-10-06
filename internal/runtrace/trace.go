@@ -20,8 +20,9 @@ import (
 )
 
 // SchemaVersion is the version of the persisted trace contract. It makes future
-// trace evolution explicit; AGENT-001 only defines this initial version.
-const SchemaVersion = 5
+// trace evolution explicit. Version 7 added the OrchestrationEvents graph records
+// (ORCH-009); version 6 added Stages (ORCH-007).
+const SchemaVersion = 7
 
 // FileName is the run artifact holding the structured trace.
 const FileName = "trace.json"
@@ -50,6 +51,24 @@ type Trace struct {
 	Iterations   []Iteration    `json:"iterations"`
 	Verification []Verification `json:"verification"`
 	Termination  Termination    `json:"termination"`
+
+	// Stages records the explicit orchestration stages the run traversed, in order
+	// (WORK -> RESULTS -> INTEGRATE -> VERIFY). It makes integration a first-class,
+	// traceable phase distinct from worker execution: the INTEGRATE record carries
+	// the worker-result references consumed and the integration-result reference
+	// produced. It is observation-only: nothing reads it back to drive a decision,
+	// and it carries no verdict.
+	Stages []StageRecord `json:"stages,omitempty"`
+
+	// OrchestrationEvents records the per-node/edge orchestration graph events
+	// (assignment created, worker selected, model class selected, provider/model
+	// resolved, worker started/completed, result accepted/rejected, integration
+	// started/completed, verification result, termination), in emission order. It
+	// makes the orchestration graph reconstructable from trace.json alone. It is
+	// observation-only: nothing reads it back to drive a decision, and it carries
+	// only opaque identifiers, enumerated labels, and bounded short text (never
+	// secrets or raw prompt/completion content).
+	OrchestrationEvents []OrchestrationEvent `json:"orchestration_events,omitempty"`
 
 	// Progress classifies the evidence above into objectively-backed forms of
 	// progress, with a deterministic summary. It is observation-only: it never
@@ -95,7 +114,6 @@ type SourceCount struct {
 }
 
 // ReplanRecord is one bounded strategy change.
-
 type ReplanRecord struct {
 	Sequence    int    `json:"sequence"`
 	Reason      string `json:"reason,omitempty"`
@@ -192,6 +210,14 @@ type Inputs struct {
 	Verification []Verification
 	Termination  Termination
 
+	// Stages is the ordered orchestration-stage record composed by the harness,
+	// including the INTEGRATE stage's inputs and outputs.
+	Stages []StageRecord
+
+	// OrchestrationEvents is the ordered orchestration-graph record (ORCH-009)
+	// composed by the harness from the events the orchestration layer emitted.
+	OrchestrationEvents []OrchestrationEvent
+
 	Budgets BudgetLimits
 
 	Replans []ReplanRecord
@@ -214,6 +240,8 @@ func Build(in Inputs) Trace {
 		Iterations:          in.Iterations,
 		Verification:        in.Verification,
 		Termination:         in.Termination,
+		Stages:              in.Stages,
+		OrchestrationEvents: in.OrchestrationEvents,
 		Progress:            progress,
 		ProgressSummary:     summarize(progress),
 		Budgets:             in.Budgets,
