@@ -515,13 +515,15 @@ func historicalizationMissingVerification(dir string, tasks []*domain.Task) []st
 }
 
 // historicalizationHasVerification reports whether a satisfied task has
-// verification evidence: a PASSED run stage, or an external-completion record
-// (the explicit, model-free completion path).
+// verification evidence: a PASSED run stage, an external-completion record (the
+// explicit, model-free completion path), or a NOT_REQUIRED disposition record.
 func historicalizationHasVerification(dir, taskID string) bool {
 	if stage, ok := run.Load(dir, taskID); ok && stage == run.Passed {
 		return true
 	}
-	return fileExists(filepath.Join(run.Dir(dir, taskID), run.ExternalCompletionFile))
+	runDir := run.Dir(dir, taskID)
+	return fileExists(filepath.Join(runDir, run.ExternalCompletionFile)) ||
+		fileExists(filepath.Join(runDir, run.NotRequiredFile))
 }
 
 // historicalizationFingerprint is a stable hash of the plan identity and every

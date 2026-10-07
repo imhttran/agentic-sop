@@ -283,12 +283,7 @@ func failedRecovery(tasks []*domain.Task, recovered map[string]bool) *domain.Tas
 // the single definition of "occupies the execution slot", shared by the scheduler
 // and by `sop run` when it resumes an interrupted task.
 func IsActive(status domain.TaskStatus) bool {
-	switch status {
-	case domain.PLANNED, domain.MERGED, domain.DONE, domain.LOCAL_DONE, domain.BLOCKED:
-		return false
-	default:
-		return true
-	}
+	return status != domain.PLANNED && status != domain.MERGED && !status.IsTerminal()
 }
 
 // checkDependenciesExist rejects persisted state where a task references a

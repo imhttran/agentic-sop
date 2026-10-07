@@ -15,15 +15,19 @@ import (
 	"github.com/imhttran/agentic-sop/internal/validate"
 )
 
-// runTask prints the persisted details of a single task, or records an external
-// completion (`sop task complete`). Like status, the read path never creates state.
+// runTask prints the persisted details of a single task, records an external
+// completion (`sop task complete`), or a NOT_REQUIRED disposition (`sop task skip`). Like status, the read path never creates state.
 func runTask(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
 	if len(args) >= 1 && args[0] == "complete" {
 		return runTaskComplete(args[1:], stdout, stderr, getwd)
 	}
+	if len(args) >= 1 && args[0] == "skip" {
+		return runTaskSkip(args[1:], stdout, stderr, getwd)
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: sop task <task-id>")
 		fmt.Fprintln(stderr, "       sop task complete <task-id> --external [--commit <sha>]")
+		fmt.Fprintln(stderr, "       "+strings.TrimPrefix(taskSkipUsage, "usage: "))
 		return exitUsage
 	}
 	id := args[0]
@@ -59,6 +63,9 @@ func runTask(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 	fmt.Fprintf(stdout, "Title: %s\n", task.Title)
 	fmt.Fprintf(stdout, "Status: %s\n", task.Status)
 	fmt.Fprintf(stdout, "Attempts: %d\n", len(task.Attempts))
+	if n := len(task.Attempts); task.Status == domain.NOT_REQUIRED && n > 0 {
+		fmt.Fprintf(stdout, "Not required: %s\n", task.Attempts[n-1].Reason)
+	}
 	if len(task.DependencyIDs) > 0 {
 		fmt.Fprintln(stdout, "Dependencies:")
 		for _, dep := range task.DependencyIDs {
@@ -118,21 +125,8 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 
 	// Dependencies must already satisfy existing policy: external completion never
 	// advances a task past its dependency ordering.
-	all, err := st.List()
-	if err != nil {
+	if err := requireDependenciesSatisfied(st, task); err != nil {
 		fmt.Fprintf(stderr, "task complete: %v\n", err)
-		return exitError
-	}
-	byID := make(map[string]*domain.Task, len(all))
-	for _, t := range all {
-		byID[t.ID] = t
-	}
-	if unmet, satisfied := task.ResolveDependencies(byID); !satisfied {
-		names := make([]string, 0, len(unmet))
-		for _, d := range unmet {
-			names = append(names, d.TaskID)
-		}
-		fmt.Fprintf(stderr, "task complete: %s has unsatisfied dependencies: %s\n", id, strings.Join(names, ", "))
 		return exitError
 	}
 
@@ -206,6 +200,28 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 	fmt.Fprintf(stdout, "  repository: %s\n", rec.RepositoryHead)
 	fmt.Fprintf(stdout, "  validation: %s\n", rec.Verification)
 	return exitOK
+}
+
+// requireDependenciesSatisfied fails unless every dependency of task is satisfied, so an
+// operator transition never advances a task past its dependency ordering.
+func requireDependenciesSatisfied(st *store.Store, task *domain.Task) error {
+	all, err := st.List()
+	if err != nil {
+		return err
+	}
+	byID := make(map[string]*domain.Task, len(all))
+	for _, t := range all {
+		byID[t.ID] = t
+	}
+	unmet, satisfied := task.ResolveDependencies(byID)
+	if satisfied {
+		return nil
+	}
+	names := make([]string, 0, len(unmet))
+	for _, d := range unmet {
+		names = append(names, d.TaskID)
+	}
+	return fmt.Errorf("%s has unsatisfied dependencies: %s", task.ID, strings.Join(names, ", "))
 }
 
 // parseTaskCompleteArgs parses

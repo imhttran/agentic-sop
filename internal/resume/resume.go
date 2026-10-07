@@ -148,10 +148,7 @@ func (r *Resumer) ResolveActive(ctx context.Context) (Decision, error) {
 func Active(tasks []*domain.Task) []*domain.Task {
 	var active []*domain.Task
 	for _, task := range tasks {
-		switch task.Status {
-		case domain.PLANNED, domain.DONE, domain.BLOCKED:
-			// Not in flight.
-		default:
+		if task.Status != domain.PLANNED && !task.Status.IsTerminal() {
 			active = append(active, task)
 		}
 	}
@@ -190,11 +187,10 @@ func ActionFor(status domain.TaskStatus) (Action, bool) {
 // one.
 func needsBranch(status domain.TaskStatus) bool {
 	switch status {
-	case domain.PLANNED, domain.READY, domain.MERGED, domain.DONE, domain.BLOCKED:
+	case domain.PLANNED, domain.READY, domain.MERGED:
 		return false
-	default:
-		return true
 	}
+	return !status.IsTerminal()
 }
 
 // needsPR reports whether a status implies the pull request must already exist.
@@ -230,7 +226,7 @@ func recoveryPath(status domain.TaskStatus, obs Observation) []domain.TaskStatus
 func resolve(task *domain.Task, obs Observation) (Decision, error) {
 	decision := Decision{TaskID: task.ID, Status: task.Status}
 
-	if task.Status == domain.DONE || task.Status == domain.BLOCKED {
+	if task.Status.IsTerminal() {
 		decision.Action = None
 		return decision, nil
 	}

@@ -67,11 +67,11 @@ func retryOne(st *store.Store, id string, stdout, stderr io.Writer, force bool) 
 		return exitError
 	}
 
-	switch task.Status {
-	case domain.DONE, domain.LOCAL_DONE, domain.MERGED:
+	switch {
+	case task.IsSatisfied():
 		fmt.Fprintf(stderr, "retry: task %s is %s; nothing to retry\n", id, task.Status)
 		return exitError
-	case domain.BLOCKED:
+	case task.IsBlocked():
 	default:
 		fmt.Fprintf(stderr, "retry: task %s is %s, not BLOCKED; nothing to retry\n", id, task.Status)
 		return exitError

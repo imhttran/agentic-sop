@@ -57,6 +57,21 @@ var transitions = map[TaskStatus][]TaskStatus{
 	DONE:             {},
 	LOCAL_DONE:       {},
 	BLOCKED:          {},
+	NOT_REQUIRED:     {},
+}
+
+// Valid reports whether s is a status the state machine knows.
+func (s TaskStatus) Valid() bool {
+	_, ok := transitions[s]
+	return ok
+}
+
+// IsTerminal reports whether s is a known status with no outgoing transition:
+// DONE, LOCAL_DONE, BLOCKED, or NOT_REQUIRED. A BLOCKED task still leaves only
+// through explicit domain operations (Requeue, MarkNotRequired), never Transition.
+func (s TaskStatus) IsTerminal() bool {
+	next, ok := transitions[s]
+	return ok && len(next) == 0
 }
 
 // CanTransitionTo reports whether the Task may move to nextStatus. It is a pure
@@ -88,7 +103,7 @@ func (t *Task) Block(reason BlockedReason) error {
 	if strings.TrimSpace(string(reason)) == "" {
 		return fmt.Errorf("blocked reason must not be empty")
 	}
-	if t.Status == DONE || t.Status == LOCAL_DONE {
+	if t.IsSatisfied() {
 		return fmt.Errorf("cannot block a completed task")
 	}
 	t.Status = BLOCKED
@@ -136,9 +151,8 @@ func (t *Task) RequeueWithoutSpending() error {
 
 // canRequeue rejects requeuing a completed task.
 func (t *Task) canRequeue() error {
-	switch t.Status {
-	case DONE, LOCAL_DONE, MERGED:
-		return fmt.Errorf("cannot requeue a completed task")
+	if t.IsSatisfied() {
+		return fmt.Errorf("cannot requeue a %s task", t.Status)
 	}
 	return nil
 }
@@ -155,10 +169,6 @@ func (t *Task) IsDone() bool {
 	return t.Status == DONE
 }
 
-// IsSatisfied reports whether the task has reached a satisfied terminal state:
-// its work is finished locally (LOCAL_DONE), integrated into shared history
-// (MERGED), or fully done (DONE). It is the single definition of "complete",
-// shared by dependency resolution, the run summary, and completed-plan handoff.
 // CompleteExternally records the task as completed locally by an explicit external
 // completion: its work was performed and merged outside this SOP execution. It is the one
 // authority for that transition, so the external path is a domain decision rather than a
@@ -176,7 +186,38 @@ func (t *Task) CompleteExternally() error {
 	return nil
 }
 
+// MarkNotRequired dispositions a task whose conditional work prerequisite evidence
+// proved unnecessary. It is the one authority for that transition: only a task that
+// has not started (PLANNED, READY) or is BLOCKED may take it, a reason is required, and
+// the transition is appended to the task's history so it is auditable. Earlier attempts
+// are kept. It records no implementation and no approval.
+func (t *Task) MarkNotRequired(reason string) error {
+	reason = strings.TrimSpace(reason)
+	if reason == "" {
+		return fmt.Errorf("not-required reason must not be empty")
+	}
+	switch t.Status {
+	case PLANNED, READY, BLOCKED:
+	default:
+		return fmt.Errorf("task %s is %s; only a PLANNED, READY, or BLOCKED task can be marked NOT_REQUIRED", t.ID, t.Status)
+	}
+	_ = t.AddAttempt(NOT_REQUIRED, reason)
+	t.Status = NOT_REQUIRED
+	t.BlockedReason = NO_REASON
+	t.UpdatedAt = time.Now().UTC()
+	return nil
+}
+
+// IsSatisfied reports whether the task no longer holds back its dependants or the
+// plan: its work is finished (see IsCompleted) or it was dispositioned NOT_REQUIRED.
 func (t *Task) IsSatisfied() bool {
+	return t.IsCompleted() || t.Status == NOT_REQUIRED
+}
+
+// IsCompleted reports whether the task's work was actually performed: finished
+// locally (LOCAL_DONE) or integrated into shared history (MERGED/DONE). Unlike
+// IsSatisfied it excludes NOT_REQUIRED, which is never implementation success.
+func (t *Task) IsCompleted() bool {
 	switch t.Status {
 	case MERGED, DONE, LOCAL_DONE:
 		return true
@@ -290,8 +331,8 @@ func (t *Task) ResolveDependencies(tasks map[string]*Task) (unmet []Dependency, 
 
 func (t *Task) dependencySatisfied(depTask *Task) bool {
 	// A dependency is complete once its work is finished: locally (LOCAL_DONE) or
-	// integrated into shared history (MERGED/DONE). Work that has merely passed
-	// local tests, review, or CI may still live on an unmerged branch. BLOCKED and
-	// in-flight work never satisfy a dependency.
+	// integrated into shared history (MERGED/DONE), or once it was dispositioned
+	// NOT_REQUIRED. Work that has merely passed local tests, review, or CI may still
+	// live on an unmerged branch. BLOCKED and in-flight work never satisfy a dependency.
 	return depTask.IsSatisfied()
 }

@@ -249,8 +249,8 @@ func printStartup(w io.Writer, dir string, cfg config.Config, stack executionSta
 		fmt.Fprintln(w, "Plan: current")
 		fmt.Fprintln(w)
 		fmt.Fprintf(w, "Tasks: %d\n", len(tasks))
-		done, ready, blocked := statusCounts(tasks)
-		fmt.Fprintf(w, "Done: %d\nReady: %d\nBlocked: %d\n", done, ready, blocked)
+		done, notRequired, ready, blocked := statusCounts(tasks)
+		fmt.Fprintf(w, "Done: %d\nNot required: %d\nReady: %d\nBlocked: %d\n", done, notRequired, ready, blocked)
 	}
 
 	if prepared.TasksCreated > 0 {
@@ -270,26 +270,28 @@ func printStartup(w io.Writer, dir string, cfg config.Config, stack executionSta
 func countDeclaredDone(tasks []*domain.Task) int {
 	n := 0
 	for _, task := range tasks {
-		if task.ExecutionMode.Done() && task.IsSatisfied() {
+		if task.ExecutionMode.Done() && task.IsCompleted() {
 			n++
 		}
 	}
 	return n
 }
 
-// statusCounts tallies completed, ready, and blocked tasks.
-func statusCounts(tasks []*domain.Task) (done, ready, blocked int) {
+// statusCounts tallies completed, not-required, ready, and blocked tasks.
+func statusCounts(tasks []*domain.Task) (done, notRequired, ready, blocked int) {
 	for _, task := range tasks {
-		switch task.Status {
-		case domain.LOCAL_DONE, domain.DONE, domain.MERGED:
+		switch {
+		case task.IsCompleted():
 			done++
-		case domain.READY:
+		case task.Status == domain.NOT_REQUIRED:
+			notRequired++
+		case task.Status == domain.READY:
 			ready++
-		case domain.BLOCKED:
+		case task.IsBlocked():
 			blocked++
 		}
 	}
-	return done, ready, blocked
+	return done, notRequired, ready, blocked
 }
 
 // guardCapability rejects a provider that cannot serve a capability the run
@@ -317,7 +319,12 @@ func printCompletion(w io.Writer, dir string, cfg config.Config, prepared planfl
 	if prepared.Source != "" {
 		fmt.Fprintf(w, "Source: %s\n", prepared.Source)
 	}
-	fmt.Fprintf(w, "Tasks: %d/%d complete\n", len(tasks), len(tasks))
+	done, notRequired, _, _ := statusCounts(tasks)
+	fmt.Fprintf(w, "Tasks: %d/%d complete", done, len(tasks))
+	if notRequired > 0 {
+		fmt.Fprintf(w, ", %d not required", notRequired)
+	}
+	fmt.Fprintln(w)
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Final gate: PASS")
 	if report := latestReportPath(dir); report != "" {

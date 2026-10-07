@@ -9,7 +9,8 @@ type TaskStatus string
 // → IMPLEMENTING → LOCAL_TESTS_PASS → REVIEW → REVIEW_PASS. From REVIEW_PASS the
 // task either completes locally (LOCAL_DONE) or continues through the remote
 // lifecycle (PR_OPEN → CI_RUNNING → CI_PASS → MERGED → DONE). FIX_REQUIRED is the
-// remediation state; BLOCKED is terminal.
+// remediation state; BLOCKED is terminal. A PLANNED, READY, or BLOCKED task may be
+// dispositioned NOT_REQUIRED (see Task.MarkNotRequired), which is also terminal.
 const (
 	PLANNED          TaskStatus = "PLANNED"
 	READY            TaskStatus = "READY"
@@ -31,6 +32,10 @@ const (
 	// was merged. It is distinct from DONE, which follows a real MERGED.
 	LOCAL_DONE TaskStatus = "LOCAL_DONE"
 	BLOCKED    TaskStatus = "BLOCKED"
+	// NOT_REQUIRED marks a task whose conditional work upstream evidence proved
+	// unnecessary. It is terminal and satisfies dependants, but it is not a
+	// completion: no implementation ran and no repository change is implied.
+	NOT_REQUIRED TaskStatus = "NOT_REQUIRED"
 )
 
 type BlockedReason string

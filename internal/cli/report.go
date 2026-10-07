@@ -50,9 +50,16 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 		return exitError
 	}
 
+	// A NOT_REQUIRED disposition supersedes any earlier run report for the task, so it
+	// is rendered first and stands alone for a task skipped before it ever ran.
+	disposed := writeNotRequiredReport(stdout, filepath.Join(runsRoot, id))
+
 	data, err := os.ReadFile(filepath.Join(runsRoot, id, "report.json"))
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
+			if disposed {
+				return exitOK
+			}
 			// A read-only prompt run writes metadata.json (not report.json). Render it
 			// through the same prompt result document so `sop report <prompt-run-id>`
 			// inspects a prompt without a second reporting system.
@@ -342,4 +349,26 @@ func findingsBySeverity(findings []review.Finding) map[review.Severity]int {
 		counts[f.Severity]++
 	}
 	return counts
+}
+
+// writeNotRequiredReport renders the task's NOT_REQUIRED disposition record, if one
+// exists, and reports whether it rendered anything.
+func writeNotRequiredReport(w io.Writer, runDir string) bool {
+	data, err := os.ReadFile(filepath.Join(runDir, runpkg.NotRequiredFile))
+	if err != nil {
+		return false
+	}
+	var rec runpkg.NotRequired
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return false
+	}
+	fmt.Fprintln(w, "Disposition: NOT_REQUIRED (no implementation ran; not a completion)")
+	fmt.Fprintf(w, "  previous status: %s\n", rec.PreviousStatus)
+	fmt.Fprintf(w, "  reason:          %s\n", rec.Reason)
+	for _, e := range rec.Evidence {
+		fmt.Fprintf(w, "  evidence:        %s (sha256 %s)\n", e.Path, e.SHA256)
+	}
+	fmt.Fprintf(w, "  recorded:        %s by %s\n", rec.RecordedAt.Format(time.RFC3339), rec.RecordedBy)
+	fmt.Fprintln(w)
+	return true
 }
