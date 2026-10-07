@@ -10,6 +10,7 @@ package decision
 import (
 	"context"
 	"fmt"
+	"math"
 	"strings"
 )
 
@@ -22,6 +23,18 @@ const (
 	High   Choice = "HIGH"
 	Human  Choice = "HUMAN"
 )
+
+// knownChoice reports whether c is one of the governance-meaningful choices.
+// An unknown/indeterminate choice (for example a value a provider invented) is
+// not an approval and must never be routed as one.
+func (c Choice) knownChoice() bool {
+	switch c {
+	case Low, Medium, High, Human:
+		return true
+	default:
+		return false
+	}
+}
 
 // Decision is a bounded decision: a choice, a confidence in [0,1], and optional
 // metadata for auditability.
@@ -108,11 +121,30 @@ const (
 	HumanTarget Target = "HUMAN"
 )
 
+// validConfidence reports whether a confidence is a usable probability in [0,1].
+// NaN, infinities, negatives, and values above 1 are invalid and must never be
+// treated as a confident authorization.
+func validConfidence(c float64) bool {
+	return !math.IsNaN(c) && !math.IsInf(c, 0) && c >= 0 && c <= 1
+}
+
 // Route maps a decision to a target using the thresholds. It is the shared
 // policy for both model routing (T035) and review escalation (T036): a HIGH
 // choice or low confidence needs a human; medium confidence uses the stronger
 // model; otherwise the small model.
+//
+// Route fails closed. A decision with an unknown/indeterminate choice or an
+// invalid confidence (outside [0,1], including NaN) cannot be interpreted by
+// policy, so it is escalated to a human: the boundary never converts an unknown
+// result into an approval, never silently downgrades risk, and never authorizes
+// execution from a provider's confidence alone. Only a known choice with a valid
+// confidence may reach a model tier.
 func Route(t Thresholds, d Decision) Target {
+	// Fail closed on anything policy cannot interpret. An unknown choice is not an
+	// approval; an out-of-range confidence is not a confident authorization.
+	if !d.Choice.knownChoice() || !validConfidence(d.Confidence) {
+		return HumanTarget
+	}
 	if d.Choice == Human || d.Choice == High || d.Confidence < t.RequireHuman {
 		return HumanTarget
 	}

@@ -12,21 +12,36 @@ import (
 
 var (
 	mdHeading = regexp.MustCompile(`^(#{1,6})\s+(.*?)\s*#*\s*$`)
-	// mdIDToken matches a leading stage id. Its optional sub-segment accepts both a
-	// letter-number suffix ("PREJEV012-S6") and a numeric one ("P5-001"), so an
-	// umbrella stage and its sub-stages can be named in one flat plan, as can the
-	// "P<n>-<nnn>" ids the phase plans use.
-	mdIDToken  = regexp.MustCompile(`^([A-Za-z]+[-_]?\d+(?:-[A-Za-z]*\d+)?[A-Za-z]?)\b`)
+	// mdIDToken matches a leading stage id. Its alphabetic prefix may carry one or
+	// more hyphen/underscore-separated name segments before the numeric segment, so
+	// a generic "<NAME>-<NAME>-<NNN>" id (for example "AS-CLEF-001") is read as one
+	// id rather than truncated at its first numeric segment. The optional
+	// sub-segment accepts both a letter-number suffix ("PREJEV012-S6") and a
+	// numeric one ("P5-001"), so an umbrella stage and its sub-stages can be named
+	// in one flat plan, as can the "P<n>-<nnn>" ids the phase plans use. No
+	// concrete id is special-cased.
+	mdIDToken  = regexp.MustCompile(`^((?:[A-Za-z]+[-_]?)+\d+(?:-[A-Za-z]*\d+)?[A-Za-z]?)\b`)
 	mdBullet   = regexp.MustCompile(`^\s*(?:[-*+]|\d+[.)])\s+`)
 	mdCheckbox = regexp.MustCompile(`^\[[ xX]\]\s*`)
 )
 
 // compileTaskPrompt asks the agent to normalize a human plan document into the
-// machine plan. It is only used when deterministic compilation fails.
+// machine plan. It is only used when deterministic compilation fails. It repeats
+// the prerequisite-classification rule so a model normalizing an unrecognized
+// document does not turn discovery or report work into a "requires" entry.
 const compileTaskPrompt = `Convert the provided human PLAN.md into the machine plan JSON.
 Preserve the stages, their ids, titles, objectives, dependencies, the
 capabilities they require, deliverables, acceptance criteria, and execution mode,
-along with any capability inventory and assumptions; do not invent or drop work.`
+along with any capability inventory and assumptions; do not invent or drop work.
+A stage's "requires" lists only capabilities that are actual externally supplied
+runtime, permission, tool, service, or artifact needed before the stage's work
+can begin. Repository or package inspection, searches, call paths, types,
+interfaces, shapes, configuration, defaults, policy, adapters, test discovery,
+and report creation or inspection are work to describe in the stage's objective
+or acceptance criteria, not prerequisites. Put an informational UNKNOWN
+discovery target in the capability inventory without a "requires" entry.
+Completed task artifacts are reusable dependency evidence: express them as stage
+dependencies, not as UNKNOWN prerequisites for rediscovery.`
 
 // PlanFromMarkdown deterministically compiles a human PLAN.md into a Plan. It
 // understands two hand-written shapes of the same plan:
@@ -335,8 +350,9 @@ func normalizeHeading(s string) string {
 }
 
 // splitStageHeading separates a leading stage id from the rest of a heading. An
-// id may carry one hierarchical sub-id segment (for example "PREJEV012-S6"), so
-// an umbrella stage and its sub-stages can be named in one flat plan.
+// id may carry one or more alphabetic name segments followed by a numeric segment
+// and an optional hierarchical sub-id (for example "PREJEV012-S6"), so an umbrella
+// stage and its sub-stages can be named in one flat plan.
 func splitStageHeading(text string) (id, title string) {
 	m := mdIDToken.FindStringSubmatch(text)
 	if m == nil {

@@ -103,15 +103,20 @@ func (c Capability) gapResolved() bool {
 // continues. Without either, ownership is a genuine product or architectural
 // choice the requirements do not settle, so the gap needs a human. A capability
 // no stage depends on is inventory, not a blocker.
+//
+// Requirement matching is normalized with normalizeCapabilityName on both sides,
+// exactly as validateCapabilities matches them, so validateCapabilities accepting a
+// case/whitespace variant cannot let an unresolved dependency bypass this ownership
+// gate by spelling a stage Require with that variant.
 func (p *Plan) CapabilityGaps() (handled, needsHuman []Capability) {
 	required := make(map[string]bool)
 	for _, stage := range p.Stages {
 		for _, name := range stage.Requires {
-			required[name] = true
+			required[normalizeCapabilityName(name)] = true
 		}
 	}
 	for _, c := range p.Capabilities {
-		if !required[c.Name] || normalizeCapabilityStatus(c.Status) == CapabilityExists {
+		if !required[normalizeCapabilityName(c.Name)] || normalizeCapabilityStatus(c.Status) == CapabilityExists {
 			continue
 		}
 		if c.gapResolved() {

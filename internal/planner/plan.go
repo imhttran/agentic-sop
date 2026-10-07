@@ -125,8 +125,13 @@ func (p *Plan) Validate() error {
 // and every stage requirement names a declared capability. A stage may not
 // depend on a capability whose status is UNKNOWN, so synthesis cannot silently
 // treat an unverified capability as if it exists.
-// normalizeCapabilityName case-folds and collapses internal whitespace so a stage
-// requirement matches a declared capability by a cosmetic name variant.
+//
+// normalizeCapabilityName case-folds and collapses repeated whitespace, preserving
+// word boundaries, so a stage requirement matches a declared capability by a
+// cosmetic name variant (for example "External Tool" and "external   tool"). This
+// is the one normalization used for both validation and the missing-capability
+// ownership gate in CapabilityGaps, so the two can never disagree about which
+// requirement names which declared capability.
 func normalizeCapabilityName(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }
@@ -156,13 +161,16 @@ func (p *Plan) validateCapabilities() error {
 		}
 	}
 
-	normalized := make(map[string]string, len(status))
-	for name := range status {
-		key := normalizeCapabilityName(name)
+	// Iterate the declared slice, not the status map, so the duplicate case/
+	// whitespace diagnostic is deterministic for identical input regardless of map
+	// iteration order.
+	normalized := make(map[string]string, len(p.Capabilities))
+	for _, c := range p.Capabilities {
+		key := normalizeCapabilityName(c.Name)
 		if prev, ok := normalized[key]; ok {
-			return fmt.Errorf("plan: capabilities %q and %q differ only by case or whitespace", prev, name)
+			return fmt.Errorf("plan: capabilities %q and %q differ only by case or whitespace", prev, c.Name)
 		}
-		normalized[key] = name
+		normalized[key] = c.Name
 	}
 
 	for _, stage := range p.Stages {

@@ -34,6 +34,21 @@ Requirements:
   Do not create an implementation task that depends on a capability nothing
   provides.
 - Record important assumptions with their evidence and consequence.
+- Keep the prerequisite classification exact: a stage's "requires" entry lists
+  ONLY an actual externally supplied runtime, permission, tool, service, or
+  artifact that must be available before the stage's work can begin.
+  Repository or package inspection, searches, call-path tracing,
+  types/interfaces/shapes discovery, configuration/defaults/policy discovery,
+  adapter and test reconnaissance, and creating or inspecting report output are
+  work: describe them in the stage's objective or acceptance criteria, not in
+  "requires".
+- A discovery target you cannot yet resolve may be recorded in the capability
+  inventory as informational with status UNKNOWN and no stage "requires" entry,
+  so it is visible without gating execution on it.
+- A completed task artifact is reusable dependency evidence, not an unknown
+  prerequisite: express it as a stage dependency (the dependent stage lists the
+  producing stage id in "dependencies") instead of an UNKNOWN capability the
+  stage requires before rediscovering it.
 - Prefer decomposing work along natural boundaries (discovery/contract, read
   operations, command operations, missing capabilities, consumer wiring,
   verification) where they clarify ownership, so implementation does not have to
@@ -81,9 +96,19 @@ const planOutputRequirements = `Return JSON only (no prose, no markdown) matchin
   ]
 }
 Stage ids are unique; each dependency must reference another stage id in this plan.
-"requires" lists the capabilities this stage depends on; each must be a name
-declared in "capabilities", and a stage must not depend on a capability whose
-status is UNKNOWN. Give "owner" (the layer that must provide it) or "resolution"
+"requires" is strictly the set of capabilities that are actual externally
+supplied runtime, permission, tool, service, or artifact this stage needs before
+its work can begin. Each entry must be a name declared in "capabilities", and a
+stage must not depend on a capability whose status is UNKNOWN. Repository or
+package inspection, searches, call-path tracing, types/interfaces/shapes
+inspection, configuration/defaults/policy inspection, adapter and test
+discovery, and report creation or inspection are work: put them in the stage's
+"objective" or "acceptance_criteria", not in "requires". An informational UNKNOWN
+discovery target may be listed in "capabilities" without any stage "requires"
+entry. A completed task artifact is reusable dependency evidence: express it as
+a stage dependency (list the producing stage id in "dependencies"), not as an
+UNKNOWN capability the stage requires before rediscovery.
+Give "owner" (the layer that must provide it) or "resolution"
 for any capability that is not EXISTS.
 kind is optional: use "environment" for a single development-environment/bootstrap
 stage that all other stages depend on, and "feature" (or omit) otherwise.`
@@ -235,7 +260,9 @@ func planRepairRequest(original agent.Request, rejected string, cause error) age
 Return a corrected plan as JSON only. Fix exactly that problem and change
 nothing else. Every dependency must reference another stage id in this plan,
 stage ids must be unique, no stage may depend on itself, and the plan must have
-no dependency cycles.`, strings.TrimSpace(cause.Error()))
+no dependency cycles. A "requires" entry must be an actual externally supplied
+runtime, permission, tool, service, or artifact; discovery, reconnaissance, and
+report work belong in the objective or acceptance criteria instead.`, strings.TrimSpace(cause.Error()))
 
 	return agent.Request{
 		Capability:         original.Capability,

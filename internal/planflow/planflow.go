@@ -69,6 +69,17 @@ const (
 // failure.
 var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed to generate a plan from a PRD, or to normalize a PLAN.md that is not recognizable)")
 
+// errUnsupportedReconcileSource is the stable diagnostic a reconciliation returns
+// when the requested source differs from the recorded one and is not recognizably a
+// structured plan. Reconciliation is deliberately deterministic and never calls a
+// model to synthesize definitions: structured compilation and comparison are
+// deterministic, while arbitrary model prose is not something SOP will infer as
+// equivalent. An operator whose source is free-form must restate it in an explicit
+// structured plan. The error text is a fixed string so repeated Inspect/Reconcile
+// calls report byte-identical diagnostics, and it is returned before any store or
+// file mutation, so the authoritative state is untouched.
+var errUnsupportedReconcileSource = errors.New("NEEDS_HUMAN: the requested plan source changed but is not a recognizable structured plan\n\nSOP reconciles a changed plan deterministically by compiling its structured Markdown (\"## Project\", \"## Summary\", and one \"## <id> — <title>\" section per stage, or a \"## Tasks\" section with \"### <id> — <title>\" stages). Structured compilation and comparison are deterministic; arbitrary model prose is not, so SOP will not call a model to synthesize or normalize definitions just for a reconciliation.\n\nRewrite the requested source explicitly in the canonical rendered layout: each stage starts with its \"## <id> — <title>\" heading, then the objective prose comes directly after the heading, followed by the optional structured sub-sections (Dependencies, Requires, Deliverables, Acceptance Criteria, Execution). Do not put the objective under an \"Objective\" subheading — that is not a recognized field. Then rerun the reconciliation. No tasks, attempts, approvals or provenance were changed")
+
 // TaskStore is the persistence slice Prepare needs.
 type TaskStore interface {
 	List() ([]*domain.Task, error)
@@ -380,8 +391,11 @@ type GraphStore interface {
 }
 
 // ReconcileOptions configures Reconcile. PlanSource is the absolute path of the
-// requested PLAN document and is required. Agent may be nil when the requested
-// plan is recognizable without normalization.
+// requested PLAN document and is required. Agent is not used by the
+// reconciliation compile path: a changed source is compiled deterministically by
+// the structured Markdown parser, and a changed source that is not recognizably
+// structured fails with a stable diagnostic instead of being normalized by a
+// model. Initial free-form planning (Prepare/handOff from a PRD) still uses it.
 type ReconcileOptions struct {
 	Dir        string
 	PlanSource string
@@ -564,8 +578,20 @@ func Inspect(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error
 // bytes. mode decides only how a task needing an explicit human decision is
 // disposed of (an error when applying, a report when inspecting), so the listing
 // and the reconciliation are one diff and can never disagree.
+//
+// Compilation on this path is deliberately deterministic: the requested plan is
+// compiled by the structured Markdown parser/Planner with NO agent, so a model is
+// never called to synthesize or normalize definitions just for a reconciliation. A
+// changed source that is not recognizably structured fails with
+// errUnsupportedReconcileSource before any mutation. Initial free-form planning
+// (Prepare/handOff) still uses the configured model normalizer; only reconciliation
+// is restrictive. It honors ctx.Err() before reading or mutating anything, so a
+// canceled reconciliation reports the cancellation and changes no state.
 func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGraphMode) (ReconcileResult, reconcilePlan, *planner.Plan, []byte, error) {
 	res := ReconcileResult{}
+	if err := ctx.Err(); err != nil {
+		return res, reconcilePlan{}, nil, nil, err
+	}
 	if strings.TrimSpace(opts.PlanSource) == "" {
 		return res, reconcilePlan{}, nil, nil, errors.New("reconcile: a plan path is required")
 	}
@@ -613,14 +639,8 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 		return res, reconcilePlan{unchanged: unchanged}, recorded, data, nil
 	}
 
-	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, KindPlan, string(data))
+	plan, err := compileReconcileSource(string(data))
 	if err != nil {
-		if errors.Is(err, errNoAgent) {
-			return res, reconcilePlan{}, nil, nil, err
-		}
-		return res, reconcilePlan{}, nil, nil, planError(rel, err)
-	}
-	if err := plan.Validate(); err != nil {
 		return res, reconcilePlan{}, nil, nil, planError(rel, err)
 	}
 	res.PlanChanged = !plansEquivalent(recorded, plan)
@@ -654,6 +674,45 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 	res.ChangedExecuted = diff.changedExecuted
 	res.RemovedExecuted = diff.removedExecuted
 	return res, diff, plan, data, nil
+}
+
+// compileReconcileSource compiles a changed reconciliation source deterministically:
+// it uses the structured Markdown parser/Planner with NO agent, so no model is ever
+// called to synthesize or normalize definitions for a reconciliation. A document the
+// parser recognizes as a plan is authoritative and is validated in place; then the
+// same missing-capability ownership gate the planner applies (acceptPlan) runs here,
+// so a MISSING/PARTIAL required capability with neither an owner nor a resolution
+// stops as NEEDS_HUMAN instead of proceeding through reconciliation. A document that
+// is not recognizably structured returns the stable, actionable
+// errUnsupportedReconcileSource, leaving all authoritative state untouched.
+//
+// Parse and validation failures are returned raw (no source prefix here); the caller
+// wraps them with planError so the diagnostic names the requested source Markdown
+// rather than SOP-owned plan.json. The caller must have already handled the
+// unchanged-source no-op and the persisted-plan baseline; that no-op path never
+// reaches here.
+func compileReconcileSource(content string) (*planner.Plan, error) {
+	if strings.TrimSpace(content) == "" {
+		return nil, errors.New("plan document is empty")
+	}
+	parsed, err := planner.PlanFromMarkdown(content)
+	if err != nil {
+		return nil, err
+	}
+	if parsed == nil || len(parsed.Stages) == 0 {
+		return nil, errUnsupportedReconcileSource
+	}
+	if err := parsed.Validate(); err != nil {
+		return nil, err
+	}
+	// The ownership gate: a non-EXISTS capability some stage requires, with neither
+	// an owner nor a resolution, is a genuine human decision. It must be enforced on
+	// the reconciliation path exactly as planner.acceptPlan enforces it on the
+	// initial build path, so a missing capability cannot slip through reconciliation.
+	if _, needsHuman := parsed.CapabilityGaps(); len(needsHuman) > 0 {
+		return nil, &planner.CapabilityGapError{Capabilities: needsHuman}
+	}
+	return parsed, nil
 }
 
 // desiredTasks builds the executable task definitions for a plan, wiring in the
@@ -817,18 +876,6 @@ func redefineTask(cur, d *domain.Task) *domain.Task {
 	return &updated
 }
 
-// sameTaskDefinition reports whether two tasks carry the same executable
-// definition. Dependencies are compared as sets, since their stored order is not
-// significant (the bootstrap dependency is appended, persistence returns them
-// sorted).
-func sameTaskDefinition(a, b *domain.Task) bool {
-	return a.Title == b.Title &&
-		a.Objective == b.Objective &&
-		a.AcceptanceCriteria == b.AcceptanceCriteria &&
-		a.ExecutionMode == b.ExecutionMode &&
-		sameStringSet(a.DependencyIDs, b.DependencyIDs)
-}
-
 // hasExecution reports whether authoritative lifecycle evidence shows the task's
 // execution began. Only a task that has never executed may have its definition
 // replaced or be removed. It defers to domain.Task.Executed so the classification
@@ -869,15 +916,6 @@ func autoReconcile(cur, desired *domain.Task, autoAccept func(ExecutedChange) au
 		Risk:           string(decision.Risk),
 		Reason:         decision.Reason,
 	}, true
-}
-
-// equivalentExecutedChange reports whether an executed task's definition changed
-// only in descriptive text: its executable semantics — the acceptance criteria,
-// the execution mode, and the dependencies — are identical.
-func equivalentExecutedChange(cur, desired *domain.Task) bool {
-	return cur.AcceptanceCriteria == desired.AcceptanceCriteria &&
-		cur.ExecutionMode == desired.ExecutionMode &&
-		sameStringSet(cur.DependencyIDs, desired.DependencyIDs)
 }
 
 // definitionHash is a stable hash of the fields a reconciliation replaces, so the
@@ -934,56 +972,6 @@ func sortedIDs(index map[string]*domain.Task) []string {
 	}
 	sort.Strings(ids)
 	return ids
-}
-
-// sameStringSet reports whether a and b contain the same values, order aside.
-func sameStringSet(a, b []string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	set := make(map[string]bool, len(a))
-	for _, v := range a {
-		set[v] = true
-	}
-	for _, v := range b {
-		if !set[v] {
-			return false
-		}
-	}
-	return true
-}
-
-// plansEquivalent reports whether a requested plan is identical to the recorded
-// machine plan: same project, summary, and stages (order aside).
-func plansEquivalent(a, b *planner.Plan) bool {
-	if a == nil || b == nil {
-		return a == b
-	}
-	if a.Project != b.Project || a.Summary != b.Summary || len(a.Stages) != len(b.Stages) {
-		return false
-	}
-	stages := make(map[string]planner.Stage, len(a.Stages))
-	for _, s := range a.Stages {
-		stages[s.ID] = s
-	}
-	for _, s := range b.Stages {
-		other, ok := stages[s.ID]
-		if !ok || !sameStage(other, s) {
-			return false
-		}
-	}
-	return true
-}
-
-// sameStage reports whether two plan stages carry the same definition.
-func sameStage(a, b planner.Stage) bool {
-	return a.Title == b.Title &&
-		a.Objective == b.Objective &&
-		a.Kind == b.Kind &&
-		a.ExecutionMode == b.ExecutionMode &&
-		strings.Join(a.AcceptanceCriteria, "\n") == strings.Join(b.AcceptanceCriteria, "\n") &&
-		sameStringSet(a.Dependencies, b.Dependencies) &&
-		strings.Join(a.Deliverables, "\n") == strings.Join(b.Deliverables, "\n")
 }
 
 // loadPersistedPlan reads the recorded machine plan. A missing, unreadable, or
@@ -1087,16 +1075,16 @@ func removedExecutedError(t *domain.Task) error {
 // definition and the requested one, so the human sees exactly what changed.
 func describeTaskDifference(cur, desired *domain.Task) string {
 	var lines []string
-	if cur.Title != desired.Title {
+	if canonicalProse(cur.Title) != canonicalProse(desired.Title) {
 		lines = append(lines, fmt.Sprintf("  title: %q -> %q", cur.Title, desired.Title))
 	}
-	if cur.Objective != desired.Objective {
+	if canonicalProse(cur.Objective) != canonicalProse(desired.Objective) {
 		lines = append(lines, "  objective changed")
 	}
-	if cur.AcceptanceCriteria != desired.AcceptanceCriteria {
+	if !sameAcceptanceCriteria(splitCriteria(cur.AcceptanceCriteria), splitCriteria(desired.AcceptanceCriteria)) {
 		lines = append(lines, "  acceptance criteria changed")
 	}
-	if cur.ExecutionMode != desired.ExecutionMode {
+	if !sameExecutionMode(cur.ExecutionMode, desired.ExecutionMode) {
 		lines = append(lines, fmt.Sprintf("  execution mode: %q -> %q", cur.ExecutionMode, desired.ExecutionMode))
 	}
 	if !sameStringSet(cur.DependencyIDs, desired.DependencyIDs) {
