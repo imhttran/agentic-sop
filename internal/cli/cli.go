@@ -260,6 +260,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runEval(rest, stdout, stderr, d)
 	case "resume":
 		return runResume(rest, stdout, stderr, d)
+	case "continue":
+		return runContinue(rest, stdout, stderr, d)
 	case "retry":
 		return runRetry(rest, stdout, stderr, d.getwd)
 	case "approve":
@@ -337,6 +339,8 @@ Commands:
   providers inspect configured provider runtimes and their models (--models)
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
+  continue  check (read-only) whether the active plan is safe to continue via
+            sop run: reconcile-before-continue (--check, --json)
   version   print the CLI version
   help      show this help
 `)

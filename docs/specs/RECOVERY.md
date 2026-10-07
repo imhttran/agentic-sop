@@ -292,7 +292,48 @@ records that completion as an explicit, model-free operator action.
   (`.agent-sdlc/runs/<task-id>/external-completion.json`: `completion_source`, `task_id`,
   `repository_head`, `implementation_commit`, `verification`, `recorded_by`, `recorded_at`).
 
-## 12. See Also
+## 12. Reconcile Before Continue
+
+SOP separates _interrupted-work resume_ (`sop resume`) from _plan-safe
+continuation_. Continuing an already-active plan is a governance decision: before
+another governed run, the source plan, the compiled plan, and the persisted
+lifecycle MUST be reconciled, and reconciliation MUST NOT silently rewrite plan
+semantics merely to let execution proceed.
+
+`sop continue --check [<PLAN.md>] [--json]` is the deterministic, model-free,
+read-only gate. It reuses the same diff as `sop reconcile --list-changed` (so a
+check and a reconciliation can never disagree), performs it a small bounded number
+of times to confirm stability, consults the persisted task lifecycle (via the
+approval boundary for pending gates), and reports exactly one classification and
+one next action:
+
+- `RECONCILE_CLEAN` - source, compiled plan, and state are compatible; continuation
+  is safe.
+- `RECONCILE_CHANGED` - a deterministic, semantics-preserving change (plan-level
+  metadata, or an executed task whose descriptive text alone changed); continuation
+  is safe only because task identity, lifecycle meaning, dependencies, and
+  acceptance meaning are unchanged.
+- `RECONCILE_SEMANTIC_CHANGE` - reconciliation would change plan meaning (a
+  materially changed or removed executed task, a task added/removed/updated, a task
+  identity change, or a required capability with no determined owner). It MUST stop
+  for human review and MUST NOT adopt a capability or other prerequisite silently.
+- `RECONCILE_FAILED` - reconciliation cannot establish a valid continuation state
+  (no active plan, an unreadable or uncompilable source, a store failure). It MUST stop.
+- `RECONCILE_NONDETERMINISTIC` - repeated reconciliation of the same source and
+  state disagrees (recurring model-generated repair). It MUST stop and MUST NOT
+  proceed into `sop run`.
+
+The gate MUST NOT mutate the task graph, the machine plan, its provenance, the state
+database, run history, or task attempts, and MUST NOT decide an approval, choose a
+provider or model, or execute a task. It exits zero only when the next action is
+`CONTINUE_SAFE`; `HUMAN_REVIEW_REQUIRED`, `APPROVAL_REQUIRED`, `BLOCKED`, and
+`PLAN_COMPLETE` are stop boundaries. Continuation itself remains `sop run`; the
+gate only authorizes it. The `/sop-continue` skill
+([skills/sop-continue/SKILL.md](../../skills/sop-continue/SKILL.md)) is the thin
+client: preflight, reconcile, validate, delegate to `sop run`, observe, and stop at
+the boundaries - it never commits or pushes by default.
+
+## 13. See Also
 
 - [MODEL-ROUTING.md](MODEL-ROUTING.md) — class selection and the routing table.
 - [PROVIDERS.md](PROVIDERS.md) — provider capability and availability evidence.

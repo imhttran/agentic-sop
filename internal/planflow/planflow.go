@@ -69,7 +69,7 @@ const (
 // failure.
 var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed to generate a plan from a PRD, or to normalize a PLAN.md that is not recognizable)")
 
-// errUnsupportedReconcileSource is the stable diagnostic a reconciliation returns
+// ErrUnsupportedReconcileSource is the stable diagnostic a reconciliation returns
 // when the requested source differs from the recorded one and is not recognizably a
 // structured plan. Reconciliation is deliberately deterministic and never calls a
 // model to synthesize definitions: structured compilation and comparison are
@@ -77,8 +77,10 @@ var errNoAgent = errors.New("no agent configured: set SOP_AGENT_COMMAND (needed 
 // equivalent. An operator whose source is free-form must restate it in an explicit
 // structured plan. The error text is a fixed string so repeated Inspect/Reconcile
 // calls report byte-identical diagnostics, and it is returned before any store or
-// file mutation, so the authoritative state is untouched.
-var errUnsupportedReconcileSource = errors.New("NEEDS_HUMAN: the requested plan source changed but is not a recognizable structured plan\n\nSOP reconciles a changed plan deterministically by compiling its structured Markdown (\"## Project\", \"## Summary\", and one \"## <id> — <title>\" section per stage, or a \"## Tasks\" section with \"### <id> — <title>\" stages). Structured compilation and comparison are deterministic; arbitrary model prose is not, so SOP will not call a model to synthesize or normalize definitions just for a reconciliation.\n\nRewrite the requested source explicitly in the canonical rendered layout: each stage starts with its \"## <id> — <title>\" heading, then the objective prose comes directly after the heading, followed by the optional structured sub-sections (Dependencies, Requires, Deliverables, Acceptance Criteria, Execution). Do not put the objective under an \"Objective\" subheading — that is not a recognized field. Then rerun the reconciliation. No tasks, attempts, approvals or provenance were changed")
+// file mutation, so the authoritative state is untouched. It is exported so a
+// read-only consumer (for example a continuation classifier) can distinguish an
+// uncompilable source from an operational failure without matching on its text.
+var ErrUnsupportedReconcileSource = errors.New("NEEDS_HUMAN: the requested plan source changed but is not a recognizable structured plan\n\nSOP reconciles a changed plan deterministically by compiling its structured Markdown (\"## Project\", \"## Summary\", and one \"## <id> — <title>\" section per stage, or a \"## Tasks\" section with \"### <id> — <title>\" stages). Structured compilation and comparison are deterministic; arbitrary model prose is not, so SOP will not call a model to synthesize or normalize definitions just for a reconciliation.\n\nRewrite the requested source explicitly in the canonical rendered layout: each stage starts with its \"## <id> — <title>\" heading, then the objective prose comes directly after the heading, followed by the optional structured sub-sections (Dependencies, Requires, Deliverables, Acceptance Criteria, Execution). Do not put the objective under an \"Objective\" subheading — that is not a recognized field. Then rerun the reconciliation. No tasks, attempts, approvals or provenance were changed")
 
 // TaskStore is the persistence slice Prepare needs.
 type TaskStore interface {
@@ -459,6 +461,16 @@ type ReconcileResult struct {
 	// stops on these; the read-only listing (Inspect) reports them instead, so a
 	// client can name every changed task before anything is mutated.
 	ChangedExecuted []string
+	// ChangedExecutedEquivalent and ChangedExecutedMaterial partition ChangedExecuted by
+	// whether the change is semantics-preserving (only descriptive text differs: the
+	// acceptance criteria, execution mode, and dependencies are unchanged) or material
+	// (a real executable-semantics change). They are populated only by the read-only
+	// Inspect path, so a client can tell "refresh the definition, meaning preserved"
+	// apart from "a human must review the new meaning" without re-deriving the
+	// comparison. They are nil on the applying path, which stops on the first
+	// unapproved change rather than partitioning it.
+	ChangedExecutedEquivalent []string
+	ChangedExecutedMaterial   []string
 	// RemovedExecuted lists executed tasks the requested plan drops. They cannot be
 	// approved with AcceptChanged: a removed executed task must be kept or completed
 	// first, so the listing reports them rather than offering an approval.
@@ -475,15 +487,17 @@ type ReconcileResult struct {
 // active graph: the tasks to upsert, the IDs to remove, and the classification
 // used for reporting.
 type reconcilePlan struct {
-	unchanged       []string
-	updated         []string
-	added           []string
-	removed         []string
-	accepted        []string
-	autoReconciled  []AutoReconciled
-	changedExecuted []string
-	removedExecuted []string
-	upserts         []*domain.Task
+	unchanged               []string
+	updated                 []string
+	added                   []string
+	removed                 []string
+	accepted                []string
+	autoReconciled          []AutoReconciled
+	changedExecuted         []string
+	changedExecutedEquiv    []string
+	changedExecutedMaterial []string
+	removedExecuted         []string
+	upserts                 []*domain.Task
 }
 
 // reconcileGraphMode selects how a diff disposes of a task that needs an explicit
@@ -583,7 +597,7 @@ func Inspect(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error
 // compiled by the structured Markdown parser/Planner with NO agent, so a model is
 // never called to synthesize or normalize definitions just for a reconciliation. A
 // changed source that is not recognizably structured fails with
-// errUnsupportedReconcileSource before any mutation. Initial free-form planning
+// ErrUnsupportedReconcileSource before any mutation. Initial free-form planning
 // (Prepare/handOff) still uses the configured model normalizer; only reconciliation
 // is restrictive. It honors ctx.Err() before reading or mutating anything, so a
 // canceled reconciliation reports the cancellation and changes no state.
@@ -672,6 +686,8 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 	res.Accepted = diff.accepted
 	res.AutoReconciled = diff.autoReconciled
 	res.ChangedExecuted = diff.changedExecuted
+	res.ChangedExecutedEquivalent = diff.changedExecutedEquiv
+	res.ChangedExecutedMaterial = diff.changedExecutedMaterial
 	res.RemovedExecuted = diff.removedExecuted
 	return res, diff, plan, data, nil
 }
@@ -684,7 +700,7 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 // so a MISSING/PARTIAL required capability with neither an owner nor a resolution
 // stops as NEEDS_HUMAN instead of proceeding through reconciliation. A document that
 // is not recognizably structured returns the stable, actionable
-// errUnsupportedReconcileSource, leaving all authoritative state untouched.
+// ErrUnsupportedReconcileSource, leaving all authoritative state untouched.
 //
 // Parse and validation failures are returned raw (no source prefix here); the caller
 // wraps them with planError so the diagnostic names the requested source Markdown
@@ -700,7 +716,7 @@ func compileReconcileSource(content string) (*planner.Plan, error) {
 		return nil, err
 	}
 	if parsed == nil || len(parsed.Stages) == 0 {
-		return nil, errUnsupportedReconcileSource
+		return nil, ErrUnsupportedReconcileSource
 	}
 	if err := parsed.Validate(); err != nil {
 		return nil, err
@@ -797,8 +813,16 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 			}
 			if mode == reconcileInspect {
 				// A listing reports the changed executed task instead of stopping, and
-				// keeps its current definition in the graph it validates.
+				// keeps its current definition in the graph it validates. It is classified
+				// as semantics-preserving (only descriptive text changed) or material (a
+				// real executable-semantics change) so a read-only consumer can decide
+				// whether a refresh preserves meaning.
 				out.changedExecuted = append(out.changedExecuted, d.ID)
+				if equivalentExecutedChange(task, d) {
+					out.changedExecutedEquiv = append(out.changedExecutedEquiv, d.ID)
+				} else {
+					out.changedExecutedMaterial = append(out.changedExecutedMaterial, d.ID)
+				}
 				kept = append(kept, task)
 				continue
 			}

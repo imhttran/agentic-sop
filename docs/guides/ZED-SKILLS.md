@@ -2,10 +2,12 @@
 
 This guide shows how to install the SOP skills so Zed's agent exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
-`/sop-test`, `/sop-implement`, and `/sop-end-to-end`, and how each one calls SOP.
+`/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`, and
+`/sop-continue`, and how each one calls SOP.
 
 The commands are **thin adapters**. Capability aliases call `sop prompt`;
-`/sop-end-to-end` delegates project execution to `sop run`. SOP
+`/sop-end-to-end` delegates project execution to `sop run`; `/sop-continue`
+reconciles through `sop continue --check` and continues through `sop run`. SOP
 still owns routing, provider selection, validation, the lifecycle, and approval. The
 normative behavior is in
 [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); the skill contract is in
@@ -69,16 +71,17 @@ scripts/install/install-skills.sh zed --uninstall
 
 ## The commands
 
-| Command          | Capability         | Mutates? | Use for                                            |
-| ---------------- | ------------------ | -------- | -------------------------------------------------- |
-| `/sop`           | _general entry_    | no\*     | route a general request to the right capability    |
-| `/sop-prompt`    | _CLI default_      | no\*     | an ad-hoc request with no capability chosen        |
-| `/sop-plan`      | `plan`             | no       | plans, designs, approaches, comparisons            |
-| `/sop-review`    | `review`           | no       | code, architecture, security, design review        |
-| `/sop-diagnose`  | `diagnose_failure` | no       | build, test, lint, runtime, provider, CI failures  |
-| `/sop-test`      | `design_tests`     | no       | test plans, cases, acceptance coverage, edge cases |
-| `/sop-implement` | `implement`        | **yes**  | an explicit request to change the repository       |
-| `/sop-end-to-end` | _project execution_ | **yes** | execute/resume a plan with `sop run` |
+| Command           | Capability          | Mutates? | Use for                                                  |
+| ----------------- | ------------------- | -------- | -------------------------------------------------------- |
+| `/sop`            | _general entry_     | no\*     | route a general request to the right capability          |
+| `/sop-prompt`     | _CLI default_       | no\*     | an ad-hoc request with no capability chosen              |
+| `/sop-plan`       | `plan`              | no       | plans, designs, approaches, comparisons                  |
+| `/sop-review`     | `review`            | no       | code, architecture, security, design review              |
+| `/sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
+| `/sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
+| `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
+| `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
@@ -111,6 +114,14 @@ preflight, invokes `sop run` once, observes its state, and reports genuine human
 boundaries. It adds no lifecycle or retry loop. Its contract is
 [the tracked skill](../../skills/sop-end-to-end/SKILL.md), with deterministic
 scenarios in [the evaluation specification](../testing/SOP-END-TO-END.md).
+
+`/sop-continue` continues an **already-active** plan. Before any execution it
+reconciles the source plan, the compiled plan, and persisted state through
+`sop continue --check` (read-only), and it continues through `sop run` only when
+reconciliation authorizes it. It stops for human review on any semantic change,
+nondeterminism, unsafe state, or pending approval, and never commits or pushes by
+default. Its contract is
+[the tracked skill](../../skills/sop-continue/SKILL.md).
 
 For capability aliases, everything after the command name is prompt data, passed
 to SOP as a single argument.
@@ -167,7 +178,7 @@ for example), move it aside before installing so the `/sop` command can be linke
 | Symptom                                | Cause                                                                                                               |
 | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | A command is missing from the `/` menu | The skill is not installed, or an untrusted project's project-local skills are excluded.                            |
-| No SOP commands at all                 | `~/.agents/skills/` has no SOP entries — run `./install.sh --skills zed`.                                                 |
+| No SOP commands at all                 | `~/.agents/skills/` has no SOP entries — run `./install.sh --skills zed`.                                           |
 | The command runs but fails immediately | `sop` is not on `PATH` — run `./install.sh` and check `sop version`.                                                |
 | "provider cannot IMPLEMENT"            | The selected provider cannot mutate the repository; see [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md). |
 

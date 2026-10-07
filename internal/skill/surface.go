@@ -32,6 +32,7 @@ var Commands = []Command{
 	{Name: "sop-implement", Capability: "implement", Delegation: "sop prompt --capability implement"},
 	{Name: "sop-end-to-end", Capability: "", Delegation: "sop run"},
 	{Name: "sop-historicalize", Capability: "", Delegation: "sop plan historicalize"},
+	{Name: "sop-continue", Capability: "", Delegation: "sop continue"},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts

@@ -49,12 +49,19 @@ Thin aliases in the same install expose one capability each:
 /sop-end-to-end <plan>    execute a project plan through `sop run`
 /sop-historicalize <plan> historicalize a completed or disposed plan
                           (`sop plan historicalize`)
+/sop-continue <plan>      continue an already-active plan: reconcile the source
+                          plan, compiled plan, and persisted SOP state before
+                          continuing (`sop continue --check`, then `sop run`)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
 `sop-end-to-end` skill and `sop run`; do not turn them into an ad-hoc prompt.
 That skill performs lightweight preflight and reports SOP's authoritative state.
 Read-only requests to review or plan end-to-end behavior still use `sop prompt`.
+
+Explicit `/sop-continue` requests use the `sop-continue` skill. That skill never
+reimplements SOP: it reconciles the active plan through `sop continue --check`
+(read-only) and continues through `sop run` only when reconciliation authorizes it.
 
 The capability aliases call the command below; the end-to-end entry delegates to
 `sop run`. None carries routing, provider, or lifecycle policy. Install them with

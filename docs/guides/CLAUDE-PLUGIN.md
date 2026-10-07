@@ -54,25 +54,28 @@ Remove it again with `claude plugin uninstall sop` (and
 Claude Code namespaces every plugin component under the plugin name, so the plugin named
 `sop` exposes these:
 
-| Command in Claude Code | Capability          | Mutates? | Use for                                            |
-| ---------------------- | ------------------- | -------- | -------------------------------------------------- |
-| `/sop:sop`             | _general entry_     | no       | route a general request to the right capability    |
-| `/sop:sop-prompt`      | _CLI default_       | no       | an ad-hoc request with no capability chosen        |
-| `/sop:sop-plan`        | `plan`              | no       | plans, designs, approaches, comparisons            |
-| `/sop:sop-review`      | `review`            | no       | code, architecture, security, design review        |
-| `/sop:sop-diagnose`    | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures  |
-| `/sop:sop-test`        | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases |
-| `/sop:sop-implement`   | `implement`         | **yes**  | an explicit request to change the repository       |
-| `/sop:sop-end-to-end` | _project execution_ | **yes** | execute/resume a plan with `sop run` |
+| Command in Claude Code | Capability          | Mutates? | Use for                                                  |
+| ---------------------- | ------------------- | -------- | -------------------------------------------------------- |
+| `/sop:sop`             | _general entry_     | no       | route a general request to the right capability          |
+| `/sop:sop-prompt`      | _CLI default_       | no       | an ad-hoc request with no capability chosen              |
+| `/sop:sop-plan`        | `plan`              | no       | plans, designs, approaches, comparisons                  |
+| `/sop:sop-review`      | `review`            | no       | code, architecture, security, design review              |
+| `/sop:sop-diagnose`    | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
+| `/sop:sop-test`        | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/sop:sop-implement`   | `implement`         | **yes**  | an explicit request to change the repository             |
+| `/sop:sop-end-to-end`  | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
+| `/sop:sop-continue`    | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
 
 The same names also work unprefixed — `/sop-review`, `/sop-plan`, … — when no other
 skill claims them, which is Claude Code's own behaviour for plugin skills. If you install
-the skills *and* the plugin, both installation routes expose the same SOP delegation.
+the skills _and_ the plugin, both installation routes expose the same SOP delegation.
 
 `/sop:sop-implement` runs the ad-hoc governed implementation lifecycle;
-`/sop:sop-end-to-end` delegates project execution to `sop run`. Both skills set
-`disable-model-invocation: true`, the official metadata that hides it from Claude's
-autonomous catalog — a repository change is always an explicit operator choice.
+`/sop:sop-end-to-end` delegates project execution to `sop run`;
+`/sop:sop-continue` reconciles an active plan through `sop continue --check` and
+continues it through `sop run`. All three skills set
+`disable-model-invocation: true`, the official metadata that hides them from Claude's
+autonomous catalog — repository execution is always an explicit operator choice.
 
 ## Where the plugin's content comes from
 
@@ -98,7 +101,7 @@ manifest and marketplace parse, the commands map to their canonical SOP delegati
 that no packaged file contains provider access, policy settings, model names, or
 direct-mutation instructions.
 
-Because the mirror is the canonical text, its skill bodies describe the *skill*
+Because the mirror is the canonical text, its skill bodies describe the _skill_
 installer (`./install.sh --skills claude`). As a plugin user you already have the
 commands; the full contract is
 [`skills/sop/SKILL.md`](../../skills/sop/SKILL.md).

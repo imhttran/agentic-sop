@@ -39,22 +39,24 @@ available.
 
 ## The commands
 
-| Command              | Capability         | Mutates? | Use for                                            |
-| -------------------- | ------------------ | -------- | -------------------------------------------------- |
-| `/sop:sop`           | _general entry_    | no       | route a general request to the right capability    |
-| `/sop:sop-prompt`    | _CLI default_      | no       | an ad-hoc request with no capability chosen        |
-| `/sop:sop-plan`      | `plan`             | no       | plans, designs, approaches, comparisons            |
-| `/sop:sop-review`    | `review`           | no       | code, architecture, security, design review        |
-| `/sop:sop-diagnose`  | `diagnose_failure` | no       | build, test, lint, runtime, provider, CI failures  |
-| `/sop:sop-test`      | `design_tests`     | no       | test plans, cases, acceptance coverage, edge cases |
-| `/sop:sop-implement` | `implement`        | **yes**  | an explicit request to change the repository       |
-| `/sop:sop-end-to-end` | _project execution_ | **yes** | execute/resume a plan with `sop run` |
+| Command               | Capability          | Mutates? | Use for                                                  |
+| --------------------- | ------------------- | -------- | -------------------------------------------------------- |
+| `/sop:sop`            | _general entry_     | no       | route a general request to the right capability          |
+| `/sop:sop-prompt`     | _CLI default_       | no       | an ad-hoc request with no capability chosen              |
+| `/sop:sop-plan`       | `plan`              | no       | plans, designs, approaches, comparisons                  |
+| `/sop:sop-review`     | `review`            | no       | code, architecture, security, design review              |
+| `/sop:sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
+| `/sop:sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/sop:sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
+| `/sop:sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
+| `/sop:sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
 
 Claude Code namespaces every plugin component under the plugin name, so each command
 appears as `/sop:<name>`; the same names also work unprefixed (`/sop-review`, …) when
 no other skill claims them. `/sop:sop-implement` runs the ad-hoc governed
 implementation lifecycle; `/sop:sop-end-to-end` delegates project execution to
-`sop run`. Both are hidden from Claude's autonomous catalog
+`sop run`; `/sop:sop-continue` reconciles through `sop continue --check` and
+continues through `sop run`. All three are hidden from Claude's autonomous catalog
 (`disable-model-invocation: true`) and require explicit operator intent.
 
 If `sop` is not on `PATH`, every command fails closed and tells the operator to install
