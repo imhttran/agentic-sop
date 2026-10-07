@@ -293,9 +293,14 @@ func (h Human) RequiresApprovalBeforeCommit() bool {
 // default: the deterministic rules are the baseline, and a Jev adapter must
 // demonstrate value before it is trusted (plan T037).
 type DecisionConfig struct {
-	Provider   string              `yaml:"provider"` // deterministic | jev
+	Provider   string              `yaml:"provider"` // deterministic | jev | command
 	Enabled    bool                `yaml:"enabled"`
 	Thresholds decision.Thresholds `yaml:"thresholds"`
+	// Command is the executable argv of an external, provider-neutral decision
+	// adapter, used only when provider == "command". The executable and its
+	// arguments are kept structurally separate; no shell is involved. It is
+	// empty unless a decision provider is explicitly configured.
+	Command []string `yaml:"command"`
 }
 
 // Features toggles optional capabilities.
@@ -571,9 +576,12 @@ func (c *Config) Validate() error {
 		return err
 	}
 	switch strings.TrimSpace(c.Decision.Provider) {
-	case "deterministic", "jev":
+	case "deterministic", "jev", "command":
 	default:
-		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, jev)", c.Decision.Provider)
+		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, jev, command)", c.Decision.Provider)
+	}
+	if strings.TrimSpace(c.Decision.Provider) == "command" && len(c.Decision.Command) == 0 {
+		return errors.New("config: decision.provider \"command\" requires decision.command")
 	}
 	t := c.Decision.Thresholds
 	if t.RouteToStrongModel < 0 || t.RouteToStrongModel > 1 || t.RequireHuman < 0 || t.RequireHuman > 1 {

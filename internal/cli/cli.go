@@ -13,6 +13,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/decision"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/jev"
@@ -59,6 +60,13 @@ type deps struct {
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.
 	newJEVAnalyzer func(cfg config.Config) (jev.Analyzer, error)
+	// newDecisionProvider builds the optional, provider-neutral decision provider
+	// from configuration (SEAM-003). It is consulted only when the external
+	// decision capability is enabled; a nil factory (or a nil provider, or an
+	// error) leaves the capability absent, so it is OFF by default and existing
+	// behavior is unchanged. The live policy path consumes its validated evidence
+	// through applyDecisionEvidence (SEAM-004), which can only add attention.
+	newDecisionProvider func(cfg config.Config) (decision.Provider, error)
 	// modelClass is the --model-class override for this invocation, if any. It is
 	// the highest-precedence input to the optional model-routing layer and is
 	// empty for every command that does not accept the flag.
@@ -166,9 +174,10 @@ func defaultDeps() deps {
 			// treats as non-fatal (never failing the lifecycle).
 			return jev.NewOllamaAnalyzerFromEnv()
 		},
-		stdin:       os.Stdin,
-		interactive: isTerminalReader,
-		localProbe:  localRuntimeProbe,
+		newDecisionProvider: decisionProviderFromConfig,
+		stdin:               os.Stdin,
+		interactive:         isTerminalReader,
+		localProbe:          localRuntimeProbe,
 	}
 }
 

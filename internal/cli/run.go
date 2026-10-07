@@ -301,6 +301,14 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	} else {
 		res.modelSelection = modelSelectionDoc(d.routing)
 	}
+	// Optional external decision-evidence checkpoint (SEAM-004). It can only ADD
+	// attention: it replaces a result's decision with a human boundary when a
+	// configured, validated provider returns adverse evidence, and is a strict no-op
+	// otherwise. It modifies res.decision only, never res.classification, res.gate, or
+	// res.stage, so the bounded recovery/model-escalation loop — which reads the
+	// classification, gate, and suite, never the decision — is unaffected: decision
+	// evidence stays independent of execution-model routing.
+	res = applyDecisionEvidence(ctx, cfg, d, spec, res)
 	// Persist the failure classification and the autonomy decision beside the other
 	// run artifacts before any early return, so a failure that stopped the lifecycle
 	// is still recorded. They are diagnostic evidence: nothing reads them back to
