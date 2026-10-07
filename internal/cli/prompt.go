@@ -46,7 +46,7 @@ import (
 // used, and no automatic escalation is performed for prompts (Phase 5.4 37).
 
 // promptUsage is the one-line usage for `sop prompt`.
-const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--cache] [--file PATH | PROMPT]"
+const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--cache] [--deliverable PATH]... [--file PATH | PROMPT]"
 
 // defaultPromptCapability is the conservative, read-only default: a bare prompt is
 // never treated as an implementation request (Phase 5.4 8).
@@ -84,8 +84,12 @@ type promptOptions struct {
 	file       string
 	prompt     string
 	modelClass string
-	json       bool
-	cache      bool
+	// deliverables are the operator-declared repository deliverables for a
+	// mutating prompt, projected into the lifecycle's task spec. They are
+	// validated before use and only meaningful for --capability implement.
+	deliverables []string
+	json         bool
+	cache        bool
 }
 
 // parsePromptArgs parses the prompt command's flags and positional prompt. At most
@@ -121,6 +125,15 @@ func parsePromptArgs(args []string, stderr io.Writer) (promptOptions, bool) {
 			i++
 		case strings.HasPrefix(a, "--file="):
 			opts.file = strings.TrimPrefix(a, "--file=")
+		case a == "--deliverable":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, promptUsage)
+				return promptOptions{}, false
+			}
+			opts.deliverables = append(opts.deliverables, args[i+1])
+			i++
+		case strings.HasPrefix(a, "--deliverable="):
+			opts.deliverables = append(opts.deliverables, strings.TrimPrefix(a, "--deliverable="))
 		case a == "--json":
 			opts.json = true
 		case a == "--cache":
@@ -159,6 +172,20 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitUsage
 	}
+	// Operator-declared deliverables are validated before any work. A declaration is
+	// only meaningful for the mutating capability: a read-only prompt never changes
+	// the repository, so accepting a deliverable there would promise an effect SOP
+	// cannot honor.
+	deliverables, err := validatePromptDeliverables(opts.deliverables)
+	if err != nil {
+		fmt.Fprintf(stderr, "prompt: %v\n", err)
+		return exitUsage
+	}
+	if len(deliverables) > 0 && capability != agent.Implement {
+		fmt.Fprintf(stderr, "prompt: --deliverable is only valid with --capability implement\n%s\n", promptUsage)
+		return exitUsage
+	}
+	opts.deliverables = deliverables
 
 	dir, ok := projectDir(d.getwd, stderr)
 	if !ok {
@@ -401,8 +428,11 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkItem, opts promptOptions, progress, stdout, stderr io.Writer) int {
 	// The prompt is projected into a task file for the existing lifecycle. This is
 	// the same adapter boundary workitem.FromTask documents; no new lifecycle is
-	// introduced.
-	spec := &taskfile.Spec{ID: wi.ID, Title: wi.Title, Description: wi.Content}
+	// introduced. Operator-declared deliverables are carried through it so the
+	// lifecycle's existing report-deliverable mechanism owns them: a declared report
+	// counts as a change only when its content actually changes, exactly as it does
+	// for a scheduled task.
+	spec := &taskfile.Spec{ID: wi.ID, Title: wi.Title, Description: wi.Content, Deliverables: opts.deliverables}
 
 	rid := promptRunDir(wi.ID)
 	priorStage, _ := runpkg.Load(dir, rid)

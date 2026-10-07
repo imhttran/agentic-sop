@@ -40,12 +40,19 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 **Implemented.** `sop prompt` accepts:
 
 ```text
-sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--file PATH | PROMPT]
+sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--deliverable PATH]... [--file PATH | PROMPT]
 ```
 
 **Required.** At most one of a positional prompt and `--file` MAY be given. An empty
 prompt (no positional argument and no file) MUST be a usage error. A missing or empty
 prompt file MUST be an error.
+
+**Implemented.** `--deliverable PATH` is repeatable and declares an explicit
+repository deliverable for a mutating (`IMPLEMENT`) prompt. It MUST be an explicit,
+clean, repository-relative file inside the project: an absolute or escaping path, a
+non-clean path (traversal or a directory reference), a directory-wide declaration, or
+a path inside SOP's own state tree MUST be a usage error. `--deliverable` on a
+read-only capability MUST be a usage error.
 
 ## 2. Capabilities
 
@@ -120,6 +127,25 @@ mutates the repository:
 MUST run through the governed implementation lifecycle, and its repository mutation
 MUST go through the existing tool/harness authorization path.
 
+### Declared deliverables
+
+**Implemented.** A mutating prompt MAY carry one or more `--deliverable PATH`
+declarations. They are projected into the lifecycle's `taskfile.Spec.Deliverables`
+using the **existing** report-deliverable mechanism a scheduled task uses
+([`EXECUTION.md`](EXECUTION.md)); no prompt-specific ownership rule exists. A
+declared path makes an exact repository report task-owned and therefore counted as a
+repository change, but only when its content **actually changes**:
+
+- A declared report whose content changed is progress.
+- A declared report that is unchanged, a merely announced output that was never
+  written, an unrelated pre-existing dirty file, and SOP's generated run reports and
+  state artifacts MUST still fail the no-changes / no-progress check.
+
+**Required.** The declaration authority is the operator, never the model: a
+model-generated output suggestion MUST NOT become a deliverable declaration. SOP MUST
+NOT suppress `NO_CHANGES_PRODUCED` globally, and a declaration MUST NOT exempt a
+whole directory or SOP state.
+
 ## 7. Provider Validation
 
 **Required.** The FINAL per-prompt model selection MUST pass through the existing
@@ -156,6 +182,7 @@ for a task) and MUST NOT be applied to a read-only prompt. See
 - An `implement` prompt additionally writes the standard run artifacts
   (`task.md`, `plan.md`, `implementation.md`, `report.json`, …), and — when bounded
   escalation applies (§8) — one attempt record per try under `attempts/NNN.json`.
+  An operator-declared `--deliverable` is rendered into `task.md` as a Deliverable.
 
 **Required.** No artifact MAY contain a credential or hidden reasoning.
 

@@ -2,10 +2,12 @@ package cli
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/planner"
@@ -31,6 +33,41 @@ func planTaskDeliverables(dir string, task *domain.Task) []string {
 		}
 	}
 	return nil
+}
+
+// validatePromptDeliverables validates operator-declared deliverables for
+// `sop prompt --capability implement` and returns them in declaration order. A
+// declaration MUST name an explicit repository FILE inside the project: an empty
+// value, an absolute or escaping path, a non-clean path (traversal or a directory
+// reference), a directory-wide declaration, or a path inside SOP's own state tree
+// is refused. This keeps the declaration authority with the operator while
+// refusing a whole-directory exemption or SOP state, so a declared report is the
+// only thing a declaration can make task-owned. The returned paths are projected
+// verbatim into the lifecycle's taskfile.Spec.Deliverables.
+func validatePromptDeliverables(paths []string) ([]string, error) {
+	out := make([]string, 0, len(paths))
+	for _, raw := range paths {
+		path := strings.TrimSpace(raw)
+		if path == "" {
+			return nil, fmt.Errorf("deliverable path is empty")
+		}
+		// safeRepoPath rejects absolute and escaping paths; the clean comparison
+		// rejects an uncleaned path (a `..` segment or a trailing slash that would
+		// otherwise name a directory).
+		if !safeRepoPath(path) || filepath.ToSlash(filepath.Clean(path)) != path {
+			return nil, fmt.Errorf("deliverable %q must be a clean, repository-relative path inside the project", raw)
+		}
+		if path == config.DirName || strings.HasPrefix(path, config.DirName+"/") {
+			return nil, fmt.Errorf("deliverable %q is SOP state; declare a repository file, not SOP's own state", raw)
+		}
+		// A directory-wide declaration (for example docs/reports) names no file and
+		// would exempt a whole tree; require an explicit file.
+		if filepath.Ext(path) == "" {
+			return nil, fmt.Errorf("deliverable %q is a directory-wide declaration; declare an explicit file", raw)
+		}
+		out = append(out, path)
+	}
+	return out, nil
 }
 
 // Explicit report files in a subdirectory are repository deliverables, unlike
