@@ -621,8 +621,7 @@ authorized by this plan.
 
 ### Deliverables
 
-- A comparison report: same repaired CLEF-014 task/context, same default budget,
-  harness before vs after the CONV-004 change.
+- `docs/reports/implementation-convergence/CONV-006-clef-dogfood-comparison.md` - the comparison report: same repaired CLEF-014 task/context, same default budget, harness before vs after the CONV-004 change.
 
 ### Acceptance Criteria
 
