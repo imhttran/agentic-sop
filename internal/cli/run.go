@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -58,17 +59,18 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 	if opts.taskArg != "" {
 		return runSingleTask(opts.taskArg, stdout, stderr, d)
 	}
-	return runGraph(opts.planArg, stdout, stderr, d)
+	return runGraph(opts.planArg, opts.maxTasks, stdout, stderr, d)
 }
 
 // runUsage is the one-line usage for `sop run`.
-const runUsage = "usage: sop run [--model-class small|medium|large] [PLAN.md | --task TASK.md]"
+const runUsage = "usage: sop run [--max-tasks N] [--model-class small|medium|large] [PLAN.md | --task TASK.md]"
 
 // runOptions are the parsed arguments of `sop run`.
 type runOptions struct {
 	planArg    string
 	taskArg    string
 	modelClass string
+	maxTasks   int
 }
 
 // parseRunArgs parses "sop run [--model-class CLASS] [PLAN.md | --task TASK.md]":
@@ -97,6 +99,26 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, bool) {
 			i++
 		case strings.HasPrefix(a, "--model-class="):
 			opts.modelClass = strings.TrimPrefix(a, "--model-class=")
+		case a == "--max-tasks":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, runUsage)
+				return runOptions{}, false
+			}
+			n, ok := parseMaxTasks(args[i+1])
+			if !ok {
+				fmt.Fprintf(stderr, "invalid --max-tasks value %q: want a positive integer\n%s\n", args[i+1], runUsage)
+				return runOptions{}, false
+			}
+			opts.maxTasks = n
+			i++
+		case strings.HasPrefix(a, "--max-tasks="):
+			raw := strings.TrimPrefix(a, "--max-tasks=")
+			n, ok := parseMaxTasks(raw)
+			if !ok {
+				fmt.Fprintf(stderr, "invalid --max-tasks value %q: want a positive integer\n%s\n", raw, runUsage)
+				return runOptions{}, false
+			}
+			opts.maxTasks = n
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "unknown flag %s\n%s\n", a, runUsage)
 			return runOptions{}, false
@@ -112,7 +134,22 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, bool) {
 		fmt.Fprintln(stderr, runUsage)
 		return runOptions{}, false
 	}
+	if opts.taskArg != "" && opts.maxTasks > 0 {
+		fmt.Fprintln(stderr, runUsage)
+		return runOptions{}, false
+	}
 	return opts, true
+}
+
+// parseMaxTasks parses the --max-tasks value: a strictly positive integer. A
+// non-positive, non-numeric, or blank value is rejected so the operator
+// execution bound can never be silently ignored or treated as unlimited.
+func parseMaxTasks(raw string) (int, bool) {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // runSingleTask runs one task file through the local lifecycle.

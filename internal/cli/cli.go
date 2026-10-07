@@ -317,7 +317,7 @@ Commands:
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)
   review    review the current changes with the configured engine
-  run       run [PLAN.md | --task TASK.md]  (normal entry point)
+  run       run [--max-tasks N] [PLAN.md | --task TASK.md]  (normal entry point)
   prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json, --cache)
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
