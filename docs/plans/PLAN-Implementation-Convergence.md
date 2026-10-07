@@ -392,6 +392,65 @@ run in IMPLEMENT/FIX that has sufficient context must converge toward a mutation
 attempt, a concrete blocker, or an explicit terminal failure, instead of merely
 being bounded.
 
+This is a bounded implementation task, not an architecture-discovery task. The
+authoritative production targets, the primary acceptance regressions, the root
+cause, and the required mutation are stated here; read only those, then implement
+the change. Do not perform broad repository discovery.
+
+AUTHORITATIVE PRODUCTION TARGETS (read; implement in these):
+- `internal/ollamaagent/orchestrate.go` - `executePhased`, the shared IMPLEMENT/FIX loop, and its existing `implFinalize` tool-denial path (the in-repo precedent to reuse).
+- `internal/ollamaagent/state.go` - `executionState`: `stalled`, `observeDiscovery`, `observeMutation`, `countNonMutatingInteraction`.
+- `internal/ollamaagent/policy.go` - `CapabilityPolicy`, `policyFor`, and the thresholds `implementNowAfter` (12) and `staleIterations` (5).
+
+AUTHORITATIVE REGRESSION TESTS (primary acceptance; they MUST pass UNCHANGED):
+- `internal/ollamaagent/convergence_regression_test.go`:
+  - `TestConvergenceImplementCreditedDiscoveryStopsAtNoProgressBound`
+  - `TestConvergenceImplementIsDeterministic`
+  - `TestConvergenceFixCreditedDiscoveryStopsAtNoProgressBound`
+  - `TestConvergenceFixIsDeterministic`
+
+ROOT CAUSE (established by CONV-001; do not re-diagnose):
+The shared phased engine bounds a non-mutating run - it stops at
+`implementNowAfter + staleIterations` (12 + 5 = 17) - but it never REQUIRES
+convergence: after the discovery window it still allows non-mutating repository
+tools, so a model can consume the entire pre-mutation window and the stale
+allowance with read-only activity and produce no mutation, no blocker, and no
+outcome. `stalled` only counts stale turns; the only tool-revocation phase
+today is `implFinalize`, reachable only after a mutation (or at the
+unreachable `implementLateStageAfter`). There is no pre-mutation denial of
+non-mutating tools.
+
+REQUIRED MUTATION:
+In the shared IMPLEMENT/FIX phased path, once the bounded discovery window has
+closed (`iteration > implementNowAfter`) and no mutation has been observed
+for the `stale_iterations` allowance, deny non-mutating repository tools
+(`read_file`, `list_files`, `search_files`, and non-mutating
+`run_command`) with a correction prompt, while keeping mutation tools
+available, so the model must either attempt a mutation or return a truthful
+`needs_human`/`failed` outcome. A run that still refuses terminates
+with the existing `IMPLEMENT_NO_PROGRESS` / `FIX_NO_PROGRESS`
+(`*noProgressError`) and the retryable disposition. Reuse the existing
+`stalled`/`observeDiscovery` accounting and the existing
+`implFinalize` denial mechanism; introduce no new budget knob.
+
+NON-GOALS:
+- No architecture redesign and no new execution engine.
+- No provider-, model-, or domain-specific behavior (no Clef/Ollama/oMLX/Julia).
+- No new iteration/stale/tool-call budget knob; change no budget.
+- No plan-schema, approval, lifecycle, retry, or checkpoint change.
+- No model-routing or provider-selection change.
+- Do not edit, weaken, or rewrite the CONV-002/CONV-003 regressions.
+
+DISCOVERY CUTOFF:
+Read only the named production targets, the named regression tests, and at most
+the directly required adjacent helper/type definitions. After those bounded
+reads, IMPLEMENT THE CHANGE. Do not perform broad repository discovery.
+
+FIRST EXPECTED MUTATION:
+`internal/ollamaagent/state.go` (the bounded enforcement accounting), then
+`internal/ollamaagent/orchestrate.go` (the pre-mutation denial in
+`executePhased`).
+
 ### Authoritative Inputs
 
 - `internal/ollamaagent/orchestrate.go` (`executePhased`)
@@ -501,8 +560,7 @@ gates, with explicit attention to safety and lifecycle behavior.
 
 ### Deliverables
 
-- A verification report recording the focused regressions, the full suite, and
-  the safety/lifecycle checks below.
+- `docs/reports/implementation-convergence/CONV-005-regression-safety.md` - the verification report recording the focused regressions, the full suite, and the safety/lifecycle checks below.
 
 ### Acceptance Criteria
 

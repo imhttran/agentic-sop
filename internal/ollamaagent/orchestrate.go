@@ -276,6 +276,16 @@ func (p implementPhase) label() string {
 // invocation in any phase, so early completion is preserved, and the capability's
 // MaxIterations stays the hard safety ceiling.
 //
+// Once the bounded discovery window has closed and no mutation has been observed
+// for the stale allowance, the loop requires convergence: non-mutating repository
+// tools (read_file, list_files, search_files, and non-mutating run_command) are
+// denied with a correction prompt while the mutation tools remain available, so
+// the model must either attempt a mutation or return a truthful needs_human/failed
+// outcome. A run that still refuses terminates through the existing no-progress
+// guard with IMPLEMENT_NO_PROGRESS / FIX_NO_PROGRESS (see stalled). This reuses
+// the existing discovery/stale accounting and the FINALIZE denial mechanism; it
+// introduces no new budget knob.
+//
 // A mutated run is force-finalized once it reaches the capability's
 // ForceFinalizeAfter, evaluated before the next model turn so the cutoff does not
 // depend on the shape of the turn that crosses it: a model that keeps writing (or
@@ -483,6 +493,34 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			messages = append(messages,
 				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
 				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + recoverySuffix(recovery)},
+			)
+			continue
+		}
+
+		// Pre-mutation convergence enforcement. Once the bounded discovery window
+		// has closed (iteration > implementNowAfter) and no mutation has been
+		// observed for the stale allowance, the run may no longer make progress by
+		// inspecting: non-mutating repository tools are denied with a correction
+		// prompt while the mutation tools remain available. This reuses the existing
+		// discovery/stale accounting (mutationConvergenceRequired) and the FINALIZE
+		// RecordDenied mechanism; it introduces no new budget knob. A run that still
+		// refuses falls through to the no-progress termination below.
+		if st.mutationConvergenceRequired(iteration) && nonMutatingRepositoryTool(name, args) {
+			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
+			h.tools.RecordDenied(name, args, "discovery has ended; make the requested repository change or return a truthful outcome")
+			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, implementConvergenceCorrection, nil))
+			progressStop := st.stalled(false, false, h.staleLimitFor(deliverables, st, b.StaleIterations))
+			terminate := repeatStop || progressStop
+			h.recordImplementTurn(req, st.phase, iteration, name, lastReq, st.progress.label(), recovery, terminate)
+			if terminate {
+				if progressStop {
+					return "", h.implementNoProgressError(req, st, ev, iteration, lastTool, lastReq)
+				}
+				return "", h.noProgressError(req, iteration, lastTool, lastReq)
+			}
+			messages = append(messages,
+				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
+				chatMessage{Role: "user", Content: implementConvergenceCorrection},
 			)
 			continue
 		}
