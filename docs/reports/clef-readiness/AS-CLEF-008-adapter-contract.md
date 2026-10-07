@@ -1,10 +1,10 @@
 # AS-CLEF-008 — Define the Adapter-Side Contract
 
-Status: contract complete (documentation-only). This report is the only repository change.
-This note is the handoff to the separate Clef adapter plan. It defines the exact
-contract that **sop-decision-adapters** must satisfy. No Clef adapter is
-implemented in agentic-sop, and sop-decision-adapters is not modified by this
-task.
+Status: FINAL — contract complete (documentation-only). This report is the
+AS-CLEF-008 deliverable and the only repository change of this task. This note is
+the handoff to the separate Clef adapter plan. It defines the exact contract that
+**sop-decision-adapters** must satisfy. No Clef adapter is implemented in
+agentic-sop, and sop-decision-adapters is not modified by this task.
 
 ## 0. Scope, ownership, and out-of-scope statement
 
@@ -38,13 +38,16 @@ and policy code located during discovery:
 | Evidence input | `internal/jev` (`jev.Evidence`, `jev.EvidenceItem`) | typed evidence consumed by `DecideEarly` |
 | Live call sites | `internal/cli/early_jev.go:184`, `internal/cli/autonomy.go:22`, `internal/cli/reconcile.go:126` | policy consumers |
 
-Status of the boundary as found: **PARTIAL**. `internal/decision` defines the
-provider interface and result shape but has **no production caller** — its only
-in-tree consumers are tests (`internal/e2e/lifecycle/early_decision_test.go`).
-The live policy path is `internal/autonomy`'s pure functions. Sections below
-mark which contract terms are backed by existing code (the `internal/decision`
-types and `internal/autonomy` policy) and which are adapter-side obligations not
-yet realized in agentic-sop.
+Status of the boundary as found: **PARTIAL (sufficient, unwired)**. `internal/decision`
+defines the provider interface and result shape but has **no production caller** — its
+only in-tree consumers are tests (`internal/e2e/lifecycle/early_decision_test.go`).
+The live policy path is `internal/autonomy`'s pure functions. AS-CLEF-003/004
+confirmed this is a provider-neutral boundary with **no material abstraction gap**
+(AS-CLEF-004 **NOT_REQUIRED**), and AS-CLEF-005/007 supplied the fail-closed
+behavioral suite and the architecture guard consumed below. Sections mark which
+contract terms are backed by existing code (the `internal/decision` types and
+`internal/autonomy` policy) and which are adapter-side obligations not yet realized
+in agentic-sop.
 
 ## 1. Request fields
 
@@ -247,6 +250,12 @@ analogue is the not-implemented provider construction path.
 - An unsupported capability must be distinguishable at the boundary from a
   supported decision: operators must be able to tell "no adapter can answer
   this" from "an adapter answered LOW".
+- **Construction and transport are adapter-owned.** `decision.NewProvider` is the
+  in-tree selector; it implements only the deterministic provider. The contract is
+  semantic: an external adapter satisfies it by producing a bounded `Decision`
+  through whatever provider-neutral construction/transport seam agentic-sop later
+  exposes. The contract does **not** require agentic-sop to import, link, or name
+  the adapter, and the adapter's wire encoding is not part of it (§10, §11).
 
 ## 9. What SOP policy consumes and what it deliberately ignores
 
@@ -356,17 +365,30 @@ nothing.
 | Committed to the agentic-sop documentation location. | This file: `docs/reports/clef-readiness/AS-CLEF-008-adapter-contract.md` (repository change; committed through the repo's normal workflow). |
 | No Clef adapter implemented; sop-decision-adapters unmodified. | §0 and §11 (explicit external-obligation statement); no code changed by this task. |
 
-## 13. Deferrals
+## 13. Prior-task inputs and remaining notes
 
-- **Behavioral failure/approval semantics** (whether a provider failure could
-  ever become implicit success under load/timeouts) — not proven here;
-  **deferred to AS-CLEF-005** (AS-CLEF-002 §4).
-- **Architecture guard preventing provider leakage** — no `internal/archtest`
-  guard exists; **deferred to AS-CLEF-007** (AS-CLEF-006 §7).
-- **A production config selecting a non-deterministic `decision.Provider`** —
-  searches over `internal` found only test hits; recorded as "not found
-  in-tree", not as impossible (AS-CLEF-002 §4).
+AS-CLEF-005 and AS-CLEF-007 are complete and are consumed here as inputs, not
+deferred:
+
+- **Behavioral failure/approval semantics** — proven by the AS-CLEF-005 suite
+  `internal/decision/governance_test.go` (provider unavailable, timeout, malformed,
+  empty, invalid confidence, unknown/indeterminate, low confidence, internal error;
+  no task-state mutation). This contract's §6–§9 obligations are the adapter-side
+  mirror of that verified, fail-closed behavior.
+- **Architecture guard** — present as `internal/archtest/guard_test.go`
+  (`TestArchitectureGuard`), which fails if a core/policy package acquires a
+  forbidden provider import. It is consumed as provider-neutrality evidence (§0).
+
+Remaining note (non-blocking; carried into AS-CLEF-010):
+
+- **No production consumer of a non-deterministic `decision.Provider`.** Searches
+  for `decision.NewProvider`/`decision.Route` over `internal` found only test hits,
+  and `config.DecisionConfig.Provider` is validated but never wired to a provider
+  constructor in production. The contract is therefore satisfiable by an external
+  adapter, but wiring an external adapter into the live policy path is a separate,
+  provider-neutral integration step — not part of this contract and not
+  Clef-specific.
 
 BLOCKED is not used: every contract section required by the PRD is defined with
-cited in-tree evidence or explicitly marked as an adapter-side obligation, and
-the remaining gaps are deferred with named evidence.
+cited in-tree evidence or explicitly marked as an adapter-side obligation, and the
+one remaining limitation is non-blocking and named with evidence.
