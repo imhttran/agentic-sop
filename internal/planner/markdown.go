@@ -325,7 +325,7 @@ func (p *Planner) Compile(ctx context.Context, markdown string) (*Plan, error) {
 		Task:               compileTaskPrompt,
 		Input:              markdown,
 		OutputRequirements: planOutputRequirements,
-	})
+	}, PlanContext{})
 	if err != nil {
 		return nil, err
 	}

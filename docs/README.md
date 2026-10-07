@@ -183,6 +183,7 @@ is owned by the documents they link.
 - [reports/PERFORMANCE-BASELINE.md](reports/PERFORMANCE-BASELINE.md) — the pre-performance baseline (CLOSE-010): the measured numbers future performance work is compared against. The measurement model is [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
 - [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) — the Phase 9 adoption decision (ORCH-012): multi-agent orchestration is verified, and the deterministic gate keeps it **opt-in** — default execution stays single-agent.
 - [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
+- [reports/planner/SOP-PLANNER-CAP-001-capability-context.md](reports/planner/SOP-PLANNER-CAP-001-capability-context.md) — the per-task planner capability-context fix: the compiled capability inventory is now authoritative at the task-level planning boundary, so a repository discovery target is no longer promoted to an external prerequisite capability.
 
 ## Historical Documentation
 

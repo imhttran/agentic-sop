@@ -516,11 +516,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		_ = rn.SetStage(runpkg.Planning)
 		ar.Emit(activity.StagePlan, "generating plan", "")
 		stop := rec.Measure(perf.StagePlan)
+		// The compiled plan's capability inventory is authoritative for this task-level
+		// plan (SOP-PLANNER-CAP-001), so the planner records existing capabilities
+		// instead of re-deriving them from task prose and does not promote a repository
+		// discovery target to an external prerequisite. An ad-hoc/no-plan context is
+		// empty and preserves the previous behavior.
 		plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
 			rec.PlanRepair()
 			rec.AgentCall()
 			fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
-		}).Generate(ctx, d.taskInput(spec.ID, spec.Render()))
+		}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), loadPlanContext(dir, spec.ID))
 		stop()
 		rec.AgentCall()
 		if err != nil {

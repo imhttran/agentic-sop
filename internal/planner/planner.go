@@ -16,7 +16,10 @@ const planTaskPrompt = `Create an implementation plan from the PRD provided as i
 
 When the work integrates with or extends an existing system, do not assume its
 capabilities. Discover them from the repository first, then plan against what
-actually exists.
+actually exists. When an authoritative plan context is provided with the input,
+treat its capability model as binding: do not re-derive or downgrade a capability
+it already declares, and do not turn a repository discovery target it names into
+an external prerequisite.
 
 Requirements:
 - Inspect the existing system's boundaries before committing to tasks: its
@@ -149,17 +152,38 @@ const maxPlanRepairs = 2
 // depends on a capability whose owner the requirements do not determine is a
 // genuine human decision and is surfaced as such. It never writes files or
 // touches workflow state.
+//
+// It is the no-context entry point: use GenerateWithContext for a task that is a
+// stage of an already-compiled plan, so the compiled capability inventory is
+// authoritative for the task-level plan.
 func (p *Planner) Generate(ctx context.Context, prd string) (*Plan, error) {
+	return p.GenerateWithContext(ctx, prd, PlanContext{})
+}
+
+// GenerateWithContext is Generate for a task-level plan that belongs to an
+// already-compiled plan. The PlanContext's capability model (SOP-PLANNER-CAP-001)
+// is authoritative: it is given to the agent so it does not re-derive existing
+// capabilities or promote a repository discovery target to an external
+// prerequisite, and it is reconciled deterministically against the generated plan
+// before validation, so a cosmetic re-derivation can never downgrade a known
+// capability and trigger recurring capability repair. An empty PlanContext is
+// exactly Generate.
+func (p *Planner) GenerateWithContext(ctx context.Context, prd string, pctx PlanContext) (*Plan, error) {
 	if strings.TrimSpace(prd) == "" {
 		return nil, fmt.Errorf("prd is empty")
+	}
+
+	input := prd
+	if block := pctx.promptBlock(); block != "" {
+		input = block + "\n\n" + prd
 	}
 
 	plan, err := p.generateValid(ctx, agent.Request{
 		Capability:         agent.Plan,
 		Task:               planTaskPrompt,
-		Input:              prd,
+		Input:              input,
 		OutputRequirements: planOutputRequirements,
-	})
+	}, pctx)
 	if err != nil {
 		return nil, err
 	}
@@ -172,13 +196,13 @@ func (p *Planner) Generate(ctx context.Context, prd string) (*Plan, error) {
 // asks for a correction; this is bounded by maxPlanRepairs so a persistently
 // invalid plan fails cleanly instead of looping. Validation stays the sole
 // authority: the agent is never asked to approve its own output.
-func (p *Planner) generateValid(ctx context.Context, req agent.Request) (*Plan, error) {
+func (p *Planner) generateValid(ctx context.Context, req agent.Request, pctx PlanContext) (*Plan, error) {
 	for repairs := 0; ; repairs++ {
 		response, err := p.agent.Generate(ctx, req)
 		if err != nil {
 			return nil, fmt.Errorf("agent: %w", err)
 		}
-		plan, err := decodePlan(response.Content)
+		plan, err := decodePlan(response.Content, pctx)
 		if err == nil {
 			return plan, nil
 		}
@@ -194,8 +218,11 @@ func (p *Planner) generateValid(ctx context.Context, req agent.Request) (*Plan, 
 
 // decodePlan parses an agent's plan JSON and validates the execution graph
 // (ids, references, cycles, non-empty). It is the deterministic authority on
-// plan validity; no model is consulted.
-func decodePlan(content string) (*Plan, error) {
+// plan validity; no model is consulted. The authoritative PlanContext is applied
+// before validation (see applyPlanContext), so a known capability is never
+// downgraded or paralleled by a cosmetic re-derivation and no repair round is
+// spent on it.
+func decodePlan(content string, pctx PlanContext) (*Plan, error) {
 	data, err := normalize.JSON(content)
 	if err != nil {
 		return nil, fmt.Errorf("parse agent response: %w", err)
@@ -204,6 +231,7 @@ func decodePlan(content string) (*Plan, error) {
 	if err := json.Unmarshal(data, &plan); err != nil {
 		return nil, fmt.Errorf("parse agent response: %w", err)
 	}
+	applyPlanContext(&plan, pctx)
 	if err := plan.Validate(); err != nil {
 		return nil, err
 	}
