@@ -173,8 +173,28 @@ func (s *Store) Save(task *domain.Task) error {
 // cascade-deleting the dependency edges other tasks hold on this one. Child
 // collections are replaced from the value, so a full task round-trips its
 // history rather than losing it.
+//
+// It is composed of the phase-addressable helpers upsertTaskRow,
+// replaceDependencies, and replaceAttempts so that callers needing
+// order-independent multi-task writes (see ReplaceGraph) can run the row
+// phase for every task before writing any dependency edge. Save keeps the
+// original single-task sequence.
 func upsertTask(tx *sql.Tx, task *domain.Task) error {
-	if _, err := tx.Exec(`
+	if err := upsertTaskRow(tx, task); err != nil {
+		return err
+	}
+	if err := replaceDependencies(tx, task); err != nil {
+		return err
+	}
+	return replaceAttempts(tx, task)
+}
+
+// upsertTaskRow upserts only the tasks row for task, leaving child collections
+// untouched. It uses INSERT ... ON CONFLICT(id) DO UPDATE (never INSERT OR
+// REPLACE) so updating an existing task does not cascade-delete the dependency
+// edges other tasks hold on it.
+func upsertTaskRow(tx *sql.Tx, task *domain.Task) error {
+	_, err := tx.Exec(`
 		INSERT INTO tasks
 		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -191,30 +211,45 @@ func upsertTask(tx *sql.Tx, task *domain.Task) error {
 			updated_at = excluded.updated_at
 	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
-		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano)); err != nil {
-		return err
-	}
+		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
+	return err
+}
 
+// replaceDependencies deletes this task's own dependency edges and reinserts
+// them from the value. Other tasks' edges are never touched.
+func replaceDependencies(tx *sql.Tx, task *domain.Task) error {
 	if _, err := tx.Exec("DELETE FROM task_dependencies WHERE task_id = ?", task.ID); err != nil {
 		return err
 	}
-	if err := insertDependencies(tx, task); err != nil {
-		return err
-	}
+	return insertDependencies(tx, task)
+}
 
+// replaceAttempts deletes this task's own attempt rows and reinserts them from
+// the value. Other tasks' attempts are never touched.
+func replaceAttempts(tx *sql.Tx, task *domain.Task) error {
 	if _, err := tx.Exec("DELETE FROM task_attempts WHERE task_id = ?", task.ID); err != nil {
 		return err
 	}
 	return insertAttempts(tx, task)
 }
 
-// ReplaceGraph applies a reconciled task set in a single transaction: each task
-// is upserted (preserving the dependencies and attempts carried on the value)
-// and the listed task IDs are removed. Deletions cascade to a removed task's
-// dependency edges, attempts, and handoffs; no other row is touched. It is the
-// persistence primitive for explicit reconciliation, so a failure rolls the
-// whole change back and leaves the previous graph authoritative. Callers must
-// have validated the resulting graph first (see planflow.Reconcile).
+// ReplaceGraph applies a reconciled task set in a single transaction: every
+// task row is upserted (preserving the dependencies and attempts carried on the
+// value), its child collections are replaced, and the listed task IDs are
+// removed. Deletions cascade to a removed task's dependency edges, attempts,
+// and handoffs; no other row is touched.
+//
+// Writes are phased inside the one transaction: deletions, then every task row,
+// then every task's dependency edges, then every task's attempts. Rows are
+// written before dependency edges so the graph persists in any order: SQLite
+// foreign keys require a referenced task to exist first, so a task listed
+// earlier may depend on a task listed later (including a newly added task)
+// without a foreign-key failure.
+//
+// It is the persistence primitive for explicit reconciliation, so a failure
+// rolls the whole change back and leaves the previous graph authoritative.
+// Callers must have validated the resulting graph first (see
+// planflow.Reconcile).
 func (s *Store) ReplaceGraph(tasks []*domain.Task, remove []string) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -222,16 +257,35 @@ func (s *Store) ReplaceGraph(tasks []*domain.Task, remove []string) error {
 	}
 	defer tx.Rollback()
 
+	// Phase 1: deletions. Cascades to the removed tasks' edges, attempts, and
+	// handoffs.
 	for _, id := range remove {
 		if _, err := tx.Exec("DELETE FROM tasks WHERE id = ?", id); err != nil {
 			return err
 		}
 	}
+
+	// Phase 2: task rows, before any dependency edge references them.
 	for _, task := range tasks {
-		if err := upsertTask(tx, task); err != nil {
+		if err := upsertTaskRow(tx, task); err != nil {
 			return err
 		}
 	}
+
+	// Phase 3: dependency edges.
+	for _, task := range tasks {
+		if err := replaceDependencies(tx, task); err != nil {
+			return err
+		}
+	}
+
+	// Phase 4: attempts.
+	for _, task := range tasks {
+		if err := replaceAttempts(tx, task); err != nil {
+			return err
+		}
+	}
+
 	return tx.Commit()
 }
 
