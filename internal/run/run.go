@@ -79,6 +79,23 @@ func New(projectDir, id string) (*Run, error) {
 	return r, nil
 }
 
+// Open returns a handle to the task's run directory for provenance writes that
+// must not start a new run. Unlike New it performs no destructive setup: it never
+// clears attempts/ and never rewrites state.json, so an existing run's evidence
+// (its stage, its attempt records, its approval artifacts) is preserved byte for
+// byte. The directory is created only when it does not already exist, so a task
+// that never ran still gets a place for its artifact.
+func Open(projectDir, id string) (*Run, error) {
+	if strings.TrimSpace(id) == "" {
+		return nil, errors.New("run: id is required")
+	}
+	dir := filepath.Join(projectDir, config.DirName, runsDirName, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("run: create %s: %w", dir, err)
+	}
+	return &Run{dir: dir}, nil
+}
+
 // Dir returns the run directory.
 func (r *Run) Dir() string { return r.dir }
 

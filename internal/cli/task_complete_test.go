@@ -6,8 +6,10 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -171,4 +173,76 @@ func TestTaskCompleteExternalRequiresExternalFlag(t *testing.T) {
 	if code, _, _ := runCLIWithAgent(t, dir, nil, "task", "complete", "S001"); code != exitUsage {
 		t.Fatalf("completion without --external must be a usage error, got %d", code)
 	}
+}
+
+// TestTaskCompleteExternalPreservesRunEvidence proves that recording an external
+// completion never destroys the task's existing run evidence. The provenance write
+// binds the existing run directory, so a prior terminal stage, the attempt records
+// under attempts/, and the original approval request all survive — the original
+// PENDING request is preserved in the append-only history while the head is superseded.
+func TestTaskCompleteExternalPreservesRunEvidence(t *testing.T) {
+	dir := t.TempDir()
+	head := setupExtProject(t, dir, extCompleteConfig, autoPlanDoc)
+
+	// Seed an existing run with the evidence an external completion must not clobber.
+	rn, err := runpkg.New(dir, "S001")
+	if err != nil {
+		t.Fatalf("new run: %v", err)
+	}
+	if err := rn.SetStage(runpkg.Failed); err != nil {
+		t.Fatal(err)
+	}
+	if err := rn.WriteAttemptRecord(runpkg.AttemptRecord{
+		Version: runpkg.AttemptRecordVersion, Attempt: 1, Result: runpkg.AttemptFailed,
+		Timestamp: time.Unix(0, 0).UTC().Format(time.RFC3339),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := rn.SaveApproval(domain.ApprovalRequest{
+		ID: "S001-gate", TaskID: "S001", Status: domain.ApprovalPending,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	statePath := filepath.Join(rn.Dir(), "state.json")
+	attemptPath := filepath.Join(rn.Dir(), "attempts", "001.json")
+	stateBefore := readBytesT(t, statePath)
+	attemptBefore := readBytesT(t, attemptPath)
+
+	code, out, errOut := runCLIWithAgent(t, dir, nil, "task", "complete", "S001", "--external", "--commit", head)
+	if code != exitOK {
+		t.Fatalf("complete: code=%d stdout=%s stderr=%s", code, out, errOut)
+	}
+
+	// The run's own evidence is preserved byte for byte.
+	if got := readBytesT(t, statePath); string(got) != string(stateBefore) {
+		t.Errorf("state.json was reset by external completion:\n before=%s\n after =%s", stateBefore, got)
+	}
+	if got := readBytesT(t, attemptPath); string(got) != string(attemptBefore) {
+		t.Errorf("attempts/001.json was destroyed by external completion:\n before=%s\n after =%s", attemptBefore, got)
+	}
+
+	// The original PENDING approval is preserved in the append-only history and the
+	// head is superseded, so no actionable PENDING head remains.
+	history := runpkg.At(rn.Dir()).ApprovalHistory()
+	if len(history) != 1 || history[0].ID != "S001-gate" || history[0].Status != domain.ApprovalPending {
+		t.Errorf("approval history = %+v, want the original PENDING request", history)
+	}
+	if got, ok := runpkg.At(rn.Dir()).Approval(); !ok || got.Status == domain.ApprovalPending {
+		t.Errorf("approval head = %+v, %v; want a resolved (non-PENDING) head", got, ok)
+	}
+
+	// The provenance artifact is still written beside the preserved evidence.
+	if _, err := os.Stat(filepath.Join(rn.Dir(), "external-completion.json")); err != nil {
+		t.Errorf("external-completion.json missing: %v", err)
+	}
+}
+
+func readBytesT(t *testing.T, path string) []byte {
+	t.Helper()
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return data
 }

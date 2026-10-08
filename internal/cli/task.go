@@ -187,8 +187,9 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 		RecordedAt:           time.Now().UTC(),
 	}
 	// Best-effort provenance: a failed artifact write is reported but never changes the
-	// recorded completion.
-	if rn, rerr := runpkg.New(dir, id); rerr == nil {
+	// recorded completion. Open (not New) binds the task's EXISTING run directory, so
+	// recording provenance never resets state.json or clears attempts/ evidence.
+	if rn, rerr := runpkg.Open(dir, id); rerr == nil {
 		if werr := rn.WriteExternalCompletion(rec); werr != nil {
 			fmt.Fprintf(stdout, "warning: external-completion artifact not persisted: %v\n", werr)
 		}
