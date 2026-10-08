@@ -798,6 +798,17 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 					revStop()
 					rec.ReviewRun()
 					if err != nil {
+						if review.IsMalformedOutput(err) {
+							// Explicit run-level classification of a malformed REVIEW
+							// response. This is a bounded outcome that is never a pass: it
+							// maps deterministically to the existing human boundary,
+							// distinct from the generic fail-closed infrastructure error.
+							// The provider's retained Report (every finding that parsed
+							// with a valid severity) is preserved, so a genuine
+							// HIGH/CRITICAL finding emitted beside the malformed output is
+							// still surfaced and still blocks at its severity.
+							return malformedOutputResult(cfg, rn, err), nil
+						}
 						return lifeResult{}, fmt.Errorf("review: %w", err)
 					}
 					sess.cacheReview(reviewKey, report)
@@ -1017,6 +1028,62 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		decision:       decision,
 		ctx:            ctxSummary,
 	}, nil
+}
+
+// malformedOutputResult classifies a malformed REVIEW response as an explicit
+// human boundary at the run level. It is reached only through the explicit
+// review.IsMalformedOutput(err) check at the run-level review caller, so the
+// classification does not depend on the generic fail-closed infrastructure
+// fallback.
+//
+// A malformed review response is a bounded outcome that is never a pass: no
+// valid report could be obtained, so a human must inspect the raw response and
+// decide how to proceed. The provider's retained Report — every finding that
+// parsed with a valid severity alongside the malformed one — is preserved in the
+// result, so a genuine HIGH/CRITICAL finding still surfaces through the review
+// report and still blocks at its severity.
+//
+// The classification is constructed deterministically (NEEDS_HUMAN, high
+// confidence) rather than derived from the raw response text, so the routing to
+// the human boundary can never depend on incidental words inside the malformed
+// model output. The existing human-approval boundary and severity thresholds are
+// unchanged: the result is mapped to the WAITING_FOR_HUMAN stage and a
+// NEEDS_HUMAN gate, and the retained report is carried verbatim.
+func malformedOutputResult(cfg config.Config, rn *runpkg.Run, err error) lifeResult {
+	reason := "the review response could not be parsed into a valid report; a human decision is required"
+	var report review.Report
+	var mo *review.ErrMalformedOutput
+	if errors.As(err, &mo) {
+		report = mo.Report
+		if detail := strings.TrimSpace(mo.Error()); detail != "" {
+			reason = detail
+		}
+	}
+	cls := failure.Classification{
+		Kind:        failure.Unknown,
+		Disposition: failure.NeedsHuman,
+		Confidence:  failure.High,
+		Reason:      reason,
+	}
+	decision := decideAutonomy(cfg, cls)
+	stage := runpkg.WaitingForHuman
+	gate := quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}
+	if decision.Action == autonomy.ActionTerminal {
+		// The configured autonomy policy withholds even the human boundary's
+		// automation: report the effective terminal action, exactly as the
+		// gate-failure path does, so an operator is never told a human is required
+		// when the policy has exhausted automation.
+		stage = runpkg.Failed
+		gate = quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+	}
+	_ = rn.SetStage(stage)
+	return lifeResult{
+		gate:           gate,
+		stage:          stage,
+		report:         report,
+		classification: cls,
+		decision:       decision,
+	}
 }
 
 // verificationEvidence builds the structured evidence for a deterministic gate
