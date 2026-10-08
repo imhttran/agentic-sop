@@ -1,0 +1,198 @@
+{
+  "corpus_runs": 1,
+  "metrics": [
+    {
+      "metric": "agent_success_failure_rate",
+      "status": "AVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator counts runs with a recorded terminal success; a run with neither report.json nor trace.json is UNAVAILABLE, never a failure"
+    },
+    {
+      "metric": "routing_finding_severity",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "runs",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "sources": [
+        "model-selection.json",
+        "review.json"
+      ],
+      "note": "numerator counts runs with a recorded routing selection over the runs whose model-selection.json parsed; routing is opt-in, so a run without it is UNAVAILABLE, never a default. Finding severities are read from review.json"
+    },
+    {
+      "metric": "fix_loop_convergence",
+      "status": "AVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "cycles",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "sources": [
+        "metrics.json"
+      ],
+      "note": "numerator sums counts.fix_cycles + counts.plan_repairs over runs whose metrics.json parsed; a run without metrics.json is unmeasured, not converged in zero cycles"
+    },
+    {
+      "metric": "retry_efficiency",
+      "status": "PARTIAL",
+      "value": "0",
+      "unit": "runs",
+      "total_runs": 1,
+      "eligible_runs": 1,
+      "artifacts_present": 1,
+      "valid_measurements": 1,
+      "unavailable_measurements": 0,
+      "numerator": 0,
+      "denominator": 1,
+      "coverage_pct": 100,
+      "sources": [
+        "attempt.txt",
+        "continuations.txt",
+        "classification.json"
+      ],
+      "note": "numerator counts runs with a positive escalation signal (nonempty attempt.txt, continuations.txt \u003e 0, or classification.json); absence is UNAVAILABLE, never 0 retries, and continuations.txt of 0 is a recorded zero"
+    },
+    {
+      "metric": "human_approval_frequency",
+      "status": "AVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator counts runs with a recorded approval request or NEEDS_HUMAN decision; absence is UNAVAILABLE, never a recorded no-approval-requested"
+    },
+    {
+      "metric": "execution_latency",
+      "status": "AVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "ms",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "sources": [
+        "metrics.json"
+      ],
+      "note": "numerator sums recorded total_ms over runs whose metrics.json parsed; a recorded total_ms 0 is a measurement, an absent metrics.json is UNAVAILABLE"
+    },
+    {
+      "metric": "token_usage",
+      "status": "UNAVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "tokens",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "no provider-independent token count is persisted; never inferred from text, byte, or diff size; informational only and never an input to a gate, budget, or routing decision"
+    }
+  ],
+  "artifacts": [
+    {
+      "name": "approval.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "attempt.txt",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "classification.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "continuations.txt",
+      "state": "present",
+      "present_runs": 1,
+      "zero_runs": 0,
+      "denominator": 1
+    },
+    {
+      "name": "metrics.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "model-selection.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "report.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "review.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    },
+    {
+      "name": "trace.json",
+      "state": "absent",
+      "present_runs": 0,
+      "zero_runs": 0,
+      "denominator": 0
+    }
+  ],
+  "unavailable": [
+    "agent_success_failure_rate",
+    "execution_latency",
+    "fix_loop_convergence",
+    "human_approval_frequency",
+    "routing_finding_severity",
+    "token_usage"
+  ]
+}
