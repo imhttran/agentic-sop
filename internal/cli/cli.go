@@ -269,7 +269,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	case "decline":
 		return runDecline(rest, stdout, stderr, d)
 	case "approval":
-		return runApprovalStatus(rest, stdout, stderr, d)
+		return runApproval(rest, stdout, stderr, d)
 	case "approvals":
 		return runApprovals(rest, stdout, stderr, d)
 	case "reconcile":
@@ -328,7 +328,9 @@ Commands:
             (no <task-id> or --select chooses interactively; --run continues after)
   decline   record a decline decision on a task's active human approval gate
             (no <task-id> or --select chooses interactively)
-  approval  show SOP's approval request (if any) for a task
+  approval  show SOP's approval request (if any) for a task;
+            approval supersede <task-id> --reason TEXT --by NAME supersedes a
+            stale PENDING request whose task is already satisfied
   approvals list every task waiting at an approval gate (--json)
   index     build the deterministic Structural Repository Index (.agent-sdlc/context/index.json)
   retrieve  rank repository evidence lexically (deterministic BM25)

@@ -43,6 +43,10 @@ var (
 	// applicable — for example the task completed after the request was raised, so
 	// the stale request can no longer authorize anything.
 	ErrApprovalNotApplicable = errors.New("approval request is no longer applicable")
+	// ErrApprovalSupersedeInput is returned when a supersession is missing its
+	// required operator authorization: a non-empty reason and an identifiable
+	// operator are both mandatory.
+	ErrApprovalSupersedeInput = errors.New("approval supersede requires a reason and an operator")
 )
 
 // Record persists one task's approval request head plus its append-only history.
@@ -101,20 +105,24 @@ type View struct {
 	Stage string
 	// Disposition is the failure-classification disposition at request time.
 	Disposition string
-	// Status is the request status (PENDING/APPROVED/DECLINED).
+	// Status is the request status (PENDING/APPROVED/DECLINED/SUPERSEDED).
 	Status domain.ApprovalStatus
 	// RequestedAt is when the request was first recorded.
 	RequestedAt time.Time
 	// RequestedBy identifies who/what raised the request.
 	RequestedBy string
-	// DecidedAt is when the decision was recorded, if resolved.
+	// DecidedAt is when the decision (or supersession) was recorded, if resolved.
 	DecidedAt time.Time
-	// DecidedBy identifies who decided, if resolved.
+	// DecidedBy identifies who decided (or superseded), if resolved.
 	DecidedBy string
-	// Note is the optional decision context, if resolved.
+	// Note is the optional decision (or supersession) context, if resolved.
 	Note string
 	// LifecycleAction is what SOP did in response, if resolved.
 	LifecycleAction string
+	// Superseded is true when the head was superseded by an operator rather than
+	// decided by a human. It disambiguates a resolved head without overloading
+	// LifecycleAction or Approved.
+	Superseded bool
 	// TaskStatus is the task's current persisted status.
 	TaskStatus domain.TaskStatus
 }
@@ -137,6 +145,16 @@ type DecisionInput struct {
 	By string
 	// Note is optional free-form context.
 	Note string
+}
+
+// SupersedeInput is the operator authorization for superseding a stale PENDING
+// approval request whose task is already satisfied. Both fields are mandatory:
+// a supersession is an explicit, audited operator action, not an implicit one.
+type SupersedeInput struct {
+	// Reason is the audited justification for the supersession (required).
+	Reason string
+	// By identifies the operator authorizing the supersession (required).
+	By string
 }
 
 // Result is the outcome of recording a decision.
@@ -243,6 +261,112 @@ func (s *Service) Decline(taskID string, in DecisionInput) (Result, error) {
 	return s.decide(taskID, false, in)
 }
 
+// Supersede is the explicit, operator-authorized supersession of a stale PENDING
+// approval request whose task is already satisfied. It exists because such a
+// request can neither be decided (the approval boundary refuses a decision on a
+// satisfied task with ErrApprovalNotApplicable) nor externally completed (external
+// completion is rejected on an already-complete task), so without an explicit
+// supersession the shared closure gates (LC-004) would block a state an operator
+// cannot leave by any supported operation.
+//
+// It is permitted ONLY for a PENDING head whose task is satisfied. A pending
+// request on an unsatisfied task is refused (it must be decided, not superseded),
+// and a non-pending head is refused. It requires both an explicit reason and an
+// identifiable operator.
+//
+// Persistence is fail-closed and ordered: the original PENDING request is appended
+// verbatim to the append-only approval-history.json first, then the head is
+// rewritten to SUPERSEDED. A history-append failure returns the error and does not
+// touch the head; a head-write failure returns the error and reports no successful
+// supersession, leaving the head PENDING (the appended history entry is the only
+// residual and is deduplicated by the idempotency check on retry). A repeated call
+// on an already-superseded head is idempotent: it appends no duplicate history entry
+// and does not change the head.
+func (s *Service) Supersede(taskID string, in SupersedeInput) (Result, error) {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return Result{}, errors.New("approval: task id is required")
+	}
+	reason := strings.TrimSpace(in.Reason)
+	by := strings.TrimSpace(in.By)
+	if reason == "" || by == "" {
+		return Result{}, ErrApprovalSupersedeInput
+	}
+
+	rec := s.record(taskID)
+	head, ok := rec.Approval()
+	if !ok || head.TaskID != taskID {
+		// No request, or a record that is not this task's: never superseded.
+		return Result{}, fmt.Errorf("%w for task %s", ErrApprovalNotRequested, taskID)
+	}
+
+	task, err := s.task(taskID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// An already-superseded head is idempotent: report provenance, write nothing.
+	if head.Status == domain.ApprovalSuperseded {
+		return Result{View: s.view(head, task), Idempotent: true}, nil
+	}
+	// Only a PENDING request can be superseded. An APPROVED/DECLINED head is a
+	// recorded human decision and must not be overwritten by a supersession.
+	if head.Status != domain.ApprovalPending {
+		return Result{}, fmt.Errorf("%w as %s for task %s", ErrApprovalResolved, head.Status, taskID)
+	}
+	// Supersession is permitted only when the task is satisfied: a pending request
+	// on live work must be decided, not superseded.
+	if task == nil || !task.IsSatisfied() {
+		return Result{}, fmt.Errorf("%w for task %s (the request must be decided, not superseded)", ErrApprovalNotApplicable, taskID)
+	}
+
+	// Step 1: preserve the original PENDING request verbatim in the append-only
+	// history, unless a snapshot with the same request id is already recorded (a
+	// retry after a partial failure must not duplicate the audit entry).
+	if !s.historyHasRequest(rec, head.ID) {
+		if err := rec.AppendApprovalHistory(head); err != nil {
+			// Fail closed: the head is untouched and still PENDING.
+			return Result{}, err
+		}
+	}
+
+	// Step 2: rewrite the head to SUPERSEDED, recording the operator, reason,
+	// timestamp, and original request identity. This second write is what makes the
+	// supersession durable; a failure here is reported and leaves the head PENDING.
+	head.Status = domain.ApprovalSuperseded
+	head.Decision = &domain.ApprovalDecision{
+		RequestID: head.ID,
+		TaskID:    taskID,
+		// A supersession is not an approval: Approved is false, consistent with the
+		// existing Decision fields. The SUPERSEDED status and LifecycleAction=NONE
+		// disambiguate it from a decline.
+		Approved:        false,
+		DecidedAt:       s.now().UTC(),
+		DecidedBy:       by,
+		Note:            reason,
+		LifecycleAction: domain.ApprovalActionNone,
+	}
+	if err := rec.SaveApproval(head); err != nil {
+		return Result{}, err
+	}
+	return Result{View: s.view(head, task)}, nil
+}
+
+// historyHasRequest reports whether the append-only history already contains a
+// snapshot with the given request id. It makes supersession idempotent across a
+// partial failure (history appended, head not yet rewritten).
+func (s *Service) historyHasRequest(rec Record, id string) bool {
+	if id == "" {
+		return false
+	}
+	for _, req := range rec.ApprovalHistory() {
+		if req.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func (s *Service) decide(taskID string, approve bool, in DecisionInput) (Result, error) {
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
@@ -272,6 +396,10 @@ func (s *Service) decide(taskID string, approve bool, in DecisionInput) (Result,
 			return Result{View: s.view(head, task), Idempotent: true}, nil
 		}
 		return Result{}, fmt.Errorf("%w as DECLINED for task %s", ErrApprovalResolved, taskID)
+	case domain.ApprovalSuperseded:
+		// A superseded request is resolved: it can no longer be decided, and
+		// repeating any decision is refused rather than silently re-resolved.
+		return Result{}, fmt.Errorf("%w as SUPERSEDED for task %s", ErrApprovalResolved, taskID)
 	}
 
 	// A pending request whose task has since completed is stale: it can no longer
@@ -363,6 +491,7 @@ func (s *Service) view(req domain.ApprovalRequest, task *domain.Task) View {
 		Status:      req.Status,
 		RequestedAt: req.RequestedAt,
 		RequestedBy: req.RequestedBy,
+		Superseded:  req.Status == domain.ApprovalSuperseded,
 		TaskStatus:  statusOf(task),
 	}
 	if d := req.Decision; d != nil {

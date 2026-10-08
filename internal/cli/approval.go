@@ -31,6 +31,16 @@ func approvalService(st *store.Store, projectDir string) *approval.Service {
 	})
 }
 
+// runApproval dispatches the `sop approval` command group: a bare task id shows
+// the task's approval boundary, and `supersede` is the supported operator operation
+// that supersedes a stale PENDING request whose task is already satisfied.
+func runApproval(args []string, stdout, stderr io.Writer, d deps) int {
+	if len(args) >= 1 && args[0] == "supersede" {
+		return runApprovalSupersede(args[1:], stdout, stderr, d)
+	}
+	return runApprovalStatus(args, stdout, stderr, d)
+}
+
 // runApprovals lists every task SOP reports at an applicable human approval gate.
 // It is read-only: it classifies nothing itself, creates no request, and resolves
 // nothing. A task whose boundary cannot be read is an error, so a listing never
@@ -134,6 +144,7 @@ type approvalListingDoc struct {
 func runApprovalStatus(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: sop approval <task-id>")
+		fmt.Fprintln(stderr, approvalSupersedeUsage)
 		return exitUsage
 	}
 	id := args[0]
