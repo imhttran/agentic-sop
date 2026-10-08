@@ -762,26 +762,46 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
-			reviewTask := d.taskInput(spec.ID, spec.Render())
-			reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, diff)
-			if cached, ok := sess.cachedReview(reviewKey); ok {
-				rec.ReviewReused()
-				report = cached
-			} else {
-				_ = rn.SetStage(runpkg.Reviewing)
-				ar.Emit(activity.StageReview, "reviewing changes", "")
-				provider, perr := reviewProvider(cfg, d)
-				if perr != nil {
-					return lifeResult{}, fmt.Errorf("review: %w", perr)
+			// The review input is restricted to the task's OWN change set: the
+			// invocation-scoped changed files (rn.ChangedFiles(), recorded by
+			// recordTaskChanges from invocationChanges) unioned with the declared
+			// deliverables (reports). The whole working tree is never reviewed, so an
+			// unrelated pre-existing modification cannot leak into the review.
+			scope := newReviewScope(rn.ChangedFiles(), reports, reports...)
+			// A legitimate no-change completion (the invocation completed without
+			// requiring a change, or it proved ALREADY_SATISFIED) has nothing of its own
+			// to review: the dirty entries in the working tree are only unrelated
+			// pre-existing modifications. That is the "no changes to review" case, not a
+			// fail-closed one, so review is skipped for exactly this invocation. When the
+			// task instead required a change and no task-owned path can be established,
+			// the seam fails closed rather than reviewing the whole tree.
+			nothingOfOwn := !changeRequired || legacyNoChange || alreadySatisfied
+			if !scope.empty() || !nothingOfOwn {
+				reviewDiff, serr := scopedReviewDiff(scope, diff, changeRequired)
+				if serr != nil {
+					return lifeResult{}, fmt.Errorf("review: %w", serr)
 				}
-				revStop := rec.Measure(perf.StageReview)
-				report, err = provider.Review(ctx, review.Request{Task: reviewTask, Diff: diff})
-				revStop()
-				rec.ReviewRun()
-				if err != nil {
-					return lifeResult{}, fmt.Errorf("review: %w", err)
+				reviewTask := d.taskInput(spec.ID, spec.Render())
+				reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, reviewDiff)
+				if cached, ok := sess.cachedReview(reviewKey); ok {
+					rec.ReviewReused()
+					report = cached
+				} else {
+					_ = rn.SetStage(runpkg.Reviewing)
+					ar.Emit(activity.StageReview, "reviewing changes", "")
+					provider, perr := reviewProvider(cfg, d)
+					if perr != nil {
+						return lifeResult{}, fmt.Errorf("review: %w", perr)
+					}
+					revStop := rec.Measure(perf.StageReview)
+					report, err = provider.Review(ctx, review.Request{Task: reviewTask, Diff: reviewDiff})
+					revStop()
+					rec.ReviewRun()
+					if err != nil {
+						return lifeResult{}, fmt.Errorf("review: %w", err)
+					}
+					sess.cacheReview(reviewKey, report)
 				}
-				sess.cacheReview(reviewKey, report)
 			}
 		}
 

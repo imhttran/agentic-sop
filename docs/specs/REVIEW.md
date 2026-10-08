@@ -6,10 +6,11 @@
 
 This document is the normative specification for the review pipeline: its layers,
 the `self` and `open-code-review` engines, the rule that the model produces
-findings but never decides the verdict, the "no changes to review" case, the
-self-review focus areas, and the external second pass. The blocking rule and the
-gate verdict are owned by [QUALITY.md](QUALITY.md); the deterministic checks that
-precede review are owned by [VALIDATION.md](VALIDATION.md).
+findings but never decides the verdict, the invocation-scoped review input, the
+"no changes to review" case, the self-review focus areas, and the external second
+pass. The blocking rule and the gate verdict are owned by [QUALITY.md](QUALITY.md);
+the deterministic checks that precede review are owned by
+[VALIDATION.md](VALIDATION.md).
 
 ## Related Specifications
 
@@ -71,14 +72,50 @@ message). The engine is replaceable and MUST NOT change how findings are judged.
 - Findings are advisory until deterministic policy classifies them as blocking.
   The orchestrator MUST NOT blindly implement every suggestion.
 
-## 4. No Changes to Review
+## 4. Invocation-Scoped Review Input
+
+The review input MUST be built from the task's own change set, never from the
+whole working tree. The review input is:
+
+- the invocation-scoped changed files the task produced — the paths attributed to
+the task by the harness (`invocationChanges`) and recorded for the task
+  (`recordTaskChanges`, surfaced as the task's changed files) — unioned with
+- the task's declared deliverables.
+
+Rules:
+
+- Unrelated pre-existing working-tree modifications MUST be excluded. A file that
+  was already dirty before the task ran and is not attributable to the task MUST
+  NOT appear in the review input.
+- A mutation made *during* the task MUST remain in scope and be reviewed, whether
+  it is a tracked edit, a new untracked file, a deletion, or a rename.
+- A task-owned untracked deliverable MUST be included; the untracked portion of
+  the diff MUST be filtered to the same path set as the tracked portion.
+- A declared deliverable MUST be included even when its path is not otherwise
+  present in the raw change listing.
+- The scope is recomputed on each review iteration against the accumulated task
+  change set, so a change made by a fix cycle is reviewed.
+- SOP-owned runtime state and generated output MUST NOT be attributed to a task
+  and MUST NOT enter the review input.
+
+### 4.1 Fail-Closed
+
+When the task's change set cannot be established — for example the working tree is
+dirty but no change is attributable to the task — the seam MUST fail closed: it
+MUST refuse to emit an unscoped review input rather than reviewing the whole
+working tree, and the refusal MUST be an explicit, testable outcome. No code path
+MAY fall back to the whole working tree. An opaque change listing that names no
+repository file cannot leak an unrelated modification and is not, by itself, a
+fail-closed condition.
+
+## 5. No Changes to Review
 
 - Git MUST remain the authority on what changed.
-- When the working tree is unchanged, review MUST report "no changes to review"
-  and MUST NOT manufacture findings; review is skipped (see
-  [QUALITY.md](QUALITY.md)).
+- When the task's change set is empty and there is nothing to review, review MUST
+  report "no changes to review" and MUST NOT manufacture findings; review is
+  skipped (see [QUALITY.md](QUALITY.md)).
 
-## 5. Self-Review Focus
+## 6. Self-Review Focus
 
 Self-review MUST examine at least:
 
@@ -90,14 +127,14 @@ Self-review MUST examine at least:
 - architecture boundaries;
 - unnecessary complexity.
 
-## 6. External Review
+## 7. External Review
 
 - External automated review provides an independent second pass.
 - Correctness findings SHOULD be fixed.
 - Suggestions that only add unnecessary complexity MAY be declined, and declining
   a non-blocking suggestion MUST NOT be treated as a gate failure.
 
-## 7. Relationship to JEV
+## 8. Relationship to JEV
 
 JEV is a separate, optional, read-only analysis invoked after validation and
 review. It is **not** part of the review pipeline and MUST NOT be presented as
