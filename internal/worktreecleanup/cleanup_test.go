@@ -59,8 +59,8 @@ func TestProvenOrphanStaleArtifact(t *testing.T) {
 		t.Fatalf("got %s/%s, want STALE_ARTIFACT/delete_after_approval", it.Class, it.Action)
 	}
 	a := Assess([]Item{it}, false)
-	if a.Disposition != DispositionApprovalRequired {
-		t.Fatalf("disposition = %s, want CLEANUP_APPROVAL_REQUIRED", a.Disposition)
+	if a.Disposition != DispositionProposalReady {
+		t.Fatalf("disposition = %s, want CLEANUP_PROPOSAL_READY", a.Disposition)
 	}
 }
 
@@ -201,5 +201,101 @@ func TestClassVocabularyComplete(t *testing.T) {
 	}
 	if len(seen) != 12 {
 		t.Fatalf("class vocabulary has %d entries, want 12", len(seen))
+	}
+}
+
+// Disposition outcomes: the five required results, driven by classification and
+// proposed action, never by item count alone.
+
+// 1. clean repository -> CLEAN
+func TestDispositionClean(t *testing.T) {
+	if a := Assess(nil, false); a.Disposition != DispositionClean {
+		t.Fatalf("disposition = %s, want CLEAN", a.Disposition)
+	}
+}
+
+// 2. dirty items, all explained, preserve-only -> CLEANUP_COMPLETE_WITH_PRESERVED_WORK
+func TestDispositionCompleteWithPreservedWork(t *testing.T) {
+	items := []Item{
+		classifyOne(Facts{Path: "internal/other/x.go", GitState: "M", Unrelated: true}),
+		classifyOne(Facts{Path: "bin/tool", GitState: "??", GeneratedConvention: true}),
+		classifyOne(Facts{Path: "docs/plans/PLAN-A.md", GitState: "M", PlanDoc: true, PlanState: "ACTIVE"}),
+	}
+	for _, it := range items {
+		if it.Action != ActionPreserve {
+			t.Fatalf("%s action = %s, want preserve", it.Path, it.Action)
+		}
+	}
+	a := Assess(items, false)
+	if a.Disposition != DispositionCompleteWithPreservedWork {
+		t.Fatalf("disposition = %s, want CLEANUP_COMPLETE_WITH_PRESERVED_WORK", a.Disposition)
+	}
+}
+
+// 3a. actionable proposal: a proven orphan (delete) -> CLEANUP_PROPOSAL_READY
+// 3b. actionable proposal: task output (commit with task) -> CLEANUP_PROPOSAL_READY
+func TestDispositionProposalReady(t *testing.T) {
+	orphan := classifyOne(Facts{Path: "internal/old/", GitState: "??", ProvenUnreferenced: true})
+	if a := Assess([]Item{orphan}, false); a.Disposition != DispositionProposalReady {
+		t.Fatalf("orphan disposition = %s, want CLEANUP_PROPOSAL_READY", a.Disposition)
+	}
+	output := classifyOne(Facts{Path: "docs/reports/x/SP-009.md", GitState: "??", DeliverableOf: "SP-009"})
+	if a := Assess([]Item{output}, false); a.Disposition != DispositionProposalReady {
+		t.Fatalf("task-output disposition = %s, want CLEANUP_PROPOSAL_READY", a.Disposition)
+	}
+	moveDoc := classifyOne(Facts{Path: "docs/plans/PLAN-X.md", GitState: "M", PlanDoc: true, PlanState: "COMPLETED", LifecycleComplete: true, HistoryConvention: true})
+	if a := Assess([]Item{moveDoc}, false); a.Disposition != DispositionProposalReady {
+		t.Fatalf("completed-plan disposition = %s, want CLEANUP_PROPOSAL_READY", a.Disposition)
+	}
+}
+
+// 4. unknown ownership -> BLOCKED_UNKNOWN_OWNERSHIP
+func TestDispositionBlockedUnknownOwnership(t *testing.T) {
+	unknown := classifyOne(Facts{Path: "mystery", GitState: "??"})
+	if a := Assess([]Item{unknown}, false); a.Disposition != DispositionBlockedUnknownOwnership {
+		t.Fatalf("disposition = %s, want BLOCKED_UNKNOWN_OWNERSHIP", a.Disposition)
+	}
+	// A blocked condition dominates even when actionable items also exist.
+	orphan := classifyOne(Facts{Path: "old/", GitState: "??", ProvenUnreferenced: true})
+	if a := Assess([]Item{orphan, unknown}, false); a.Disposition != DispositionBlockedUnknownOwnership {
+		t.Fatalf("with unknown present: disposition = %s, want BLOCKED_UNKNOWN_OWNERSHIP", a.Disposition)
+	}
+}
+
+// 5. lifecycle conflict -> BLOCKED_LIFECYCLE_CONFLICT (highest precedence)
+func TestDispositionBlockedLifecycleConflict(t *testing.T) {
+	unknown := classifyOne(Facts{Path: "mystery", GitState: "??"})
+	if a := Assess([]Item{unknown}, true); a.Disposition != DispositionBlockedLifecycleConflict {
+		t.Fatalf("disposition = %s, want BLOCKED_LIFECYCLE_CONFLICT", a.Disposition)
+	}
+	if a := Assess(nil, true); a.Disposition != DispositionBlockedLifecycleConflict {
+		t.Fatalf("empty+conflict disposition = %s, want BLOCKED_LIFECYCLE_CONFLICT", a.Disposition)
+	}
+}
+
+// The preserved CONV-001 case (an operator-designated untracked report) is
+// explained and preserve-only, so it must read as a completed cleanup with
+// preserved work — never as an actionable proposal.
+func TestPreservedReportIsCompleteWithPreservedWork(t *testing.T) {
+	const path = "docs/reports/CONV-001-convergence-baseline.md"
+	// The same explained, preserved artifact must yield the preserved-work
+	// disposition whether ownership is established by operator designation or by
+	// the artifact's own historical nature: the disposition is not owner-flag
+	// dependent, and no ownership evidence is fabricated.
+	cases := map[string]Facts{
+		"operator-designated owner": {Path: path, GitState: "??", KnownOwner: true},
+		"historical first-attempt":  {Path: path, GitState: "??", HistoricalEvidence: true},
+	}
+	for name, f := range cases {
+		t.Run(name, func(t *testing.T) {
+			it := classifyOne(f)
+			if it.Action != ActionPreserve {
+				t.Fatalf("action = %s, want preserve", it.Action)
+			}
+			a := Assess([]Item{it}, false)
+			if a.Disposition != DispositionCompleteWithPreservedWork {
+				t.Fatalf("disposition = %s, want CLEANUP_COMPLETE_WITH_PRESERVED_WORK", a.Disposition)
+			}
+		})
 	}
 }

@@ -114,9 +114,9 @@ Produce exactly one disposition:
 
 | Disposition | When |
 | ----------- | ---- |
-| `CLEAN` | Nothing unexplained is dirty; work is coherent |
-| `CLEANUP_PROPOSAL_READY` | Items exist, but only non-destructive dispositions are proposed |
-| `CLEANUP_APPROVAL_REQUIRED` | One or more destructive dispositions (a delete or a move) need approval |
+| `CLEAN` | Nothing is dirty; the worktree is coherent |
+| `CLEANUP_COMPLETE_WITH_PRESERVED_WORK` | Items are dirty but every one is explained and proposes only `preserve` |
+| `CLEANUP_PROPOSAL_READY` | One or more items propose an action: commit with the task, a delete, or a move |
 | `BLOCKED_UNKNOWN_OWNERSHIP` | An item cannot be classified without guessing |
 | `BLOCKED_LIFECYCLE_CONFLICT` | SOP state is internally inconsistent, or cleanup would touch protected evidence |
 
@@ -268,7 +268,7 @@ Orphan artifact removal (requires approval):
 
 ```text
 internal/old-wire/ -> STALE_ARTIFACT (zero importers; not referenced by any plan)
-disposition: CLEANUP_APPROVAL_REQUIRED
+disposition: CLEANUP_PROPOSAL_READY
 action on approval: delete that exact path only
 ```
 

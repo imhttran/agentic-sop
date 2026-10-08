@@ -54,11 +54,11 @@ const (
 type Disposition string
 
 const (
-	DispositionClean                    Disposition = "CLEAN"
-	DispositionProposalReady            Disposition = "CLEANUP_PROPOSAL_READY"
-	DispositionApprovalRequired         Disposition = "CLEANUP_APPROVAL_REQUIRED"
-	DispositionBlockedUnknownOwnership  Disposition = "BLOCKED_UNKNOWN_OWNERSHIP"
-	DispositionBlockedLifecycleConflict Disposition = "BLOCKED_LIFECYCLE_CONFLICT"
+	DispositionClean                     Disposition = "CLEAN"
+	DispositionCompleteWithPreservedWork Disposition = "CLEANUP_COMPLETE_WITH_PRESERVED_WORK"
+	DispositionProposalReady             Disposition = "CLEANUP_PROPOSAL_READY"
+	DispositionBlockedUnknownOwnership   Disposition = "BLOCKED_UNKNOWN_OWNERSHIP"
+	DispositionBlockedLifecycleConflict  Disposition = "BLOCKED_LIFECYCLE_CONFLICT"
 )
 
 // Facts are the observable facts about one dirty/relevant path, gathered read-only
@@ -182,10 +182,12 @@ type Assessment struct {
 	Disposition Disposition `json:"disposition"`
 }
 
-// Assess derives the single assessment disposition. A lifecycle conflict dominates;
-// an UNKNOWN item blocks on ownership; a proposed destructive action requires
-// approval; otherwise the presence of items yields a ready proposal and no items is
-// CLEAN.
+// Assess derives the single assessment disposition from the classifications and
+// proposed actions, never from the item count alone. A lifecycle conflict dominates;
+// an UNKNOWN item blocks on ownership; a proposed action (commit with a task, a
+// delete, or a move) yields a ready proposal; items that are all explained and
+// propose only `preserve` are a completed cleanup with preserved work; and an empty
+// item set is CLEAN.
 func Assess(items []Item, lifecycleConflict bool) Assessment {
 	a := Assessment{Items: items}
 	switch {
@@ -193,12 +195,12 @@ func Assess(items []Item, lifecycleConflict bool) Assessment {
 		a.Disposition = DispositionBlockedLifecycleConflict
 	case hasClass(items, ClassUnknown):
 		a.Disposition = DispositionBlockedUnknownOwnership
-	case requiresApproval(items):
-		a.Disposition = DispositionApprovalRequired
-	case len(items) > 0:
-		a.Disposition = DispositionProposalReady
-	default:
+	case len(items) == 0:
 		a.Disposition = DispositionClean
+	case allPreserve(items):
+		a.Disposition = DispositionCompleteWithPreservedWork
+	default:
+		a.Disposition = DispositionProposalReady
 	}
 	return a
 }
@@ -212,13 +214,15 @@ func hasClass(items []Item, c Class) bool {
 	return false
 }
 
-func requiresApproval(items []Item) bool {
+// allPreserve reports whether every item proposes only `preserve`: an explained,
+// non-actionable worktree that needs no cleanup.
+func allPreserve(items []Item) bool {
 	for _, it := range items {
-		if it.Action == ActionDeleteAfterApproval || it.Action == ActionMoveToHistory {
-			return true
+		if it.Action != ActionPreserve {
+			return false
 		}
 	}
-	return false
+	return true
 }
 
 // Baseline is the assessment-time identity used to detect drift before APPLY.
