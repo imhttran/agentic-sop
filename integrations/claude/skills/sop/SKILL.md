@@ -52,6 +52,8 @@ Thin aliases in the same install expose one capability each:
 /sop-continue <plan>      continue an already-active plan: reconcile the source
                           plan, compiled plan, and persisted SOP state before
                           continuing (`sop continue --check`, then `sop run`)
+/sop-cleanup <path>       inspect, classify, and PROPOSE worktree cleanup;
+                          read-only by default (`sop status`)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the

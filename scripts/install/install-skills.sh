@@ -37,7 +37,7 @@ set -eu
 
 # The canonical SOP skill set. Keep in sync with internal/skill (the build fails if
 # this list and the shipped skills/ tree drift).
-skills="sop sop-prompt sop-plan sop-review sop-diagnose sop-test sop-implement sop-end-to-end sop-historicalize sop-continue"
+skills="sop sop-prompt sop-plan sop-review sop-diagnose sop-test sop-implement sop-end-to-end sop-historicalize sop-continue sop-cleanup"
 
 script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 # This script lives at scripts/install/install-skills.sh, so the repository root is two
