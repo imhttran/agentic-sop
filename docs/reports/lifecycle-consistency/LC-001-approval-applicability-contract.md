@@ -15,7 +15,7 @@ Let `A` be the task's persisted approval request head (`internal/run/approval.go
 **Authoritative predicate (P):**
 
 ```
-resolved(A)     := A.Status == APPROVED || A.Status == DECLINED   (domain.ApprovalStatus.Resolved)
+resolved(A)     := A.Status == APPROVED || A.Status == DECLINED || A.Status == SUPERSEDED   (domain.ApprovalStatus.Resolved)
 active(A)       := A.Status == PENDING
 stale(A, T)     := active(A) && T != nil && T.IsSatisfied()
 applicable(A,T) := active(A) && !stale(A, T)     == ( active(A) && (T == nil || !T.IsSatisfied()) )
@@ -24,14 +24,16 @@ unresolved(A,T) := active(A)                       (regardless of staleness)
 
 ### 2.1 Classification derived from P
 
-| Classification | Definition                                      | Meaning                                                                                                                                    |
-| -------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `resolved`     | `resolved(A)`                                   | A decision has been recorded (`APPROVED`/`DECLINED`). It authorizes nothing further and is archive provenance.                             |
-| `stale`        | `active(A) && T.IsSatisfied()`                  | The request is still `PENDING` but its task has since reached a satisfied terminal state, so the request can no longer authorize anything. |
-| `applicable`   | `active(A) && (T == nil \|\| !T.IsSatisfied())` | A decision may actually be recorded through the boundary right now.                                                                        |
-| `unresolved`   | `active(A)`                                     | No decision has been recorded. Broader than `applicable`: it includes stale requests.                                                      |
+| Classification | Definition                                      | Meaning                                                                                                                                       |
+| -------------- | ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `resolved`     | `resolved(A)`                                   | A resolution has been recorded (`APPROVED`/`DECLINED`, or `SUPERSEDED` from LC-007). It authorizes nothing further and is archive provenance. |
+| `stale`        | `active(A) && T.IsSatisfied()`                  | The request is still `PENDING` but its task has since reached a satisfied terminal state, so the request can no longer authorize anything.    |
+| `applicable`   | `active(A) && (T == nil \|\| !T.IsSatisfied())` | A decision may actually be recorded through the boundary right now.                                                                           |
+| `unresolved`   | `active(A)`                                     | No decision has been recorded. Broader than `applicable`: it includes stale requests.                                                         |
 
 `applicable ⊆ unresolved`; `stale ⊆ unresolved`; `resolved`, `stale`, and `applicable` are mutually exclusive. These are the four labels every consumer must speak in.
+
+`SUPERSEDED` is introduced by **LC-007** as the explicit disposition of a stale request an authorized operator has retired; it is a recorded resolution (`resolved(A)`) and therefore does **not** block closure, unlike an `unresolved` head. It is a distinct status rather than an overload of `DECLINED`, so the audit trail records _why_ the request ended without a decision.
 
 ## 3. Stale / active / cross-plan / external rules
 
@@ -113,10 +115,15 @@ This stage creates exactly one file — this report — under `docs/reports/life
 `sop plan complete` and `sop plan historicalize` **must enforce the same closure
 safety invariants**, while keeping distinct lifecycle operations:
 
-- **Same safety gates.** Both fail closed when the active plan has a genuinely
-  _applicable_ pending approval (an open human gate whose task can still act on it)
-  or missing required verification. Neither may archive a plan that readiness would
-  refuse.
+- **Same safety gates.** Both fail closed when the active plan has an
+  _unresolved_ pending approval — a `PENDING` request whose task belongs to the
+  active plan, **regardless of whether that task has since been satisfied** — or
+  missing required verification. Neither may archive a plan that readiness would
+  refuse. This is the canonical `unresolved(A,T) := active(A)` predicate of §2 and
+  the LC-003 active-plan scoping (I2), not the narrower boundary projection
+  `applicable(A,T) := active(A) ∧ ¬stale(A,T)`: `applicable` answers only whether a
+  decision may be recorded through the boundary right now, so a satisfied task's
+  still-open gate blocks closure even though the boundary can no longer decide it.
 - **Distinct operations.** `complete` marks the active plan COMPLETE and archives it;
   `historicalize` performs the disposition-aware close with an explicit
   `COMPLETE | SUPERSEDED` selector and a readiness report. The operations differ;
