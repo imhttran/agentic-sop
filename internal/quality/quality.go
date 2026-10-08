@@ -74,6 +74,15 @@ type Input struct {
 	// evidence. A nil value means no JEV analysis ran (disabled or absent), and
 	// leaves the verdict exactly as before.
 	JEV *JEVEvidence
+	// ValidationRequired reports that this run deterministically requires
+	// configured validation before it may pass: an ordinary task whose invocation
+	// changed the repository. It is derived from the task's execution mode and
+	// SOP's own mutation observation, never from model output.
+	ValidationRequired bool
+	// ValidationConfigured reports whether any validation command is configured for
+	// the run. When a required validation set is absent, the gate must not pass: an
+	// empty suite is not evidence that a change is correct.
+	ValidationConfigured bool
 }
 
 // JEVEvidence is a validated snapshot of an optional JEV analysis, shaped for
@@ -132,6 +141,16 @@ func Evaluate(policy config.Quality, in Input) Result {
 
 	if in.HumanRequired {
 		return Result{Decision: NeedsHuman, Reasons: append(reasons, "human approval required")}
+	}
+
+	// A required validation set that is not configured is never a pass: an empty
+	// suite proves nothing about the change. The gate fails closed (FAIL, not
+	// NEEDS_HUMAN) so the failure is classified and handled deterministically as a
+	// configuration failure. It never becomes an approval the operator did not ask
+	// for, and it never lets an unverified change pass.
+	if in.ValidationRequired && !in.ValidationConfigured {
+		reasons = append(reasons, "required validation is not configured")
+		return Result{Decision: Fail, Reasons: reasons}
 	}
 
 	checkFailed := false

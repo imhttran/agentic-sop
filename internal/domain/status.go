@@ -57,4 +57,11 @@ const (
 	// NO_PROGRESS: the execution agent made no governed repository progress within
 	// its bounded allowance. It is a blocked-for-operator state, not a human approval.
 	NO_PROGRESS BlockedReason = "NO_PROGRESS"
+	// VALIDATION_NOT_CONFIGURED marks a task that changed the repository but has no
+	// validation configured to verify the change. SOP fails closed rather than treat
+	// a vacuous empty suite as a pass. It is a terminal operator-intervention /
+	// configuration state, not a human approval: the operator configures validation
+	// (for example via `sop init`) and re-runs. Like NO_PROGRESS, it is not
+	// auto-continued or auto-fixed under unchanged configuration.
+	VALIDATION_NOT_CONFIGURED BlockedReason = "VALIDATION_NOT_CONFIGURED"
 )

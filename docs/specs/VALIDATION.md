@@ -37,6 +37,13 @@ Validation commands MUST come from the `validation` section (`build`, `test`,
 `build`, unit test, integration test, `lint`, and Docker build. See
 [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md).
 
+A task that changes the repository MUST NOT pass when no validation command is
+configured: SOP fails closed rather than treat the vacuously passing empty suite as
+verification. The gate returns `FAIL` and the run reports the outcome as
+`VALIDATION_NOT_CONFIGURED` — a terminal operator-intervention/configuration state,
+not an implementation failure and not a human approval. Configuring validation (for
+example via `sop init`) and re-running clears it.
+
 ## 2. Execution Order and Directory
 
 The configured commands MUST run in the project directory, in the fixed order
@@ -60,6 +67,12 @@ it is **not** a model judgment. A task MUST NOT pass without the required
 validation succeeding. When validation fails, the deterministic failure MUST be
 handed to the fix loop as context (see [QUALITY.md](QUALITY.md)) — a failing check
 is actionable in its own right.
+
+"The required validation" is the configured command set. When a task requires
+validation and none is configured, the run MUST NOT pass and MUST NOT loop: the
+deterministic outcome is the `VALIDATION_NOT_CONFIGURED` configuration failure from
+§1, which the autonomy policy treats as a terminal operator-intervention state rather
+than a human approval (see [QUALITY.md](QUALITY.md) and [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md)).
 
 ## 6. Paths That Still Validate
 

@@ -136,6 +136,18 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	// A single --task run is an ordinary project run: materialize the documented
+	// default configuration (which carries the validation policy) when the project
+	// has none, exactly as a plan run does, so the change can be verified. Without
+	// this, a configless --task run had no validation commands at all and could not
+	// verify what it changed. It writes only the config template and the state
+	// self-ignore; the ad-hoc task has no scheduler store to initialize.
+	if _, cerr := config.LoadDir(dir); errors.Is(cerr, config.ErrNotFound) {
+		if _, werr := ensureConfigTemplate(dir); werr != nil {
+			fmt.Fprintf(stderr, "run: %v\n", werr)
+			return exitError
+		}
+	}
 	cfg, err := loadConfigOrDefault(dir)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
@@ -479,6 +491,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// It is cleared once the evidence is consumed.
 		pendingOutcome *agent.Outcome
 		pendingSource  string
+
+		// validationRequired reports that this task deterministically requires
+		// configured validation before it may pass (an ordinary mutating task whose
+		// invocation changed the repository). validationConfigured reports whether any
+		// validation command is configured. The gate reads both: a required and absent
+		// validation set fails closed instead of passing an empty suite, and the
+		// classification names it a configuration failure rather than an implementation
+		// defect.
+		validationRequired   bool
+		validationConfigured bool
 	)
 
 	// Verification-first: run the configured deterministic validation before any
@@ -779,6 +801,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			jevDoc = persistedJEVDoc(rn, jevEv)
 		}
 
+		// A task that deterministically requires a change and actually changed the
+		// repository must have validation configured before it may pass; otherwise the
+		// empty suite would be mistaken for a passing verification.
+		validationRequired = changeRequired && (implMutation || len(taskChangeEvidence(rn, reports...)) > 0)
+		validationConfigured = validate.Enabled(cfg.Validation)
+
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
 			TestPassed:   categoryPassed(suite, testrunner.UnitTest),
@@ -787,6 +815,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Unresolved:   report.Findings,
 			FixCycles:    cycles,
 			JEV:          jevEv.gateEvidence(),
+
+			ValidationRequired:   validationRequired,
+			ValidationConfigured: validationConfigured,
 		})
 		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 
@@ -913,7 +944,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var class failure.Classification
 	var decision autonomy.Decision
 	if gate.Decision != quality.Pass {
-		class = failure.Classify(verificationEvidence(cfg, suite, report, cycles, jevEv, approval))
+		ev := verificationEvidence(cfg, suite, report, cycles, jevEv, approval)
+		ev.ValidationRequired = validationRequired
+		ev.ValidationConfigured = validationConfigured
+		class = failure.Classify(ev)
 		decision = decideAutonomy(cfg, class)
 	}
 

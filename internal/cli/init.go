@@ -57,13 +57,26 @@ func ensureProjectInitialized(dir string) (configWritten bool, err error) {
 		return false, err
 	}
 
+	return ensureConfigTemplate(dir)
+}
+
+// ensureConfigTemplate writes the documented default configuration (which carries
+// the project's validation policy) when none is present, and keeps SOP runtime
+// state out of Git. It is the config-only part of project initialization, for a
+// caller that needs the configuration but not the task store: a single
+// `sop run --task` is an ordinary project run and must be able to verify its change,
+// yet it has no scheduler graph to initialize. It is idempotent and never overwrites
+// an existing configuration.
+func ensureConfigTemplate(dir string) (configWritten bool, err error) {
 	configPath := config.Path(dir)
 	present, err := exists(configPath)
 	if err != nil {
 		return false, err
 	}
-	configWritten = false
 	if !present {
+		if err := os.MkdirAll(filepath.Join(dir, stateDirName), 0o755); err != nil {
+			return false, err
+		}
 		if err := os.WriteFile(configPath, []byte(config.Template(filepath.Base(dir))), 0o644); err != nil {
 			return false, err
 		}

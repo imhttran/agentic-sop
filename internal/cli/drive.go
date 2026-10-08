@@ -756,9 +756,16 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			decision = decideAutonomy(cfg, res.classification)
 		}
 		if decision.Action == autonomy.ActionTerminal {
+			// The persisted block reason follows the classification: a bounded no-progress
+			// stop and a missing required validation set each name their own terminal
+			// operator-intervention state, so the stored diagnostic is not misreported as
+			// an exhausted retry budget. Both stay terminal (no requeue here).
 			reason := domain.RETRIES_EXHAUSTED
-			if res.classification.Kind == failure.NoProgress {
+			switch res.classification.Kind {
+			case failure.NoProgress:
 				reason = domain.NO_PROGRESS
+			case failure.ValidationNotConfigured:
+				reason = domain.VALIDATION_NOT_CONFIGURED
 			}
 			if err := blockTask(saver, task, reason); err != nil {
 				fmt.Fprintf(stderr, "run: %v\n", err)
