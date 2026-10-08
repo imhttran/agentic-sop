@@ -213,10 +213,24 @@ verification (§8) or already-satisfied proof (§8a).
   CHANGE/finalization behavior. Discovery alone MUST NOT set mutation evidence or
   satisfy the completion requirement in §8 or already-satisfied proof in §8a.
 
-Continuous novel discovery with no mutation therefore stops by turn 17. Attempted
-inspection checkpoints remain first-seen, deduplicated, and bounded to twelve
-paths, with five shown in diagnostics; failed attempts may appear there but MUST
-NOT earn discovery credit merely because they are checkpoint members.
+**Required.** Once the bounded discovery window has closed (`iteration >
+implementNowAfter`) with no observed mutation, the harness MUST require convergence:
+as soon as a stale turn has accrued, non-mutating repository tools (`read_file`,
+`list_files`, `search_files`, and non-mutating `run_command`) MUST be denied with a
+correction prompt, while the mutation tools (`write_file`, `create_file`,
+`delete_file`, `restore_file`, or a mutating `run_command`) remain available, so the
+run converges on a mutation attempt or returns a truthful `needs_human`/`failed`
+outcome. This enforcement opens strictly before the stale bound and is derived from
+the existing discovery window and stale accounting; it introduces no new counter,
+threshold, or budget knob.
+
+The stale guard remains the fallback for a run that still does not converge:
+continuous non-mutating activity stops by turn 17 with `IMPLEMENT_NO_PROGRESS` /
+`FIX_NO_PROGRESS`, and the pre-mutation denial above fires on the same path strictly
+before that bound. Attempted inspection checkpoints remain first-seen, deduplicated,
+and bounded to twelve paths, with five shown in diagnostics; failed attempts may
+appear there but MUST NOT earn discovery credit merely because they are checkpoint
+members.
 
 Diagnostics record the actual turn count, credited inspections, mutations, changed
 files, and last action. Early `IMPLEMENT_NO_CHANGES` completion and stalled
