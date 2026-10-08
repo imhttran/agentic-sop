@@ -292,6 +292,40 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 	return res, nil
 }
 
+// closureBlocker is the shared, fail-closed closure invariant used by both
+// `plan complete` and `plan historicalize`. It reuses the exact same sources of
+// truth the historicalize readiness predicate consults, so the two closure paths
+// cannot disagree about what "ready to close" means (invariants I3/I4/I5):
+//
+//   - unresolved work: a task that has not reached a satisfied terminal state
+//   - an unresolved approval: a PENDING approval gate bound to a task in the
+//     active plan
+//   - missing verification: a satisfied task with no recorded verification
+//     evidence (a PASSED run, an external-completion record, or a NOT_REQUIRED
+//     disposition)
+//
+// It returns "" when the plan is clean and fully satisfied, or a human-readable
+// reason naming the offending tasks otherwise. It is fail-closed: a read error on
+// the approval artifacts is surfaced as a blocker (the caller must not close a
+// plan whose readiness could not be established), and any unknown or missing
+// approval/verification state counts as not ready.
+func closureBlocker(dir string, tasks []*domain.Task) string {
+	if unresolved := historicalizationUnresolvedTasks(tasks); len(unresolved) > 0 {
+		return "the active plan still has unresolved work: " + summarize(unresolved)
+	}
+	approvals, err := historicalizationUnresolvedApprovals(dir, tasks)
+	if err != nil {
+		return "could not determine approval readiness: " + err.Error()
+	}
+	if len(approvals) > 0 {
+		return "plan has unresolved approval requests: " + summarize(approvals)
+	}
+	if missing := historicalizationMissingVerification(dir, tasks); len(missing) > 0 {
+		return "plan has unresolved verification requirements: " + summarize(missing)
+	}
+	return ""
+}
+
 // historicalizationTarget resolves an optional plan argument to a plan id. A
 // resolvable PLAN path yields its derived id and relative source. A value that
 // looks like a path but does not resolve surfaces the resolution error, so an

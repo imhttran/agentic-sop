@@ -1321,10 +1321,12 @@ type CompleteResult struct {
 // done" transition: distinct from handoff (which requires a successor plan to take
 // over) and from supersede (which abandons unfinished work).
 //
-// It fails closed: it refuses unless the active plan's work is fully satisfied, so a
-// plan with any unresolved task cannot be completed. It fabricates nothing — the
-// archived records are the task snapshot verbatim — and it never executes a task or
-// runs a model.
+// It fails closed: it reuses the same closure invariants historicalize enforces, so
+// it refuses unless the active plan's work is fully satisfied, has no unresolved
+// (PENDING) approval gate, and every satisfied task has recorded verification
+// evidence. A plan with any unresolved task, pending approval, or missing
+// verification cannot be completed. It fabricates nothing — the archived records are
+// the task snapshot verbatim — and it never executes a task or runs a model.
 func Complete(opts Options) (CompleteResult, error) {
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
@@ -1337,8 +1339,13 @@ func Complete(opts Options) (CompleteResult, error) {
 	if len(tasks) == 0 && strings.TrimSpace(meta.Source) == "" && strings.TrimSpace(meta.PlanID) == "" {
 		return CompleteResult{}, errors.New("complete: no active plan to complete")
 	}
-	if len(tasks) > 0 && !domain.AllSatisfied(tasks) {
-		return CompleteResult{}, errors.New("complete: the active plan still has unresolved work; refusing to complete it")
+	// Reuse the historicalize closure invariants (I3/I4/I5): the same fail-closed
+	// readiness predicate that guards historicalization guards completion, so
+	// `plan complete` and `plan historicalize` agree on what "ready to close" means.
+	// It refuses unresolved work, an unresolved (PENDING) approval gate, and missing
+	// verification evidence.
+	if blocker := closureBlocker(opts.Dir, tasks); blocker != "" {
+		return CompleteResult{}, fmt.Errorf("complete: %w: %s", ErrHistoricalizationIneligible, blocker)
 	}
 
 	root, err := archivePlan(opts.Dir, meta, tasks, planPath, metaPath, DispositionComplete)
