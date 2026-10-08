@@ -7,10 +7,10 @@
 This document is the normative specification for the review pipeline: its layers,
 the `self` and `open-code-review` engines, the rule that the model produces
 findings but never decides the verdict, the invocation-scoped review input, the
-"no changes to review" case, the self-review focus areas, and the external second
-pass. The blocking rule and the gate verdict are owned by [QUALITY.md](QUALITY.md);
-the deterministic checks that precede review are owned by
-[VALIDATION.md](VALIDATION.md).
+"no changes to review" case, the malformed-output boundary, the self-review focus
+areas, and the external second pass. The blocking rule and the gate verdict are
+owned by [QUALITY.md](QUALITY.md); the deterministic checks that precede review are
+owned by [VALIDATION.md](VALIDATION.md).
 
 ## Related Specifications
 
@@ -115,7 +115,43 @@ fail-closed condition.
   report "no changes to review" and MUST NOT manufacture findings; review is
   skipped (see [QUALITY.md](QUALITY.md)).
 
-## 6. Self-Review Focus
+## 6. Malformed Review Output
+
+A review response that cannot be parsed into a valid report is a deterministic,
+bounded outcome. The allowed severity set is exactly `INFO`, `LOW`, `MEDIUM`,
+`HIGH`, and `CRITICAL`; it MUST NOT be widened or narrowed.
+
+### 6.1 Per-Finding Parsing
+
+- Parsing MUST be per finding. Every finding whose severity is in the allowed set
+  MUST be retained in the report and MUST block at its own severity; the verdict
+  MUST NOT be lowered by the presence of a malformed sibling finding.
+- A finding whose severity is missing or not in the allowed set (an invalid or
+  empty severity) MUST be rejected explicitly and deterministically. It MUST NOT
+  be silently dropped, silently defaulted, or tolerated.
+- A valid `HIGH` or `CRITICAL` finding MUST still be retained and MUST still block
+  when the same response also contains a malformed finding. The whole report MUST
+  NOT be discarded because one finding is malformed.
+
+### 6.2 Bounded Retry
+
+- When a response cannot be parsed, the REVIEW capability MUST be retried up to a
+  small, fixed bound. The bound counts total attempts and MUST be small: malformed
+  output is a bounded outcome, not an unbounded loop.
+- When a valid report is still not obtained within the bound, the outcome MUST be
+  the bounded malformed-output classification. It MUST preserve the raw response
+  and every finding that parsed with a valid severity on the final attempt.
+
+### 6.3 Never a Pass
+
+- Malformed review output MUST NEVER yield `quality.Pass`.
+- Malformed review output MUST NEVER be a silent fix-loop exit. It MUST terminate
+  the loop as an explicit, classifiable outcome that the run maps to the EXISTING
+  human boundary (`NEEDS_HUMAN`), recorded through the existing approval path.
+- The human approval boundary, the severity thresholds, and `quality.Evaluate`
+  acceptance MUST be unchanged by this boundary.
+
+## 7. Self-Review Focus
 
 Self-review MUST examine at least:
 
@@ -127,14 +163,14 @@ Self-review MUST examine at least:
 - architecture boundaries;
 - unnecessary complexity.
 
-## 7. External Review
+## 8. External Review
 
 - External automated review provides an independent second pass.
 - Correctness findings SHOULD be fixed.
 - Suggestions that only add unnecessary complexity MAY be declined, and declining
   a non-blocking suggestion MUST NOT be treated as a gate failure.
 
-## 8. Relationship to JEV
+## 9. Relationship to JEV
 
 JEV is a separate, optional, read-only analysis invoked after validation and
 review. It is **not** part of the review pipeline and MUST NOT be presented as

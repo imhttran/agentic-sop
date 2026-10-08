@@ -611,9 +611,12 @@ func reviewSummary(report review.Report) string {
 // receives the same change set the gate reasons about. It honors git's rename
 // and /dev/null semantics: a deletion's "+++ b/..." side is /dev/null (and its
 // "--- a/..." side is the real path), while an addition's "--- a/..." side is
-// /dev/null; only the side that names a real path is recorded. Diff header
-// lines may carry a trailing tab and timestamp, so the path is trimmed at the
-// tab as well as at surrounding whitespace.
+// /dev/null; only the side that names a real path is recorded. A rename is
+// recorded on BOTH its sides (git's `rename from` / `rename to` lines), so a
+// renamed file is treated as a real repository path rather than an opaque diff
+// that could be silently excluded from attribution. Diff header lines may carry
+// a trailing tab and timestamp, so the path is trimmed at the tab as well as at
+// surrounding whitespace.
 func changedFiles(diff string) []string {
 	seen := map[string]bool{}
 	var files []string
@@ -654,6 +657,13 @@ func changedFiles(diff string) []string {
 				continue
 			}
 			add(to)
+		case strings.HasPrefix(line, "rename from "):
+			// A rename names a real repository path on each side. Both sides are
+			// recorded so a renamed file is never mistaken for an opaque diff and
+			// silently excluded from attribution.
+			add(strings.TrimPrefix(line, "rename from "))
+		case strings.HasPrefix(line, "rename to "):
+			add(strings.TrimPrefix(line, "rename to "))
 		}
 	}
 	return files
