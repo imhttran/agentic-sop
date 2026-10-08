@@ -33,6 +33,13 @@ var Commands = []Command{
 	{Name: "sop-end-to-end", Capability: "", Delegation: "sop run"},
 	{Name: "sop-historicalize", Capability: "", Delegation: "sop plan historicalize"},
 	{Name: "sop-continue", Capability: "", Delegation: "sop continue"},
+
+	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
+	// existing read-only capability. They fix a read-only capability only, so they can
+	// never enter the governed implementation lifecycle or mutate the repository.
+	{Name: "rag-schema", Capability: "plan", Delegation: "sop prompt --capability plan"},
+	{Name: "rag-test", Capability: "design_tests", Delegation: "sop prompt --capability design_tests"},
+	{Name: "rag-ingest", Capability: "plan", Delegation: "sop prompt --capability plan"},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts

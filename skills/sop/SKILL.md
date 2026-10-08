@@ -52,6 +52,14 @@ Thin aliases in the same install expose one capability each:
 /sop-continue <plan>      continue an already-active plan: reconcile the source
                           plan, compiled plan, and persisted SOP state before
                           continuing (`sop continue --check`, then `sop run`)
+/rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
+                          operator-controlled embedding-dimension change
+                          (capability: plan, read-only)
+/rag-test <request>       RAG: design unit/race/integration/end-to-end and
+                          dimension-mismatch tests (capability: design_tests)
+/rag-ingest <request>     RAG: design a safe ingestion pipeline — chunking,
+                          concurrency, retries, transactional replacement
+                          (capability: plan, read-only)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
@@ -62,6 +70,11 @@ Read-only requests to review or plan end-to-end behavior still use `sop prompt`.
 Explicit `/sop-continue` requests use the `sop-continue` skill. That skill never
 reimplements SOP: it reconciles the active plan through `sop continue --check`
 (read-only) and continues through `sop run` only when reconciliation authorizes it.
+
+The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
+`design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
+matrix, ingestion safety). They never mutate the repository; applying a change goes
+through `/sop-implement`, and a database change is an operator action.
 
 The capability aliases call the command below; the end-to-end entry delegates to
 `sop run`. None carries routing, provider, or lifecycle policy. Install them with

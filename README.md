@@ -113,7 +113,9 @@ Install the `/sop*` agent commands with `./install.sh --skills zed`,
 [the command examples](docs/guides/GETTING-STARTED.md#install-agent-commands),
 [installation](docs/guides/INSTALLATION.md), or
 [the Claude Code plugin guide](docs/guides/CLAUDE-PLUGIN.md).
-SOP owns routing, validation, and approval for every command.
+SOP owns routing, validation, and approval for every command. Three RAG-domain
+skills (`/rag-schema`, `/rag-test`, `/rag-ingest`) add a pgvector/RAG checklist on top
+of the read-only capabilities; see [docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md).
 
 ## Basic Workflow
 
