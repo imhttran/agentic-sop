@@ -1,11 +1,13 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 
@@ -14,7 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
-	"github.com/imhttran/agentic-sop/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // This file integrates internal/outcome into the governed lifecycle: after the
@@ -84,33 +86,34 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		})
 	}
 
-	// Operator-authorized deterministic acceptance checks: each is executed with the
-	// existing command runner, independently of the model completion claim. A check
-	// the command policy does not authorize is a boundary and holds the outcome.
+	// Operator-authorized deterministic acceptance checks: each is validated into an
+	// exact argument vector and executed directly (never through a shell),
+	// independently of the model completion claim. A command the policy does not
+	// classify SAFE — including any command that uses shell syntax (chaining,
+	// pipelines, redirection, substitution, expansion) — is a boundary that holds the
+	// outcome and is never executed.
 	for i, command := range spec.AcceptanceChecks {
 		cmd := command
-		class, cerr := commandpolicy.Classify(strings.Fields(cmd))
-		if cerr == nil && class != commandpolicy.Safe {
+		argv, aerr := authorizeAcceptanceCommand(cmd)
+		if aerr != nil {
+			err := aerr
 			criteria = append(criteria, outcome.Criterion{
 				ID:          fmt.Sprintf("check-%d", i+1),
 				Required:    true,
 				Boundary:    true,
 				Description: "unauthorized acceptance check: " + cmd,
 				Command:     cmd,
-				Check: func() error {
-					return fmt.Errorf("acceptance check %q is not authorized (%s)", cmd, class)
-				},
+				Check:       func() error { return err },
 			})
 			continue
 		}
+		args := argv
 		criteria = append(criteria, outcome.Criterion{
 			ID:          fmt.Sprintf("check-%d", i+1),
 			Required:    true,
 			Description: "acceptance check: " + cmd,
 			Command:     cmd,
-			Check: func() error {
-				return runAcceptanceCheck(dir, cmd)
-			},
+			Check:       func() error { return runAcceptanceArgv(dir, args) },
 		})
 	}
 
@@ -141,22 +144,55 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
 }
 
-// runAcceptanceCheck runs one operator-authorized acceptance check with the existing
-// deterministic command runner (sh -c). Exit status 0 means met; any other status or a
-// runner failure means not met, and the observed result is recorded as evidence.
-func runAcceptanceCheck(dir, command string) error {
-	result := testrunner.New(dir).Run(context.Background(), testrunner.Check{Category: testrunner.UnitTest, Command: command})
-	if result.Status == testrunner.Pass {
+// authorizeAcceptanceCommand tokenizes an operator-declared acceptance command and
+// validates it against the existing command policy, returning the exact argument
+// vector that will execute. It reuses toolharness.SplitCommand, which rejects shell
+// syntax (command chaining, pipelines, redirection, command substitution,
+// environment expansion, and globs) and unterminated quotes, so authorization
+// validates the same structure that runs — never a shell. A classification error or
+// a non-SAFE class is rejected before execution, so an unauthorized command never
+// runs.
+func authorizeAcceptanceCommand(command string) ([]string, error) {
+	argv, err := toolharness.SplitCommand(command)
+	if err != nil {
+		return nil, err
+	}
+	class, err := commandpolicy.Classify(argv)
+	if err != nil {
+		return nil, err
+	}
+	if class != commandpolicy.Safe {
+		return nil, fmt.Errorf("acceptance check %q is not authorized (%s)", command, class)
+	}
+	return argv, nil
+}
+
+// runAcceptanceArgv executes an authorized acceptance command's argument vector
+// directly, without invoking a shell, so nothing beyond the validated argv can run.
+// Exit status 0 means met; any other status or a launch failure means not met, and
+// the observed result is recorded as evidence.
+func runAcceptanceArgv(dir string, argv []string) error {
+	if len(argv) == 0 {
+		return errors.New("acceptance check has an empty command")
+	}
+	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
+	cmd.Dir = dir
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+	runErr := cmd.Run()
+	if runErr == nil {
 		return nil
 	}
-	detail := strings.TrimSpace(result.Stderr)
-	if detail == "" {
-		detail = strings.TrimSpace(result.Stdout)
-	}
+	detail := strings.TrimSpace(out.String())
 	if len(detail) > 400 {
 		detail = detail[:400]
 	}
-	return fmt.Errorf("acceptance check %q %s (exit %d): %s", command, result.Status, result.ExitCode, detail)
+	var exitErr *exec.ExitError
+	if errors.As(runErr, &exitErr) {
+		return fmt.Errorf("acceptance check %q failed (exit %d): %s", strings.Join(argv, " "), exitErr.ExitCode(), detail)
+	}
+	return fmt.Errorf("acceptance check %q could not run: %v", strings.Join(argv, " "), runErr)
 }
 
 // deliverablePath extracts a repository-relative path from a declared deliverable,
