@@ -1,0 +1,54 @@
+diff --git a/broken_test.go.disabled b/broken_test.go.disabled
+deleted file mode 100644
+index f9e8fe0..0000000
+--- a/broken_test.go.disabled
++++ /dev/null
+@@ -1,8 +0,0 @@
+-package fixture
+-
+-import "testing"
+-
+-// TestBroken is intentionally failing; the gate must report FAIL.
+-func TestBroken(t *testing.T) {
+-	t.Fatalf("intentional ETOE-005 validation failure")
+-}
+diff --git a/calc.go b/calc.go
+index 70e28ac..8907c1f 100644
+--- a/calc.go
++++ b/calc.go
+@@ -4,3 +4,11 @@ package fixture
+ func Add(a, b int) int {
+ 	return 0
+ }
++
++// etoe-005 fixture (fail mode): intentional mutation
++
++// etoe-005 fixture (fail mode): intentional mutation
++
++// etoe-005 fixture (fail mode): intentional mutation
++
++// etoe-005 fixture (fail mode): intentional mutation
+diff --git a/broken_test.go b/broken_test.go
+new file mode 100644
+--- /dev/null
++++ b/broken_test.go
+@@ -0,0 +1,8 @@
++package fixture
++
++import "testing"
++
++// TestBroken is intentionally failing; the gate must report FAIL.
++func TestBroken(t *testing.T) {
++	t.Fatalf("intentional ETOE-005 validation failure")
++}
+diff --git a/etoe-005-run-records.txt b/etoe-005-run-records.txt
+new file mode 100644
+--- /dev/null
++++ b/etoe-005-run-records.txt
+@@ -0,0 +1,6 @@
++# ETOE-005 fixture run records (structured evidence)
++# binary: /tmp/sop-etoe005
++# agent:  /Users/imhttran/agentic-workspace/agentic-sop/scripts/etoe-005-fixture-agent.sh (controlled, offline; SOP_AGENT_HARNESS=command)
++# root:   /private/tmp/etoe-006-fail
++# scenario: fail
++# git-baseline: 2559c38

@@ -1,0 +1,9 @@
+{
+  "class": "medium",
+  "provider": "ollama",
+  "model": "glm-5.3-flash:cloud",
+  "locality": "cloud",
+  "source": "cli",
+  "fallback": false,
+  "reason": "explicit CLI model class"
+}

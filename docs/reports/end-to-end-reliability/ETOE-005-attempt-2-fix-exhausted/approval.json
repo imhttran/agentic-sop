@@ -1,0 +1,13 @@
+{
+  "id": "ETOE-005-1791522983748348000",
+  "task_id": "ETOE-005",
+  "kind": "NEEDS_HUMAN",
+  "target": "ETOE-005",
+  "reason": "fix-loop limit reached (3/3)",
+  "evidence": "automatic fixes were exhausted (3/3) without resolving the failure",
+  "stage": "WAITING_FOR_HUMAN",
+  "disposition": "NEEDS_HUMAN",
+  "requested_at": "2026-10-09T05:16:23.748349Z",
+  "requested_by": "sop",
+  "status": "PENDING"
+}

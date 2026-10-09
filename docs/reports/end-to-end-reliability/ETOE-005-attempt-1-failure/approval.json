@@ -1,0 +1,12 @@
+{
+  "id": "ETOE-005-1791522659990369000",
+  "task_id": "ETOE-005",
+  "kind": "NEEDS_HUMAN",
+  "target": "ETOE-005",
+  "reason": "no authoritative signal was available; a human decision is required",
+  "evidence": "no authoritative signal was available; a human decision is required",
+  "disposition": "NEEDS_HUMAN",
+  "requested_at": "2026-10-09T05:10:59.99037Z",
+  "requested_by": "sop",
+  "status": "PENDING"
+}

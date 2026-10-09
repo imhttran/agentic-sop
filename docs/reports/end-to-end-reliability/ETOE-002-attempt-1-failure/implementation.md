@@ -1,0 +1,1 @@
+"the Ollama agent IMPLEMENT stopped after 6 iterations; the model repeated a non-progressing action (termination=no_progress, model=deepseek-v4.1-flash:cloud, repeated_action="read_file")"

@@ -1,0 +1,1 @@
+NEEDS_HUMAN: the requested fixture operation is destructive and irreversible, so it requires authorization|NEEDS_HUMAN

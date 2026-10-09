@@ -1,0 +1,66 @@
+{
+  "id": "run-20261009-054551",
+  "stage": "WAITING_FOR_HUMAN",
+  "provider": "ollama",
+  "review_engine": "self",
+  "decision": "NEEDS_HUMAN",
+  "reasons": [
+    "tests failed or were not run",
+    "fix-loop limit reached (3/3)"
+  ],
+  "fix_cycles": 3,
+  "execution_mode": "",
+  "verified_first": false,
+  "validation": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 25742875,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 1,
+      "Stdout": "--- FAIL: TestBroken (0.00s)\n    broken_test.go:7: intentional ETOE-005 validation failure\n--- FAIL: TestAdd (0.00s)\n    calc_test.go:7: Add(2,3) = 0, want 5\nFAIL\nFAIL\tetoe005fixture\t0.167s\nFAIL\n",
+      "Stderr": "",
+      "Duration": 312749291,
+      "Status": "FAIL"
+    }
+  ],
+  "findings": null,
+  "performance": {
+    "id": "run-20261009-054551",
+    "total_ms": 1697,
+    "stages_ms": {
+      "fix": 113,
+      "implement": 32,
+      "plan": 31,
+      "validation": 1409
+    },
+    "validation_ms": {
+      "build": 99,
+      "test": 1307
+    },
+    "counts": {
+      "agent_calls": 5,
+      "agent_calls_avoided": 0,
+      "validation_runs": 4,
+      "validation_reused": 0,
+      "review_runs": 0,
+      "review_reused": 0,
+      "fix_cycles": 3,
+      "plan_repairs": 0
+    }
+  },
+  "classification": {
+    "kind": "AUTO_FIX_EXHAUSTED",
+    "disposition": "NEEDS_HUMAN",
+    "confidence": "HIGH",
+    "reason": "automatic fixes were exhausted (3/3) without resolving the failure: UNIT_TEST `go test ./...`: --- FAIL: TestBroken (0.00s) broken_test.go:7: intentional ETOE-005 validation failure --- FAIL: TestAdd (0.00s) calc_test.go:7: Add(2,3) = 0, want 5 FAIL FAIL etoe005fixture 0.167s FAIL"
+  },
+  "generated_at": "2026-10-09T05:45:53.459037Z"
+}

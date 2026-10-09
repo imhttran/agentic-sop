@@ -1,0 +1,19 @@
+{
+  "kind": "APPROVAL_REQUIRED",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "HIGH",
+  "reason": "the current run is at an authoritative approval boundary; a human decision is required",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "HIGH",
+    "RequiresHuman": true,
+    "Reason": "the current run is at an authoritative approval boundary; a human decision is required",
+    "Classification": {
+      "kind": "APPROVAL_REQUIRED",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "HIGH",
+      "reason": "the current run is at an authoritative approval boundary; a human decision is required"
+    }
+  }
+}

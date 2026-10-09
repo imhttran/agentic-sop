@@ -1,0 +1,61 @@
+{
+  "Summary": "The change adds three operator-run scripts (setup/run/teardown) plus a report for a disposable ETOE-005 dogfood fixture. The design is reasonable: setup isolates the fixture outside any production checkout with symlink-resolved guards, writes three tasks (FIX-SUCCESS, FIX-FAIL, FIX-GATE) with predeclared outcomes, and the run script captures run IDs by diffing .agent-sdlc/runs/ before/after each sop run and compares observed vs expected outcomes. However, acceptance criterion 3 is only partially met: no concrete run IDs or observed outcomes are recorded in the deliverable, and the run script's outcome parsing is fragile (grep for a bare \"stage\" field against state.json, and substring matching for \"fail\" against the expected value would also match other stages such as \"failed\"), so the deterministic baseline is more of a procedure than a recorded baseline. The scripts also invoke the installed/built sop with a `run --task` flag whose existence is not verified anywhere in the change.",
+  "Findings": [
+    {
+      "Severity": "HIGH",
+      "Title": "Acceptance criterion 3 not actually delivered: no concrete run IDs or observed outcomes recorded",
+      "Detail": "The task's third acceptance criterion requires that 'the recorded run IDs and expected outcomes are sufficient to reproduce the baseline.' The report itself marks this criterion 'PARTIALLY MET' and records all run IDs and observed outcomes as PENDING. No concrete run-ID values appear anywhere in the deliverable; the baseline is therefore a procedure, not a recorded baseline. The report's justification (that the governed harness is repository-root confined) does not match the scripts: they are ordinary operator-run bash that shell out to `sop`, not the tool harness, so an operator execution of the run script was possible and would have populated the records file.",
+      "File": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+      "Line": 285,
+      "Suggestion": "Actually execute scripts/etoe-005-fixture-setup.sh and scripts/etoe-005-fixture-run.sh once (against a source build of sop) and paste the resulting etoe-005-run-records.txt content (concrete run IDs, observed stages, MATCH/MISMATCH verdicts) into the report, then mark criterion 3 accordingly. If execution genuinely cannot be performed, state the specific concrete blocker rather than the generic harness-confinement rationale."
+    },
+    {
+      "Severity": "HIGH",
+      "Title": "Outcome parsing is fragile and can silently misclassify the intentionally failing task",
+      "Detail": "read_stage greps the raw state.json for '\"stage\"[^,]*' and records the raw grep output (e.g. '\"stage\": \"blocked\"' or '\"stage\":\"failed\"'). verify_expectation then applies `grep -qi \"$expected\"` where EXPECT_FAIL='fail'. That substring test would match stages such as 'failed', 'validation_failed', or even 'failure' — and more importantly it does NOT robustly distinguish a validation failure from any other failure (e.g. a crash, a missing binary, an infrastructure error). A task that failed for an unrelated reason would be recorded as MATCH, defeating the purpose of a deterministic baseline. Similarly EXPECT_SUCCESS='completed' and EXPECT_GATE='needs_human' rely on arbitrary substring matches against a raw, unparsed grep fragment rather than a parsed field value.",
+      "File": "scripts/etoe-005-fixture-run.sh",
+      "Line": 106,
+      "Suggestion": "Parse state.json properly (e.g. with a small python/jq-free awk or a documented field extractor that yields the exact value), normalize the observed value, and compare with exact equality or a whitelist of accepted values per task. Assert that FIX-FAIL's failure is attributable to the validation command (e.g. validation.json shows the go test command failing) rather than only that the stage contains 'fail'."
+    },
+    {
+      "Severity": "MEDIUM",
+      "Title": "Run-ID capture assumes exactly one new run directory yet silently continues with UNAVAILABLE",
+      "Detail": "new_run_id records UNAVAILABLE when zero or more than one new directory appears, and `sop run` is invoked with `|| true`, so a run that never starts (e.g. wrong --task flag, binary lacking the surface, sop init state not recognized) produces a successful-looking script exit with UNAVAILABLE run IDs. The script exits 0 in all cases, so an automated/CI consumer cannot tell a real baseline from a completely failed run. This makes the 'reproducible' claim weaker than stated.",
+      "File": "scripts/etoe-005-fixture-run.sh",
+      "Line": 91,
+      "Suggestion": "Fail fast (non-zero exit) when a run produces zero new run directories or the expected stage cannot be read, and optionally aggregate a final PASS/FAIL verdict so the baseline run is self-checking rather than purely observational."
+    },
+    {
+      "Severity": "MEDIUM",
+      "Title": "Scripts depend on `sop run --task` but never verify that surface exists",
+      "Detail": "Both the report (mentioning 'run --max-tasks' as a possibly-missing surface) and the scripts assume `sop run --task \u003cfile\u003e` exists. The setup script's `command -v sop` check only verifies the binary exists; the run script likewise only checks `command -v`. If the installed binary lacks `--task`, every invocation fails, `|| true` swallows it, and the baseline records UNAVAILABLE for each task with no clear diagnosis. The baseline's reproducibility depends on an unverified interface.",
+      "File": "scripts/etoe-005-fixture-run.sh",
+      "Line": 132,
+      "Suggestion": "Add an explicit capability probe (e.g. `sop run --help | grep -q '\\-\\-task'` or `sop run --task` on an absent task and check for a usage error distinct from a not-found error) and abort with a clear message recommending the source-built binary when the surface is missing."
+    },
+    {
+      "Severity": "MEDIUM",
+      "Title": "FIX-GATE task definition does not clearly guarantee it reaches the human approval gate",
+      "Detail": "tasks/FIX-GATE.md and the report claim FIX-GATE reaches the approval boundary because config sets human.approval_before_commit: true, but the task body is only prose ('Perform a change that requires human approval before it is committed'). The success task (implement Add) and the gated task do not differ operationally in a way the fixture enforces: because `sop run` here runs a single task, whether the run stops at needs_human vs completes depends on SOP's internal handling of approval_before_commit, not on anything the fixture does. If SOP only reaches the approval gate after commit-stage work, the gate task may complete instead, and the predeclared expectation would MISMATCH on first execution — which the script will record but which indicates the fixture's third task is under-specified.",
+      "File": "scripts/etoe-005-fixture-setup.sh",
+      "Line": 246,
+      "Suggestion": "Make FIX-GATE do work that is guaranteed to hit the gated stage (e.g. a change that reaches the commit step), or document the exact SOP stage/config combination that produces needs_human and assert it in the expectation. If the gate is purely config-driven on every run, note that FIX-SUCCESS and FIX-FAIL would also hit it, which would conflict with their predeclared outcomes."
+    },
+    {
+      "Severity": "LOW",
+      "Title": "Setup's in-checkout guard depends on the script being run from its repository location",
+      "Detail": "CHECKOUT_ROOT is derived from `dirname $0`/.., so if the scripts are copied elsewhere (e.g. vendored into another tree or invoked via a symlink in a shared bin directory) the computed checkout root changes and the 'inside production checkout' guard may no longer refuse an in-checkout fixture root. The symlink resolution uses `cd ... \u0026\u0026 pwd -P` on the parent of dirname($0), which resolves the directory but not the script file symlink itself.",
+      "File": "scripts/etoe-005-fixture-setup.sh",
+      "Line": 96,
+      "Suggestion": "Resolve the script's real path first (e.g. readlink -f \"$0\" or a portable equivalent) before computing CHECKOUT_ROOT, or document that the scripts must be invoked from the checkout's scripts/ directory."
+    },
+    {
+      "Severity": "LOW",
+      "Title": "Report references config-schema documentation as authoritative without verifying it in this change",
+      "Detail": "The setup script and report assert the config heredoc follows docs/reference/CONFIGURATION.md and is validated by `sop status`. The report does not record the actual `sop status` success message or an init/config sample in the baseline, so a reviewer cannot confirm the config shape was accepted for the recorded binary. Section 3.2 lists only the expected layout.",
+      "File": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+      "Line": 120,
+      "Suggestion": "Record the verbatim `sop status` (or `sop init`) output and the exact config.yaml content used for the baseline run, so the schema-shape claim is verifiable from the report alone."
+    }
+  ]
+}

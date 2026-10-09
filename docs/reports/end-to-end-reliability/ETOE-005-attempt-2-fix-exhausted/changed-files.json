@@ -1,0 +1,6 @@
+[
+  "scripts/etoe-005-fixture-setup.sh",
+  "scripts/etoe-005-fixture-teardown.sh",
+  "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+  "scripts/etoe-005-fixture-run.sh"
+]

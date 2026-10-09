@@ -1,0 +1,7 @@
+{
+  "Decision": "NEEDS_HUMAN",
+  "Reasons": [
+    "tests failed or were not run",
+    "fix-loop limit reached (3/3)"
+  ]
+}
