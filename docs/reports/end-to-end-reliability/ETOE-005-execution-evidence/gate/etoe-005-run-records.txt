@@ -1,0 +1,28 @@
+# ETOE-005 fixture run records (structured evidence)
+# binary: /tmp/sop-etoe005
+# agent:  /Users/imhttran/agentic-workspace/agentic-sop/scripts/etoe-005-fixture-agent.sh (controlled, offline; SOP_AGENT_HARNESS=command)
+# root:   /private/tmp/etoe-005-gate
+# scenario: gate
+# git-baseline: 78e5143
+RESULT docs/PLAN.md | run-id FIX-003 | exit=1 | expected=gated | stage=WAITING_FOR_HUMAN validation=UNAVAILABLE gate=UNAVAILABLE | verdict=MATCH
+# --- sop approvals --json (after FIX-GATE) ---
+{
+  "version": 1,
+  "approvals": [
+    {
+      "task_id": "FIX-003",
+      "kind": "NEEDS_HUMAN",
+      "target": "FIX-003",
+      "reason": "the requested fixture operation is destructive and irreversible, so it requires authorization",
+      "evidence": "the agent reported a boundary that requires a human: the requested fixture operation is destructive and irreversible, so it requires authorization",
+      "stage": "WAITING_FOR_HUMAN",
+      "disposition": "NEEDS_HUMAN",
+      "status": "PENDING",
+      "requested_at": "2026-10-09T05:31:19.762621Z",
+      "task_status": "PLANNED"
+    }
+  ]
+}
+GATE-EVIDENCE: a PENDING approval is present
+# --- machine-readable summary (JSONL) ---
+{"exit": 1, "expected": "gated", "gate": "UNAVAILABLE", "run_id": "FIX-003", "stage": "WAITING_FOR_HUMAN", "task": "docs/PLAN.md", "validation": "UNAVAILABLE", "verdict": "MATCH"}

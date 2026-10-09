@@ -1,0 +1,1 @@
+{"status":"needs_human","reason":"the requested fixture operation is destructive and irreversible, so it requires authorization","summary":"human gate"}

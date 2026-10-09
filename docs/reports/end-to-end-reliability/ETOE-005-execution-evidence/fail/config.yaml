@@ -1,0 +1,30 @@
+version: 1
+
+project:
+  name: etoe-005-fixture
+  integration_branch: main
+
+validation:
+  build:
+    - go build ./...
+  test:
+    - go test ./...
+  lint:
+    - go vet ./...
+
+review:
+  engine: self
+  delegation: false
+
+quality:
+  require_tests: true
+  max_fix_cycles: 3
+  fail_on:
+    - critical
+    - high
+
+human:
+  approval_before_commit: true
+
+workflow:
+  mode: local
