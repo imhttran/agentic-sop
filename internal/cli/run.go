@@ -269,7 +269,12 @@ type lifeResult struct {
 	report        review.Report
 	verifiedFirst bool
 	satisfaction  *agent.CompletionEvidence
-	perf          perf.Task
+	// outcome is the objective-level acceptance verdict derived from the task
+	// specification after the gate. It is nil when the task declared no objective;
+	// it distinguishes PASS/LOCAL_DONE from verified completion and never changes
+	// the lifecycle transition.
+	outcome *outcomeArtifact
+	perf    perf.Task
 	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
 	// JEV did not run. It is diagnostic evidence referenced by the report; it is
 	// never workflow state and never feeds a decision.
@@ -363,6 +368,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
+	writeOutcomeArtifact(rn, res.outcome)
 	completion := ""
 	var mutations *int
 	if res.satisfaction != nil {
@@ -395,6 +401,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		ModelSelection: res.modelSelection,
 		Routing:        routingDocFor(res.routing),
 		Classification: classificationDoc(res.classification),
+		Outcome:        res.outcome,
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
 	})
@@ -1022,6 +1029,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		report:         report,
 		verifiedFirst:  verifiedFirst,
 		satisfaction:   satisfaction,
+		outcome:        deriveOutcome(spec, dir, gate),
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
@@ -1222,6 +1230,7 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	if rel := relDir(dir, rn.Dir()); rel != "" {
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
+	writeOutcomeSummary(stdout, res.outcome)
 	if res.gate.Decision == quality.Pass {
 		fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
 		return exitOK
@@ -1705,7 +1714,11 @@ type runReportDoc struct {
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
 	Classification *failure.Classification `json:"classification,omitempty"`
-	GeneratedAt    time.Time               `json:"generated_at"`
+	// Outcome is the objective-level acceptance verdict derived from the task
+	// specification (VERIFIED/PARTIAL/HOLD). It is omitted when the task declared no
+	// objective, so an existing PASS report is unchanged.
+	Outcome     *outcomeArtifact `json:"outcome,omitempty"`
+	GeneratedAt time.Time        `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
@@ -1726,7 +1739,9 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	if res.verifiedFirst {
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
-	fmt.Fprintf(&b, "- Gate: `%s`\n\n", res.gate.Decision)
+	fmt.Fprintf(&b, "- Gate: `%s`\n", res.gate.Decision)
+	writeOutcomeReport(&b, res.outcome)
+	b.WriteString("\n")
 	writeModelSelectionReport(&b, res.modelSelection)
 	writeRoutingReport(&b, routingDocFor(res.routing))
 
