@@ -104,17 +104,22 @@ var ErrNotFound = errors.New("config: not found")
 // Config is the resolved project configuration: every default has been applied
 // and the values have passed Validate.
 type Config struct {
-	Version    int            `yaml:"version"`
-	Project    Project        `yaml:"project"`
-	Agent      Agent          `yaml:"agent"`
-	Validation Validation     `yaml:"validation"`
-	Review     Review         `yaml:"review"`
-	Quality    Quality        `yaml:"quality"`
-	Human      Human          `yaml:"human"`
-	Decision   DecisionConfig `yaml:"decision"`
-	Features   Features       `yaml:"features"`
-	Workflow   Workflow       `yaml:"workflow"`
-	Autonomy   Autonomy       `yaml:"autonomy"`
+	Version    int        `yaml:"version"`
+	Project    Project    `yaml:"project"`
+	Agent      Agent      `yaml:"agent"`
+	Validation Validation `yaml:"validation"`
+	Review     Review     `yaml:"review"`
+	Quality    Quality    `yaml:"quality"`
+	// Verification is the operator-owned acceptance-criterion verification
+	// configuration (HARDEN-001). It is additive and OFF by default: an omitted
+	// block leaves existing behavior unchanged. `enforce` is a TEMPORARY migration
+	// switch (default false); HARDEN-001-e removes the permissive default.
+	Verification Verification   `yaml:"verification"`
+	Human        Human          `yaml:"human"`
+	Decision     DecisionConfig `yaml:"decision"`
+	Features     Features       `yaml:"features"`
+	Workflow     Workflow       `yaml:"workflow"`
+	Autonomy     Autonomy       `yaml:"autonomy"`
 	// EarlyJEV is the optional early-JEV checkpoint configuration: its own
 	// top-level namespace, separate from quality.jev (quality-seam JEV),
 	// decision.* (the thresholds layer), and models (agent model routing).
@@ -191,6 +196,27 @@ type Quality struct {
 	MaxFixCycles int      `yaml:"max_fix_cycles"`
 	FailOn       []string `yaml:"fail_on"`
 	JEV          JEV      `yaml:"jev"`
+}
+
+// Verification is the operator-owned acceptance-criterion verification
+// configuration (HARDEN-001). Bindings are authoritative verifier definitions:
+// they are loaded only from this operator-authored configuration, and the tool
+// harness protects .agent-sdlc, so an agent can neither read nor modify them.
+type Verification struct {
+	// Enforce is the TEMPORARY migration switch (HARDEN-001-c). It defaults to
+	// false so no existing behavior changes; HARDEN-001-e removes this permissive
+	// default and makes acceptance enforcement unconditional.
+	Enforce bool `yaml:"enforce"`
+	// Bindings are the operator-owned verifier definitions.
+	Bindings []VerificationBinding `yaml:"bindings"`
+}
+
+// VerificationBinding is one operator-owned verifier definition.
+type VerificationBinding struct {
+	ID                string `yaml:"id"`
+	Criterion         string `yaml:"criterion"`
+	Command           string `yaml:"command"`
+	OutputMustContain string `yaml:"output_must_contain"`
 }
 
 // JEV is the JEV feature flag (conceptually quality.jev.enabled).

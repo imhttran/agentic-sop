@@ -18,6 +18,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
+	"github.com/imhttran/agentic-sop/internal/criteria"
 	"github.com/imhttran/agentic-sop/internal/decisionmemory"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/git"
@@ -301,6 +302,13 @@ type lifeResult struct {
 	// implementation attempt. It is diagnostic evidence: the trace records its
 	// summary, and nothing reads it back to drive a decision.
 	ctx sopctx.Context
+	// acceptanceEnforced, acceptanceVerified, and acceptanceWorkspace carry the
+	// trusted acceptance-verification context to the completion boundary
+	// (HARDEN-001-d Phase 4D): enforcement active, verification passed, and the
+	// workspace fingerprint it observed. They are zero when enforcement is off.
+	acceptanceEnforced  bool
+	acceptanceVerified  bool
+	acceptanceWorkspace string
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -847,6 +855,25 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			jevDoc = persistedJEVDoc(rn, jevEv)
 		}
 
+		// Trusted acceptance-criterion verification (HARDEN-001-c). When enforcement
+		// is enabled, SOP runs the operator-owned verifiers for the task's required
+		// criteria and feeds the trusted, in-memory outcomes to the gate.
+		// criteria.json is written as an audit artifact only; the gate reads the
+		// in-memory result, never the artifact, so the artifact can never authorise
+		// completion. Disabled (the temporary migration default) is a no-op, so
+		// existing behavior is unchanged.
+		var acceptance *quality.Acceptance
+		var acceptanceWS string
+		if cfg.Verification.Enforce {
+			acceptance, acceptanceWS = evaluateAcceptance(ctx, cfg, dir, spec, rn)
+			if d.afterVerify != nil {
+				d.afterVerify()
+			}
+		}
+		res.acceptanceEnforced = acceptance != nil && acceptance.Enforced
+		res.acceptanceVerified = acceptance != nil && acceptance.Satisfied
+		res.acceptanceWorkspace = acceptanceWS
+
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
 			TestPassed:   categoryPassed(suite, testrunner.UnitTest),
@@ -855,6 +882,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Unresolved:   report.Findings,
 			FixCycles:    cycles,
 			JEV:          jevEv.gateEvidence(),
+			Acceptance:   acceptance,
 		})
 		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 
@@ -1027,6 +1055,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		classification: class,
 		decision:       decision,
 		ctx:            ctxSummary,
+		// Carry the trusted acceptance-verification context to the completion
+		// boundary (HARDEN-001-d Phase 4D).
+		acceptanceEnforced:  res.acceptanceEnforced,
+		acceptanceVerified:  res.acceptanceVerified,
+		acceptanceWorkspace: res.acceptanceWorkspace,
 	}, nil
 }
 
@@ -1544,6 +1577,79 @@ func loadTaskFile(dir, arg string) (*taskfile.Spec, error) {
 
 // runID derives a stable run id from the task file, falling back to a timestamp
 // when the file has no id.
+// evaluateAcceptance runs the operator-owned acceptance verifiers for the task's
+// required criteria and returns the trusted in-memory gate input (HARDEN-001-c)
+// together with the trusted workspace fingerprint it observed (HARDEN-001-d
+// Phase 4D), which the completion boundary re-checks. It is model-free and never
+// reads criteria.json back. A task with no declared acceptance criteria has
+// nothing to enforce and is satisfied.
+func evaluateAcceptance(ctx context.Context, cfg config.Config, dir string, spec *taskfile.Spec, rn *runpkg.Run) (*quality.Acceptance, string) {
+	if len(spec.AcceptanceCriteria) == 0 {
+		return &quality.Acceptance{Enforced: true, Satisfied: true}, ""
+	}
+	specs := make([]criteria.BindingSpec, 0, len(cfg.Verification.Bindings))
+	for _, b := range cfg.Verification.Bindings {
+		specs = append(specs, criteria.BindingSpec{ID: b.ID, Criterion: b.Criterion, Command: b.Command, OutputMustContain: b.OutputMustContain})
+	}
+	bindings, err := criteria.ParseBindingSpecs(specs)
+	if err != nil {
+		return &quality.Acceptance{Enforced: true, Reason: "invalid operator verifier bindings: " + err.Error()}, ""
+	}
+	revision := ""
+	if head, herr := git.New(dir).Head(ctx); herr == nil {
+		revision = head
+	}
+	if strings.TrimSpace(revision) == "" {
+		return &quality.Acceptance{Enforced: true, Reason: "workspace revision could not be established"}, ""
+	}
+	workspace := dir
+	if abs, aerr := filepath.Abs(dir); aerr == nil {
+		workspace = abs
+	}
+	id := runID(spec)
+	// Authoritative attempt identity: the 1-based ordinal of the attempt this run
+	// records, derived from SOP's persisted attempt records (never a model
+	// assertion and never an invented counter). It does not reset on a
+	// continuation, because the records accumulate on disk.
+	attempt := len(runpkg.ReadAttemptRecordsAt(rn.Dir())) + 1
+	attemptID := fmt.Sprintf("%s-a%d", id, attempt)
+	wsState, wsErr := criteria.WorkspaceDigest(dir)
+	if wsErr != nil {
+		return &quality.Acceptance{Enforced: true, Reason: "workspace fingerprint could not be computed: " + wsErr.Error()}, ""
+	}
+	ev, verr := criteria.Verify(ctx, criteria.Options{
+		Dir: dir, Workspace: workspace, WorkspaceState: wsState,
+		TaskID: id, Attempt: attempt, AttemptID: attemptID, Revision: revision,
+		Criteria: spec.AcceptanceCriteria, Bindings: bindings,
+	})
+	if verr != nil {
+		return &quality.Acceptance{Enforced: true, Reason: verr.Error()}, ""
+	}
+	// criteria.json is an audit artifact only: it is never read back.
+	_, _ = criteria.WriteEvidence(rn.Dir(), ev)
+	if ev.AllMetVerified() {
+		return &quality.Acceptance{Enforced: true, Satisfied: true}, wsState
+	}
+	return &quality.Acceptance{Enforced: true, Reason: summarizeAcceptance(ev)}, wsState
+}
+
+// summarizeAcceptance names the criteria that are not MET (for the gate reason).
+func summarizeAcceptance(ev criteria.Evidence) string {
+	if len(ev.Outcomes) == 0 {
+		return "required acceptance criteria were not verified"
+	}
+	var parts []string
+	for _, o := range ev.Outcomes {
+		if o.State != criteria.Met {
+			parts = append(parts, fmt.Sprintf("%s=%s", o.CriterionID, o.State))
+		}
+	}
+	if len(parts) == 0 {
+		parts = append(parts, "evidence invalid")
+	}
+	return strings.Join(parts, ", ")
+}
+
 func runID(spec *taskfile.Spec) string {
 	if id := strings.TrimSpace(spec.ID); id != "" {
 		return id

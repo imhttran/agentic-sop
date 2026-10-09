@@ -15,6 +15,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/criteria"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
@@ -599,7 +600,7 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// The run's lifecycle already passed its gates, or the task is parked after the
 	// local gates: finish it without restarting implementation.
 	if (hasStage && stage == runpkg.Passed) || action == resume.Review || action == resume.OpenPR {
-		if err := completeTask(st, task); err != nil {
+		if err := completeTask(st, task, dir, cfg, &completionVerify{enforced: cfg.Verification.Enforce}); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
 			return exitError, task.ID
 		}
@@ -803,7 +804,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		return exitError
 	}
 
-	if err := completeTask(saver, task); err != nil {
+	if err := completeTask(saver, task, dir, cfg, &completionVerify{enforced: res.acceptanceEnforced, verified: res.acceptanceVerified, workspace: res.acceptanceWorkspace}); err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
@@ -924,10 +925,37 @@ var localCompletionPath = []domain.TaskStatus{
 	domain.LOCAL_DONE,
 }
 
+// completionVerify is the trusted acceptance-verification context carried from
+// the run loop to the completion boundary (HARDEN-001-d Phase 4D).
+type completionVerify struct {
+	enforced  bool
+	verified  bool
+	workspace string
+}
+
 // completeTask advances a task to LOCAL_DONE along the local path on a copy,
 // saved once. It continues from wherever the task already is on that path, so a
 // resumed task that already passed some local steps is not sent backwards.
-func completeTask(saver taskSaver, task *domain.Task) error {
+//
+// HARDEN-001-d Phase 4D: when acceptance enforcement is active, completion is
+// refused unless trusted verification passed AND the workspace fingerprint is
+// unchanged since verification. The fingerprint is recomputed here, immediately
+// before the LOCAL_DONE transition, so a workspace mutation after verification
+// (or a completion path with no verification context, e.g. resume) cannot
+// silently complete the task. With enforcement off, behavior is unchanged.
+func completeTask(saver taskSaver, task *domain.Task, dir string, cfg config.Config, vctx *completionVerify) error {
+	if vctx != nil && vctx.enforced {
+		if !vctx.verified {
+			return fmt.Errorf("acceptance verification did not pass; completion refused")
+		}
+		now, err := criteria.WorkspaceDigest(dir)
+		if err != nil {
+			return fmt.Errorf("workspace fingerprint could not be recomputed: %w", err)
+		}
+		if now != vctx.workspace {
+			return fmt.Errorf("workspace changed after verification; completion refused")
+		}
+	}
 	start := 0
 	for i, status := range localCompletionPath {
 		if status == task.Status {

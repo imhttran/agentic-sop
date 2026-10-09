@@ -74,6 +74,24 @@ type Input struct {
 	// evidence. A nil value means no JEV analysis ran (disabled or absent), and
 	// leaves the verdict exactly as before.
 	JEV *JEVEvidence
+	// Acceptance is the trusted, in-memory result of operator-owned acceptance
+	// criterion verification (HARDEN-001). A nil value (enforcement disabled)
+	// leaves the verdict exactly as before; when present and enforced, unsatisfied
+	// criteria are a deterministic failure — never a model judgement.
+	Acceptance *Acceptance
+}
+
+// Acceptance is the deterministic acceptance-criterion gate input. It is derived
+// from trusted in-memory verifier outcomes (never from an artifact or model text),
+// so criteria.json can never independently authorise completion.
+type Acceptance struct {
+	// Enforced is true when acceptance enforcement is on for this run.
+	Enforced bool
+	// Satisfied is true only when the trusted evidence is valid and every required
+	// criterion is MET.
+	Satisfied bool
+	// Reason explains an unsatisfied result (shown when the gate blocks).
+	Reason string
 }
 
 // JEVEvidence is a validated snapshot of an optional JEV analysis, shaped for
@@ -145,6 +163,20 @@ func Evaluate(policy config.Quality, in Input) Result {
 	}
 	if in.LintRequired && !in.LintPassed {
 		reasons = append(reasons, "lint failed")
+		checkFailed = true
+	}
+
+	// Trusted acceptance-criterion verification (HARDEN-001): an enforced,
+	// not-satisfied result is a deterministic failure. It is model-free (the
+	// outcomes come from operator-owned verifiers run by SOP), so it participates
+	// in the existing FIX/human logic below exactly like a failed check. A nil or
+	// disabled Acceptance leaves the verdict unchanged.
+	if in.Acceptance != nil && in.Acceptance.Enforced && !in.Acceptance.Satisfied {
+		reason := strings.TrimSpace(in.Acceptance.Reason)
+		if reason == "" {
+			reason = "required acceptance criteria are not verified"
+		}
+		reasons = append(reasons, "acceptance criteria not verified: "+reason)
 		checkFailed = true
 	}
 

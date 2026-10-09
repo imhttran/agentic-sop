@@ -56,6 +56,12 @@ type deps struct {
 	snapshotRepository func(context.Context, string) (map[string]string, error)
 	commit             func(ctx context.Context, dir, message string) error
 	newGitHub          func(dir string) github.Client
+	// afterVerify, when set, is a deterministic test seam invoked immediately after
+	// trusted acceptance verification runs and before the gate/completion boundary
+	// (HARDEN-001-d Phase 4D). Production leaves it nil. It lets a test mutate the
+	// workspace after verification to prove the completion re-check blocks a stale
+	// completion; it never influences a decision by itself.
+	afterVerify func()
 	// newJEVAnalyzer builds the optional JEV analyzer from configuration. It is
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.

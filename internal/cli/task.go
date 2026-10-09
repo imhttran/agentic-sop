@@ -123,6 +123,16 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 		return exitError
 	}
 
+	// HARDEN-001-c: while acceptance enforcement is enabled, an externally
+	// completed task whose work was never verified by a governed run cannot be
+	// silently accepted. Fail closed when the task declares required acceptance
+	// criteria; a task without criteria is unaffected. A safe operator-attestation
+	// contract is deferred to HARDEN-001-e.
+	if cfg.Verification.Enforce && strings.TrimSpace(task.AcceptanceCriteria) != "" {
+		fmt.Fprintf(stderr, "task complete: external completion is blocked while acceptance enforcement is enabled; task %s declares required acceptance criteria that must be verified by a governed run\n", id)
+		return exitError
+	}
+
 	// Dependencies must already satisfy existing policy: external completion never
 	// advances a task past its dependency ordering.
 	if err := requireDependenciesSatisfied(st, task); err != nil {
