@@ -37,11 +37,14 @@ type outcomeArtifact struct {
 }
 
 // deriveOutcome computes the objective-level verdict from the task specification.
-// It returns nil — leaving the run exactly as before — when the task declares
-// neither acceptance criteria nor deliverables, so a task with no declared
-// objective is unchanged.
+// It always returns a verdict for a non-nil specification — a prompt-driven
+// implementation run therefore records evidence-backed outcome, never a silent
+// no-op. When the specification declares no deterministically verifiable
+// acceptance requirement, the deterministic checks are the only evidence and the
+// verdict is PARTIAL rather than VERIFIED, so a PASS is never equated with verified
+// objective completion. It returns nil only when there is no specification.
 func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcomeArtifact {
-	if spec == nil || (len(spec.AcceptanceCriteria) == 0 && len(spec.Deliverables) == 0) {
+	if spec == nil {
 		return nil
 	}
 	var criteria []outcome.Criterion
@@ -86,6 +89,18 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 			ID:          fmt.Sprintf("criterion-%d", i+1),
 			Required:    true,
 			Description: c,
+		})
+	}
+
+	// With no objective-bearing requirement (no deliverable, no acceptance
+	// criterion), the deterministic checks are the only evidence, which cannot
+	// verify the objective: record an unverifiable required criterion so the verdict
+	// is PARTIAL, never VERIFIED.
+	if len(spec.Deliverables) == 0 && len(spec.AcceptanceCriteria) == 0 {
+		criteria = append(criteria, outcome.Criterion{
+			ID:          "objective-acceptance",
+			Required:    true,
+			Description: "the specification declares no deterministically verifiable acceptance requirement",
 		})
 	}
 

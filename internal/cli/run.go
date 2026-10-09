@@ -1212,6 +1212,9 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
+	for _, advisory := range res.gate.Advisories {
+		fmt.Fprintf(stdout, "  advisory: %s\n", advisory)
+	}
 	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
 	writeClassification(stdout, res.classification, res.decision)
 	writeAutonomySummary(stdout, res.decision)
@@ -1740,6 +1743,9 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
 	fmt.Fprintf(&b, "- Gate: `%s`\n", res.gate.Decision)
+	for _, advisory := range res.gate.Advisories {
+		fmt.Fprintf(&b, "- Advisory: %s\n", advisory)
+	}
 	writeOutcomeReport(&b, res.outcome)
 	b.WriteString("\n")
 	writeModelSelectionReport(&b, res.modelSelection)
