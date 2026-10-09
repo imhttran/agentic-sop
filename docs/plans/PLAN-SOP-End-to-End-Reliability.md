@@ -1,0 +1,310 @@
+# PLAN — SOP End-to-End Reliability
+
+**Status:** PROPOSED — formatted for deterministic SOP import; requires operator review before activation
+**Primary repository:** `agentic-sop`
+**Integration targets:** `sop-controller`, `sop-decision-adapters`
+**Execution rule:** Parallel read-only assessments or isolated worktrees; single writer to each SOP state database.
+**Import format:** SOP rendered-plan shape — `## Project`, `## Summary`, then one `## <ID> — <title>` stage each with `### Dependencies` / `### Deliverables` / `### Acceptance Criteria`.
+**Task IDs:** `ETOE-001` … `ETOE-010` (parser-safe; the former `E2E-###` prefix is not a valid SOP stage id because a stage id's alphabetic prefix may not contain digits).
+
+## Project
+
+SOP End-to-End Reliability
+
+## Summary
+
+Verify that a real, disposable SOP project can proceed through provider readiness,
+model/decision selection, IMPLEMENT, deterministic VALIDATE, REVIEW, optional
+FIX/retry, human approval, and plan completion while preserving SOP as the sole
+workflow authority. Measure failure behavior and produce an evidence-backed
+prioritized backlog. Do not reopen archived LC or CONV plans.
+
+## Existing boundaries
+
+- `agentic-sop` owns state, policy, execution, gates and approvals.
+- `sop-controller` observes persisted SOP state and delegates actions through the SOP CLI; it must not become a second authority.
+- `sop-decision-adapters` returns provider-neutral decision evaluations, not workflow policy.
+- The completed CONV implementation enforces post-discovery convergence for IMPLEMENT/FIX; this plan tests it in integrated use rather than reimplementing it.
+- Julia live inference is optional and requires operator-supplied model assets; do not make it a baseline gate.
+
+**Decision-adapter integration status: UNAVAILABLE.** `agentic-sop` does not import
+the `sop-decision-adapters` module, and its `.agent-sdlc/config.yaml` has no
+`decision:` section (the default is disabled / deterministic). The only
+integration surface is the process-level `decision.provider: command` seam. Until
+real SOP-to-adapter wiring is configured and verified, decision-adapter
+integration must be reported as UNAVAILABLE — never asserted from standalone
+adapter tests alone (see ETOE-004 and ETOE-008).
+
+## Safety invariants
+
+1. Use a disposable, initialized project with known fixtures; never run mutating dogfood against any production checkout.
+2. Do not edit `.agent-sdlc/state.db` directly, bypass approvals, force-push, or silently commit/push.
+3. Preserve original task history, approval history, traces and diagnostic evidence.
+4. No parallel SOP mutations against the same project or state database.
+5. External model or service unavailability must be reported as UNAVAILABLE, not PASS or FAIL of code behavior.
+6. Stop at actual human authorization boundaries. Test refusal paths without granting unauthorized approvals.
+7. Do not claim end-to-end success based solely on mocked unit tests.
+
+## Required validation
+
+Per repository where applicable: `gofmt -l .`, `go build ./...`, `go vet ./...`,
+`go test -count=1 ./...`, `go test -race -count=1 ./...`, `git diff --check`. Run
+documentation checks only where the repository supplies them. Record exact
+versions and exit codes. For controller integration, verify `/healthz` and SOP
+state/action parity in the disposable environment. For adapters, run offline tests
+first; opt-in live tests only if the corresponding backend is available and
+authorized.
+
+**Required validation commands vs. gates SOP actually enforces.** These are
+distinct, and evidence must state which was run.
+
+- Commands required by this plan (operator/agent-run, recorded in run evidence): `gofmt -l .`, `go build ./...`, `go vet ./...`, `go test -count=1 ./...`, `go test -race -count=1 ./...`, `git diff --check`.
+- Gates enforced automatically by SOP configuration (`agentic-sop/.agent-sdlc/config.yaml`): `build: go build ./...`; `test: go test ./...`; `lint: go vet ./...` plus `test -z "$(gofmt -l .)"`.
+- Required by this plan but NOT enforced by SOP's configured gate: `go test -race -count=1 ./...` and `git diff --check`. These must be run and recorded explicitly; a passing SOP gate does not imply they ran.
+- Changing what SOP's gate enforces is a repository/configuration change and requires separate authorization.
+
+## Acceptance criteria
+
+- All critical transitions and approval boundaries are demonstrated with traceable evidence from a real disposable SOP run, or explicitly marked BLOCKED/UNAVAILABLE.
+- At least one successful task and one intentionally failing/recovering task are tested; a human-gated task cannot be completed without authorization.
+- Controller never mutates authoritative state except through SOP's approved interface.
+- Decision model outputs cannot override SOP policy; missing runtime wiring is reported rather than assumed.
+- Convergence enforcement is observed or deterministically verified without relaxing bounds.
+- All discovered failures are reproducible and prioritized; no missing metric is fabricated.
+- Closure is not performed unless all gates pass and the operator authorizes it.
+
+## Task index (non-authoritative)
+
+The authoritative task graph is the ten stage sections below; the dependency
+edges are defined there. This table is a reading aid only.
+
+| Task     | Work                                                  | Depends on                   |
+| -------- | ----------------------------------------------------- | ---------------------------- |
+| ETOE-001 | Cross-repository preflight                            | none                         |
+| ETOE-002 | Core workflow contract audit                          | ETOE-001                     |
+| ETOE-003 | Controller integration audit                          | ETOE-001                     |
+| ETOE-004 | Decision adapter integration audit                    | ETOE-001                     |
+| ETOE-005 | Disposable dogfood fixture and deterministic baseline | ETOE-002, ETOE-003, ETOE-004 |
+| ETOE-006 | Core end-to-end success and failure/recovery paths    | ETOE-005                     |
+| ETOE-007 | Controller parity against the disposable project      | ETOE-006                     |
+| ETOE-008 | Decision adapter integration or documented absence    | ETOE-005                     |
+| ETOE-009 | Metrics and regression review                         | ETOE-006, ETOE-007, ETOE-008 |
+| ETOE-010 | Final reliability report and prioritized backlog      | ETOE-009                     |
+
+## Initial operator instruction
+
+Start with ETOE-001 only. In parallel, perform read-only inspection of the three
+repositories. Confirm the exact available SOP CLI commands and existing plan
+parser conventions before importing or reconciling this plan. Do not mutate
+repositories, activate a plan, or run a dogfood task until the preflight report is
+reviewed. Preserve unrelated working-tree changes. Return findings, any proposed
+edits to the task graph, and the next safe execution batch. Bounded execution must
+use the source binary, e.g.
+`go run ./cmd/sop run --max-tasks 1 docs/plans/PLAN-SOP-End-to-End-Reliability.md`.
+
+## ETOE-001 — Cross-repository preflight
+
+Cross-repository preflight: Git/worktree state and revisions, the installed SOP
+binary versus the current source implementation, active/archived LC and CONV plan
+status, documented CLI/API contracts, and fixture availability. Read-only across
+all three repositories; no repository or SOP-state mutation.
+
+### Dependencies
+
+None
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-001-preflight-baseline.md` — baseline report recording versions, exact commands, gaps, and unavailable dependencies.
+
+### Acceptance Criteria
+
+- The baseline report records the Git revision and worktree state of `agentic-sop`, `sop-controller`, and `sop-decision-adapters`.
+- The baseline report records the installed `sop` binary versus the source build, including any command/flag the installed binary lacks.
+- Active/archived LC and CONV plan status is recorded from SOP state and the plan archive.
+- Every documented CLI/API contract consulted is named by path; unavailable dependencies are labeled UNAVAILABLE.
+- No repository and no SOP state is mutated by this task.
+
+## ETOE-002 — Core workflow contract audit
+
+Core workflow contract audit: state transitions, validation/review/FIX/retry,
+approval refusal, closure, and trace/metrics. Read-only.
+
+### Dependencies
+
+- ETOE-001
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-002-workflow-contract-matrix.md` — requirement-to-test matrix with missing coverage identified.
+
+### Acceptance Criteria
+
+- A requirement-to-test matrix maps each core workflow transition and each approval-refusal path to existing test coverage.
+- Every requirement with no covering test is listed explicitly as a gap.
+- The matrix distinguishes behavior verified by unit tests from behavior requiring a real disposable run.
+
+## ETOE-003 — Controller integration audit
+
+Controller integration audit: read-only state display, delegated actions, pending
+approval visibility, phone-safe approval workflow, and the auth/network boundary.
+May run in parallel with ETOE-002 and ETOE-004.
+
+### Dependencies
+
+- ETOE-001
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-003-controller-contract-matrix.md` — contract matrix and a safe integration test plan.
+
+### Acceptance Criteria
+
+- The contract matrix covers state display and every delegated SOP action, and states that the controller must not become a second authority.
+- Pending-approval visibility and the phone-safe approval path are assessed from the controller's documented behavior, not assumed.
+- No mobile or network readiness is asserted without verification; unverified capabilities are marked UNAVAILABLE.
+
+## ETOE-004 — Decision adapter integration audit
+
+Decision adapter integration audit: actual SOP wiring versus a standalone adapter,
+LOW/MEDIUM/HIGH routing, normalized results, fallbacks, and failure handling. May
+run in parallel with ETOE-002 and ETOE-003.
+
+### Dependencies
+
+- ETOE-001
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-004-adapter-integration-matrix.md` — explicit distinction between integrated and standalone-only capabilities.
+
+### Acceptance Criteria
+
+- The report explicitly distinguishes capabilities that are integrated into SOP from those that are standalone-only.
+- Decision-adapter integration is marked UNAVAILABLE until real SOP-to-adapter wiring is configured and verified; standalone adapter tests are not evidence of integration.
+- The report names the exact integration seam (`decision.provider: command` plus `decision.command`) and whether it is configured in the audited project.
+
+## ETOE-005 — Disposable dogfood fixture and deterministic baseline
+
+Create a disposable dogfood fixture and deterministic baseline: one success task,
+one intentional validation failure, and one human-gated task. Setup and teardown
+must be reproducible and isolated from any production checkout.
+
+### Dependencies
+
+- ETOE-002
+- ETOE-003
+- ETOE-004
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md` — recorded setup/teardown, expected outcomes, and run IDs.
+- Reproducible fixture setup and teardown scripts or documented commands.
+
+### Acceptance Criteria
+
+- A reproducible setup and teardown exists and creates a disposable, initialized SOP project outside any production checkout.
+- The fixture contains one success task, one intentionally failing task, and one human-gated task, with expected outcomes recorded before execution.
+- The recorded run IDs and expected outcomes are sufficient to reproduce the baseline.
+
+## ETOE-006 — Core end-to-end success and failure/recovery paths
+
+Run the core end-to-end success and failure/recovery paths using governed SOP:
+IMPLEMENT → VALIDATE → REVIEW → FIX if triggered → approval → completion.
+Sequential and state-changing; no approval bypass.
+
+### Dependencies
+
+- ETOE-005
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-006-e2e-evidence.md` — task/run/approval evidence and independent gate results.
+
+### Acceptance Criteria
+
+- At least one successful task and one intentionally failing/recovering task are exercised end to end with traceable task/run/approval evidence.
+- The human-gated task cannot be completed without an explicit authorization; the refusal path is demonstrated without granting an unauthorized approval.
+- No approval boundary is bypassed and no SOP state is edited by hand.
+- Convergence enforcement is observed or deterministically verified without relaxing any bound.
+
+## ETOE-007 — Controller parity against the disposable project
+
+Exercise the controller against the same disposable project and verify display and
+action parity with the SOP CLI, including pending approvals. Sequential
+state-changing; independent UI checks may be read-only.
+
+### Dependencies
+
+- ETOE-006
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-007-controller-parity.md` — screens/API traces, action parity, and permission findings.
+
+### Acceptance Criteria
+
+- Controller display and delegated actions are shown to match the SOP CLI for the same disposable project, including pending approvals.
+- The controller never mutates authoritative state except through SOP's approved interface.
+- `/healthz` and SOP state/action parity are verified in the disposable environment.
+
+## ETOE-008 — Decision adapter integration or documented absence
+
+Exercise decision adapter integration, or document the absence of wiring; test
+provider failures and fallback only where the contract supports it. Isolated
+fixture only; may parallelize with ETOE-006 and ETOE-007 when independent.
+
+### Dependencies
+
+- ETOE-005
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-008-adapter-evidence.md` — decision traces, model-tier distribution where instrumented, and fallback results.
+
+### Acceptance Criteria
+
+- Decision model outputs cannot override SOP policy; any attempt to do so is reported, not accepted.
+- Missing runtime wiring is reported as UNAVAILABLE rather than assumed present.
+- Provider failure and fallback behavior is tested only where the contract supports it, and unsupported paths are labeled UNAVAILABLE.
+
+## ETOE-009 — Metrics and regression review
+
+Metrics and regression review: iterations, verified mutations, stale turns,
+retries, elapsed time, token usage if available, model selection, approvals, and
+task outcomes. Read-only parallel analysis.
+
+### Dependencies
+
+- ETOE-006
+- ETOE-007
+- ETOE-008
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-009-metrics-review.md` — baseline measurements with provenance.
+
+### Acceptance Criteria
+
+- Each reported measurement carries provenance (before/after or baseline) and the artifact it was read from.
+- Unavailable metrics are labeled UNAVAILABLE; no metric is fabricated or inferred without a source.
+- Metrics cover iterations, verified mutations, stale turns, retries, approvals, and task outcomes where instrumented.
+
+## ETOE-010 — Final reliability report and prioritized backlog
+
+Produce the final reliability report and a prioritized backlog with reproducible
+defects and scoped follow-up plans. Sequential.
+
+### Dependencies
+
+- ETOE-009
+
+### Deliverables
+
+- `docs/reports/end-to-end-reliability/ETOE-010-final-reliability-report.md` — GO/HOLD verdict, P0/P1/P2 backlog, owners, and dependency graph.
+
+### Acceptance Criteria
+
+- A GO/HOLD verdict is backed by the recorded evidence, with BLOCKED/UNAVAILABLE items listed explicitly.
+- Every discovered failure is reproducible and prioritized P0/P1/P2 with an owner and a scoped follow-up.
+- Closure is not performed unless all gates pass and the operator authorizes it.

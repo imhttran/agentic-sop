@@ -1,0 +1,13 @@
+{
+  "id": "ETOE-004-1791512542800825000",
+  "task_id": "ETOE-004",
+  "kind": "NEEDS_HUMAN",
+  "target": "ETOE-004",
+  "reason": "malformed tool request: \"tool\" must be a non-empty string",
+  "evidence": "the agent reported a failure without an authoritative signal: malformed tool request: \"tool\" must be a non-empty string",
+  "stage": "FAILED",
+  "disposition": "NEEDS_HUMAN",
+  "requested_at": "2026-10-09T02:22:22.800825Z",
+  "requested_by": "sop",
+  "status": "PENDING"
+}

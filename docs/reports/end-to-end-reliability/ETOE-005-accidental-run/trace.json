@@ -1,0 +1,354 @@
+{
+  "schema_version": 7,
+  "run_id": "ETOE-005",
+  "task_id": "ETOE-005",
+  "started_at": "2026-10-09T05:20:06.243865Z",
+  "completed_at": "2026-10-09T05:20:46.010523Z",
+  "execution": {
+    "capability": "implement",
+    "model_class": "large",
+    "provider": "ollama",
+    "model": "deepseek-v4.1-flash:cloud",
+    "locality": "cloud",
+    "execution_source": "primary",
+    "fallback": false
+  },
+  "repository_mutations": 4,
+  "changed_files": [
+    "scripts/etoe-005-fixture-setup.sh",
+    "scripts/etoe-005-fixture-teardown.sh",
+    "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+    "scripts/etoe-005-fixture-run.sh"
+  ],
+  "iterations": [
+    {
+      "sequence": 1,
+      "phase": "START",
+      "timestamp": "2026-10-09T00:20:06.244001-05:00",
+      "action": "Disposable dogfood fixture and deterministic baseline",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 2,
+      "phase": "PLAN",
+      "timestamp": "2026-10-09T00:20:06.244228-05:00",
+      "action": "generating plan",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 3,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:06.5223-05:00",
+      "action": "listing",
+      "observation": ".",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 4,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:06.875406-05:00",
+      "action": "reading",
+      "observation": "README.md",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 5,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:10.254173-05:00",
+      "action": "listing",
+      "observation": "docs/reports/end-to-end-reliability",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 6,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:10.664143-05:00",
+      "action": "reading",
+      "observation": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 7,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:11.070926-05:00",
+      "action": "listing",
+      "observation": "scripts",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 8,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:11.380748-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-setup.sh",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 9,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:11.789336-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-run.sh",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 10,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:12.198776-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-agent.sh",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 11,
+      "phase": "IMPLEMENT",
+      "timestamp": "2026-10-09T00:20:29.099222-05:00",
+      "action": "implementing",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 12,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:29.810766-05:00",
+      "action": "listing",
+      "observation": "scripts",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 13,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:30.23452-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-setup.sh",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 14,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:30.641803-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-run.sh",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 15,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:31.044303-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-teardown.sh",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 16,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:31.383459-05:00",
+      "action": "reading",
+      "observation": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 17,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:31.964343-05:00",
+      "action": "reading",
+      "observation": "scripts/etoe-005-fixture-agent.sh",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 18,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:32.475203-05:00",
+      "action": "searching",
+      "observation": "approvals",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 19,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:32.987218-05:00",
+      "action": "listing",
+      "observation": "cmd",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 20,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:33.499271-05:00",
+      "action": "listing",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 21,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:20:34.011738-05:00",
+      "action": "listing",
+      "observation": "cmd/sop",
+      "repository_mutation": false,
+      "signal": "discovery.novel"
+    },
+    {
+      "sequence": 22,
+      "phase": "BLOCKED",
+      "timestamp": "2026-10-09T00:20:46.010522-05:00",
+      "action": "needs_human",
+      "repository_mutation": false
+    }
+  ],
+  "verification": null,
+  "termination": {
+    "stage": "WAITING_FOR_HUMAN",
+    "kind": "APPROVAL_REQUIRED",
+    "disposition": "NEEDS_HUMAN",
+    "action": "HUMAN_APPROVAL_REQUIRED",
+    "reason": "the current run is at an authoritative approval boundary; a human decision is required",
+    "diagnostic": "the current run is at an authoritative approval boundary; a human decision is required",
+    "human_required": true
+  },
+  "progress": [
+    {
+      "sequence": 1,
+      "iteration": 2,
+      "phase": "PLAN",
+      "type": "STATE_TRANSITION",
+      "subtype": "lifecycle_advanced",
+      "evidence": "PLAN"
+    },
+    {
+      "sequence": 2,
+      "iteration": 11,
+      "phase": "IMPLEMENT",
+      "type": "STATE_TRANSITION",
+      "subtype": "lifecycle_advanced",
+      "evidence": "IMPLEMENT"
+    },
+    {
+      "sequence": 3,
+      "iteration": 12,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "scripts"
+    },
+    {
+      "sequence": 4,
+      "iteration": 13,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "scripts/etoe-005-fixture-setup.sh"
+    },
+    {
+      "sequence": 5,
+      "iteration": 14,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "scripts/etoe-005-fixture-run.sh"
+    },
+    {
+      "sequence": 6,
+      "iteration": 15,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "scripts/etoe-005-fixture-teardown.sh"
+    },
+    {
+      "sequence": 7,
+      "iteration": 16,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md"
+    },
+    {
+      "sequence": 8,
+      "iteration": 17,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "scripts/etoe-005-fixture-agent.sh"
+    },
+    {
+      "sequence": 9,
+      "iteration": 19,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "cmd"
+    },
+    {
+      "sequence": 10,
+      "iteration": 20,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection"
+    },
+    {
+      "sequence": 11,
+      "iteration": 21,
+      "phase": "DISCOVER",
+      "type": "DISCOVERY",
+      "subtype": "novel_inspection",
+      "evidence": "cmd/sop"
+    },
+    {
+      "sequence": 12,
+      "iteration": 22,
+      "phase": "BLOCKED",
+      "type": "STATE_TRANSITION",
+      "subtype": "lifecycle_advanced",
+      "evidence": "BLOCKED"
+    },
+    {
+      "sequence": 13,
+      "type": "REPOSITORY_MUTATION",
+      "subtype": "changed_file",
+      "evidence": "scripts/etoe-005-fixture-setup.sh"
+    },
+    {
+      "sequence": 14,
+      "type": "REPOSITORY_MUTATION",
+      "subtype": "changed_file",
+      "evidence": "scripts/etoe-005-fixture-teardown.sh"
+    },
+    {
+      "sequence": 15,
+      "type": "REPOSITORY_MUTATION",
+      "subtype": "changed_file",
+      "evidence": "docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md"
+    },
+    {
+      "sequence": 16,
+      "type": "REPOSITORY_MUTATION",
+      "subtype": "changed_file",
+      "evidence": "scripts/etoe-005-fixture-run.sh"
+    }
+  ],
+  "progress_summary": {
+    "discovery": 9,
+    "repository_mutations": 4,
+    "verification": 0,
+    "state_transitions": 3
+  },
+  "budgets": {
+    "implement_iterations": 32,
+    "fix_iterations": 24,
+    "stale_iterations": 5,
+    "tool_calls": 80
+  },
+  "context": {
+    "items": 0,
+    "files": 0,
+    "bytes": 0,
+    "truncated": false
+  }
+}

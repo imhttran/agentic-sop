@@ -1,0 +1,12 @@
+{"task_id":"ETOE-005","stage":"START","action":"Disposable dogfood fixture and deterministic baseline","timestamp":"2026-10-09T00:06:23.088999-05:00"}
+{"task_id":"ETOE-005","stage":"PLAN","action":"generating plan","timestamp":"2026-10-09T00:06:23.089314-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"listing","timestamp":"2026-10-09T00:06:25.210823-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"reading","detail":"README.md","timestamp":"2026-10-09T00:06:26.441577-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"listing","detail":"docs/reports","timestamp":"2026-10-09T00:06:28.563732-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"listing","detail":"docs/reports/end-to-end-reliability","timestamp":"2026-10-09T00:06:29.12823-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"reading","detail":"docs/reports/end-to-end-reliability/ETOE-001-preflight-baseline.md","timestamp":"2026-10-09T00:06:30.022414-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"reading","detail":"docs/plans/PLAN-SOP-End-to-End-Reliability.md","timestamp":"2026-10-09T00:06:36.548317-05:00"}
+{"task_id":"ETOE-005","stage":"DISCOVER","action":"listing","detail":"scripts","timestamp":"2026-10-09T00:06:43.749637-05:00"}
+{"task_id":"ETOE-005","stage":"CLASSIFY","action":"NEEDS_HUMAN","detail":"UNKNOWN","timestamp":"2026-10-09T00:10:59.990193-05:00"}
+{"task_id":"ETOE-005","stage":"AUTONOMY","action":"HUMAN_APPROVAL_REQUIRED","detail":"risk=MEDIUM level=BALANCED","timestamp":"2026-10-09T00:10:59.990303-05:00"}
+{"task_id":"ETOE-005","stage":"APPROVAL","action":"REQUESTED","detail":"no authoritative signal was available; a human decision is required","timestamp":"2026-10-09T00:10:59.990497-05:00"}

@@ -27,20 +27,20 @@ completed dependency evidence, pending-task updates, and all 18 existing
 lifecycle states with historical attempts and artifacts preserved. The existing
 approval, task acceptance, and commit gates remain unchanged.
 
-- [Planner review](../../.agent-sdlc/runs/prompts/prompt-20261007-020220/result.md):
+- `Planner review` (`.agent-sdlc/runs/prompts/prompt-20261007-020220/result.md`):
   approve_with_nits; only optional wording/fixture-size comments, no functional
   blocker. No cosmetic code changes are retained in the proposal.
-- [Initial reconciliation review](../../.agent-sdlc/runs/prompts/prompt-20261007-020428/result.md):
+- `Initial reconciliation review` (`.agent-sdlc/runs/prompts/prompt-20261007-020428/result.md`):
   changes_requested; raised one HIGH counterexample and one unconfirmed MEDIUM
   concern. This original outcome is retained rather than relabeled.
-- [Finding verification](../../.agent-sdlc/runs/prompts/prompt-20261007-020645/result.md):
+- `Finding verification` (`.agent-sdlc/runs/prompts/prompt-20261007-020645/result.md`):
   approve; HIGH F1 refuted by executing its exact example against unchanged
   comparison helpers, MEDIUM F2 dismissed as unconfirmed. Reordering `starts`
   and "prints `x`" compares equal through both plan-list and stored-task paths;
   literal whitespace and multiline literal line changes still compare unequal.
 
 The initial combined review
-[prompt-20261007-015919](../../.agent-sdlc/runs/prompts/prompt-20261007-015919/metadata.json)
+`prompt-20261007-015919` (`.agent-sdlc/runs/prompts/prompt-20261007-015919/metadata.json`)
 failed at SOP's synthesis limit and supplied no verdict. The narrower reviews
 above completed. `sop-run.log: UNAVAILABLE` for that failed invocation.
 
@@ -202,9 +202,9 @@ are retained locally at:
 ## Documentation cleanup review incident
 
 The three-document preparation
-[prompt-20261007-020900](../../.agent-sdlc/runs/prompts/prompt-20261007-020900/report.md)
+`prompt-20261007-020900` (`.agent-sdlc/runs/prompts/prompt-20261007-020900/report.md`)
 completed PASS without committing. A subsequent two-line whitespace cleanup
-[prompt-20261007-021122](../../.agent-sdlc/runs/prompts/prompt-20261007-021122/review.json)
+`prompt-20261007-021122` (`.agent-sdlc/runs/prompts/prompt-20261007-021122/review.json`)
 was rejected by automatic review because its full-workspace diff was attributed
 to that narrow cleanup. The review suggested reverting pre-existing operator
 work and raised a speculative architecture failure despite the passed suite.

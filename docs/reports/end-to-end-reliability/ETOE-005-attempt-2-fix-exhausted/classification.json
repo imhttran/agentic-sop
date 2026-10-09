@@ -1,0 +1,19 @@
+{
+  "kind": "AUTO_FIX_EXHAUSTED",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "HIGH",
+  "reason": "automatic fixes were exhausted (3/3) without resolving the failure",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "MEDIUM",
+    "RequiresHuman": true,
+    "Reason": "automatic fixes were exhausted (3/3) without resolving the failure",
+    "Classification": {
+      "kind": "AUTO_FIX_EXHAUSTED",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "HIGH",
+      "reason": "automatic fixes were exhausted (3/3) without resolving the failure"
+    }
+  }
+}

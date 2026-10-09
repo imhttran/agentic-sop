@@ -20,8 +20,8 @@ implementation change detector or its gates.
 
 Both observed attempts remain authoritative failed outcomes:
 
-- [prompt-20261007-015026](../../.agent-sdlc/runs/prompts/prompt-20261007-015026/report.md)
-- [prompt-20261007-015307](../../.agent-sdlc/runs/prompts/prompt-20261007-015307/report.md)
+- `prompt-20261007-015026` (`.agent-sdlc/runs/prompts/prompt-20261007-015026/report.md`)
+- `prompt-20261007-015307` (`.agent-sdlc/runs/prompts/prompt-20261007-015307/report.md`)
 
 Both report FAILED / FAIL / NO_CHANGES_PRODUCED. Validation was not reached;
 these failures are not evidence of a passed implementation lifecycle.

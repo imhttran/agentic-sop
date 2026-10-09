@@ -55,6 +55,11 @@ const (
 type Result struct {
 	Decision Decision
 	Reasons  []string
+	// Advisories are non-blocking observations: a check that ran and failed but is
+	// not required by policy (for example unit tests when require_tests is false).
+	// They never change the Decision, but they are reported explicitly so a passing
+	// gate never silently hides a failing optional check.
+	Advisories []string
 }
 
 // Input is the deterministic evidence the gate decides on.
@@ -129,9 +134,10 @@ func NewJEVEvidence(res jev.Result) JEVEvidence {
 // the verdict. JEV absence changes nothing.
 func Evaluate(policy config.Quality, in Input) Result {
 	reasons := []string{}
+	advisories := []string{}
 
 	if in.HumanRequired {
-		return Result{Decision: NeedsHuman, Reasons: append(reasons, "human approval required")}
+		return Result{Decision: NeedsHuman, Reasons: append(reasons, "human approval required"), Advisories: advisories}
 	}
 
 	checkFailed := false
@@ -142,6 +148,11 @@ func Evaluate(policy config.Quality, in Input) Result {
 	if policy.RequiresTests() && !in.TestPassed {
 		reasons = append(reasons, "tests failed or were not run")
 		checkFailed = true
+	}
+	// A unit-test failure is advisory when policy does not require tests: it never
+	// blocks the gate, but it is reported so a PASS does not silently hide it.
+	if !policy.RequiresTests() && !in.TestPassed {
+		advisories = append(advisories, "unit tests failed (not required by quality policy; advisory only)")
 	}
 	if in.LintRequired && !in.LintPassed {
 		reasons = append(reasons, "lint failed")
@@ -157,7 +168,7 @@ func Evaluate(policy config.Quality, in Input) Result {
 
 	if in.FixCycles >= policy.MaxFixCycles && (checkFailed || blocking > 0 || jevBlocking > 0 || jevFailClosed) {
 		reasons = append(reasons, fmt.Sprintf("fix-loop limit reached (%d/%d)", in.FixCycles, policy.MaxFixCycles))
-		return Result{Decision: NeedsHuman, Reasons: reasons}
+		return Result{Decision: NeedsHuman, Reasons: reasons, Advisories: advisories}
 	}
 
 	if blocking > 0 {
@@ -179,13 +190,13 @@ func Evaluate(policy config.Quality, in Input) Result {
 	reasons = append(reasons, JEVReportFindings(policy.JEVFailOn(), in.JEV)...)
 
 	if checkFailed {
-		return Result{Decision: Fail, Reasons: reasons}
+		return Result{Decision: Fail, Reasons: reasons, Advisories: advisories}
 	}
 
 	if len(reasons) == 0 {
 		reasons = append(reasons, "all required checks passed")
 	}
-	return Result{Decision: Pass, Reasons: reasons}
+	return Result{Decision: Pass, Reasons: reasons, Advisories: advisories}
 }
 
 // jevReason renders a fail-closed JEV evidence reason, falling back to a generic

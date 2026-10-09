@@ -1,0 +1,19 @@
+{
+  "kind": "AUTO_FIX_EXHAUSTED",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "HIGH",
+  "reason": "automatic fixes were exhausted (3/3) without resolving the failure: UNIT_TEST `go test ./...`: --- FAIL: TestBroken (0.00s) broken_test.go:7: intentional ETOE-005 validation failure --- FAIL: TestAdd (0.00s) calc_test.go:7: Add(2,3) = 0, want 5 FAIL FAIL etoe005fixture 0.169s FAIL",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "MEDIUM",
+    "RequiresHuman": true,
+    "Reason": "automatic fixes were exhausted (3/3) without resolving the failure: UNIT_TEST `go test ./...`: --- FAIL: TestBroken (0.00s) broken_test.go:7: intentional ETOE-005 validation failure --- FAIL: TestAdd (0.00s) calc_test.go:7: Add(2,3) = 0, want 5 FAIL FAIL etoe005fixture 0.169s FAIL",
+    "Classification": {
+      "kind": "AUTO_FIX_EXHAUSTED",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "HIGH",
+      "reason": "automatic fixes were exhausted (3/3) without resolving the failure: UNIT_TEST `go test ./...`: --- FAIL: TestBroken (0.00s) broken_test.go:7: intentional ETOE-005 validation failure --- FAIL: TestAdd (0.00s) calc_test.go:7: Add(2,3) = 0, want 5 FAIL FAIL etoe005fixture 0.169s FAIL"
+    }
+  }
+}

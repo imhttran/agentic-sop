@@ -1,0 +1,23 @@
+[
+  {
+    "id": "ETOE-005-1791522659990369000",
+    "task_id": "ETOE-005",
+    "kind": "NEEDS_HUMAN",
+    "target": "ETOE-005",
+    "reason": "no authoritative signal was available; a human decision is required",
+    "evidence": "no authoritative signal was available; a human decision is required",
+    "disposition": "NEEDS_HUMAN",
+    "requested_at": "2026-10-09T05:10:59.99037Z",
+    "requested_by": "sop",
+    "status": "APPROVED",
+    "decision": {
+      "request_id": "ETOE-005-1791522659990369000",
+      "task_id": "ETOE-005",
+      "approved": true,
+      "decided_at": "2026-10-09T05:13:15.974088Z",
+      "decided_by": "operator",
+      "note": "authorized controlled retry with --model-class large (deepseek-v4.1-flash:cloud)",
+      "lifecycle_action": "REQUEUED"
+    }
+  }
+]

@@ -325,18 +325,18 @@ the approval-file manifest is
 These are local investigation artifacts, not new prerequisite capabilities.
 
 Governed implementation reports include
-[compiler step](../../.agent-sdlc/runs/prompts/prompt-20261007-011846/report.md),
-[comparison/ownership correction](../../.agent-sdlc/runs/prompts/prompt-20261007-013220/report.md),
-[word-boundary correction](../../.agent-sdlc/runs/prompts/prompt-20261007-014056/report.md), and
-[source/lifecycle step](../../.agent-sdlc/runs/prompts/prompt-20261007-014312/report.md).
+`compiler step` (`.agent-sdlc/runs/prompts/prompt-20261007-011846/report.md`),
+`comparison/ownership correction` (`.agent-sdlc/runs/prompts/prompt-20261007-013220/report.md`),
+`word-boundary correction` (`.agent-sdlc/runs/prompts/prompt-20261007-014056/report.md`), and
+`source/lifecycle step` (`.agent-sdlc/runs/prompts/prompt-20261007-014312/report.md`).
 Their generated artifacts provide the implementation/review trail. No external
 adapter repository was modified.
 
 Final documentation invocation note: prompt-20261007-015026 wrote this report
 but ended FAIL / NO_CHANGES_PRODUCED; the bounded correction
 prompt-20261007-015307 also ended FAIL / NO_CHANGES_PRODUCED. Their
-[original failed report](../../.agent-sdlc/runs/prompts/prompt-20261007-015026/report.md)
-and [correction failed report](../../.agent-sdlc/runs/prompts/prompt-20261007-015307/report.md)
+`original failed report` (`.agent-sdlc/runs/prompts/prompt-20261007-015026/report.md`)
+and `correction failed report` (`.agent-sdlc/runs/prompts/prompt-20261007-015307/report.md`)
 remain authoritative; `sop-run.log: UNAVAILABLE`. No failed gate was accepted or
 weakened. The independently verified implementation and supported Clef
 reconciliation results above are unchanged.
