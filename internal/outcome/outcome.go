@@ -37,6 +37,10 @@ type Criterion struct {
 	Boundary bool
 	// Description is the human-readable criterion text.
 	Description string
+	// Command is the deterministic check command whose exit status backs this
+	// criterion (empty when the criterion has no command). It is recorded in the
+	// outcome artifact as per-criterion evidence.
+	Command string
 	// Check is the deterministic predicate: a nil error means met. A nil Check is
 	// unverifiable and counts as unmet; a model claim cannot satisfy it.
 	Check func() error
@@ -49,6 +53,7 @@ type CriterionResult struct {
 	Boundary    bool
 	Met         bool
 	Description string
+	Command     string
 	Evidence    string
 }
 
@@ -74,7 +79,7 @@ func Verify(criteria []Criterion) Result {
 	requiredTotal := 0
 
 	for _, c := range criteria {
-		cr := CriterionResult{ID: c.ID, Required: c.Required, Boundary: c.Boundary, Description: c.Description}
+		cr := CriterionResult{ID: c.ID, Required: c.Required, Boundary: c.Boundary, Description: c.Description, Command: c.Command}
 		switch {
 		case c.Check == nil:
 			cr.Met = false

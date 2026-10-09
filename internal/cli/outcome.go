@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,10 +9,12 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/commandpolicy"
 	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // This file integrates internal/outcome into the governed lifecycle: after the
@@ -81,6 +84,36 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		})
 	}
 
+	// Operator-authorized deterministic acceptance checks: each is executed with the
+	// existing command runner, independently of the model completion claim. A check
+	// the command policy does not authorize is a boundary and holds the outcome.
+	for i, command := range spec.AcceptanceChecks {
+		cmd := command
+		class, cerr := commandpolicy.Classify(strings.Fields(cmd))
+		if cerr == nil && class != commandpolicy.Safe {
+			criteria = append(criteria, outcome.Criterion{
+				ID:          fmt.Sprintf("check-%d", i+1),
+				Required:    true,
+				Boundary:    true,
+				Description: "unauthorized acceptance check: " + cmd,
+				Command:     cmd,
+				Check: func() error {
+					return fmt.Errorf("acceptance check %q is not authorized (%s)", cmd, class)
+				},
+			})
+			continue
+		}
+		criteria = append(criteria, outcome.Criterion{
+			ID:          fmt.Sprintf("check-%d", i+1),
+			Required:    true,
+			Description: "acceptance check: " + cmd,
+			Command:     cmd,
+			Check: func() error {
+				return runAcceptanceCheck(dir, cmd)
+			},
+		})
+	}
+
 	// Free-text acceptance criteria have no deterministic determinant on this branch;
 	// recorded but unverifiable, they hold the verdict at PARTIAL rather than letting
 	// a PASS imply verified completion.
@@ -96,7 +129,7 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 	// criterion), the deterministic checks are the only evidence, which cannot
 	// verify the objective: record an unverifiable required criterion so the verdict
 	// is PARTIAL, never VERIFIED.
-	if len(spec.Deliverables) == 0 && len(spec.AcceptanceCriteria) == 0 {
+	if len(spec.Deliverables) == 0 && len(spec.AcceptanceCriteria) == 0 && len(spec.AcceptanceChecks) == 0 {
 		criteria = append(criteria, outcome.Criterion{
 			ID:          "objective-acceptance",
 			Required:    true,
@@ -106,6 +139,24 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 
 	res := outcome.Verify(criteria)
 	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
+}
+
+// runAcceptanceCheck runs one operator-authorized acceptance check with the existing
+// deterministic command runner (sh -c). Exit status 0 means met; any other status or a
+// runner failure means not met, and the observed result is recorded as evidence.
+func runAcceptanceCheck(dir, command string) error {
+	result := testrunner.New(dir).Run(context.Background(), testrunner.Check{Category: testrunner.UnitTest, Command: command})
+	if result.Status == testrunner.Pass {
+		return nil
+	}
+	detail := strings.TrimSpace(result.Stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(result.Stdout)
+	}
+	if len(detail) > 400 {
+		detail = detail[:400]
+	}
+	return fmt.Errorf("acceptance check %q %s (exit %d): %s", command, result.Status, result.ExitCode, detail)
 }
 
 // deliverablePath extracts a repository-relative path from a declared deliverable,

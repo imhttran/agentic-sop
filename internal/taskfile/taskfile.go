@@ -25,8 +25,13 @@ type Spec struct {
 	Requirements       []string
 	Deliverables       []string
 	AcceptanceCriteria []string
-	Constraints        []string
-	Dependencies       []string
+	// AcceptanceChecks are operator-authorized deterministic acceptance checks: each
+	// is a shell command whose exit status 0 means the criterion is met. They are the
+	// verifiable half of acceptance (unlike the free-text AcceptanceCriteria) and are
+	// executed independently of any model completion claim.
+	AcceptanceChecks []string
+	Constraints      []string
+	Dependencies     []string
 	// ExecutionMode is the optional execution mode ("" is the implement
 	// default). An unrecognized value is ignored rather than failing, so an
 	// unrelated "Execution" section cannot break a task file.
