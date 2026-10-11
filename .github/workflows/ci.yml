@@ -152,7 +152,15 @@ jobs:
           $env:USERPROFILE = $home_dir
           .\install.ps1 -Skills claude -Plugin claude
           $skills = Get-ChildItem (Join-Path $home_dir '.claude\skills') -Directory
-          if ($skills.Count -ne 7) { throw "expected 7 installed skills, got $($skills.Count)" }
+          # Expect exactly the canonical skills/ tree that install.ps1 installs from, so
+          # adding or removing a skill never requires editing this smoke test.
+          $expected = Get-ChildItem (Join-Path $PWD 'skills') -Directory |
+            Where-Object { Test-Path (Join-Path $_.FullName 'SKILL.md') } |
+            Select-Object -ExpandProperty Name | Sort-Object
+          $installed = $skills.Name | Sort-Object
+          if (($installed -join ',') -ne ($expected -join ',')) {
+            throw "installed skills mismatch: expected [$($expected -join ', ')], got [$($installed -join ', ')]"
+          }
           foreach ($skill in $skills) {
             if (-not (Test-Path (Join-Path $skill.FullName '.sop-managed'))) { throw "no ownership marker in $($skill.Name)" }
           }
