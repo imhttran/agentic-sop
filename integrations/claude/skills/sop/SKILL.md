@@ -60,6 +60,8 @@ Thin aliases in the same install expose one capability each:
 /rag-ingest <request>     RAG: design a safe ingestion pipeline — chunking,
                           concurrency, retries, transactional replacement
                           (capability: plan, read-only)
+/sop-cleanup <path>       inspect, classify, and PROPOSE worktree cleanup;
+                          read-only by default (`sop status`)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the

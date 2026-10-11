@@ -1,0 +1,7 @@
+{
+  "id": "RUN-A",
+  "total_ms": 12345,
+  "stages_ms": {"plan": 100, "implement": 200},
+  "validation_ms": {"test": 50},
+  "counts": {"agent_calls": 2, "validation_runs": 1, "review_runs": 1, "fix_cycles": 1, "plan_repairs": 0}
+}

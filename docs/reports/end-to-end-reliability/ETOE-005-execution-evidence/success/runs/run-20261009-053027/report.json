@@ -1,0 +1,69 @@
+{
+  "id": "run-20261009-053027",
+  "stage": "PASSED",
+  "provider": "ollama",
+  "review_engine": "self",
+  "decision": "PASS",
+  "reasons": [
+    "all required checks passed"
+  ],
+  "fix_cycles": 0,
+  "execution_mode": "",
+  "verified_first": false,
+  "validation": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 26625208,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tetoe005fixture\t0.236s\n",
+      "Stderr": "",
+      "Duration": 394353083,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "go vet ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 79137208,
+      "Status": "PASS"
+    }
+  ],
+  "findings": [],
+  "performance": {
+    "id": "run-20261009-053027",
+    "total_ms": 631,
+    "stages_ms": {
+      "implement": 34,
+      "plan": 33,
+      "review": 35,
+      "validation": 500
+    },
+    "validation_ms": {
+      "build": 26,
+      "lint": 79,
+      "test": 394
+    },
+    "counts": {
+      "agent_calls": 2,
+      "agent_calls_avoided": 0,
+      "validation_runs": 1,
+      "validation_reused": 0,
+      "review_runs": 1,
+      "review_reused": 0,
+      "fix_cycles": 0,
+      "plan_repairs": 0
+    }
+  },
+  "generated_at": "2026-10-09T05:30:27.84921Z"
+}

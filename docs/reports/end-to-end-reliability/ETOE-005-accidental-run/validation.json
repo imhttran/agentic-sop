@@ -1,0 +1,41 @@
+{
+  "Results": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 549108042,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "?   \tgithub.com/imhttran/agentic-sop/cmd/sop\t[no test files]\n?   \tgithub.com/imhttran/agentic-sop/cmd/sop-ollama-agent\t[no test files]\nok  \tgithub.com/imhttran/agentic-sop/internal/activity\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/adaptiveroute\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/agent\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/agentbin\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/approval\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/archtest\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/autonomy\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/bootstrap\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/budget\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/ci\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/ciremediation\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/cli\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/commandpolicy\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/commitgate\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/completion\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/config\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/context\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/continuation\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/decision\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/decision/command\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/decisionmemory\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/dist\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/domain\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/dotenv\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/e2e\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/e2e/harness\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/e2e/lifecycle\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/eval\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/failure\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/git\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/github\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/handoff\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/handoff/caveman\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/jev\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/mcp\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/mergegate\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/model\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/normalize\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/ollamaagent\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/orchadopt\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/orchestration\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/parallel\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/perf\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/planflow\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/planner\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/prompt\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/promptcache\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/prompttuning\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/command\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/httpx\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/llamacpp\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/mlx\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/ollama\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/provider/openai\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/quality\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/recovery\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/repoindex\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/resume\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/retrieval\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/retrievalgate\t0.588s\nok  \tgithub.com/imhttran/agentic-sop/internal/review\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/router\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/run\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/runmetrics\t0.211s\nok  \tgithub.com/imhttran/agentic-sop/internal/runtrace\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/scheduler\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/skill\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/store\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/taskbuilder\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/taskfile\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/testrunner\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/toolharness\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/validate\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/vectoreval\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/verifcache\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/workitem\t(cached)\nok  \tgithub.com/imhttran/agentic-sop/internal/worktreecleanup\t(cached)\n",
+      "Stderr": "",
+      "Duration": 1653618375,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "go vet ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 362566917,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "test -z \"$(gofmt -l .)\"",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 77959875,
+      "Status": "PASS"
+    }
+  ],
+  "Status": "PASS"
+}

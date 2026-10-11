@@ -39,6 +39,13 @@ func NewLoop(provider Provider, fixer Fixer, tester Tester, threshold Severity, 
 
 // Run reviews, applying a fix and re-verifying after each blocking round, until
 // there are no blocking findings or the round budget is exhausted.
+//
+// A malformed REVIEW response (IsMalformedOutput) is never a pass and never a
+// silent fix-loop exit: it terminates the loop as a bounded NEEDS_HUMAN outcome,
+// preserving the raw response and every valid finding the provider could still
+// parse. When those retained findings include one at or above the threshold, the
+// blocking Report is returned alongside the malformed-output error so the caller
+// still sees (and blocks on) the genuine HIGH/CRITICAL finding.
 func (l *Loop) Run(ctx context.Context, request Request) (Report, error) {
 	var last Report
 	for round := 0; round < l.maxRounds; round++ {
@@ -48,6 +55,13 @@ func (l *Loop) Run(ctx context.Context, request Request) (Report, error) {
 
 		report, err := l.provider.Review(ctx, request)
 		if err != nil {
+			if IsMalformedOutput(err) {
+				// Bounded malformed-output outcome: never a pass, never a silent
+				// fix-loop exit. Surface the best report the provider could parse
+				// (which may carry blocking findings) alongside the classified error
+				// so a genuine HIGH/CRITICAL is retained and still blocks.
+				return report, newMalformedOutputError(err)
+			}
 			return last, err
 		}
 		last = report
@@ -71,6 +85,20 @@ func (l *Loop) Run(ctx context.Context, request Request) (Report, error) {
 	}
 
 	return last, fmt.Errorf("review still has blocking findings after %d round(s)", l.maxRounds)
+}
+
+// newMalformedOutputError normalizes a malformed-output error returned by a
+// provider into the bounded, classifiable *ErrMalformedOutput the loop's callers
+// classify as NEEDS_HUMAN. When the provider already returns that concrete type the
+// value (including its retained Report and raw response) is passed through
+// unchanged; otherwise the error is wrapped so IsMalformedOutput remains true and
+// no raw response is invented.
+func newMalformedOutputError(err error) error {
+	var target *ErrMalformedOutput
+	if errors.As(err, &target) {
+		return err
+	}
+	return &ErrMalformedOutput{Attempts: 1, Last: err}
 }
 
 func ctxErr(ctx context.Context) error {

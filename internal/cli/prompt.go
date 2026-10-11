@@ -46,7 +46,7 @@ import (
 // used, and no automatic escalation is performed for prompts (Phase 5.4 37).
 
 // promptUsage is the one-line usage for `sop prompt`.
-const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--cache] [--deliverable PATH]... [--file PATH | PROMPT]"
+const promptUsage = "usage: sop prompt [--capability CAP] [--model-class small|medium|large] [--json] [--cache] [--deliverable PATH]... [--accept CMD]... [--file PATH | PROMPT]"
 
 // defaultPromptCapability is the conservative, read-only default: a bare prompt is
 // never treated as an implementation request (Phase 5.4 8).
@@ -88,8 +88,12 @@ type promptOptions struct {
 	// mutating prompt, projected into the lifecycle's task spec. They are
 	// validated before use and only meaningful for --capability implement.
 	deliverables []string
-	json         bool
-	cache        bool
+	// accepts are the operator-authorized deterministic acceptance checks for a
+	// mutating prompt: each is a shell command whose exit status 0 means the
+	// criterion is met. They are executed independently of the model's claim.
+	accepts []string
+	json    bool
+	cache   bool
 }
 
 // parsePromptArgs parses the prompt command's flags and positional prompt. At most
@@ -134,6 +138,24 @@ func parsePromptArgs(args []string, stderr io.Writer) (promptOptions, bool) {
 			i++
 		case strings.HasPrefix(a, "--deliverable="):
 			opts.deliverables = append(opts.deliverables, strings.TrimPrefix(a, "--deliverable="))
+		case a == "--accept":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, promptUsage)
+				return promptOptions{}, false
+			}
+			if strings.TrimSpace(args[i+1]) == "" {
+				fmt.Fprintln(stderr, "empty --accept command")
+				return promptOptions{}, false
+			}
+			opts.accepts = append(opts.accepts, args[i+1])
+			i++
+		case strings.HasPrefix(a, "--accept="):
+			v := strings.TrimPrefix(a, "--accept=")
+			if strings.TrimSpace(v) == "" {
+				fmt.Fprintln(stderr, "empty --accept command")
+				return promptOptions{}, false
+			}
+			opts.accepts = append(opts.accepts, v)
 		case a == "--json":
 			opts.json = true
 		case a == "--cache":
@@ -432,7 +454,7 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	// lifecycle's existing report-deliverable mechanism owns them: a declared report
 	// counts as a change only when its content actually changes, exactly as it does
 	// for a scheduled task.
-	spec := &taskfile.Spec{ID: wi.ID, Title: wi.Title, Description: wi.Content, Deliverables: opts.deliverables}
+	spec := &taskfile.Spec{ID: wi.ID, Title: wi.Title, Description: wi.Content, Deliverables: opts.deliverables, AcceptanceChecks: opts.accepts}
 
 	rid := promptRunDir(wi.ID)
 	priorStage, _ := runpkg.Load(dir, rid)

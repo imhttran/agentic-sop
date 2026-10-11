@@ -1,0 +1,7 @@
+{"task_id":"FIX-003","stage":"START","action":"Human-gated fixture task","timestamp":"2026-10-09T00:31:19.668313-05:00"}
+{"task_id":"FIX-003","stage":"PLAN","action":"generating plan","timestamp":"2026-10-09T00:31:19.66851-05:00"}
+{"task_id":"FIX-003","stage":"IMPLEMENT","action":"implementing","timestamp":"2026-10-09T00:31:19.702463-05:00"}
+{"task_id":"FIX-003","stage":"BLOCKED","action":"needs_human","timestamp":"2026-10-09T00:31:19.761874-05:00"}
+{"task_id":"FIX-003","stage":"CLASSIFY","action":"NEEDS_HUMAN","detail":"DESTRUCTIVE_OPERATION","timestamp":"2026-10-09T00:31:19.762549-05:00"}
+{"task_id":"FIX-003","stage":"AUTONOMY","action":"HUMAN_APPROVAL_REQUIRED","detail":"risk=IRREVERSIBLE level=BALANCED","timestamp":"2026-10-09T00:31:19.762584-05:00"}
+{"task_id":"FIX-003","stage":"APPROVAL","action":"REQUESTED","detail":"the requested fixture operation is destructive and irreversible, so it requires authorization","timestamp":"2026-10-09T00:31:19.762696-05:00"}

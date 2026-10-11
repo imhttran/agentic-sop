@@ -170,7 +170,7 @@ func evaluateHistoricalization(dir string, store TaskStore, targetID, targetSour
 	}
 	r.UnresolvedTasks = historicalizationUnresolvedTasks(tasks)
 
-	r.UnresolvedApprovals, err = historicalizationUnresolvedApprovals(dir)
+	r.UnresolvedApprovals, err = historicalizationUnresolvedApprovals(dir, tasks)
 	if err != nil {
 		return HistoricalizationReadiness{}, err
 	}
@@ -292,6 +292,40 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 	return res, nil
 }
 
+// closureBlocker is the shared, fail-closed closure invariant used by both
+// `plan complete` and `plan historicalize`. It reuses the exact same sources of
+// truth the historicalize readiness predicate consults, so the two closure paths
+// cannot disagree about what "ready to close" means (invariants I3/I4/I5):
+//
+//   - unresolved work: a task that has not reached a satisfied terminal state
+//   - an unresolved approval: a PENDING approval gate bound to a task in the
+//     active plan
+//   - missing verification: a satisfied task with no recorded verification
+//     evidence (a PASSED run, an external-completion record, or a NOT_REQUIRED
+//     disposition)
+//
+// It returns "" when the plan is clean and fully satisfied, or a human-readable
+// reason naming the offending tasks otherwise. It is fail-closed: a read error on
+// the approval artifacts is surfaced as a blocker (the caller must not close a
+// plan whose readiness could not be established), and any unknown or missing
+// approval/verification state counts as not ready.
+func closureBlocker(dir string, tasks []*domain.Task) string {
+	if unresolved := historicalizationUnresolvedTasks(tasks); len(unresolved) > 0 {
+		return "the active plan still has unresolved work: " + summarize(unresolved)
+	}
+	approvals, err := historicalizationUnresolvedApprovals(dir, tasks)
+	if err != nil {
+		return "could not determine approval readiness: " + err.Error()
+	}
+	if len(approvals) > 0 {
+		return "plan has unresolved approval requests: " + summarize(approvals)
+	}
+	if missing := historicalizationMissingVerification(dir, tasks); len(missing) > 0 {
+		return "plan has unresolved verification requirements: " + summarize(missing)
+	}
+	return ""
+}
+
 // historicalizationTarget resolves an optional plan argument to a plan id. A
 // resolvable PLAN path yields its derived id and relative source. A value that
 // looks like a path but does not resolve surfaces the resolution error, so an
@@ -379,7 +413,9 @@ func historicalizationEligibility(state, disposition string, r *Historicalizatio
 // historicalizationStillEligible re-checks the eligibility blockers against the
 // freshly read state, closing the window between readiness and mutation for
 // blockers that a concurrent process could change without moving the task
-// fingerprint (a new approval gate, or removed run evidence).
+// fingerprint (a new approval gate, or removed run evidence). It applies the
+// same active-plan scoping as readiness, so no new blocker appears between
+// readiness and mutation.
 func historicalizationStillEligible(dir string, tasks []*domain.Task, disposition string) error {
 	if disposition == DispositionSuperseded {
 		return nil
@@ -387,7 +423,7 @@ func historicalizationStillEligible(dir string, tasks []*domain.Task, dispositio
 	if unresolved := historicalizationUnresolvedTasks(tasks); len(unresolved) > 0 {
 		return fmt.Errorf("%w: unresolved work appeared: %s", ErrStaleHistoricalizationState, summarize(unresolved))
 	}
-	approvals, err := historicalizationUnresolvedApprovals(dir)
+	approvals, err := historicalizationUnresolvedApprovals(dir, tasks)
 	if err != nil {
 		return err
 	}
@@ -464,9 +500,19 @@ func historicalizationUnresolvedTasks(tasks []*domain.Task) []string {
 }
 
 // historicalizationUnresolvedApprovals reads the persisted approval requests
-// under .agent-sdlc/runs/ and returns the tasks parked at a pending gate. It
-// reuses internal/run's artifact reader, so the approval format has one owner.
-func historicalizationUnresolvedApprovals(dir string) ([]string, error) {
+// under .agent-sdlc/runs/ and returns the tasks parked at a pending gate that
+// belong to the active plan. It reuses internal/run's artifact reader, so the
+// approval format has one owner.
+//
+// Under the canonical contract (LC-001) an approval is *unresolved* while it is
+// PENDING and its task is in the active plan, REGARDLESS of task satisfaction: a
+// satisfied task can still carry an open gate that must be explicitly resolved or
+// superseded (for example by external completion) before the plan is
+// historicalized, and the historical evidence must never be silently discarded.
+// Only a request whose task is absent from the active plan — a cross-plan or
+// already-released task — is out of scope. The scan is a pure read: it never
+// writes or removes an approval artifact.
+func historicalizationUnresolvedApprovals(dir string, tasks []*domain.Task) ([]string, error) {
 	root := filepath.Join(dir, config.DirName, runsDirName)
 	entries, err := os.ReadDir(root)
 	if err != nil {
@@ -484,10 +530,14 @@ func historicalizationUnresolvedApprovals(dir string) ([]string, error) {
 		if !ok || req.Status != domain.ApprovalPending {
 			continue
 		}
-		label := entry.Name()
+		taskID := entry.Name()
 		if strings.TrimSpace(req.TaskID) != "" {
-			label = req.TaskID
+			taskID = strings.TrimSpace(req.TaskID)
 		}
+		if !historicalizationApprovalInPlan(taskID, tasks) {
+			continue
+		}
+		label := taskID
 		if strings.TrimSpace(req.ID) != "" {
 			label = fmt.Sprintf("%s (%s)", label, req.ID)
 		}
@@ -495,6 +545,28 @@ func historicalizationUnresolvedApprovals(dir string) ([]string, error) {
 	}
 	sort.Strings(out)
 	return out, nil
+}
+
+// historicalizationApprovalInPlan reports whether a pending approval bound to
+// taskID belongs to the active plan. Per the canonical contract (LC-001) the
+// blocker is scoping, not staleness: a PENDING request whose task is present in
+// the active plan is a plan-level blocker REGARDLESS of task satisfaction, because
+// a satisfied task can still carry an open gate that must be explicitly resolved
+// or superseded (e.g. by external completion) before the plan is historicalized.
+// Only a request whose task is absent from the active plan (a cross-plan or
+// already-released task) is out of scope. It is a pure predicate over the task
+// slice and the request's task id, and writes nothing.
+func historicalizationApprovalInPlan(taskID string, tasks []*domain.Task) bool {
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return false
+	}
+	for _, t := range tasks {
+		if t.ID == taskID {
+			return true
+		}
+	}
+	return false
 }
 
 // historicalizationMissingVerification reports satisfied tasks with no recorded

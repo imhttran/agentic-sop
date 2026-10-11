@@ -19,6 +19,12 @@ import (
 //   - whitespace and line-wrap differences in literal-free prose only; a field that
 //     contains quotes, backticks, or an indented/fenced literal is compared
 //     byte-for-byte, so code, quoted values and wrapped paths are never folded;
+//   - a pure Markdown emphasis-marker difference (*x* versus _x_) in literal-free
+//     prose, so an editor that rewrites emphasis markers on save is not mistaken for
+//     a definition change. Folding is strictly limited to a paired single-character
+//     '*' or '_' delimiter around non-space, non-underscore, word-boundary content;
+//     intra-word underscores and asterisks (for example snake_case or a glob-like
+//     token) are never touched, so an identifier difference stays a real change;
 //   - the order of independent acceptance items, compared as a conjunction;
 //   - an explicit "implement" execution mode versus the default empty mode.
 //
@@ -204,6 +210,14 @@ func sameAcceptanceCriteria(a, b []string) bool {
 // "~~~" fences and indented lines are detected directly, while any other multiline
 // literal is left to splitCriteria/hasMultilineLiteral so the comparison never
 // silently normalizes code.
+//
+// Within the literal-free branch only, a pure Markdown emphasis-marker difference is
+// also folded to one canonical form, so an editor that rewrites *x* to _x_ on save
+// is not mistaken for a definition change. The fold replaces a paired
+// single-character '*' or '_' delimiter with a canonical '*' only when it wraps
+// non-space, non-underscore, word-boundary content; intra-word underscores and
+// asterisks (snake_case) and line-start bullets are never treated as emphasis, so
+// an identifier or list difference stays a real change.
 func canonicalProse(s string) string {
 	if strings.ContainsAny(s, "`\"'") || strings.Contains(s, "~~~") {
 		return s
@@ -213,7 +227,79 @@ func canonicalProse(s string) string {
 			return s
 		}
 	}
-	return strings.Join(strings.Fields(s), " ")
+	return foldEmphasisMarkers(strings.Join(strings.Fields(s), " "))
+}
+
+// foldEmphasisMarkers maps a Markdown emphasis pair whose delimiter is a single '*'
+// or '_' to one canonical representation (the '*' form), leaving every other byte
+// untouched. It folds only when the delimiter wraps non-space, non-underscore,
+// word-boundary content, so it never touches intra-word underscores or asterisks
+// (snake_case, snakecase's underscore difference, or a glob-like token), a
+// line-start bullet, or an isolated marker. The single canonical form here is a
+// pure presentation choice: the input is literal-free prose, so no code span,
+// quoted value, or fenced/indented literal is affected.
+func foldEmphasisMarkers(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for i := 0; i < len(s); {
+		ch := s[i]
+		if ch != '*' && ch != '_' {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		// A line-start bullet marker ("* " / "- ") is not emphasis: only treat a
+		// delimiter as emphasis when it is immediately followed by non-space content.
+		if i+1 >= len(s) || s[i+1] == ' ' || s[i+1] == '\t' || s[i+1] == ch {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		// An opener must sit at a word boundary: at the start of the string, after
+		// whitespace, or after an opening punctuation/emphasis marker rather than
+		// inside a word (which would make it part of an identifier such as snake_case).
+		if i > 0 && !isEmphasisBoundary(s[i-1]) {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		// The content must be a single unbroken, non-space run that does not itself
+		// contain an underscore or asterisk, and must not begin or end with one, so an
+		// intra-word underscore (snake_case) is never folded.
+		j := i + 1
+		ok := true
+		for j < len(s) && s[j] != ' ' && s[j] != '\t' && s[j] != '\n' && s[j] != ch {
+			if s[j] == '_' || s[j] == '*' {
+				ok = false
+				break
+			}
+			j++
+		}
+		if !ok || j >= len(s) || s[j] != ch {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		// Content is non-empty (s[i+1] != ch checked above) and closed by the same
+		// delimiter at j. The closer must end at a word boundary too.
+		if j+1 < len(s) && !isEmphasisBoundary(s[j+1]) {
+			b.WriteByte(ch)
+			i++
+			continue
+		}
+		b.WriteByte('*')
+		b.WriteString(s[i+1 : j])
+		b.WriteByte('*')
+		i = j + 1
+	}
+	return b.String()
+}
+
+// isEmphasisBoundary reports whether c can sit immediately outside a Markdown
+// emphasis delimiter: whitespace or punctuation, but never a letter, digit, or
+// underscore (which would make the delimiter intra-word).
+func isEmphasisBoundary(c byte) bool {
+	return !((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '_')
 }
 
 // plansEquivalent reports whether a requested plan is identical to the recorded

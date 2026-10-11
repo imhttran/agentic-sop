@@ -1,0 +1,21 @@
+{"task_id":"ETOE-004","stage":"START","action":"Decision adapter integration audit","timestamp":"2026-10-08T21:19:30.845226-05:00"}
+{"task_id":"ETOE-004","stage":"PLAN","action":"generating plan","timestamp":"2026-10-08T21:19:30.845511-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","timestamp":"2026-10-08T21:19:32.031335-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","detail":"docs","timestamp":"2026-10-08T21:19:32.954695-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","detail":"docs/reports","timestamp":"2026-10-08T21:19:33.781456-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","detail":"docs/reports/end-to-end-reliability","timestamp":"2026-10-08T21:19:34.588853-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"reading","detail":"docs/reports/end-to-end-reliability/ETOE-003-controller-contract-matrix.md","timestamp":"2026-10-08T21:19:35.940314-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"searching","detail":"ETOE-004","timestamp":"2026-10-08T21:19:38.815018-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"reading","detail":"docs/plans/PLAN-SOP-End-to-End-Reliability.md","timestamp":"2026-10-08T21:19:39.790868-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"searching","detail":"decision","timestamp":"2026-10-08T21:19:44.858563-05:00"}
+{"task_id":"ETOE-004","stage":"IMPLEMENT","action":"implementing","timestamp":"2026-10-08T21:21:48.151912-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","detail":"docs/reports/end-to-end-reliability","signal":"discovery.novel","timestamp":"2026-10-08T21:21:50.562168-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","signal":"discovery.novel","timestamp":"2026-10-08T21:21:52.834113-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"reading","detail":"go.mod","signal":"discovery.novel","timestamp":"2026-10-08T21:21:53.98314-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"listing","detail":".agent-sdlc","signal":"discovery.novel","timestamp":"2026-10-08T21:21:55.495758-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"reading","detail":".agent-sdlc/config.yaml","signal":"discovery.novel","timestamp":"2026-10-08T21:21:56.827858-05:00"}
+{"task_id":"ETOE-004","stage":"DISCOVER","action":"reading","detail":"internal/config/config.go","signal":"discovery.novel","timestamp":"2026-10-08T21:21:58.734448-05:00"}
+{"task_id":"ETOE-004","stage":"FAILED","action":"failed","timestamp":"2026-10-08T21:22:22.799938-05:00"}
+{"task_id":"ETOE-004","stage":"CLASSIFY","action":"NEEDS_HUMAN","detail":"UNKNOWN","timestamp":"2026-10-08T21:22:22.800743-05:00"}
+{"task_id":"ETOE-004","stage":"AUTONOMY","action":"HUMAN_APPROVAL_REQUIRED","detail":"risk=MEDIUM level=BALANCED","timestamp":"2026-10-08T21:22:22.800784-05:00"}
+{"task_id":"ETOE-004","stage":"APPROVAL","action":"REQUESTED","detail":"malformed tool request: \"tool\" must be a non-empty string","timestamp":"2026-10-08T21:22:22.800895-05:00"}

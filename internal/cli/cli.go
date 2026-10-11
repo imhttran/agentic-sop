@@ -269,7 +269,7 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	case "decline":
 		return runDecline(rest, stdout, stderr, d)
 	case "approval":
-		return runApprovalStatus(rest, stdout, stderr, d)
+		return runApproval(rest, stdout, stderr, d)
 	case "approvals":
 		return runApprovals(rest, stdout, stderr, d)
 	case "reconcile":
@@ -317,7 +317,7 @@ Commands:
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)
   review    review the current changes with the configured engine
-  run       run [PLAN.md | --task TASK.md]  (normal entry point)
+  run       run [--max-tasks N] [PLAN.md | --task TASK.md]  (normal entry point)
   prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json, --cache)
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
@@ -328,7 +328,9 @@ Commands:
             (no <task-id> or --select chooses interactively; --run continues after)
   decline   record a decline decision on a task's active human approval gate
             (no <task-id> or --select chooses interactively)
-  approval  show SOP's approval request (if any) for a task
+  approval  show SOP's approval request (if any) for a task;
+            approval supersede <task-id> --reason TEXT --by NAME supersedes a
+            stale PENDING request whose task is already satisfied
   approvals list every task waiting at an approval gate (--json)
   index     build the deterministic Structural Repository Index (.agent-sdlc/context/index.json)
   retrieve  rank repository evidence lexically (deterministic BM25)

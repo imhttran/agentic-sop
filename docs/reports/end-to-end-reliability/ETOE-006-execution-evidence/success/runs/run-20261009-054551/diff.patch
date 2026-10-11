@@ -1,0 +1,24 @@
+diff --git a/calc.go b/calc.go
+index 70e28ac..cb4e283 100644
+--- a/calc.go
++++ b/calc.go
+@@ -1,6 +1,6 @@
+ package fixture
+ 
+-// Add is an intentional STUB so the success task must implement it.
++// Add returns the sum of two integers.
+ func Add(a, b int) int {
+-	return 0
++	return a + b
+ }
+diff --git a/etoe-005-run-records.txt b/etoe-005-run-records.txt
+new file mode 100644
+--- /dev/null
++++ b/etoe-005-run-records.txt
+@@ -0,0 +1,6 @@
++# ETOE-005 fixture run records (structured evidence)
++# binary: /tmp/sop-etoe005
++# agent:  /Users/imhttran/agentic-workspace/agentic-sop/scripts/etoe-005-fixture-agent.sh (controlled, offline; SOP_AGENT_HARNESS=command)
++# root:   /private/tmp/etoe-006-success
++# scenario: success
++# git-baseline: 2559c38

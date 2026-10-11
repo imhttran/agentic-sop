@@ -153,9 +153,12 @@ const (
 	// truncates a run that is still writing. Soft thresholds are interaction
 	// counts: they steer a productive run without withdrawing tools from it.
 
-	// PLAN phase bounds. Discovery ends synthesis; synthesis is tool-free.
+	// PLAN phase bounds. Discovery ends synthesis; synthesis is tool-free. The
+	// synthesis bound carries a one-turn margin: a model that narrates before
+	// emitting the structured PLAN document must still have a turn left to produce
+	// it (a benchmark run failed at synthesis_limit after two narration turns).
 	planDiscoveryTurns = 8
-	planSynthesisTurns = 2
+	planSynthesisTurns = 3
 
 	// REVIEW phase bounds. The change under review is in the request, so
 	// inspection is short: at most reviewInspectTurns read-only tool calls. The

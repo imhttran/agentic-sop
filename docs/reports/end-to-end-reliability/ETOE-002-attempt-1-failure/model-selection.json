@@ -1,0 +1,9 @@
+{
+  "class": "large",
+  "provider": "ollama",
+  "model": "deepseek-v4.1-flash:cloud",
+  "locality": "cloud",
+  "source": "env",
+  "fallback": false,
+  "reason": "environment default class"
+}

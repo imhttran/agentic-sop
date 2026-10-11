@@ -1,0 +1,19 @@
+{
+  "kind": "DESTRUCTIVE_OPERATION",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "HIGH",
+  "reason": "the agent reported a boundary that requires a human: the requested fixture operation is destructive and irreversible, so it requires authorization",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "IRREVERSIBLE",
+    "RequiresHuman": true,
+    "Reason": "the agent reported a boundary that requires a human: the requested fixture operation is destructive and irreversible, so it requires authorization",
+    "Classification": {
+      "kind": "DESTRUCTIVE_OPERATION",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "HIGH",
+      "reason": "the agent reported a boundary that requires a human: the requested fixture operation is destructive and irreversible, so it requires authorization"
+    }
+  }
+}

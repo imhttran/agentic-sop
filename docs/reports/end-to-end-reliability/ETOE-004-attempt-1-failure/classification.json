@@ -1,0 +1,19 @@
+{
+  "kind": "UNKNOWN",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "HIGH",
+  "reason": "the agent reported a failure without an authoritative signal: malformed tool request: \"tool\" must be a non-empty string",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "MEDIUM",
+    "RequiresHuman": true,
+    "Reason": "the agent reported a failure without an authoritative signal: malformed tool request: \"tool\" must be a non-empty string",
+    "Classification": {
+      "kind": "UNKNOWN",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "HIGH",
+      "reason": "the agent reported a failure without an authoritative signal: malformed tool request: \"tool\" must be a non-empty string"
+    }
+  }
+}

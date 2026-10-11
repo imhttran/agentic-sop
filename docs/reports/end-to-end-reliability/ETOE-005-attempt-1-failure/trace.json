@@ -1,0 +1,120 @@
+{
+  "schema_version": 7,
+  "run_id": "ETOE-005",
+  "task_id": "ETOE-005",
+  "started_at": "2026-10-09T05:06:23.088906Z",
+  "completed_at": "2026-10-09T05:06:23.089269Z",
+  "execution": {
+    "capability": "implement",
+    "model_class": "medium",
+    "provider": "ollama",
+    "model": "glm-5.3-flash:cloud",
+    "locality": "cloud",
+    "execution_source": "primary",
+    "fallback": false
+  },
+  "repository_mutations": 0,
+  "iterations": [
+    {
+      "sequence": 1,
+      "phase": "START",
+      "timestamp": "2026-10-09T00:06:23.088999-05:00",
+      "action": "Disposable dogfood fixture and deterministic baseline",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 2,
+      "phase": "PLAN",
+      "timestamp": "2026-10-09T00:06:23.089314-05:00",
+      "action": "generating plan",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 3,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:25.210823-05:00",
+      "action": "listing",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 4,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:26.441577-05:00",
+      "action": "reading",
+      "observation": "README.md",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 5,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:28.563732-05:00",
+      "action": "listing",
+      "observation": "docs/reports",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 6,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:29.12823-05:00",
+      "action": "listing",
+      "observation": "docs/reports/end-to-end-reliability",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 7,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:30.022414-05:00",
+      "action": "reading",
+      "observation": "docs/reports/end-to-end-reliability/ETOE-001-preflight-baseline.md",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 8,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:36.548317-05:00",
+      "action": "reading",
+      "observation": "docs/plans/PLAN-SOP-End-to-End-Reliability.md",
+      "repository_mutation": false
+    },
+    {
+      "sequence": 9,
+      "phase": "DISCOVER",
+      "timestamp": "2026-10-09T00:06:43.749637-05:00",
+      "action": "listing",
+      "observation": "scripts",
+      "repository_mutation": false
+    }
+  ],
+  "verification": null,
+  "termination": {
+    "human_required": false
+  },
+  "progress": [
+    {
+      "sequence": 1,
+      "iteration": 2,
+      "phase": "PLAN",
+      "type": "STATE_TRANSITION",
+      "subtype": "lifecycle_advanced",
+      "evidence": "PLAN"
+    }
+  ],
+  "progress_summary": {
+    "discovery": 0,
+    "repository_mutations": 0,
+    "verification": 0,
+    "state_transitions": 1
+  },
+  "budgets": {
+    "implement_iterations": 32,
+    "fix_iterations": 24,
+    "stale_iterations": 5,
+    "tool_calls": 80
+  },
+  "context": {
+    "items": 0,
+    "files": 0,
+    "bytes": 0,
+    "truncated": false
+  }
+}

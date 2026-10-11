@@ -1,0 +1,25 @@
+{
+  "id": "run-20261009-054551",
+  "total_ms": 604,
+  "stages_ms": {
+    "implement": 34,
+    "plan": 36,
+    "review": 34,
+    "validation": 472
+  },
+  "validation_ms": {
+    "build": 25,
+    "lint": 81,
+    "test": 365
+  },
+  "counts": {
+    "agent_calls": 2,
+    "agent_calls_avoided": 0,
+    "validation_runs": 1,
+    "validation_reused": 0,
+    "review_runs": 1,
+    "review_reused": 0,
+    "fix_cycles": 0,
+    "plan_repairs": 0
+  }
+}

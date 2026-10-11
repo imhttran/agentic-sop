@@ -1,0 +1,23 @@
+{
+  "Results": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 25742875,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 1,
+      "Stdout": "--- FAIL: TestBroken (0.00s)\n    broken_test.go:7: intentional ETOE-005 validation failure\n--- FAIL: TestAdd (0.00s)\n    calc_test.go:7: Add(2,3) = 0, want 5\nFAIL\nFAIL\tetoe005fixture\t0.167s\nFAIL\n",
+      "Stderr": "",
+      "Duration": 312749291,
+      "Status": "FAIL"
+    }
+  ],
+  "Status": "FAIL"
+}

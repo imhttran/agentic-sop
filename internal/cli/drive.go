@@ -43,7 +43,7 @@ type graphStore interface {
 // from a human PLAN/PRD, and creating tasks — then drives the task graph. planArg
 // names an execution PLAN; when it is empty the project's normal plan is
 // discovered. Each step is idempotent and safe to repeat.
-func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
+func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) int {
 	dir, ok := projectDir(d.getwd, stderr)
 	if !ok {
 		return exitError
@@ -156,7 +156,7 @@ func runGraph(planArg string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	sess := newRunSession()
-	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, stdout, stderr)
+	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, maxTasks, stdout, stderr)
 	if code == exitOK {
 		if final, err := st.List(); err == nil && domain.AllSatisfied(final) {
 			printCompletion(stdout, dir, cfg, prepared, final)
@@ -399,7 +399,7 @@ func latestReportPath(dir string) string {
 // (BRANCH_CREATED … REVIEW_PASS → LOCAL_DONE). It never fabricates PR_OPEN,
 // CI_RUNNING, CI_PASS, or MERGED, because no PR was opened and no CI ran. The
 // persisted state therefore describes what actually happened.
-func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, planID string, sess *runSession, stdout, stderr io.Writer) int {
+func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, st graphStore, planID string, sess *runSession, maxTasks int, stdout, stderr io.Writer) int {
 	tasks, err := st.List()
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
@@ -422,6 +422,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	// created here, used only here, and discarded when driveGraph returns.
 	sch := scheduler.New(st)
 	completed := 0
+	tasksEntered := 0
 
 	// Each iteration either completes a task (→ LOCAL_DONE), resumes and completes
 	// an interrupted one, blocks one, or requeues one blocked task for recovery
@@ -437,6 +438,16 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	maxIterations := iterationsPerTask*len(tasks) + 2
 
 	for i := 0; i < maxIterations; i++ {
+		// Operator execution bound (--max-tasks): stop before selecting the next
+		// task, so a bounded invocation never enters (or even promotes to READY)
+		// task N+1. The bound counts tasks entered, not successful completions, and
+		// only trims successful continuation: a failure, block, or approval boundary
+		// has already returned through the existing path above.
+		if maxTasks > 0 && tasksEntered >= maxTasks {
+			fmt.Fprintf(stdout, "Bounded run: execution bound reached after %d task(s); stopping before the next task.\n", tasksEntered)
+			fmt.Fprintf(stdout, "Remaining tasks are unchanged and normally runnable; inspect with sop status and continue with sop run.\n")
+			return exitOK
+		}
 		res, err := sch.Next(ctx)
 		if err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -446,6 +457,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		switch res.Outcome {
 		case scheduler.ReadyTask:
 			id := res.Task.ID
+			tasksEntered++
 			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
 			addTaskMetrics(run, dir, res.Task.ID)
 			if code != exitOK {
@@ -478,6 +490,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 			printFailedRecovery(stderr, dir, res.Task)
 			return exitError
 		case scheduler.ActiveTask:
+			tasksEntered++
 			// A task is mid-lifecycle (typically selected but interrupted). SOP has one
 			// interpretation of that state: resume the same task, never start another.
 			code, id := resumeActiveTask(ctx, dir, cfg, a, d, st, sess, stdout, stderr)

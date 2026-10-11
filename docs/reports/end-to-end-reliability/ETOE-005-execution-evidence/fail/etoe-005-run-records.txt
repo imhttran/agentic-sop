@@ -1,0 +1,33 @@
+# ETOE-005 fixture run records (structured evidence)
+# binary: /tmp/sop-etoe005
+# agent:  /Users/imhttran/agentic-workspace/agentic-sop/scripts/etoe-005-fixture-agent.sh (controlled, offline; SOP_AGENT_HARNESS=command)
+# root:   /private/tmp/etoe-005-fail
+# scenario: fail
+# git-baseline: 1c17271
+RESULT tasks/FIX-FAIL.md | run-id run-20261009-053030 | exit=1 | expected=not-completed | stage=WAITING_FOR_HUMAN validation=FAIL gate=UNAVAILABLE | verdict=MATCH
+# --- validation.json (FIX-FAIL) ---
+{
+  "Results": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 25240583,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 1,
+      "Stdout": "--- FAIL: TestBroken (0.00s)\n    broken_test.go:7: intentional ETOE-005 validation failure\n--- FAIL: TestAdd (0.00s)\n    calc_test.go:7: Add(2,3) = 0, want 5\nFAIL\nFAIL\tetoe005fixture\t0.169s\nFAIL\n",
+      "Stderr": "",
+      "Duration": 317702500,
+      "Status": "FAIL"
+    }
+  ],
+  "Status": "FAIL"
+}
+# --- machine-readable summary (JSONL) ---
+{"exit": 1, "expected": "not-completed", "gate": "UNAVAILABLE", "run_id": "run-20261009-053030", "stage": "WAITING_FOR_HUMAN", "task": "tasks/FIX-FAIL.md", "validation": "FAIL", "verdict": "MATCH"}

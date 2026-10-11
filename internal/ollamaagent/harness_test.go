@@ -910,10 +910,9 @@ func TestPlanSynthesisExhaustion(t *testing.T) {
 	for i := 0; i < planDiscoveryTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
-	responses = append(responses,
-		`I am still synthesizing the plan.`,
-		`I am continuing to synthesize the plan.`,
-	)
+	for i := 0; i < planSynthesisTurns; i++ {
+		responses = append(responses, fmt.Sprintf("I am still synthesizing the plan (%d).", i))
+	}
 	fake, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100
@@ -927,7 +926,7 @@ func TestPlanSynthesisExhaustion(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "during synthesis") ||
 		!strings.Contains(err.Error(), "discovery_tool_calls=8") ||
-		!strings.Contains(err.Error(), "synthesis_turns=2") {
+		!strings.Contains(err.Error(), fmt.Sprintf("synthesis_turns=%d", planSynthesisTurns)) {
 		t.Errorf("err = %v, want phase and counts", err)
 	}
 	if fake.count() != planDiscoveryTurns+planSynthesisTurns {
@@ -1018,10 +1017,9 @@ func TestPlanTraceShowsSynthesisTermination(t *testing.T) {
 	for i := 0; i < planDiscoveryTurns; i++ {
 		responses = append(responses, readToolCall(i))
 	}
-	responses = append(responses,
-		`I am still synthesizing the plan.`,
-		`I am continuing to synthesize the plan.`,
-	)
+	for i := 0; i < planSynthesisTurns; i++ {
+		responses = append(responses, fmt.Sprintf("I am still synthesizing the plan (%d).", i))
+	}
 	_, srv := newFakeOllama(t, responses...)
 	cfg := testConfig(srv.URL)
 	cfg.MaxToolCalls = 100

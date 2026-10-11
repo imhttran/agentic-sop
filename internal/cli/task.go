@@ -165,6 +165,23 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 		}
 	}
 
+	// Invariant I1: resolve any PENDING approval for the task BEFORE the completion
+	// is recorded, so an external completion can never leave an actionable PENDING
+	// head. This is not best-effort: if the approval cannot be persisted the command
+	// fails and reports no successful completion, and because the task is not yet
+	// marked complete the operator can retry without being blocked as already done.
+	// It reads and writes only the task's own run directory via run.At, so it never
+	// resets the task's run state.json or attempts evidence.
+	approvalRun := runpkg.At(runpkg.Dir(dir, id))
+	if _, derr := runpkg.ResolvePendingApproval(approvalRun); derr != nil {
+		fmt.Fprintf(stderr, "task complete: pending approval not resolved: %v\n", derr)
+		return exitError
+	}
+	if head, ok := approvalRun.Approval(); ok && head.Status == domain.ApprovalPending {
+		fmt.Fprintf(stderr, "task complete: a PENDING approval remains for %s after resolution\n", id)
+		return exitError
+	}
+
 	// Record the transition. The domain method is the one authority for it, so the status
 	// is never set by hand.
 	if err := task.CompleteExternally(); err != nil {
@@ -187,8 +204,9 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 		RecordedAt:           time.Now().UTC(),
 	}
 	// Best-effort provenance: a failed artifact write is reported but never changes the
-	// recorded completion.
-	if rn, rerr := runpkg.New(dir, id); rerr == nil {
+	// recorded completion. Open (not New) binds the task's EXISTING run directory, so
+	// recording provenance never resets state.json or clears attempts/ evidence.
+	if rn, rerr := runpkg.Open(dir, id); rerr == nil {
 		if werr := rn.WriteExternalCompletion(rec); werr != nil {
 			fmt.Fprintf(stdout, "warning: external-completion artifact not persisted: %v\n", werr)
 		}

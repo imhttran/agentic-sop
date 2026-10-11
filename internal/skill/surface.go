@@ -40,6 +40,7 @@ var Commands = []Command{
 	{Name: "rag-schema", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "rag-test", Capability: "design_tests", Delegation: "sop prompt --capability design_tests"},
 	{Name: "rag-ingest", Capability: "plan", Delegation: "sop prompt --capability plan"},
+	{Name: "sop-cleanup", Capability: "", Delegation: "sop status"},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts

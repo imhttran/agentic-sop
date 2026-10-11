@@ -4,6 +4,7 @@
 package git
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -300,10 +301,18 @@ func excluded(path string, excludes []string) bool {
 	return false
 }
 
-// untrackedDiff renders a new-file diff for an untracked file.
+// untrackedDiff renders a new-file diff for an untracked file. A binary file (one
+// containing a NUL byte — git's detection heuristic) is summarized rather than
+// embedded, so a generated artifact (for example a compiled binary the agent
+// produced with a bare `go build`) cannot inflate the diff — and the model context
+// that consumes it — with megabytes of raw bytes.
 func untrackedDiff(path string, data []byte) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n", path, path, path)
+	if isBinary(data) {
+		fmt.Fprintf(&b, "Binary file %s added\n", path)
+		return b.String()
+	}
 	trimmed := strings.TrimRight(string(data), "\n")
 	if trimmed == "" {
 		return b.String()
@@ -316,6 +325,16 @@ func untrackedDiff(path string, data []byte) string {
 		b.WriteString("\n")
 	}
 	return b.String()
+}
+
+// isBinary reports whether data looks binary: it contains a NUL byte within its
+// first 8000 bytes (git's binary-detection heuristic). An empty file is text.
+func isBinary(data []byte) bool {
+	n := len(data)
+	if n > 8000 {
+		n = 8000
+	}
+	return bytes.IndexByte(data[:n], 0) >= 0
 }
 
 // Add stages paths for the next commit. With no paths it stages all changes

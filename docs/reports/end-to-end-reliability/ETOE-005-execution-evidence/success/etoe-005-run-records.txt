@@ -1,0 +1,9 @@
+# ETOE-005 fixture run records (structured evidence)
+# binary: /tmp/sop-etoe005
+# agent:  /Users/imhttran/agentic-workspace/agentic-sop/scripts/etoe-005-fixture-agent.sh (controlled, offline; SOP_AGENT_HARNESS=command)
+# root:   /private/tmp/etoe-005-success
+# scenario: success
+# git-baseline: f8960fd
+RESULT tasks/FIX-SUCCESS.md | run-id run-20261009-053027 | exit=0 | expected=completed | stage=PASSED validation=PASS gate=UNAVAILABLE | verdict=MATCH
+# --- machine-readable summary (JSONL) ---
+{"exit": 0, "expected": "completed", "gate": "UNAVAILABLE", "run_id": "run-20261009-053027", "stage": "PASSED", "task": "tasks/FIX-SUCCESS.md", "validation": "PASS", "verdict": "MATCH"}

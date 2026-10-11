@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -58,17 +59,18 @@ func runRun(args []string, stdout, stderr io.Writer, d deps) int {
 	if opts.taskArg != "" {
 		return runSingleTask(opts.taskArg, stdout, stderr, d)
 	}
-	return runGraph(opts.planArg, stdout, stderr, d)
+	return runGraph(opts.planArg, opts.maxTasks, stdout, stderr, d)
 }
 
 // runUsage is the one-line usage for `sop run`.
-const runUsage = "usage: sop run [--model-class small|medium|large] [PLAN.md | --task TASK.md]"
+const runUsage = "usage: sop run [--max-tasks N] [--model-class small|medium|large] [PLAN.md | --task TASK.md]"
 
 // runOptions are the parsed arguments of `sop run`.
 type runOptions struct {
 	planArg    string
 	taskArg    string
 	modelClass string
+	maxTasks   int
 }
 
 // parseRunArgs parses "sop run [--model-class CLASS] [PLAN.md | --task TASK.md]":
@@ -97,6 +99,26 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, bool) {
 			i++
 		case strings.HasPrefix(a, "--model-class="):
 			opts.modelClass = strings.TrimPrefix(a, "--model-class=")
+		case a == "--max-tasks":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, runUsage)
+				return runOptions{}, false
+			}
+			n, ok := parseMaxTasks(args[i+1])
+			if !ok {
+				fmt.Fprintf(stderr, "invalid --max-tasks value %q: want a positive integer\n%s\n", args[i+1], runUsage)
+				return runOptions{}, false
+			}
+			opts.maxTasks = n
+			i++
+		case strings.HasPrefix(a, "--max-tasks="):
+			raw := strings.TrimPrefix(a, "--max-tasks=")
+			n, ok := parseMaxTasks(raw)
+			if !ok {
+				fmt.Fprintf(stderr, "invalid --max-tasks value %q: want a positive integer\n%s\n", raw, runUsage)
+				return runOptions{}, false
+			}
+			opts.maxTasks = n
 		case strings.HasPrefix(a, "-"):
 			fmt.Fprintf(stderr, "unknown flag %s\n%s\n", a, runUsage)
 			return runOptions{}, false
@@ -112,7 +134,22 @@ func parseRunArgs(args []string, stderr io.Writer) (runOptions, bool) {
 		fmt.Fprintln(stderr, runUsage)
 		return runOptions{}, false
 	}
+	if opts.taskArg != "" && opts.maxTasks > 0 {
+		fmt.Fprintln(stderr, runUsage)
+		return runOptions{}, false
+	}
 	return opts, true
+}
+
+// parseMaxTasks parses the --max-tasks value: a strictly positive integer. A
+// non-positive, non-numeric, or blank value is rejected so the operator
+// execution bound can never be silently ignored or treated as unlimited.
+func parseMaxTasks(raw string) (int, bool) {
+	n, err := strconv.Atoi(strings.TrimSpace(raw))
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }
 
 // runSingleTask runs one task file through the local lifecycle.
@@ -244,7 +281,12 @@ type lifeResult struct {
 	report        review.Report
 	verifiedFirst bool
 	satisfaction  *agent.CompletionEvidence
-	perf          perf.Task
+	// outcome is the objective-level acceptance verdict derived from the task
+	// specification after the gate. It is nil when the task declared no objective;
+	// it distinguishes PASS/LOCAL_DONE from verified completion and never changes
+	// the lifecycle transition.
+	outcome *outcomeArtifact
+	perf    perf.Task
 	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
 	// JEV did not run. It is diagnostic evidence referenced by the report; it is
 	// never workflow state and never feeds a decision.
@@ -338,6 +380,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
+	writeOutcomeArtifact(rn, res.outcome)
 	completion := ""
 	var mutations *int
 	if res.satisfaction != nil {
@@ -370,6 +413,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		ModelSelection: res.modelSelection,
 		Routing:        routingDocFor(res.routing),
 		Classification: classificationDoc(res.classification),
+		Outcome:        res.outcome,
 		Performance:    res.perf,
 		GeneratedAt:    time.Now().UTC(),
 	})
@@ -747,26 +791,57 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
-			reviewTask := d.taskInput(spec.ID, spec.Render())
-			reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, diff)
-			if cached, ok := sess.cachedReview(reviewKey); ok {
-				rec.ReviewReused()
-				report = cached
-			} else {
-				_ = rn.SetStage(runpkg.Reviewing)
-				ar.Emit(activity.StageReview, "reviewing changes", "")
-				provider, perr := reviewProvider(cfg, d)
-				if perr != nil {
-					return lifeResult{}, fmt.Errorf("review: %w", perr)
+			// The review input is restricted to the task's OWN change set: the
+			// invocation-scoped changed files (rn.ChangedFiles(), recorded by
+			// recordTaskChanges from invocationChanges) unioned with the declared
+			// deliverables (reports). The whole working tree is never reviewed, so an
+			// unrelated pre-existing modification cannot leak into the review.
+			scope := newReviewScope(rn.ChangedFiles(), reports, reports...)
+			// A legitimate no-change completion (the invocation completed without
+			// requiring a change, or it proved ALREADY_SATISFIED) has nothing of its own
+			// to review: the dirty entries in the working tree are only unrelated
+			// pre-existing modifications. That is the "no changes to review" case, not a
+			// fail-closed one, so review is skipped for exactly this invocation. When the
+			// task instead required a change and no task-owned path can be established,
+			// the seam fails closed rather than reviewing the whole tree.
+			nothingOfOwn := !changeRequired || legacyNoChange || alreadySatisfied
+			if !scope.empty() || !nothingOfOwn {
+				reviewDiff, serr := scopedReviewDiff(scope, diff, changeRequired)
+				if serr != nil {
+					return lifeResult{}, fmt.Errorf("review: %w", serr)
 				}
-				revStop := rec.Measure(perf.StageReview)
-				report, err = provider.Review(ctx, review.Request{Task: reviewTask, Diff: diff})
-				revStop()
-				rec.ReviewRun()
-				if err != nil {
-					return lifeResult{}, fmt.Errorf("review: %w", err)
+				reviewTask := d.taskInput(spec.ID, spec.Render())
+				reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, reviewDiff)
+				if cached, ok := sess.cachedReview(reviewKey); ok {
+					rec.ReviewReused()
+					report = cached
+				} else {
+					_ = rn.SetStage(runpkg.Reviewing)
+					ar.Emit(activity.StageReview, "reviewing changes", "")
+					provider, perr := reviewProvider(cfg, d)
+					if perr != nil {
+						return lifeResult{}, fmt.Errorf("review: %w", perr)
+					}
+					revStop := rec.Measure(perf.StageReview)
+					report, err = provider.Review(ctx, review.Request{Task: reviewTask, Diff: reviewDiff})
+					revStop()
+					rec.ReviewRun()
+					if err != nil {
+						if review.IsMalformedOutput(err) {
+							// Explicit run-level classification of a malformed REVIEW
+							// response. This is a bounded outcome that is never a pass: it
+							// maps deterministically to the existing human boundary,
+							// distinct from the generic fail-closed infrastructure error.
+							// The provider's retained Report (every finding that parsed
+							// with a valid severity) is preserved, so a genuine
+							// HIGH/CRITICAL finding emitted beside the malformed output is
+							// still surfaced and still blocks at its severity.
+							return malformedOutputResult(cfg, rn, err), nil
+						}
+						return lifeResult{}, fmt.Errorf("review: %w", err)
+					}
+					sess.cacheReview(reviewKey, report)
 				}
-				sess.cacheReview(reviewKey, report)
 			}
 		}
 
@@ -988,12 +1063,69 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		report:         report,
 		verifiedFirst:  verifiedFirst,
 		satisfaction:   satisfaction,
+		outcome:        deriveOutcome(spec, dir, gate),
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,
 		decision:       decision,
 		ctx:            ctxSummary,
 	}, nil
+}
+
+// malformedOutputResult classifies a malformed REVIEW response as an explicit
+// human boundary at the run level. It is reached only through the explicit
+// review.IsMalformedOutput(err) check at the run-level review caller, so the
+// classification does not depend on the generic fail-closed infrastructure
+// fallback.
+//
+// A malformed review response is a bounded outcome that is never a pass: no
+// valid report could be obtained, so a human must inspect the raw response and
+// decide how to proceed. The provider's retained Report — every finding that
+// parsed with a valid severity alongside the malformed one — is preserved in the
+// result, so a genuine HIGH/CRITICAL finding still surfaces through the review
+// report and still blocks at its severity.
+//
+// The classification is constructed deterministically (NEEDS_HUMAN, high
+// confidence) rather than derived from the raw response text, so the routing to
+// the human boundary can never depend on incidental words inside the malformed
+// model output. The existing human-approval boundary and severity thresholds are
+// unchanged: the result is mapped to the WAITING_FOR_HUMAN stage and a
+// NEEDS_HUMAN gate, and the retained report is carried verbatim.
+func malformedOutputResult(cfg config.Config, rn *runpkg.Run, err error) lifeResult {
+	reason := "the review response could not be parsed into a valid report; a human decision is required"
+	var report review.Report
+	var mo *review.ErrMalformedOutput
+	if errors.As(err, &mo) {
+		report = mo.Report
+		if detail := strings.TrimSpace(mo.Error()); detail != "" {
+			reason = detail
+		}
+	}
+	cls := failure.Classification{
+		Kind:        failure.Unknown,
+		Disposition: failure.NeedsHuman,
+		Confidence:  failure.High,
+		Reason:      reason,
+	}
+	decision := decideAutonomy(cfg, cls)
+	stage := runpkg.WaitingForHuman
+	gate := quality.Result{Decision: quality.NeedsHuman, Reasons: []string{reason}}
+	if decision.Action == autonomy.ActionTerminal {
+		// The configured autonomy policy withholds even the human boundary's
+		// automation: report the effective terminal action, exactly as the
+		// gate-failure path does, so an operator is never told a human is required
+		// when the policy has exhausted automation.
+		stage = runpkg.Failed
+		gate = quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+	}
+	_ = rn.SetStage(stage)
+	return lifeResult{
+		gate:           gate,
+		stage:          stage,
+		report:         report,
+		classification: cls,
+		decision:       decision,
+	}
 }
 
 // verificationEvidence builds the structured evidence for a deterministic gate
@@ -1114,6 +1246,9 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	for _, reason := range res.gate.Reasons {
 		fmt.Fprintf(stdout, "  - %s\n", reason)
 	}
+	for _, advisory := range res.gate.Advisories {
+		fmt.Fprintf(stdout, "  advisory: %s\n", advisory)
+	}
 	fmt.Fprintf(stdout, "fix cycles: %d/%d\n", res.cycles, cfg.Quality.MaxFixCycles)
 	writeClassification(stdout, res.classification, res.decision)
 	writeAutonomySummary(stdout, res.decision)
@@ -1132,6 +1267,7 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	if rel := relDir(dir, rn.Dir()); rel != "" {
 		fmt.Fprintf(stdout, "report: %s/report.md\n", rel)
 	}
+	writeOutcomeSummary(stdout, res.outcome)
 	if res.gate.Decision == quality.Pass {
 		fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
 		return exitOK
@@ -1615,7 +1751,11 @@ type runReportDoc struct {
 	// not pass: the kind, the disposition SOP applied, and the reason. It is
 	// omitted for a passing run, so an existing PASS report is unchanged.
 	Classification *failure.Classification `json:"classification,omitempty"`
-	GeneratedAt    time.Time               `json:"generated_at"`
+	// Outcome is the objective-level acceptance verdict derived from the task
+	// specification (VERIFIED/PARTIAL/HOLD). It is omitted when the task declared no
+	// objective, so an existing PASS report is unchanged.
+	Outcome     *outcomeArtifact `json:"outcome,omitempty"`
+	GeneratedAt time.Time        `json:"generated_at"`
 }
 
 // buildRunReport renders the human-readable report.
@@ -1636,7 +1776,12 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	if res.verifiedFirst {
 		b.WriteString("- Execution: `verify-first` (validation passed; no implementation agent invoked)\n")
 	}
-	fmt.Fprintf(&b, "- Gate: `%s`\n\n", res.gate.Decision)
+	fmt.Fprintf(&b, "- Gate: `%s`\n", res.gate.Decision)
+	for _, advisory := range res.gate.Advisories {
+		fmt.Fprintf(&b, "- Advisory: %s\n", advisory)
+	}
+	writeOutcomeReport(&b, res.outcome)
+	b.WriteString("\n")
 	writeModelSelectionReport(&b, res.modelSelection)
 	writeRoutingReport(&b, routingDocFor(res.routing))
 

@@ -1,0 +1,19 @@
+{
+  "kind": "UNKNOWN",
+  "disposition": "NEEDS_HUMAN",
+  "confidence": "LOW",
+  "reason": "no authoritative signal was available; a human decision is required",
+  "autonomy": {
+    "Action": "HUMAN_APPROVAL_REQUIRED",
+    "Level": "balanced",
+    "Risk": "MEDIUM",
+    "RequiresHuman": true,
+    "Reason": "no authoritative signal was available; a human decision is required",
+    "Classification": {
+      "kind": "UNKNOWN",
+      "disposition": "NEEDS_HUMAN",
+      "confidence": "LOW",
+      "reason": "no authoritative signal was available; a human decision is required"
+    }
+  }
+}

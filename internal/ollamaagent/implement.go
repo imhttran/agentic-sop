@@ -51,6 +51,25 @@ No additional tools are available.
 Return the required structured execution outcome now. SOP will perform
 independent validation.`
 
+	// implementConvergenceCorrection is returned when the bounded discovery window
+	// has closed and no mutation has been observed for the stale allowance. The run
+	// must now converge: make the requested repository change with the mutation
+	// tools that remain available, or return a truthful structured outcome.
+	implementConvergenceCorrection = `The bounded discovery window for this invocation has closed and no repository
+change has been observed.
+
+Non-mutating repository tools (read_file, list_files, search_files, and
+non-mutating run_command) are no longer available. Further inspection is not
+progress toward the task, and this invocation cannot continue by reading.
+
+Either make the requested repository change now with the mutation tools that
+remain available (write_file, create_file, delete_file, restore_file, or a
+mutating run_command), or return a truthful structured execution outcome
+(needs_human or failed) explaining what remains and why the change was not made.
+
+Do not claim completion without making the required change. SOP will
+independently validate the repository.`
+
 	implementNowInstruction = `You have gathered enough repository context, but you have not yet made the
 required repository change.
 

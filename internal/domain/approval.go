@@ -17,11 +17,20 @@ const (
 	ApprovalApproved ApprovalStatus = "APPROVED"
 	// ApprovalDeclined: a human declined the request.
 	ApprovalDeclined ApprovalStatus = "DECLINED"
+	// ApprovalSuperseded: an operator authorized the supersession of a stale
+	// PENDING request whose task is already satisfied. It is NOT a human decision:
+	// the request could no longer authorize anything (the task had completed), so
+	// the operator recorded an audited reason and preserved the original request in
+	// the append-only history rather than deciding it. It is resolved, so the shared
+	// closure gates treat the gate as leaveable.
+	ApprovalSuperseded ApprovalStatus = "SUPERSEDED"
 )
 
-// Resolved reports whether a decision has been recorded for the request.
+// Resolved reports whether a decision has been recorded for the request. A
+// SUPERSEDED request is resolved: an operator superseded it, so no decision is
+// pending on it.
 func (s ApprovalStatus) Resolved() bool {
-	return s == ApprovalApproved || s == ApprovalDeclined
+	return s == ApprovalApproved || s == ApprovalDeclined || s == ApprovalSuperseded
 }
 
 // ApprovalKind names why SOP parked the task at a human gate. It is SOP's own
@@ -97,9 +106,10 @@ type ApprovalRequest struct {
 	RequestedAt time.Time `json:"requested_at"`
 	// RequestedBy identifies who/what raised the request, when known.
 	RequestedBy string `json:"requested_by,omitempty"`
-	// Status is the current request status (PENDING/APPROVED/DECLINED).
+	// Status is the current request status (PENDING/APPROVED/DECLINED/SUPERSEDED).
 	Status ApprovalStatus `json:"status"`
 	// Decision is the recorded decision once the request is resolved, nil while
-	// pending.
+	// pending. A superseded request records the supersession provenance here (the
+	// operator, reason, timestamp, and request identity) with Approved=false.
 	Decision *ApprovalDecision `json:"decision,omitempty"`
 }

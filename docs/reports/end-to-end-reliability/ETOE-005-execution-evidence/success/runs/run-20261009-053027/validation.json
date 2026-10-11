@@ -1,0 +1,32 @@
+{
+  "Results": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 26625208,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tetoe005fixture\t0.236s\n",
+      "Stderr": "",
+      "Duration": 394353083,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "go vet ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 79137208,
+      "Status": "PASS"
+    }
+  ],
+  "Status": "PASS"
+}

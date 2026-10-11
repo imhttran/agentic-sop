@@ -3,6 +3,8 @@ package ollamaagent
 import (
 	"fmt"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // Invocation-scoped execution state.
@@ -145,6 +147,56 @@ func (st *executionState) stalled(mutated, discovered bool, staleLimit int) bool
 	}
 	st.consecutiveNoProgress++
 	return !st.mutationObserved && st.consecutiveNoProgress >= staleLimit
+}
+
+// mutationConvergenceRequired reports whether the bounded discovery window has
+// closed with no observed mutation, so non-mutating repository tools must now be
+// denied and the run must converge on a mutation attempt or a truthful terminal
+// outcome.
+//
+// The enforcement opens strictly BEFORE the stale bound. An unmutated run is
+// terminated by the stale guard at implementNowAfter + staleIterations turns, so
+// an enforcement that fired only once the stale streak had already reached
+// staleIterations could never affect execution (the loop returns first). Firing as
+// soon as the discovery window closes (iteration > implementNowAfter) leaves the
+// model the remaining turns up to the stale bound in which to make the change --
+// mutation tools stay available -- or to return a truthful needs_human/failed
+// outcome; a run that still keeps requesting non-mutating tools is stopped by the
+// unchanged stale guard. Derived entirely from the existing window: no new counter,
+// no new configurable threshold, no budget knob.
+func (st *executionState) mutationConvergenceRequired(iteration int) bool {
+	if st.mutationObserved {
+		return false
+	}
+	// The enforcement opens only after the bounded discovery window has closed
+	// (iteration > implementNowAfter) AND the run has carried its non-mutating
+	// activity one turn further (a stale turn has accrued). This threshold is
+	// strictly below the stale bound (staleIterations), so the denial runs before
+	// the stale guard terminates the stage and the model still has turns in which
+	// to make the change or return a truthful outcome. A first post-window turn
+	// that immediately mutates is therefore never denied.
+	if iteration <= implementNowAfter {
+		return false
+	}
+	return st.consecutiveNoProgress >= 1
+}
+
+// nonMutatingRepositoryTool reports whether name is a repository tool that does
+// not change the repository: a file inspection or an inspection-class command.
+// It reuses the existing controlledMutation/commandMutates classification rather
+// than hard-coding a second mutation list, so the enforcement set stays derived.
+func nonMutatingRepositoryTool(name string, args map[string]any) bool {
+	if controlledMutation(name, args) {
+		return false
+	}
+	switch name {
+	case toolharness.ToolReadFile, toolharness.ToolListFiles, toolharness.ToolSearchFiles:
+		return true
+	case toolharness.ToolRunCommand:
+		command, _ := args["command"].(string)
+		return !commandMutates(command)
+	}
+	return false
 }
 
 // countNonMutatingInteraction advances the invocation's counters after a tool

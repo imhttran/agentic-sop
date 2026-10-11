@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "task": "ETOE-004",
+  "class": "medium",
+  "source": "manual_override",
+  "reasons": [
+    "manual model-class override"
+  ],
+  "provider": "ollama",
+  "model": "glm-5.3-flash:cloud",
+  "locality": "cloud",
+  "execution_source": "primary",
+  "signals": {
+    "jev_available": false,
+    "risk": "",
+    "complexity": "",
+    "scope": "",
+    "cross_cutting": false,
+    "requires_context": false,
+    "confidence": 0,
+    "acceptance_criteria": 0,
+    "dependencies": 0,
+    "files_affected": 0
+  },
+  "timestamp": "2026-10-09T02:22:22Z"
+}
