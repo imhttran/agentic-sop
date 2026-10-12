@@ -45,9 +45,9 @@ func TestRecorderInputOmittedWhenNothingAssembled(t *testing.T) {
 // nothing when absent.
 func TestWriteInputRendersBytes(t *testing.T) {
 	var buf bytes.Buffer
-	WriteInput(&buf, &Input{Assemblies: 3, ContextBytes: 4096, PromptBytes: 8192})
+	WriteInput(&buf, &Input{Assemblies: 3, ContextBytes: 4096, PromptBytes: 8192, OutputBytes: 1024})
 	out := buf.String()
-	for _, want := range []string{"Input", "Assemblies: 3", "4096 bytes", "8192 bytes"} {
+	for _, want := range []string{"Input", "Assemblies: 3", "4096 bytes", "8192 bytes", "1024 bytes"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("WriteInput output missing %q:\n%s", want, out)
 		}
@@ -60,12 +60,23 @@ func TestWriteInputRendersBytes(t *testing.T) {
 	}
 }
 
+// TestRecorderOutputKeepsLargest proves the model output size keeps the largest value.
+func TestRecorderOutputKeepsLargest(t *testing.T) {
+	r := NewRecorder("T3")
+	r.OutputProduced(120)
+	r.OutputProduced(90)
+	task := r.Task()
+	if task.Input == nil || task.Input.OutputBytes != 120 {
+		t.Fatalf("Input = %+v, want OutputBytes 120", task.Input)
+	}
+}
+
 // TestRunAggregatesInput proves the run aggregate sums assemblies and keeps the
 // largest context/prompt size, and stays nil when no task assembled input.
 func TestRunAggregatesInput(t *testing.T) {
 	run := NewRun(time.Now())
-	run.Add(Task{ID: "a", Input: &Input{Assemblies: 1, ContextBytes: 1000, PromptBytes: 2000}})
-	run.Add(Task{ID: "b", Input: &Input{Assemblies: 2, ContextBytes: 500, PromptBytes: 5000}})
+	run.Add(Task{ID: "a", Input: &Input{Assemblies: 1, ContextBytes: 1000, PromptBytes: 2000, OutputBytes: 300}})
+	run.Add(Task{ID: "b", Input: &Input{Assemblies: 2, ContextBytes: 500, PromptBytes: 5000, OutputBytes: 100}})
 
 	if run.Input == nil {
 		t.Fatal("run Input = nil, want an aggregate")
@@ -78,6 +89,9 @@ func TestRunAggregatesInput(t *testing.T) {
 	}
 	if run.Input.PromptBytes != 5000 {
 		t.Errorf("PromptBytes = %d, want the largest 5000", run.Input.PromptBytes)
+	}
+	if run.Input.OutputBytes != 300 {
+		t.Errorf("OutputBytes = %d, want the largest 300", run.Input.OutputBytes)
 	}
 
 	empty := NewRun(time.Now())

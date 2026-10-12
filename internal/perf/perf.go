@@ -86,10 +86,10 @@ type JEV struct {
 	BlockingFindings int `json:"blocking_findings"`
 }
 
-// Input is the diagnostic record of the deterministic model input SOP assembled for a
-// task, measured in bytes (RBV-013). It is metadata only: a value SOP did not measure
-// is absent rather than inferred from text length, and no value here influences a
-// gate, routing, a budget, or an approval decision.
+// Input is the diagnostic record of the deterministic model input and output sizes
+// recorded for a task, measured in bytes (RBV-013). It is metadata only: a value SOP
+// did not measure is absent rather than inferred from text length, and no value here
+// influences a gate, routing, a budget, or an approval decision.
 type Input struct {
 	// Assemblies is the number of model-input assemblies recorded for the task
 	// (the IMPLEMENT attempt, plus each FIX attempt).
@@ -99,6 +99,9 @@ type Input struct {
 	ContextBytes int `json:"context_bytes,omitempty"`
 	// PromptBytes is the largest assembled model input for the task, in bytes.
 	PromptBytes int `json:"prompt_bytes,omitempty"`
+	// OutputBytes is the largest model output (normalized response content) recorded
+	// for the task, in bytes. It is 0 when no output was measured.
+	OutputBytes int `json:"output_bytes,omitempty"`
 }
 
 // Task is the persisted performance record for one task lifecycle.
@@ -240,6 +243,18 @@ func (r *Recorder) InputAssembled(contextBytes, promptBytes int) {
 	}
 }
 
+// OutputProduced records one model output's size, in bytes (the normalized response
+// content), keeping the largest. Metadata only; it is never inferred from text length
+// and never read back to drive a decision.
+func (r *Recorder) OutputProduced(bytes int) {
+	if r.input == nil {
+		r.input = &Input{}
+	}
+	if bytes > r.input.OutputBytes {
+		r.input.OutputBytes = bytes
+	}
+}
+
 // Task snapshots the recorder into a persistable record.
 func (r *Recorder) Task() Task {
 	return Task{
@@ -354,6 +369,9 @@ func WriteInput(w io.Writer, in *Input) {
 	if in.PromptBytes > 0 {
 		fmt.Fprintf(w, "  Prompt:     %d bytes\n", in.PromptBytes)
 	}
+	if in.OutputBytes > 0 {
+		fmt.Fprintf(w, "  Output:     %d bytes\n", in.OutputBytes)
+	}
 }
 
 // WriteJEV renders a JEV diagnostic record, kept separate from the
@@ -466,6 +484,9 @@ func addInput(a, b *Input) *Input {
 	}
 	if b.PromptBytes > a.PromptBytes {
 		a.PromptBytes = b.PromptBytes
+	}
+	if b.OutputBytes > a.OutputBytes {
+		a.OutputBytes = b.OutputBytes
 	}
 	return a
 }

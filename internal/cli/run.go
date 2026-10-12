@@ -716,6 +716,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("implement: %w", err)
 		}
+		rec.OutputProduced(len(impl.Content))
 		_ = rn.Write("implementation.md", impl.Content)
 		alreadySatisfied = impl.VerifiedAlreadySatisfied && impl.Outcome != nil &&
 			impl.Outcome.Status == agent.OutcomeCompleted && impl.Outcome.Completion == agent.AlreadySatisfied
@@ -996,6 +997,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if err != nil {
 			return lifeResult{}, fmt.Errorf("fix: %w", err)
 		}
+		rec.OutputProduced(len(fix.Content))
 		_ = rn.Write(fmt.Sprintf("fix-%d.md", cycles), fix.Content)
 		// A later fix invalidates an earlier already-satisfied verdict. Only the
 		// current proof can be used; a run that implemented changes is not a

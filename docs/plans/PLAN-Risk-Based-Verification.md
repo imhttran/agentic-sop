@@ -5,7 +5,8 @@
 RD-03/RD-04 are preserved as SUPERSEDED history under `.agent-sdlc/archive/`
 (`RD-03`/`RD-04` remain `PLANNED`; no PASS or approval was fabricated). Implemented
 and committed: RBV-001, RBV-002, RBV-003, RBV-004, RBV-008, RBV-012, the dedup
-guarantee of RBV-011, and the deterministic input-size half of RBV-013.
+guarantee of RBV-011, and the deterministic input+output-size part of RBV-013
+(provider-reported tokens remain UNAVAILABLE).
 
 **Basis:** review of the current verification, JEV, autonomy, and approval
 workflows. Only RBV-001, RBV-002, and RBV-008 are implemented so far; the rest are
