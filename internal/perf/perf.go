@@ -86,6 +86,21 @@ type JEV struct {
 	BlockingFindings int `json:"blocking_findings"`
 }
 
+// Input is the diagnostic record of the deterministic model input SOP assembled for a
+// task, measured in bytes (RBV-013). It is metadata only: a value SOP did not measure
+// is absent rather than inferred from text length, and no value here influences a
+// gate, routing, a budget, or an approval decision.
+type Input struct {
+	// Assemblies is the number of model-input assemblies recorded for the task
+	// (the IMPLEMENT attempt, plus each FIX attempt).
+	Assemblies int `json:"assemblies"`
+	// ContextBytes is the largest canonical context assembled for the task, in bytes.
+	// It is 0 when the context engine did not run (for example a FIX attempt).
+	ContextBytes int `json:"context_bytes,omitempty"`
+	// PromptBytes is the largest assembled model input for the task, in bytes.
+	PromptBytes int `json:"prompt_bytes,omitempty"`
+}
+
 // Task is the persisted performance record for one task lifecycle.
 type Task struct {
 	ID string `json:"id"`
@@ -100,6 +115,10 @@ type Task struct {
 	// JEV is the task's JEV diagnostic record. It is omitted entirely when JEV
 	// did not run, so an existing report without JEV metrics stays compatible.
 	JEV *JEV `json:"jev,omitempty"`
+	// Input is the task's model-input size record. It is omitted when no model input
+	// was assembled (for example a verify-first pass), so an existing report is
+	// unchanged. It is metadata only.
+	Input *Input `json:"input,omitempty"`
 }
 
 // Run aggregates the tasks of one sop invocation.
@@ -111,6 +130,10 @@ type Run struct {
 	// JEV is the run's JEV diagnostic record, aggregated from its tasks. It is
 	// omitted when no task ran JEV.
 	JEV *JEV `json:"jev,omitempty"`
+	// Input is the run's model-input size record, aggregated from its tasks as the
+	// sum of assemblies and the largest context/prompt size. It is omitted when no task
+	// assembled model input.
+	Input *Input `json:"input,omitempty"`
 }
 
 // Recorder accumulates timing and counts for one task lifecycle. Its clock is
@@ -123,6 +146,7 @@ type Recorder struct {
 	perCat map[string]int64
 	counts Counts
 	jev    *JEV
+	input  *Input
 }
 
 // NewRecorder returns a Recorder for the task, measuring with the monotonic clock.
@@ -199,6 +223,23 @@ func (r *Recorder) JEVInvocation(inv JEV) {
 	r.jev.BlockingFindings = inv.BlockingFindings
 }
 
+// InputAssembled records one model-input assembly for the task: the canonical
+// context size and the assembled input size, in bytes. It keeps the largest size and
+// counts each assembly, so a task's representative input size is observable without
+// ever inferring a value SOP did not measure. Metadata only.
+func (r *Recorder) InputAssembled(contextBytes, promptBytes int) {
+	if r.input == nil {
+		r.input = &Input{}
+	}
+	r.input.Assemblies++
+	if contextBytes > r.input.ContextBytes {
+		r.input.ContextBytes = contextBytes
+	}
+	if promptBytes > r.input.PromptBytes {
+		r.input.PromptBytes = promptBytes
+	}
+}
+
 // Task snapshots the recorder into a persistable record.
 func (r *Recorder) Task() Task {
 	return Task{
@@ -208,6 +249,7 @@ func (r *Recorder) Task() Task {
 		ValidationMS: copyMap(r.perCat),
 		Counts:       r.counts,
 		JEV:          r.jev,
+		Input:        r.input,
 	}
 }
 
@@ -219,6 +261,7 @@ func (r *Run) Add(t Task) {
 	r.Tasks = append(r.Tasks, t)
 	r.Counts = addCounts(r.Counts, t.Counts)
 	r.JEV = addJEV(r.JEV, t.JEV)
+	r.Input = addInput(r.Input, t.Input)
 }
 
 // Finish records the run's total wall-clock duration.
@@ -263,6 +306,7 @@ func WriteTask(w io.Writer, t Task) {
 		fmt.Fprintf(w, "Plan repairs: %d\n", t.Counts.PlanRepairs)
 	}
 	WriteJEV(w, t.JEV)
+	WriteInput(w, t.Input)
 }
 
 // WriteRun renders a run-level performance summary. Percentages are derived from
@@ -292,6 +336,24 @@ func WriteRun(w io.Writer, r Run) {
 		fmt.Fprintf(w, "Plan repairs:           %d\n", r.Counts.PlanRepairs)
 	}
 	WriteJEV(w, r.JEV)
+	WriteInput(w, r.Input)
+}
+
+// WriteInput renders a model-input size record. Nothing is printed when no input was
+// assembled, so a report without the record is unchanged. Sizes are bytes; they are
+// diagnostics and never assert correctness.
+func WriteInput(w io.Writer, in *Input) {
+	if in == nil {
+		return
+	}
+	fmt.Fprintf(w, "\nInput (largest)\n")
+	fmt.Fprintf(w, "  Assemblies: %d\n", in.Assemblies)
+	if in.ContextBytes > 0 {
+		fmt.Fprintf(w, "  Context:    %d bytes\n", in.ContextBytes)
+	}
+	if in.PromptBytes > 0 {
+		fmt.Fprintf(w, "  Prompt:     %d bytes\n", in.PromptBytes)
+	}
 }
 
 // WriteJEV renders a JEV diagnostic record, kept separate from the
@@ -388,6 +450,26 @@ func addCounts(a, b Counts) Counts {
 	}
 }
 
+// addInput folds a task's input record into a run aggregate: assemblies sum, and the
+// largest context/prompt size is retained. A task with no input record (nil) leaves
+// the aggregate unchanged, so a run with no assembled input carries no input record.
+func addInput(a, b *Input) *Input {
+	if b == nil {
+		return a
+	}
+	if a == nil {
+		a = &Input{}
+	}
+	a.Assemblies += b.Assemblies
+	if b.ContextBytes > a.ContextBytes {
+		a.ContextBytes = b.ContextBytes
+	}
+	if b.PromptBytes > a.PromptBytes {
+		a.PromptBytes = b.PromptBytes
+	}
+	return a
+}
+
 // addJEV folds a task's JEV record into a run aggregate. A task with no JEV
 // record (nil) leaves the aggregate unchanged, so a run where JEV never ran
 // carries no JEV record.
@@ -425,7 +507,7 @@ func (t Task) SortedStageNames() []string {
 // Measured reports whether any timing or count was recorded, so a caller can
 // avoid printing an empty summary.
 func (t Task) Measured() bool {
-	return t.TotalMS > 0 || len(t.StagesMS) > 0 || t.Counts != (Counts{}) || t.JEV != nil
+	return t.TotalMS > 0 || len(t.StagesMS) > 0 || t.Counts != (Counts{}) || t.JEV != nil || t.Input != nil
 }
 
 // Line renders a one-line task summary for concise run output.

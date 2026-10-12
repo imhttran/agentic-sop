@@ -344,6 +344,7 @@ cannot make it fail. Extend the existing benchmark in `internal/cli/perf_test.go
 - RBV-004
 - RBV-005
 - RBV-007
+- RBV-013
 
 ### Deliverables
 
@@ -363,6 +364,143 @@ cannot make it fail. Extend the existing benchmark in `internal/cli/perf_test.go
 
 - implement
 
+## Prompt and output efficiency (added scope)
+
+This scope was added after the initial review. It reuses Phase 8 and the existing
+metrics/evaluation plans and must not duplicate them.
+
+### Reconciliation with existing work
+
+Phase 8 context/efficiency is largely implemented and is reused as-is: CTX-001
+Context Engine (`internal/context`), CTX-002 structural index (`internal/repoindex`),
+CTX-003 retrieval (`internal/retrieval`), CTX-004 retrieval gate
+(`internal/retrievalgate`), CTX-005 Prompt Compiler (`internal/prompt`), CTX-006
+Response Normalizer (`internal/normalize`), CTX-007 verification cache
+(`internal/verifcache`), CTX-008 prompt-result cache (`internal/promptcache`),
+CTX-009 vector evaluation (`internal/vectoreval`), CTX-010 decision memory
+(`internal/decisionmemory`), CTX-011 adaptive routing, CTX-012 prompt tuning
+(`internal/prompttuning`). The handoff capsule/compressor (`internal/handoff`)
+exists but is not wired into the run lifecycle. `internal/perf` records stage
+latency, agent calls, validation/review/fix counts, and JEV invocations, but not
+context/prompt size or tokens. `sop report` is concise by default with no detailed
+view. Two existing plans already cover parts of this:
+`PLAN-Run-Metrics-And-Observability.md` (provider-reported tokens are MISSING and are
+explicitly not policy/budget/acceptance authority) and
+`PLAN-EV-Context-Run-Evaluation.md` (live-path context evaluation). Reuse both; do not
+rebuild their subject matter.
+
+### Missing functionality (gaps to close)
+
+- **Input:** no dedup guarantee across compiled sections; retrieval and the handoff
+  capsule are not wired into execution-context assembly.
+- **Output:** no detailed view; the concise default does not state a fixed
+  completed-work / verification / blockers / next-action shape.
+- **Measurement:** context/prompt input size is not recorded; provider-reported
+  input/output tokens are not captured; normalized output size is not recorded.
+
+## RBV-011 — Input efficiency: dedup, relevant context, between-task compression
+
+Guarantee the compiled model input carries no duplicated instruction, task, or
+globally inherited policy text; assemble only relevant, already-identified context
+(reusing CTX-001/CTX-003/CTX-010); and compress between tasks via the existing handoff
+capsule — never during an active task's execution. Acceptance criteria and safety
+boundaries are carried verbatim. No new dependency and no second context or handoff
+implementation.
+
+### Dependencies
+
+- RBV-003
+
+### Deliverables
+
+- A dedup guarantee in `internal/prompt` (sections never repeat acceptance criteria or
+  policy text; the task and its criteria are carried by the request's own fields).
+- Opt-in, off-by-default wiring of retrieval context and the handoff capsule into
+  context assembly for a task, reusing `internal/retrieval`, `internal/handoff`, and
+  `internal/context`.
+- Tests: byte-identical compiled input for identical input; no duplicated criterion or
+  policy line across sections; between-task compression is bounded and never applied
+  mid-task; boundaries and acceptance criteria unchanged.
+
+### Acceptance Criteria
+
+- A compiled prompt contains each acceptance criterion and each policy line at most
+  once.
+- Retrieval and handoff wiring is opt-in and off by default, so an existing run is
+  unchanged.
+- Context compression happens only between tasks (handoff), never inside an active
+  task's execution.
+- No gate, approval, or acceptance-verification behavior changes.
+
+### Execution
+
+- implement
+
+## RBV-012 — Output efficiency: concise default, detailed on request
+
+Add an explicit detailed view (`sop report --detailed`) that renders the full existing
+evidence (validation, review findings, JEV, classification, routing, performance) on
+request, while the default stays concise and states completed work, the verification
+outcome, blockers, and the next action. Full technical evidence remains in the
+existing run artifacts; responses are normalized through CTX-006 before
+interpretation. No new reporting subsystem.
+
+### Dependencies
+
+None
+
+### Deliverables
+
+- A `--detailed` flag on `sop report` (reusing the persisted `report.json` and the
+  existing renderers); the default output shape is unchanged.
+- A fixed concise summary shape: completed work, verification outcome, blockers, next
+  action.
+- Tests: default output is concise and unchanged in shape; `--detailed` adds the full
+  sections; no task-state or gate effect.
+
+### Acceptance Criteria
+
+- The default `sop report` remains concise; `--detailed` shows the full evidence.
+- No evidence is lost: everything shown in detail is already in the run artifacts.
+- No behavior change to task state, gates, or approvals.
+
+### Execution
+
+- implement
+
+## RBV-013 — Input/output measurement: size, tokens, latency, calls, JEV
+
+Record the deterministic input size (canonical context bytes and compiled-prompt
+bytes) per task in `internal/perf`, and capture provider-reported input/output tokens
+when a provider exposes them; a value SOP did not measure is `UNAVAILABLE`, never
+estimated. Latency (stage durations), model calls (agent calls), and JEV invocations
+are already recorded and are reported alongside. Reuses the existing perf and metrics
+plans; introduces no new metrics store or dependency.
+
+### Dependencies
+
+- RBV-003
+- RBV-011
+
+### Deliverables
+
+- `internal/perf` fields for context/prompt bytes (and normalized output bytes), with
+  reporting in `metrics.json`, `report.json`, and the perf summary.
+- Provider-reported token capture where available, else `UNAVAILABLE`.
+- Tests: sizes are recorded and rendered; an unmeasured value is `UNAVAILABLE` and
+  never inferred; no decision reads a metric.
+
+### Acceptance Criteria
+
+- A measured size is recorded; a value SOP did not measure is `UNAVAILABLE`, never
+  inferred from text length.
+- No metric influences a gate, routing, budget, or approval decision.
+- No new dependency and no second metrics store.
+
+### Execution
+
+- implement
+
 ## Dependency graph
 
 ```text
@@ -370,16 +508,19 @@ RBV-001 ──► RBV-002 ──► RBV-003 ──┬─► RBV-005 ──► RB
                                   ├─► RBV-007 ──► RBV-010
 RBV-001 ──► RBV-004 ──────────────┘
 RBV-003, RBV-004 ──► RBV-007
+RBV-003 ──► RBV-011 ──► RBV-013 ──► RBV-010
+RBV-012   (independent)
 RBV-008   (independent)
 ```
 
 ## Parallelizable groups
 
-- **Group A (independent):** RBV-001, RBV-008.
+- **Group A (independent):** RBV-001, RBV-008, RBV-012.
 - **Group B (after RBV-001):** RBV-002, then RBV-003.
 - **Group C (after RBV-001 / RBV-003; disjoint files):** RBV-004, RBV-005.
 - **Group D (after the above):** RBV-007, RBV-010.
 - **Group E (docs, after RBV-003..005):** RBV-009.
+- **Group F (added scope, after RBV-003):** RBV-011, then RBV-013; RBV-010 also depends on RBV-013.
 
 Assign non-overlapping files: RBV-001 owns `internal/verify`; RBV-002 owns
 `internal/config`; RBV-003/004 own `internal/cli/run.go` and the JEV seam; RBV-005
@@ -402,6 +543,9 @@ touched: `gofmt -l .`; `go build ./...`; `go vet ./...`; `go test -count=1 ./...
 - No model-selected or prose-inferred tier.
 - No new approval gate (decision 4).
 - Do not vendor `AGENT-POLICY.md` into the repository (decision 1).
+- No second context, handoff, or reporting subsystem; reuse CTX-001..012 and `internal/handoff`.
+- Tokens are never policy, budget, routing, or acceptance authority; an unmeasured value is `UNAVAILABLE`, never estimated.
+- No new dependency.
 
 ## Estimated impact (to be confirmed by RBV-010)
 

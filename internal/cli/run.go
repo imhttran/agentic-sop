@@ -681,6 +681,10 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		input := compiled.Evidence()
+		// Record the deterministic input size (canonical context and compiled prompt) for
+		// this attempt. It is diagnostic measurement only (RBV-013): nothing reads it
+		// back, and no value is inferred from text length.
+		rec.InputAssembled(ctxSummary.Bytes(), compiled.Bytes)
 		var before map[string]string
 		if d.snapshotRepository != nil {
 			before, err = d.snapshotRepository(ctx, dir)
@@ -963,13 +967,18 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				return lifeResult{}, fmt.Errorf("fix mutation baseline: %w", err)
 			}
 		}
+		fixInput := d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()))
+		// Record this fix attempt's input size (RBV-013). A fix does not build a canonical
+		// context, so only the prompt size is recorded; the context size keeps its
+		// largest value from the implementation attempt. Metadata only.
+		rec.InputAssembled(0, len(fixInput))
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
 			Capability:         agent.Fix,
 			AcceptanceCriteria: spec.AcceptanceCriteria,
 			ValidationCommands: completionValidationCommands(cfg),
 			Task:               spec.Render(),
-			Input:              d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn())),
+			Input:              fixInput,
 			Deliverables:       reports,
 			RawOutputEvidence:  rawOutputEvidence(spec),
 			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
