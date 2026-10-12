@@ -47,3 +47,17 @@ func selectValidation(cfg config.Config, spec *taskfile.Spec) config.Validation 
 		return cfg.Validation
 	}
 }
+
+// shouldRunJEV reports whether the optional JEV analysis runs for this task (RBV-004).
+// JEV must be enabled, and with risk-based verification enabled it runs only for the
+// HIGH tier (LOW/MEDIUM keep it optional), reusing the tier's RequiresJEV rule. With
+// the feature off, an enabled JEV runs exactly as before.
+func shouldRunJEV(cfg config.Config, tier verify.Tier) bool {
+	if !cfg.JEVActive() {
+		return false
+	}
+	if !cfg.Verification.Enabled() {
+		return true
+	}
+	return tier.RequiresJEV()
+}

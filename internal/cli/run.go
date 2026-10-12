@@ -538,6 +538,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// requires for this task's deterministic verification tier. Off by default, so the
 	// full configured set runs exactly as it did before.
 	vset := selectValidation(cfg, spec)
+	// The tier also gates the optional JEV analysis (RBV-004): with risk-based
+	// verification enabled, JEV runs only for the HIGH tier.
+	tier := verificationTier(cfg, spec)
 
 	var (
 		plan       *planner.Plan
@@ -901,7 +904,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// (not only this one) is handed to JEV, so a no-change final invocation still
 		// reviews the implementation the task produced earlier.
 		jevEv = nil
-		if suite.Passed() {
+		if suite.Passed() && shouldRunJEV(cfg, tier) {
 			jevEv = runOptionalJEV(ctx, cfg, d, spec, rn, diff, suite, report, dir, rec)
 
 			// Persist the JEV result as a run artifact beside the other diagnostics,
