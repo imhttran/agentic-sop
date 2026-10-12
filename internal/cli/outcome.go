@@ -28,10 +28,16 @@ import (
 // An operator-declared deterministic acceptance check (a SAFE argv vector, never a
 // shell) is the verifiable half of acceptance: when a stage declares checks, every
 // check MUST execute and pass for the verdict to be VERIFIED. A `go test` check is
-// additionally required to have actually executed at least one test: a check that
-// runs zero tests (no test files, `-run` matching nothing, or every test skipped)
-// yields PARTIAL with explicit `no test executed` evidence, so a green-but-empty
-// test run can never stand in for verification.
+// additionally required to have actually executed at least one PASSING test: it is
+// judged from structured `go test -json` events from a single execution. It is met
+// only when the process exit status is 0 AND at least one test-level pass event
+// (Action=="pass" with a non-empty test name, TestMain excluded) occurred. An
+// all-skipped run, a `-run` filter that matched nothing, a package with no test
+// files, and a TestMain that returns without calling m.Run are therefore never
+// VERIFIED; packages with no test files do not count against an otherwise passing
+// run. This replaces the earlier output-text heuristic and yields PARTIAL with
+// explicit `no test executed` evidence, so a green-but-empty test run can never
+// stand in for verification.
 //
 // Authorization is form-aware: beyond the generic SAFE classification, flag forms
 // that redirect or inject tooling (-exec/-toolexec/-vettool/-o/-overlay/-modfile),
@@ -282,30 +288,43 @@ func flagName(arg string) string {
 }
 
 // checkRun is the structured evidence from one executed acceptance check: the exact
-// argv, the process exit code, and a bounded output excerpt.
+// argv, the process exit code, a bounded output excerpt, and the untruncated output.
 type checkRun struct {
 	argv     []string
 	exitCode int
-	output   string
+	output   string // bounded (<=400 byte) excerpt, for recorded evidence
+	full     string // untruncated combined output, for the go test decision
 }
 
-// runAcceptanceCheck executes an authorized acceptance check's argument vector,
-// records its execution evidence, and applies the ACC-003 `go test` execution rule
-// on top of it: a `go test` command that exits 0 but executed no test yields a
-// "no test executed" error (PARTIAL) rather than a pass, so an empty-but-green test
-// run cannot verify the objective. Non-go commands behave exactly as runAcceptanceArgv.
+// runAcceptanceCheck executes an authorized acceptance check's argument vector
+// exactly once, records its execution evidence, and applies the structured `go test`
+// execution rule on top of it. A `go test` check is run with `-json` (added when the
+// operator did not already request it) and judged from the resulting event stream: it
+// is met only when the process exits 0 AND at least one test-level pass event
+// occurred, so an all-skipped, zero-test, unmatched `-run`, or TestMain-without-m.Run
+// run yields a "no test executed" error (PARTIAL) rather than a pass. Non-go-test
+// commands are judged solely by exit status, exactly as runAcceptanceArgv does.
+//
+// The command is executed once: the same run's exit status and captured output back
+// both the pass/fail decision and the recorded evidence, so no second invocation is
+// made for events.
 func runAcceptanceCheck(dir string, argv []string) (error, checkRun) {
-	err, run := runAcceptanceArgv(dir, argv)
 	if !isGoTestArgv(argv) {
-		return err, run
+		return runAcceptanceArgv(dir, argv)
 	}
-	// The command ran to completion with exit status 0; check that it actually
-	// executed a test. A failing go test already returns a non-nil error above.
+	// Force structured output for go test checks (never duplicating an operator's
+	// -json, never altering -count), then execute that argv exactly once.
+	argv = ensureGoTestJSON(argv)
+	err, run := runAcceptanceArgv(dir, argv)
 	if err != nil {
+		// A non-zero exit already means not met; report it with the executed argv.
 		return err, run
 	}
-	if !goTestExecuted(run.output) {
-		return fmt.Errorf("acceptance check %q executed no test: no test executed", strings.Join(argv, " ")), run
+	// Judge the full event stream, not the bounded evidence excerpt, so a pass event
+	// beyond the 400-byte excerpt still counts.
+	met, reason := goTestJSONMet(run.exitCode, run.full)
+	if !met {
+		return fmt.Errorf("acceptance check %q executed no passing test: %s", strings.Join(argv, " "), reason), run
 	}
 	return nil, run
 }
@@ -316,34 +335,13 @@ func isGoTestArgv(argv []string) bool {
 	return len(argv) >= 2 && argv[0] == "go" && argv[1] == "test"
 }
 
-// goTestExecuted inspects the combined output of a `go test` command and reports
-// whether at least one test actually executed. It is deliberately conservative:
-// only the explicit no-execution signals are treated as "no test executed", so a
-// run that produced a normal `ok` with no per-test lines is assumed to have run
-// something. The signals are the ones `go test` emits when nothing ran:
-//
-//   - "no test files" — the package(s) declared no test files;
-//   - "no tests to run" — the `-run` filter matched nothing;
-//   - verbose output whose only test verdicts are skips (every test `t.Skip`).
-func goTestExecuted(output string) bool {
-	if strings.Contains(output, "no test files") {
-		return false
-	}
-	if strings.Contains(output, "no tests to run") {
-		return false
-	}
-	if strings.Contains(output, "--- SKIP:") && !strings.Contains(output, "--- PASS:") {
-		return false
-	}
-	return true
-}
-
 // runAcceptanceArgv executes an authorized acceptance command's argument vector
 // directly, without invoking a shell, so nothing beyond the validated argv can run.
 // Exit status 0 means met; any other status or a launch failure means not met. It
 // returns the error (nil when met) together with the observed execution evidence:
 // the exact argv, the process exit code, and a bounded (<=400 byte) excerpt of the
-// combined stdout/stderr.
+// combined stdout/stderr. The untruncated combined output is also retained so the
+// `go test -json` decision can inspect the full event stream.
 func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	run := checkRun{argv: append([]string(nil), argv...)}
 	if len(argv) == 0 {
@@ -355,7 +353,8 @@ func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	runErr := cmd.Run()
-	run.output = boundOutput(out.String())
+	run.full = out.String()
+	run.output = boundOutput(run.full)
 	if runErr == nil {
 		run.exitCode = 0
 		return nil, run
