@@ -3,6 +3,7 @@ package planner
 import (
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -311,5 +312,64 @@ func TestRenderMarkdown(t *testing.T) {
 
 	if got := plan.RenderMarkdown(); got != want {
 		t.Errorf("RenderMarkdown mismatch:\n got %q\nwant %q", got, want)
+	}
+}
+
+// TestDecodePlanDropsModelAcceptanceChecks proves a model plan JSON that carries
+// acceptance_checks contributes no acceptance checks to any stage: decodePlan is
+// the model-output path, and a model may never author its own deterministic
+// checks. The plan still validates (no error), and the operator's free-text
+// acceptance criteria are preserved.
+func TestDecodePlanDropsModelAcceptanceChecks(t *testing.T) {
+	const planJSON = `{
+  "project": "Book RAG",
+  "summary": "Answer questions over books.",
+  "stages": [
+    {
+      "id": "S001",
+      "title": "Application skeleton",
+      "objective": "Create the Go application skeleton.",
+      "dependencies": [],
+      "deliverables": ["Go application"],
+      "acceptance_criteria": ["Application starts successfully"],
+      "acceptance_checks": ["go test ./...", "go vet ./..."]
+    }
+  ]
+}`
+
+	plan, err := decodePlan(planJSON, PlanContext{})
+	if err != nil {
+		t.Fatalf("decodePlan failed: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	if got := plan.Stages[0].AcceptanceChecks; len(got) != 0 {
+		t.Errorf("model acceptance checks survived decodePlan: %v, want none", got)
+	}
+	// The free-text criteria the model declared are preserved.
+	if want := []string{"Application starts successfully"}; !reflect.DeepEqual(plan.Stages[0].AcceptanceCriteria, want) {
+		t.Errorf("acceptance criteria = %v, want %v", plan.Stages[0].AcceptanceCriteria, want)
+	}
+}
+
+// TestOperatorAcceptanceChecksSurviveDecodePath proves that decodePlan is the only
+// scrubbing path: an operator Markdown plan's '### Acceptance checks' section still
+// yields the declared checks, so the operator-authored verifiable half is kept.
+func TestOperatorAcceptanceChecksSurviveDecodePath(t *testing.T) {
+	doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n" +
+		"## S001 — Stage\n\nDo it.\n\n### Acceptance Criteria\n\n- it works\n\n" +
+		"### Acceptance checks\n\n- `go test ./...`\n- `go vet ./...`\n"
+
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown failed: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	want := []string{"go test ./...", "go vet ./..."}
+	if got := plan.Stages[0].AcceptanceChecks; !reflect.DeepEqual(got, want) {
+		t.Errorf("operator acceptance checks = %v, want %v", got, want)
 	}
 }

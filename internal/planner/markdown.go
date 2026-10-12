@@ -1,3 +1,6 @@
+// Package planner turns a project PRD into a structured Plan by asking an
+// Agent and validating the result. It performs no filesystem or workflow work;
+// rendering and file IO live elsewhere.
 package planner
 
 import (
@@ -133,13 +136,45 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 		stage     Stage
 		objective strings.Builder
 		sub       string
+		// item holds the accumulated list item for the current sub-section so an
+		// indented continuation line joins onto it instead of starting a new item.
+		item strings.Builder
 	}
 	var cur *stageAcc
 	var curCap *Capability
 	var curAsm *Assumption
 
+	flushItem := func() {
+		if cur == nil {
+			return
+		}
+		item := strings.TrimSpace(cur.item.String())
+		cur.item.Reset()
+		if item == "" {
+			return
+		}
+		switch cur.sub {
+		case "dependencies", "dependency", "depends on":
+			cur.stage.Dependencies = append(cur.stage.Dependencies, item)
+		case "requires", "require", "needs":
+			cur.stage.Requires = append(cur.stage.Requires, item)
+		case "deliverables", "deliverable", "scope", "outputs":
+			cur.stage.Deliverables = append(cur.stage.Deliverables, item)
+		case "acceptance criteria", "acceptance", "acceptance criterion", "tests":
+			cur.stage.AcceptanceCriteria = append(cur.stage.AcceptanceCriteria, item)
+		case "acceptance checks", "acceptance check":
+			cur.stage.AcceptanceChecks = append(cur.stage.AcceptanceChecks, unwrapBackticks(item))
+		case "execution", "execution mode":
+			// The mode may be followed by a note joined onto it from an indented line
+			// ("- done" then "  (already merged)"); take the mode itself.
+			if mode, ok := domain.ParseExecutionMode(executionModeValue(item)); ok {
+				cur.stage.ExecutionMode = mode
+			}
+		}
+	}
 	flushStage := func() {
 		if cur != nil {
+			flushItem()
 			cur.stage.Objective = strings.TrimSpace(cur.objective.String())
 			plan.Stages = append(plan.Stages, cur.stage)
 			cur = nil
@@ -197,6 +232,7 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 				continue
 			default: // level >= 3: a sub-section within the current section
 				if cur != nil {
+					flushItem()
 					cur.sub = normalizeHeading(text)
 					continue
 				}
@@ -260,28 +296,26 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 			}
 			item := listItem(raw)
 			if item == "" {
+				// A blank or explicit "none" line ends the current item.
+				flushItem()
 				continue
 			}
-			switch cur.sub {
-			case "dependencies", "dependency", "depends on":
-				cur.stage.Dependencies = append(cur.stage.Dependencies, item)
-			case "requires", "require", "needs":
-				cur.stage.Requires = append(cur.stage.Requires, item)
-			case "deliverables", "deliverable", "scope", "outputs":
-				cur.stage.Deliverables = append(cur.stage.Deliverables, item)
-			case "acceptance criteria", "acceptance", "acceptance criterion", "tests":
-				cur.stage.AcceptanceCriteria = append(cur.stage.AcceptanceCriteria, item)
-			case "execution", "execution mode":
-				if mode, ok := domain.ParseExecutionMode(item); ok {
-					cur.stage.ExecutionMode = mode
-				}
-			default:
+			// A line more indented than the item above it, and not starting its own
+			// bullet, is a wrapped continuation of that item.
+			indented := raw[0] == ' ' || raw[0] == '\t'
+			if indented && !mdBullet.MatchString(raw) && cur.item.Len() > 0 {
+				cur.item.WriteString(" ")
+				cur.item.WriteString(item)
+				continue
+			}
+			flushItem()
+			if cur.sub == "" {
 				// Only prose between the stage heading and its first sub-section is the
 				// objective; an unrecognized sub-section is ignored rather than merged in.
-				if cur.sub == "" {
-					cur.objective.WriteString(raw + "\n")
-				}
+				cur.objective.WriteString(raw + "\n")
+				continue
 			}
+			cur.item.WriteString(item)
 		}
 	}
 	flush()
@@ -289,6 +323,15 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 	plan.Project = strings.TrimSpace(project.String())
 	plan.Summary = strings.TrimSpace(summary.String())
 	return plan, nil
+}
+
+// unwrapBackticks removes one pair of enclosing backticks from s, if present.
+func unwrapBackticks(s string) string {
+	s = strings.TrimSpace(s)
+	if len(s) >= 2 && strings.HasPrefix(s, "`") && strings.HasSuffix(s, "`") {
+		return strings.TrimSpace(s[1 : len(s)-1])
+	}
+	return s
 }
 
 // Compile returns a validated Plan from a human plan document. When the document
@@ -522,7 +565,9 @@ func (t *taskStage) stage() (Stage, error) {
 		case "scope":
 			scope = append(scope, f.value)
 		case "files", "file", "likely files", "likely files/packages", "likely packages":
-			s.Deliverables = append(s.Deliverables, f.value)
+			// A Files value may list several paths; each becomes its own deliverable so
+			// it is verified individually by the outcome.
+			s.Deliverables = append(s.Deliverables, splitFiles(f.value)...)
 		case "depends on", "depends", "dependency", "dependencies":
 			deps, err := parseDependencies(f.value)
 			if err != nil {
@@ -531,6 +576,8 @@ func (t *taskStage) stage() (Stage, error) {
 			s.Dependencies = append(s.Dependencies, deps...)
 		case "acceptance", "acceptance criteria", "acceptance criterion", "tests", "done when":
 			s.AcceptanceCriteria = append(s.AcceptanceCriteria, f.value)
+		case "acceptance checks", "acceptance check":
+			s.AcceptanceChecks = append(s.AcceptanceChecks, unwrapBackticks(f.value))
 		case "execution", "execution mode":
 			if mode, ok := domain.ParseExecutionMode(executionModeValue(f.value)); ok {
 				s.ExecutionMode = mode
@@ -544,6 +591,30 @@ func (t *taskStage) stage() (Stage, error) {
 		s.Objective = strings.TrimSpace(strings.Join(scope, "\n\n"))
 	}
 	return s, nil
+}
+
+// splitFiles splits a Files field value into one deliverable per listed path. The
+// value is divided on commas and semicolons, each piece is trimmed, has one pair of
+// enclosing backticks removed, and has any trailing sentence punctuation stripped
+// (so a value that ends a sentence, such as "`cmd/sop/main.go`, `a/app.go`.",
+// yields bare paths); empty pieces are dropped. A single path with no separator
+// yields exactly one deliverable.
+func splitFiles(value string) []string {
+	var out []string
+	for _, piece := range strings.FieldsFunc(value, func(r rune) bool { return r == ',' || r == ';' }) {
+		piece = strings.TrimSpace(piece)
+		// A sentence-terminating period may sit outside the closing backtick
+		// ("`a/app.go`.") or outside a bare path ("c/other.go."); strip it before
+		// unwrapping so the backtick pair is still recognized. Only trailing
+		// punctuation is removed, so an extension or interior dot survives.
+		piece = strings.TrimRight(piece, ".")
+		p := unwrapBackticks(piece)
+		p = strings.TrimRight(strings.TrimSpace(p), ".")
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 // parseDependencies reads a stage's "Depends on" value: an explicit, comma- or

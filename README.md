@@ -33,6 +33,11 @@ Human approval remains explicit where policy requires it.
   (`SQLite`, `plan.json`); the orchestrator never parses human docs for its state.
 - **Bounded autonomy.** Retries and fix loops have explicit limits and end at a
   human gate when they must.
+- **Operator-owned acceptance checks.** A plan stage MAY declare deterministic
+  acceptance checks that SOP executes once — a SAFE argv, never a shell — and records
+  as an objective-level `VERIFIED` / `PARTIAL` / `HOLD` verdict with per-check
+  evidence, so a task's `PASS` is never equated with verified objective completion
+  (see [docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b).
 - **Local first, provider neutral.** Runs locally with local or cloud models and
   does not require a cloud service. The smallest class is local-first: it runs a
   local model and falls back to a cloud model only when the local runtime cannot
@@ -148,7 +153,8 @@ Detailed state transitions and lifecycle rules live in the specifications:
 
 SOP V1 and the later routing, provider-runtime, recovery, prompt, distribution,
 interactive-approval, and agentic reliability/evaluation layers (structured run
-trace, progress signals, evaluation harness) are implemented. Detailed delivery status and
+trace, progress signals, evaluation harness), plus native deterministic acceptance
+checks ([docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b), are implemented. Detailed delivery status and
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
 
@@ -163,15 +169,15 @@ started by that plan.
 
 Start at **[docs/README.md](docs/README.md)** for the complete categorized index.
 
-| Read about | Start here |
-| --- | --- |
-| Product requirements | [PRD](docs/PRD.md) |
-| Architecture and ownership | [Overview](docs/architecture/OVERVIEW.md), [SOP boundary](docs/architecture/SOP-BOUNDARY.md) |
-| Execution and lifecycle | [Execution](docs/specs/EXECUTION.md), [task lifecycle](docs/specs/TASK-LIFECYCLE.md) |
-| Providers and harnesses | [Agent provider](docs/specs/AGENT-PROVIDER.md), [model routing](docs/specs/MODEL-ROUTING.md) |
-| CLI and configuration | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md) |
-| Usage and development | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
-| Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation) |
+| Read about                    | Start here                                                                                   |
+| ----------------------------- | -------------------------------------------------------------------------------------------- |
+| Product requirements          | [PRD](docs/PRD.md)                                                                           |
+| Architecture and ownership    | [Overview](docs/architecture/OVERVIEW.md), [SOP boundary](docs/architecture/SOP-BOUNDARY.md) |
+| Execution and lifecycle       | [Execution](docs/specs/EXECUTION.md), [task lifecycle](docs/specs/TASK-LIFECYCLE.md)         |
+| Providers and harnesses       | [Agent provider](docs/specs/AGENT-PROVIDER.md), [model routing](docs/specs/MODEL-ROUTING.md) |
+| CLI and configuration         | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md)          |
+| Usage and development         | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
+| Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation)            |
 
 ## License
 

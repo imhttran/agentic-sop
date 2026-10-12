@@ -43,6 +43,13 @@ type Stage struct {
 	Dependencies       []string `json:"dependencies"`
 	Deliverables       []string `json:"deliverables"`
 	AcceptanceCriteria []string `json:"acceptance_criteria"`
+	// AcceptanceChecks are operator-declared deterministic acceptance checks for
+	// the stage: each is a shell command whose exit status 0 means the criterion
+	// is met. They are the verifiable half of acceptance (unlike the free-text
+	// AcceptanceCriteria) and are carried in plan.json, in rendered PLAN.md, and
+	// in task files. Optional: a stage with no checks omits the key so a plan
+	// without checks stays byte-identical to the previous format.
+	AcceptanceChecks []string `json:"acceptance_checks,omitempty"`
 	// Kind is optional: "" and "feature" are ordinary stages; "environment"
 	// marks a bootstrap stage feature work depends on.
 	Kind string `json:"kind,omitempty"`

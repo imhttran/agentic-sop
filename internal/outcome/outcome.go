@@ -55,6 +55,15 @@ type CriterionResult struct {
 	Description string
 	Command     string
 	Evidence    string
+	// Argv is the exact argument vector that executed for this criterion's check
+	// (empty when the criterion ran no external command).
+	Argv []string
+	// ExitCode is the process exit code observed for the executed check (0 when the
+	// check did not run an external command, or ran and succeeded).
+	ExitCode int
+	// Output is a bounded excerpt of the executed check's combined stdout/stderr
+	// (empty when the check produced no output or ran no external command).
+	Output string
 }
 
 // Result is the deterministic outcome verdict.
@@ -129,4 +138,20 @@ func Verify(criteria []Criterion) Result {
 		res.Reasons = append(res.Reasons, "every required criterion was independently met")
 	}
 	return res
+}
+
+// PropagateEvidence copies the per-check execution evidence recorded by an executor
+// onto the matching criterion result, so a criterion backed by an executed check
+// carries the exact argv, exit code, and bounded output excerpt. It is a no-op for
+// criteria that ran no external command (an empty argv).
+func (r *Result) PropagateEvidence(id string, argv []string, exitCode int, output string) {
+	for i := range r.Criteria {
+		if r.Criteria[i].ID != id {
+			continue
+		}
+		r.Criteria[i].Argv = append([]string(nil), argv...)
+		r.Criteria[i].ExitCode = exitCode
+		r.Criteria[i].Output = output
+		return
+	}
 }

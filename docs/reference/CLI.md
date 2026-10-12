@@ -16,9 +16,9 @@ semantics in [`docs/specs/RECOVERY.md`](../specs/RECOVERY.md).
 | `sop tasks`                                                                                                    | Convert the machine-readable Plan into persisted tasks.                                                                                                               | Reads `.agent-sdlc/plan.json`.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | `sop validate`                                                                                                 | Run the configured build/test/lint commands and report a deterministic result.                                                                                        | Commands come from `validation` in `.agent-sdlc/config.yaml`; they run in the project directory, in order (build, test, lint), and stop at the first failure. Exit code is non-zero on failure.                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | `sop review`                                                                                                   | Review the current working-tree changes with the configured engine.                                                                                                   | `self` (default) asks the agent for structured findings; `open-code-review` runs an external command (`SOP_REVIEW_COMMAND`). The model never decides the verdict: findings whose severity is named in `quality.fail_on` are blocking, and the exit code is non-zero when any remain. With no working-tree changes it reports “no changes to review”.                                                                                                                                                                                                                                                                                       |
-| `sop run [--model-class small\|medium\|large] [PLAN.md \| --task TASK.md]`                                     | The one-command workflow: discover or resolve the planning source, initialize state, compile or generate `.agent-sdlc/plan.json`, create tasks, then drive the graph. | A file argument names an execution PLAN (authoritative for that run); `--task TASK.md` runs a single task through the local lifecycle instead; `--model-class` overrides the model-routing class for this invocation (see [`CONFIGURATION.md`](CONFIGURATION.md)). Each step is idempotent. See the precedence and multi-plan notes below.                                                                                                                                                                                                                                                                                                 |
+| `sop run [--model-class small\|medium\|large] [PLAN.md \| --task TASK.md]`                                     | The one-command workflow: discover or resolve the planning source, initialize state, compile or generate `.agent-sdlc/plan.json`, create tasks, then drive the graph. | A file argument names an execution PLAN (authoritative for that run); `--task TASK.md` runs a single task through the local lifecycle instead; `--model-class` overrides the model-routing class for this invocation (see [`CONFIGURATION.md`](CONFIGURATION.md)). Each step is idempotent. A stage that declares acceptance checks has them executed and recorded as an objective-level `VERIFIED`/`PARTIAL`/`HOLD` outcome (see the acceptance-checks note below). See the precedence and multi-plan notes below.                                                                                                                        |
 | `sop prompt [--capability CAP] [--model-class CLASS] [--json] [--deliverable PATH]... [--file PATH \| PROMPT]` | Run an ad-hoc operator prompt through SOP's governed execution (Phase 5.4).                                                                                           | Capability defaults to `plan` (read-only); `plan`, `review`, `diagnose_failure`, and `design_tests` run read-only, while `implement` runs the full governed implementation lifecycle. `--deliverable PATH` (repeatable, `implement` only) declares an explicit repository deliverable projected into the lifecycle; a declared report counts as a change only when its content changes. Routing reuses the `small`/`medium`/`large` classes; provider validation applies when `providers.validate` is on. Runs are written under `.agent-sdlc/runs/prompts/<run-id>/`. See [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md). |
-| `sop report [run-id]`                                                                                          | Print a concise, informational summary of a run (the latest of either kind by default).                                                                               | Shows stage, provider, gate, per-check validation, and findings by severity. When model routing or bounded escalation applies, it also shows the `Model routing:` decision and an `Execution attempts:` section with the initial class, each attempt, and the escalation metrics.                                                                                                                                                                                                                                                                                                                                                          |
+| `sop report [run-id]`                                                                                          | Print a concise, informational summary of a run (the latest of either kind by default).                                                                               | Shows stage, provider, gate, per-check validation, findings by severity, and the `## Outcome` acceptance verdict when the stage declared acceptance checks. When model routing or bounded escalation applies, it also shows the `Model routing:` decision and an `Execution attempts:` section with the initial class, each attempt, and the escalation metrics.                                                                                                                                                                                                                                                                           |
 | `sop commit [TASK.md] [--yes]`                                                                                 | Commit the current changes with a message derived from a task file (no push).                                                                                         | When `human.approval_before_commit` is on (the default), `--yes` is required.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              |
 | `sop pr TASK.md [--yes]`                                                                                       | Push a task branch and open a pull request.                                                                                                                           | The branch is `task/<id>-<slug>` and the base is the integration branch. It never merges.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
 | `sop mcp`                                                                                                      | Serve tools over the Model Context Protocol on stdio.                                                                                                                 | Exposes `sop_status`, `sop_validate`, `sop_review`, and the approval tools (`sop_approval`, `sop_approve`, `sop_decline`), backed by the same services as the CLI.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
@@ -131,6 +131,61 @@ once on the same class (bounded by `SOP_MODEL_MAX_REPLANS`, default 1). Each att
 is recorded under `attempts/`. All three are OFF by default and apply equally to an
 `implement` prompt. See
 [`CONFIGURATION.md`](CONFIGURATION.md) and [`../specs/RECOVERY.md`](../specs/RECOVERY.md).
+
+## `sop run`: acceptance checks and the outcome artifact
+
+A plan stage may declare **operator-owned deterministic acceptance checks** — the
+verifiable half of acceptance — as an `### Acceptance Checks` sub-section in a rendered
+plan or `- **Acceptance check:** <command>` inline lines in a task-list plan (one command
+per line, optionally backtick-wrapped). When a scheduled task's stage declares checks,
+`sop run` executes each **exactly once** as a SAFE argument vector — never a shell — and
+records an objective-level verdict beside the gate summary, so a task's
+`PASS`/`LOCAL_DONE` is never equated with verified objective completion. A non-SAFE
+command, a rejected flag form (`-exec`, `-toolexec`, `-vettool`, `-o`, `-overlay`,
+`-modfile`), `go fmt`, or `git -c` / `--config-env` is a boundary (`HOLD`) and is never
+executed; a `go test` check is judged from structured `go test -json` events from a
+single execution (met only on exit 0 with at least one test-level pass). The verdict is
+`VERIFIED`, `PARTIAL`, or `HOLD`. The full rules are normative in
+[`../specs/EXECUTION.md`](../specs/EXECUTION.md) §6b.
+
+The verdict is written to `.agent-sdlc/runs/<task>/outcome.json`, with one entry per
+criterion (`ID`, `Required`, `Boundary`, `Met`, `Description`, `Command`, `Evidence`, and
+— for an executed check — `Argv`, `ExitCode`, and a bounded `Output` excerpt):
+
+```json
+{
+  "status": "PARTIAL",
+  "criteria": [
+    {
+      "ID": "check-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": false,
+      "Description": "acceptance check: go vet ./doesnotexist/",
+      "Command": "go vet ./doesnotexist/",
+      "Evidence": "acceptance check \"go vet ./doesnotexist/\" failed (exit 1): directory not found",
+      "Argv": ["go", "vet", "./doesnotexist/"],
+      "ExitCode": 1,
+      "Output": "directory not found"
+    }
+  ],
+  "reasons": ["required criterion check-1 not met: …"]
+}
+```
+
+The run report renders the same evidence in its `## Outcome` section:
+
+```text
+## Outcome
+
+- Status: `PARTIAL`
+- `check-1` not met — go vet ./doesnotexist/ (acceptance check "go vet ./doesnotexist/" failed (exit 1): directory not found)
+  - argv: `go vet ./doesnotexist/`
+  - exit: 1
+  - output: directory not found
+```
+
+Inspect a run's verdict with `sop report <task-id>` (see the `sop report` row above).
 
 ## `sop run`: caller observations and report deliverables
 
