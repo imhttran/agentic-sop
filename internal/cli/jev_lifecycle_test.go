@@ -4,15 +4,19 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"reflect"
 	"strings"
 	"testing"
 
+	"github.com/imhttran/agentic-sop/internal/activity"
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 // jevEnabledConfig enables JEV in review mode with passing validation, so a run
@@ -477,5 +481,230 @@ func TestJEVRunEvidenceGateEvidenceIsNilSafe(t *testing.T) {
 	ev := &quality.JEVEvidence{Status: jev.StatusPass}
 	if got := (&jevRunEvidence{Evidence: ev}).gateEvidence(); got != ev {
 		t.Errorf("gate evidence = %v, want the inner evidence", got)
+	}
+}
+
+// A configured JEV whose analyzer factory fails stays non-fatal (the lifecycle
+// still completes OK) but is not silent: a fixed, secret-free diagnostic is
+// recorded so the failure is observable without leaking the raw error, endpoint,
+// or credentials. A disabled or absent JEV stays silent.
+func TestJEVAnalyzerFactoryFailureIsObservable(t *testing.T) {
+	secret := "token=super-secret-credential"
+	factoryErr := func(config.Config) (jev.Analyzer, error) {
+		return nil, errors.New("dial tcp 10.1.2.3:11434 refused " + secret)
+	}
+
+	// The failure is non-fatal end to end: the run completes OK.
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, jevEnabledConfig)
+	a := &jevTestAgent{plan: validPlanJSON, impl: "impl", review: `{"summary":"clean","findings":[]}`}
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, jevDiff, a, factoryErr, "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("factory failure must stay non-fatal: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+
+	cfg, err := config.Parse([]byte(jevEnabledConfig))
+	if err != nil {
+		t.Fatalf("parse enabled config: %v", err)
+	}
+	inactive, err := config.Parse([]byte("project:\n  name: x\n"))
+	if err != nil {
+		t.Fatalf("parse inactive config: %v", err)
+	}
+
+	// A factory failure is observable and secret-free.
+	var events []activity.Event
+	rec := activity.New("T1", activity.Func(func(e activity.Event) { events = append(events, e) }))
+	ctx := activity.WithRecorder(context.Background(), rec)
+	if ev := runOptionalJEV(ctx, *cfg, deps{newJEVAnalyzer: factoryErr}, nil, nil, "", testrunner.SuiteResult{}, review.Report{}, "", nil); ev != nil {
+		t.Fatalf("a factory failure must produce no gate evidence: %+v", ev)
+	}
+	if len(events) == 0 {
+		t.Fatal("a factory failure must be observable on the activity stream")
+	}
+	found := false
+	for _, e := range events {
+		if e.Action == jevAnalyzerUnavailableAction {
+			found = true
+		}
+		for _, field := range []string{e.Action, e.Detail} {
+			for _, leak := range []string{secret, "10.1.2.3", "refused"} {
+				if strings.Contains(field, leak) {
+					t.Fatalf("diagnostic leaked the raw factory error (%q): %q", leak, field)
+				}
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("expected the %q diagnostic; events=%+v", jevAnalyzerUnavailableAction, events)
+	}
+
+	// A disabled JEV records nothing.
+	var disabledEvents []activity.Event
+	disabledRec := activity.New("T1", activity.Func(func(e activity.Event) { disabledEvents = append(disabledEvents, e) }))
+	disabledCtx := activity.WithRecorder(context.Background(), disabledRec)
+	if ev := runOptionalJEV(disabledCtx, *inactive, deps{newJEVAnalyzer: factoryErr}, nil, nil, "", testrunner.SuiteResult{}, review.Report{}, "", nil); ev != nil {
+		t.Fatalf("disabled JEV must produce no gate evidence: %+v", ev)
+	}
+	if len(disabledEvents) != 0 {
+		t.Fatalf("disabled JEV must stay silent: %+v", disabledEvents)
+	}
+
+	// An absent factory records nothing.
+	var absentEvents []activity.Event
+	absentRec := activity.New("T1", activity.Func(func(e activity.Event) { absentEvents = append(absentEvents, e) }))
+	absentCtx := activity.WithRecorder(context.Background(), absentRec)
+	if ev := runOptionalJEV(absentCtx, *cfg, deps{}, nil, nil, "", testrunner.SuiteResult{}, review.Report{}, "", nil); ev != nil {
+		t.Fatalf("an absent factory must produce no gate evidence: %+v", ev)
+	}
+	if len(absentEvents) != 0 {
+		t.Fatalf("an absent factory must stay silent: %+v", absentEvents)
+	}
+
+	// A factory that returns (nil, nil) is "absent", not a failure: silent.
+	var nilEvents []activity.Event
+	nilRec := activity.New("T1", activity.Func(func(e activity.Event) { nilEvents = append(nilEvents, e) }))
+	nilCtx := activity.WithRecorder(context.Background(), nilRec)
+	nilFactory := deps{newJEVAnalyzer: func(config.Config) (jev.Analyzer, error) { return nil, nil }}
+	if ev := runOptionalJEV(nilCtx, *cfg, nilFactory, nil, nil, "", testrunner.SuiteResult{}, review.Report{}, "", nil); ev != nil {
+		t.Fatalf("a nil analyzer must produce no gate evidence: %+v", ev)
+	}
+	if len(nilEvents) != 0 {
+		t.Fatalf("a nil analyzer (absent) must stay silent: %+v", nilEvents)
+	}
+}
+
+// TestChangedFilesHandlesQuotedPaths asserts changedFiles attributes git-quoted
+// paths (non-ASCII, space-containing, renames) under their real names, strips
+// only the tab-separated timestamp, and preserves /dev/null and both-side rename
+// semantics, so a quoted or space-containing file is never silently dropped.
+func TestChangedFilesHandlesQuotedPaths(t *testing.T) {
+	cases := []struct {
+		name string
+		diff string
+		want []string
+	}{
+		{
+			name: "unquoted",
+			diff: "diff --git a/internal/x.go b/internal/x.go\n--- a/internal/x.go\n+++ b/internal/x.go\n@@ -1 +1 @@\n-old\n+new\n",
+			want: []string{"internal/x.go"},
+		},
+		{
+			name: "non-ascii quoted",
+			diff: "diff --git \"a/\\303\\251.txt\" \"b/\\303\\251.txt\"\nindex 0..1 100644\n--- \"a/\\303\\251.txt\"\n+++ \"b/\\303\\251.txt\"\n@@ -1 +1 @@\n-old\n+new\n",
+			want: []string{"é.txt"},
+		},
+		{
+			name: "quoted with space",
+			diff: "diff --git \"a/na\\303\\257ve file.txt\" \"b/na\\303\\257ve file.txt\"\nindex 0..1 100644\n--- \"a/na\\303\\257ve file.txt\"\t\n+++ \"b/na\\303\\257ve file.txt\"\t\n@@ -1 +1 @@\n-old\n+new\n",
+			want: []string{"naïve file.txt"},
+		},
+		{
+			name: "unquoted space with timestamp",
+			diff: "diff --git a/with space.txt b/with space.txt\nindex 0..1 100644\n--- a/with space.txt\t2020-01-01 10:00:00 +0000\n+++ b/with space.txt\t2020-01-01 10:00:00 +0000\n@@ -1 +1 @@\n-old\n+new\n",
+			want: []string{"with space.txt"},
+		},
+		{
+			name: "quoted rename",
+			diff: "diff --git a/del.txt \"b/na\\303\\257ve new.txt\"\nsimilarity index 100%\nrename from del.txt\nrename to \"na\\303\\257ve new.txt\"\n",
+			want: []string{"del.txt", "naïve new.txt"},
+		},
+		{
+			name: "dev null sides",
+			diff: "diff --git a/added.txt b/added.txt\nnew file mode 100644\n--- /dev/null\n+++ b/added.txt\n@@ -0,0 +1 @@\n+new\n" +
+				"diff --git \"a/\\303\\251-old.txt\" \"b/\\303\\251-old.txt\"\ndeleted file mode 100644\n--- \"a/\\303\\251-old.txt\"\n+++ /dev/null\n@@ -1 +0,0 @@\n-x\n",
+			want: []string{"added.txt", "é-old.txt"},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := changedFiles(tc.diff); !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("changedFiles = %#v, want %#v", got, tc.want)
+			}
+		})
+	}
+}
+
+// TestJEVFailClosedReasonIsBoundedClassOnly pins the persisted fail-closed reason
+// to a bounded, class-only diagnostic. A real analyzer error can embed a provider
+// endpoint, up to ~512 chars of a response body, and credential-like text (see
+// internal/ollamaagent), so none of that may reach the gate reason, while the
+// provider-error class must survive so the failure stays recognizable.
+func TestJEVFailClosedReasonIsBoundedClassOnly(t *testing.T) {
+	const (
+		sentinelEndpoint = "http://sentinel-endpoint:11434"
+		sentinelBody     = "SECRET-RESPONSE-BODY"
+		sentinelToken    = "token=SECRET-TOKEN"
+	)
+
+	cases := []struct {
+		name      string
+		err       error
+		wantClass string
+	}{
+		{
+			name: "provider error preserves its class",
+			err: &jev.ProviderError{
+				Kind: jev.ErrProviderUnreachable,
+				Err:  errors.New("post " + sentinelEndpoint + "/api/chat: " + sentinelBody + " " + sentinelToken),
+			},
+			wantClass: string(jev.ErrProviderUnreachable),
+		},
+		{
+			name:      "generic error falls back to a fixed class",
+			err:       errors.New("dial " + sentinelEndpoint + " failed: " + sentinelBody + " " + sentinelToken),
+			wantClass: "provider-error",
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			ev := jevEvidence(runpkg.JEVOutcome{Ran: true, Error: tc.err})
+			if ev == nil || !ev.FailClosed {
+				t.Fatalf("an errored outcome must yield fail-closed evidence; got %+v", ev)
+			}
+			for _, leak := range []string{sentinelEndpoint, sentinelBody, sentinelToken, "SECRET"} {
+				if strings.Contains(ev.Reason, leak) {
+					t.Errorf("fail-closed reason leaked %q: %q", leak, ev.Reason)
+				}
+			}
+			if !strings.Contains(ev.Reason, tc.wantClass) {
+				t.Errorf("fail-closed reason = %q, want it to name class %q", ev.Reason, tc.wantClass)
+			}
+			if !strings.Contains(ev.Reason, "JEV analysis failed (fail closed)") {
+				t.Errorf("fail-closed reason missing the fixed prefix: %q", ev.Reason)
+			}
+		})
+	}
+}
+
+// TestJEVFailClosedReasonDoesNotLeakRawErrorEndToEnd asserts the bounded class-only
+// reason is what actually reaches the persisted gate reason: a sentinel-laden
+// analyzer error must not surface on stdout or stderr, while the provider-error
+// class must, and the run must stay fail-closed.
+func TestJEVFailClosedReasonDoesNotLeakRawErrorEndToEnd(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, jevEnabledConfig)
+	a := &jevTestAgent{plan: validPlanJSON, impl: "impl", review: `{"summary":"clean","findings":[]}`}
+	analyzer := &sequencedJEV{errs: []error{&jev.ProviderError{
+		Kind: jev.ErrProviderUnreachable,
+		Err:  errors.New("post http://sentinel-endpoint:11434/api/chat: SECRET-RESPONSE-BODY token=SECRET-TOKEN"),
+	}}}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, jevDiff, a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run", "--task", "TASK.md")
+	if code == exitOK {
+		t.Fatalf("a fail-closed JEV must not pass; stdout=%s", stdout)
+	}
+	for _, leak := range []string{"sentinel-endpoint", "SECRET-RESPONSE-BODY", "SECRET-TOKEN"} {
+		if strings.Contains(stdout, leak) || strings.Contains(stderr, leak) {
+			t.Errorf("fail-closed diagnostic leaked %q; stdout=%q stderr=%q", leak, stdout, stderr)
+		}
+	}
+	if !strings.Contains(stdout, string(jev.ErrProviderUnreachable)) {
+		t.Errorf("stdout missing the bounded provider-error class; stdout=%q", stdout)
 	}
 }

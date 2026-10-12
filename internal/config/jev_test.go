@@ -137,15 +137,18 @@ workflow:
 }
 
 // TestDecisionProviderJevDoesNotEnableJEV proves the legacy decision-layer
-// signals cannot turn JEV on by themselves.
+// signals cannot turn JEV on by themselves. As of the JEV-202 contract
+// alignment, `decision.provider: jev` is no longer an accepted value, so a
+// configuration that tries to opt into JEV through the decision layer is
+// rejected at load time and can never activate JEV.
 func TestDecisionProviderJevDoesNotEnableJEV(t *testing.T) {
 	yaml := "project:\n  name: a\ndecision:\n  provider: jev\nfeatures:\n  jev_decisions: true\n"
-	c, err := Parse([]byte(yaml))
-	if err != nil {
-		t.Fatalf("Parse failed: %v", err)
+	_, err := Parse([]byte(yaml))
+	if err == nil {
+		t.Fatal("Parse succeeded for provider: jev, want rejection")
 	}
-	if c.JEVActive() {
-		t.Error("JEV active without an explicit quality.jev.enabled, want disabled")
+	if !strings.Contains(err.Error(), "unknown decision.provider") {
+		t.Errorf("error = %q, want it to contain %q", err, "unknown decision.provider")
 	}
 }
 

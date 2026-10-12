@@ -182,9 +182,9 @@ settings from the shared `SOP_OLLAMA_*` environment variables, falling back to
 built-in defaults when they are unset:
 
 ```bash
-export SOP_OLLAMA_BASE_URL=http://localhost:11434   # default http://127.0.0.1:11434
+export SOP_OLLAMA_BASE_URL=http://127.0.0.1:11434    # default http://127.0.0.1:11434
 export SOP_OLLAMA_MODEL=deepseek-v4.1-flash:cloud    # default deepseek-v4.1-flash:cloud
-export SOP_OLLAMA_TIMEOUT=2m                          # a Go duration; default 2m
+export SOP_OLLAMA_TIMEOUT=120s                        # a Go duration; default 120s
 ```
 
 Because the model is selected by configuration, **JEV is not synonymous with
@@ -199,11 +199,65 @@ Ollama needs no extra setup:
 
 - a base URL (`SOP_OLLAMA_BASE_URL`, default `http://127.0.0.1:11434`),
 - a model (`SOP_OLLAMA_MODEL`, default `deepseek-v4.1-flash:cloud`), and
-- a positive timeout (`SOP_OLLAMA_TIMEOUT`, a Go duration such as `2m`, default `2m`).
+- a positive timeout (`SOP_OLLAMA_TIMEOUT`, a Go duration such as `120s` or `2m`, default `120s`).
 
 A malformed or non-positive timeout (for example `SOP_OLLAMA_TIMEOUT=soon` or
 `0s`) produces a **focused configuration error** at load time, not a silent
 fallback.
+
+### JEV inference settings are separate from SOP execution-model routing
+
+JEV's inference settings and SOP's execution-model routing are **independent
+layers** and are not the same setting:
+
+- **JEV resolves its own provider and model** from `SOP_OLLAMA_BASE_URL`,
+  `SOP_OLLAMA_MODEL`, and `SOP_OLLAMA_TIMEOUT` (via the shared Ollama
+  configuration path). These select *what JEV analyzes with*.
+- **SOP execution-model routing selects what SOP executes with.** That layer is
+  the project's `agent.model` value plus the model-routing overrides
+  `SOP_AGENT_MODEL` (the unified override) and the `SOP_MODEL_*` variables
+  (routing, escalation, and replanning). It selects the small/medium/large class
+  and the execution target; see [`CONFIGURATION.md`](CONFIGURATION.md).
+- **JEV does not participate in routing.** JEV reads no `agent.model`,
+  `SOP_AGENT_MODEL`, or `SOP_MODEL_*` value and never selects a model class, so
+  changing routing does not change JEV.
+
+The layers stay distinct: JEV's inference settings never change class selection
+or the execution target, and the routing overrides never change JEV. They overlap
+only in the shared `SOP_OLLAMA_*` setting, which the Ollama agent provider and
+JEV both read when the agent itself runs on Ollama.
+
+### Authentication: local daemon versus remote endpoint
+
+JEV, like the rest of SOP's Ollama path, **sends no Ollama credential**. There
+is no `SOP_OLLAMA_API_KEY` and no other Ollama API-key setting; authentication
+belongs to the endpoint, not to SOP:
+
+- **Local daemon (the default).** Against the default
+  `http://127.0.0.1:11434`, the Ollama daemon runs on the local machine and
+  expects no credential. SOP sends none.
+- **Cloud model through the local daemon.** A cloud model (for example a
+  `*-cloud` model name) is still served by the local Ollama daemon; the daemon
+  **performs the cloud authentication itself**, using the operator's Ollama
+  sign-in. SOP sends no credential to the daemon, so cloud auth is delegated to
+  the local daemon rather than configured in SOP.
+- **Bearer-protected remote endpoint is unsupported.** SOP has no setting to
+  attach an `Authorization: Bearer ...` header (or any other credential) to its
+  Ollama requests. A remote Ollama endpoint that requires a bearer token cannot
+  be configured through SOP; point SOP at a local (or otherwise credential-free)
+  daemon instead.
+
+### Diagnostics are secret-free
+
+Everything JEV records about the provider is **diagnostic metadata only** and
+contains no secret:
+
+- The recorded provider/model metadata is a canonical **provider id**
+  (`ollama`) and the **model** the analysis used, plus the provider-call count.
+  None of these is a credential.
+- SOP reads no Ollama credential (there is no `SOP_OLLAMA_API_KEY`), so a value
+  placed in a secret-shaped variable is never recorded — by construction, not by
+  redaction.
 
 ### Context and prompt bounds
 

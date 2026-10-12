@@ -775,13 +775,23 @@ Example:
 
 ```yaml
 decision:
-  provider: jev
+  provider: deterministic
   enabled: false
 
   thresholds:
     route_to_strong_model: 0.75
     require_human: 0.50
 ```
+
+The `decision.provider` setting accepts `deterministic` (the default baseline
+rules) or `command` (a provider-neutral external adapter, which requires
+`decision.command`).
+
+> **Configuration compatibility change.** `decision.provider: jev` was previously
+> accepted by configuration but was nonfunctional — the runtime never implemented
+> a `jev` decision provider — and is now **rejected at load**. An existing
+> configuration carrying `provider: jev` must remove that setting (falling back
+> to the `deterministic` default) or set `provider: deterministic` explicitly.
 
 Jev never directly:
 

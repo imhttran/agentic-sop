@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
+	"github.com/imhttran/agentic-sop/internal/provider"
 	"github.com/imhttran/agentic-sop/internal/review"
 )
 
@@ -233,7 +234,7 @@ func TestFindingsResult(t *testing.T) {
 		Status:  "FINDINGS",
 		Summary: "issues",
 		Findings: []modelFinding{{
-			ID: "F1", Severity: "HIGH", Category: "quality", Message: "issue",
+			ID: "F1", Severity: "HIGH", Category: "scope", Message: "issue",
 		}},
 	})
 	chat := &fakeChat{output: string(out)}
@@ -563,5 +564,444 @@ func assertKind(t *testing.T, err error, kind ProviderErrorKind) {
 	}
 	if pe.Kind != kind {
 		t.Fatalf("kind = %s, want %s", pe.Kind, kind)
+	}
+}
+
+// TestOllamaAnalyzerEmitsStructuredEvidence asserts the production analyzer
+// populates Result.StructuredEvidence from a well-formed model response, and that
+// the evidence satisfies the versioned contract validator. It uses only the
+// in-process fake chat provider: no live provider and no network.
+func TestOllamaAnalyzerEmitsStructuredEvidence(t *testing.T) {
+	out, err := json.Marshal(modelOutput{
+		Status:  "FINDINGS",
+		Summary: "found issues",
+		Findings: []modelFinding{{
+			ID:       "F1",
+			Severity: "HIGH",
+			Category: "scope",
+			Path:     "internal/x.go",
+			Line:     3,
+			Message:  "change exceeds task scope",
+			Evidence: "touches files outside the task scope",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal model output: %v", err)
+	}
+	chat := &fakeChat{output: string(out)}
+	a, err := NewOllamaAnalyzer(testConfig(), chat)
+	if err != nil {
+		t.Fatalf("NewOllamaAnalyzer: %v", err)
+	}
+	res, err := a.Analyze(context.Background(), Request{Task: "t", Purpose: PurposeTaskTriage})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if res.StructuredEvidence == nil {
+		t.Fatal("StructuredEvidence = nil, want non-nil evidence from the production analyzer")
+	}
+	if err := res.StructuredEvidence.Validate(); err != nil {
+		t.Fatalf("StructuredEvidence failed validation: %v", err)
+	}
+	if res.StructuredEvidence.Version != EvidenceVersion {
+		t.Errorf("evidence version = %d, want %d", res.StructuredEvidence.Version, EvidenceVersion)
+	}
+	if res.StructuredEvidence.Purpose != PurposeTaskTriage {
+		t.Errorf("evidence purpose = %q, want TASK_TRIAGE from the request context", res.StructuredEvidence.Purpose)
+	}
+	if res.StructuredEvidence.Status != EvidenceFindings {
+		t.Errorf("evidence status = %q, want FINDINGS", res.StructuredEvidence.Status)
+	}
+	if len(res.StructuredEvidence.Items) != 1 {
+		t.Fatalf("evidence items = %d, want 1", len(res.StructuredEvidence.Items))
+	}
+	if got := res.StructuredEvidence.Items[0].Category; got != CategoryScope {
+		t.Errorf("item category = %q, want %q", got, CategoryScope)
+	}
+	if res.Status != StatusFindings || len(res.Findings) != 1 {
+		t.Errorf("existing Status/Findings behavior changed: %+v", res)
+	}
+}
+
+// TestStructuredEvidenceInvalidFailsClosed asserts that evidence failing the
+// fail-closed contract is never attached: Analyze returns a non-nil error and a
+// zero Result, so invalid evidence can never authorize continuation. The request
+// declares an unknown purpose, so the evidence derived from it is invalid. It uses
+// only the in-process fake chat provider: no live provider and no network.
+func TestStructuredEvidenceInvalidFailsClosed(t *testing.T) {
+	out, err := json.Marshal(modelOutput{Status: "PASS", Summary: "ok"})
+	if err != nil {
+		t.Fatalf("marshal model output: %v", err)
+	}
+	chat := &fakeChat{output: string(out)}
+	a, err := NewOllamaAnalyzer(testConfig(), chat)
+	if err != nil {
+		t.Fatalf("NewOllamaAnalyzer: %v", err)
+	}
+	res, err := a.Analyze(context.Background(), Request{Task: "t", Purpose: Purpose("NOT_A_KNOWN_PURPOSE")})
+	if err == nil {
+		t.Fatal("expected a fail-closed error for invalid structured evidence")
+	}
+	if res.Status != "" || len(res.Findings) != 0 || res.Summary != "" || res.StructuredEvidence != nil {
+		t.Fatalf("result = %+v, want a zero Result on invalid evidence", res)
+	}
+}
+
+// blockingChat is a ChatProvider that blocks until its context is done, signalling
+// once it has been entered so a test can cancel deterministically rather than
+// racing a sleep. It returns the context's error, exactly as a real provider does
+// when its call is aborted.
+type blockingChat struct {
+	entered chan struct{}
+}
+
+func (c *blockingChat) Chat(ctx context.Context, _, _ string) (string, error) {
+	return c.block(ctx)
+}
+
+func (c *blockingChat) ChatStructured(ctx context.Context, _, _ string, _ json.RawMessage) (string, error) {
+	return c.block(ctx)
+}
+
+func (c *blockingChat) block(ctx context.Context) (string, error) {
+	select {
+	case c.entered <- struct{}{}:
+	default:
+	}
+	<-ctx.Done()
+	return "", ctx.Err()
+}
+
+// TestCanceledContextIsNotTimeout asserts a caller cancellation is classified as
+// CANCELED, never as a provider TIMEOUT. The failure kind is distinct, the
+// wrapping error still satisfies errors.Is(err, context.Canceled), the result is
+// the zero Result, and cancellation is terminal (it is never retried).
+func TestCanceledContextIsNotTimeout(t *testing.T) {
+	assertCanceled := func(t *testing.T, err error) {
+		t.Helper()
+		if err == nil {
+			t.Fatal("expected an error on a cancelled context")
+		}
+		var pe *ProviderError
+		if !errors.As(err, &pe) {
+			t.Fatalf("error %v is not a *ProviderError", err)
+		}
+		if pe.Kind == ErrTimeout {
+			t.Fatalf("cancellation was mislabeled as %s", ErrTimeout)
+		}
+		if pe.Kind != ErrCanceled {
+			t.Fatalf("kind = %s, want %s", pe.Kind, ErrCanceled)
+		}
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("error %v does not wrap context.Canceled", err)
+		}
+	}
+
+	t.Run("canceled-before-call", func(t *testing.T) {
+		chat := &blockingChat{entered: make(chan struct{}, 1)}
+		a, err := NewOllamaAnalyzer(testConfig(), chat)
+		if err != nil {
+			t.Fatalf("NewOllamaAnalyzer: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel()
+		res, err := a.Analyze(ctx, Request{Task: "t"})
+		assertCanceled(t, err)
+		if res.Status != "" || len(res.Findings) != 0 || res.Summary != "" {
+			t.Fatalf("cancellation must yield the zero Result, got %+v", res)
+		}
+		if got := a.JEVToolCalls(); got != 0 {
+			t.Fatalf("JEVToolCalls = %d, want 0 (a canceled context is terminal, never retried)", got)
+		}
+	})
+
+	t.Run("canceled-during-call", func(t *testing.T) {
+		chat := &blockingChat{entered: make(chan struct{}, 1)}
+		a, err := NewOllamaAnalyzer(testConfig(), chat)
+		if err != nil {
+			t.Fatalf("NewOllamaAnalyzer: %v", err)
+		}
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+		done := make(chan struct{})
+		go func() {
+			<-chat.entered
+			cancel()
+			close(done)
+		}()
+		res, err := a.Analyze(ctx, Request{Task: "t"})
+		<-done
+		assertCanceled(t, err)
+		if res.Status != "" || len(res.Findings) != 0 || res.Summary != "" {
+			t.Fatalf("cancellation must yield the zero Result, got %+v", res)
+		}
+		if got := a.JEVToolCalls(); got != 1 {
+			t.Fatalf("JEVToolCalls = %d, want 1 (cancellation is terminal, never retried)", got)
+		}
+	})
+}
+
+// TestJEVProviderMetadataNoSecrets asserts the provider/model metadata JEV
+// records is canonical, independent of the model string, and secret-free.
+//
+// It covers the JEV-204 acceptance criteria: the provider and model can be
+// identified unambiguously; the reported provider is a canonical known provider
+// id and does not depend on the model; nothing shaped like a secret reaches the
+// recorded metadata; and the analysis runs against a fake chat provider, so
+// Claude and a live Ollama are never required.
+func TestJEVProviderMetadataNoSecrets(t *testing.T) {
+	// A synthetic sentinel stands in for a credential. It is not a real secret
+	// and is never persisted: it only proves non-leakage. SOP reads no Ollama
+	// credential, so this secret-shaped variable must have no effect at all.
+	const sentinel = "jev204-sentinel-credential-not-a-real-secret"
+	t.Setenv("SOP_OLLAMA_API_KEY", sentinel)
+	t.Setenv("SOP_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+	t.Setenv("SOP_OLLAMA_MODEL", "deepseek-v4.1-flash:cloud")
+	t.Setenv("SOP_OLLAMA_TIMEOUT", "2m")
+
+	// The reused shared configuration path supplies the model, base URL, and
+	// timeout. The analyzer is wired to a fake chat provider, so the test needs
+	// neither a live Ollama endpoint nor Claude.
+	cfg, err := ollamaagent.ConfigFromEnv()
+	if err != nil {
+		t.Fatalf("ConfigFromEnv: %v", err)
+	}
+	chat := &fakeChat{output: `{"status":"PASS"}`}
+	a, err := NewOllamaAnalyzer(cfg, chat)
+	if err != nil {
+		t.Fatalf("NewOllamaAnalyzer: %v", err)
+	}
+
+	// (a) The reported provider and model are exactly the configured values.
+	if got := a.JEVProvider(); got != "ollama" {
+		t.Fatalf("JEVProvider = %q, want %q", got, "ollama")
+	}
+	if got := a.JEVModel(); got != cfg.Model {
+		t.Fatalf("JEVModel = %q, want %q", got, cfg.Model)
+	}
+
+	// (c) Nothing shaped like a secret appears in the recorded provider/model
+	// metadata: not the sentinel, and not a secret-shaped field name.
+	metadata := a.JEVProvider() + " / " + a.JEVModel()
+	if strings.Contains(metadata, sentinel) {
+		t.Fatalf("recorded provider/model metadata leaked the sentinel: %q", metadata)
+	}
+	for _, shaped := range []string{"api_key", "apikey", "authorization", "bearer", "secret", "token", "password", "credential"} {
+		if strings.Contains(strings.ToLower(metadata), shaped) {
+			t.Fatalf("recorded provider/model metadata contains secret-shaped field %q: %q", shaped, metadata)
+		}
+	}
+
+	// (b) The reported provider is a canonical known provider id, validated
+	// through the provider package rather than compared as a raw string, and it
+	// is invariant to the model string.
+	id, err := provider.ParseID(a.JEVProvider())
+	if err != nil {
+		t.Fatalf("JEVProvider %q is not a canonical provider id: %v", a.JEVProvider(), err)
+	}
+	if id != provider.Ollama {
+		t.Fatalf("provider id = %q, want %q", id, provider.Ollama)
+	}
+	for _, model := range []string{"deepseek-v4.1-flash:cloud", "qwen3:4b", "nemotron-3-nano:30b-cloud"} {
+		alt := testConfig()
+		alt.Model = model
+		am, err := NewOllamaAnalyzer(alt, &fakeChat{output: `{"status":"PASS"}`})
+		if err != nil {
+			t.Fatalf("NewOllamaAnalyzer(%q): %v", model, err)
+		}
+		if am.JEVProvider() != a.JEVProvider() {
+			t.Fatalf("JEVProvider changed with model %q: %q, want %q", model, am.JEVProvider(), a.JEVProvider())
+		}
+		if am.JEVModel() != model {
+			t.Fatalf("JEVModel = %q, want %q", am.JEVModel(), model)
+		}
+		if _, err := provider.ParseID(am.JEVProvider()); err != nil {
+			t.Fatalf("JEVProvider %q is not canonical for model %q: %v", am.JEVProvider(), model, err)
+		}
+	}
+
+	// (d) The analysis runs against the fake chat provider only: it completes
+	// with no Claude, no live Ollama, and no network.
+	if _, err := a.Analyze(context.Background(), Request{Task: "t"}); err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if chat.calls != 1 {
+		t.Fatalf("fake provider calls = %d, want 1", chat.calls)
+	}
+	if chat.model != cfg.Model {
+		t.Fatalf("provider model = %q, want %q", chat.model, cfg.Model)
+	}
+}
+
+// TestUnknownCategoryFailsClosed asserts the analyzer fails closed when the model
+// reports a non-empty category outside the closed JEV category vocabulary: Analyze
+// returns a non-nil error and the zero Result. An unrecognized category is never
+// silently coerced to the unspecified value, because that would drop the model's
+// classification and could let a mislabeled security-family finding bypass the
+// router's conservative HIGH floor. It uses only the in-process fake chat provider:
+// no live provider and no network.
+func TestUnknownCategoryFailsClosed(t *testing.T) {
+	out, err := json.Marshal(modelOutput{
+		Status:  "FINDINGS",
+		Summary: "issue",
+		Findings: []modelFinding{{
+			ID: "F1", Severity: "HIGH", Category: "totally_unknown_category", Message: "issue",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal model output: %v", err)
+	}
+	chat := &fakeChat{output: string(out)}
+	a, err := NewOllamaAnalyzer(testConfig(), chat)
+	if err != nil {
+		t.Fatalf("NewOllamaAnalyzer: %v", err)
+	}
+	res, err := a.Analyze(context.Background(), Request{Task: "t"})
+	if err == nil {
+		t.Fatal("expected a fail-closed error for an unknown non-empty category")
+	}
+	if res.Status != "" || len(res.Findings) != 0 || res.Summary != "" || res.StructuredEvidence != nil {
+		t.Fatalf("result = %+v, want a zero Result on an unknown non-empty category", res)
+	}
+}
+
+// TestValidSecurityCategoryRemainsValid asserts a valid security-family category is
+// preserved through the analyzer: the evidence stays valid and the item keeps its
+// typed category, so the router's conservative HIGH floor still applies. It uses
+// only the in-process fake chat provider: no live provider and no network.
+func TestValidSecurityCategoryRemainsValid(t *testing.T) {
+	out, err := json.Marshal(modelOutput{
+		Status:  "FINDINGS",
+		Summary: "issue",
+		Findings: []modelFinding{{
+			ID: "F1", Severity: "MEDIUM", Category: "security", Message: "hardcoded secret",
+			Evidence: "literal in source",
+		}},
+	})
+	if err != nil {
+		t.Fatalf("marshal model output: %v", err)
+	}
+	chat := &fakeChat{output: string(out)}
+	a, err := NewOllamaAnalyzer(testConfig(), chat)
+	if err != nil {
+		t.Fatalf("NewOllamaAnalyzer: %v", err)
+	}
+	res, err := a.Analyze(context.Background(), Request{Task: "t"})
+	if err != nil {
+		t.Fatalf("Analyze: %v", err)
+	}
+	if res.StructuredEvidence == nil {
+		t.Fatal("StructuredEvidence = nil, want non-nil evidence")
+	}
+	if err := res.StructuredEvidence.Validate(); err != nil {
+		t.Fatalf("StructuredEvidence failed validation: %v", err)
+	}
+	if len(res.StructuredEvidence.Items) != 1 {
+		t.Fatalf("evidence items = %d, want 1", len(res.StructuredEvidence.Items))
+	}
+	if got := res.StructuredEvidence.Items[0].Category; got != CategorySecurity {
+		t.Errorf("item category = %q, want %q", got, CategorySecurity)
+	}
+}
+
+// categoryEnumFromSchema extracts the findings[].items.properties.category enum
+// from the shipped schema, so the vocabulary test reads the real constraint
+// rather than a copy of it.
+func categoryEnumFromSchema(t *testing.T, schema json.RawMessage) []string {
+	t.Helper()
+	var doc struct {
+		Properties struct {
+			Findings struct {
+				Items struct {
+					Properties struct {
+						Category struct {
+							Enum []string `json:"enum"`
+						} `json:"category"`
+					} `json:"properties"`
+				} `json:"items"`
+			} `json:"findings"`
+		} `json:"properties"`
+	}
+	if err := json.Unmarshal(schema, &doc); err != nil {
+		t.Fatalf("schema is not valid JSON: %v", err)
+	}
+	return doc.Properties.Findings.Items.Properties.Category.Enum
+}
+
+// TestPromptAndSchemaAdvertiseEveryCategory asserts the rendered prompt and the
+// shipped JSON schema category enum advertise every value in the authoritative
+// vocabulary (Categories, derived from evidence.go) and nothing else, so a drift
+// between the advertised and the validated sets fails here.
+func TestPromptAndSchemaAdvertiseEveryCategory(t *testing.T) {
+	cats := Categories()
+	if len(cats) == 0 {
+		t.Fatal("authoritative category vocabulary is empty")
+	}
+
+	a := &OllamaAnalyzer{cfg: testConfig()}
+	prompt := a.buildPrompt(Request{Task: "t"})
+	for _, c := range cats {
+		if !strings.Contains(prompt, string(c)) {
+			t.Errorf("prompt does not advertise category %q", c)
+		}
+	}
+
+	enum := categoryEnumFromSchema(t, jevOutputJSONSchema)
+	if len(enum) != len(cats) {
+		t.Fatalf("schema category enum has %d values, authoritative set has %d: %v", len(enum), len(cats), enum)
+	}
+	enumSet := make(map[string]bool, len(enum))
+	for _, v := range enum {
+		if enumSet[v] {
+			t.Errorf("schema category enum repeats %q", v)
+		}
+		enumSet[v] = true
+	}
+	for _, c := range cats {
+		if !enumSet[string(c)] {
+			t.Errorf("schema category enum missing %q", c)
+		}
+	}
+}
+
+// TestEveryAuthoritativeCategoryYieldsValidEvidence asserts every valid category
+// is preserved through the analyzer and yields valid evidence, so the advertised
+// vocabulary is actually accepted.
+func TestEveryAuthoritativeCategoryYieldsValidEvidence(t *testing.T) {
+	for _, c := range Categories() {
+		c := c
+		t.Run(string(c), func(t *testing.T) {
+			out, err := json.Marshal(modelOutput{
+				Status:  "FINDINGS",
+				Summary: "issue",
+				Findings: []modelFinding{{
+					ID: "F1", Severity: "HIGH", Category: string(c), Message: "issue",
+				}},
+			})
+			if err != nil {
+				t.Fatalf("marshal model output: %v", err)
+			}
+			chat := &fakeChat{output: string(out)}
+			a, err := NewOllamaAnalyzer(testConfig(), chat)
+			if err != nil {
+				t.Fatalf("NewOllamaAnalyzer: %v", err)
+			}
+			res, err := a.Analyze(context.Background(), Request{Task: "t"})
+			if err != nil {
+				t.Fatalf("Analyze: %v", err)
+			}
+			if res.StructuredEvidence == nil {
+				t.Fatal("StructuredEvidence = nil, want non-nil evidence")
+			}
+			if err := res.StructuredEvidence.Validate(); err != nil {
+				t.Fatalf("evidence failed validation: %v", err)
+			}
+			if len(res.StructuredEvidence.Items) != 1 {
+				t.Fatalf("evidence items = %d, want 1", len(res.StructuredEvidence.Items))
+			}
+			if got := res.StructuredEvidence.Items[0].Category; got != c {
+				t.Errorf("item category = %q, want %q", got, c)
+			}
+		})
 	}
 }

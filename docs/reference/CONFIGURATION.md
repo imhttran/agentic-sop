@@ -70,7 +70,7 @@ workflow:
 # Optional decision layer (off by default; the deterministic rules are the
 # baseline).
 # decision:
-#   provider: deterministic # deterministic | jev
+#   provider: deterministic # deterministic | command
 #   enabled: false
 #   thresholds:
 #     route_to_strong_model: 0.7
@@ -153,7 +153,8 @@ workflow:
 | `early_jev.fail_on`                     | `quality.fail_on`        | Severities that escalate an early-JEV result to a human boundary.                          |
 | `human.approval_before_commit`          | `true`                   | When on, `sop commit` / `sop pr` require `--yes`.                                          |
 | `workflow.mode`                         | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
-| `decision.provider`                     | `deterministic`          | Optional decision layer: `deterministic` (baseline rules) or `jev` (JEV adapter).          |
+| `decision.provider`                     | `deterministic`          | Optional decision layer: `deterministic` (baseline rules, the default) or `command` (provider-neutral external adapter; requires `decision.command`).          |
+| `decision.command`                      | —                        | External adapter argv: the executable followed by its arguments, in order. Required when `decision.provider: command`. |
 | `decision.enabled`                      | `false`                  | Enable the optional decision layer.                                                        |
 | `decision.thresholds.route_to_strong_model` | `0.7`               | Confidence below this uses the stronger model class; must be within `[0,1]`.               |
 | `decision.thresholds.require_human`     | `0.4`                    | Confidence below this (or a HIGH choice) needs a human boundary; must be within `[0,1]`.   |
@@ -551,8 +552,9 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
 Two optional policy blocks describe how SOP decides to proceed without a human.
 
 - `decision` is the optional decision layer. It is **off by default**: the
-  deterministic rules are the baseline, and a JEV adapter must demonstrate value
-  before it is trusted. `decision.provider` is `deterministic` (default) or `jev`;
+  deterministic rules are the baseline, and an external decision adapter must demonstrate value
+  before it is trusted. `decision.provider` is `deterministic` (default) or
+  `command` (a provider-neutral external adapter, which requires `decision.command`);
   `decision.thresholds` route a low-confidence decision to the stronger model
   (`route_to_strong_model`, default `0.7`) or to a human (`require_human`, default
   `0.4`). `features.jev_decisions` is a pre-existing signal that selects the

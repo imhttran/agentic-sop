@@ -290,10 +290,10 @@ func (h Human) RequiresApprovalBeforeCommit() bool {
 }
 
 // DecisionConfig holds the decision-layer policy. The layer is disabled by
-// default: the deterministic rules are the baseline, and a Jev adapter must
-// demonstrate value before it is trusted (plan T037).
+// default: the deterministic rules are the baseline, and an external decision
+// adapter must demonstrate value before it is trusted (plan T037).
 type DecisionConfig struct {
-	Provider   string              `yaml:"provider"` // deterministic | jev | command
+	Provider   string              `yaml:"provider"` // deterministic | command
 	Enabled    bool                `yaml:"enabled"`
 	Thresholds decision.Thresholds `yaml:"thresholds"`
 	// Command is the executable argv of an external, provider-neutral decision
@@ -576,9 +576,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	switch strings.TrimSpace(c.Decision.Provider) {
-	case "deterministic", "jev", "command":
+	case "deterministic", "command":
 	default:
-		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, jev, command)", c.Decision.Provider)
+		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, command)", c.Decision.Provider)
 	}
 	if strings.TrimSpace(c.Decision.Provider) == "command" && len(c.Decision.Command) == 0 {
 		return errors.New("config: decision.provider \"command\" requires decision.command")
@@ -679,7 +679,7 @@ func (c *Config) validateEarlyJEV() error {
 // explicitly set, and nothing is enabled by default.
 //
 // It reads only the early_jev flag: quality.jev.enabled, the decision-layer
-// signals (features.jev_decisions and decision.provider: jev), and models are
+// signals (features.jev_decisions and decision.provider), and models are
 // NOT consulted. Enabling the early layer MUST NOT require — or imply —
 // quality.jev.enabled, and vice versa.
 func (c *Config) EarlyJEVActive() bool {
@@ -742,7 +742,7 @@ func (c *Config) EarlyJEVFailOn() []string {
 // new quality.jev.enabled flag is explicitly set. Nothing is enabled by default.
 //
 // The pre-existing decision-layer signals (features.jev_decisions and
-// decision.provider: jev) are NOT consulted here and cannot turn JEV on by
+// decision.provider) are NOT consulted here and cannot turn JEV on by
 // themselves. Those signals select or describe the decision layer, which is a
 // separate capability (plan T033–T046); enabling them does not enable JEV, and
 // a project that wants JEV must set quality.jev.enabled: true explicitly.

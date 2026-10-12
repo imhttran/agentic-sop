@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -52,9 +53,16 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 	}
 
 	analyzer, err := d.newJEVAnalyzer(cfg)
-	if err != nil || analyzer == nil {
-		// A disabled/misconfigured JEV is never fatal to the lifecycle; record
-		// nothing rather than failing the run.
+	if err != nil {
+		// A configured JEV whose analyzer cannot be constructed is never fatal to
+		// the lifecycle, but it is not silent either: record a fixed, secret-free
+		// diagnostic so the failure is observable without echoing the raw error,
+		// endpoint, or credentials. Gate evidence is unchanged.
+		emitJEVAnalyzerUnavailable(ctx)
+		return nil
+	}
+	if analyzer == nil {
+		// No implementation wired: JEV stays optional, non-fatal, and silent.
 		return nil
 	}
 
@@ -90,6 +98,20 @@ func runOptionalJEV(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 	}
 
 	return &jevRunEvidence{TaskID: spec.ID, RunID: rn.State().ID, Evidence: ev, Result: outcome.Result, Metrics: &metrics}
+}
+
+// jevAnalyzerUnavailableAction is the fixed activity action recorded when a
+// configured JEV analyzer factory fails. It is a constant label, never the raw
+// error, so the diagnostic cannot leak an endpoint, credential, or provider text.
+const jevAnalyzerUnavailableAction = "analyzer-unavailable"
+
+// emitJEVAnalyzerUnavailable records on the activity stream that a configured
+// JEV could not construct its analyzer. It is diagnostic only: it emits a fixed,
+// secret-free label and never copies the factory's own error text, and it never
+// changes the lifecycle (the run proceeds exactly as if JEV were absent). It is a
+// no-op when no recorder is present.
+func emitJEVAnalyzerUnavailable(ctx context.Context) {
+	activity.FromContext(ctx).Emit(activity.StageJEV, jevAnalyzerUnavailableAction, "analyzer construction failed")
 }
 
 // jevRunEvidence is a JEV result stamped with the task and run that produced it.
@@ -573,11 +595,27 @@ func jevEvidence(outcome runpkg.JEVOutcome) *quality.JEVEvidence {
 	if outcome.FailClosed() {
 		return &quality.JEVEvidence{
 			FailClosed: true,
-			Reason:     "JEV analysis failed (fail closed): " + outcome.Error.Error(),
+			Reason:     jevFailClosedReason(outcome.Error),
 		}
 	}
 	ev := quality.NewJEVEvidence(outcome.Result)
 	return &ev
+}
+
+// jevFailClosedReason builds the persisted fail-closed reason for an analyzer
+// error. It is bounded and class-only: it never echoes the raw analyzer error,
+// so a real provider failure cannot leak an endpoint URL, a response body
+// (the provider client bounds the captured body), a token, or any other
+// credential onto the gate reason. A *jev.ProviderError contributes its
+// focused class; any other error falls back to a fixed generic class. The
+// error's classification and the fail-closed behavior are unchanged.
+func jevFailClosedReason(err error) string {
+	class := "provider-error"
+	var pe *jev.ProviderError
+	if errors.As(err, &pe) && pe.Kind != "" {
+		class = string(pe.Kind)
+	}
+	return "JEV analysis failed (fail closed): " + class
 }
 
 // suiteSummary renders the validation outcome as bounded text.
@@ -614,46 +652,66 @@ func reviewSummary(report review.Report) string {
 // /dev/null; only the side that names a real path is recorded. A rename is
 // recorded on BOTH its sides (git's `rename from` / `rename to` lines), so a
 // renamed file is treated as a real repository path rather than an opaque diff
-// that could be silently excluded from attribution. Diff header lines may carry
-// a trailing tab and timestamp, so the path is trimmed at the tab as well as at
-// surrounding whitespace.
+// that could be silently excluded from attribution. Git C-quotes a path that
+// contains unusual characters (non-ASCII, a quote, a backslash, or a tab) and
+// appends a tab-separated timestamp to some header lines; both are decoded here
+// (see diffHeaderPath), so a quoted or space-containing path is attributed under
+// its real name rather than dropped from the change set.
 func changedFiles(diff string) []string {
 	seen := map[string]bool{}
 	var files []string
 	add := func(path string) {
-		path = diffHeaderPath(path)
 		if path == "" || path == "/dev/null" || seen[path] {
 			return
 		}
 		seen[path] = true
 		files = append(files, path)
 	}
+	// side decodes one git diff header side ("--- a/x" or "+++ b/x"), returning the
+	// repository-relative path (the a/ or b/ prefix stripped) and whether the line
+	// is a real header side. A /dev/null side decodes to "/dev/null"; a line that
+	// does not carry the expected prefix decodes to the empty path, so a diff
+	// content line that merely resembles a header is not mistaken for one.
+	side := func(line, marker, prefix string) (string, bool) {
+		rest, ok := strings.CutPrefix(line, marker+" ")
+		if !ok {
+			return "", false
+		}
+		decoded := diffHeaderPath(rest)
+		if decoded == "/dev/null" {
+			return decoded, true
+		}
+		if !strings.HasPrefix(decoded, prefix) {
+			return "", false
+		}
+		return strings.TrimPrefix(decoded, prefix), true
+	}
 
 	lines := strings.Split(diff, "\n")
 	for i := 0; i < len(lines); i++ {
 		line := lines[i]
 		switch {
-		case strings.HasPrefix(line, "--- a/"):
-			// The "---" side names a real file unless it is a new file (the
-			// "+++" side is /dev/null), in which case the next line carries the
-			// real path.
-			from := strings.TrimPrefix(line, "--- a/")
-			to := ""
-			if i+1 < len(lines) && strings.HasPrefix(lines[i+1], "+++ b/") {
-				to = strings.TrimPrefix(lines[i+1], "+++ b/")
+		case strings.HasPrefix(line, "--- "):
+			from, ok := side(line, "---", "a/")
+			if !ok {
+				continue
 			}
-			if diffHeaderPath(from) == "/dev/null" {
+			if from == "/dev/null" {
 				// New file: the real path is on the "+++" side.
-				add(to)
+				if i+1 < len(lines) {
+					if to, ok := side(lines[i+1], "+++", "b/"); ok {
+						add(to)
+					}
+				}
 				continue
 			}
 			add(from)
-		case strings.HasPrefix(line, "+++ b/"):
-			to := strings.TrimPrefix(line, "+++ b/")
+		case strings.HasPrefix(line, "+++ "):
+			to, ok := side(line, "+++", "b/")
 			// A "+++" side that names /dev/null is a deletion; its real path was
 			// already recorded from the "---" side above. Record it here only when
 			// it names a real path (additions and modifications).
-			if diffHeaderPath(to) == "/dev/null" {
+			if !ok || to == "/dev/null" {
 				continue
 			}
 			add(to)
@@ -661,21 +719,49 @@ func changedFiles(diff string) []string {
 			// A rename names a real repository path on each side. Both sides are
 			// recorded so a renamed file is never mistaken for an opaque diff and
 			// silently excluded from attribution.
-			add(strings.TrimPrefix(line, "rename from "))
+			add(diffHeaderPath(strings.TrimPrefix(line, "rename from ")))
 		case strings.HasPrefix(line, "rename to "):
-			add(strings.TrimPrefix(line, "rename to "))
+			add(diffHeaderPath(strings.TrimPrefix(line, "rename to ")))
 		}
 	}
 	return files
 }
 
-// diffHeaderPath normalizes a path taken from a git diff header line: git appends
-// a tab-separated timestamp to some header lines, and the path may carry
-// incidental surrounding whitespace. A header naming no path (an empty or
-// /dev/null side) is returned unchanged so callers can detect it.
+// diffHeaderPath decodes the path field of a git diff header line. Git wraps the
+// whole token — including the a/ or b/ prefix — in double quotes and C-escapes it
+// when the path contains unusual characters (non-ASCII, a quote, a backslash, or
+// a tab), and appends a tab-separated timestamp to some header lines. A quoted
+// token is C-unquoted; an unquoted token is cut at the first tab. Only the
+// tab-separated suffix is removed: surrounding whitespace is preserved, so a path
+// that legitimately begins or ends with a space is not corrupted. A header naming
+// no path (an empty or /dev/null side) is returned as-is so callers can detect it.
 func diffHeaderPath(path string) string {
-	if i := strings.IndexByte(path, '\t'); i >= 0 {
-		path = path[:i]
+	if strings.HasPrefix(path, `"`) {
+		if end := closingQuote(path); end >= 0 {
+			if unquoted, err := strconv.Unquote(path[:end+1]); err == nil {
+				return unquoted
+			}
+		}
+		return path
 	}
-	return strings.TrimSpace(path)
+	if i := strings.IndexByte(path, '\t'); i >= 0 {
+		return path[:i]
+	}
+	return path
+}
+
+// closingQuote returns the index of the double quote that closes a git C-quoted
+// token beginning at index 0, or -1 when the token is not terminated. Git escapes
+// an embedded backslash or double quote with a backslash, so an escaped byte is
+// skipped rather than mistaken for the terminator.
+func closingQuote(s string) int {
+	for i := 1; i < len(s); i++ {
+		switch s[i] {
+		case '\\':
+			i++
+		case '"':
+			return i
+		}
+	}
+	return -1
 }
