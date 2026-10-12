@@ -66,7 +66,7 @@ func decisionEvidenceEnabled(cfg config.Config) bool {
 // evidence, it returns res UNCHANGED (a strict no-op). Otherwise it replaces the
 // result's decision with a human boundary produced by the single policy path
 // (autonomy.Decide), so the provider can only add attention.
-func applyDecisionEvidence(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, res lifeResult) lifeResult {
+func applyDecisionEvidence(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, res lifeResult, observe ...func(*decisionEvidenceDoc)) lifeResult {
 	if strings.TrimSpace(string(res.classification.Disposition)) == "" {
 		// A passing run (or no classification) has no failure to attend to; the
 		// checkpoint is a strict no-op.
@@ -84,20 +84,47 @@ func applyDecisionEvidence(ctx context.Context, cfg config.Config, d deps, spec 
 		// attention to a result that would otherwise proceed automatically.
 		return res
 	}
-	escalation, ok, failure := decisionEvidenceEscalation(ctx, cfg, d, spec, res.classification)
+	escalation, ok, failure, doc := decisionEvidenceEscalation(ctx, cfg, d, spec, res.classification)
+	if doc != nil {
+		// Record the sanitized boundary outcome: the governed baseline action, and the
+		// final action (unchanged unless the provider added attention). The record is
+		// diagnostic only and never authority; the deterministic decision below is
+		// unchanged by it.
+		doc.BaselineAction = string(base.Action)
+		doc.FinalAction = string(base.Action)
+		doc.Escalated = false
+	}
 	if failure != nil {
 		// A CONFIGURED provider was consulted and could not supply usable evidence.
 		// Record it distinctly so "provider failed" is never silently identical to "no
 		// provider configured" — but the governed baseline always stands, and a provider
 		// failure is never a success, an approval, or an authorization.
 		emitDecisionEvidenceUnavailable(ctx, failure)
+		emitDecisionEvidenceRecord(observe, doc)
 		return res
 	}
 	if !ok {
+		emitDecisionEvidenceRecord(observe, doc)
 		return res
 	}
+	if doc != nil {
+		doc.FinalAction = string(escalation.Action)
+		doc.Escalated = true
+	}
+	emitDecisionEvidenceRecord(observe, doc)
 	res.decision = escalation
 	return res
+}
+
+// emitDecisionEvidenceRecord hands the sanitized SEAM-004 record to the first
+// observer, when one is present. Observation is a SIDE EFFECT only: the returned
+// lifecycle result is unchanged, so the checkpoint remains a strict no-op for a
+// caller that does not observe.
+func emitDecisionEvidenceRecord(observe []func(*decisionEvidenceDoc), doc *decisionEvidenceDoc) {
+	if len(observe) == 0 || observe[0] == nil || doc == nil {
+		return
+	}
+	observe[0](doc)
 }
 
 // attentionable reports whether a governed decision would proceed automatically
@@ -120,19 +147,19 @@ func attentionable(d autonomy.Decision) bool {
 // caller can RECORD it distinctly; that failure is never authority, and the governed
 // baseline always stands. Absent/disabled is (zero, false, nil): a strict no-op
 // indistinguishable from pre-SEAM behavior.
-func decisionEvidenceEscalation(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, cls failure.Classification) (autonomy.Decision, bool, error) {
+func decisionEvidenceEscalation(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, cls failure.Classification) (autonomy.Decision, bool, error, *decisionEvidenceDoc) {
 	if !decisionEvidenceEnabled(cfg) || d.newDecisionProvider == nil {
-		return autonomy.Decision{}, false, nil
+		return autonomy.Decision{}, false, nil, nil
 	}
 	provider, err := d.newDecisionProvider(cfg)
 	if err != nil {
 		// A misconfigured provider is a failure, recorded distinctly; deterministic
 		// policy owns the outcome exactly as before.
-		return autonomy.Decision{}, false, err
+		return autonomy.Decision{}, false, err, newDecisionEvidenceDoc("unavailable", decisionEvidenceFailureLabel(err), decision.Decision{})
 	}
 	if provider == nil {
 		// No provider configured: a strict no-op, indistinguishable from disabled.
-		return autonomy.Decision{}, false, nil
+		return autonomy.Decision{}, false, nil, nil
 	}
 	callCtx, cancel := context.WithTimeout(ctx, decisionEvidenceTimeout)
 	defer cancel()
@@ -141,19 +168,40 @@ func decisionEvidenceEscalation(ctx context.Context, cfg config.Config, d deps, 
 		// Unavailable, timed out, cancelled, unsupported, indeterminate, malformed, or
 		// a process failure: never a success, never an approval. The governed baseline
 		// stands.
-		return autonomy.Decision{}, false, err
+		return autonomy.Decision{}, false, err, newDecisionEvidenceDoc("unavailable", decisionEvidenceFailureLabel(err), decision.Decision{})
 	}
 	// SOP owns validation: the provider is never trusted to validate its own result.
 	if err := decision.Validate(dec); err != nil {
-		return autonomy.Decision{}, false, err
+		// Rejected by SOP's validator: the canonical choice/confidence are NOT recorded,
+		// so a rejected result can never be read as accepted evidence.
+		return autonomy.Decision{}, false, err, newDecisionEvidenceDoc("rejected", decisionEvidenceFailureLabel(err), decision.Decision{})
 	}
 	if !decisionEvidenceAdverse(dec) {
 		// Benign or lower-attention evidence adds nothing: a provider can never make
 		// SOP less conservative than the governed baseline. Confidence is evidence,
 		// never authorization, so a high-confidence benign choice still adds nothing.
-		return autonomy.Decision{}, false, nil
+		return autonomy.Decision{}, false, nil, newDecisionEvidenceDoc("benign", "", dec)
 	}
-	return autonomy.Decide(decisionEvidenceClassification(dec), cfg.AutonomyPolicy()), true, nil
+	return autonomy.Decide(decisionEvidenceClassification(dec), cfg.AutonomyPolicy()), true, nil, newDecisionEvidenceDoc("accepted", "", dec)
+}
+
+// newDecisionEvidenceDoc builds a sanitized SEAM-004 evidence record. Choice and
+// Confidence are copied ONLY for a result SOP's own validator accepted (benign or
+// adverse); for a rejected/unavailable outcome they are left empty so the record
+// can never imply successful evidence capture.
+func newDecisionEvidenceDoc(outcomeClass, failureLabel string, dec decision.Decision) *decisionEvidenceDoc {
+	doc := &decisionEvidenceDoc{
+		Version:      decisionEvidenceVersion,
+		Contract:     decisionEvidenceContract,
+		Consulted:    true,
+		OutcomeClass: outcomeClass,
+		FailureLabel: failureLabel,
+	}
+	if outcomeClass == "benign" || outcomeClass == "accepted" {
+		doc.Choice = string(dec.Choice)
+		doc.Confidence = dec.Confidence
+	}
+	return doc
 }
 
 // emitDecisionEvidenceUnavailable records on the activity stream that a configured
@@ -185,6 +233,33 @@ func decisionEvidenceFailureLabel(err error) string {
 	default:
 		return "provider unavailable"
 	}
+}
+
+// decisionEvidenceVersion and decisionEvidenceContract identify the schema of the
+// sanitized SEAM-004 evidence record.
+const (
+	decisionEvidenceVersion  = 1
+	decisionEvidenceContract = "SEAM-002/SEAM-004"
+)
+
+// decisionEvidenceDoc is the sanitized, credential-free record of the optional
+// external decision-evidence checkpoint (SEAM-004) for one governed run. It is
+// diagnostic evidence: it records what the boundary did and NEVER raw prompts,
+// model responses, credentials, provider endpoints, or filesystem paths, and it
+// never feeds a decision. Choice and Confidence are recorded only when SOP's own
+// validator accepted the provider result.
+type decisionEvidenceDoc struct {
+	RunID          string  `json:"run_id,omitempty"`
+	Version        int     `json:"version"`
+	Contract       string  `json:"contract"`
+	Consulted      bool    `json:"consulted"`
+	OutcomeClass   string  `json:"outcome_class"`
+	Choice         string  `json:"choice,omitempty"`
+	Confidence     float64 `json:"confidence,omitempty"`
+	FailureLabel   string  `json:"failure_label,omitempty"`
+	BaselineAction string  `json:"baseline_action,omitempty"`
+	FinalAction    string  `json:"final_action,omitempty"`
+	Escalated      bool    `json:"escalated"`
 }
 
 // decisionEvidenceAdverse reports whether validated provider evidence adds
