@@ -38,6 +38,62 @@ func reconcileInspectWithAgent(t *testing.T, dir, name string, st *fakeStore, ag
 	})
 }
 
+// TestAcceptanceCheckChangeIsATaskDefinitionChange proves at the comparison level
+// that adding, removing, or modifying a criterion each makes sameTaskDefinition and
+// equivalentExecutedChange report a real change. The call path is traced once:
+//
+//	reconcileGraph (planflow.go)
+//	  -> sameTaskDefinition (compare.go)         // never-executed classification
+//	  -> equivalentExecutedChange (compare.go)   // executed-change semantics
+//	       -> sameAcceptanceCriteria (compare.go) -> splitCriteria / canonicalProse
+//
+// No second classification path is introduced: acceptance-check edits reach the
+// same diff that decides Updated vs ChangedExecuted.
+func TestAcceptanceCheckChangeIsATaskDefinitionChange(t *testing.T) {
+	base := &domain.Task{ID: "S001", Title: "Application skeleton", Objective: "Create it", AcceptanceCriteria: "starts\nstops cleanly"}
+
+	cases := map[string]*domain.Task{
+		"added":    {ID: "S001", Title: "Application skeleton", Objective: "Create it", AcceptanceCriteria: "starts\nstops cleanly\nlogs"},
+		"removed":  {ID: "S001", Title: "Application skeleton", Objective: "Create it", AcceptanceCriteria: "starts"},
+		"modified": {ID: "S001", Title: "Application skeleton", Objective: "Create it", AcceptanceCriteria: "starts quickly\nstops cleanly"},
+	}
+	for name, changed := range cases {
+		t.Run(name, func(t *testing.T) {
+			if sameTaskDefinition(base, changed) {
+				t.Errorf("sameTaskDefinition = true for a %s acceptance check, want false", name)
+			}
+			if equivalentExecutedChange(base, changed) {
+				t.Errorf("equivalentExecutedChange = true for a %s acceptance check, want false", name)
+			}
+		})
+	}
+}
+
+// TestAcceptanceCheckWhitespaceReorderIsAChange proves a whitespace-only edit to the
+// text inside a criterion is reported as a change rather than folded as equivalent.
+// The canonical comparison folds whitespace in literal-free prose and treats
+// independent criteria as an unordered conjunction, so an edit that only reorders
+// words/whitespace WITHIN one criterion is still a real change: it is not a reorder
+// of independent criteria.
+func TestAcceptanceCheckWhitespaceReorderIsAChange(t *testing.T) {
+	base := &domain.Task{ID: "S001", Title: "t", Objective: "o", AcceptanceCriteria: "prints the banner above the log"}
+	reordered := &domain.Task{ID: "S001", Title: "t", Objective: "o", AcceptanceCriteria: "the banner prints above the log"}
+	if sameTaskDefinition(base, reordered) {
+		t.Error("sameTaskDefinition = true for a whitespace/word reorder within one criterion, want false")
+	}
+	if equivalentExecutedChange(base, reordered) {
+		t.Error("equivalentExecutedChange = true for a whitespace/word reorder within one criterion, want false")
+	}
+
+	// A whitespace-only edit inside a quoted/literal criterion is byte-for-byte
+	// compared, so it too stays a change.
+	quotedBase := &domain.Task{ID: "S001", AcceptanceCriteria: "prints `a  b`"}
+	quotedEdit := &domain.Task{ID: "S001", AcceptanceCriteria: "prints `a b`"}
+	if sameAcceptanceCriteria(splitCriteria(quotedBase.AcceptanceCriteria), splitCriteria(quotedEdit.AcceptanceCriteria)) {
+		t.Error("whitespace inside a literal criterion must be a change")
+	}
+}
+
 // TestReconcileDeterministicCompileZeroModelCalls proves a changed, structured
 // source is compiled deterministically: repeated Inspect (with a model available
 // and configured) yields identical diagnostics and classifications and never calls

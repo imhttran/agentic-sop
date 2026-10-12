@@ -68,6 +68,51 @@ func TestInspectReportsChangedExecutedWithoutMutating(t *testing.T) {
 	}
 }
 
+// TestInspectReportsExecutedAcceptanceCheckChange proves the --list-changed listing
+// names an executed task whose acceptance checks were added, removed, or modified,
+// and applies nothing. This is the executable acceptance of ACC-004: a check change
+// to an executed task is listed as a changed executed task.
+func TestInspectReportsExecutedAcceptanceCheckChange(t *testing.T) {
+	cases := map[string]struct {
+		before, after string
+	}{
+		"added":    {before: "starts", after: "starts\nlogs started"},
+		"removed":  {before: "starts\nstops cleanly", after: "starts"},
+		"modified": {before: "starts", after: "starts within 5 seconds"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			st := prepareForReconcile(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.before, "\n")...))
+			markExecuted(taskByID(t, st.tasks, "S001"))
+			write(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.after, "\n")...))
+
+			planPath := filepath.Join(dir, config.DirName, planFileName)
+			metaPath := filepath.Join(dir, config.DirName, metaFileName)
+			beforePlan := read(t, planPath)
+			beforeMeta := read(t, metaPath)
+
+			res, err := inspect(t, dir, "PLAN.md", st)
+			if err != nil {
+				t.Fatalf("Inspect: %v", err)
+			}
+			if len(res.ChangedExecuted) != 1 || res.ChangedExecuted[0] != "S001" {
+				t.Errorf("ChangedExecuted = %v, want [S001]", res.ChangedExecuted)
+			}
+			if len(res.Updated) != 0 {
+				t.Errorf("Updated = %v, want none (an executed check change is not silently updated)", res.Updated)
+			}
+			// The listing must not mutate.
+			if got := read(t, planPath); got != beforePlan {
+				t.Error("Inspect rewrote the machine plan")
+			}
+			if got := read(t, metaPath); got != beforeMeta {
+				t.Error("Inspect rewrote the provenance")
+			}
+		})
+	}
+}
+
 // TestInspectReportsRemovedExecuted proves a task the requested plan drops is
 // reported rather than approved: a removed executed task cannot be reconciled
 // with --accept-changed, so the listing must never offer it as one.

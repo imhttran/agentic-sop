@@ -41,22 +41,27 @@ import (
 // dropped. Text fields are compared by canonicalProse and acceptance criteria as
 // independent-conjunction sets. A task's AcceptanceCriteria is stored as a single
 // string (one criterion per line), so it is split into independent items before
-// comparison.
+// comparison. The operator-declared acceptance checks (AcceptanceChecks) are part
+// of the executable definition too, so a check add/modify/remove makes two
+// definitions differ.
 func sameTaskDefinition(a, b *domain.Task) bool {
 	return canonicalProse(a.Title) == canonicalProse(b.Title) &&
 		canonicalProse(a.Objective) == canonicalProse(b.Objective) &&
 		sameAcceptanceCriteria(splitCriteria(a.AcceptanceCriteria), splitCriteria(b.AcceptanceCriteria)) &&
+		sameAcceptanceChecks(a.AcceptanceChecks, b.AcceptanceChecks) &&
 		sameExecutionMode(a.ExecutionMode, b.ExecutionMode) &&
 		sameStringSet(a.DependencyIDs, b.DependencyIDs)
 }
 
 // equivalentExecutedChange reports whether an executed task's definition changed only
 // in descriptive text: its executable semantics - the acceptance criteria, the
-// execution mode, and the dependencies - are unchanged under the conservative
-// comparisons. A real acceptance/negation/number/scope/dependency/mode change is not
-// equivalent.
+// operator-declared acceptance checks, the execution mode, and the dependencies -
+// are unchanged under the conservative comparisons. A real acceptance/check/
+// negation/number/scope/dependency/mode change is not equivalent, so a permissive
+// autonomy policy can never auto-reconcile it.
 func equivalentExecutedChange(cur, desired *domain.Task) bool {
 	return sameAcceptanceCriteria(splitCriteria(cur.AcceptanceCriteria), splitCriteria(desired.AcceptanceCriteria)) &&
+		sameAcceptanceChecks(cur.AcceptanceChecks, desired.AcceptanceChecks) &&
 		sameExecutionMode(cur.ExecutionMode, desired.ExecutionMode) &&
 		sameStringSet(cur.DependencyIDs, desired.DependencyIDs)
 }
@@ -200,6 +205,19 @@ func sameAcceptanceCriteria(a, b []string) bool {
 	return true
 }
 
+// sameAcceptanceChecks reports whether two operator-declared acceptance-check
+// lists are the same set of independent commands. Checks are shell commands (often
+// backticked in the plan), so each is compared as an exact string: unlike
+// literal-free prose, internal whitespace is meaningful and never folded, and a
+// trailing-whitespace-only variance is already trimmed away by the plan parser
+// before it reaches here. The order of independent checks is cosmetic, so they are
+// compared as a multiset (via sameStringSet), which also keeps a duplicated check
+// a real change rather than silently collapsing it. A check added, modified, or
+// removed therefore makes the definitions differ.
+func sameAcceptanceChecks(a, b []string) bool {
+	return sameStringSet(a, b)
+}
+
 // canonicalProse collapses whitespace only in literal-free prose: when a field
 // contains no quotes, backticks, or indented/fenced literals, its runs of
 // whitespace are folded to a single space. A field that contains any quote,
@@ -334,14 +352,16 @@ func plansEquivalent(a, b *planner.Plan) bool {
 }
 
 // sameStage reports whether two plan stages carry the same definition under the
-// conservative comparisons, including the capabilities the stage requires. A real
-// Requires change is a change; only cosmetic variance is equivalent.
+// conservative comparisons, including the capabilities the stage requires and the
+// operator-declared acceptance checks. A real Requires change or a check
+// add/modify/remove is a change; only cosmetic variance is equivalent.
 func sameStage(a, b planner.Stage) bool {
 	return canonicalProse(a.Title) == canonicalProse(b.Title) &&
 		canonicalProse(a.Objective) == canonicalProse(b.Objective) &&
 		sameStageKind(a.Kind, b.Kind) &&
 		sameExecutionMode(a.ExecutionMode, b.ExecutionMode) &&
 		sameAcceptanceCriteria(a.AcceptanceCriteria, b.AcceptanceCriteria) &&
+		sameAcceptanceChecks(a.AcceptanceChecks, b.AcceptanceChecks) &&
 		sameStringSet(a.Dependencies, b.Dependencies) &&
 		sameStringSet(a.Requires, b.Requires) &&
 		sameDeliverables(a.Deliverables, b.Deliverables)

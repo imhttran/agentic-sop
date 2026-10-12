@@ -789,12 +789,18 @@ agent:
   model: %s
 
 validation:
+  # Deterministic verification commands, run in order (build, then test, then
+  # lint) and stopping at the first failure. A task that changes the repository
+  # cannot pass without configured validation, so keep this block for any
+  # project SOP implements in. For a Go module the four required checks are
+  # go build, go test, go vet, and a gofmt formatting check.
   build:
     - go build ./...
   test:
     - go test ./...
   lint:
     - go vet ./...
+    - test -z "$(gofmt -l .)"
 
 review:
   # self | open-code-review

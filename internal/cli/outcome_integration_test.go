@@ -31,11 +31,37 @@ func outcomeFixtureAgent() *fakeCapabilityAgent {
 	return &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
 }
 
-func TestOutcomeIntegrationVerified(t *testing.T) {
+// TestOutcomeIntegrationDeliverableAloneIsPartial proves a passing gate plus an
+// existing declared deliverable is NOT VERIFIED: VERIFIED requires at least one
+// executed, passing acceptance check (ACC-008).
+func TestOutcomeIntegrationDeliverableAloneIsPartial(t *testing.T) {
 	dir := t.TempDir()
-	// The declared deliverable exists and the deterministic checks pass => VERIFIED.
+	// The declared deliverable exists and the deterministic checks pass, but no
+	// acceptance check was declared/executed => PARTIAL, never VERIFIED.
 	writeFile(t, dir, "out.md", "report\n")
 	writeFile(t, dir, "TASK.md", "# T001 --- Deliver a report\n\n## Objective\n\nWrite the report.\n\n## Deliverables\n\n- `out.md` — the report.\n")
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/out.md b/out.md\n", outcomeFixtureAgent(), "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if !strings.Contains(stdout, "outcome: PARTIAL") {
+		t.Errorf("stdout missing partial outcome: %q", stdout)
+	}
+	if got := outcomeStatus(t, dir); got != "PARTIAL" {
+		t.Errorf("outcome.json status = %q, want PARTIAL", got)
+	}
+}
+
+// TestOutcomeIntegrationVerifiedWithExecutedCheck proves a deliverable that exists
+// alongside an executed, passing acceptance check is VERIFIED.
+func TestOutcomeIntegrationVerifiedWithExecutedCheck(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "out.md", "report\n")
+	// The acceptance check `go vet ./...` must run against a real module and pass.
+	goModuleFixture(t, dir)
+	writeFile(t, dir, "TASK.md", "# T001 --- Deliver a report\n\n## Objective\n\nWrite the report.\n\n## Deliverables\n\n- `out.md` — the report.\n\n## Acceptance checks\n\n- go vet ./...\n")
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
 
 	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/out.md b/out.md\n", outcomeFixtureAgent(), "run", "--task", "TASK.md")

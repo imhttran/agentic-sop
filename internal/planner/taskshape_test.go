@@ -87,7 +87,9 @@ func TestPlanFromMarkdownRepoPlansHonourExecutionMode(t *testing.T) {
 
 // TestPlanFromMarkdownTaskShape covers the "## Tasks" shape field by field: the
 // recognized fields become plan fields, wrapped values are joined, and the
-// documentation-only fields (Status, Validation) are not consulted.
+// documentation-only fields (Status, Validation) are not consulted. A Files value
+// that lists several paths becomes one deliverable per path (ACC-010): each is a
+// bare path with no backticks and no trailing sentence punctuation.
 func TestPlanFromMarkdownTaskShape(t *testing.T) {
 	doc := "# PLAN — Sample\n\n## Project\n\nWidget\n\n## Summary\n\nAdd a widget.\n\n## Tasks\n\n" +
 		"### P1-001 — Build the skeleton\n\n" +
@@ -129,7 +131,7 @@ func TestPlanFromMarkdownTaskShape(t *testing.T) {
 	if len(first.Dependencies) != 0 {
 		t.Errorf("dependencies = %v, want none for an em-dash marker", first.Dependencies)
 	}
-	if !reflect.DeepEqual(first.Deliverables, []string{"`cmd/sop/main.go`, `internal/app/app.go`."}) {
+	if !reflect.DeepEqual(first.Deliverables, []string{"cmd/sop/main.go", "internal/app/app.go"}) {
 		t.Errorf("deliverables = %v", first.Deliverables)
 	}
 	if !reflect.DeepEqual(first.AcceptanceCriteria, []string{"the binary runs."}) {

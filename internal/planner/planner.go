@@ -222,6 +222,13 @@ func (p *Planner) generateValid(ctx context.Context, req agent.Request, pctx Pla
 // before validation (see applyPlanContext), so a known capability is never
 // downgraded or paralleled by a cosmetic re-derivation and no repair round is
 // spent on it.
+//
+// The agent's output is a MODEL plan, not the operator's plan document. A model
+// may never author a stage's deterministic acceptance checks: those are the
+// operator-authorized verifiable half of acceptance (PlanFromMarkdown reads them
+// from the operator's own plan), so every stage's AcceptanceChecks is cleared
+// here. The operator's Markdown path (PlanFromMarkdown/parseRenderedPlan) is
+// untouched, so checks an operator wrote survive.
 func decodePlan(content string, pctx PlanContext) (*Plan, error) {
 	data, err := normalize.JSON(content)
 	if err != nil {
@@ -230,6 +237,12 @@ func decodePlan(content string, pctx PlanContext) (*Plan, error) {
 	var plan Plan
 	if err := json.Unmarshal(data, &plan); err != nil {
 		return nil, fmt.Errorf("parse agent response: %w", err)
+	}
+	// A model plan contributes no acceptance checks. Clear them on every stage
+	// before the PlanContext is applied and the graph is validated, so a model can
+	// never author its own deterministic acceptance checks.
+	for i := range plan.Stages {
+		plan.Stages[i].AcceptanceChecks = nil
 	}
 	applyPlanContext(&plan, pctx)
 	if err := plan.Validate(); err != nil {

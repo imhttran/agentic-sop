@@ -137,7 +137,7 @@ workflow:
 | `agent.harness`                         | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
 | `agent.provider`                        | —                        | `ollama`, `llamacpp`, `mlx`, or `command`. Required when `harness: tool`.                  |
 | `agent.model`                           | —                        | Model ID. Required when `provider: ollama`, `llamacpp`, or `mlx`.                          |
-| `validation.build` / `test` / `lint`    | —                        | Command lists run in the project directory, in order, stopping at the first failure.       |
+| `validation.build` / `test` / `lint`    | —                        | Command lists run in the project directory, in order, stopping at the first failure. A task that changes the repository cannot pass without at least one configured command; SOP reports `VALIDATION_NOT_CONFIGURED` (a terminal configuration failure, not an approval) otherwise. |
 | `review.engine`                         | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
 | `review.delegation`                     | `false`                  | Review delegation flag.                                                                    |
 | `quality.require_tests`                 | `true`                   | Require tests as part of the quality policy.                                               |
