@@ -285,6 +285,7 @@ func TestBoundaryDoesNotMutateSOPPersistence(t *testing.T) {
 	_, _ = c.Task(ctx, pid, "t2")
 	_, _ = c.PlanSource(pid)
 	_, _ = c.Approvals(ctx, pid)
+	_ = c.PendingApprovals(ctx)
 	_ = c.Run(ctx, pid)
 	_ = c.Resume(ctx, pid)
 	_ = c.Retry(ctx, pid, "t2")
@@ -328,4 +329,58 @@ func snapshotTree(t *testing.T, dir string) map[string]string {
 		t.Fatal(err)
 	}
 	return out
+}
+
+// recordingSop is a sop binary that appends the verb of every invocation (no
+// truncation, unlike fakeSop), so a test can assert the complete set of verbs a
+// boundary operation drove across several projects.
+func recordingSop(t *testing.T) (bin string, verbs func() []string) {
+	t.Helper()
+	dir := t.TempDir()
+	record := filepath.Join(dir, "verbs")
+	bin = filepath.Join(dir, "sop")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$1\" >> " + record + "\nexit 0\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin, func() []string {
+		raw, err := os.ReadFile(record)
+		if err != nil {
+			return nil
+		}
+		trimmed := strings.TrimSpace(string(raw))
+		if trimmed == "" {
+			return nil
+		}
+		return strings.Split(trimmed, "\n")
+	}
+}
+
+// The cross-project inbox read delegates only to `sop approvals --json`, once per
+// project, and starts no other SOP operation: it adds no orchestration or
+// decision logic and no mutation path (docs/architecture/SOP-BOUNDARY.md).
+func TestPendingApprovalsDelegatesOnlyToSOPApprovals(t *testing.T) {
+	rootA := t.TempDir()
+	initProjectAt(t, rootA, "alpha")
+	rootB := t.TempDir()
+	initProjectAt(t, rootB, "beta")
+
+	bin, verbs := recordingSop(t)
+	c, err := New([]string{rootA, rootB}, bin, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_ = c.PendingApprovals(context.Background())
+
+	got := verbs()
+	if len(got) != 2 {
+		t.Fatalf("invocations = %v, want one per project", got)
+	}
+	for _, v := range got {
+		if v != "approvals" {
+			t.Fatalf("inbox drove %q, want only approvals", v)
+		}
+	}
 }

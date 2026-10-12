@@ -1,0 +1,115 @@
+package web
+
+import (
+	"database/sql"
+	"io/fs"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	assets "sop-controller"
+
+	"sop-controller/internal/sopclient"
+
+	_ "modernc.org/sqlite"
+)
+
+// GET /approvals renders SOP's applicable gates and delegates each decision to
+// the existing task-scoped approve/decline routes (CSRF included). The page is
+// read-only: it starts no command and manufactures no gate.
+func TestApprovalsInboxRendersPendingGates(t *testing.T) {
+	srv, id, _ := decisionServer(t, "")
+	_, body := get(t, srv.URL+"/approvals")
+
+	if !strings.Contains(body, "Pending approvals") {
+		t.Fatalf("inbox heading missing: %q", body)
+	}
+	if !strings.Contains(body, "demo") {
+		t.Errorf("project name missing from inbox")
+	}
+	if !strings.Contains(body, "x1") || !strings.Contains(body, "NEEDS_HUMAN") {
+		t.Errorf("gate not rendered: %q", body)
+	}
+	if !strings.Contains(body, "needs a human") {
+		t.Errorf("SOP-reported reason missing")
+	}
+	// The control must POST to the existing task-scoped route with a CSRF token.
+	if want := "/projects/" + id + "/tasks/x1/commands/approve"; !strings.Contains(body, want) {
+		t.Errorf("approve form not wired to %q", want)
+	}
+	if !strings.Contains(body, "name=\"csrf\"") {
+		t.Errorf("approve form missing csrf input")
+	}
+}
+
+// A failed `sop approvals --json` is shown as an unread listing, never as "no
+// gates": a failing SOP must be distinguishable from a quiet one.
+func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {
+	srv := unreadApprovalsServer(t)
+	_, body := get(t, srv.URL+"/approvals")
+
+	if !strings.Contains(body, "Could not be read") {
+		t.Fatalf("unread panel missing: %q", body)
+	}
+	if strings.Contains(body, "SOP reports no applicable approval gate") {
+		t.Errorf("an unread listing was rendered as 'no gates': %q", body)
+	}
+}
+
+// The projects list surfaces the attention count derived from SOP's listing.
+func TestProjectsListShowsAttentionBadge(t *testing.T) {
+	srv, _, _ := decisionServer(t, "")
+	_, body := get(t, srv.URL+"/projects")
+
+	if !strings.Contains(body, "needs attention") {
+		t.Fatalf("attention badge missing from projects list: %q", body)
+	}
+}
+
+// unreadApprovalsServer builds a project whose `sop approvals --json` fails (a
+// binary that exits non-zero and no persisted listing), so the approval read is
+// unreported rather than an empty success.
+func unreadApprovalsServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	root := t.TempDir()
+	dir := filepath.Join(root, ".agent-sdlc")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "config.yaml"),
+		[]byte("project:\n  name: \"demo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "state.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(testSchema); err != nil {
+		t.Fatal(err)
+	}
+	db.Close()
+
+	bin := filepath.Join(t.TempDir(), "sop")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	sop, err := sopclient.New([]string{root}, bin, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { sop.Close() })
+	views, err := NewViews(assets.FS)
+	if err != nil {
+		t.Fatalf("views: %v", err)
+	}
+	staticFS, err := fs.Sub(assets.FS, "static")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := httptest.NewServer(NewServer(Options{SOP: sop, Views: views, StaticFS: staticFS, Poll: time.Second, CommandTimeout: time.Minute}))
+	t.Cleanup(srv.Close)
+	return srv
+}

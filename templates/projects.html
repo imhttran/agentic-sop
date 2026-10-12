@@ -26,6 +26,11 @@
                         {{.PercentComplete}}%
                     </div>
                     <div class="counts">
+                        {{if .NeedsAttention}}
+                        <span class="badge s-attention"
+                            >{{.NeedsAttention}} needs attention</span
+                        >
+                        {{end}}
                         <span class="badge s-running"
                             >{{.Running}} running</span
                         >

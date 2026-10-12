@@ -36,6 +36,7 @@ func NewViews(fsys fs.FS) (*Views, error) {
 		"retryCount":             retryCount,
 		"blocked":                blocked,
 		"hasProviderModel":       hasProviderModel,
+		"hasModelSelection":      hasModelSelection,
 		"startedAt":              startedAt,
 		"elapsed":                elapsed,
 	}
@@ -186,6 +187,13 @@ func blocked(t sopclient.TaskDetail) bool {
 // hasProviderModel reports whether either half of provider/model is present.
 func hasProviderModel(r sopclient.RunInfo) bool {
 	return strings.TrimSpace(r.Provider) != "" || strings.TrimSpace(r.Model) != ""
+}
+
+// hasModelSelection reports whether SOP persisted a model-selection record
+// (report.json "model_selection"). The controller displays what SOP selected;
+// it never selects a model itself (docs/specs/AGENT-PROVIDER.md).
+func hasModelSelection(r sopclient.RunInfo) bool {
+	return r.ModelSelection.Present
 }
 
 // startedAt is the earliest attempt timestamp, or zero (CTRL008).

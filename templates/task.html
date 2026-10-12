@@ -29,7 +29,8 @@
                     <span class="badge {{statusClass .Task.State}}"
                         >{{.Task.State}}</span
                     >
-                    {{if .Task.RunStatus.Present}}{{if .Task.RunStatus.Stage}}<span
+                    {{if .Task.RunStatus.Present}}{{if
+                    .Task.RunStatus.Stage}}<span
                         class="badge {{stageClass .Task.RunStatus.Stage}}"
                         >stage {{.Task.RunStatus.Stage}}</span
                     >{{else}}<span class="badge s-planned"
@@ -71,7 +72,8 @@
                     <div>
                         <dt>Current stage</dt>
                         <dd>
-                            {{if .Task.RunStatus.Present}}{{if .Task.RunStatus.Stage}}<span
+                            {{if .Task.RunStatus.Present}}{{if
+                            .Task.RunStatus.Stage}}<span
                                 class="badge {{stageClass .Task.RunStatus.Stage}}"
                                 >{{.Task.RunStatus.Stage}}</span
                             >{{else}}<span class="badge s-planned"
@@ -105,7 +107,8 @@
                     <div>
                         <dt>Provider / model</dt>
                         <dd>
-                            {{if hasProviderModel .Task.Run}}<span class="badge s-running"
+                            {{if hasProviderModel .Task.Run}}<span
+                                class="badge s-running"
                                 >{{evidenceState true .Task.Run.Provider}} /
                                 {{evidenceState true .Task.Run.Model}}</span
                             >{{else}}<span class="badge s-unavailable"
@@ -114,9 +117,37 @@
                         </dd>
                     </div>
                     <div>
+                        <dt>Model class</dt>
+                        <dd>
+                            {{if hasModelSelection .Task.Run}}<span
+                                class="badge s-running"
+                                >{{.Task.Run.ModelSelection.Class}}</span
+                            >{{if .Task.Run.ModelSelection.Locality}}<span
+                                class="muted small"
+                                >{{.Task.Run.ModelSelection.Locality}}</span
+                            >{{end}}{{if .Task.Run.ModelSelection.Source}}<span
+                                class="muted small"
+                                >source
+                                {{.Task.Run.ModelSelection.Source}}</span
+                            >{{end}}{{if
+                            .Task.Run.ModelSelection.Fallback}}<span
+                                class="badge s-blocked"
+                                >fallback</span
+                            >{{end}}{{if .Task.Run.ModelSelection.Reason}}<span
+                                class="muted small"
+                                >{{.Task.Run.ModelSelection.Reason}}</span
+                            >{{end}}{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            ><span class="muted small"
+                                >SOP persisted no model-selection record</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
                         <dt>Fix cycles</dt>
                         <dd>
-                            {{if .Task.Run.Present}}<span class="badge s-running"
+                            {{if .Task.Run.Present}}<span
+                                class="badge s-running"
                                 >{{.Task.Run.FixCycles}}</span
                             >{{else}}<span class="badge s-unavailable"
                                 >{{unavailable}}</span
@@ -138,12 +169,14 @@
                     <div>
                         <dt>Blocked reason</dt>
                         <dd>
-                            {{if blocked .Task}}{{if .Task.BlockedReason}}<span class="badge s-blocked"
+                            {{if blocked .Task}}{{if .Task.BlockedReason}}<span
+                                class="badge s-blocked"
                                 >{{.Task.BlockedReason}}</span
-                            >{{else}}<span class="badge s-blocked"
-                                >blocked</span
-                            >{{end}}{{if .Task.BlockedBy}}<span class="muted small"
-                                >waiting on {{range .Task.BlockedBy}}{{.}} {{end}}</span
+                            >{{else}}<span class="badge s-blocked">blocked</span
+                            >{{end}}{{if .Task.BlockedBy}}<span
+                                class="muted small"
+                                >waiting on {{range .Task.BlockedBy}}{{.}}
+                                {{end}}</span
                             >{{end}}{{else}}<span class="badge s-ready"
                                 >not blocked</span
                             >{{end}}
@@ -240,9 +273,7 @@
             <section class="panel evidence-panel evidence-review">
                 <div class="panel-head">
                     <h2>Review</h2>
-                    <span class="muted small"
-                        >code review findings</span
-                    >
+                    <span class="muted small">code review findings</span>
                 </div>
                 {{template "review.html" .Task}}
             </section>
@@ -250,9 +281,7 @@
             <section class="panel evidence-panel evidence-jev">
                 <div class="panel-head">
                     <h2>JEV</h2>
-                    <span class="muted small"
-                        >independent verification</span
-                    >
+                    <span class="muted small">independent verification</span>
                 </div>
                 {{template "jev.html" .Task}}
             </section>
@@ -303,7 +332,9 @@
                         hx-swap="innerHTML"
                     >
                         <input type="hidden" name="csrf" value="{{.CSRF}}" />
-                        <button class="btn" hx-disabled-elt="this">Open report</button>
+                        <button class="btn" hx-disabled-elt="this">
+                            Open report
+                        </button>
                     </form>
                 </div>
                 <div id="cmd"></div>

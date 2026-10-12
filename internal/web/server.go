@@ -35,6 +35,9 @@ func NewServer(opts Options) http.Handler {
 	mux.HandleFunc("GET /healthz", h.health)
 	mux.HandleFunc("GET /{$}", h.home)
 	mux.HandleFunc("GET /projects", h.projects)
+	// P0 cross-project pending-approvals inbox (read-only; controls POST to the
+	// task-scoped approve/decline routes above).
+	mux.HandleFunc("GET /approvals", h.approvals)
 	mux.HandleFunc("GET /discovery", h.discovery)
 	mux.HandleFunc("GET /projects/{project}", h.project)
 	mux.HandleFunc("GET /projects/{project}/tasks", h.projectTasks)

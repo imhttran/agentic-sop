@@ -33,6 +33,17 @@ type projectsPage struct {
 	Projects []sopclient.ProjectSummary
 }
 
+// approvalsPage feeds the cross-project pending-approvals inbox (P0).
+type approvalsPage struct {
+	baseData
+	Projects []sopclient.ProjectApprovals
+	// Pending is the number of applicable gates across all projects.
+	Pending int
+	// Unread is the number of projects whose approval listing could not be read
+	// (an absence, not "no gates").
+	Unread int
+}
+
 type discoveryPage struct {
 	baseData
 	Discovery config.DiscoveryReport
@@ -130,6 +141,23 @@ func (h *Handlers) projects(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	h.render(w, http.StatusOK, "projects.html", projectsPage{baseData: h.base(r, "projects"), Projects: list})
+}
+
+// approvals renders the cross-project pending-approvals inbox (P0). It is a
+// read-only projection of SOP's `sop approvals --json` across the observed
+// projects; each control POSTs to the existing task-scoped approve/decline
+// routes, so SOP still validates the gate at command time. GET is side-effect
+// free.
+func (h *Handlers) approvals(w http.ResponseWriter, r *http.Request) {
+	projects := h.sop.PendingApprovals(r.Context())
+	page := approvalsPage{baseData: h.base(r, "approvals"), Projects: projects}
+	for _, p := range projects {
+		page.Pending += len(p.Entries)
+		if !p.Reported {
+			page.Unread++
+		}
+	}
+	h.render(w, http.StatusOK, "approvals.html", page)
 }
 
 // discovery renders the read-only discovery report (roots, depth, projects, skips).
