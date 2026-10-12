@@ -49,6 +49,41 @@ type Options struct {
 	Model    string
 	// Timeout bounds one invocation (defaults to defaultTimeout).
 	Timeout time.Duration
+	// Observer, when set, receives ONE class-only Event per invocation. It never
+	// receives prompts, payloads, endpoints, or credentials.
+	Observer func(Event)
+}
+
+// Event is a class-only observability record for one adapter invocation. It never
+// carries prompts, response bodies, endpoints, or credentials.
+type Event struct {
+	LatencyMS int    `json:"latency_ms"`
+	Outcome   string `json:"outcome"` // ok|invalid|unsupported|indeterminate|timeout|canceled|provider_failure
+	Valid     bool   `json:"valid"`
+}
+
+// classOf maps a connector error to a fixed, secret-free outcome class.
+func classOf(err error) string {
+	switch {
+	case err == nil:
+		return "ok"
+	case errors.Is(err, decision.ErrInvalidResult):
+		return "invalid"
+	case errors.Is(err, decision.ErrUnsupportedCapability):
+		return "unsupported"
+	case errors.Is(err, decision.ErrIndeterminate):
+		return "indeterminate"
+	case errors.Is(err, decision.ErrProviderFailure):
+		if strings.Contains(err.Error(), "timed out") {
+			return "timeout"
+		}
+		if strings.Contains(err.Error(), "canceled") {
+			return "canceled"
+		}
+		return "provider_failure"
+	default:
+		return "provider_failure"
+	}
 }
 
 // Connector implements decision.Provider over an external batched adapter.
@@ -58,6 +93,7 @@ type Connector struct {
 	provider string
 	model    string
 	timeout  time.Duration
+	observer func(Event)
 }
 
 // New builds a Connector. It never selects a profile by provider name alone; the
@@ -79,16 +115,27 @@ func New(opts Options) (*Connector, error) {
 		provider: strings.TrimSpace(opts.Provider),
 		model:    strings.TrimSpace(opts.Model),
 		timeout:  timeout,
+		observer: opts.Observer,
 	}, nil
 }
 
 // Name reports the provider-neutral identifier of this provider.
 func (c *Connector) Name() string { return "adapter" }
 
-// Decide translates a canonical request through the M3 bridge, invokes the
+// Decide runs one bounded adapter invocation and records a class-only observation.
+func (c *Connector) Decide(ctx context.Context, req decision.Request) (decision.Decision, error) {
+	start := time.Now()
+	d, err := c.decide(ctx, req)
+	if c.observer != nil {
+		c.observer(Event{LatencyMS: int(time.Since(start).Milliseconds()), Outcome: classOf(err), Valid: err == nil})
+	}
+	return d, err
+}
+
+// decide translates a canonical request through the M3 bridge, invokes the
 // adapter, and returns canonical evidence. Every failure fails closed with a
 // typed sentinel; none is ever an approval.
-func (c *Connector) Decide(ctx context.Context, req decision.Request) (decision.Decision, error) {
+func (c *Connector) decide(ctx context.Context, req decision.Request) (decision.Decision, error) {
 	built, err := c.registry.Build(req)
 	if err != nil {
 		return decision.Decision{}, err
@@ -132,6 +179,7 @@ func (c *Connector) Decide(ctx context.Context, req decision.Request) (decision.
 	if err := cmd.Start(); err != nil {
 		return decision.Decision{}, fmt.Errorf("%w: adapter failed to start", decision.ErrProviderFailure)
 	}
+	afterStart(cmd)
 	done := make(chan error, 1)
 	go func() { done <- cmd.Wait() }()
 

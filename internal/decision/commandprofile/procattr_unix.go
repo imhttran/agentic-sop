@@ -13,6 +13,9 @@ func setProcGroup(cmd *exec.Cmd) {
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 }
 
+// afterStart is a no-op on Unix: the process group covers descendants.
+func afterStart(_ *exec.Cmd) {}
+
 // killProcessTree terminates the adapter and every descendant by signaling the
 // whole process group.
 func killProcessTree(cmd *exec.Cmd) {

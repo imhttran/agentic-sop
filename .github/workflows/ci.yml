@@ -118,6 +118,8 @@ jobs:
         run: go build ./...
       - name: vet
         run: go vet ./...
+      - name: adapter connector + process-tree tests (Windows)
+        run: go test -count=1 -v ./internal/decision/commandprofile/
       - name: install.ps1 parses (PowerShell language parser)
         shell: powershell
         run: |

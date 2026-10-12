@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -119,8 +120,18 @@ func TestAdapterConnectorBoundsSubprocess(t *testing.T) {
 	}
 }
 
-// TestAdapterHelperProcess is the deterministic fake adapter: when the connector
-// execs the test binary with GO_WANT_ADAPTER_HELPER=1, it acts as the adapter.
+// TestAdapterGrandchildHelper is the grandchild process: it writes a marker after a
+// delay, so a surviving process tree is observable.
+func TestAdapterGrandchildHelper(t *testing.T) {
+	if os.Getenv("GO_WANT_ADAPTER_GRANDCHILD") != "1" {
+		return
+	}
+	time.Sleep(10 * time.Second)
+	if m := os.Getenv("ADAPTER_MARKER"); m != "" {
+		_ = os.WriteFile(m, []byte("survived"), 0o644)
+	}
+	os.Exit(0)
+}
 func TestAdapterHelperProcess(t *testing.T) {
 	if os.Getenv("GO_WANT_ADAPTER_HELPER") != "1" {
 		return
@@ -195,12 +206,11 @@ func TestAdapterHelperProcess(t *testing.T) {
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
 	case "grandchild":
-		go func() {
-			time.Sleep(10 * time.Second)
-			if m := os.Getenv("ADAPTER_MARKER"); m != "" {
-				_ = os.WriteFile(m, []byte("survived"), 0o644)
-			}
-		}()
+		// Spawn a grandchild deterministically via a Go re-exec (cross-platform; no
+		// shell). If the process tree is killed, the grandchild never writes its marker.
+		child := exec.Command(os.Args[0], "-test.run=^TestAdapterGrandchildHelper$")
+		child.Env = append(os.Environ(), "GO_WANT_ADAPTER_GRANDCHILD=1")
+		_ = child.Start()
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
 	default:
