@@ -212,7 +212,7 @@ layers** and are not the same setting:
 
 - **JEV resolves its own provider and model** from `SOP_OLLAMA_BASE_URL`,
   `SOP_OLLAMA_MODEL`, and `SOP_OLLAMA_TIMEOUT` (via the shared Ollama
-  configuration path). These select *what JEV analyzes with*.
+  configuration path). These select _what JEV analyzes with_.
 - **SOP execution-model routing selects what SOP executes with.** That layer is
   the project's `agent.model` value plus the model-routing overrides
   `SOP_AGENT_MODEL` (the unified override) and the `SOP_MODEL_*` variables
@@ -451,7 +451,6 @@ only part of the lifecycle that changes code.
 
 ---
 
-
 ---
 
 ## Troubleshooting and reference
@@ -460,3 +459,39 @@ Failure behavior, how to tell whether JEV executed, blocking-versus-non-blocking
 findings, report and artifact locations, the terminology glossary, and the JEV015
 acceptance-criteria traceability are in
 [`JEV-TROUBLESHOOTING.md`](JEV-TROUBLESHOOTING.md).
+
+---
+
+## Decision adapter: rollback and observability
+
+The optional decision adapter (`decision.provider: adapter`) is **off by default**
+and never carries execution or approval authority. This section describes how to
+roll it back and what it can observe.
+
+### Rollback (restore deterministic routing)
+
+Any one of the following restores the deterministic baseline exactly — a strict
+no-op, not an error:
+
+- set `decision.enabled: false` **while keeping `provider: adapter` and a valid
+  `adapter_command`** (disabling short-circuits the provider: `decisionProviderFromConfig`
+  returns `(nil, nil)` when the layer is disabled);
+- set `decision.provider: deterministic`;
+- remove the `decision` block.
+
+Do **not** disable by dropping `decision.adapter_command` alone: configuration
+validation is unconditional, so `provider: adapter` with no `adapter_command` is
+rejected at load time even when `decision.enabled: false`.
+
+### Observability (class-only)
+
+Each adapter invocation emits ONE class-only observation:
+
+- `latency_ms` — wall-clock duration of the invocation;
+- `outcome` — one of `ok`, `invalid`, `unsupported`, `indeterminate`, `timeout`,
+  `canceled`, `provider_failure`;
+- `valid` — whether the result passed SOP-owned validation.
+
+The observation **never** contains prompts, response bodies, endpoint URLs,
+credentials, or filesystem paths, and there is **no** automatic fallback: a
+provider failure is recorded and the governed baseline stands.

@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "command": "/tmp/sop-rd01 run --task task.md",
+  "argv": ["sop", "run", "--task", "task.md"],
+  "revision": "10fd86a98039a936c12ce49c9aa098a930382c13",
+  "provider": "ollama",
+  "model": "deepseek-v4.1-flash:cloud",
+  "governed_outcome": "PASS/PARTIAL (human approval required before commit)",
+  "agent_logical_calls": 2,
+  "agent_http_requests": 21,
+  "adapter_http_requests": 0,
+  "configurations": [
+    {
+      "name": "governed-run",
+      "classification": "measured",
+      "sample_size": 1,
+      "reason": "one governed `sop run --task` in a disposable project; the full lifecycle ran (plan, implement, validation, review) and the quality gate passed",
+      "metrics": {
+        "agent_logical_calls": 2,
+        "agent_http_requests": 21,
+        "latency_ms": 15500
+      }
+    },
+    {
+      "name": "adapter-decision-evidence",
+      "classification": "untested",
+      "reason": "the adapter was NOT consulted: the SEAM-004 decision-evidence checkpoint proceeds only when the governed baseline has an attentionable failure classification, and a clean/PARTIAL run has none (0 adapter /v1/systemone requests)"
+    },
+    {
+      "name": "adapter-offline",
+      "classification": "simulated",
+      "reason": "offline integration against a deterministic fake adapter (TestAdapterConnectorIntegration)",
+      "metrics": {
+        "inference_calls": 0
+      }
+    }
+  ]
+}
