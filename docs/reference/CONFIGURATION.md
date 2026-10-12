@@ -560,6 +560,30 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   (`route_to_strong_model`, default `0.7`) or to a human (`require_human`, default
   `0.4`). `features.jev_decisions` is a pre-existing signal that selects the
   decision layer; it does not by itself enable JEV.
+
+### Adapter connector (`decision.provider: adapter`)
+
+- **Opt-in and disabled by default.** The default provider is `deterministic`; the
+  adapter runs only when `decision.provider: adapter` and `decision.enabled: true`
+  are set. Disabling (`decision.enabled: false`) or removing the block restores the
+  deterministic baseline exactly — a strict no-op, not an error (**rollback**).
+- **`decision.adapter_command` is the executable argv only.** Provide the adapter
+  executable and any _fixed_ arguments, **without** the `decide` subcommand: the
+  connector appends `decide -file <tmp> -json -provider <p> -model <m> -timeout <d>`
+  itself. Example: `adapter_command: ["/usr/local/bin/sop-decision-adapter"]`.
+- **Provider/model hints.** `decision.adapter_provider` (default `nimble`) and
+  `decision.adapter_model` are passed through to the adapter and select the
+  config-driven profile registry; they never select SOP policy.
+- **Failure behavior (fail closed).** The connector bounds the subprocess
+  (time, output size), decodes the result strictly, and maps adapter exit codes
+  (`0` ok, `2` invalid request, `3` provider unavailable, `1`/other provider
+  failure) and cancellation/timeout to typed, class-only errors. Adapter evidence
+  can only _add_ attention: it is validated (`decision.Validate`) and routed by
+  `decision.Route`/`autonomy`, which retain final authority; it never approves or
+  bypasses a human boundary.
+- **Live inference authorization.** Running a real adapter incurs inference and is
+  gated (Gate W3-4); enabling the adapter by default is a separate production-policy
+  decision (Gate W3-3).
 - `autonomy` is the risk-based policy for how much **recovery** SOP performs
   without asking a human. An omitted block resolves to the conservative `balanced`
   default, so no project is silently switched to maximum autonomy. `level` is
