@@ -292,6 +292,12 @@ PRECHECK -> (optional JEV PRE-EXECUTION) -> SOP POLICY -> IMPLEMENT / FIX -> ...
 Both are gated by the separate `early_jev` namespace and default OFF, so the
 pipeline above is unchanged unless they are explicitly enabled. See §18.
 
+JEV analyses a change. A verify-first pass makes no change of its own, so JEV is
+skipped for it — exactly as review is skipped for a verify-first pass — and it is
+never invoked against a task whose own change set is empty. A task that did produce
+a change is still analysed, with the task-scoped change evidence accumulated across
+its invocations supplied to it.
+
 ## 13. Inputs and outputs
 
 - **Inputs** — bounded, read-only snapshots only: the task, its acceptance

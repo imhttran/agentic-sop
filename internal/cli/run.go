@@ -904,8 +904,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// The task-scoped change evidence accumulated across this task's invocations
 		// (not only this one) is handed to JEV, so a no-change final invocation still
 		// reviews the implementation the task produced earlier.
+		//
+		// JEV analyses a CHANGE. A verify-first pass makes no change of its own (there may
+		// be no working-tree diff at all), so there is nothing for JEV to analyse and it
+		// is skipped — exactly as review is skipped for a verify-first pass. This mirrors
+		// the review guard and avoids invoking JEV against an empty diff (which could only
+		// waste a model call or fail closed, blocking an otherwise-complete task). A task
+		// that did produce a change still runs JEV; the task-scoped change evidence is
+		// supplied to it when it exists. Non-verify-first runs are unchanged.
 		jevEv = nil
-		if suite.Passed() && shouldRunJEV(cfg, tier) {
+		if suite.Passed() && shouldRunJEV(cfg, tier) && !verifiedFirst {
 			jevEv = runOptionalJEV(ctx, cfg, d, spec, rn, diff, suite, report, dir, rec)
 
 			// Persist the JEV result as a run artifact beside the other diagnostics,
