@@ -45,7 +45,7 @@ results where a report is the deliverable.
 - **Files:** internal/decision/commandprofile/procattr_windows.go, internal/decision/commandprofile/procattr_windows_test.go
 - **Depends on:** —
 - **Acceptance:** on Windows, cancelling or timing out the adapter terminates its descendants, verified by **actual execution** of the Windows test in the CI windows job (not merely a cross-compile); the Unix path is unchanged; `GOOS=windows` builds.
-- **Acceptance check:** the CI windows job executes `go test -count=1 -run TestAdapterConnectorKillsProcessGroupWindows ./internal/decision/commandprofile/` and it passes.
+- **Acceptance check:** the CI windows job executes `go test -count=1 ./internal/decision/commandprofile/` — which includes both `TestAdapterConnectorKillsProcessGroupWindows` and `TestAdapterJobHandleNoLeak` — and it passes.
 - **Failure / rollback:** a platform regression is caught by the Windows CI job.
 
 ### RD-03 — Julia Runtime and Live Verification
@@ -81,6 +81,7 @@ results where a report is the deliverable.
 ## Corrections
 
 - **RD-02 acceptance (recorded before activation):** the Windows process-tree requirement is met only by **actual execution** of the Windows test in the CI windows job — a cross-compile (`GOOS=windows go build`) is **not** sufficient. The Windows CI job must run `go test ./internal/decision/commandprofile/`.
+- **RD-02 acceptance check (reconciled 2026-10-12):** the original registered acceptance check named the literal command `go test -count=1 -run TestAdapterConnectorKillsProcessGroupWindows ./internal/decision/commandprofile/`. The CI windows job executes the whole `internal/decision/commandprofile` package (`.github/workflows/ci.yml`, step "adapter connector + process-tree tests (Windows)": `go test -count=1 -v ./internal/decision/commandprofile/`), which includes that test and `TestAdapterJobHandleNoLeak`. The acceptance check was reconciled to that package-level run. The literal original wording is preserved here, unmodified, for provenance.
 
 ## Inference limits and attribution
 
