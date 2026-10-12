@@ -88,7 +88,7 @@ A run MUST reject a provider that cannot `IMPLEMENT` before running any task.
 
 Every stage SHOULD write an artifact under `.agent-sdlc/runs/<id>/` (`task.md`,
 `plan.md`, `implementation.md`, `diff.patch`, `fix-N.md`, `validation.json`,
-`review.json`, `report.md`, `report.json`, `metrics.json`, `state.json`); a run that
+`review.json`, `outcome.json`, `report.md`, `report.json`, `metrics.json`, `state.json`); a run that
 terminates MUST stay inspectable. Each task SHOULD end with a concise performance
 line; see [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md).
 
@@ -139,6 +139,103 @@ A stage whose work must be _verified_ rather than accepted is `verify-first` (§
 stage with nothing to verify cannot become `done` by implication. A run still requires
 a configured agent, exactly as a graph whose tasks are all `verify-first` does; the
 agent is simply never invoked for a declared-complete task.
+
+## 6b. Objective Acceptance Checks
+
+The configured validation/review verdicts establish that work was done; they do not
+establish that an objective was met. A plan stage MAY declare **operator-owned,
+deterministic acceptance checks** — the verifiable half of acceptance — which `sop run`
+MUST execute and record as an objective-level verdict, never as a model completion
+claim.
+
+**Declaration.** A stage declares its checks with the same sub-section (rendered shape)
+or inline-field (task-list shape) keywords used for the other stage fields, one command
+per line, each optionally wrapped in one pair of backticks (Markdown code formatting,
+which the parser strips — not shell syntax):
+
+- the rendered shape uses an `### Acceptance Checks` sub-section (also
+  `### Acceptance Check`);
+- the task-list shape uses one or more inline `- **Acceptance check:** <command>`
+  lines (also `- **Acceptance checks:**`).
+
+The two shapes are equivalent; a rendered plan round-trips its checks.
+
+```markdown
+## S001 — Greeting package
+
+Create the greeting package.
+
+### Deliverables
+
+- `greeting/greeting.go`
+
+### Acceptance Criteria
+
+- the greeting package exists and passes `go vet`
+
+### Acceptance Checks
+
+`go vet ./greeting/`
+go test ./greeting/
+```
+
+The same stage in the task-list shape:
+
+```markdown
+### S001 — Greeting package
+
+- **Objective:** Create the greeting package.
+- **Files:** greeting/greeting.go
+- **Acceptance:** the greeting package exists and passes `go vet`
+- **Acceptance check:** `go vet ./greeting/`
+- **Acceptance check:** `go test ./greeting/`
+```
+
+**Operator-owned and never model-authored.** A check is a **SAFE argument vector,
+never a shell**: `sop run` MUST tokenize it with the same splitter the command policy
+uses, which rejects shell syntax (chaining, pipelines, redirection, command
+substitution, expansion, and globs), so authorization validates the same structure that
+runs. A command the policy does not classify SAFE — or whose form redirects or injects
+tooling — MUST NOT execute and MUST be a boundary that HOLDS the verdict. Beyond the
+SAFE classification the following forms MUST be rejected before execution, in every
+spelling (`-f v`, `-f=v`, `--f v`, `--f=v`): `go`/`build`/`vet` `-exec`, `-toolexec`,
+`-vettool`, `-o`, `-overlay`, and `-modfile`; `go fmt` (which rewrites files); and
+`git -c` / `--config-env` config injection. A stage's checks MUST come only from the
+operator's plan document; a plan normalized by an agent MUST have its checks cleared,
+mirroring how a model-declared `done` mode is discarded (§6a), so a model can never
+author its own acceptance checks. A free-text `### Acceptance Criteria` entry has no
+deterministic determinant: it is recorded as informational when the stage declares
+checks, and as unverifiable (never VERIFIED) when it does not.
+
+**Evaluation.** A `go test` check MUST be judged from structured `go test -json`
+(test2json) events produced by a **single execution**: it is met only when the process
+exits 0 AND the event stream contains at least one test-level pass event (a package-level
+pass with no test name does not count). An all-skipped run, a `-run` filter that matched
+nothing, a package with no test files, and a `TestMain` that returns without calling
+`m.Run` are therefore not met, reported as `no test executed`. `-json` MUST be added when
+absent and MUST NOT be duplicated. A non-`go test` SAFE command is met by exit status 0.
+Each check MUST execute exactly once.
+
+**Verdict.** The verdict is derived deterministically at run time from the checks, never
+from a confidence score or a model claim:
+
+- **VERIFIED** — every required criterion was independently met, including at least one
+  executed, passing acceptance check; a deliverable-only or free-text-only stage can
+  therefore never be VERIFIED;
+- **PARTIAL** — safe work was done but a named required criterion is unmet or
+  unverifiable (a failing check, a `go test` that ran no test, or no declared check);
+- **HOLD** — a protected/authority boundary was crossed (an unauthorized or rejected
+  check), regardless of the other criteria.
+
+The verdict is recorded in `.agent-sdlc/runs/<task>/outcome.json` — per criterion its
+status, `Met`, `Command`, `Argv`, `ExitCode`, and a bounded `Output` excerpt — and
+rendered in the run report's `## Outcome` section. It is diagnostic evidence only: a
+task's `PASS`/`LOCAL_DONE` MUST NOT be equated with verified objective completion, and
+the verdict is never read back to drive a decision.
+
+A change to a stage's declared checks is a material task change: reconciliation MUST
+detect it, an executed task MUST stop for the existing `--accept-changed` approval, and
+a never-executed task MUST be updated (see [RECOVERY.md](RECOVERY.md)).
 
 ## 7. Fix Loop Bound
 
