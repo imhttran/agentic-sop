@@ -28,6 +28,7 @@ const internalImportPrefix = moduleImportPrefix + "internal/"
 var decisionSeamPackages = map[string]map[string]bool{
 	"internal/decision":         nil, // leaf: no internal import at all
 	"internal/decision/command": {internalImportPrefix + "decision": true},
+	"internal/decision/bridge":  {internalImportPrefix + "decision": true},
 }
 
 // TestDecisionSeamStaysProviderAndModelNeutral fails if a decision-seam production
