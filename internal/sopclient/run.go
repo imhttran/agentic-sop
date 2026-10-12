@@ -89,6 +89,23 @@ type JEV struct {
 	Findings int
 }
 
+// ModelSelection is SOP's recorded model selection for a run (report.json
+// "model_selection"), carried verbatim. The controller reports what SOP
+// selected; it never selects a model or provider itself (see
+// docs/specs/AGENT-PROVIDER.md). Class is SOP's vocabulary (for example SMALL /
+// MEDIUM / LARGE) and is displayed as persisted, without re-deriving it.
+type ModelSelection struct {
+	// Present is true when SOP persisted a model-selection record.
+	Present  bool
+	Class    string
+	Provider string
+	Model    string
+	Locality string
+	Source   string
+	Fallback bool
+	Reason   string
+}
+
 // RunInfo is the latest run's record for one task; Present when any artifact exists.
 type RunInfo struct {
 	Present        bool
@@ -98,6 +115,7 @@ type RunInfo struct {
 	FixCycles      int
 	Provider       string
 	Model          string
+	ModelSelection ModelSelection
 	ExecutionMode  string
 	VerifiedFirst  bool
 	GeneratedAt    time.Time
@@ -127,11 +145,23 @@ type activityDoc struct {
 	Timestamp time.Time `json:"timestamp"`
 }
 
+// modelSelectionDoc mirrors agentic-sop's report "model_selection" object.
+type modelSelectionDoc struct {
+	Class    string `json:"class"`
+	Provider string `json:"provider"`
+	Model    string `json:"model"`
+	Locality string `json:"locality"`
+	Source   string `json:"source"`
+	Fallback bool   `json:"fallback"`
+	Reason   string `json:"reason"`
+}
+
 type reportDoc struct {
 	ID             string             `json:"id"`
 	Stage          string             `json:"stage"`
 	Provider       string             `json:"provider"`
 	Model          string             `json:"model"`
+	ModelSelection *modelSelectionDoc `json:"model_selection"`
 	Decision       string             `json:"decision"`
 	Reasons        []string           `json:"reasons"`
 	FixCycles      int                `json:"fix_cycles"`
@@ -189,6 +219,18 @@ func (s *Store) runInfo(taskID string) RunInfo {
 		ri.FixCycles = rep.FixCycles
 		ri.Provider = rep.Provider
 		ri.Model = rep.Model
+		if rep.ModelSelection != nil {
+			ri.ModelSelection = ModelSelection{
+				Present:  true,
+				Class:    rep.ModelSelection.Class,
+				Provider: rep.ModelSelection.Provider,
+				Model:    rep.ModelSelection.Model,
+				Locality: rep.ModelSelection.Locality,
+				Source:   rep.ModelSelection.Source,
+				Fallback: rep.ModelSelection.Fallback,
+				Reason:   rep.ModelSelection.Reason,
+			}
+		}
 		ri.ExecutionMode = rep.ExecutionMode
 		ri.VerifiedFirst = rep.VerifiedFirst
 		ri.GeneratedAt = rep.GeneratedAt

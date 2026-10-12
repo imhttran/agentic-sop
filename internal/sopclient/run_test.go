@@ -224,3 +224,48 @@ func TestRunMetaAndPlanSource(t *testing.T) {
 		t.Fatalf("PlanSource = %q,%v, want docs/PLAN.md,true", src, ok)
 	}
 }
+
+// SOP's recorded model selection (report.json "model_selection") is carried
+// verbatim: class, locality, source, fallback, and reason are read as SOP
+// persisted them. The controller reports the selection; it never selects a
+// model or provider (docs/specs/AGENT-PROVIDER.md). Without the field the
+// projection is absent, not a zero-filled class.
+func TestModelSelectionReadVerbatim(t *testing.T) {
+	root := newProject(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, root,
+		`INSERT INTO tasks VALUES ('sel','S','o','a','IMPLEMENTING',NULL,1,3,'`+now+`','`+now+`')`,
+		`INSERT INTO tasks VALUES ('nosel','N','o','a','PLANNED',NULL,0,3,'`+now+`','`+now+`')`,
+	)
+	writeArtifact(t, root, "sel", "report.json", `{
+	  "id":"sel","stage":"PASSED","decision":"PASS","provider":"ollama","model":"deepseek-v4.1-flash:cloud",
+	  "model_selection":{"class":"large","provider":"ollama","model":"deepseek-v4.1-flash:cloud","locality":"cloud","source":"env","fallback":false,"reason":"environment default class"},
+	  "generated_at":"2026-01-01T00:00:00Z"
+	}`)
+
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	d, err := st.Task(context.Background(), "sel", readApprovals(t, st))
+	if err != nil {
+		t.Fatal(err)
+	}
+	ms := d.Run.ModelSelection
+	if !ms.Present {
+		t.Fatal("ModelSelection.Present = false, want true")
+	}
+	if ms.Class != "large" || ms.Locality != "cloud" || ms.Source != "env" || ms.Fallback || ms.Reason != "environment default class" {
+		t.Fatalf("model selection not verbatim: %+v", ms)
+	}
+
+	d2, err := st.Task(context.Background(), "nosel", readApprovals(t, st))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d2.Run.ModelSelection.Present {
+		t.Fatalf("ModelSelection.Present = true without a record: %+v", d2.Run.ModelSelection)
+	}
+}
