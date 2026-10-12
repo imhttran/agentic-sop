@@ -24,6 +24,7 @@ package jev
 import (
 	"encoding/json"
 	"fmt"
+	"sort"
 )
 
 // EvidenceVersion is the schema version of the structured evidence contract.
@@ -168,6 +169,20 @@ var categoryRank = map[Category]bool{
 // unspecified (valid); any other unknown value is invalid so callers can fail
 // closed rather than default.
 func (c Category) Valid() bool { return c == "" || categoryRank[c] }
+
+// Categories returns the authoritative closed set of known evidence categories in
+// a deterministic order. It is derived from the same definition of validity
+// (categoryRank) that Category.Valid uses, so an advertised vocabulary and the
+// validated vocabulary cannot drift. The empty (unspecified) category is valid but
+// is not a named vocabulary value, so it is not included.
+func Categories() []Category {
+	cats := make([]Category, 0, len(categoryRank))
+	for c := range categoryRank {
+		cats = append(cats, c)
+	}
+	sort.Slice(cats, func(i, j int) bool { return cats[i] < cats[j] })
+	return cats
+}
 
 // EvidenceItem is one structured early JEV analysis finding: a validated
 // purpose/severity pair with supporting detail. It is plain data.

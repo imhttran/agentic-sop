@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "command": "go test -count=1 -run '^TestDeterministicBenchmarkFixtures$' ./internal/decision/",
+  "argv": [
+    "go",
+    "test",
+    "-run",
+    "^TestDeterministicBenchmarkFixtures$",
+    "./internal/decision/"
+  ],
+  "revision": "c6e30de77447aa3c298e5667aed8cb7f14b208db",
+  "inputs": [
+    {
+      "id": "correct-continuation",
+      "description": "continue"
+    },
+    {
+      "id": "unsafe-continuation",
+      "description": "unsafe"
+    },
+    {
+      "id": "unnecessary-escalation",
+      "description": "escalation"
+    },
+    {
+      "id": "fail-closed",
+      "description": "fail_closed"
+    },
+    {
+      "id": "human-approval",
+      "description": "human"
+    }
+  ],
+  "configurations": [
+    {
+      "name": "deterministic",
+      "classification": "measured",
+      "sample_size": 50,
+      "provider": "in-process",
+      "model": "decision.Route",
+      "metrics": {
+        "correct_rate": 1,
+        "inference_calls": 0,
+        "latency_p50_us": 0,
+        "latency_p95_us": 0.042,
+        "latency_us": 0.018539999999999997,
+        "repeatability": 1,
+        "schema_validity": 1,
+        "unnecessary_escalation_rate": 0,
+        "unsafe_continuation_rate": 0
+      },
+      "artifact_path": "docs/reports/evidence/artifacts/deterministic-baseline"
+    },
+    {
+      "name": "jev-assisted",
+      "classification": "measured",
+      "sample_size": 1,
+      "provider": "ollama",
+      "model": "deepseek-v4.1-flash:cloud",
+      "metrics": {
+        "inference_calls": 23,
+        "latency_ms": 15873
+      },
+      "artifact_path": "docs/reports/evidence/artifacts/direct_sop_jev_invocation",
+      "reason": "single observation (N=1) from JEV-207 run DOGFOOD-001; p50/p95 and rates are not measurable at N=1 and are not reported"
+    },
+    {
+      "name": "julia",
+      "classification": "untested",
+      "reason": "no production connector: end-to-end adapter benchmarking requires JEV-209"
+    },
+    {
+      "name": "nimble",
+      "classification": "untested",
+      "reason": "no production connector: end-to-end adapter benchmarking requires JEV-209"
+    }
+  ]
+}

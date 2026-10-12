@@ -1,0 +1,12 @@
+{
+  "provider": "julia",
+  "model": "julia-1",
+  "answers": {
+    "complexity": {
+      "type": "choice",
+      "choice": "high",
+      "confidence": 0.9
+    }
+  },
+  "usage": {}
+}

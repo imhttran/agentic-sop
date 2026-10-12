@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "command": "go test -count=1 -run ^TestAdapterDogfoodLiveNimble$ ./internal/cli/",
+  "argv": [
+    "go",
+    "test",
+    "-run",
+    "^TestAdapterDogfoodLiveNimble$",
+    "./internal/cli/"
+  ],
+  "revision": "3b62f5c876acda257d60144fad855ade5b29d615",
+  "provider": "adapter",
+  "model": "nimble",
+  "configurations": [
+    {
+      "name": "connector-offline",
+      "classification": "simulated",
+      "reason": "offline integration against a deterministic fake adapter (TestAdapterConnectorIntegration)",
+      "metrics": {
+        "inference_calls": 0
+      }
+    },
+    {
+      "name": "nimble-live",
+      "classification": "measured",
+      "sample_size": 1,
+      "reason": "live Nimble decision: choice=LOW confidence=0.190 -\u003e HUMAN",
+      "metrics": {
+        "latency_ms": 5330
+      },
+      "artifact_path": "docs/reports/evidence/artifacts/nimble-dogfood"
+    },
+    {
+      "name": "julia-live",
+      "classification": "untested",
+      "reason": "no ONNX model and onnxruntime are available; Julia live inference is unavailable"
+    }
+  ]
+}

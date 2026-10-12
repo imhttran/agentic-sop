@@ -6,6 +6,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/decision"
 	"github.com/imhttran/agentic-sop/internal/decision/command"
+	"github.com/imhttran/agentic-sop/internal/decision/commandprofile"
 )
 
 // decisionProviderFromConfig constructs the optional, provider-neutral decision
@@ -25,6 +26,17 @@ func decisionProviderFromConfig(cfg config.Config) (decision.Provider, error) {
 	switch name := strings.TrimSpace(cfg.Decision.Provider); name {
 	case "command":
 		return command.New("command", cfg.Decision.Command)
+	case "adapter":
+		reg, err := adapterProfileRegistry(cfg)
+		if err != nil {
+			return nil, err
+		}
+		return commandprofile.New(commandprofile.Options{
+			Registry: reg,
+			Argv:     cfg.Decision.AdapterCommand,
+			Provider: strings.TrimSpace(cfg.Decision.AdapterProvider),
+			Model:    strings.TrimSpace(cfg.Decision.AdapterModel),
+		})
 	default:
 		// "" and "deterministic" return the in-process deterministic provider;
 		// any other name fails closed rather than silently falling back.

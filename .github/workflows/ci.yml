@@ -53,6 +53,25 @@ jobs:
       - name: test -race
         run: go test -race ./...
 
+  # The tagged JEV evidence acceptance checks. They are build-tagged out of the ordinary
+  # suite (so `go test ./...` stays green before an evidence artifact exists); this job runs
+  # them explicitly, so a missing or tampered evidence artifact fails CI. Deterministic; no
+  # live inference.
+  acceptance-evidence:
+    name: tagged JEV evidence acceptance checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: evidence acceptance checks
+        run: |
+          go test -tags='jev207_acceptance jev208_acceptance jev213_acceptance' -count=1 -v \
+            -run 'TestJEVDogfoodEvidence|TestJEVBenchmarkEvidence|TestAdapterDogfoodEvidence' \
+            ./internal/jev/ ./internal/decision/commandprofile/
+
   # The distribution layer: the packaged Claude Code plugin must be current, and the
   # installer must work from a clean checkout with no agent configuration to touch. The
   # install itself is exercised for real (against a temporary HOME) by the Go tests in

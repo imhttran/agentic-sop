@@ -108,10 +108,12 @@ func scopedReviewDiff(scope reviewScope, diff string, changeRequired bool) (stri
 
 // filterDiffToScope returns the subset of a unified diff that touches only
 // in-scope paths. It splits the diff into per-file chunks (each beginning at a
-// `diff --git` line) and keeps a chunk only when every path it names is in
-// scope. A chunk that names any out-of-scope path is dropped whole, so a rename
-// from an out-of-scope source to an in-scope destination cannot smuggle the
-// unrelated source into review.
+// `diff --git` line) and drops a chunk only when it positively names an
+// out-of-scope path, so a rename from an out-of-scope source to an in-scope
+// destination cannot smuggle the unrelated source into review. A chunk whose
+// header cannot be decoded to a real path — a malformed or opaque header — is
+// kept rather than silently dropped: over-inclusion is safe for review, whereas
+// silently dropping it would lose review coverage.
 func filterDiffToScope(diff string, scope reviewScope) string {
 	if strings.TrimSpace(diff) == "" {
 		return ""
@@ -122,19 +124,18 @@ func filterDiffToScope(diff string, scope reviewScope) string {
 		if len(chunk) == 0 {
 			return
 		}
-		keep := true
-		seen := false
+		drop := false
 		for _, l := range chunk {
 			p, ok := diffChunkPath(l)
 			if !ok {
 				continue
 			}
-			seen = true
 			if !scope.contains(p) {
-				keep = false
+				drop = true
+				break
 			}
 		}
-		if seen && keep {
+		if !drop {
 			for _, l := range chunk {
 				b.WriteString(l)
 				b.WriteByte('\n')
@@ -153,29 +154,49 @@ func filterDiffToScope(diff string, scope reviewScope) string {
 }
 
 // diffChunkPath extracts the repository-relative path named by a unified-diff
-// header line. It recognizes both the `--- a/...` / `+++ b/...` file headers
-// (including the `/dev/null` side of an addition or deletion) and git's
-// `rename from` / `rename to` lines, so a renamed file is matched on both its
-// sides. It reports ok=false for any other line, and for a header side naming
-// no real path (/dev/null or empty), so a new or deleted file contributes only
-// its real side.
+// header line. It recognizes git's `--- ` / `+++ ` file headers (including the
+// `/dev/null` side of an addition or deletion) and its `rename from ` /
+// `rename to ` lines, so a renamed file is matched on both its sides. Git
+// C-quotes a token whose path contains unusual bytes (non-ASCII, a quote, a
+// backslash, or a tab) and appends a tab-separated timestamp to some headers, so
+// the token is decoded with diffHeaderPath — the same decoder changedFiles uses —
+// before the a/ or b/ prefix is stripped. The decode must precede the prefix
+// check because the quote wraps the prefix too (`--- "a/caf\303\251.go"`). It
+// reports ok=false for any other line and for a header side naming no real path
+// (/dev/null or empty), so a new or deleted file contributes only its real side
+// and an unrelated content line is never mistaken for a header.
 func diffChunkPath(line string) (string, bool) {
-	var path string
+	marker, prefix := "", ""
 	switch {
-	case strings.HasPrefix(line, "--- a/"):
-		path = strings.TrimPrefix(line, "--- a/")
-	case strings.HasPrefix(line, "+++ b/"):
-		path = strings.TrimPrefix(line, "+++ b/")
+	case strings.HasPrefix(line, "--- "):
+		marker, prefix = "---", "a/"
+	case strings.HasPrefix(line, "+++ "):
+		marker, prefix = "+++", "b/"
 	case strings.HasPrefix(line, "rename from "):
-		path = strings.TrimPrefix(line, "rename from ")
+		return diffRenamePath(strings.TrimPrefix(line, "rename from "))
 	case strings.HasPrefix(line, "rename to "):
-		path = strings.TrimPrefix(line, "rename to ")
+		return diffRenamePath(strings.TrimPrefix(line, "rename to "))
 	default:
 		return "", false
 	}
-	path = diffHeaderPath(path)
-	if path == "" || path == "/dev/null" {
+	decoded := diffHeaderPath(strings.TrimPrefix(line, marker+" "))
+	if decoded == "/dev/null" {
 		return "", false
 	}
-	return path, true
+	if !strings.HasPrefix(decoded, prefix) {
+		return "", false
+	}
+	return strings.TrimPrefix(decoded, prefix), true
+}
+
+// diffRenamePath decodes the path that follows a git `rename from ` / `rename to `
+// token, which — unlike the `--- `/`+++ ` headers — carries no a/ or b/ prefix
+// and may itself be C-quoted. It reports ok=false for a rename side that names no
+// real path.
+func diffRenamePath(rest string) (string, bool) {
+	p := diffHeaderPath(rest)
+	if p == "" || p == "/dev/null" {
+		return "", false
+	}
+	return p, true
 }

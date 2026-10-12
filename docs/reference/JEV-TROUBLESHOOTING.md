@@ -19,10 +19,12 @@ JEV **fails closed**. A failure is never treated as a pass.
 | Situation                       | Behavior                                                                                                                                             |
 | ------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | **Timeout**                     | The bounded call is abandoned; the run does not proceed as `PASS`. Falls back to deterministic policy or human review.                               |
+| **Cancellation**                | A caller-cancelled analysis (`context.Canceled`) is terminal and is reported as a distinct `CANCELED` failure, never as a `TIMEOUT`; the run does not proceed as `PASS`. Falls back to deterministic policy or human review. |
 | **Malformed output**            | Output that is not a valid JEV result is rejected; it fails closed and never becomes `PASS`.                                                         |
 | **Low confidence / incomplete** | An incomplete or low-confidence analysis is reported as incomplete; it is not treated as a pass. Falls back to deterministic policy or human review. |
 | **Unavailability**              | An unreachable provider yields a focused error; the run does not silently pass.                                                                      |
 | **Schema violation**            | A result that violates the schema (unknown status, unknown severity, `PASS` carrying findings, `FINDINGS` without any) is rejected.                  |
+| **Analyzer construction failure** | JEV is enabled but its analyzer cannot be constructed (for example an invalid provider, model, or timeout configuration). This is non-fatal: the run proceeds exactly as if JEV were absent, and a fixed, secret-free diagnostic is recorded that never echoes the raw error, endpoint, or credentials. |
 
 For all of these, SOP **falls back to deterministic policy or human review** and
 **never silently fails open for high-risk decisions**. A provider error or
@@ -38,6 +40,10 @@ You can tell whether JEV executed without reading the implementation:
   disabled signal, not a failure.
 - **In the run artifacts.** A JEV run writes its diagnostic artifacts under the
   run directory; if no JEV artifact exists, JEV did not run.
+- **Enabled but not constructed.** If JEV is enabled but its analyzer could not be
+  constructed, the run behaves as if JEV were absent but records a fixed
+  `analyzer-unavailable` activity diagnostic, so a configuration failure is
+  distinguishable from an intentional disable (which records nothing).
 
 ### Blocking versus non-blocking findings
 

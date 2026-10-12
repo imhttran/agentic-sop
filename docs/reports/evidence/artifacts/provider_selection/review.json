@@ -1,0 +1,4 @@
+{
+  "Summary": "The change adds a small deterministic `Add` function in package synthetic plus a table-driven unit test. The implementation matches the acceptance criterion (returns the sum of two integers), compiles as valid Go, and the test covers positive, zero, negative, and mixed-sign cases without external dependencies. No correctness, safety, or security issues found.",
+  "Findings": []
+}

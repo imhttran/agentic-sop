@@ -43,9 +43,17 @@ simple rules before it is trusted (plan T037).
   escalation (T036) because the policy shape is the same.
 - The layer is **disabled by default** (`decision.enabled: false`), and the
   default provider is deterministic.
-- The `jev` provider is recognized by configuration but not implemented, so
-  `NewProvider("jev")` fails clearly rather than silently falling back. Enabling
-  Jev by default requires demonstrated value (plan T037), so it stays opt-in.
+- `decision.provider` accepts only `deterministic` (the default) and `command`
+  (a provider-neutral external adapter, which requires `decision.command`). An
+  unsupported provider name is rejected at config load rather than silently
+  falling back; `NewProvider` keeps the same fail-closed guard for any name it
+  does not implement. Configuration compatibility note: `decision.provider: jev`
+  was previously accepted by configuration but was nonfunctional — the runtime
+  never implemented a `jev` decision provider — and is now rejected at load. An
+  existing config carrying `provider: jev` must remove the override or set
+  `provider: deterministic`.
+- Enabling the decision layer by default requires demonstrated value (plan T037),
+  so it stays opt-in.
 - Thresholds must be within [0,1].
 
 ## Tests

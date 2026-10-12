@@ -1,0 +1,41 @@
+{
+  "Results": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 19853125,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tdogfood/synthetic\t(cached)\n",
+      "Stderr": "",
+      "Duration": 78733500,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "go vet ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 70212000,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "test -z \"$(gofmt -l .)\"",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 11143042,
+      "Status": "PASS"
+    }
+  ],
+  "Status": "PASS"
+}

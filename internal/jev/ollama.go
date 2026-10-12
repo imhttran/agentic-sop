@@ -62,10 +62,37 @@ const maxAnalysisAttempts = 3
 // the output unparseable, so the model is told the contract rather than guessed
 // at. It reuses the schema the adapter already validates (modelOutput) and is
 // complemented by the provider's schema-constrained mode (jevOutputJSONSchema);
-// it introduces no second protocol.
-const jevOutputSchema = `Return ONE JSON object and nothing else (no prose, no markdown, no code fences):
-{"status":"PASS|FINDINGS|INCOMPLETE|ERROR","summary":string,"findings":[{"id":string,"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","category":string,"path":string,"line":number,"message":string,"evidence":string}]}
+// it introduces no second protocol. Its category vocabulary is derived from the
+// single definition of validity in evidence.go (Categories), so the categories the
+// model is told are exactly the categories the parser accepts and cannot drift.
+var jevOutputSchema = `Return ONE JSON object and nothing else (no prose, no markdown, no code fences):
+{"status":"PASS|FINDINGS|INCOMPLETE|ERROR","summary":string,"findings":[{"id":string,"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","category":` + strconv.Quote(categoryVocabulary("|")) + `,"path":string,"line":number,"message":string,"evidence":string}]}
 Use "PASS" with an empty findings list when there is nothing to report, and "FINDINGS" with at least one finding otherwise. Report only real findings with concrete evidence.`
+
+// categoryVocabulary joins the authoritative category vocabulary (the single
+// definition of validity in evidence.go) with sep, so the prompt and the JSON
+// schema advertise exactly the categories the parser accepts rather than a second,
+// hand-maintained list that could drift from it.
+func categoryVocabulary(sep string) string {
+	cats := Categories()
+	parts := make([]string, len(cats))
+	for i, c := range cats {
+		parts[i] = string(c)
+	}
+	return strings.Join(parts, sep)
+}
+
+// categoryEnumJSON renders the authoritative category vocabulary as a JSON array
+// body (quoted, comma-separated values) for the schema category enum, derived
+// from Categories so the constraint tracks evidence.go.
+func categoryEnumJSON() string {
+	cats := Categories()
+	parts := make([]string, len(cats))
+	for i, c := range cats {
+		parts[i] = strconv.Quote(string(c))
+	}
+	return strings.Join(parts, ", ")
+}
 
 // jevCorrectiveInstruction is appended to the prompt when the model's previous
 // response did not satisfy the required JSON schema. It asks the model to correct
@@ -89,7 +116,7 @@ type ChatProvider interface {
 // the parser already requires rather than the model inferring it. It is the
 // schema-constraint layer of defense in depth; the prompt contract and the strict
 // parser + bounded corrective retry remain in place.
-var jevOutputJSONSchema = json.RawMessage(`{
+var jevOutputJSONSchema = json.RawMessage(fmt.Sprintf(`{
   "type": "object",
   "properties": {
     "status": {"type": "string", "enum": ["PASS", "FINDINGS", "INCOMPLETE", "ERROR"]},
@@ -101,7 +128,7 @@ var jevOutputJSONSchema = json.RawMessage(`{
         "properties": {
           "id": {"type": "string"},
           "severity": {"type": "string", "enum": ["INFO", "LOW", "MEDIUM", "HIGH", "CRITICAL"]},
-          "category": {"type": "string"},
+          "category": {"type": "string", "enum": [%s]},
           "path": {"type": "string"},
           "line": {"type": "integer"},
           "message": {"type": "string"},
@@ -112,7 +139,7 @@ var jevOutputJSONSchema = json.RawMessage(`{
     }
   },
   "required": ["status"]
-}`)
+}`, categoryEnumJSON()))
 
 // OllamaAnalyzer is a jev.Analyzer backed by the existing Ollama infrastructure.
 // It receives only the bounded jev.Request, builds a prompt from it, and returns
@@ -137,7 +164,11 @@ const (
 	ErrProviderUnreachable ProviderErrorKind = "PROVIDER_UNREACHABLE"
 	ErrConfigInvalid       ProviderErrorKind = "CONFIG_INVALID"
 	ErrTimeout             ProviderErrorKind = "TIMEOUT"
-	ErrMalformedOutput     ProviderErrorKind = "MALFORMED_OUTPUT"
+	// ErrCanceled distinguishes a caller cancellation (context.Canceled) from an
+	// elapsed deadline (ErrTimeout). Both are terminal; the split keeps a
+	// cancellation from being mislabeled as a provider timeout.
+	ErrCanceled        ProviderErrorKind = "CANCELED"
+	ErrMalformedOutput ProviderErrorKind = "MALFORMED_OUTPUT"
 )
 
 // ProviderError is a focused JEV provider failure. It names the failure class in
@@ -175,6 +206,17 @@ func providerError(kind ProviderErrorKind, err error) error {
 // were exhausted instead of reading like a first-attempt failure.
 func providerErrorAfter(kind ProviderErrorKind, err error, attempts int) error {
 	return &ProviderError{Kind: kind, Err: err, Attempts: attempts}
+}
+
+// contextErrorKind classifies a terminal context error without collapsing the
+// two cases: a caller cancellation is ErrCanceled, an elapsed deadline is
+// ErrTimeout. Both are terminal (never retried), so the split only makes the
+// failure observable as the right class.
+func contextErrorKind(err error) ProviderErrorKind {
+	if errors.Is(err, context.Canceled) {
+		return ErrCanceled
+	}
+	return ErrTimeout
 }
 
 // NewOllamaAnalyzer builds an adapter from the reused Ollama configuration. The
@@ -255,9 +297,11 @@ func (a *OllamaAnalyzer) Analyze(ctx context.Context, req Request) (Result, erro
 
 	var lastErr error
 	for attempt := 1; attempt <= maxAnalysisAttempts; attempt++ {
-		// A cancelled/expired context is terminal: never retry it.
+		// A cancelled/expired context is terminal: never retry it. Cancellation and
+		// an elapsed deadline are classified apart so a caller cancellation is not
+		// reported as a provider timeout.
 		if err := callCtx.Err(); err != nil {
-			return Result{}, providerError(ErrTimeout, err)
+			return Result{}, providerError(contextErrorKind(err), err)
 		}
 
 		// The first attempt carries the base contract; a corrective retry appends
@@ -280,20 +324,30 @@ func (a *OllamaAnalyzer) Analyze(ctx context.Context, req Request) (Result, erro
 			case errors.Is(err, context.DeadlineExceeded), errors.Is(callCtx.Err(), context.DeadlineExceeded):
 				return Result{}, providerError(ErrTimeout, err)
 			case errors.Is(err, context.Canceled), errors.Is(callCtx.Err(), context.Canceled):
-				return Result{}, providerError(ErrTimeout, err)
+				// A caller cancellation is terminal and distinct from a timeout.
+				return Result{}, providerError(ErrCanceled, err)
 			default:
 				return Result{}, providerError(ErrProviderUnreachable, err)
 			}
 		}
 		if err := callCtx.Err(); err != nil {
-			return Result{}, providerError(ErrTimeout, err)
+			return Result{}, providerError(contextErrorKind(err), err)
 		}
 
 		result, err := parseModelOutput(out)
-		if err == nil {
-			return result, nil
+		if err != nil {
+			lastErr = err
+			continue
 		}
-		lastErr = err
+		// Attach the validated, versioned structured evidence built from the parsed
+		// output and the request context. Evidence that fails the fail-closed contract
+		// is terminal: it is never attached, never corrective-retried (a retry cannot
+		// repair the request context), and never authorizes continuation.
+		result, err = attachStructuredEvidence(result, req.Purpose)
+		if err != nil {
+			return Result{}, err
+		}
+		return result, nil
 	}
 
 	// Every attempt produced output that violated the schema: fail closed with a
@@ -387,6 +441,120 @@ func parseModelOutput(raw string) (Result, error) {
 		return Result{}, err
 	}
 	return result, nil
+}
+
+// attachStructuredEvidence builds and validates the versioned structured evidence
+// for a validated Result, then attaches it. It fails closed: evidence that does
+// not satisfy the contract returns a zero Result and a non-nil error, so malformed
+// or incomplete evidence is never attached and never authorizes continuation. It
+// never derives meaning from summary prose and never fabricates a category.
+func attachStructuredEvidence(result Result, requestPurpose Purpose) (Result, error) {
+	ev := structuredEvidenceFor(result, requestPurpose)
+	if err := ev.Validate(); err != nil {
+		return Result{}, err
+	}
+	result.StructuredEvidence = &ev
+	return result, nil
+}
+
+// structuredEvidenceFor maps a validated Result, parsed from the model output,
+// together with the request context onto the closed evidence enumerations in
+// evidence.go. An undeclared (empty) request purpose keeps the analyzer's generic
+// quality meaning rather than an unknown value; a non-empty but unknown purpose is
+// preserved so validation rejects it. It never fabricates a category: an empty
+// model category stays the valid unspecified value, while an unrecognized non-empty
+// category is preserved so validation rejects it and the analysis fails closed.
+func structuredEvidenceFor(result Result, requestPurpose Purpose) Evidence {
+	purpose := requestPurpose
+	if purpose == "" {
+		purpose = PurposeQuality
+	}
+
+	var items []EvidenceItem
+	for _, f := range result.Findings {
+		items = append(items, EvidenceItem{
+			Purpose:  purpose,
+			Severity: evidenceSeverity(f.Severity),
+			Category: evidenceCategory(f.Category),
+			Detail:   f.Message,
+			Evidence: f.Evidence,
+		})
+	}
+
+	return Evidence{
+		Version:  EvidenceVersion,
+		Purpose:  purpose,
+		Severity: evidenceOverallSeverity(result.Findings),
+		Status:   evidenceStatus(result.Status),
+		Items:    items,
+		Summary:  result.Summary,
+	}
+}
+
+// evidenceStatus maps a validated Result status to the closed evidence status
+// enumeration. An unknown status maps to the empty (invalid) value so validation
+// fails closed rather than defaulting.
+func evidenceStatus(s Status) EvidenceStatus {
+	switch s {
+	case StatusPass:
+		return EvidencePass
+	case StatusFindings:
+		return EvidenceFindings
+	case StatusIncomplete:
+		return EvidenceIncomplete
+	case StatusError:
+		return EvidenceError
+	default:
+		return ""
+	}
+}
+
+// evidenceSeverity maps a review finding severity to the evidence severity
+// enumeration. The two vocabularies are the same strings, so an unknown value maps
+// to itself and is rejected by validation.
+func evidenceSeverity(s review.Severity) Severity {
+	return Severity(strings.ToUpper(strings.TrimSpace(string(s))))
+}
+
+// evidenceSeverityRank orders the evidence severities from least to most serious
+// so the overall evidence severity can be the most serious finding.
+var evidenceSeverityRank = map[Severity]int{
+	SeverityInfo:     0,
+	SeverityLow:      1,
+	SeverityMedium:   2,
+	SeverityHigh:     3,
+	SeverityCritical: 4,
+}
+
+// evidenceOverallSeverity is the most serious finding severity, or INFO when there
+// are no findings, so the evidence always carries a valid severity.
+func evidenceOverallSeverity(findings []Finding) Severity {
+	overall := SeverityInfo
+	for _, f := range findings {
+		if s := evidenceSeverity(f.Severity); evidenceSeverityRank[s] > evidenceSeverityRank[overall] {
+			overall = s
+		}
+	}
+	return overall
+}
+
+// evidenceCategory maps a model-supplied category to the closed category
+// enumeration. It normalizes case, hyphens, and spaces to the contract's
+// snake_case form. An empty or absent model category stays the valid unspecified
+// (empty) value; an unrecognized non-empty category is preserved as-is so
+// validation rejects it and the analysis fails closed instead of silently
+// dropping the model's classification. Dropping it would let a mislabeled
+// security-family finding (security, destructive, credential sensitivity, or
+// approval sensitivity) evade the router's conservative HIGH floor, which keys
+// off the typed category.
+func evidenceCategory(raw string) Category {
+	v := strings.ToLower(strings.TrimSpace(raw))
+	if v == "" {
+		return ""
+	}
+	v = strings.ReplaceAll(v, "-", "_")
+	v = strings.ReplaceAll(v, " ", "_")
+	return Category(v)
 }
 
 // truncateRunes bounds s to at most max runes, appending an explicit marker so a

@@ -54,6 +54,7 @@ human:
 workflow:
   mode: local # local | pull-request
 
+
 # Optional risk-based autonomy policy: how much recovery SOP performs without a
 # human. Omitted => balanced (the conservative default). See "Decision layer and
 # autonomy policy".
@@ -70,7 +71,7 @@ workflow:
 # Optional decision layer (off by default; the deterministic rules are the
 # baseline).
 # decision:
-#   provider: deterministic # deterministic | jev
+#   provider: deterministic # deterministic | command
 #   enabled: false
 #   thresholds:
 #     route_to_strong_model: 0.7
@@ -79,9 +80,6 @@ workflow:
 # Optional capability toggles.
 # features:
 #   jev_decisions: false
-
-
-
 
 # Optional model routing. Off unless this block (or a SOP_MODEL_* variable, or
 # --model-class) is set, so an existing project is unchanged. See "Model routing".
@@ -129,54 +127,58 @@ workflow:
 
 ## Field reference
 
-| Key                                     | Default                  | Values / behavior                                                                          |
-| --------------------------------------- | ------------------------ | ------------------------------------------------------------------------------------------ |
-| `version`                               | `1`                      | Configuration schema version.                                                              |
-| `project.name`                          | — (required)             | Project identifier. A missing name fails with a clear message.                             |
-| `project.integration_branch`            | `main`                   | Base branch for task branches and PRs.                                                     |
-| `agent.harness`                         | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.           |
-| `agent.provider`                        | —                        | `ollama`, `llamacpp`, `mlx`, or `command`. Required when `harness: tool`.                  |
-| `agent.model`                           | —                        | Model ID. Required when `provider: ollama`, `llamacpp`, or `mlx`.                          |
-| `validation.build` / `test` / `lint`    | —                        | Command lists run in the project directory, in order, stopping at the first failure. A task that changes the repository cannot pass without at least one configured command; SOP reports `VALIDATION_NOT_CONFIGURED` (a terminal configuration failure, not an approval) otherwise. |
-| `review.engine`                         | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`). |
-| `review.delegation`                     | `false`                  | Review delegation flag.                                                                    |
-| `quality.require_tests`                 | `true`                   | Require tests as part of the quality policy.                                               |
-| `quality.max_fix_cycles`                | `3`                      | Upper bound on the validate → review → gate → fix loop.                                    |
-| `quality.fail_on`                       | `critical`, `high`       | Severities that block a pass.                                                              |
-| `quality.jev.enabled`                   | `false`                  | Enable the optional read-only JEV analysis stage.                                          |
-| `quality.jev.mode`                      | `review`                 | Only implemented JEV mode (read-only analysis).                                            |
-| `quality.jev.fail_on`                   | `quality.fail_on`        | JEV severities that block a pass.                                                          |
-| `early_jev.enabled`                     | `false`                  | Enable the early-JEV decision layer (independent of `quality.jev`).                        |
-| `early_jev.mode`                        | `review`                 | Only implemented early-JEV mode (read-only analysis).                                      |
-| `early_jev.gates.task_triage`           | `false`                  | Run JEV task triage before implementation (requires `early_jev.enabled: true`).            |
-| `early_jev.gates.pre_execution`         | `false`                  | Run JEV pre-execution analysis before implementation (requires `early_jev.enabled: true`). |
-| `early_jev.fail_on`                     | `quality.fail_on`        | Severities that escalate an early-JEV result to a human boundary.                          |
-| `human.approval_before_commit`          | `true`                   | When on, `sop commit` / `sop pr` require `--yes`.                                          |
-| `workflow.mode`                         | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                    |
-| `decision.provider`                     | `deterministic`          | Optional decision layer: `deterministic` (baseline rules) or `jev` (JEV adapter).          |
-| `decision.enabled`                      | `false`                  | Enable the optional decision layer.                                                        |
-| `decision.thresholds.route_to_strong_model` | `0.7`               | Confidence below this uses the stronger model class; must be within `[0,1]`.               |
-| `decision.thresholds.require_human`     | `0.4`                    | Confidence below this (or a HIGH choice) needs a human boundary; must be within `[0,1]`.   |
-| `features.jev_decisions`                | `false`                  | Pre-existing decision-layer signal (selects the decision layer; does not itself enable JEV).|
-| `autonomy.level`                        | `balanced`               | `low`, `balanced`, or `high`: how much recovery SOP performs without a human boundary.     |
-| `autonomy.auto_retry`                   | level setting            | Optional explicit override: bounded retries of transient failures.                         |
-| `autonomy.auto_continue`                | level setting            | Optional explicit override: bounded continuation of productive incomplete work.            |
-| `autonomy.auto_fix`                     | level setting            | Optional explicit override: the bounded deterministic fix loop.                            |
-| `autonomy.auto_reconcile_safe_changes`  | level setting            | Optional explicit override: automatic reconciliation of semantically safe plan changes.     |
-| `autonomy.max_continuations`            | level setting            | Optional explicit override: bound automatic continuation (separate from the retry budget). |
-| `models.default_class`                  | `medium`                 | Default model class (`small`, `medium`, `large`).                                          |
-| `models.fallback_class`                 | selected class           | Class used when the selected class has no model.                                           |
-| `models.allow_cloud_fallback_for_local` | `false`                  | Allow a `local` class **with no model** to fall back to a cloud class (config-completeness).|
-| `models.<class>.provider`               | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `mlx`, `command`).                             |
-| `models.<class>.name`                   | per class                | Model name for a class (see "Model routing").                                              |
-| `models.<class>.locality`               | per class                | `local` or `cloud` (see "Model routing").                                                  |
-| `models.<class>.fallback.provider`      | class provider           | Provider for a class's runtime cloud fallback; defaults to the class's provider.           |
-| `models.<class>.fallback.name`          | per class                | Model a LOCAL class runs when its local runtime cannot serve the primary.                  |
-| `models.<class>.fallback.locality`      | `cloud`                  | `local` or `cloud` for a class's runtime fallback.                                         |
-| `providers.validate`                    | `false`                  | Opt-in pre-execution model-availability validation (see "Provider runtime").               |
-| `providers.ollama.endpoint`             | `http://127.0.0.1:11434` | Ollama base URL.                                                                           |
-| `providers.llamacpp.endpoint`           | `http://127.0.0.1:8080`  | llama.cpp `llama-server` base URL.                                                         |
-| `providers.mlx.endpoint`                | `http://127.0.0.1:8000`  | MLX / oMLX base URL.                                                                       |
+| Key                                         | Default                  | Values / behavior                                                                                                                                                                                                                                                                   |
+| ------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `version`                                   | `1`                      | Configuration schema version.                                                                                                                                                                                                                                                       |
+| `project.name`                              | — (required)             | Project identifier. A missing name fails with a clear message.                                                                                                                                                                                                                      |
+| `project.integration_branch`                | `main`                   | Base branch for task branches and PRs.                                                                                                                                                                                                                                              |
+| `agent.harness`                             | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.                                                                                                                                                                                                    |
+| `agent.provider`                            | —                        | `ollama`, `llamacpp`, `mlx`, or `command`. Required when `harness: tool`.                                                                                                                                                                                                           |
+| `agent.model`                               | —                        | Model ID. Required when `provider: ollama`, `llamacpp`, or `mlx`.                                                                                                                                                                                                                   |
+| `validation.build` / `test` / `lint`        | —                        | Command lists run in the project directory, in order, stopping at the first failure. A task that changes the repository cannot pass without at least one configured command; SOP reports `VALIDATION_NOT_CONFIGURED` (a terminal configuration failure, not an approval) otherwise. |
+| `review.engine`                             | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`).                                                                                                                                                                                          |
+| `review.delegation`                         | `false`                  | Review delegation flag.                                                                                                                                                                                                                                                             |
+| `quality.require_tests`                     | `true`                   | Require tests as part of the quality policy.                                                                                                                                                                                                                                        |
+| `quality.max_fix_cycles`                    | `3`                      | Upper bound on the validate → review → gate → fix loop.                                                                                                                                                                                                                             |
+| `quality.fail_on`                           | `critical`, `high`       | Severities that block a pass.                                                                                                                                                                                                                                                       |
+| `quality.jev.enabled`                       | `false`                  | Enable the optional read-only JEV analysis stage.                                                                                                                                                                                                                                   |
+| `quality.jev.mode`                          | `review`                 | Only implemented JEV mode (read-only analysis).                                                                                                                                                                                                                                     |
+| `quality.jev.fail_on`                       | `quality.fail_on`        | JEV severities that block a pass.                                                                                                                                                                                                                                                   |
+| `early_jev.enabled`                         | `false`                  | Enable the early-JEV decision layer (independent of `quality.jev`).                                                                                                                                                                                                                 |
+| `early_jev.mode`                            | `review`                 | Only implemented early-JEV mode (read-only analysis).                                                                                                                                                                                                                               |
+| `early_jev.gates.task_triage`               | `false`                  | Run JEV task triage before implementation (requires `early_jev.enabled: true`).                                                                                                                                                                                                     |
+| `early_jev.gates.pre_execution`             | `false`                  | Run JEV pre-execution analysis before implementation (requires `early_jev.enabled: true`).                                                                                                                                                                                          |
+| `early_jev.fail_on`                         | `quality.fail_on`        | Severities that escalate an early-JEV result to a human boundary.                                                                                                                                                                                                                   |
+| `human.approval_before_commit`              | `true`                   | When on, `sop commit` / `sop pr` require `--yes`.                                                                                                                                                                                                                                   |
+| `workflow.mode`                             | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                                                                                                                                                                                                             |
+| `decision.provider`                         | `deterministic`          | Optional decision layer: `deterministic` (baseline rules, the default), `command` (SEAM-002 external process; requires `decision.command`), or `adapter` (batched adapter connector; requires `decision.adapter_command`).                                                          |
+| `decision.command`                          | —                        | SEAM-002 external process argv: the executable followed by its arguments, in order. Required when `decision.provider: command`.                                                                                                                                                     |
+| `decision.adapter_command`                  | —                        | Batched adapter executable argv: the executable followed by its fixed arguments. Required when `decision.provider: adapter`. Separate from `decision.command`.                                                                                                                      |
+| `decision.adapter_provider`                 | `nimble`                 | Optional selection hint passed to the adapter (`nimble` or `julia`); also selects the config-driven profile registry. Never selects SOP policy.                                                                                                                                     |
+| `decision.adapter_model`                    | —                        | Optional model hint passed to the adapter.                                                                                                                                                                                                                                          |
+| `decision.enabled`                          | `false`                  | Enable the optional decision layer.                                                                                                                                                                                                                                                 |
+| `decision.thresholds.route_to_strong_model` | `0.7`                    | Confidence below this uses the stronger model class; must be within `[0,1]`.                                                                                                                                                                                                        |
+| `decision.thresholds.require_human`         | `0.4`                    | Confidence below this (or a HIGH choice) needs a human boundary; must be within `[0,1]`.                                                                                                                                                                                            |
+| `features.jev_decisions`                    | `false`                  | Pre-existing decision-layer signal (selects the decision layer; does not itself enable JEV).                                                                                                                                                                                        |
+| `autonomy.level`                            | `balanced`               | `low`, `balanced`, or `high`: how much recovery SOP performs without a human boundary.                                                                                                                                                                                              |
+| `autonomy.auto_retry`                       | level setting            | Optional explicit override: bounded retries of transient failures.                                                                                                                                                                                                                  |
+| `autonomy.auto_continue`                    | level setting            | Optional explicit override: bounded continuation of productive incomplete work.                                                                                                                                                                                                     |
+| `autonomy.auto_fix`                         | level setting            | Optional explicit override: the bounded deterministic fix loop.                                                                                                                                                                                                                     |
+| `autonomy.auto_reconcile_safe_changes`      | level setting            | Optional explicit override: automatic reconciliation of semantically safe plan changes.                                                                                                                                                                                             |
+| `autonomy.max_continuations`                | level setting            | Optional explicit override: bound automatic continuation (separate from the retry budget).                                                                                                                                                                                          |
+| `models.default_class`                      | `medium`                 | Default model class (`small`, `medium`, `large`).                                                                                                                                                                                                                                   |
+| `models.fallback_class`                     | selected class           | Class used when the selected class has no model.                                                                                                                                                                                                                                    |
+| `models.allow_cloud_fallback_for_local`     | `false`                  | Allow a `local` class **with no model** to fall back to a cloud class (config-completeness).                                                                                                                                                                                        |
+| `models.<class>.provider`                   | `ollama`                 | Provider for a class (`ollama`, `llamacpp`, `mlx`, `command`).                                                                                                                                                                                                                      |
+| `models.<class>.name`                       | per class                | Model name for a class (see "Model routing").                                                                                                                                                                                                                                       |
+| `models.<class>.locality`                   | per class                | `local` or `cloud` (see "Model routing").                                                                                                                                                                                                                                           |
+| `models.<class>.fallback.provider`          | class provider           | Provider for a class's runtime cloud fallback; defaults to the class's provider.                                                                                                                                                                                                    |
+| `models.<class>.fallback.name`              | per class                | Model a LOCAL class runs when its local runtime cannot serve the primary.                                                                                                                                                                                                           |
+| `models.<class>.fallback.locality`          | `cloud`                  | `local` or `cloud` for a class's runtime fallback.                                                                                                                                                                                                                                  |
+| `providers.validate`                        | `false`                  | Opt-in pre-execution model-availability validation (see "Provider runtime").                                                                                                                                                                                                        |
+| `providers.ollama.endpoint`                 | `http://127.0.0.1:11434` | Ollama base URL.                                                                                                                                                                                                                                                                    |
+| `providers.llamacpp.endpoint`               | `http://127.0.0.1:8080`  | llama.cpp `llama-server` base URL.                                                                                                                                                                                                                                                  |
+| `providers.mlx.endpoint`                    | `http://127.0.0.1:8000`  | MLX / oMLX base URL.                                                                                                                                                                                                                                                                |
 
 ## Agent configuration matrix
 
@@ -222,12 +224,12 @@ SOP's state database.
   blank, non-numeric, or non-positive value keeps the built-in default, so a
   malformed override can never disable a limit:
 
-  | Variable | Limit | Default |
-  | --- | --- | --- |
-  | `SOP_OLLAMA_IMPLEMENT_ITERATIONS` | IMPLEMENT iteration ceiling | `32` |
-  | `SOP_OLLAMA_FIX_ITERATIONS` | FIX iteration ceiling | `24` |
-  | `SOP_OLLAMA_STALE_ITERATIONS` | consecutive-stale-turn bound (no-progress guard) | `5` |
-  | `SOP_OLLAMA_TOOL_CALLS` | tool calls per invocation | `80` |
+  | Variable                          | Limit                                            | Default |
+  | --------------------------------- | ------------------------------------------------ | ------- |
+  | `SOP_OLLAMA_IMPLEMENT_ITERATIONS` | IMPLEMENT iteration ceiling                      | `32`    |
+  | `SOP_OLLAMA_FIX_ITERATIONS`       | FIX iteration ceiling                            | `24`    |
+  | `SOP_OLLAMA_STALE_ITERATIONS`     | consecutive-stale-turn bound (no-progress guard) | `5`     |
+  | `SOP_OLLAMA_TOOL_CALLS`           | tool calls per invocation                        | `80`    |
 
   A negative limit is rejected. The applied limits are recorded in each run's
   `trace.json` and shown by `sop report`. The harness owns and enforces the budget;
@@ -257,22 +259,22 @@ Resolution order, highest first:
 --model-class  >  environment / .env  >  models: block  >  built-in defaults
 ```
 
-| Setting (config / environment)                                                       | Default            | Meaning                                                                   |
-| ------------------------------------------------------------------------------------ | ------------------ | ------------------------------------------------------------------------- |
-| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                             |
-| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                          |
-| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class with **no model** to fall back to a cloud class.    |
-| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                            |
-| `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt.       |
-| `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                          |
+| Setting (config / environment)                                                       | Default            | Meaning                                                                      |
+| ------------------------------------------------------------------------------------ | ------------------ | ---------------------------------------------------------------------------- |
+| `models.default_class` / `SOP_MODEL_DEFAULT_CLASS`                                   | `medium`           | Class the default agent uses.                                                |
+| `models.fallback_class` / `SOP_MODEL_FALLBACK_CLASS`                                 | the selected class | Class used when the selected class has no model.                             |
+| `models.allow_cloud_fallback_for_local` / `SOP_MODEL_ALLOW_CLOUD_FALLBACK_FOR_LOCAL` | `false`            | Allow a `local` class with **no model** to fall back to a cloud class.       |
+| `models.routing_enabled` / `SOP_MODEL_ROUTING_ENABLED`                               | `false`            | Enable automatic per-task model-class routing.                               |
+| `models.escalation_enabled` / `SOP_MODEL_ESCALATION_ENABLED`                         | `false`            | Enable bounded escalation to a larger class after a failed attempt.          |
+| `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                             |
 | `models.replan_enabled` / `SOP_MODEL_REPLAN_ENABLED`                                 | `false`            | Enable bounded strategy replanning (same class) after a recoverable failure. |
-| `models.max_replans` / `SOP_MODEL_MAX_REPLANS`                                       | `1`                | Bound on strategy replanning (`0` disables it).                           |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                                |
-| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                                 |
-| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                       |
-| `models.<class>.fallback.provider` / `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`           | class provider     | Provider for the class's runtime fallback.                                |
-| `models.<class>.fallback.name` / `SOP_MODEL_<CLASS>_FALLBACK_NAME`                   | per class (below)  | Model a LOCAL class runs when its local runtime cannot serve the primary. |
-| `models.<class>.fallback.locality` / `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`           | `cloud`            | `local` or `cloud` for the class's runtime fallback.                      |
+| `models.max_replans` / `SOP_MODEL_MAX_REPLANS`                                       | `1`                | Bound on strategy replanning (`0` disables it).                              |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                                   |
+| `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                                    |
+| `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                          |
+| `models.<class>.fallback.provider` / `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`           | class provider     | Provider for the class's runtime fallback.                                   |
+| `models.<class>.fallback.name` / `SOP_MODEL_<CLASS>_FALLBACK_NAME`                   | per class (below)  | Model a LOCAL class runs when its local runtime cannot serve the primary.    |
+| `models.<class>.fallback.locality` / `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`           | `cloud`            | `local` or `cloud` for the class's runtime fallback.                         |
 
 Built-in class defaults (used when no layer names a class):
 
@@ -307,7 +309,7 @@ is present, so an existing project is unchanged.
   the runtime reports it cannot chat), observed read-only — never because a
   generation, validation, or review failed. The switch keeps the class and is
   recorded with the source `cloud-fallback` and the reason `local runtime
-  unavailable; cloud fallback`. SMALL's built-in fallback is
+unavailable; cloud fallback`. SMALL's built-in fallback is
   `nemotron-3-nano:30b-cloud`. See
   [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) §"Local-First Fallback".
 - An unreachable local runtime (Ollama at `http://127.0.0.1:11434`) is NOT an
@@ -545,18 +547,43 @@ mutates SOP state. See [`../specs/PROVIDERS.md`](../specs/PROVIDERS.md).
 - Credentials are never configured here (and never printed by `sop providers`);
   they stay in the environment, exactly as for the agent path.
 
-
 ## Decision layer and autonomy policy
 
 Two optional policy blocks describe how SOP decides to proceed without a human.
 
 - `decision` is the optional decision layer. It is **off by default**: the
-  deterministic rules are the baseline, and a JEV adapter must demonstrate value
-  before it is trusted. `decision.provider` is `deterministic` (default) or `jev`;
+  deterministic rules are the baseline, and an external decision adapter must demonstrate value
+  before it is trusted. `decision.provider` is `deterministic` (default), or
+  `command` (a SEAM-002 external process, which requires `decision.command`), or
+  `adapter` (the batched adapter connector, which requires `decision.adapter_command`);
   `decision.thresholds` route a low-confidence decision to the stronger model
   (`route_to_strong_model`, default `0.7`) or to a human (`require_human`, default
   `0.4`). `features.jev_decisions` is a pre-existing signal that selects the
   decision layer; it does not by itself enable JEV.
+
+### Adapter connector (`decision.provider: adapter`)
+
+- **Opt-in and disabled by default.** The default provider is `deterministic`; the
+  adapter runs only when `decision.provider: adapter` and `decision.enabled: true`
+  are set. Disabling (`decision.enabled: false`) or removing the block restores the
+  deterministic baseline exactly — a strict no-op, not an error (**rollback**).
+- **`decision.adapter_command` is the executable argv only.** Provide the adapter
+  executable and any _fixed_ arguments, **without** the `decide` subcommand: the
+  connector appends `decide -file <tmp> -json -provider <p> -model <m> -timeout <d>`
+  itself. Example: `adapter_command: ["/usr/local/bin/sop-decision-adapter"]`.
+- **Provider/model hints.** `decision.adapter_provider` (default `nimble`) and
+  `decision.adapter_model` are passed through to the adapter and select the
+  config-driven profile registry; they never select SOP policy.
+- **Failure behavior (fail closed).** The connector bounds the subprocess
+  (time, output size), decodes the result strictly, and maps adapter exit codes
+  (`0` ok, `2` invalid request, `3` provider unavailable, `1`/other provider
+  failure) and cancellation/timeout to typed, class-only errors. Adapter evidence
+  can only _add_ attention: it is validated (`decision.Validate`) and routed by
+  `decision.Route`/`autonomy`, which retain final authority; it never approves or
+  bypasses a human boundary.
+- **Live inference authorization.** Running a real adapter incurs inference and is
+  gated (Gate W3-4); enabling the adapter by default is a separate production-policy
+  decision (Gate W3-3).
 - `autonomy` is the risk-based policy for how much **recovery** SOP performs
   without asking a human. An omitted block resolves to the conservative `balanced`
   default, so no project is silently switched to maximum autonomy. `level` is
@@ -568,7 +595,6 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
 Human approval is required for a **risk** or authority boundary or unresolved
 human intent, never merely because automation failed. See
 [`../PRD.md`](../PRD.md) (Bounded autonomy) and `internal/autonomy`.
-
 
 ## Prompts
 

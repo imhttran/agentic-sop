@@ -1,0 +1,9 @@
+{
+  "choice": "LOW",
+  "confidence": 0.18978170992436016,
+  "governance_target": "HUMAN",
+  "latency_ms": 5330,
+  "model": "nimble",
+  "provider": "nimble",
+  "validation": "PASS"
+}

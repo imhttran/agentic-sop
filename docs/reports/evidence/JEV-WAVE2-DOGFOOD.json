@@ -1,0 +1,111 @@
+{
+  "version": 1,
+  "command": "sop",
+  "argv": [
+    "run",
+    "--task",
+    "task.md"
+  ],
+  "revision": "719ba15d8cba2e5e9581bc796cc96bd66da6605b",
+  "provider": "ollama",
+  "model": "deepseek-v4.1-flash:cloud",
+  "endpoint_category": "local",
+  "scenarios": [
+    {
+      "id": "direct_sop_jev_invocation",
+      "classification": "measured",
+      "started_at": "2026-10-12T05:23:59Z",
+      "finished_at": "2026-10-12T05:24:15Z",
+      "exit_status": 0,
+      "latency_ms": 15873,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "PARTIAL",
+      "artifact_path": "docs/reports/evidence/artifacts/direct_sop_jev_invocation",
+      "reason": "Facet 1 of 4 of ONE execution (`sop run --task task.md`, run DOGFOOD-001): the production JEV analyzer was invoked (observable in metrics.json: jev.invocations=1)."
+    },
+    {
+      "id": "provider_selection",
+      "classification": "measured",
+      "started_at": "2026-10-12T05:23:59Z",
+      "finished_at": "2026-10-12T05:24:15Z",
+      "exit_status": 0,
+      "latency_ms": 15873,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "PARTIAL",
+      "artifact_path": "docs/reports/evidence/artifacts/provider_selection",
+      "reason": "Facet 2 of 4 of ONE execution (run DOGFOOD-001): provider/model identity recorded (observable in trace.json and metrics.json: provider=ollama, model=deepseek-v4.1-flash:cloud)."
+    },
+    {
+      "id": "structured_evidence",
+      "classification": "measured",
+      "started_at": "2026-10-12T05:23:59Z",
+      "finished_at": "2026-10-12T05:24:15Z",
+      "exit_status": 0,
+      "latency_ms": 15873,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "PARTIAL",
+      "artifact_path": "docs/reports/evidence/artifacts/structured_evidence",
+      "reason": "Facet 3 of 4 of ONE execution (run DOGFOOD-001): Result.StructuredEvidence populated and validated (observable in jev.json: status=PASS, fail_closed=false)."
+    },
+    {
+      "id": "early_jev_routing",
+      "classification": "measured",
+      "started_at": "2026-10-12T05:23:59Z",
+      "finished_at": "2026-10-12T05:24:15Z",
+      "exit_status": 0,
+      "latency_ms": 15873,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "PARTIAL",
+      "artifact_path": "docs/reports/evidence/artifacts/early_jev_routing",
+      "reason": "Facet 4 of 4 of ONE execution (run DOGFOOD-001): early-JEV routing/gate decision recorded (observable in gate.json: Decision=PASS)."
+    },
+    {
+      "id": "retry",
+      "classification": "simulated",
+      "started_at": "2026-10-12T05:24:15Z",
+      "finished_at": "2026-10-12T05:24:15Z",
+      "exit_status": 0,
+      "latency_ms": 480,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "unknown",
+      "artifact_path": "",
+      "reason": "deterministic fault injection: persistent malformed output exhausts the bounded corrective retries (in-process fake provider; no network)"
+    },
+    {
+      "id": "provider_unavailability",
+      "classification": "simulated",
+      "started_at": "2026-10-12T05:24:15Z",
+      "finished_at": "2026-10-12T05:24:16Z",
+      "exit_status": 0,
+      "latency_ms": 499,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "unknown",
+      "artifact_path": "",
+      "reason": "deterministic fault injection: a provider failure surfaces as a focused, non-finding error (in-process fake provider; no network)"
+    },
+    {
+      "id": "human_escalation",
+      "classification": "simulated",
+      "started_at": "2026-10-12T05:24:16Z",
+      "finished_at": "2026-10-12T05:24:17Z",
+      "exit_status": 0,
+      "latency_ms": 885,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "unknown",
+      "artifact_path": "",
+      "reason": "deterministic fault injection: a HIGH security finding requires a human boundary via autonomy.DecideEarly (in-process fake provider; no network)"
+    },
+    {
+      "id": "fail_closed",
+      "classification": "simulated",
+      "started_at": "2026-10-12T05:24:17Z",
+      "finished_at": "2026-10-12T05:24:17Z",
+      "exit_status": 0,
+      "latency_ms": 468,
+      "process_outcome": "process exit 0",
+      "governed_outcome": "unknown",
+      "artifact_path": "",
+      "reason": "deterministic fault injection: invalid structured evidence fails closed (in-process fake provider; no network)"
+    }
+  ]
+}

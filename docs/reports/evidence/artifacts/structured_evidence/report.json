@@ -1,0 +1,149 @@
+{
+  "id": "DOGFOOD-001",
+  "stage": "PASSED",
+  "provider": "ollama",
+  "review_engine": "self",
+  "decision": "PASS",
+  "reasons": [
+    "all required checks passed"
+  ],
+  "fix_cycles": 0,
+  "execution_mode": "",
+  "verified_first": false,
+  "validation": [
+    {
+      "Category": "BUILD",
+      "Command": "go build ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 19853125,
+      "Status": "PASS"
+    },
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tdogfood/synthetic\t(cached)\n",
+      "Stderr": "",
+      "Duration": 78733500,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "go vet ./...",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 70212000,
+      "Status": "PASS"
+    },
+    {
+      "Category": "LINT",
+      "Command": "test -z \"$(gofmt -l .)\"",
+      "ExitCode": 0,
+      "Stdout": "",
+      "Stderr": "",
+      "Duration": 11143042,
+      "Status": "PASS"
+    }
+  ],
+  "findings": [],
+  "jev": {
+    "task_id": "DOGFOOD-001",
+    "run_id": "DOGFOOD-001",
+    "status": "PASS",
+    "fail_closed": false,
+    "findings": [],
+    "artifact_path": ".agent-sdlc/runs/DOGFOOD-001/jev.json",
+    "metrics": {
+      "invocations": 0,
+      "duration_ms": 340,
+      "provider": "ollama",
+      "model": "deepseek-v4.1-flash:cloud",
+      "tool_calls": 1,
+      "findings": 0,
+      "blocking_findings": 0
+    }
+  },
+  "performance": {
+    "id": "DOGFOOD-001",
+    "total_ms": 15861,
+    "stages_ms": {
+      "implement": 5219,
+      "plan": 9532,
+      "review": 550,
+      "validation": 179
+    },
+    "validation_ms": {
+      "build": 19,
+      "lint": 81,
+      "test": 78
+    },
+    "counts": {
+      "agent_calls": 2,
+      "agent_calls_avoided": 0,
+      "validation_runs": 1,
+      "validation_reused": 0,
+      "review_runs": 1,
+      "review_reused": 0,
+      "fix_cycles": 0,
+      "plan_repairs": 0
+    },
+    "jev": {
+      "invocations": 1,
+      "total_ms": 340,
+      "provider": "ollama",
+      "model": "deepseek-v4.1-flash:cloud",
+      "tool_calls": 1,
+      "findings": 0,
+      "blocking_findings": 0
+    }
+  },
+  "outcome": {
+    "status": "PARTIAL",
+    "criteria": [
+      {
+        "ID": "deterministic-checks",
+        "Required": true,
+        "Boundary": false,
+        "Met": true,
+        "Description": "the configured build/test/lint checks and the review passed",
+        "Command": "",
+        "Evidence": "met",
+        "Argv": null,
+        "ExitCode": 0,
+        "Output": ""
+      },
+      {
+        "ID": "criterion-1",
+        "Required": true,
+        "Boundary": false,
+        "Met": false,
+        "Description": "Add returns the sum of two integers.",
+        "Command": "",
+        "Evidence": "unverifiable: no deterministic check supplied",
+        "Argv": null,
+        "ExitCode": 0,
+        "Output": ""
+      },
+      {
+        "ID": "objective-acceptance",
+        "Required": true,
+        "Boundary": false,
+        "Met": false,
+        "Description": "the specification declares no executed, passing acceptance check",
+        "Command": "",
+        "Evidence": "unverifiable: no deterministic check supplied",
+        "Argv": null,
+        "ExitCode": 0,
+        "Output": ""
+      }
+    ],
+    "reasons": [
+      "required criterion criterion-1 not met: unverifiable: no deterministic check supplied",
+      "required criterion objective-acceptance not met: unverifiable: no deterministic check supplied"
+    ]
+  },
+  "generated_at": "2026-10-12T05:24:15.337648Z"
+}
