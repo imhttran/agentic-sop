@@ -7,7 +7,10 @@
 .PHONY: fmt vet test build check check-plugin install install-all install-ollama-agent \
 	plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
-	uninstall-skills uninstall-skills-zed uninstall-skills-claude
+	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
+	model-claude model-deepseek model-status
+
+ENV_FILE := .env
 
 fmt:
 	go fmt ./...
@@ -69,3 +72,17 @@ uninstall-skills-claude:
 # under edit, so the bootstrap invocation never compiles candidate source.
 install-ollama-agent: check
 	./scripts/install/install-sop-ollama-agent.sh
+
+
+model-claude:
+	@python3 scripts/switch-large-model.py claude
+
+.PHONY: model-deepseek
+
+model-deepseek:
+	@python3 scripts/switch-large-model.py deepseek
+	@echo "DeepSeek configuration activated"
+	@echo "unset SOP_AGENT_COMMAND ANTHROPIC_MODEL"
+
+model-status:
+	@python3 scripts/switch-large-model.py status

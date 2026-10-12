@@ -11,24 +11,24 @@ SOP E2E Reliability Hardening
 ## Summary
 
 Convert the end-to-end reliability assessment's observed defects and UNAVAILABLE coverage into a
-scoped, prioritized hardening backlog. Priorities: P1 — deterministic acceptance-criteria
-enforcement, operator-authorised cross-repository workspace, controller runtime parity; P2 —
-successful FIX-recovery coverage, live decision-adapter dispatch/fallback, explicit project-root
-execution safeguards, attempt-scoped artifact isolation, model PLAN/tool-protocol convergence.
-Tasks are independent unless a dependency is named. Cross-repository tasks are isolated and
-require an explicit operator authorization; the default repository confinement is preserved.
+scoped, prioritized hardening backlog. Ten tasks. P1: HARDEN-001b (caller-owned criterion
+verification — prerequisite), HARDEN-001 (deterministic acceptance enforcement), HARDEN-002
+(operator-authorised cross-repository workspace), HARDEN-003 (controller runtime parity). P2:
+HARDEN-004 (successful FIX-recovery coverage), HARDEN-005 (live decision-adapter dispatch),
+HARDEN-006 (explicit project-root execution safeguards), HARDEN-007 (attempt-scoped artifact
+isolation), HARDEN-008 (model PLAN/tool-protocol convergence). Proposed backlog: HARDEN-009
+(explicit plan-handoff disposition).
 
-## HARDEN-001 — Deterministic acceptance-criteria enforcement
+Acceptance enforcement is only legitimate if a criterion's outcome derives from an **observed**
+result, not a model claim. HARDEN-001b therefore lands first: it adds operator-owned, deterministic
+verifier bindings so `MET` is produced by SOP executing a trusted verifier, never by model text.
 
-Make a declared-but-unmet acceptance criterion a blocking, model-free gate outcome. The
-**authoritative enforcement location** is the gate evaluation that produces a task's PASS/FAIL
-(the quality gate consumed by the run loop in `internal/cli`; the criterion check itself is owned
-by the gate/quality evaluator, `internal/quality` or the gate evaluator that emits `gate.json`).
-Criterion outcomes must be **machine-readable**: each acceptance criterion is recorded with a
-tri-state outcome (MET / NOT_MET / UNAVAILABLE) in a task-level artifact (e.g.
-`.agent-sdlc/runs/<id>/criteria.json`) written by the run loop. The gate reads that artifact and
-**blocks completion** (no PASS) when any criterion is NOT_MET/UNAVAILABLE, unless an explicit
-operator authorization record exists.
+## HARDEN-001b — Caller-Owned Criterion Verification
+
+Priority: P1. Give every required acceptance criterion a stable identifier and an operator-owned
+deterministic **verifier binding**, so SOP can execute the verifier and observe the result rather
+than trust a model claim. Reuse existing trusted execution mechanisms (the validated command/
+validation runner) rather than adding a new execution surface.
 
 ### Dependencies
 
@@ -36,16 +36,58 @@ None
 
 ### Deliverables
 
-- The gate/quality evaluator change that blocks on NOT_MET/UNAVAILABLE criteria.
-- The machine-readable criterion-outcome artifact writer + schema.
-- A regression test reproducing ETOE-007 (3 declared criteria, 0 MET) asserting the gate now blocks.
+- Task-specification extension: stable `criterion_id` per criterion + operator-owned `verify`/`expect` binding (deterministic command or named test).
+- A bounded verifier runner (timeout + output cap) reusing existing trusted execution, returning observed exit status.
+- Machine-readable criterion-evidence artifact recording command identity, exit status, timestamp, and artifact references.
+- `internal/toolharness`/command-policy reuse so verifiers obey existing sandbox/authorization restrictions; model-authored or model-supplied verifier definitions are refused.
+- `docs/specs/` + `docs/reference/` documentation of the binding and the trust model.
+
+### Acceptance Criteria
+
+- Every required criterion can be bound to a trusted (operator-owned) verifier; a criterion without a binding is UNAVAILABLE.
+- SOP executes the verifier and observes its result; the outcome is derived from the observed exit status, not from model text.
+- Model-authored claims (including `CompletionEvidence.Acceptance`) cannot establish MET.
+- Missing, malformed, unsupported, or unexecutable bindings fail closed (UNAVAILABLE → not MET).
+- Verification evidence records command identity, execution outcome, timestamp, and artifact references.
+- Tests cover successful, failed, unavailable, and unauthorized verification.
+- No regression in existing validation or approval boundaries.
+
+### Validation Commands
+
+`gofmt -l .`; `go build ./...`; `go vet ./...`; `go test -count=1 ./...`; `go test -race -count=1 ./...`; `git diff --check`.
+
+### Failure Behavior
+
+If a verifier cannot be executed under the existing sandbox/authorization restrictions, it is recorded UNAVAILABLE (never MET); the change is additive and separately testable, and is reverted if it alters existing validation.
+
+## HARDEN-001 — Deterministic acceptance-criteria enforcement
+
+Priority: P1. Consume the trusted criterion outcomes from HARDEN-001b and make a
+declared-but-unmet acceptance criterion a blocking, model-free gate outcome, **enforced by
+default**. Located at the gate/quality evaluator that emits `gate.json`; the run loop writes a
+machine-readable `criteria.json` (per-criterion MET/NOT_MET/UNAVAILABLE) built from the verifier
+outcomes and passes it to the gate, which blocks completion (no PASS) when any required criterion
+is NOT_MET/UNAVAILABLE, or when the evidence is missing/malformed.
+
+### Dependencies
+
+- HARDEN-001b
+
+### Deliverables
+
+- The gate/quality evaluator change enforcing trusted criterion outcomes by default (`internal/quality`, wired at `internal/cli/run.go`).
+- The `criteria.json` writer + schema (per-criterion tri-state from HARDEN-001b verifier results).
+- A regression test reproducing ETOE-007 (3 declared criteria, 0 MET) asserting the gate blocks.
+- Migrated fixtures providing real verifier bindings (never fabricated MET).
 - `docs/specs/` note recording the new gate semantics.
 
 ### Acceptance Criteria
 
-- A task with any criterion NOT_MET/UNAVAILABLE cannot reach PASS without an explicit operator authorization record.
-- The check is deterministic and model-free (no agent call).
-- The ETOE-007 regression (0/3 MET) blocks; a fully-MET task is unchanged.
+- Consumes trusted criterion outcomes (never model claims); enforcement is on by default with no permissive fallback.
+- A task with any required criterion NOT_MET/UNAVAILABLE cannot reach LOCAL_DONE without an explicit operator authorization record.
+- Missing or malformed criterion evidence blocks; a fully-MET task is unchanged.
+- Existing severity-based quality checks and human-approval boundaries remain enforced; existing FIX/human-escalation limits are unchanged.
+- The ETOE-007 regression (0/3 MET) blocks; affected fixtures are migrated with real verifier bindings.
 
 ### Validation Commands
 
@@ -57,13 +99,12 @@ If a fully-MET task regresses, revert the package; the gate must be additive and
 
 ## HARDEN-002 — Operator-authorised cross-repository integration workspace
 
-Provide a supported, explicit, non-production mechanism for a governed task to inspect an
-allow-listed sibling repository without weakening repository-root confinement for ordinary work.
-The allow-list is an **operator-controlled** configuration (`tool_allow_roots` config key and/or
-`SOP_TOOL_ALLOW_ROOTS` env), default empty/OFF. It is read **only** from operator configuration or
-the environment and **never** from plan, task, or model text. Granting is audited to a machine-
-readable artifact (e.g. `.agent-sdlc/runs/<id>/authorized-roots.json`) recording the granted root,
-grant time, and the operator source.
+Priority: P1. Provide a supported, explicit, non-production mechanism for a governed task to
+inspect an allow-listed sibling repository without weakening repository-root confinement for
+ordinary work. The allow-list is an **operator-controlled** configuration
+(`tool_allow_roots` config key and/or `SOP_TOOL_ALLOW_ROOTS` env), default empty/OFF. It is read
+**only** from operator configuration or the environment and **never** from plan, task, or model
+text. Granting is audited to a machine-readable artifact.
 
 ### Dependencies
 
@@ -92,9 +133,9 @@ Any test showing ordinary runs gaining sibling access disables the feature (fail
 
 ## HARDEN-003 — Controller runtime parity verification
 
-Exercise `sop-controller` against a disposable SOP project and verify read-only state display
-and delegated-action parity with the SOP CLI, including pending approvals, using HARDEN-002 for
-reachability. Requires **actual runtime checks** on a running controller instance.
+Priority: P1. Exercise `sop-controller` against a disposable SOP project and verify read-only
+state display and delegated-action parity with the SOP CLI, including pending approvals, using
+HARDEN-002 for reachability, with actual runtime checks.
 
 ### Dependencies
 
@@ -121,9 +162,7 @@ If parity fails, record the exact divergent view/action and keep the prior UNAVA
 
 ## HARDEN-004 — Successful FIX recovery coverage
 
-Add a fixture scenario with a **deterministic FAIL → FIX → PASS recovery**: the controlled
-provider first introduces a validation-failing change, then on the FIX capability performs the
-repair so revalidation passes and the task completes.
+Priority: P2. Add a fixture scenario with a deterministic FAIL → FIX → PASS recovery.
 
 ### Dependencies
 
@@ -149,10 +188,9 @@ If the scenario cannot reach PASS deterministically, record the bounded behavior
 
 ## HARDEN-005 — Live decision-adapter dispatch and fallback verification
 
-Configure `decision.provider: command` with `decision.command` pointing at an **adapter fixture**
-in an isolated project whose stdout is a valid SEAM-002 result DTO, and verify a real dispatch
-with a recorded **decision trace** (the run artifact evidencing the SOP→adapter invocation and
-the normalized result), plus contract-supported fallback behavior. Unsupported paths stay UNAVAILABLE.
+Priority: P2. Configure `decision.provider: command` with `decision.command` pointing at an adapter
+fixture and verify a real dispatch with a recorded decision trace, plus contract-supported
+fallback; unsupported paths stay UNAVAILABLE.
 
 ### Dependencies
 
@@ -178,10 +216,8 @@ If no dispatch can be evidenced, keep integration UNAVAILABLE and record the fai
 
 ## HARDEN-006 — Explicit project-root execution safeguards
 
-Require **explicit project targeting** for mutating commands: a mutating `sop run` with no
-selector (no plan path, no `--task`) must refuse (or require an explicit confirmation in
-non-interactive contexts), so a bare run can never silently execute the active plan. Intended
-explicit invocations are preserved.
+Priority: P2. Require explicit project targeting for mutating commands so a bare `sop run` can
+never silently execute the active plan.
 
 ### Dependencies
 
@@ -208,9 +244,8 @@ If any supported invocation regresses, revert; the safeguard must be conservativ
 
 ## HARDEN-007 — Attempt-scoped artifact isolation
 
-Store retry artifacts **attempt-scoped** (e.g. `.agent-sdlc/runs/<id>/attempt-N/`) instead of
-overwriting the task run directory, so a failed attempt's evidence survives a retry. Consumers
-(`sop report`, `sop continue`, `sop approvals`) must resolve the **latest attempt**.
+Priority: P2. Store retry artifacts attempt-scoped so a failed attempt's evidence survives a retry,
+with latest-attempt resolution for consumers.
 
 ### Dependencies
 
@@ -237,10 +272,8 @@ If consumers break on the new layout, keep the flat layout and add the attempt-s
 
 ## HARDEN-008 — Model / harness diagnostic convergence improvements
 
-Improve **diagnostics** distinguishing model-output failures (PLAN synthesis limit, malformed
-tool request with empty `tool`, non-progressing tool loops) from harness/infra failures, with
-bounded, provider-neutral recovery — **without** raising convergence or retry budgets. Add
-regression coverage for the malformed-tool-request and PLAN-synthesis outcomes.
+Priority: P2. Improve diagnostics distinguishing model-output failures from harness/infra
+failures, with bounded, provider-neutral recovery, without raising budgets.
 
 ### Dependencies
 
@@ -248,7 +281,7 @@ None
 
 ### Deliverables
 
-- Bounded, provider-neutral improvements to PLAN/tool-protocol handling + tests (malformed `tool`, PLAN synthesis limit).
+- Bounded, provider-neutral improvements to PLAN/tool-protocol handling + tests.
 - `docs/specs/AGENT-PROVIDER.md` §9 update recording the model-vs-harness diagnostic distinction.
 
 ### Acceptance Criteria
@@ -265,13 +298,55 @@ None
 
 If a change relaxes a bound or alters unrelated lifecycle behavior, revert; improvements must be additive.
 
+## HARDEN-009 — Explicit plan-handoff disposition (proposed backlog item)
+
+Priority: P3 (proposed backlog; do NOT execute in this plan's first pass). SOP offers only
+`COMPLETE`/`SUPERSEDED` dispositions; neither expresses "assessment complete — implementation
+blocked (HOLD)". Provide an explicit, honest handoff/closure disposition (or a documented
+convention) so a completed-but-blocked assessment can be released without over-claiming runtime
+verification.
+
+### Dependencies
+
+None
+
+### Deliverables
+
+- A design note and (if adopted) a disposition/convention change + `docs/specs/` update.
+
+### Acceptance Criteria
+
+- A documented mechanism (or convention) lets an assessment plan be released without implying full runtime verification.
+- No existing `COMPLETE`/`SUPERSEDED` semantics change; the addition is explicit and opt-in.
+- The HOLD/UNAVAILABLE findings remain externally referenced.
+
+### Validation Commands
+
+`gofmt -l .`; `go build ./...`; `go vet ./...`; `go test -count=1 ./...`; `git diff --check`; `scripts/checks/check-doc-links.sh`.
+
+### Failure Behavior
+
+If adopted and it alters existing dispositions, revert; this is a proposal until authorized.
+
+## Dependency graph
+
+```text
+HARDEN-001b ──► HARDEN-001                 (acceptance enforcement consumes trusted criterion outcomes)
+HARDEN-002  ──► HARDEN-003, HARDEN-005     (cross-repo workspace prerequisite)
+HARDEN-004, HARDEN-006, HARDEN-007, HARDEN-008   (independent)
+HARDEN-009  (proposed backlog; independent)
+```
+
 ## Parallelizable groups
 
-- **Group A (independent, separate worktrees):** HARDEN-001, HARDEN-004, HARDEN-006, HARDEN-007, HARDEN-008.
-- **Group B (prerequisite first):** HARDEN-002, then HARDEN-003 and HARDEN-005 in parallel (both depend on HARDEN-002).
+- **Group A (independent, separate worktrees):** HARDEN-001b, HARDEN-002, HARDEN-004, HARDEN-006, HARDEN-007, HARDEN-008.
+- **Group B (after HARDEN-002):** HARDEN-003, HARDEN-005 (may run in parallel).
+- **Group C (after HARDEN-001b):** HARDEN-001.
+- **Backlog (not executed this pass):** HARDEN-009.
 
 ## Recommended execution order
 
-1. HARDEN-001 (highest priority — closes the acceptance-enforcement defect).
-2. Group A remainder (HARDEN-006, HARDEN-007, HARDEN-008, HARDEN-004).
-3. HARDEN-002, then Group B (HARDEN-003, HARDEN-005).
+1. HARDEN-001b (prerequisite — trusted criterion verification).
+2. HARDEN-001 (acceptance enforcement by default) + HARDEN-002 (cross-repo workspace) in parallel.
+3. HARDEN-003 and HARDEN-005 (after HARDEN-002); HARDEN-004, HARDEN-006, HARDEN-007, HARDEN-008 independently.
+4. HARDEN-009 only if authorized later.
