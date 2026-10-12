@@ -115,6 +115,9 @@ type Config struct {
 	Features   Features       `yaml:"features"`
 	Workflow   Workflow       `yaml:"workflow"`
 	Autonomy   Autonomy       `yaml:"autonomy"`
+	// Verification is the optional, off-by-default risk-based verification tier.
+	// An omitted block leaves verification unchanged; see verification.go.
+	Verification Verification `yaml:"verification"`
 	// EarlyJEV is the optional early-JEV checkpoint configuration: its own
 	// top-level namespace, separate from quality.jev (quality-seam JEV),
 	// decision.* (the thresholds layer), and models (agent model routing).

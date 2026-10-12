@@ -151,6 +151,16 @@ bounded outcome. The allowed severity set is exactly `INFO`, `LOW`, `MEDIUM`,
 - The human approval boundary, the severity thresholds, and `quality.Evaluate`
   acceptance MUST be unchanged by this boundary.
 
+### 6.4 Infrastructure Failure Is Not a Finding
+
+A review infrastructure or provider failure — a timeout, a transport error, or an
+unavailable provider — is a failure to review, not a review result. It MUST be
+classified by the deterministic failure classifier as an infrastructure failure
+(retry, or fail-closed to a human when unrecognized), and it MUST NOT be interpreted
+as a blocking finding or auto-fixed. A response that cannot be parsed maps to the
+human boundary of §6.3. A genuine blocking finding reported by a completed review is
+a code defect and MUST enter the bounded fix loop.
+
 ## 7. Self-Review Focus
 
 Self-review MUST examine at least:
