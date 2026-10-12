@@ -181,7 +181,8 @@ Concrete interfaces, values, commands, and states.
 - [guides/FAILURE-DISPLAY.md](guides/FAILURE-DISPLAY.md) — how review, CI, and
   handoff failures and diagnostics appear to an operator.
 - [guides/APPROVAL-AND-RECONCILE.md](guides/APPROVAL-AND-RECONCILE.md) — when a
-  human gate appears and how approval/reconcile actions delegate to SOP.
+  human gate appears, the cross-project approvals inbox (`/approvals`), and how
+  approval/reconcile actions delegate to SOP.
 - [guides/TROUBLESHOOTING.md](guides/TROUBLESHOOTING.md) — mapping observed
   states to recovery actions, and the CLI/make equivalents of controller controls.
 - [guides/PROJECT-DISCOVERY.md](guides/PROJECT-DISCOVERY.md) — configure which

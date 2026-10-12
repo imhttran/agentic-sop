@@ -13,7 +13,7 @@ PID  := .run/sop-controller.pid
 LOG  := .run/sop-controller.log
 ADDR ?= 127.0.0.1:8080
 
-.PHONY: help run start stop restart status logs build test fmt vet tidy clean
+.PHONY: help run start stop restart status logs build test test-race fmt vet tidy clean
 
 help:
 	@echo "SOP Controller"
@@ -27,6 +27,7 @@ help:
 	@echo ""
 	@echo "  make build     build ./cmd/sop-controller to $(BIN)"
 	@echo "  make test      go test ./..."
+	@echo "  make test-race go test -race ./..."
 	@echo "  make fmt       gofmt -w ."
 	@echo "  make vet       go vet ./..."
 	@echo "  make tidy      go mod tidy"
@@ -80,6 +81,9 @@ logs:
 
 test:
 	go test ./...
+
+test-race:
+	go test -race ./...
 
 fmt:
 	gofmt -w .

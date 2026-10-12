@@ -81,6 +81,36 @@ delegates every action back to SOP.
 - Statuses, run stages, and recovery: [docs/reference/STATUS-AND-RECOVERY.md](docs/reference/STATUS-AND-RECOVERY.md)
 - Human gates: [docs/specs/HUMAN-APPROVAL.md](docs/specs/HUMAN-APPROVAL.md)
 
+## Approvals and Mobile Access
+
+Every human approval gate SOP reports is collected at
+[`/approvals`](http://127.0.0.1:8080/approvals) — a phone-friendly inbox across
+the projects the controller observes. Approve / decline controls delegate to
+`sop approve` / `sop decline` (with `--by` / `--note` provenance); the controller
+never approves on its own, and viewing the page starts no command. A project
+whose SOP approval listing cannot be read is shown as an explicit absence, never
+as "no gates". See [docs/guides/APPROVAL-AND-RECONCILE.md](docs/guides/APPROVAL-AND-RECONCILE.md).
+
+To reach the dashboard from a phone on the same network, enable network mode
+with an access token (loopback binding is the default; a non-loopback address
+without it is refused):
+
+```bash
+SOP_CONTROLLER_ALLOW_NETWORK=true \
+SOP_CONTROLLER_TOKEN="choose-a-token" \
+SOP_CONTROLLER_ADDR=0.0.0.0:8080 \
+  go run ./cmd/sop-controller
+```
+
+Network mode requires the token, and every state-changing request is `POST` with
+a CSRF token. The controller never renders secrets or forwards provider
+credentials to SOP. See [docs/specs/SECURITY.md](docs/specs/SECURITY.md) and
+[docs/guides/GETTING-STARTED.md](docs/guides/GETTING-STARTED.md#phone--same-network-access).
+
+The task detail view also reports SOP's recorded **model selection** (its class,
+locality, and whether a fallback was used) and run usage counts when SOP persisted
+them; the controller reports the selection and never chooses a model.
+
 ## Documentation
 
 Start at the documentation index: **[docs/README.md](docs/README.md)** — it maps

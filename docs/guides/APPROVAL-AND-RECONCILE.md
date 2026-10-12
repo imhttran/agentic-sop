@@ -52,7 +52,7 @@ gate; the resulting transition is still SOP's to make.
   rather than proceeding.
 
 Approve and decline are **two independent SOP operations**. The controller
-offers a control only when SOP both reports the boundary *and* exposes the
+offers a control only when SOP both reports the boundary _and_ exposes the
 operation. When SOP reports a boundary but exposes no operation for an action,
 the controller shows the gate **read-only**, advertises no control that cannot
 succeed, and returns an explicit conflict if the action is invoked.
@@ -109,8 +109,25 @@ boundary when an executed task's definition changed.
   exits non-zero, or emits unparsable output), the controller reports the
   absence/failure explicitly rather than showing an empty success.
 - Accepting a changed executed task is a distinct operation
-  (`sop reconcile <PLAN.md> --accept-changed <id>`) and remains a recorder gap
-  until SOP exposes it: the controller never simulates or bulk-accepts.
+  (`sop reconcile <PLAN.md> --accept-changed <id>`), supported at the controller
+  boundary: the controller delegates the decision to SOP and never simulates or
+  bulk-accepts. Boundary support describes controller delegation; external-binary
+  flag support was unverified in the recorded C2-009 sandbox run.
+
+## The Cross-Project Approvals Inbox
+
+`/approvals` lists every applicable gate SOP reports across all observed
+projects, so a phone can review and decide without visiting each project. It is
+the same read as the per-project decisions panel — `sop approvals --json` once
+per project — and the same delegated routes; the page adds no new decision logic
+and starts no command on `GET`.
+
+- A project whose `sop approvals --json` cannot be read is shown as an explicit
+  absence ("Could not be read"), never as "no gates".
+- Each gate links to its task and offers the same approve / decline controls.
+- It is reachable over the network only with an access token (network mode); see
+  [../specs/SECURITY.md](../specs/SECURITY.md) and
+  [GETTING-STARTED.md](GETTING-STARTED.md#phone--same-network-access).
 
 ## Related Documentation
 
