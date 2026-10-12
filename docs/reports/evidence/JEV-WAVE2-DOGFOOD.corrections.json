@@ -1,0 +1,74 @@
+{
+  "version": 1,
+  "corrected_at": "2026-10-12T05:25:48Z",
+  "original_report_sha256": "2dcac8151db12c190302eda0544a66f0ec49100996a8cc7e105f16eb2def4e36",
+  "corrected_report_sha256": "827cb1d92c2bbe9de63d3712065492aa4ce63dd1ae6af4b160834ac0e4b13f4e",
+  "preserved_invariants": [
+    "all timestamps",
+    "all exit codes",
+    "provider=ollama",
+    "model=deepseek-v4.1-flash:cloud",
+    "governed_outcome=PARTIAL",
+    "revision=719ba15",
+    "live inference calls=23"
+  ],
+  "corrections": [
+    {
+      "scenario": "direct_sop_jev_invocation",
+      "field": "reason",
+      "from": "facet of ONE live run: the production JEV analyzer was invoked (observable in report.json)",
+      "to": "Facet 1 of 4 of ONE execution (`sop run --task task.md`, run DOGFOOD-001): the production JEV analyzer was invoked (observable in metrics.json: jev.invocations=1).",
+      "reason": "factual clarification: this facet derives from ONE shared execution (run DOGFOOD-001); named the verified artifact"
+    },
+    {
+      "scenario": "provider_selection",
+      "field": "reason",
+      "from": "facet of ONE live run: provider/model identity recorded (observable in model-selection.json)",
+      "to": "Facet 2 of 4 of ONE execution (run DOGFOOD-001): provider/model identity recorded (observable in trace.json and metrics.json: provider=ollama, model=deepseek-v4.1-flash:cloud).",
+      "reason": "removed a reference to a nonexistent artifact (model-selection.json); replaced with verified artifacts (trace.json, metrics.json)"
+    },
+    {
+      "scenario": "structured_evidence",
+      "field": "reason",
+      "from": "facet of ONE live run: Result.StructuredEvidence populated and validated (observable in the run's JEV evidence)",
+      "to": "Facet 3 of 4 of ONE execution (run DOGFOOD-001): Result.StructuredEvidence populated and validated (observable in jev.json: status=PASS, fail_closed=false).",
+      "reason": "factual clarification: this facet derives from ONE shared execution (run DOGFOOD-001); named the verified artifact"
+    },
+    {
+      "scenario": "early_jev_routing",
+      "field": "reason",
+      "from": "facet of ONE live run: early-JEV routing/escalation decision recorded (observable in the run's gate/outcome)",
+      "to": "Facet 4 of 4 of ONE execution (run DOGFOOD-001): early-JEV routing/gate decision recorded (observable in gate.json: Decision=PASS).",
+      "reason": "factual clarification: this facet derives from ONE shared execution (run DOGFOOD-001); named the verified artifact"
+    },
+    {
+      "scenario": "retry",
+      "field": "artifact_path",
+      "from": "<agentic-sop>/.agent-sdlc/runs/plan-sop-lifecycle-consistency-hardening",
+      "to": "",
+      "reason": "simulated scenarios carry no SOP run artifact; the previous value was a stale unrelated run directory misattributed by the runner"
+    },
+    {
+      "scenario": "provider_unavailability",
+      "field": "artifact_path",
+      "from": "<agentic-sop>/.agent-sdlc/runs/plan-sop-lifecycle-consistency-hardening",
+      "to": "",
+      "reason": "simulated scenarios carry no SOP run artifact; the previous value was a stale unrelated run directory misattributed by the runner"
+    },
+    {
+      "scenario": "human_escalation",
+      "field": "artifact_path",
+      "from": "<agentic-sop>/.agent-sdlc/runs/plan-sop-lifecycle-consistency-hardening",
+      "to": "",
+      "reason": "simulated scenarios carry no SOP run artifact; the previous value was a stale unrelated run directory misattributed by the runner"
+    },
+    {
+      "scenario": "fail_closed",
+      "field": "artifact_path",
+      "from": "<agentic-sop>/.agent-sdlc/runs/plan-sop-lifecycle-consistency-hardening",
+      "to": "",
+      "reason": "simulated scenarios carry no SOP run artifact; the previous value was a stale unrelated run directory misattributed by the runner"
+    }
+  ],
+  "note": "Provenance-only corrections. No execution evidence was fabricated, backfilled, or altered beyond removing a stale misattributed reference and replacing a nonexistent artifact reference with verified ones. The four measured facets derive from ONE execution (run DOGFOOD-001)."
+}

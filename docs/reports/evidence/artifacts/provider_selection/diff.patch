@@ -1,0 +1,63 @@
+diff --git a/proxy-state.json b/proxy-state.json
+new file mode 100644
+--- /dev/null
++++ b/proxy-state.json
+@@ -0,0 +1,8 @@
++{
++  "max": 24,
++  "count": 21,
++  "rejected": 0,
++  "failures": {
++    "endpoint_not_approved": 1
++  }
++}
+diff --git a/proxy.log b/proxy.log
+new file mode 100644
+--- /dev/null
++++ b/proxy.log
+@@ -0,0 +1,1 @@
++2026/10/12 00:23:56 jdproxy listening on 127.0.0.1:11499 -> http://127.0.0.1:11434 (max 24 requests, deadline 2m0s, init=true)
+diff --git a/runner.log b/runner.log
+new file mode 100644
+--- /dev/null
++++ b/runner.log
+diff --git a/synthetic/example.go b/synthetic/example.go
+new file mode 100644
+--- /dev/null
++++ b/synthetic/example.go
+@@ -0,0 +1,7 @@
++// Package synthetic provides small, deterministic example helpers.
++package synthetic
++
++// Add returns the sum of two integers.
++func Add(a, b int) int {
++	return a + b
++}
+diff --git a/synthetic/example_test.go b/synthetic/example_test.go
+new file mode 100644
+--- /dev/null
++++ b/synthetic/example_test.go
+@@ -0,0 +1,23 @@
++package synthetic
++
++import "testing"
++
++func TestAdd(t *testing.T) {
++	cases := []struct {
++		name string
++		a, b int
++		want int
++	}{
++		{"positive", 1, 2, 3},
++		{"zero", 0, 0, 0},
++		{"negative", -1, -2, -3},
++		{"mixed sign", -1, 1, 0},
++	}
++	for _, tc := range cases {
++		t.Run(tc.name, func(t *testing.T) {
++			if got := Add(tc.a, tc.b); got != tc.want {
++				t.Errorf("Add(%d, %d) = %d, want %d", tc.a, tc.b, got, tc.want)
++			}
++		})
++	}
++}

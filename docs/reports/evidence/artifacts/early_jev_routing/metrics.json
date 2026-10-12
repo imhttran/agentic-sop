@@ -1,0 +1,34 @@
+{
+  "id": "DOGFOOD-001",
+  "total_ms": 15861,
+  "stages_ms": {
+    "implement": 5219,
+    "plan": 9532,
+    "review": 550,
+    "validation": 179
+  },
+  "validation_ms": {
+    "build": 19,
+    "lint": 81,
+    "test": 78
+  },
+  "counts": {
+    "agent_calls": 2,
+    "agent_calls_avoided": 0,
+    "validation_runs": 1,
+    "validation_reused": 0,
+    "review_runs": 1,
+    "review_reused": 0,
+    "fix_cycles": 0,
+    "plan_repairs": 0
+  },
+  "jev": {
+    "invocations": 1,
+    "total_ms": 340,
+    "provider": "ollama",
+    "model": "deepseek-v4.1-flash:cloud",
+    "tool_calls": 1,
+    "findings": 0,
+    "blocking_findings": 0
+  }
+}

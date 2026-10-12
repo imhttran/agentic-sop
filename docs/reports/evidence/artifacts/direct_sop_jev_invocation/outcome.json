@@ -1,0 +1,45 @@
+{
+  "status": "PARTIAL",
+  "criteria": [
+    {
+      "ID": "deterministic-checks",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "the configured build/test/lint checks and the review passed",
+      "Command": "",
+      "Evidence": "met",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    },
+    {
+      "ID": "criterion-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": false,
+      "Description": "Add returns the sum of two integers.",
+      "Command": "",
+      "Evidence": "unverifiable: no deterministic check supplied",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    },
+    {
+      "ID": "objective-acceptance",
+      "Required": true,
+      "Boundary": false,
+      "Met": false,
+      "Description": "the specification declares no executed, passing acceptance check",
+      "Command": "",
+      "Evidence": "unverifiable: no deterministic check supplied",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    }
+  ],
+  "reasons": [
+    "required criterion criterion-1 not met: unverifiable: no deterministic check supplied",
+    "required criterion objective-acceptance not met: unverifiable: no deterministic check supplied"
+  ]
+}
