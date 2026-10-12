@@ -194,6 +194,15 @@ func TestAdapterHelperProcess(t *testing.T) {
 	case "sleep":
 		time.Sleep(30 * time.Second)
 		os.Exit(0)
+	case "grandchild":
+		go func() {
+			time.Sleep(10 * time.Second)
+			if m := os.Getenv("ADAPTER_MARKER"); m != "" {
+				_ = os.WriteFile(m, []byte("survived"), 0o644)
+			}
+		}()
+		time.Sleep(30 * time.Second)
+		os.Exit(0)
 	default:
 		os.Exit(1)
 	}

@@ -35,9 +35,6 @@ const (
 	// maxOutputBytes bounds the adapter's stdout, so an untrusted adapter cannot
 	// exhaust memory. Output beyond the bound is a provider failure.
 	maxOutputBytes = 1 << 20 // 1 MiB
-	// waitDelay bounds how long the connector waits for I/O to drain after the
-	// process exits or is killed.
-	waitDelay = 2 * time.Second
 )
 
 // Options configures a Connector.
@@ -125,23 +122,36 @@ func (c *Connector) Decide(ctx context.Context, req decision.Request) (decision.
 	cctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
 
-	cmd := exec.CommandContext(cctx, argv[0], argv[1:]...)
-	cmd.WaitDelay = waitDelay
+	cmd := exec.Command(argv[0], argv[1:]...)
+	setProcGroup(cmd)
 	stdout := newBoundedWriter(maxOutputBytes)
 	stderr := newBoundedWriter(maxOutputBytes)
 	cmd.Stdout = stdout
 	cmd.Stderr = stderr
 
-	if err := cmd.Run(); err != nil {
-		// Cancellation and deadline are classified distinctly; both fail closed.
+	if err := cmd.Start(); err != nil {
+		return decision.Decision{}, fmt.Errorf("%w: adapter failed to start", decision.ErrProviderFailure)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+
+	var runErr error
+	select {
+	case runErr = <-done:
+	case <-cctx.Done():
+		// Terminate the whole process tree, then classify cancellation vs deadline
+		// distinctly; both fail closed.
+		killProcessTree(cmd)
+		<-done
 		if errors.Is(cctx.Err(), context.Canceled) {
 			return decision.Decision{}, fmt.Errorf("%w: adapter canceled", decision.ErrProviderFailure)
 		}
-		if errors.Is(cctx.Err(), context.DeadlineExceeded) {
-			return decision.Decision{}, fmt.Errorf("%w: adapter timed out", decision.ErrProviderFailure)
-		}
+		return decision.Decision{}, fmt.Errorf("%w: adapter timed out", decision.ErrProviderFailure)
+	}
+
+	if runErr != nil {
 		var ee *exec.ExitError
-		if errors.As(err, &ee) {
+		if errors.As(runErr, &ee) {
 			switch ee.ExitCode() {
 			case 2:
 				return decision.Decision{}, fmt.Errorf("%w: adapter rejected the request", decision.ErrInvalidResult)
