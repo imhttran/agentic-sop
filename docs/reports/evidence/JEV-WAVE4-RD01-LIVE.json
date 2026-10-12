@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "run": "rd01-live",
+  "command": "/tmp/sop-now run --task task.md",
+  "argv": ["sop", "run", "--task", "task.md"],
+  "repository_revision": "c742153a68459ced3648277cec50084489d4ded0",
+  "provider": "ollama",
+  "model": "nimble:latest",
+  "agent": "command (deterministic; no agent-model inference)",
+  "governed_outcome": "CONTINUE (IMPLEMENT_NO_CHANGES)",
+  "baseline_decision": "AUTO_CONTINUE",
+  "seam004_engaged": true,
+  "adapter_http_requests": 1,
+  "adapter_inferences_completed": 0,
+  "adapter_failure_class": "endpoint_not_approved",
+  "governance_overridden": false,
+  "auto_commit_or_approval": false,
+  "counting_proxy": {"max": 3, "count": 1, "failures": {"endpoint_not_approved": 1}},
+  "configurations": [
+    {
+      "name": "governed-run",
+      "classification": "measured",
+      "sample_size": 1,
+      "reason": "one bounded governed `sop run --task` in the disposable project; the full lifecycle ran (plan, implement, validation) and produced IMPLEMENT_NO_CHANGES / CONTINUE, which is SEAM-004-eligible (non-empty disposition, attentionable AUTO_CONTINUE)",
+      "metrics": {"adapter_http_requests": 1, "adapter_inferences_completed": 0}
+    },
+    {
+      "name": "adapter-live-evidence",
+      "classification": "untested",
+      "reason": "SEAM-004 engaged and invoked the configured adapter, but the Nimble provider first performs an availability probe (GET /api/tags, internal/providers/nimble/nimble.go:59) that the counting proxy rejects because it only approves inference endpoints; no inference completed and no adapter evidence reached deterministic governance"
+    },
+    {
+      "name": "adapter-offline",
+      "classification": "simulated",
+      "reason": "existing offline connector/integration fixtures (deterministic fake adapters)"
+    }
+  ],
+  "historical": "docs/reports/evidence/JEV-WAVE4-SOP-RUN-DOGFOOD.json records the earlier governed run with zero adapter calls"
+}
