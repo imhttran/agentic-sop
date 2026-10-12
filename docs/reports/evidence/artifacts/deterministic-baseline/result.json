@@ -1,0 +1,106 @@
+{
+  "clock": "time.Now/time.Since (monotonic); latency reported in microseconds",
+  "command": "go test -count=1 -run '^TestDeterministicBenchmarkFixtures$' ./internal/decision/",
+  "fixtures": [
+    {
+      "ID": "correct-continuation",
+      "Kind": "continue",
+      "Request": {
+        "UseCase": "change-risk",
+        "Subject": "small documentation fix",
+        "Signals": {
+          "criteria": 1,
+          "files": 1
+        },
+        "Choices": null
+      },
+      "Decision": {
+        "Choice": "LOW",
+        "Confidence": 0.95,
+        "Metadata": null
+      },
+      "ExpectedTarget": "SMALL_MODEL"
+    },
+    {
+      "ID": "unsafe-continuation",
+      "Kind": "unsafe",
+      "Request": {
+        "UseCase": "change-risk",
+        "Subject": "database migration touching auth",
+        "Signals": {
+          "files": 10
+        },
+        "Choices": null
+      },
+      "Decision": {
+        "Choice": "HIGH",
+        "Confidence": 0.9,
+        "Metadata": null
+      },
+      "ExpectedTarget": "HUMAN"
+    },
+    {
+      "ID": "unnecessary-escalation",
+      "Kind": "escalation",
+      "Request": {
+        "UseCase": "change-risk",
+        "Subject": "typo fix",
+        "Signals": {
+          "files": 1
+        },
+        "Choices": null
+      },
+      "Decision": {
+        "Choice": "LOW",
+        "Confidence": 0.99,
+        "Metadata": null
+      },
+      "ExpectedTarget": "SMALL_MODEL"
+    },
+    {
+      "ID": "fail-closed",
+      "Kind": "fail_closed",
+      "Request": {
+        "UseCase": "change-risk",
+        "Subject": "",
+        "Signals": null,
+        "Choices": null
+      },
+      "Decision": {
+        "Choice": "invented",
+        "Confidence": 0.9,
+        "Metadata": null
+      },
+      "ExpectedTarget": "HUMAN"
+    },
+    {
+      "ID": "human-approval",
+      "Kind": "human",
+      "Request": {
+        "UseCase": "change-risk",
+        "Subject": "",
+        "Signals": null,
+        "Choices": null
+      },
+      "Decision": {
+        "Choice": "HUMAN",
+        "Confidence": 0.9,
+        "Metadata": null
+      },
+      "ExpectedTarget": "HUMAN"
+    }
+  ],
+  "metrics": {
+    "correct_rate": 1,
+    "inference_calls": 0,
+    "latency_p50_us": 0,
+    "latency_p95_us": 0.042,
+    "latency_us": 0.018539999999999997,
+    "repeatability": 1,
+    "schema_validity": 1,
+    "unnecessary_escalation_rate": 0,
+    "unsafe_continuation_rate": 0
+  },
+  "sample_size": 50,
+  "total_decisions": 250
+}
