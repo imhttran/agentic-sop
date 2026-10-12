@@ -640,6 +640,26 @@ An invalid file — malformed YAML, an unknown key, an unknown
 provider/engine/severity, a missing `project.name`, or an unsupported
 `version` — fails with a clear message rather than a silent fallback.
 
+## Risk-based verification
+
+Optional and off by default. When enabled, `sop run` selects the configured command set
+the gate requires from a deterministic, escalate-only verification tier (see
+[../specs/VALIDATION.md](../specs/VALIDATION.md)). An omitted block leaves verification
+unchanged.
+
+```yaml
+verification:
+  risk_based: false   # opt in; default off
+  low:                # targeted command set, used only for the LOW tier
+    build: []
+    test: []
+```
+
+`low.build` / `low.test` reuse the `validation` shape. When no targeted set is
+configured, a LOW task falls back to the full configured set, so enabling the feature
+cannot reduce verification to nothing. The tier also gates the optional JEV analysis
+(`quality.jev`): with risk-based verification on, JEV runs only for the HIGH tier.
+
 ## Related
 
 - [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md)

@@ -178,3 +178,13 @@ These were evaluated and deliberately deferred; none is a correctness shortcut.
 Wherever the two conflict, correctness wins over speed. Timing is metadata, reuse
 requires an identical input identity, and verify-first only ever _skips work that
 deterministic validation has already proven unnecessary_.
+
+## Input/output size measurement
+
+`internal/perf` records, per task, the largest canonical context size and assembled
+model-input size, the largest normalized model-output size, and the number of model-input
+assemblies, alongside the stage latency, agent calls, validation/review/fix counts, and
+JEV invocations already described above. These are diagnostic metadata only: a value SOP
+did not measure is reported `UNAVAILABLE`, never inferred from text length, and no metric
+influences a decision. Provider-reported input/output tokens are not available today and
+are reported `UNAVAILABLE`.

@@ -98,3 +98,16 @@ run or a plan, and a miss MUST always be safe because correctness never depends 
 a hit. The authoritative identity and rules are owned by
 [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md); this document MUST NOT
 restate them.
+
+## 9. Risk-Based Verification Tier
+
+When `verification.risk_based` is enabled, the configured command set the gate
+requires is selected by a deterministic, escalate-only verification tier derived from
+typed signals and the task's declared execution mode (see
+[../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)). The tier changes *what*
+is verified, never *how* the verdict is decided: [QUALITY.md](QUALITY.md) still computes
+`PASS`/`FAIL`/`NEEDS_HUMAN` from the observed results. Off by default, the full
+configured set runs exactly as before. When enabled: `LOW` runs the configured targeted
+set (falling back to the full set when none is configured, so a tier can never reduce
+verification to nothing), `MEDIUM` runs the build+test set, and `HIGH` runs the full
+configured set.

@@ -412,3 +412,12 @@ does not block normal work, while a policy naming the relevant severities may fa
 closed or require human authorization (§15). Early results are persisted as
 diagnostic run artifacts (`early-jev.json`, `early-jev-history.jsonl`) and are
 never read back to drive a decision.
+
+## 19. Tier-gated invocation
+
+When `verification.risk_based` is enabled, the optional JEV stage is additionally gated
+by the task's deterministic verification tier: JEV runs only for the HIGH tier (see
+[VALIDATION.md](VALIDATION.md) and [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)).
+This changes only *whether* the optional stage runs; the JEV boundary, its findings, and
+the quality gate are unchanged. With the feature off, an enabled JEV runs exactly as
+before.
