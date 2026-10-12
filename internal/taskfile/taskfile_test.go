@@ -3,6 +3,7 @@ package taskfile
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -237,5 +238,174 @@ func TestParseHierarchicalIDHeading(t *testing.T) {
 	}
 	if spec.Title != "Repository Reconciliation" {
 		t.Errorf("Title = %q, want Repository Reconciliation", spec.Title)
+	}
+}
+
+// TestParseJoinsWrappedListItems proves a bullet wrapped onto an indented second
+// line is ONE item rather than one per physical line, for every list section.
+func TestParseJoinsWrappedListItems(t *testing.T) {
+	doc := "# T001 — Wrapped\n\n" +
+		"## Acceptance criteria\n\n" +
+		"- the first criterion wraps onto\n  an indented second line\n" +
+		"- the second criterion also wraps\n  onto its own continuation line\n\n" +
+		"## Deliverables\n\n" +
+		"- the binary at cmd/sop, and also\n  the docs it emits\n" +
+		"- a second deliverable that\n  wraps too\n" +
+		"## Requirements\n\n" +
+		"- must build, and must\n  pass vet\n" +
+		"## Constraints\n\n" +
+		"- no network, and no\n  real model calls\n" +
+		"## Dependencies\n\n" +
+		"- T000, and the\n  shared library T000b\n"
+
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if got, want := spec.AcceptanceCriteria, []string{
+		"the first criterion wraps onto an indented second line",
+		"the second criterion also wraps onto its own continuation line",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", got, want)
+	}
+	if got, want := spec.Deliverables, []string{
+		"the binary at cmd/sop, and also the docs it emits",
+		"a second deliverable that wraps too",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Deliverables = %v, want %v", got, want)
+	}
+	if got, want := spec.Requirements, []string{"must build, and must pass vet"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Requirements = %v, want %v", got, want)
+	}
+	if got, want := spec.Constraints, []string{"no network, and no real model calls"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Constraints = %v, want %v", got, want)
+	}
+	if got, want := spec.Dependencies, []string{"T000, and the shared library T000b"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Dependencies = %v, want %v", got, want)
+	}
+}
+
+// TestParsePreservedListBehaviour proves the join rule does not change the cases
+// existing plans rely on: unindented unbulleted lines, nested bullets, and blank
+// lines each keep their own item.
+func TestParsePreservedListBehaviour(t *testing.T) {
+	doc := "# T001 — Preserved\n\n" +
+		"## Acceptance criteria\n\n" +
+		"- a bullet with an indented continuation\n  joined on\n" +
+		"- a nested bullet stays its own item:\n  - the nested one\n" +
+		"plain unindented line stays its own item\n" +
+		"\n" +
+		"- after a blank line this starts a new item\n"
+
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	want := []string{
+		"a bullet with an indented continuation joined on",
+		"a nested bullet stays its own item:",
+		"the nested one",
+		"plain unindented line stays its own item",
+		"after a blank line this starts a new item",
+	}
+	if !reflect.DeepEqual(spec.AcceptanceCriteria, want) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", spec.AcceptanceCriteria, want)
+	}
+}
+
+// TestParseSeparatorEndsItem proves a "---" separator still ends an item.
+func TestParseSeparatorEndsItem(t *testing.T) {
+	doc := "# T001 — Separator\n\n## Acceptance criteria\n\n- one\n\n---\n\n- two\n"
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if got, want := spec.AcceptanceCriteria, []string{"one", "two"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", got, want)
+	}
+}
+
+// TestParseAcceptanceChecks proves a task file authored with an '## Acceptance
+// checks' section and shell-command bullets yields the same Spec.AcceptanceChecks
+// in order, distinct from the '## Acceptance criteria' section.
+func TestParseAcceptanceChecks(t *testing.T) {
+	doc := "# T001 — Checked\n\n" +
+		"## Acceptance criteria\n\n" +
+		"- the build is green\n" +
+		"- the docs exist\n\n" +
+		"## Acceptance checks\n\n" +
+		"- go test ./...\n" +
+		"- go vet ./...\n"
+
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if got, want := spec.AcceptanceChecks, []string{"go test ./...", "go vet ./..."}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AcceptanceChecks = %v, want %v", got, want)
+	}
+	if got, want := spec.AcceptanceCriteria, []string{"the build is green", "the docs exist"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", got, want)
+	}
+}
+
+// TestRenderParseAcceptanceChecksRoundTrip proves a Spec with AcceptanceChecks
+// renders a section that Parse reads back into the same slice, in order and with
+// the command text preserved, and that checks and criteria stay distinct sections.
+func TestRenderParseAcceptanceChecksRoundTrip(t *testing.T) {
+	original := &Spec{
+		ID:                 "T001",
+		Title:              "Checked",
+		AcceptanceCriteria: []string{"the build is green"},
+		AcceptanceChecks:   []string{"go test ./...", "go vet ./..."},
+	}
+	rendered := original.Render()
+	if !strings.Contains(rendered, "## Acceptance checks") {
+		t.Fatalf("Render missing the acceptance-checks section:\n%s", rendered)
+	}
+	if !strings.Contains(rendered, "## Acceptance criteria") {
+		t.Fatalf("Render missing the acceptance-criteria section:\n%s", rendered)
+	}
+
+	got, err := Parse([]byte(rendered))
+	if err != nil {
+		t.Fatalf("Parse(Render) failed: %v", err)
+	}
+	if !reflect.DeepEqual(got.AcceptanceChecks, original.AcceptanceChecks) {
+		t.Errorf("AcceptanceChecks = %v, want %v", got.AcceptanceChecks, original.AcceptanceChecks)
+	}
+	if !reflect.DeepEqual(got.AcceptanceCriteria, original.AcceptanceCriteria) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", got.AcceptanceCriteria, original.AcceptanceCriteria)
+	}
+}
+
+// TestAcceptanceChecksAndCriteriaStayDistinct proves the two sections do not merge
+// on either side of the round-trip.
+func TestAcceptanceChecksAndCriteriaStayDistinct(t *testing.T) {
+	doc := "# T001 — Distinct\n\n" +
+		"## Acceptance criteria\n\n" +
+		"- free-text criterion\n\n" +
+		"## Acceptance checks\n\n" +
+		"- go test ./...\n"
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if !reflect.DeepEqual(spec.AcceptanceCriteria, []string{"free-text criterion"}) {
+		t.Errorf("AcceptanceCriteria = %v", spec.AcceptanceCriteria)
+	}
+	if !reflect.DeepEqual(spec.AcceptanceChecks, []string{"go test ./..."}) {
+		t.Errorf("AcceptanceChecks = %v", spec.AcceptanceChecks)
+	}
+	reparsed, err := Parse([]byte(spec.Render()))
+	if err != nil {
+		t.Fatalf("Parse(Render) failed: %v", err)
+	}
+	if !reflect.DeepEqual(reparsed.AcceptanceCriteria, spec.AcceptanceCriteria) {
+		t.Errorf("criteria changed across round-trip: %v -> %v", spec.AcceptanceCriteria, reparsed.AcceptanceCriteria)
+	}
+	if !reflect.DeepEqual(reparsed.AcceptanceChecks, spec.AcceptanceChecks) {
+		t.Errorf("checks changed across round-trip: %v -> %v", spec.AcceptanceChecks, reparsed.AcceptanceChecks)
 	}
 }

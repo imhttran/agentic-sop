@@ -54,6 +54,10 @@ func (p *Plan) RenderMarkdown() string {
 		b.WriteString(renderList(stage.Deliverables))
 		b.WriteString("\n### Acceptance Criteria\n\n")
 		b.WriteString(renderList(stage.AcceptanceCriteria))
+		if len(stage.AcceptanceChecks) > 0 {
+			b.WriteString("\n### Acceptance Checks\n\n")
+			b.WriteString(renderList(stage.AcceptanceChecks))
+		}
 		if stage.ExecutionMode != "" {
 			b.WriteString("\n### Execution\n\n")
 			b.WriteString(renderList([]string{string(stage.ExecutionMode)}))

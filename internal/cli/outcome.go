@@ -25,12 +25,27 @@ import (
 // The verdict (VERIFIED / PARTIAL / HOLD) is recorded as an artifact and reported,
 // so a task's PASS/LOCAL_DONE is never equated with verified objective completion.
 //
-// The deterministic determinants available on this branch are SOP's own checks (the
-// gate's build/test/lint/review verdict) and the existence of each declared
-// deliverable that names a repository-relative path. A free-text acceptance
-// criterion has no deterministic determinant here (per-criterion operator-owned
-// verifier bindings live in the unmerged harden-001 work), so it is recorded but
-// counts as unverifiable and cannot by itself establish VERIFIED.
+// An operator-declared deterministic acceptance check (a SAFE argv vector, never a
+// shell) is the verifiable half of acceptance: when a stage declares checks, every
+// check MUST execute and pass for the verdict to be VERIFIED. A `go test` check is
+// additionally required to have actually executed at least one test: a check that
+// runs zero tests (no test files, `-run` matching nothing, or every test skipped)
+// yields PARTIAL with explicit `no test executed` evidence, so a green-but-empty
+// test run can never stand in for verification.
+//
+// Authorization is form-aware: beyond the generic SAFE classification, flag forms
+// that redirect or inject tooling (-exec/-toolexec/-vettool/-o/-overlay/-modfile),
+// `go fmt` (which rewrites files), and `git -c` / `--config-env` config injection
+// are rejected BEFORE execution, as an unmet boundary that HOLDs the verdict. A
+// rejected command therefore never runs and leaves no evidence of execution.
+//
+// Free-text acceptance criteria have no deterministic determinant here
+// (per-criterion operator-owned verifier bindings live in the unmerged harden-001
+// work). When the stage declares deterministic checks, such criteria are recorded
+// as informational: they are shown alongside the checks but do not themselves hold
+// the verdict, because the checks are the verifiable evidence. When no checks exist
+// they keep today's semantics — recorded but unverifiable — so a PASS is never
+// equated with verified objective completion.
 
 // outcomeArtifact is the persisted objective-level verdict: the status, the
 // per-criterion evidence, and the reasons. It is diagnostic record only; nothing
@@ -44,10 +59,10 @@ type outcomeArtifact struct {
 // deriveOutcome computes the objective-level verdict from the task specification.
 // It always returns a verdict for a non-nil specification — a prompt-driven
 // implementation run therefore records evidence-backed outcome, never a silent
-// no-op. When the specification declares no deterministically verifiable
-// acceptance requirement, the deterministic checks are the only evidence and the
-// verdict is PARTIAL rather than VERIFIED, so a PASS is never equated with verified
-// objective completion. It returns nil only when there is no specification.
+// no-op. VERIFIED requires at least one executed, passing acceptance check: a
+// deliverable-only or free-text-only specification whose quality gate passed is
+// held at PARTIAL, so a PASS is never equated with verified objective completion.
+// It returns nil only when there is no specification.
 func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcomeArtifact {
 	if spec == nil {
 		return nil
@@ -89,16 +104,24 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 	// Operator-authorized deterministic acceptance checks: each is validated into an
 	// exact argument vector and executed directly (never through a shell),
 	// independently of the model completion claim. A command the policy does not
-	// classify SAFE — including any command that uses shell syntax (chaining,
-	// pipelines, redirection, substitution, expansion) — is a boundary that holds the
-	// outcome and is never executed.
+	// classify SAFE — or whose form is one of the rejected dangerous flag forms,
+	// `go fmt`, or git config injection — is a boundary that holds the outcome and is
+	// never executed. Evidence for an executed check (argv, exit code, bounded
+	// output) is captured and attached to the criterion result.
+	type checkEvidence struct {
+		id  string
+		run *checkRun
+	}
+	var evidence []checkEvidence
+
 	for i, command := range spec.AcceptanceChecks {
 		cmd := command
+		id := fmt.Sprintf("check-%d", i+1)
 		argv, aerr := authorizeAcceptanceCommand(cmd)
 		if aerr != nil {
 			err := aerr
 			criteria = append(criteria, outcome.Criterion{
-				ID:          fmt.Sprintf("check-%d", i+1),
+				ID:          id,
 				Required:    true,
 				Boundary:    true,
 				Description: "unauthorized acceptance check: " + cmd,
@@ -108,19 +131,40 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 			continue
 		}
 		args := argv
+		run := &checkRun{}
 		criteria = append(criteria, outcome.Criterion{
-			ID:          fmt.Sprintf("check-%d", i+1),
+			ID:          id,
 			Required:    true,
 			Description: "acceptance check: " + cmd,
 			Command:     cmd,
-			Check:       func() error { return runAcceptanceArgv(dir, args) },
+			Check: func() error {
+				err, executed := runAcceptanceCheck(dir, args)
+				*run = executed
+				return err
+			},
 		})
+		evidence = append(evidence, checkEvidence{id: id, run: run})
 	}
 
-	// Free-text acceptance criteria have no deterministic determinant on this branch;
-	// recorded but unverifiable, they hold the verdict at PARTIAL rather than letting
-	// a PASS imply verified completion.
+	// Free-text acceptance criteria have no deterministic determinant on this branch.
+	// When the stage declares deterministic checks, the criteria are recorded as
+	// informational — shown alongside the checks but non-required, because the checks
+	// are the verifiable evidence. When no checks exist they keep today's semantics:
+	// recorded but unverifiable, holding the verdict at PARTIAL rather than letting a
+	// PASS imply verified completion.
+	hasChecks := len(spec.AcceptanceChecks) > 0
 	for i, c := range spec.AcceptanceCriteria {
+		if hasChecks {
+			criteria = append(criteria, outcome.Criterion{
+				ID:          fmt.Sprintf("criterion-%d", i+1),
+				Required:    false,
+				Description: c,
+				// A nil Check counts as unverifiable; Required=false keeps it from
+				// holding the verdict, and writeOutcomeReport labels such a
+				// non-required, unmet criterion "informational".
+			})
+			continue
+		}
 		criteria = append(criteria, outcome.Criterion{
 			ID:          fmt.Sprintf("criterion-%d", i+1),
 			Required:    true,
@@ -128,33 +172,47 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		})
 	}
 
-	// With no objective-bearing requirement (no deliverable, no acceptance
-	// criterion), the deterministic checks are the only evidence, which cannot
-	// verify the objective: record an unverifiable required criterion so the verdict
-	// is PARTIAL, never VERIFIED.
-	if len(spec.Deliverables) == 0 && len(spec.AcceptanceCriteria) == 0 && len(spec.AcceptanceChecks) == 0 {
+	// VERIFIED requires at least one executed, passing acceptance check. Without a
+	// declared check, a deliverable or free-text criterion cannot alone verify the
+	// objective: record an unverifiable required criterion so a passing gate with
+	// only deliverables/criteria is PARTIAL, never VERIFIED. When nothing is declared
+	// at all, the same fallback applies.
+	if len(spec.AcceptanceChecks) == 0 {
 		criteria = append(criteria, outcome.Criterion{
 			ID:          "objective-acceptance",
 			Required:    true,
-			Description: "the specification declares no deterministically verifiable acceptance requirement",
+			Description: "the specification declares no executed, passing acceptance check",
 		})
 	}
 
 	res := outcome.Verify(criteria)
+	// Verify has executed every authorized check; attach each run's argv, exit code,
+	// and bounded output to its criterion. Rejected checks never ran and have no entry.
+	for _, e := range evidence {
+		res.PropagateEvidence(e.id, e.run.argv, e.run.exitCode, e.run.output)
+	}
 	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
 }
 
+// rejectedGoFlagForms are the flag names whose presence in any spelling (-flag
+// value, -flag=value, --flag value, --flag=value) redirects or injects tooling and
+// must never be authorized as an acceptance check.
+var rejectedGoFlagForms = []string{"exec", "toolexec", "vettool", "o", "overlay", "modfile"}
+
 // authorizeAcceptanceCommand tokenizes an operator-declared acceptance command and
-// validates it against the existing command policy, returning the exact argument
-// vector that will execute. It reuses toolharness.SplitCommand, which rejects shell
-// syntax (command chaining, pipelines, redirection, command substitution,
-// environment expansion, and globs) and unterminated quotes, so authorization
-// validates the same structure that runs — never a shell. A classification error or
-// a non-SAFE class is rejected before execution, so an unauthorized command never
-// runs.
+// validates it against the command policy and the hardened form rules, returning the
+// exact argument vector that will execute. It reuses toolharness.SplitCommand, which
+// rejects shell syntax (command chaining, pipelines, redirection, command
+// substitution, environment expansion, and globs) and unterminated quotes, so
+// authorization validates the same structure that runs — never a shell. A
+// classification error, a non-SAFE class, or a rejected dangerous form is returned
+// before execution, so an unauthorized command never runs.
 func authorizeAcceptanceCommand(command string) ([]string, error) {
 	argv, err := toolharness.SplitCommand(command)
 	if err != nil {
+		return nil, err
+	}
+	if err := rejectDangerousForm(argv); err != nil {
 		return nil, err
 	}
 	class, err := commandpolicy.Classify(argv)
@@ -167,13 +225,129 @@ func authorizeAcceptanceCommand(command string) ([]string, error) {
 	return argv, nil
 }
 
+// rejectDangerousForm rejects acceptance commands whose form is not permitted even
+// though it may otherwise classify SAFE:
+//
+//   - a go/build/vet flag that redirects or injects tooling (-exec, -toolexec,
+//     -vettool, -o, -overlay, -modfile), in every spelling;
+//   - `go fmt` (and `go fmt ...`), which rewrites files;
+//   - `git -c ...`, `git -ccore...=...` and `git --config-env ...` config injection.
+func rejectDangerousForm(argv []string) error {
+	if len(argv) == 0 {
+		return nil
+	}
+	// git config injection: `-c`, `-cK=V`, `--config-env` (value or =value) are
+	// rejected; a plain read-only git command stays authorized.
+	if argv[0] == "git" {
+		for _, a := range argv[1:] {
+			if a == "-c" || strings.HasPrefix(a, "-c") || a == "--config-env" || strings.HasPrefix(a, "--config-env=") {
+				return fmt.Errorf("acceptance check %q injects git configuration", strings.Join(argv, " "))
+			}
+		}
+	}
+	// `go fmt` rewrites files.
+	if argv[0] == "go" && len(argv) >= 2 && argv[1] == "fmt" {
+		return fmt.Errorf("acceptance check %q rewrites files (go fmt)", strings.Join(argv, " "))
+	}
+	// go tooling flags that redirect or inject tooling, in every spelling.
+	for _, a := range argv[1:] {
+		name := flagName(a)
+		if name == "" {
+			continue
+		}
+		for _, bad := range rejectedGoFlagForms {
+			if name == bad {
+				return fmt.Errorf("acceptance check %q uses unauthorized flag -%s", strings.Join(argv, " "), bad)
+			}
+		}
+	}
+	return nil
+}
+
+// flagName extracts the flag name from an argument in any of the -f, -f=v, --f and
+// --f=v spellings, returning "" for a non-flag argument. The leading dashes are
+// stripped and any "=value" suffix removed (so -o=x yields "o" and -o yields "o").
+func flagName(arg string) string {
+	if !strings.HasPrefix(arg, "-") {
+		return ""
+	}
+	trimmed := strings.TrimLeft(arg, "-")
+	if trimmed == "" {
+		return ""
+	}
+	if i := strings.IndexByte(trimmed, '='); i >= 0 {
+		trimmed = trimmed[:i]
+	}
+	return trimmed
+}
+
+// checkRun is the structured evidence from one executed acceptance check: the exact
+// argv, the process exit code, and a bounded output excerpt.
+type checkRun struct {
+	argv     []string
+	exitCode int
+	output   string
+}
+
+// runAcceptanceCheck executes an authorized acceptance check's argument vector,
+// records its execution evidence, and applies the ACC-003 `go test` execution rule
+// on top of it: a `go test` command that exits 0 but executed no test yields a
+// "no test executed" error (PARTIAL) rather than a pass, so an empty-but-green test
+// run cannot verify the objective. Non-go commands behave exactly as runAcceptanceArgv.
+func runAcceptanceCheck(dir string, argv []string) (error, checkRun) {
+	err, run := runAcceptanceArgv(dir, argv)
+	if !isGoTestArgv(argv) {
+		return err, run
+	}
+	// The command ran to completion with exit status 0; check that it actually
+	// executed a test. A failing go test already returns a non-nil error above.
+	if err != nil {
+		return err, run
+	}
+	if !goTestExecuted(run.output) {
+		return fmt.Errorf("acceptance check %q executed no test: no test executed", strings.Join(argv, " ")), run
+	}
+	return nil, run
+}
+
+// isGoTestArgv reports whether argv is a `go test` invocation (the command whose
+// result is only meaningful when at least one test actually ran).
+func isGoTestArgv(argv []string) bool {
+	return len(argv) >= 2 && argv[0] == "go" && argv[1] == "test"
+}
+
+// goTestExecuted inspects the combined output of a `go test` command and reports
+// whether at least one test actually executed. It is deliberately conservative:
+// only the explicit no-execution signals are treated as "no test executed", so a
+// run that produced a normal `ok` with no per-test lines is assumed to have run
+// something. The signals are the ones `go test` emits when nothing ran:
+//
+//   - "no test files" — the package(s) declared no test files;
+//   - "no tests to run" — the `-run` filter matched nothing;
+//   - verbose output whose only test verdicts are skips (every test `t.Skip`).
+func goTestExecuted(output string) bool {
+	if strings.Contains(output, "no test files") {
+		return false
+	}
+	if strings.Contains(output, "no tests to run") {
+		return false
+	}
+	if strings.Contains(output, "--- SKIP:") && !strings.Contains(output, "--- PASS:") {
+		return false
+	}
+	return true
+}
+
 // runAcceptanceArgv executes an authorized acceptance command's argument vector
 // directly, without invoking a shell, so nothing beyond the validated argv can run.
-// Exit status 0 means met; any other status or a launch failure means not met, and
-// the observed result is recorded as evidence.
-func runAcceptanceArgv(dir string, argv []string) error {
+// Exit status 0 means met; any other status or a launch failure means not met. It
+// returns the error (nil when met) together with the observed execution evidence:
+// the exact argv, the process exit code, and a bounded (<=400 byte) excerpt of the
+// combined stdout/stderr.
+func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
+	run := checkRun{argv: append([]string(nil), argv...)}
 	if len(argv) == 0 {
-		return errors.New("acceptance check has an empty command")
+		return errors.New("acceptance check has an empty command"), run
 	}
 	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
 	cmd.Dir = dir
@@ -181,18 +355,27 @@ func runAcceptanceArgv(dir string, argv []string) error {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	runErr := cmd.Run()
+	run.output = boundOutput(out.String())
 	if runErr == nil {
-		return nil
-	}
-	detail := strings.TrimSpace(out.String())
-	if len(detail) > 400 {
-		detail = detail[:400]
+		run.exitCode = 0
+		return nil, run
 	}
 	var exitErr *exec.ExitError
 	if errors.As(runErr, &exitErr) {
-		return fmt.Errorf("acceptance check %q failed (exit %d): %s", strings.Join(argv, " "), exitErr.ExitCode(), detail)
+		run.exitCode = exitErr.ExitCode()
+		return fmt.Errorf("acceptance check %q failed (exit %d): %s", strings.Join(argv, " "), run.exitCode, run.output), run
 	}
-	return fmt.Errorf("acceptance check %q could not run: %v", strings.Join(argv, " "), runErr)
+	return fmt.Errorf("acceptance check %q could not run: %v", strings.Join(argv, " "), runErr), run
+}
+
+// boundOutput returns a bounded excerpt of a check's combined output: trimmed, and
+// truncated to at most 400 bytes so the recorded evidence stays small.
+func boundOutput(s string) string {
+	detail := strings.TrimSpace(s)
+	if len(detail) > 400 {
+		detail = detail[:400]
+	}
+	return detail
 }
 
 // deliverablePath extracts a repository-relative path from a declared deliverable,
@@ -235,7 +418,9 @@ func writeOutcomeSummary(w io.Writer, res *outcomeArtifact) {
 	}
 }
 
-// writeOutcomeReport renders the verdict in the run report.
+// writeOutcomeReport renders the verdict in the run report, including the per-check
+// execution evidence when present. A rejected boundary check is rendered as not met
+// with no execution evidence.
 func writeOutcomeReport(b *strings.Builder, res *outcomeArtifact) {
 	if res == nil {
 		return
@@ -244,10 +429,30 @@ func writeOutcomeReport(b *strings.Builder, res *outcomeArtifact) {
 	fmt.Fprintf(b, "- Status: `%s`\n", res.Status)
 	for _, cr := range res.Criteria {
 		state := "met"
-		if !cr.Met {
+		switch {
+		case !cr.Met && !cr.Required:
+			// A non-required criterion with no deterministic check is informational:
+			// the stage's declared checks are the verifiable evidence.
+			state = "informational"
+		case !cr.Met:
 			state = "not met"
 		}
-		fmt.Fprintf(b, "- `%s` %s — %s\n", cr.ID, state, cr.Evidence)
+		// A criterion backed by an acceptance check names the exact command, so the
+		// report shows the operator which command was (or was not) met.
+		desc := cr.Description
+		if cr.Command != "" {
+			desc = cr.Command
+		}
+		fmt.Fprintf(b, "- `%s` %s — %s (%s)\n", cr.ID, state, desc, cr.Evidence)
+		// Surface executed-check evidence where present. A rejected boundary check
+		// carries no argv and shows no execution evidence.
+		if len(cr.Argv) > 0 {
+			fmt.Fprintf(b, "  - argv: `%s`\n", strings.Join(cr.Argv, " "))
+			fmt.Fprintf(b, "  - exit: %d\n", cr.ExitCode)
+			if cr.Output != "" {
+				fmt.Fprintf(b, "  - output: %s\n", cr.Output)
+			}
+		}
 	}
 	for _, r := range res.Reasons {
 		fmt.Fprintf(b, "- %s\n", r)

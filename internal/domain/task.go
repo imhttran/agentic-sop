@@ -26,15 +26,22 @@ type Task struct {
 	Title              string
 	Objective          string
 	AcceptanceCriteria string
-	Status             TaskStatus
-	BlockedReason      BlockedReason
-	ExecutionMode      ExecutionMode
-	Attempt            int
-	MaxAttempts        int
-	DependencyIDs      []string
-	Attempts           []Attempt
-	CreatedAt          time.Time
-	UpdatedAt          time.Time
+	// AcceptanceChecks are the operator-authorized deterministic acceptance
+	// checks a plan stage declares (planner.Stage.AcceptanceChecks). They are
+	// carried on the executable definition so reconciliation can detect a check
+	// add/modify/remove the same way it detects any other definition change. The
+	// field is additive: a checkless task serializes exactly as before (omitempty),
+	// so existing records stay byte-identical.
+	AcceptanceChecks []string `json:"acceptance_checks,omitempty"`
+	Status           TaskStatus
+	BlockedReason    BlockedReason
+	ExecutionMode    ExecutionMode
+	Attempt          int
+	MaxAttempts      int
+	DependencyIDs    []string
+	Attempts         []Attempt
+	CreatedAt        time.Time
+	UpdatedAt        time.Time
 }
 
 // transitions is the authoritative state machine. Every workflow decision

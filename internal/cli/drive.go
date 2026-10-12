@@ -664,6 +664,12 @@ func parkRunAtHumanBoundary(rn *runpkg.Run, taskID string, stderr io.Writer) {
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
 	spec.Deliverables = planTaskDeliverables(dir, task)
+	// Plan-declared acceptance checks are recovered through the same plan-stage
+	// reconciliation as the deliverables and projected into the spec, so the
+	// existing deriveOutcome/authorizeAcceptanceCommand/runAcceptanceArgv seam
+	// evaluates them. A missing/mismatched plan yields nil, and a task with no
+	// declared checks behaves exactly as before.
+	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
 	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
 	// The previous invocation's run stage is read before New resets state.json, so
 	// a task parked at WAITING_FOR_HUMAN stays a human gate on re-entry.

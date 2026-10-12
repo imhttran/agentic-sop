@@ -21,10 +21,10 @@ func SerializeAcceptanceCriteria(criteria []string) string {
 }
 
 // Build converts each Plan stage into a domain.Task, preserving IDs, title,
-// objective, acceptance criteria, and dependency IDs. New tasks start in
-// PLANNED with retry defaults applied, except a stage the plan declares done
-// (execution_mode: done), whose task is recorded as already satisfied. Task order
-// follows Plan stage order.
+// objective, acceptance criteria, dependency IDs, and the operator-declared
+// acceptance checks. New tasks start in PLANNED with retry defaults applied,
+// except a stage the plan declares done (execution_mode: done), whose task is
+// recorded as already satisfied. Task order follows Plan stage order.
 func Build(plan *planner.Plan) ([]*domain.Task, error) {
 	if plan == nil {
 		return nil, errors.New("plan is nil")
@@ -45,11 +45,19 @@ func Build(plan *planner.Plan) ([]*domain.Task, error) {
 		if stage.ExecutionMode.Done() {
 			status = domain.LOCAL_DONE
 		}
+		// The operator's acceptance checks are carried verbatim (and in order) so
+		// reconciliation compares the same value plan.json persists. A checkless
+		// stage yields a nil slice, so a checkless plan round-trips unchanged.
+		var checks []string
+		if len(stage.AcceptanceChecks) > 0 {
+			checks = append([]string{}, stage.AcceptanceChecks...)
+		}
 		tasks = append(tasks, &domain.Task{
 			ID:                 stage.ID,
 			Title:              stage.Title,
 			Objective:          stage.Objective,
 			AcceptanceCriteria: SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
+			AcceptanceChecks:   checks,
 			ExecutionMode:      stage.ExecutionMode,
 			Status:             status,
 			BlockedReason:      domain.NO_REASON,

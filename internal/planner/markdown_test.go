@@ -143,6 +143,67 @@ func TestPlanFromMarkdownDeclaredDone(t *testing.T) {
 	}
 }
 
+// TestPlanFromMarkdownExecutionShapes locks in the execution-mode parsing shapes a
+// hand-written plan uses: a bare mode bullet, prose before the bullet ("This stage
+// runs as" then "- verify-first"), an indented note after the bullet ("- done" then
+// "  (already merged)"), and an unrecognized line that must never clear a valid
+// mode set in the same sub-section.
+func TestPlanFromMarkdownExecutionShapes(t *testing.T) {
+	cases := []struct {
+		name    string
+		section string
+		want    domain.ExecutionMode
+	}{
+		{
+			name:    "verify-first bullet",
+			section: "- verify-first\n",
+			want:    domain.ExecutionVerifyFirst,
+		},
+		{
+			name:    "done bullet",
+			section: "- done\n",
+			want:    domain.ExecutionDone,
+		},
+		{
+			name:    "prose before the bullet",
+			section: "This stage runs as\n\n- verify-first\n",
+			want:    domain.ExecutionVerifyFirst,
+		},
+		{
+			name:    "indented note after the bullet",
+			section: "- done\n  (already merged)\n",
+			want:    domain.ExecutionDone,
+		},
+		{
+			name:    "unrecognized line does not clear a valid mode",
+			section: "- done\n\n- later\n",
+			want:    domain.ExecutionDone,
+		},
+		{
+			name:    "unrecognized line first, valid mode second",
+			section: "- later\n\n- verify-first\n",
+			want:    domain.ExecutionVerifyFirst,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n" +
+				"## S001 — Stage\n\nDo it.\n\n### Acceptance Criteria\n\n- it works\n\n### Execution\n\n" + tc.section
+			plan, err := PlanFromMarkdown(doc)
+			if err != nil {
+				t.Fatalf("PlanFromMarkdown failed: %v", err)
+			}
+			if len(plan.Stages) != 1 {
+				t.Fatalf("stages = %d, want 1", len(plan.Stages))
+			}
+			if got := plan.Stages[0].ExecutionMode; got != tc.want {
+				t.Errorf("execution mode = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestCompileAgentCannotDeclareDone proves the completion marker is operator intent
 // read from the plan document: a plan a MODEL normalized cannot declare a stage
 // done, so a model can never skip work by claiming it is finished.
@@ -252,5 +313,84 @@ func TestPlanFromMarkdownHierarchicalIDs(t *testing.T) {
 	}
 	if !reflect.DeepEqual(plan.Stages[0].Dependencies, []string{"PREJEV012-S6"}) {
 		t.Errorf("umbrella dependencies = %v, want [PREJEV012-S6]", plan.Stages[0].Dependencies)
+	}
+}
+
+// TestStageShapeJoinsWrappedItems proves a stage-shape bullet wrapped onto an
+// indented second line is ONE item for Acceptance Criteria and Deliverables: a
+// '### Acceptance Criteria' sub-section with 2 wrapped bullets yields exactly 2
+// criteria with the fragments space-joined.
+func TestStageShapeJoinsWrappedItems(t *testing.T) {
+	doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n" +
+		"## S001 — Wrapped\n\nDo it.\n\n" +
+		"### Dependencies\n\nNone\n\n" +
+		"### Deliverables\n\n" +
+		"- the binary, and the docs it emits\n  joined onto the same item\n" +
+		"- a second deliverable\n  that wraps too\n\n" +
+		"### Acceptance Criteria\n\n" +
+		"- the first criterion wraps onto\n  an indented second line\n" +
+		"- the second criterion also wraps\n  onto its continuation\n"
+
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	st := plan.Stages[0]
+
+	if got, want := st.AcceptanceCriteria, []string{
+		"the first criterion wraps onto an indented second line",
+		"the second criterion also wraps onto its continuation",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("AcceptanceCriteria = %v, want %v", got, want)
+	}
+	if got, want := st.Deliverables, []string{
+		"the binary, and the docs it emits joined onto the same item",
+		"a second deliverable that wraps too",
+	}; !reflect.DeepEqual(got, want) {
+		t.Errorf("Deliverables = %v, want %v", got, want)
+	}
+}
+
+// TestStageShapeJoinFromSplitField proves the same join holds for the field lines
+// consumed by splitField: an indented non-bullet line continues the value above it.
+func TestStageShapeJoinFromSplitField(t *testing.T) {
+	doc := "# Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — One\n\no\n\n### Acceptance Criteria\n\n- fragment one and\n  fragment two\n"
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown: %v", err)
+	}
+	if got, want := plan.Stages[0].AcceptanceCriteria, []string{"fragment one and fragment two"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("criteria = %v, want %v", got, want)
+	}
+}
+
+// TestStageShapePreservesListBehaviour proves the join rule does not change the
+// cases existing plans rely on: an unindented unbulleted line stays separate, a
+// nested bullet stays separate, and a blank line ends an item so the following
+// line starts a new item.
+func TestStageShapePreservesListBehaviour(t *testing.T) {
+	doc := "# Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — One\n\no\n\n### Acceptance Criteria\n\n" +
+		"- a bullet with an indented continuation\n  joined on\n" +
+		"- a nested bullet stays its own item:\n  - the nested one\n" +
+		"plain unindented line stays its own item\n" +
+		"\n" +
+		"- after a blank line this starts a new item\n"
+
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown: %v", err)
+	}
+	want := []string{
+		"a bullet with an indented continuation joined on",
+		"a nested bullet stays its own item:",
+		"the nested one",
+		"plain unindented line stays its own item",
+		"after a blank line this starts a new item",
+	}
+	if !reflect.DeepEqual(plan.Stages[0].AcceptanceCriteria, want) {
+		t.Errorf("criteria = %v, want %v", plan.Stages[0].AcceptanceCriteria, want)
 	}
 }

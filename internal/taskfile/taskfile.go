@@ -116,6 +116,8 @@ func Parse(data []byte) (*Spec, error) {
 			spec.Deliverables = append(spec.Deliverables, listItems(sec.lines)...)
 		case "acceptance criteria", "acceptance", "acceptance criterion":
 			spec.AcceptanceCriteria = append(spec.AcceptanceCriteria, listItems(sec.lines)...)
+		case "acceptance checks", "acceptance check":
+			spec.AcceptanceChecks = append(spec.AcceptanceChecks, listItems(sec.lines)...)
 		case "constraints", "constraint", "rules", "rule":
 			spec.Constraints = append(spec.Constraints, listItems(sec.lines)...)
 		case "dependencies", "dependency", "depends on":
@@ -150,7 +152,9 @@ func Load(path string) (*Spec, error) {
 }
 
 // Render turns a Spec back into normalized Markdown, the input the planner
-// reasons over.
+// reasons over. Acceptance checks are emitted as their own "Acceptance checks"
+// section, distinct from "Acceptance criteria", so a Spec round-trips both lists
+// through Render and Parse without merging them.
 func (s *Spec) Render() string {
 	var b strings.Builder
 	if heading := joinHeading(s.ID, s.Title); heading != "" {
@@ -162,6 +166,7 @@ func (s *Spec) Render() string {
 	writeList(&b, "Requirements", s.Requirements)
 	writeList(&b, "Deliverables", s.Deliverables)
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
+	writeList(&b, "Acceptance checks", s.AcceptanceChecks)
 	writeList(&b, "Constraints", s.Constraints)
 	writeList(&b, "Dependencies", s.Dependencies)
 	if s.ExecutionMode != "" {
@@ -187,19 +192,40 @@ func splitID(s string) (id, title string) {
 }
 
 // listItems strips bullets and checkboxes from a section's lines, yielding the
-// individual requirements/criteria/constraints.
+// individual requirements/criteria/constraints. A non-blank line more indented than
+// the item above it — one that does not itself carry a bullet/checkbox — is a
+// wrapped continuation of that item and is joined onto it (space-separated), so a
+// bullet wrapped across an indented second line is one item rather than two. A blank
+// line or a "---" separator ends the current item, so the following line starts a
+// new one; an unindented line or a line carrying its own bullet (including a nested
+// one) starts a new item as before.
 func listItems(lines []string) []string {
 	var out []string
+	joinable := false
 	for _, line := range lines {
 		t := strings.TrimSpace(line)
 		if t == "" || t == "---" {
+			joinable = false
 			continue
+		}
+		indented := line[0] == ' ' || line[0] == '\t'
+		if joinable && indented && !bulletRE.MatchString(line) && !checkboxRE.MatchString(t) {
+			frag := strings.TrimSpace(checkboxRE.ReplaceAllString(strings.TrimSpace(t), ""))
+			if frag != "" {
+				out[len(out)-1] += " " + frag
+				continue
+			}
 		}
 		t = bulletRE.ReplaceAllString(t, "")
 		t = checkboxRE.ReplaceAllString(t, "")
 		if t = strings.TrimSpace(t); t != "" {
 			out = append(out, t)
+			joinable = true
+			continue
 		}
+		// A line that strips to nothing (an explicit "none" bullet or a bare marker)
+		// is not an item and cannot be a join target.
+		joinable = false
 	}
 	return out
 }

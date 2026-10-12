@@ -12,10 +12,10 @@ import (
 )
 
 // These regressions prove the prompt-driven implementation path records an
-// evidence-backed outcome verdict: successful verification (a satisfied declared
-// deliverable), missing evidence (no declared requirement), and failed acceptance
-// (a declared deliverable that is absent). A model PASS never yields VERIFIED on
-// its own.
+// evidence-backed outcome verdict: successful verification, missing evidence (no
+// declared requirement), and failed acceptance (a declared deliverable that is
+// absent). A model PASS never yields VERIFIED on its own: VERIFIED requires an
+// executed, passing acceptance check (ACC-008).
 
 type promptDeliverableAgent struct {
 	dir   string
@@ -69,7 +69,10 @@ func promptOutcomeStatus(t *testing.T, dir string) string {
 	return doc.Status
 }
 
-func TestPromptOutcomeVerifiedWithSatisfiedDeliverable(t *testing.T) {
+// TestPromptOutcomeDeliverableAloneIsPartial proves a satisfied declared deliverable
+// with a passing gate is NOT VERIFIED without an executed, passing acceptance check
+// (ACC-008).
+func TestPromptOutcomeDeliverableAloneIsPartial(t *testing.T) {
 	clearProviderEnv(t)
 	dir := t.TempDir()
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
@@ -77,6 +80,28 @@ func TestPromptOutcomeVerifiedWithSatisfiedDeliverable(t *testing.T) {
 
 	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/out.md b/out.md\n", a,
 		"prompt", "--capability", "implement", "--deliverable", "out.md", "write the report")
+	if code != exitOK {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, "outcome: PARTIAL") {
+		t.Errorf("stdout missing partial outcome: %q", stdout)
+	}
+	if got := promptOutcomeStatus(t, dir); got != "PARTIAL" {
+		t.Errorf("outcome.json status = %q, want PARTIAL", got)
+	}
+}
+
+// TestPromptOutcomeVerifiedWithExecutedCheck proves a deliverable plus a declared,
+// executed, passing acceptance check is VERIFIED.
+func TestPromptOutcomeVerifiedWithExecutedCheck(t *testing.T) {
+	clearProviderEnv(t)
+	dir := t.TempDir()
+	goModuleFixture(t, dir)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
+	a := &promptDeliverableAgent{dir: dir, write: "out.md"}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/out.md b/out.md\n", a,
+		"prompt", "--capability", "implement", "--deliverable", "out.md", "--accept", "go vet ./...", "write the report")
 	if code != exitOK {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, stdout, stderr)
 	}

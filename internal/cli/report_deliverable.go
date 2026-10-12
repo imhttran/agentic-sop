@@ -18,21 +18,50 @@ import (
 // without rewriting the task or accepting a model-generated implementation plan
 // as authority. A missing/mismatched plan grants no report exception.
 func planTaskDeliverables(dir string, task *domain.Task) []string {
+	stage, ok := planTaskStage(dir, task)
+	if !ok {
+		return nil
+	}
+	return stage.Deliverables
+}
+
+// planTaskAcceptanceChecks recovers the plan-declared acceptance checks for a
+// scheduled task's reconciled stage, using the same identity match as
+// planTaskDeliverables. A missing/invalid plan, or a stage whose ID, Objective, or
+// AcceptanceCriteria no longer matches the persisted task, yields nil — the task
+// then behaves exactly as one that declared no checks. The recovered checks are
+// projected verbatim into the lifecycle's taskfile.Spec.AcceptanceChecks and are
+// evaluated by the existing deriveOutcome/authorizeAcceptanceCommand/
+// runAcceptanceArgv seam; no new execution or authorization path is introduced.
+func planTaskAcceptanceChecks(dir string, task *domain.Task) []string {
+	stage, ok := planTaskStage(dir, task)
+	if !ok {
+		return nil
+	}
+	return stage.AcceptanceChecks
+}
+
+// planTaskStage reads the persisted plan and returns the stage that reconciles
+// with the task by identity (ID + Objective + AcceptanceCriteria). It reports
+// ok=false when the plan is absent, invalid, or no stage matches — the single
+// reconciliation rule shared by the deliverable and acceptance-check
+// projections so they can never disagree about which stage owns a task.
+func planTaskStage(dir string, task *domain.Task) (planner.Stage, bool) {
 	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "plan.json"))
 	if err != nil {
-		return nil
+		return planner.Stage{}, false
 	}
 	var plan planner.Plan
 	if json.Unmarshal(data, &plan) != nil || plan.Validate() != nil {
-		return nil
+		return planner.Stage{}, false
 	}
 	for _, stage := range plan.Stages {
 		if stage.ID == task.ID && stage.Objective == task.Objective &&
 			strings.Join(stage.AcceptanceCriteria, "\n") == task.AcceptanceCriteria {
-			return stage.Deliverables
+			return stage, true
 		}
 	}
-	return nil
+	return planner.Stage{}, false
 }
 
 // validatePromptDeliverables validates operator-declared deliverables for
