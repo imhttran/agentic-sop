@@ -362,7 +362,11 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// res.stage, so the bounded recovery/model-escalation loop — which reads the
 	// classification, gate, and suite, never the decision — is unaffected: decision
 	// evidence stays independent of execution-model routing.
-	res = applyDecisionEvidence(ctx, cfg, d, spec, res)
+	res = applyDecisionEvidence(ctx, cfg, d, spec, res, func(doc *decisionEvidenceDoc) {
+		// Persist the sanitized SEAM-004 record when the checkpoint consulted a
+		// configured provider. Observation is best-effort and never changes the result.
+		writeDecisionEvidenceArtifact(rn, doc)
+	})
 	// Persist the failure classification and the autonomy decision beside the other
 	// run artifacts before any early return, so a failure that stopped the lifecycle
 	// is still recorded. They are diagnostic evidence: nothing reads them back to
@@ -456,6 +460,29 @@ func writeClassificationArtifact(rn *runpkg.Run, cls failure.Classification, dec
 		return
 	}
 	_ = rn.Write("classification.json", string(append(data, '\n')))
+}
+
+// decisionEvidenceArtifactName is the sanitized SEAM-004 decision-evidence record
+// written beside the other run artifacts. It carries no secrets and no raw model
+// text.
+const decisionEvidenceArtifactName = "decision-evidence.json"
+
+// writeDecisionEvidenceArtifact persists the sanitized SEAM-004 decision-evidence
+// record when the checkpoint consulted a configured provider (doc is nil
+// otherwise). It records only the boundary outcome, the canonical choice and
+// confidence when SOP accepted the result, and the baseline/final governance
+// actions — never a prompt, model response, credential, endpoint, or path. It is
+// best-effort observation: a write failure never changes the run decision.
+func writeDecisionEvidenceArtifact(rn *runpkg.Run, doc *decisionEvidenceDoc) {
+	if rn == nil || doc == nil {
+		return
+	}
+	doc.RunID = string(rn.State().ID)
+	data, err := json.MarshalIndent(doc, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = rn.Write(decisionEvidenceArtifactName, string(append(data, '\n')))
 }
 
 // runStages performs the lifecycle for one task. An ordinary task runs plan →
