@@ -80,3 +80,21 @@ func killProcessTree(cmd *exec.Cmd) {
 	}
 	_ = cmd.Process.Kill()
 }
+
+// releaseJob closes and forgets the Job Object on the NORMAL-completion path, so a
+// successful invocation does not leak the handle. Closing the job is harmless once
+// the process has exited, and KILL_ON_JOB_CLOSE still reclaims any surviving child.
+func releaseJob(cmd *exec.Cmd) {
+	if cmd.Process == nil {
+		return
+	}
+	jobMu.Lock()
+	job, ok := jobFor[cmd.Process.Pid]
+	if ok {
+		delete(jobFor, cmd.Process.Pid)
+	}
+	jobMu.Unlock()
+	if ok {
+		_ = windows.CloseHandle(job)
+	}
+}

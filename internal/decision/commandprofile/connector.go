@@ -186,6 +186,9 @@ func (c *Connector) decide(ctx context.Context, req decision.Request) (decision.
 	var runErr error
 	select {
 	case runErr = <-done:
+		// Normal completion: release the Windows job handle so a successful invocation
+		// does not leak it (a no-op on Unix).
+		releaseJob(cmd)
 	case <-cctx.Done():
 		// Terminate the whole process tree, then classify cancellation vs deadline
 		// distinctly; both fail closed.

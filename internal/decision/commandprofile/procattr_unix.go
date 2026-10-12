@@ -16,6 +16,9 @@ func setProcGroup(cmd *exec.Cmd) {
 // afterStart is a no-op on Unix: the process group covers descendants.
 func afterStart(_ *exec.Cmd) {}
 
+// releaseJob is a no-op on Unix: there is no job handle to release.
+func releaseJob(_ *exec.Cmd) {}
+
 // killProcessTree terminates the adapter and every descendant by signaling the
 // whole process group.
 func killProcessTree(cmd *exec.Cmd) {
