@@ -2,11 +2,13 @@
 
 **Status:** ACTIVE (`plan-risk-based-verification`). The prior plan
 `plan-post-wave3-production-readiness` was superseded with operator authorization;
-RD-03/RD-04 are preserved as SUPERSEDED history under `.agent-sdlc/archive/`
-(`RD-03`/`RD-04` remain `PLANNED`; no PASS or approval was fabricated). Implemented
-and committed: RBV-001, RBV-002, RBV-003, RBV-004, RBV-008, RBV-012, the dedup
-guarantee of RBV-011, and the deterministic input+output-size part of RBV-013
-(provider-reported tokens remain UNAVAILABLE).
+RD-03/RD-04 are preserved as SUPERSEDED history under `.agent-sdlc/archive/`.
+Implemented and committed: RBV-001, RBV-002, RBV-003, RBV-004, RBV-008, RBV-012, the
+dedup guarantee of RBV-011, and RBV-013 (input+output size; provider tokens
+UNAVAILABLE). RBV-005 (acceptance verification) and RBV-007 (validation/review reuse)
+are satisfied by existing components and test coverage - no change. RBV-009 is
+documented. RBV-010 is satisfied by the deterministic fixture. RBV-011's
+retrieval/handoff wiring remains, pending a design decision.
 
 **Basis:** review of the current verification, JEV, autonomy, and approval
 workflows. Only RBV-001, RBV-002, and RBV-008 are implemented so far; the rest are
