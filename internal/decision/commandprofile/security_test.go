@@ -92,13 +92,40 @@ func TestAdapterCancellationVersusDeadline(t *testing.T) {
 }
 
 func TestAdapterTempFileCleanup(t *testing.T) {
-	before := countAdapterTempDirs(t)
+	// Isolate the process temp directory for this test. The connector creates its
+	// private request directories with os.MkdirTemp("", "sop-adapter-"), which honors
+	// os.TempDir(). Pointing TMPDIR (Unix) and TMP/TEMP (Windows) at a private, empty
+	// directory makes both the connector and countAdapterTempDirs() observe the same
+	// location, which no other test can see or mutate. The tests in this package run
+	// sequentially (none call t.Parallel), and t.Setenv restores the environment when
+	// this test ends, so no concurrently-running test is affected.
+	isolated := t.TempDir()
+	t.Setenv("TMPDIR", isolated)
+	t.Setenv("TMP", isolated)
+	t.Setenv("TEMP", isolated)
+
+	// Positive control: prove the counter observes a connector-style directory in the
+	// isolated location, so a real leak could not pass unnoticed below.
+	probe, err := os.MkdirTemp("", "sop-adapter-")
+	if err != nil {
+		t.Fatalf("create probe directory: %v", err)
+	}
+	if got := countAdapterTempDirs(t); got != 1 {
+		t.Fatalf("counter did not observe an isolated sop-adapter- directory: got %d, want 1", got)
+	}
+	if err := os.RemoveAll(probe); err != nil {
+		t.Fatalf("remove probe directory: %v", err)
+	}
+	if got := countAdapterTempDirs(t); got != 0 {
+		t.Fatalf("isolated temp directory is not empty before Decide: got %d, want 0", got)
+	}
+
 	c := testConnector(t, "success", 10*time.Second)
 	if _, err := c.Decide(context.Background(), req()); err != nil {
 		t.Fatalf("Decide: %v", err)
 	}
-	if after := countAdapterTempDirs(t); after != before {
-		t.Fatalf("temporary request directories leaked: before=%d after=%d", before, after)
+	if got := countAdapterTempDirs(t); got != 0 {
+		t.Fatalf("temporary request directories leaked: %d remained after Decide", got)
 	}
 }
 
