@@ -2,8 +2,9 @@
 
 This guide shows how to install the SOP skills so Zed's agent exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
-`/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`, and
-`/sop-continue`, and how each one calls SOP.
+`/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
+`/sop-continue`, and the RAG skills `/rag-schema`, `/rag-test`, and `/rag-ingest`,
+and how each one calls SOP.
 
 The commands are **thin adapters**. Capability aliases call `sop prompt`;
 `/sop-end-to-end` delegates project execution to `sop run`; `/sop-continue`
@@ -79,6 +80,9 @@ scripts/install/install-skills.sh zed --uninstall
 | `/sop-review`     | `review`            | no       | code, architecture, security, design review              |
 | `/sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
 | `/sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change    |
+| `/rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix          |
+| `/rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                      |
 | `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
@@ -86,6 +90,10 @@ scripts/install/install-skills.sh zed --uninstall
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
 `/sop end-to-end` project-execution requests use `/sop-end-to-end` instead.
+
+The `rag-*` commands are RAG-domain skills: they fix the read-only `plan` or
+`design_tests` capability and add a pgvector/RAG checklist. They never mutate
+the repository; see [`RAG-SKILLS.md`](RAG-SKILLS.md).
 
 Example, from Zed's agent message editor:
 

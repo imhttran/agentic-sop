@@ -93,14 +93,23 @@ const (
 type Kind string
 
 const (
-	MissingTestCoverage      Kind = "MISSING_TEST_COVERAGE"
-	CompilerError            Kind = "COMPILER_ERROR"
-	TestFailure              Kind = "TEST_FAILURE"
-	StaleTest                Kind = "STALE_TEST"
-	IntegrationWiring        Kind = "INTEGRATION_WIRING"
-	LintFailure              Kind = "LINT_FAILURE"
-	Regression               Kind = "REGRESSION"
-	BlockingFindings         Kind = "BLOCKING_FINDINGS"
+	MissingTestCoverage Kind = "MISSING_TEST_COVERAGE"
+	CompilerError       Kind = "COMPILER_ERROR"
+	TestFailure         Kind = "TEST_FAILURE"
+	StaleTest           Kind = "STALE_TEST"
+	IntegrationWiring   Kind = "INTEGRATION_WIRING"
+	LintFailure         Kind = "LINT_FAILURE"
+	Regression          Kind = "REGRESSION"
+	BlockingFindings    Kind = "BLOCKING_FINDINGS"
+	// ValidationNotConfigured: a task that requires deterministic validation before
+	// it may pass produced a repository change, but the project has no validation
+	// commands configured. It is a workflow/configuration failure, distinct from an
+	// implementation failure: the change may be correct, yet SOP has no evidence
+	// and will not claim a pass. The disposition is Block — no human decision exists
+	// to approve or decline, and a fresh invocation would repeat under unchanged
+	// configuration — so it is reported as a terminal operator-intervention state
+	// rather than an approval.
+	ValidationNotConfigured  Kind = "VALIDATION_NOT_CONFIGURED"
 	IncompleteImplementation Kind = "INCOMPLETE_IMPLEMENTATION"
 	// NoChangesProduced: a mutating invocation reported success (or reported that it
 	// had applied a fix) while leaving the working tree unchanged, when SOP expected a
@@ -227,6 +236,15 @@ type Evidence struct {
 	// consulted together with ChangeRequired.
 	MutationObserved bool
 
+	// ValidationRequired reports that this failure occurred on a task whose
+	// execution deterministically requires configured validation (an ordinary
+	// mutating task). ValidationConfigured reports whether any validation command was
+	// configured. Together they make a missing validation set its own failure kind
+	// (ValidationNotConfigured) instead of an implementation verdict, so a
+	// configuration failure is never mistaken for a code defect.
+	ValidationRequired   bool
+	ValidationConfigured bool
+
 	// Authoritative signals, supplied when a caller can determine them. They
 	// select the specific AUTO_FIX kind; their absence does not change the
 	// disposition (a test failure is still auto-fixable).
@@ -304,6 +322,16 @@ func Classify(ev Evidence) Classification {
 	if r := evidenceReasonText(ev); harnessNoProgress(strings.ToLower(r)) {
 		return Classification{Kind: NoProgress, Disposition: Block, Confidence: High,
 			Reason: describe(r, "the invocation made no repository progress within its bounded stale allowance; an automatic continuation would repeat under unchanged conditions and is not taken")}
+	}
+
+	// 2c. A required validation set that is not configured cannot verify the change,
+	//     so it can neither pass nor continue: the bounded fix loop cannot repair a
+	//     missing configuration, and a fresh invocation would repeat under unchanged
+	//     configuration. It is a workflow/configuration failure, distinct from an
+	//     implementation failure, and it is not a human approval.
+	if ev.ValidationRequired && !ev.ValidationConfigured {
+		return Classification{Kind: ValidationNotConfigured, Disposition: Block, Confidence: High,
+			Reason: "the task requires deterministic validation before it can pass, but no validation commands are configured; configure validation (for example via `sop init`) and re-run"}
 	}
 
 	// 3. SOP's own deterministic budget/no-change signal. The agent harness (and the

@@ -78,7 +78,10 @@ then MUST run again (regression protection).
 - `PASS` — verification passed (when required) and no blocking findings remain; the
   task may proceed to commit/integration gates.
 - `FAIL` — a deterministic failure (including a claimed change with none produced)
-  leaves the task `BLOCKED`.
+  leaves the task `BLOCKED`. A required-but-unconfigured validation set is also a
+  `FAIL`: an empty suite is never a pass. It is classified `VALIDATION_NOT_CONFIGURED`
+  and is terminal for the automation (a configuration state, not a code defect) —
+  distinct from the `NEEDS_HUMAN` fix-budget exhaustion below.
 - `NEEDS_HUMAN` — the fix budget is spent, or a human boundary was reported. The
   gate's verdict is `NEEDS_HUMAN`; what follows is owned by the autonomy policy and
   [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md). At the conservative levels the task is
@@ -93,3 +96,8 @@ Validation MUST fail fast before review so a broken check reaches the fix loop e
 when review is skipped (see [VALIDATION.md](VALIDATION.md)). Review is skipped when
 there is no change to review, and review/re-validation results MAY be reused only
 under the safety rules in [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md).
+
+A human-required verdict takes precedence over the missing-validation failure: the gate
+checks the human boundary first, so a run that reached a genuine human boundary is
+`NEEDS_HUMAN` even when no validation is configured (see
+[HUMAN-APPROVAL.md](HUMAN-APPROVAL.md)).

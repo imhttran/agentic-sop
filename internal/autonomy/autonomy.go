@@ -174,6 +174,15 @@ func Decide(c failure.Classification, p Policy) Decision {
 		return auto(ActionTerminal, c, p, RiskLow, "no repository progress under unchanged conditions; the task is blocked for operator intervention, not a human approval")
 	}
 
+	// 1c. A required validation set that is not configured is a terminal
+	//     automation/configuration state at every level: there is no human decision to
+	//     approve or decline, and an automatic continuation would repeat under
+	//     unchanged configuration. The operator must configure validation and re-run.
+	//     It is deliberately NOT a human approval boundary.
+	if c.Kind == failure.ValidationNotConfigured {
+		return auto(ActionTerminal, c, p, RiskLow, "required validation is not configured; the operator must configure validation and re-run — an automation/configuration block, not a human approval")
+	}
+
 	// 2. Bounded automation exhaustion. Under the high level it is a terminal
 	//    automation state — SOP tried and stopped; no human decision exists. The
 	//    conservative levels keep the human boundary, so an operator who never opted
