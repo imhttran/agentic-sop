@@ -16,6 +16,19 @@ import (
 // reconcileDocTwo is a two-stage plan used to exercise additions and removals.
 const reconcileDocTwo = "# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nAdd a widget.\n\n## S001 — Application skeleton\n\nCreate it.\n\n### Acceptance Criteria\n\n- starts\n\n## S002 — Ingestion\n\nIngest it.\n\n### Dependencies\n\n- S001\n\n### Acceptance Criteria\n\n- ingests\n"
 
+// acceptanceDoc builds a one-stage plan whose single stage carries exactly the
+// given acceptance-criterion lines, so a test varies only the acceptance checks.
+func acceptanceDoc(criteria ...string) string {
+	var b strings.Builder
+	b.WriteString("# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nAdd a widget.\n\n## S001 — Application skeleton\n\nCreate it.\n\n### Acceptance Criteria\n\n")
+	for _, c := range criteria {
+		b.WriteString("- ")
+		b.WriteString(c)
+		b.WriteString("\n")
+	}
+	return b.String()
+}
+
 // prepareForReconcile writes a plan document, runs the normal prepare path (so
 // .agent-sdlc/plan.json and the task graph exist), and returns the store.
 func prepareForReconcile(t *testing.T, dir, name, doc string) *fakeStore {
@@ -267,6 +280,159 @@ func TestReconcilePreservesHistoryOfUnchangedTask(t *testing.T) {
 	kept := taskByID(t, st.tasks, "S001")
 	if kept.Attempt != 1 || len(kept.Attempts) != 1 {
 		t.Errorf("history lost: %+v", kept)
+	}
+}
+
+// TestReconcileNeverExecutedAcceptanceCheckChangeUpdates proves a never-executed
+// task whose only change is an added, removed, or modified acceptance check is
+// reported Updated, and the persisted plan.json carries the new checks while the
+// task stays PLANNED. The change reaches the diff via reconcileGraph ->
+// sameTaskDefinition -> sameAcceptanceCriteria.
+func TestReconcileNeverExecutedAcceptanceCheckChangeUpdates(t *testing.T) {
+	cases := map[string]struct {
+		before, after string
+		wantPresent   string
+		wantAbsent    string
+	}{
+		"added": {
+			before:      "starts",
+			after:       "starts\nlogs started",
+			wantPresent: "logs started",
+		},
+		"removed": {
+			before:     "starts\nstops cleanly",
+			after:      "starts",
+			wantAbsent: "stops cleanly",
+		},
+		"modified": {
+			before:      "starts",
+			after:       "starts within 5 seconds",
+			wantPresent: "starts within 5 seconds",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			st := prepareForReconcile(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.before, "\n")...))
+			write(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.after, "\n")...))
+
+			res, err := reconcile(t, dir, "PLAN.md", st)
+			if err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+			if len(res.Updated) != 1 || res.Updated[0] != "S001" {
+				t.Errorf("Updated = %v, want [S001]", res.Updated)
+			}
+			if len(res.Added)+len(res.Removed)+len(res.ChangedExecuted)+len(res.Accepted) != 0 {
+				t.Errorf("unexpected other categories: %+v", res)
+			}
+
+			task := taskByID(t, st.tasks, "S001")
+			if task.Status != domain.PLANNED {
+				t.Errorf("status = %s, want PLANNED", task.Status)
+			}
+			planJSON := read(t, filepath.Join(dir, config.DirName, planFileName))
+			if tc.wantPresent != "" && !strings.Contains(planJSON, tc.wantPresent) {
+				t.Errorf("plan.json does not contain %q:\n%s", tc.wantPresent, planJSON)
+			}
+			if tc.wantAbsent != "" && strings.Contains(planJSON, tc.wantAbsent) {
+				t.Errorf("plan.json still contains %q:\n%s", tc.wantAbsent, planJSON)
+			}
+		})
+	}
+}
+
+// TestReconcileExecutedAcceptanceCheckChangeStopsAndAccepts proves an executed
+// task whose acceptance checks change stops as a changed executed task, is listed
+// by Inspect, and is accepted only with AcceptChanged, preserving history and
+// rewriting plan.json with the new checks. The classification reaches the diff via
+// reconcileGraph -> equivalentExecutedChange -> sameAcceptanceCriteria.
+func TestReconcileExecutedAcceptanceCheckChangeStopsAndAccepts(t *testing.T) {
+	cases := map[string]struct {
+		before, after string
+		wantPresent   string
+	}{
+		"added":    {before: "starts", after: "starts\nlogs started", wantPresent: "logs started"},
+		"removed":  {before: "starts\nstops cleanly", after: "starts"},
+		"modified": {before: "starts", after: "starts within 5 seconds", wantPresent: "starts within 5 seconds"},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			st := prepareForReconcile(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.before, "\n")...))
+			executed := taskByID(t, st.tasks, "S001")
+			markExecuted(executed)
+			write(t, dir, "PLAN.md", acceptanceDoc(strings.Split(tc.after, "\n")...))
+
+			planPath := filepath.Join(dir, config.DirName, planFileName)
+			metaPath := filepath.Join(dir, config.DirName, metaFileName)
+			beforePlan := read(t, planPath)
+			beforeMeta := read(t, metaPath)
+
+			// Unapproved: stops and mutates nothing.
+			_, err := reconcile(t, dir, "PLAN.md", st)
+			if err == nil {
+				t.Fatal("expected NEEDS_HUMAN for an unapproved executed acceptance-check change")
+			}
+			if !strings.Contains(err.Error(), "S001") {
+				t.Errorf("error %q does not name S001", err)
+			}
+			if got := taskByID(t, st.tasks, "S001"); got != executed {
+				t.Error("an unapproved executed change must leave the graph untouched")
+			}
+			if got := read(t, planPath); got != beforePlan {
+				t.Error("plan.json must be untouched on an unapproved executed change")
+			}
+			if got := read(t, metaPath); got != beforeMeta {
+				t.Error("plan.meta.json must be untouched on an unapproved executed change")
+			}
+
+			// The read-only listing names it.
+			listed, err := inspect(t, dir, "PLAN.md", st)
+			if err != nil {
+				t.Fatalf("Inspect: %v", err)
+			}
+			if len(listed.ChangedExecuted) != 1 || listed.ChangedExecuted[0] != "S001" {
+				t.Errorf("ChangedExecuted = %v, want [S001]", listed.ChangedExecuted)
+			}
+
+			// With --accept-changed it is applied, preserving history.
+			res, err := reconcileAccept(t, dir, "PLAN.md", st, "S001")
+			if err != nil {
+				t.Fatalf("reconcile --accept-changed: %v", err)
+			}
+			if len(res.Accepted) != 1 || res.Accepted[0] != "S001" {
+				t.Errorf("Accepted = %v, want [S001]", res.Accepted)
+			}
+			got := taskByID(t, st.tasks, "S001")
+			if got.Status != domain.LOCAL_DONE || got.Attempt != 1 || len(got.Attempts) != 1 {
+				t.Errorf("history/status lost: %+v", got)
+			}
+			planJSON := read(t, planPath)
+			if tc.wantPresent != "" && !strings.Contains(planJSON, tc.wantPresent) {
+				t.Errorf("plan.json does not contain the new check %q:\n%s", tc.wantPresent, planJSON)
+			}
+		})
+	}
+}
+
+// TestReconcileOtherFieldChangeReconcilesAsBefore is a regression guard: a change
+// confined to a field other than the acceptance checks (objective prose) still
+// reconciles exactly as before, and the acceptance checks are untouched.
+func TestReconcileOtherFieldChangeReconcilesAsBefore(t *testing.T) {
+	dir := t.TempDir()
+	st := prepareForReconcile(t, dir, "PLAN.md", acceptanceDoc("starts"))
+	write(t, dir, "PLAN.md", strings.Replace(acceptanceDoc("starts"), "Create it.", "Create it thoroughly.", 1))
+
+	res, err := reconcile(t, dir, "PLAN.md", st)
+	if err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	if len(res.Updated) != 1 || res.Updated[0] != "S001" {
+		t.Errorf("Updated = %v, want [S001] for an objective-only change", res.Updated)
+	}
+	if len(res.ChangedExecuted) != 0 {
+		t.Errorf("ChangedExecuted = %v, want none", res.ChangedExecuted)
 	}
 }
 
