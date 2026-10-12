@@ -275,3 +275,50 @@ wiring the bounded runner to `sop run` remains future work.
 execution has no remote PR/CI/merge, so a passing lifecycle completes the task at
 `LOCAL_DONE` directly and MUST NOT fabricate remote states. The remote path is driven
 by the explicit `sop commit`/`sop pr` commands.
+
+## 10. Reuse Before Implementation (policy)
+
+SOP's execution favors existing capabilities, configuration, and native tooling over new
+code, tests, abstractions, or orchestration. This section records the nine policies and
+their evidence. It adds **no runtime behavior**: existing execution, verification,
+autonomy, and lifecycle mechanisms already satisfy it, so no code, plan, or test suite is
+required.
+
+1. **Inspect existing capabilities first.** Before implementing a requirement, determine
+   whether the functionality already exists. The risk-based verification tier reuses the
+   `internal/router` typed signals, prompt compilation reuses CTX-001/CTX-005, response
+   handling reuses CTX-006, and between-task compression reuses `internal/handoff`.
+2. **Configuration before code.** Behavior that can be enabled or adjusted through
+   configuration MUST NOT introduce new implementation. `autonomy.*`, `quality.jev.*`,
+   `verification.risk_based`, `models.*`, `orchestration.enabled`, and `decision.*` gate
+   optional capabilities; each defaults off or to the conservative value.
+3. **Minimal change.** Extend or reuse existing components rather than creating parallel
+   systems, frameworks, or abstractions. SOP has one quality gate, one failure classifier,
+   one autonomy policy, one performance model, and one validation runner. The worktree
+   runner (§8) and the handoff capsule are staged components; the live path does not
+   duplicate them.
+4. **Tests proportional to change.** Configuration-only changes MUST reuse existing tests;
+   focused tests are added only when behavior changes or a genuine coverage gap exists.
+5. **Continuous execution.** Eligible tasks MUST be executed, satisfied plans closed, and
+   explicitly queued plans activated through existing lifecycle capabilities (`sop run`,
+   `verify-first`, `sop task complete --external`, `sop plan complete`/`supersede`,
+   `sop reconcile`) without unnecessary interruptions.
+6. **Approval by exception.** SOP continues autonomously within established authority and
+   stops only for a genuine approval boundary, an unexpected conflict, or an unrecoverable
+   failure ([HUMAN-APPROVAL.md](HUMAN-APPROVAL.md), [RECOVERY.md](RECOVERY.md)).
+7. **No redundant reconciliation.** Reconcile only when the relevant plan, source, or
+   execution state changes; unchanged evidence MUST NOT be re-validated
+   ([RECOVERY.md](RECOVERY.md) §7, §12; [VALIDATION.md](VALIDATION.md) §8 reuse rules).
+8. **Native toolchain first.** Prefer existing Go tooling, Git, repository conventions, and
+   SOP components over additional infrastructure.
+9. **Preserve determinism and safety.** No required approval, acceptance criterion, audit
+   history, or security boundary MAY be bypassed to reduce overhead
+   ([QUALITY.md](QUALITY.md), [HUMAN-APPROVAL.md](HUMAN-APPROVAL.md)).
+
+**Compliance.** A read-only review of the live path found it already reuses the components
+above and gates optional capability behind configuration; the deterministic gate, failure
+classifier, autonomy policy, and approval surface remain the single source of truth for
+each decision. Where helper duplication or staged-but-unwired packages exist, the policy is
+to wire or drop them deliberately rather than add a parallel implementation; this section
+does not mandate those changes. The policy documents existing behavior and requires no
+change to it.
