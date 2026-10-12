@@ -105,12 +105,17 @@ reader signal, not lifecycle authority.
 
 Current:
 
-- [plans/PLAN-Pre-Performance-Closure-Remaining.md](plans/PLAN-Pre-Performance-Closure-Remaining.md) —
-  **active** remaining Pre-Performance Closure work (CLOSE-005…CLOSE-011).
-  Recorded by SOP as the active plan; executed via
-  `sop run docs/plans/PLAN-Pre-Performance-Closure-Remaining.md`.
+No plan is currently ACTIVE. SOP records no active plan in
+`.agent-sdlc/plan.meta.json` (`sop status` reports none), and the last plan,
+Pre-Performance Closure (CLOSE-005…CLOSE-011), is **complete and archived**:
+its lifecycle record is disposition `COMPLETE` and its document now lives at
+[history/plans/PLAN-Pre-Performance-Closure-Remaining.md](history/plans/PLAN-Pre-Performance-Closure-Remaining.md).
+
 - [plans/README.md](plans/README.md) — what belongs in `plans/` versus
   `history/plans/`.
+- [plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md](plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md) —
+  **proposed** next work (pending-approvals inbox, model-selection display,
+  documentation). Not yet ACTIVE with SOP.
 
 Historical (completed or superseded — non-normative evidence):
 
@@ -227,11 +232,10 @@ do not define current behavior.
 These paths are deliberately left where they are: SOP or the code records them,
 so moving them would change behavior or break provenance.
 
-- `docs/plans/PLAN-Pre-Performance-Closure-Remaining.md` — SOP's recorded active
-  plan source (matched by path in `.agent-sdlc/plan.meta.json`).
 - `docs/PLAN-SOP-Controller.md` — SOP plan-archive source path (its `sha256` is
   recorded in `.agent-sdlc/archive/plan-sop-controller/plan.meta.json` and in the
   retirement record), so it is not moved.
 - `docs/tasks/CLOSE-004.md` — task source executed via `sop run --task`.
-- `docs/reports/pre-performance-closure/` — the active plan declares files in this
-  directory as its task deliverables, so the path is operational.
+- `docs/reports/pre-performance-closure/` — the (now archived) Pre-Performance
+  Closure plan declares files in this directory as its task deliverables, so the
+  path is operational.

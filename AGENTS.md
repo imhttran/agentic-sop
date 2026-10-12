@@ -77,6 +77,8 @@ SOP matches a plan by its recorded source path, so operational paths stay put:
 the **active** plan's path is recorded in `.agent-sdlc/plan.meta.json`;
 `docs/PLAN-SOP-Controller.md` is a **superseded** plan kept because SOP's plan
 archive records it as a source; `docs/tasks/CLOSE-004.md` is a `sop run --task`
-source; `docs/reports/pre-performance-closure/` holds the active plan's declared
-deliverables. Do not move these while SOP records them — see
+source; `docs/reports/pre-performance-closure/` holds the (now archived)
+Pre-Performance Closure plan's declared deliverables. When SOP records no active
+plan (`sop status` reports none), none of these is an active planning source. Do
+not move these while SOP records them — see
 [docs/README.md](docs/README.md#kept-operational-paths).
