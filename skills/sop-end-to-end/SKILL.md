@@ -150,10 +150,23 @@ Link relevant existing run artifacts under `.agent-sdlc/runs/`. Do not fabricate
 evidence, claim historical validation ran again, expose secrets, or dump full
 model responses unless diagnostic detail is requested.
 
-## CONTINUOUS EXECUTION
+## CONTINUOUS EXECUTION — STOP ONLY FOR GENUINE DECISIONS
 
-One invocation is a run, not a task: `sop run` drives the whole runnable graph (its
-`driveGraph` loop continues to `AllDone`; the only stops are a task block/fail, a human
-gate, or the bounded `3 x len(tasks) + 2` backstop), and the unbounded default has no
-`--max-tasks` limit. Do not return control or report after an individual task. Continue
-until the run terminates or reaches a genuine human boundary, then report once.
+Once an authorized workflow starts, continue autonomously until its end goal is achieved
+— implementation, verification, recovery, task-state reconciliation, and plan closure —
+without asking for another prompt. A single invocation is a run, not a task: `sop run`
+drives the whole runnable graph (`driveGraph` continues to `AllDone`; the unbounded default
+has no `--max-tasks` limit).
+
+Do not stop for: task or phase completion; routine implementation choices; recoverable
+failures; repeated verification with unchanged evidence; already-committed work requiring
+lifecycle reconciliation; intermediate progress reports; or decisions that can be resolved
+safely from existing requirements, policy, or evidence.
+
+Stop only when: (1) explicit human authorization is required by policy; (2) a consequential
+decision cannot be safely resolved from existing requirements, policy, or evidence; or
+(3) an unrecoverable blocker prevents further safe progress. When a stop is necessary, name
+the exact decision or blocker and present the recommended resolution.
+
+Definition of done: the intended end-to-end outcome is achieved, verified, and recorded in
+SOP state — not merely that individual tasks or tests passed.

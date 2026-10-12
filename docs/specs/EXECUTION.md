@@ -322,3 +322,33 @@ each decision. Where helper duplication or staged-but-unwired packages exist, th
 to wire or drop them deliberately rather than add a parallel implementation; this section
 does not mandate those changes. The policy documents existing behavior and requires no
 change to it.
+
+## 11. Continuous Execution — Stop Only for Genuine Decisions
+
+Once an authorized workflow starts, `sop run` MUST continue autonomously until its end
+goal is achieved — implementation, verification, recovery, task-state reconciliation, and
+plan closure — rather than stopping at a task or phase boundary. A single invocation is a
+run, not a task: the graph driver continues to `AllDone`, and the unbounded default imposes
+no per-run task limit (`--max-tasks` is the operator's explicit bound).
+
+SOP MUST NOT stop for: a task or phase completing; a routine implementation choice; a
+recoverable failure; repeated verification with unchanged evidence; already-committed work
+requiring lifecycle reconciliation; an intermediate progress report; or a decision that can
+be resolved safely from existing requirements, policy, or evidence.
+
+SOP MUST stop only when:
+
+1. explicit human authorization is required by policy (an approval gate, a
+   commit/push/merge, or a protected/destructive action);
+2. a consequential decision cannot be safely resolved from existing requirements, policy,
+   or evidence; or
+3. an unrecoverable blocker prevents further safe progress.
+
+When a stop is necessary, SOP MUST name the exact decision or blocker and present the
+recommended resolution; it MUST NOT invent approval or cross a gate.
+
+**Definition of done.** The intended end-to-end outcome is *achieved, verified, and
+recorded in SOP state* — not merely that individual tasks or tests passed. Reconciling
+already-committed work into lifecycle state, and closing a satisfied plan, are part of the
+outcome, not a reason to stop. This rule adds no workflow layer: it states how the existing
+`sop run` driver, the bounded fix/recovery loop, and the approval policy already behave.
