@@ -1,0 +1,20 @@
+{
+  "provider": "nimble",
+  "model": "nimble",
+  "answers": {
+    "risk": {
+      "type": "choice",
+      "choice": "HIGH",
+      "probabilities": {
+        "LOW": 0.0013367338788281202,
+        "MEDIUM": 0.041031786153483775,
+        "HIGH": 0.9576314799676882
+      },
+      "confidence": 0.8349416441131589
+    }
+  },
+  "usage": {
+    "input_tokens": 983,
+    "output_tokens": 4
+  }
+}

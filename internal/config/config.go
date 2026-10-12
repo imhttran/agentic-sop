@@ -293,7 +293,7 @@ func (h Human) RequiresApprovalBeforeCommit() bool {
 // default: the deterministic rules are the baseline, and an external decision
 // adapter must demonstrate value before it is trusted (plan T037).
 type DecisionConfig struct {
-	Provider   string              `yaml:"provider"` // deterministic | command
+	Provider   string              `yaml:"provider"` // deterministic | command | adapter
 	Enabled    bool                `yaml:"enabled"`
 	Thresholds decision.Thresholds `yaml:"thresholds"`
 	// Command is the executable argv of an external, provider-neutral decision
@@ -301,6 +301,15 @@ type DecisionConfig struct {
 	// arguments are kept structurally separate; no shell is involved. It is
 	// empty unless a decision provider is explicitly configured.
 	Command []string `yaml:"command"`
+	// AdapterCommand is the executable argv of the batched adapter connector, used
+	// only when provider == "adapter". It is separate from Command (which carries
+	// the SEAM-002 command-provider meaning) and requires no shell.
+	AdapterCommand []string `yaml:"adapter_command"`
+	// AdapterProvider and AdapterModel are optional selection hints passed to the
+	// adapter connector (empty means the adapter's own default). They never select
+	// SOP policy.
+	AdapterProvider string `yaml:"adapter_provider"`
+	AdapterModel    string `yaml:"adapter_model"`
 }
 
 // Features toggles optional capabilities.
@@ -576,12 +585,15 @@ func (c *Config) Validate() error {
 		return err
 	}
 	switch strings.TrimSpace(c.Decision.Provider) {
-	case "deterministic", "command":
+	case "deterministic", "command", "adapter":
 	default:
-		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, command)", c.Decision.Provider)
+		return fmt.Errorf("config: unknown decision.provider %q (want deterministic, command, adapter)", c.Decision.Provider)
 	}
 	if strings.TrimSpace(c.Decision.Provider) == "command" && len(c.Decision.Command) == 0 {
 		return errors.New("config: decision.provider \"command\" requires decision.command")
+	}
+	if strings.TrimSpace(c.Decision.Provider) == "adapter" && len(c.Decision.AdapterCommand) == 0 {
+		return errors.New("config: decision.provider \"adapter\" requires decision.adapter_command")
 	}
 	t := c.Decision.Thresholds
 	if t.RouteToStrongModel < 0 || t.RouteToStrongModel > 1 || t.RequireHuman < 0 || t.RequireHuman > 1 {

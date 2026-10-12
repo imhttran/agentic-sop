@@ -5,6 +5,32 @@ import (
 	"testing"
 )
 
+// TestDecisionProviderAdapterRequiresCommand proves the opt-in adapter provider
+// is accepted only with a dedicated decision.adapter_command argv, and is rejected
+// when that argv is missing. decision.command keeps its separate meaning.
+func TestDecisionProviderAdapterRequiresCommand(t *testing.T) {
+	// Accepted with adapter_command.
+	c, err := Parse([]byte("project:\n  name: a\ndecision:\n  provider: adapter\n  adapter_command:\n    - /path/to/adapter\n"))
+	if err != nil {
+		t.Fatalf("adapter with adapter_command must be accepted: %v", err)
+	}
+	if c.Decision.Provider != "adapter" || len(c.Decision.AdapterCommand) != 1 {
+		t.Fatalf("parsed decision = %+v, want provider adapter + adapter_command", c.Decision)
+	}
+
+	// Rejected without adapter_command (fail closed).
+	if _, err := Parse([]byte("project:\n  name: a\ndecision:\n  provider: adapter\n")); err == nil {
+		t.Fatal("adapter without adapter_command must be rejected")
+	} else if !strings.Contains(err.Error(), "adapter_command") {
+		t.Errorf("error = %q, want it to name adapter_command", err)
+	}
+
+	// decision.command does NOT satisfy the adapter requirement.
+	if _, err := Parse([]byte("project:\n  name: a\ndecision:\n  provider: adapter\n  command:\n    - /x\n")); err == nil {
+		t.Fatal("adapter must require adapter_command, not command")
+	}
+}
+
 // TestDecisionProviderRejectsUnsupported proves configuration validation accepts
 // only the supported decision providers. An unsupported value (the legacy jev
 // name or any invented provider) is rejected at load time with a focused error,
