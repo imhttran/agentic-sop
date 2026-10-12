@@ -17,16 +17,16 @@ type Builder struct{}
 // NewBuilder returns a Builder.
 func NewBuilder() *Builder { return &Builder{} }
 
-// Build produces a capsule for a completed task. The task must be DONE; a
-// capsule is only meaningful for finished work. It never invents facts: task id
-// and result are read from the task, everything else is the caller's explicit
-// input, normalized deterministically.
+// Build produces a capsule for a completed task. The task must have finished its
+// work (LOCAL_DONE, MERGED, or DONE); a capsule is only meaningful for finished work.
+// It never invents facts: task id and result are read from the task, everything else
+// is the caller's explicit input, normalized deterministically.
 func (b *Builder) Build(task *domain.Task, facts Facts) (Capsule, error) {
 	if task == nil {
 		return Capsule{}, errors.New("handoff: task is nil")
 	}
-	if task.Status != domain.DONE {
-		return Capsule{}, fmt.Errorf("handoff: task %s is %s, not DONE", task.ID, task.Status)
+	if !task.IsCompleted() {
+		return Capsule{}, fmt.Errorf("handoff: task %s is %s, not completed", task.ID, task.Status)
 	}
 
 	return Capsule{

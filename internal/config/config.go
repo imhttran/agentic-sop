@@ -178,6 +178,11 @@ type ContextEfficiency struct {
 	// context (CTX-010). A decision recorded under another repository state is never
 	// applied.
 	DecisionMemory bool `yaml:"decision_memory"`
+	// Handoff includes the handoff capsules of a task's direct dependencies as
+	// execution context (RBV-011), compressing between-task context instead of replaying
+	// full history. It reuses internal/handoff; OFF by default, so an existing run is
+	// unchanged. A capsule is a derived summary, never workflow truth.
+	Handoff bool `yaml:"handoff"`
 }
 
 // Review selects the review engine and whether it delegates semantic review.

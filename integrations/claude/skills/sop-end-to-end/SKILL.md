@@ -149,3 +149,11 @@ Return a concise evidence-backed summary:
 Link relevant existing run artifacts under `.agent-sdlc/runs/`. Do not fabricate
 evidence, claim historical validation ran again, expose secrets, or dump full
 model responses unless diagnostic detail is requested.
+
+## CONTINUOUS EXECUTION
+
+One invocation is a run, not a task: `sop run` drives the whole runnable graph (its
+`driveGraph` loop continues to `AllDone`; the only stops are a task block/fail, a human
+gate, or the bounded `3 x len(tasks) + 2` backstop), and the unbounded default has no
+`--max-tasks` limit. Do not return control or report after an individual task. Continue
+until the run terminates or reaches a genuine human boundary, then report once.

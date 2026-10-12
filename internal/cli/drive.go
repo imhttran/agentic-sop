@@ -721,6 +721,12 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
 
+	// Between-task context compression (RBV-011): include the handoff capsules of the
+	// task's direct dependencies when opted in. It reads only the store; a store without
+	// handoffs yields nothing, so a disabled feature is a strict no-op.
+	if cfg.ContextEfficiency.Handoff {
+		d.handoffItems = dependencyHandoffItems(task, saver)
+	}
 	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 
@@ -819,6 +825,11 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if err := completeTask(saver, task); err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
+	}
+	// Persist this task's handoff capsule so a dependent task's context can be
+	// compressed between tasks (RBV-011). Best-effort; metadata only.
+	if cfg.ContextEfficiency.Handoff {
+		saveTaskHandoff(saver, task, rn, res)
 	}
 	fmt.Fprintf(stdout, "%s %s\n", task.ID, task.Status)
 	return exitOK

@@ -612,6 +612,7 @@ block leaves existing behavior unchanged.
 ```yaml
 context:
   decision_memory: false
+  handoff: false         # include a dependency task's handoff capsule (RBV-011)
 ```
 
 `context.decision_memory` includes durable engineering decisions recorded for the
@@ -619,6 +620,12 @@ current repository as execution context. Record and list decisions with `sop mem
 a decision recorded under another repository state is never applied, and memory carries
 the lowest context priority, so it never overrides current repository, lifecycle, or
 verification evidence.
+
+`context.handoff` includes the handoff capsules of a task's direct dependencies as
+execution context, so context is compressed between tasks instead of replaying
+full history (see [../specs/EXECUTION.md](../specs/EXECUTION.md)). A capsule is a
+derived summary, never workflow truth; it carries the lowest context priority, and
+a task only ever receives its own dependencies' capsules. Off by default.
 
 The verification cache (`sop validate --cache`) and the prompt result cache
 (`sop prompt --cache`) are enabled per invocation, not in configuration.

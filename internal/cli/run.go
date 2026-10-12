@@ -2008,11 +2008,14 @@ func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, c
 
 	// The task, acceptance criteria, and execution identity are carried by the agent
 	// request's own fields or the execution item; the context carries the plan and the
-	// evidence, so the compiled prompt does not duplicate the task. Decision memory is
-	// included only when opted in.
+	// evidence, so the compiled prompt does not copy the task. Decision memory and the
+	// dependency handoff capsules are included only when opted in.
 	var memory []sopctx.Item
 	if cfg.ContextEfficiency.DecisionMemory {
 		memory = applicableDecisionItems(d)
+	}
+	if cfg.ContextEfficiency.Handoff {
+		memory = append(memory, d.handoffItems...)
 	}
 	return sopctx.FromInputs(sopctx.Inputs{
 		TaskID:       spec.ID,

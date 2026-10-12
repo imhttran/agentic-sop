@@ -13,6 +13,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	sopctx "github.com/imhttran/agentic-sop/internal/context"
 	"github.com/imhttran/agentic-sop/internal/decision"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
@@ -109,6 +110,11 @@ type deps struct {
 	// means "no observation", which model resolution never treats as
 	// unavailability, so an unwired process keeps the local model.
 	localProbe func(cfg config.Config, sel model.Selection) (unavailable bool, detail string)
+	// handoffItems are the context items built from a task's direct dependencies'
+	// handoff capsules (RBV-011), when context.handoff is enabled. They are computed
+	// once per task from the store and included as lowest-priority context; a nil
+	// slice (the default) leaves the context unchanged.
+	handoffItems []sopctx.Item
 }
 
 func defaultDeps() deps {

@@ -7,8 +7,9 @@ Implemented and committed: RBV-001, RBV-002, RBV-003, RBV-004, RBV-008, RBV-012,
 dedup guarantee of RBV-011, and RBV-013 (input+output size; provider tokens
 UNAVAILABLE). RBV-005 (acceptance verification) and RBV-007 (validation/review reuse)
 are satisfied by existing components and test coverage - no change. RBV-009 is
-documented. RBV-010 is satisfied by the deterministic fixture. RBV-011's
-retrieval/handoff wiring remains, pending a design decision.
+documented. RBV-010 is satisfied by the deterministic fixture. RBV-011 is complete
+(dedup guarantee plus dependency handoff capsules via `context.handoff`, reusing
+`internal/handoff`). All RBV tasks are implemented or satisfied.
 
 **Basis:** review of the current verification, JEV, autonomy, and approval
 workflows. Only RBV-001, RBV-002, and RBV-008 are implemented so far; the rest are
