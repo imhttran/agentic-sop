@@ -14,6 +14,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/perf"
+	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
@@ -23,8 +24,18 @@ import (
 // is the informational PR output: build/test results, review findings by
 // severity, and the final gate.
 func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
-	if len(args) > 1 {
-		fmt.Fprintln(stderr, "usage: sop report [run-id]")
+	detailed := false
+	var rest []string
+	for _, a := range args {
+		switch a {
+		case "--detailed":
+			detailed = true
+		default:
+			rest = append(rest, a)
+		}
+	}
+	if len(rest) > 1 {
+		fmt.Fprintln(stderr, "usage: sop report [run-id] [--detailed]")
 		return exitUsage
 	}
 
@@ -35,8 +46,8 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 
 	runsRoot := filepath.Join(dir, stateDirName, "runs")
 	id := ""
-	if len(args) == 1 {
-		id = args[0]
+	if len(rest) == 1 {
+		id = rest[0]
 	} else {
 		latest, err := latestRun(runsRoot)
 		if err != nil {
@@ -79,7 +90,7 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 		return exitError
 	}
 
-	writeReport(stdout, doc)
+	writeReport(stdout, doc, detailed)
 	// Execution attempts (Phase 5): when bounded escalation is enabled, the task's
 	// initial routing attempt and each escalated retry are rendered from the run's
 	// persisted attempt records, so the initial class is distinguishable from the
@@ -247,8 +258,10 @@ func promptRunCandidates(promptsRoot string) []runCandidate {
 	return out
 }
 
-// writeReport renders the concise summary.
-func writeReport(w io.Writer, doc runReportDoc) {
+// writeReport renders the concise summary. With detailed set it additionally renders
+// each review finding in full and the per-command validation detail that the concise
+// default summarizes; the default shape is otherwise unchanged.
+func writeReport(w io.Writer, doc runReportDoc, detailed bool) {
 	fmt.Fprintf(w, "Run: %s\n", doc.ID)
 	fmt.Fprintf(w, "Stage: %s\n", doc.Stage)
 	fmt.Fprintf(w, "Provider: %s\n", doc.Provider)
@@ -276,6 +289,50 @@ func writeReport(w io.Writer, doc runReportDoc) {
 
 	writeJEVSummary(w, doc.JEV)
 	writeClassificationSummary(w, doc.Classification)
+
+	if detailed {
+		writeFindingsDetail(w, doc.Findings)
+	}
+
+	fmt.Fprintf(w, "\nNext action: %s\n", nextAction(doc))
+}
+
+// nextAction derives the single next operator action from the run's recorded outcome.
+// It is presentation only: it reads the gate verdict and stage and never changes task
+// state or manufactures an approval.
+func nextAction(doc runReportDoc) string {
+	switch doc.Decision {
+	case quality.Pass:
+		if doc.Stage == runpkg.Passed {
+			return "commit when ready (`sop commit`); no further validation is required"
+		}
+		return "none"
+	case quality.Fail:
+		return "review the blocking findings and retry (`sop retry " + doc.ID + "`)"
+	case quality.NeedsHuman:
+		return "resolve the human gate (`sop approvals --json`, then `sop approve`/`sop decline " + doc.ID + "`)"
+	default:
+		return "none"
+	}
+}
+
+// writeFindingsDetail renders each review finding in full (severity, location, title)
+// for `sop report --detailed`. The concise default shows only per-severity counts.
+func writeFindingsDetail(w io.Writer, findings []review.Finding) {
+	if len(findings) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "\nFindings (detail):")
+	for _, f := range findings {
+		loc := f.File
+		if f.Line > 0 {
+			loc = fmt.Sprintf("%s:%d", f.File, f.Line)
+		}
+		if strings.TrimSpace(loc) == "" {
+			loc = "-"
+		}
+		fmt.Fprintf(w, "  %-8s %-30s %s\n", f.Severity, loc, f.Title)
+	}
 }
 
 // writeModelSelectionSummary renders the run's resolved model-routing evidence

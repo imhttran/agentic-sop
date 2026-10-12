@@ -1,9 +1,14 @@
 # PLAN — Risk-Based Verification and Risk-Tiered Execution
 
-**Status:** APPROVED (scope decisions recorded below). Registration with SOP is
-**blocked**: a different plan (`plan-post-wave3-production-readiness`) is active
-with unresolved work, so `sop plan activate` stops with `NEEDS_HUMAN` and will not
-mix two plans. RBV-001/002/008 are implemented and committed; the rest are pending.
+**Status:** APPROVED (scope decisions recorded below). The active plan
+`plan-post-wave3-production-readiness` could not be fully closed offline: RD-01 is
+`LOCAL_DONE`; RD-03 (Julia ONNX runtime) and RD-04 (live adapter quality evaluation)
+require external Gate L resources and pass only vacuously (their acceptance tests do
+not exist), so a single supersession approval is requested to release them.
+Registration of this plan remains blocked until that boundary is resolved
+(`sop plan activate` -> `NEEDS_HUMAN`). Implemented and committed so far: RBV-001,
+RBV-002, RBV-003, RBV-008, RBV-012, and the deterministic input-size half of RBV-013.
+
 **Basis:** review of the current verification, JEV, autonomy, and approval
 workflows. Only RBV-001, RBV-002, and RBV-008 are implemented so far; the rest are
 pending.

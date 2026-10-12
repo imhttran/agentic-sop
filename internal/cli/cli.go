@@ -322,7 +322,7 @@ Commands:
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio)
-  report    print a concise summary of the latest run
+  report    print a concise summary of the latest run (--detailed for full evidence)
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
   approve   record an approval decision on a task's active human approval gate
             (no <task-id> or --select chooses interactively; --run continues after)

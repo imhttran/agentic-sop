@@ -534,6 +534,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// only the task's declared execution mode; a model claim alone cannot waive it.
 	changeRequired := !spec.ExecutionMode.VerifyFirst() && !spec.ExecutionMode.Done()
 
+	// Risk-based verification (RBV-003): select the configured command set the gate
+	// requires for this task's deterministic verification tier. Off by default, so the
+	// full configured set runs exactly as it did before.
+	vset := selectValidation(cfg, spec)
+
 	var (
 		plan       *planner.Plan
 		diff       string
@@ -591,7 +596,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// so a verify-first pass still contributes to the task's accumulated
 		// implementation evidence.
 		recordTaskChanges(rn, changedFiles(diff), reports...)
-		suite := sessionValidation(ctx, dir, cfg, diff, rec, sess)
+		suite := sessionValidation(ctx, dir, vset, diff, rec, sess)
 		switch {
 		case len(suite.Results) == 0:
 		case suite.Passed():
@@ -793,7 +798,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		} else {
 			// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
 			_ = rn.SetStage(runpkg.Validating)
-			suite = sessionValidation(ctx, dir, cfg, diff, rec, sess)
+			suite = sessionValidation(ctx, dir, vset, diff, rec, sess)
 		}
 
 		// A non-completed mutating outcome is classified on the deterministic
@@ -1658,15 +1663,15 @@ func hasCategory(suite testrunner.SuiteResult, category testrunner.Category) boo
 // timedValidation runs the configured validation and records its stage time, its
 // per-category durations, and one validation execution. It is the single place a
 // suite is measured, so counts and timings cannot drift from where validation runs.
-func timedValidation(ctx context.Context, dir string, cfg config.Config, rec *perf.Recorder) testrunner.SuiteResult {
+func timedValidation(ctx context.Context, dir string, v config.Validation, rec *perf.Recorder) testrunner.SuiteResult {
 	// Announce the validation commands before they run, so a slow suite is
 	// visible as it runs rather than only after it returns.
 	ar := activity.FromContext(ctx)
-	for _, check := range validate.Checks(cfg.Validation) {
+	for _, check := range validate.Checks(v) {
 		ar.Emit(activity.StageValidate, check.Command, "")
 	}
 	stop := rec.Measure(perf.StageValidation)
-	suite := validate.Run(ctx, dir, cfg.Validation)
+	suite := validate.Run(ctx, dir, v)
 	stop()
 	rec.ValidationRun()
 	for _, r := range suite.Results {
@@ -1678,13 +1683,13 @@ func timedValidation(ctx context.Context, dir string, cfg config.Config, rec *pe
 // sessionValidation runs the configured validation, reusing a prior passing result
 // when the command set and working-tree change are unchanged. It is the single
 // place the reuse decision is made, so the cache and the run cannot drift.
-func sessionValidation(ctx context.Context, dir string, cfg config.Config, diff string, rec *perf.Recorder, sess *runSession) testrunner.SuiteResult {
-	key := validationIdentity(cfg.Validation, diff)
+func sessionValidation(ctx context.Context, dir string, v config.Validation, diff string, rec *perf.Recorder, sess *runSession) testrunner.SuiteResult {
+	key := validationIdentity(v, diff)
 	if suite, ok := sess.cachedValidation(key); ok {
 		rec.ValidationReused()
 		return suite
 	}
-	suite := timedValidation(ctx, dir, cfg, rec)
+	suite := timedValidation(ctx, dir, v, rec)
 	sess.cacheValidation(key, suite)
 	return suite
 }
