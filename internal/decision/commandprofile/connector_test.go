@@ -154,9 +154,14 @@ func TestAdapterHelperProcess(t *testing.T) {
 		os.Exit(0)
 	}
 
+	choice := os.Getenv("ADAPTER_CHOICE")
+	if choice == "" {
+		choice = "high"
+	}
+
 	switch mode {
 	case "success":
-		emit(id, "high", "")
+		emit(id, choice, "")
 	case "wrongid":
 		emit("some-other-id", "high", "")
 	case "typemismatch":
