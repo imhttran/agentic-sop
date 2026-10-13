@@ -203,21 +203,43 @@ different operational responsibilities: `NEEDS_HUMAN` is a human approval bounda
 deterministic result (`BLOCK`) withholds execution; the label asks for a human; JEV's
 `CONTINUE` would let the scenario proceed — strictly less conservative than both.
 
-### `DecideEarly` handling of `INCOMPLETE` / `ERROR`
+### `DecideEarly` handling of `INCOMPLETE` / `ERROR` (DME-FU-001, investigated)
 
-In the shadow run, JEV's `INCOMPLETE`/`ERROR` statuses were mapped by
-`autonomy.DecideEarly`, which classifies only by finding severity. A result with no
-blocking finding — including `INCOMPLETE`/`ERROR` with no HIGH/CRITICAL items —
-maps to `CONTINUE`. By contrast, the quality gate
-(`quality.NewJEVEvidence` / `quality.Evaluate`) treats `INCOMPLETE`/`ERROR` as
-**fail-closed** evidence that is never a pass. The two paths therefore disagree on
-the safety semantics of an incomplete analysis.
+**Verified conclusion: the production execution path is safe. The
+`INCOMPLETE`/`ERROR` → `CONTINUE` mapping seen in the shadow run was an artifact of
+evaluation-only tooling, not production behavior.**
 
-This is recorded as an **investigation item**, not a confirmed production
-vulnerability: whether `DecideEarly`'s behavior is reachable in the real execution
-path (early-JEV checkpoints), and whether the discrepancy is a defect or an
-intentional difference between the two consumers, must be verified against the
-production wiring before any change. No production code was modified.
+- **Where production uses `DecideEarly`.** Only the early-JEV checkpoints
+  (`internal/cli/early_jev.go`: task triage and pre-execution) call
+  `autonomy.DecideEarly`. Before doing so, `runJEVCheckpoint` short-circuits any
+  fail-closed, `ERROR`, or `INCOMPLETE` result (and any result without valid
+  structured evidence) into a `ProviderFailed` outcome, so `DecideEarly` is never
+  invoked with an `INCOMPLETE`/`ERROR` result. `ProviderFailed` does not escalate;
+  the checkpoint continues under deterministic SOP policy — the documented advisory
+  contract (JEV is never authority).
+- **Where production fails closed.** The quality-gate JEV path
+  (`internal/cli/jev.go` → `quality.NewJEVEvidence` → `quality.Evaluate`) marks
+  `INCOMPLETE`/`ERROR` (and analyzer errors and malformed results) as `FailClosed`,
+  which the gate treats as a failed check. Such a result is never a pass.
+- **Why the shadow run showed `CONTINUE`.** The evaluation helper `MapJEVDirective`
+  (`internal/deceleval/jev.go`, eval-only) calls `DecideEarly` directly, without the
+  production status short-circuit; `DecideEarly` classifies solely by finding
+  severity, so an `INCOMPLETE`/`ERROR` result with no HIGH/CRITICAL item maps to
+  `AUTO_CONTINUE`. This is a fidelity gap in evaluation-only tooling, not a
+  production path.
+- **`CONTINUE` is an internal decision directive, not permission to execute.** In
+  production, when JEV cannot produce usable evidence the code records a provider
+  failure and falls back to deterministic policy rather than emitting a `CONTINUE`
+  decision. Validation, review, the quality gate, and operator-owned acceptance
+  checks remain the authority and are unchanged.
+- **Origin of `INCOMPLETE`/`ERROR`.** These are model-reported statuses (the
+  analyzer's JSON schema permits them); provider/transport failures instead surface
+  as an analyzer error (also fail-closed). Neither reaches `DecideEarly` as an
+  escalation-relevant input in production.
+
+No production code was modified. The only residual item is evaluation-only:
+reconcile `MapJEVDirective`'s scope with the production mapping (or document the
+difference) so a shadow result is never read as production behavior.
 
 ## 6. Limitations
 

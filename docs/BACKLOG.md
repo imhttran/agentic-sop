@@ -52,7 +52,17 @@ Scope
 ## DME-FU-001 — Investigate `DecideEarly` handling of `INCOMPLETE`/`ERROR`
 
 - **Priority:** P1
-- **Status:** Proposed
+- **Status:** Resolved (investigated 2026-10-13) — no production defect
+- **Finding:** Production never routes `INCOMPLETE`/`ERROR` to `DecideEarly`: the
+  early-JEV checkpoint (`internal/cli/early_jev.go`) short-circuits fail-closed,
+  `ERROR`, and `INCOMPLETE` results into a non-escalating `ProviderFailed` outcome
+  before policy is applied, and the quality-gate path (`quality.NewJEVEvidence`)
+  fails closed on them. The `CONTINUE` mapping was an evaluation-only tooling
+  artifact (`internal/deceleval/jev.go`). See
+  [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) §5.
+- **Residual (evaluation-only):** reconcile `MapJEVDirective`'s scope with the
+  production mapping, or document the difference, so a shadow result is never read
+  as production behavior.
 - **Problem:** In the JEV shadow-mode evaluation, `autonomy.DecideEarly` mapped a
   result with no blocking finding — including `INCOMPLETE`/`ERROR` with no
   HIGH/CRITICAL items — to `CONTINUE`, while the quality gate
