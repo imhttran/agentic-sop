@@ -47,3 +47,11 @@ measurement evidence.
 
 - Historical point-in-time artifacts also live under [`../history/`](../history/).
 - Documentation index: [`../README.md`](../README.md).
+
+### Developer Preview
+
+- [`DP-001-real-sop-smoke.md`](DP-001-real-sop-smoke.md) — the Phase 1 real-`sop`
+  integration smoke: discovery, project/task views, activity streaming, the
+  approvals inbox, and the approve/decline/retry/reconcile delegations, verified
+  against the real binary with a deterministic stub agent and a disposable project
+  (no model calls; no production SOP state changes).
