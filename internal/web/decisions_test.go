@@ -37,6 +37,9 @@ func TestProjectDecisionsRouteRendersState(t *testing.T) {
 			t.Errorf("decisions route missing %q", want)
 		}
 	}
+	if n := strings.Count(body, `name="note"`); n != 1 {
+		t.Errorf("decisions panel should offer one shared decision note per gate, got %d", n)
+	}
 }
 
 // An unknown project is a 404, not a phantom empty panel.

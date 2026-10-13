@@ -41,6 +41,8 @@ interpolated into a shell string. */ -}}
             <div class="decisions-actions">
                 <form
                     class="inline decisions-form"
+                    method="post"
+                    action="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/approve"
                     hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/approve"
                     hx-target="#decisions-cmd"
                     hx-swap="innerHTML"
@@ -53,49 +55,33 @@ interpolated into a shell string. */ -}}
                         placeholder="by (actor, optional)"
                         autocomplete="off"
                     />
-                    <input
-                        class="input"
-                        type="text"
+                    <textarea
+                        class="input decision-note"
                         name="note"
-                        placeholder="note (optional)"
+                        rows="1"
+                        placeholder="decision note (optional)"
                         autocomplete="off"
-                    />
-                    <button
-                        class="btn primary"
-                        hx-disabled-elt="this"
-                        title="sop approve {{.TaskID}}"
-                    >
-                        Approve
-                    </button>
-                </form>
-                <form
-                    class="inline decisions-form"
-                    hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/decline"
-                    hx-target="#decisions-cmd"
-                    hx-swap="innerHTML"
-                >
-                    <input type="hidden" name="csrf" value="{{$.CSRF}}" />
-                    <input
-                        class="input"
-                        type="text"
-                        name="by"
-                        placeholder="by (actor, optional)"
-                        autocomplete="off"
-                    />
-                    <input
-                        class="input"
-                        type="text"
-                        name="note"
-                        placeholder="note (optional)"
-                        autocomplete="off"
-                    />
-                    <button
-                        class="btn danger"
-                        hx-disabled-elt="this"
-                        title="sop decline {{.TaskID}}"
-                    >
-                        Decline
-                    </button>
+                    ></textarea>
+                    <div class="decision-buttons">
+                        <button
+                            class="btn primary"
+                            type="submit"
+                            hx-disabled-elt="this"
+                            title="sop approve {{.TaskID}}"
+                        >
+                            Approve
+                        </button>
+                        <button
+                            class="btn danger"
+                            type="submit"
+                            formaction="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/decline"
+                            hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/decline"
+                            hx-disabled-elt="this"
+                            title="sop decline {{.TaskID}}"
+                        >
+                            Decline
+                        </button>
+                    </div>
                 </form>
             </div>
         </li>

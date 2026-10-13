@@ -225,6 +225,8 @@ func TestApproveRejectionIsConflictNotSuccess(t *testing.T) {
 
 // The task page offers the approve/decline controls (both supported) with the
 // optional actor/note inputs.
+// The task page offers the approve/decline controls (both supported) from one shared
+// actor and decision-note field.
 func TestApprovalControlsOfferMetadataInputs(t *testing.T) {
 	srv, id, _ := decisionServer(t, "")
 	code, body := get(t, srv.URL+"/projects/"+id+"/tasks/x1")
@@ -238,5 +240,8 @@ func TestApprovalControlsOfferMetadataInputs(t *testing.T) {
 		if !strings.Contains(body, want) {
 			t.Errorf("task page missing %q", want)
 		}
+	}
+	if n := strings.Count(body, `name="note"`); n != 1 {
+		t.Errorf("task approval panel should offer one shared decision note, got %d", n)
 	}
 }

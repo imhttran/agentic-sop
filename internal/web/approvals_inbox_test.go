@@ -47,6 +47,29 @@ func TestApprovalsInboxRendersPendingGates(t *testing.T) {
 	}
 }
 
+// The inbox offers one shared decision field per approval, not one note per action: a
+// single form carries the shared actor and decision note, and both decision buttons
+// submit them to their existing endpoints.
+func TestApprovalsInboxUsesOneSharedDecisionNote(t *testing.T) {
+	srv, id, _ := decisionServer(t, "")
+	_, body := get(t, srv.URL+"/approvals")
+
+	if n := strings.Count(body, `name="by"`); n != 1 {
+		t.Errorf("inbox should have exactly one shared actor field, got %d", n)
+	}
+	if n := strings.Count(body, `name="note"`); n != 1 {
+		t.Errorf("inbox should have exactly one shared decision note field, got %d", n)
+	}
+	for _, want := range []string{
+		"/projects/" + id + "/tasks/x1/commands/approve",
+		`formaction="/projects/` + id + `/tasks/x1/commands/decline"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("inbox missing %q", want)
+		}
+	}
+}
+
 // A failed `sop approvals --json` is shown as an unread listing, never as "no
 // gates": a failing SOP must be distinguishable from a quiet one.
 func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {

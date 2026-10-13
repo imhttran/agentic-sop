@@ -53,11 +53,30 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
     await expect(card.getByRole("button", { name: "Decline" })).toBeVisible();
   });
 
-  test("8. mobile controls and form inputs stay usable", async ({ page }) => {
+  test("2b. each approval has exactly one shared Decision Note field", async ({
+    page,
+  }) => {
     const card = projectCard(page, state.projects.readonly.id);
-    const by = card.getByPlaceholder("by (actor, optional)").first();
+    await expect(card).toHaveCount(1);
+    await expect(card.locator("form")).toHaveCount(1);
+    await expect(card.getByPlaceholder("by (actor, optional)")).toHaveCount(1);
+    await expect(card.getByPlaceholder("decision note (optional)")).toHaveCount(
+      1,
+    );
+    await expect(card.getByRole("button", { name: "Approve" })).toHaveCount(1);
+    await expect(card.getByRole("button", { name: "Decline" })).toHaveCount(1);
+  });
+
+  test("8. mobile controls and the shared form stay usable", async ({
+    page,
+  }) => {
+    const card = projectCard(page, state.projects.readonly.id);
+    const by = card.getByPlaceholder("by (actor, optional)");
+    const note = card.getByPlaceholder("decision note (optional)");
     await by.fill("phone tester");
+    await note.fill("looks good");
     await expect(by).toHaveValue("phone tester");
+    await expect(note).toHaveValue("looks good");
 
     const box = await by.boundingBox();
     const viewport = page.viewportSize();
@@ -65,21 +84,20 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
     expect(viewport).not.toBeNull();
     expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
     await expect(card.getByRole("button", { name: "Approve" })).toBeEnabled();
+    await expect(card.getByRole("button", { name: "Decline" })).toBeEnabled();
   });
 
-  test("3. Approve submits and updates authoritative SOP state", async ({
+  test("3. Approve submits the shared note and updates authoritative SOP state", async ({
     page,
   }) => {
     const fixture = state.projects.approve;
     const card = projectCard(page, fixture.id);
     await expect(card).toHaveCount(1);
 
-    const approveForm = card
-      .locator("form")
-      .filter({ has: page.getByRole("button", { name: "Approve" }) });
-    await approveForm.getByPlaceholder("by (actor, optional)").fill("e2e");
-    await approveForm.getByPlaceholder("note (optional)").fill("approve e2e");
-    await approveForm.getByRole("button", { name: "Approve" }).click();
+    const form = card.locator("form.decisions-form");
+    await form.getByPlaceholder("by (actor, optional)").fill("e2e");
+    await form.getByPlaceholder("decision note (optional)").fill("approve e2e");
+    await form.getByRole("button", { name: "Approve" }).click();
 
     await expect(page.locator("#approvals-cmd")).toContainText(
       "SOP recorded the approval decision.",
@@ -89,21 +107,20 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
     const record = sopApprovalState(fixture.root, fixture.task);
     expect(record).toContain("Approval: APPROVED");
     expect(record).toContain("Decided by: e2e");
+    expect(record).toContain("Note: approve e2e");
   });
 
-  test("4. Decline submits and updates authoritative SOP state", async ({
+  test("4. Decline submits the shared note and updates authoritative SOP state", async ({
     page,
   }) => {
     const fixture = state.projects.decline;
     const card = projectCard(page, fixture.id);
     await expect(card).toHaveCount(1);
 
-    const declineForm = card
-      .locator("form")
-      .filter({ has: page.getByRole("button", { name: "Decline" }) });
-    await declineForm.getByPlaceholder("by (actor, optional)").fill("e2e");
-    await declineForm.getByPlaceholder("note (optional)").fill("decline e2e");
-    await declineForm.getByRole("button", { name: "Decline" }).click();
+    const form = card.locator("form.decisions-form");
+    await form.getByPlaceholder("by (actor, optional)").fill("e2e");
+    await form.getByPlaceholder("decision note (optional)").fill("decline e2e");
+    await form.getByRole("button", { name: "Decline" }).click();
 
     await expect(page.locator("#approvals-cmd")).toContainText(
       "SOP recorded the decline/withhold decision.",
@@ -113,6 +130,7 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
     const record = sopApprovalState(fixture.root, fixture.task);
     expect(record).toContain("Approval: DECLINED");
     expect(record).toContain("Decided by: e2e");
+    expect(record).toContain("Note: decline e2e");
   });
 
   test("7. a stale decision is reported as a conflict", async ({ page }) => {

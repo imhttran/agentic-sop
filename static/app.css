@@ -712,6 +712,21 @@ ul.decisions-list {
     flex: 1 1 8rem;
 }
 
+/* The shared decision note: compact by default and vertically expandable. */
+.decision-note {
+    resize: vertical;
+    min-height: 2.4rem;
+    max-height: 8rem;
+}
+
+/* The two decision buttons sit together and wrap on narrow screens. */
+.decision-buttons {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
 /* Narrow viewport: stack everything, no horizontal scrolling, generous tap
    targets with clear separation between approve/decline/accept controls. */
 @media (max-width: 640px) {
@@ -724,6 +739,12 @@ ul.decisions-list {
     .decisions-form .input,
     .decisions-form .btn {
         width: 100%;
+    }
+
+    /* In the stacked layout the shared actor and decision note keep their content
+       height; the inputs' 8rem flex basis is a row-layout width, not a height. */
+    .decisions-form .input {
+        flex: 0 0 auto;
     }
 
     .decisions-actions {

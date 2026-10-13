@@ -41,25 +41,19 @@
 <div class="actions">
   <form
     class="inline approval-form"
+    method="post"
+    action="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
     hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
     hx-target="#cmd"
     hx-swap="innerHTML"
   >
     <input type="hidden" name="csrf" value="{{.CSRF}}" />
     <input class="input" type="text" name="by" placeholder="by (actor, optional)" autocomplete="off" />
-    <input class="input" type="text" name="note" placeholder="note (optional)" autocomplete="off" />
-    <button class="btn" hx-disabled-elt="this">Approve (SOP gate)</button>
-  </form>
-  <form
-    class="inline approval-form"
-    hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline"
-    hx-target="#cmd"
-    hx-swap="innerHTML"
-  >
-    <input type="hidden" name="csrf" value="{{.CSRF}}" />
-    <input class="input" type="text" name="by" placeholder="by (actor, optional)" autocomplete="off" />
-    <input class="input" type="text" name="note" placeholder="note (optional)" autocomplete="off" />
-    <button class="btn" hx-disabled-elt="this">Decline</button>
+    <textarea class="input decision-note" name="note" rows="1" placeholder="decision note (optional)" autocomplete="off"></textarea>
+    <div class="decision-buttons">
+      <button class="btn primary" type="submit" hx-disabled-elt="this">Approve (SOP gate)</button>
+      <button class="btn danger" type="submit" formaction="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline" hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline" hx-disabled-elt="this">Decline</button>
+    </div>
   </form>
 </div>
 <div id="cmd"></div>
