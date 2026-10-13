@@ -89,6 +89,7 @@ func traceBudgets() runtrace.BudgetLimits {
 		FixIterations:       b.FixIterations,
 		StaleIterations:     b.StaleIterations,
 		ToolCalls:           b.ToolCalls,
+		DiscoveryIterations: b.DiscoveryIterations,
 	}
 }
 

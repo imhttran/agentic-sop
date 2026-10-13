@@ -197,14 +197,15 @@ verification (§8) or already-satisfied proof (§8a).
 
 **Required.** Discovery evidence MUST remain separate from mutation evidence:
 
-- Through the existing `implementNowAfter` threshold (model turn 12), a successful
-  first informative inspection MAY reset the stale streak.
+- Through the configured discovery window (the built-in default is model turn 12; the
+  allowance is configurable and bounded, see below), a successful first informative
+  inspection MAY reset the stale streak.
 - Identities MUST use operation plus canonical target; search identities include
   normalized scope and query. Each identity earns credit only once per invocation.
 - Failed or denied calls, repeated inspections, narration, empty reads/listings,
   and searches with no matches MUST NOT receive discovery credit.
 - Every model turn, including narration and denial, counts toward that window.
-  After turn 12, every non-mutating turn MUST increment the stale streak.
+  After the discovery window closes, every non-mutating turn MUST increment the stale streak.
 - Five stale turns before the first mutation MUST terminate with the existing
   `IMPLEMENT_NO_PROGRESS` or `FIX_NO_PROGRESS`, `termination=no_progress`, and
   retryable continuation disposition. Consecutive identical behavior remains
@@ -213,8 +214,8 @@ verification (§8) or already-satisfied proof (§8a).
   CHANGE/finalization behavior. Discovery alone MUST NOT set mutation evidence or
   satisfy the completion requirement in §8 or already-satisfied proof in §8a.
 
-**Required.** Once the bounded discovery window has closed (`iteration >
-implementNowAfter`) with no observed mutation, the harness MUST require convergence:
+**Required.** Once the bounded discovery window has closed (`iteration > the
+configured discovery window`) with no observed mutation, the harness MUST require convergence:
 as soon as a stale turn has accrued, non-mutating repository tools (`read_file`,
 `list_files`, `search_files`, and non-mutating `run_command`) MUST be denied with a
 correction prompt, while the mutation tools (`write_file`, `create_file`,
@@ -225,7 +226,8 @@ the existing discovery window and stale accounting; it introduces no new counter
 threshold, or budget knob.
 
 The stale guard remains the fallback for a run that still does not converge:
-continuous non-mutating activity stops by turn 17 with `IMPLEMENT_NO_PROGRESS` /
+continuous non-mutating activity stops at the discovery window plus five stale turns
+(turn 17 with the built-in window) with `IMPLEMENT_NO_PROGRESS` /
 `FIX_NO_PROGRESS`, and the pre-mutation denial above fires on the same path strictly
 before that bound. Attempted inspection checkpoints remain first-seen, deduplicated,
 and bounded to twelve paths, with five shown in diagnostics; failed attempts may
@@ -239,8 +241,17 @@ files, and last action. Early `IMPLEMENT_NO_CHANGES` completion and stalled
 The built-in mutating ceilings can still be overridden by positive
 `SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` values. Unset,
 blank, nonnumeric, or nonpositive values retain 32/24. The existing scaled
-finalization thresholds are unchanged; discovery credit remains limited to the
-first twelve model turns.
+finalization thresholds are unchanged.
+
+**Required.** The discovery allowance is a task-scoped, operator-configurable, bounded
+execution limit (`internal/budget`: `DiscoveryIterations`, §9's `implementNowAfter`
+default), overridable with `SOP_OLLAMA_DISCOVERY_ITERATIONS`. It MUST be bounded: a
+malformed value keeps the base, a value below the minimum is raised, a value above the
+maximum is clamped, and the effective window is always capped strictly below the
+capability's hard iteration ceiling. It MUST NOT be a per-model or per-provider
+hardcoding. Discovery credit MUST remain limited to the effective window, and the
+configured allowance MUST be recorded in the diagnostics and run trace. The model MUST
+NOT set or extend it.
 
 **Observational progress signals.** The harness marks the activity events it emits
 with the progress it has already substantiated — a first-seen inspection

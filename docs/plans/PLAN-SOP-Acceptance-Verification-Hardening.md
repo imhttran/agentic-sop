@@ -1,7 +1,7 @@
 # PLAN — SOP Acceptance-Verification Hardening
 
 **Type:** Correctness-hardening plan (verification, lifecycle gating, recovery). **Planning only — no runtime change.**
-**Status:** IMPLEMENTED — integrated on `integration/sop-hardening` (based on `main` @ `c54eef3`). See the completion section at the end.
+**Status:** IMPLEMENTED — merged into `main` at `9604bec` (SOP-HARD integration onto `origin/main` `c54eef3`). See the completion section at the end.
 **Baseline:** `agentic-sop` `main` @ `3be4a90`.
 **Derived from:** observed RAG-023/RAG-024/RAG-025 runs (SOP PASS + outcome `PARTIAL`; `ALREADY_SATISFIED` rejected with 0 mutations; a missing deliverable still reaching `LOCAL_DONE`).
 **Does not** change any production RAG behaviour; it hardens SOP's own acceptance verification.

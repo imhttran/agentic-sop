@@ -27,6 +27,14 @@ type executionState struct {
 	// denied mutation never sets it.
 	mutationObserved bool
 
+	// discoveryWindow is the bounded, task-scoped discovery allowance resolved for
+	// this invocation from the capability policy (the canonical budget). Successful
+	// novel discovery is credited, and the pre-mutation convergence enforcement is
+	// withheld, only while iteration <= discoveryWindow. A zero value falls back to
+	// the built-in default (implementNowAfter) through discoveryLimit, so a directly
+	// constructed state — and every existing test — is unchanged.
+	discoveryWindow int
+
 	// consecutiveNoProgress counts stale turns. Successful novel discovery -- a
 	// first-seen inspection or a first-seen successful non-mutating command --
 	// resets it only within the initial discovery window; mutation resets it
@@ -35,8 +43,8 @@ type executionState struct {
 
 	// discoverySeen contains successful discovery identities (inspections and
 	// non-mutating commands) credited during this invocation. It is independent of
-	// attempted-path checkpoints and mutation evidence, and grows only within
-	// implementNowAfter model turns.
+	// attempted-path checkpoints and mutation evidence, and grows only within the
+	// task-scoped discovery window (discoveryLimit).
 	discoverySeen map[inspectionIdentity]bool
 
 	// repositoryMutations counts the successful controlled mutations this invocation
@@ -106,7 +114,18 @@ type finalizationState struct {
 // so observing a mutation, advancing a phase, or accumulating a no-progress
 // fingerprint in one invocation cannot affect another.
 func newExecutionState() *executionState {
-	return &executionState{phase: implDiscover}
+	return &executionState{phase: implDiscover, discoveryWindow: implementNowAfter}
+}
+
+// discoveryLimit returns the effective discovery window for this invocation: the
+// task-scoped allowance the capability policy resolved, or the built-in default
+// when a state was built without one. It is the single point every discovery/stale
+// decision reads, so the allowance is applied consistently.
+func (st *executionState) discoveryLimit() int {
+	if st.discoveryWindow > 0 {
+		return st.discoveryWindow
+	}
+	return implementNowAfter
 }
 
 // observeMutation records a successful controlled mutation during this
@@ -123,7 +142,7 @@ func (st *executionState) observeMutation() {
 // inspection or a non-mutating command -- only within the initial model-turn
 // window. Narration, failures, denied calls, and repeats cannot extend that window.
 func (st *executionState) observeDiscovery(iteration int, root, name string, args map[string]any, result string, err error) bool {
-	if st.mutationObserved || iteration > implementNowAfter {
+	if st.mutationObserved || iteration > st.discoveryLimit() {
 		return false
 	}
 	identity, ok := discoveryIdentity(root, name, args, result, err)
@@ -175,7 +194,7 @@ func (st *executionState) mutationConvergenceRequired(iteration int) bool {
 	// the stale guard terminates the stage and the model still has turns in which
 	// to make the change or return a truthful outcome. A first post-window turn
 	// that immediately mutates is therefore never denied.
-	if iteration <= implementNowAfter {
+	if iteration <= st.discoveryLimit() {
 		return false
 	}
 	return st.consecutiveNoProgress >= 1

@@ -11,7 +11,7 @@ import (
 // assertion is not perturbed by an ambient operator override.
 func clearBudgetEnv(t *testing.T) {
 	t.Helper()
-	for _, k := range []string{budget.EnvImplementIterations, budget.EnvFixIterations, budget.EnvStaleIterations, budget.EnvToolCalls} {
+	for _, k := range []string{budget.EnvImplementIterations, budget.EnvFixIterations, budget.EnvStaleIterations, budget.EnvToolCalls, budget.EnvDiscoveryIterations} {
 		t.Setenv(k, "")
 	}
 }

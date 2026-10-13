@@ -43,6 +43,14 @@ type CapabilityPolicy struct {
 	// FinalizeTurns bounds the model turns spent in FINALIZE before the run fails
 	// with a finalization-specific diagnostic.
 	FinalizeTurns int
+	// DiscoveryWindow is the bounded, task-scoped discovery allowance for the phased
+	// mutating capabilities (IMPLEMENT, FIX): how many model turns an unmutated run
+	// may spend on novel successful repository discovery before the pre-mutation
+	// convergence enforcement opens and non-mutating turns become stale. It is
+	// resolved from the canonical budget (operator-configurable, clamped below the
+	// hard ceiling); it is zero for every other capability, which never runs the
+	// phased engine.
+	DiscoveryWindow int
 }
 
 // Allows reports whether the capability may call tool. An unknown tool is
@@ -249,6 +257,38 @@ func fixIterations(b budget.Budget) int { return b.FixIterations }
 // guard), read from the canonical budget.
 func staleIterations(b budget.Budget) int { return b.StaleIterations }
 
+// discoveryTurns resolves the task-scoped discovery allowance for a mutating
+// capability whose hard iteration ceiling is n. The value comes from the canonical
+// budget (the operator's per-task allowance, resolved from
+// SOP_OLLAMA_DISCOVERY_ITERATIONS) and is:
+//
+//   - the built-in default (implementNowAfter) when unset, so an unconfigured
+//     project is unchanged;
+//   - never below budget.MinDiscoveryIterations, so the convergence enforcement and
+//     the stale guard always have a defined opening;
+//   - always strictly below the hard ceiling n, so the allowance can never consume
+//     the whole budget or disable the safety ceiling.
+//
+// It deliberately does not scale with n: the discovery allowance is an explicit
+// operator decision, not a derived fraction of the ceiling, so a raised ceiling
+// does not silently widen legitimate-exploration time.
+func discoveryTurns(b budget.Budget, n int) int {
+	d := b.DiscoveryIterations
+	if d <= 0 {
+		d = implementNowAfter
+	}
+	if d < budget.MinDiscoveryIterations {
+		d = budget.MinDiscoveryIterations
+	}
+	if n > 0 && d >= n {
+		d = n - 1
+	}
+	if d < 1 {
+		d = 1
+	}
+	return d
+}
+
 // scaleIterations maps a soft threshold defined against base onto a ceiling of n,
 // rounding up, so a raised ceiling moves every threshold to the same relative
 // position. A ceiling at or below the built-in base keeps the threshold verbatim.
@@ -318,6 +358,7 @@ func policyFor(c agent.Capability, b budget.Budget) CapabilityPolicy {
 			CompletionWindow:   implementCompletionWindow,
 			ForceFinalizeAfter: scaleIterations(n, implementForceFinalizeAfter, maxIterationsImplement),
 			FinalizeTurns:      implementFinalizeTurns,
+			DiscoveryWindow:    discoveryTurns(b, n),
 		}
 	case agent.Fix:
 		n := fixIterations(b)
@@ -329,6 +370,7 @@ func policyFor(c agent.Capability, b budget.Budget) CapabilityPolicy {
 			CompletionWindow:   implementCompletionWindow,
 			ForceFinalizeAfter: scaleIterations(n, fixForceFinalizeAfter, maxIterationsFix),
 			FinalizeTurns:      fixFinalizeTurns,
+			DiscoveryWindow:    discoveryTurns(b, n),
 		}
 	default:
 		// Conservative read-only default; completion is the generic bounded loop.
