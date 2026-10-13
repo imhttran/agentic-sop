@@ -20,7 +20,7 @@ import (
 // provider policy, lifecycle, approval, commit, merge, or execution authority;
 // it only builds a decision.Provider.
 func decisionProviderFromConfig(cfg config.Config) (decision.Provider, error) {
-	if !cfg.Decision.Enabled {
+	if !cfg.Decision.DecisionEnabled() {
 		return nil, nil
 	}
 	switch name := strings.TrimSpace(cfg.Decision.Provider); name {

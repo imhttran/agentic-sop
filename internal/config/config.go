@@ -8,6 +8,7 @@ package config
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -301,8 +302,11 @@ func (h Human) RequiresApprovalBeforeCommit() bool {
 // default: the deterministic rules are the baseline, and an external decision
 // adapter must demonstrate value before it is trusted (plan T037).
 type DecisionConfig struct {
-	Provider   string              `yaml:"provider"` // deterministic | command | adapter
-	Enabled    bool                `yaml:"enabled"`
+	Provider string `yaml:"provider"` // deterministic | command | adapter
+	// Enabled is a pointer so an omitted flag (nil) is distinguishable from an
+	// explicit false: the environment may enable the layer, but a project that
+	// sets decision.enabled: false keeps the adapter disabled even then.
+	Enabled    *bool               `yaml:"enabled"`
 	Thresholds decision.Thresholds `yaml:"thresholds"`
 	// Command is the executable argv of an external, provider-neutral decision
 	// adapter, used only when provider == "command". The executable and its
@@ -318,6 +322,101 @@ type DecisionConfig struct {
 	// SOP policy.
 	AdapterProvider string `yaml:"adapter_provider"`
 	AdapterModel    string `yaml:"adapter_model"`
+}
+
+// DecisionEnabled reports whether the optional decision layer is explicitly
+// enabled. An omitted flag and an explicit false both resolve to disabled.
+func (d DecisionConfig) DecisionEnabled() bool {
+	return d.Enabled != nil && *d.Enabled
+}
+
+// Decision-layer environment variables. They configure the SEAM-004 advisory
+// decision adapter for a whole local environment (and for every
+// controller-launched run, which inherits SOP's environment). They never change
+// SOP governance: the adapter stays advisory, and an explicit project
+// configuration always wins over them.
+const (
+	envDecisionEnabled         = "SOP_DECISION_ENABLED"
+	envDecisionProvider        = "SOP_DECISION_PROVIDER"
+	envDecisionAdapterProvider = "SOP_DECISION_ADAPTER_PROVIDER"
+	envDecisionAdapterCommand  = "SOP_DECISION_ADAPTER_COMMAND"
+	envDecisionAdapterModel    = "SOP_DECISION_ADAPTER_MODEL"
+)
+
+// applyDecisionEnv fills decision settings the project configuration omitted,
+// honoring precedence: explicit project configuration > environment > built-in
+// default. A field the project set is never overwritten, so a project that sets
+// decision.enabled: false stays disabled even when the environment enables it.
+// An unparseable value fails closed rather than silently defaulting.
+func (c *Config) applyDecisionEnv() error {
+	if c.Decision.Enabled == nil {
+		if v, ok := os.LookupEnv(envDecisionEnabled); ok && strings.TrimSpace(v) != "" {
+			b, err := parseEnvBool(envDecisionEnabled, v)
+			if err != nil {
+				return err
+			}
+			c.Decision.Enabled = &b
+		}
+	}
+	if strings.TrimSpace(c.Decision.Provider) == "" {
+		if v := strings.TrimSpace(os.Getenv(envDecisionProvider)); v != "" {
+			c.Decision.Provider = v
+		}
+	}
+	// Adapter hints/command are only meaningful for the adapter provider, so fill
+	// them from the environment only when the resolved provider is "adapter"; a
+	// project that chose another provider keeps an inert, empty adapter config.
+	if strings.TrimSpace(c.Decision.Provider) != "adapter" {
+		return nil
+	}
+	if strings.TrimSpace(c.Decision.AdapterProvider) == "" {
+		if v := strings.TrimSpace(os.Getenv(envDecisionAdapterProvider)); v != "" {
+			c.Decision.AdapterProvider = v
+		}
+	}
+	if strings.TrimSpace(c.Decision.AdapterModel) == "" {
+		if v := strings.TrimSpace(os.Getenv(envDecisionAdapterModel)); v != "" {
+			c.Decision.AdapterModel = v
+		}
+	}
+	if len(c.Decision.AdapterCommand) == 0 {
+		if v, ok := os.LookupEnv(envDecisionAdapterCommand); ok && strings.TrimSpace(v) != "" {
+			argv, err := parseEnvArgv(envDecisionAdapterCommand, v)
+			if err != nil {
+				return err
+			}
+			c.Decision.AdapterCommand = argv
+		}
+	}
+	return nil
+}
+
+// parseEnvBool accepts the conventional boolean spellings; anything else is a
+// focused configuration error rather than a silent default.
+func parseEnvBool(name, v string) (bool, error) {
+	switch strings.ToLower(strings.TrimSpace(v)) {
+	case "1", "true", "yes", "on":
+		return true, nil
+	case "0", "false", "no", "off":
+		return false, nil
+	default:
+		return false, fmt.Errorf("config: %s: invalid boolean %q (want true/false)", name, v)
+	}
+}
+
+// parseEnvArgv parses an adapter command from the environment: a JSON array of
+// strings when the value is a JSON array, otherwise whitespace-separated fields.
+// No shell is involved.
+func parseEnvArgv(name, v string) ([]string, error) {
+	t := strings.TrimSpace(v)
+	if strings.HasPrefix(t, "[") {
+		var argv []string
+		if err := json.Unmarshal([]byte(t), &argv); err != nil {
+			return nil, fmt.Errorf("config: %s: invalid JSON array: %w", name, err)
+		}
+		return argv, nil
+	}
+	return strings.Fields(t), nil
 }
 
 // Features toggles optional capabilities.
@@ -464,6 +563,11 @@ func Parse(data []byte) (*Config, error) {
 		return nil, fmt.Errorf("config: parse: %w", err)
 	}
 
+	// Environment fills only what the project omitted (precedence:
+	// explicit config > environment > default), before defaults are applied.
+	if err := c.applyDecisionEnv(); err != nil {
+		return nil, err
+	}
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err

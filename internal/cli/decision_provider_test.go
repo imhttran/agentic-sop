@@ -28,7 +28,7 @@ func TestDecisionProviderOffByDefault(t *testing.T) {
 
 func TestDecisionProviderDeterministic(t *testing.T) {
 	cfg := config.Default()
-	cfg.Decision.Enabled = true
+	cfg.Decision.Enabled = bp(true)
 	cfg.Decision.Provider = "deterministic"
 	p, err := decisionProviderFromConfig(cfg)
 	if err != nil {
@@ -45,7 +45,7 @@ func TestDecisionProviderDeterministic(t *testing.T) {
 
 func TestDecisionProviderCommand(t *testing.T) {
 	cfg := config.Default()
-	cfg.Decision.Enabled = true
+	cfg.Decision.Enabled = bp(true)
 	cfg.Decision.Provider = "command"
 	cfg.Decision.Command = []string{"/bin/echo"}
 	p, err := decisionProviderFromConfig(cfg)
@@ -64,17 +64,20 @@ func TestDecisionProviderCommand(t *testing.T) {
 func TestDecisionProviderFactoryFailsClosed(t *testing.T) {
 	for _, name := range []string{"skynet", "clef", "ollama", "nimble", "systemone"} {
 		cfg := config.Default()
-		cfg.Decision.Enabled = true
+		cfg.Decision.Enabled = bp(true)
 		cfg.Decision.Provider = name
 		if p, err := decisionProviderFromConfig(cfg); err == nil || p != nil {
 			t.Errorf("provider %q must fail closed (no provider, an error): p=%v err=%v", name, p, err)
 		}
 	}
 	cfg := config.Default()
-	cfg.Decision.Enabled = true
+	cfg.Decision.Enabled = bp(true)
 	cfg.Decision.Provider = "command"
 	cfg.Decision.Command = nil
 	if p, err := decisionProviderFromConfig(cfg); err == nil || p != nil {
 		t.Fatalf("provider command without an executable must fail closed: p=%v err=%v", p, err)
 	}
 }
+
+// bp returns a pointer to b for the decision-layer's *bool explicit-enable field.
+func bp(b bool) *bool { return &b }

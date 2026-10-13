@@ -30,7 +30,7 @@ func TestAdapterDogfoodLiveNimble(t *testing.T) {
 
 	cfg := config.Config{Decision: config.DecisionConfig{
 		Provider:        "adapter",
-		Enabled:         true,
+		Enabled:         bp(true),
 		AdapterCommand:  []string{adapter},
 		AdapterProvider: "nimble",
 		AdapterModel:    "nimble",

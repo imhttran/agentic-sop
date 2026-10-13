@@ -57,7 +57,7 @@ const (
 // capability is active. It is OFF by default, so an installation with no decision
 // configuration is never consulted and behaves exactly as before.
 func decisionEvidenceEnabled(cfg config.Config) bool {
-	return cfg.Decision.Enabled
+	return cfg.Decision.DecisionEnabled()
 }
 
 // applyDecisionEvidence is the optional, disabled-by-default evidence checkpoint

@@ -25,7 +25,7 @@ func TestDecisionProviderAdapterFactory(t *testing.T) {
 
 	cfg := config.Config{Decision: config.DecisionConfig{
 		Provider:        "adapter",
-		Enabled:         true,
+		Enabled:         bp(true),
 		AdapterCommand:  []string{os.Args[0], "-test.run=^TestDecisionAdapterHelperProcess$", "--"},
 		AdapterProvider: "julia",
 		AdapterModel:    "julia-1",
@@ -53,7 +53,7 @@ func TestDecisionProviderAdapterFactory(t *testing.T) {
 func TestDecisionProviderAdapterUnknownSelectionFailsClosed(t *testing.T) {
 	cfg := config.Config{Decision: config.DecisionConfig{
 		Provider:        "adapter",
-		Enabled:         true,
+		Enabled:         bp(true),
 		AdapterCommand:  []string{"/nonexistent"},
 		AdapterProvider: "skynet",
 	}}

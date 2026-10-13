@@ -5,11 +5,12 @@ import "testing"
 // TestDecisionConfigOffByDefault proves an existing installation with no
 // decision configuration is unchanged: disabled, deterministic, no command.
 func TestDecisionConfigOffByDefault(t *testing.T) {
+	clearDecisionEnv(t)
 	c, err := Parse([]byte("project:\n  name: a\n"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if c.Decision.Enabled || c.Decision.Provider != "deterministic" || len(c.Decision.Command) != 0 {
+	if c.Decision.DecisionEnabled() || c.Decision.Provider != "deterministic" || len(c.Decision.Command) != 0 {
 		t.Fatalf("default decision config = %+v, want disabled/deterministic/no command", c.Decision)
 	}
 }
@@ -17,6 +18,7 @@ func TestDecisionConfigOffByDefault(t *testing.T) {
 // TestDecisionCommandConfig proves the provider-neutral command surface parses
 // and that misconfiguration fails closed at config validation.
 func TestDecisionCommandConfig(t *testing.T) {
+	clearDecisionEnv(t)
 	if _, err := Parse([]byte("project:\n  name: a\ndecision:\n  provider: command\n")); err == nil {
 		t.Fatal("decision.provider command without decision.command must be rejected")
 	}
@@ -25,7 +27,7 @@ func TestDecisionCommandConfig(t *testing.T) {
 	if err != nil {
 		t.Fatalf("valid command config rejected: %v", err)
 	}
-	if !c.Decision.Enabled || c.Decision.Provider != "command" {
+	if !c.Decision.DecisionEnabled() || c.Decision.Provider != "command" {
 		t.Fatalf("decision = %+v, want enabled command", c.Decision)
 	}
 	if len(c.Decision.Command) != 2 || c.Decision.Command[0] != "/path/to/adapter" || c.Decision.Command[1] != "--flag" {

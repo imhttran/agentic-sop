@@ -581,6 +581,18 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   can only _add_ attention: it is validated (`decision.Validate`) and routed by
   `decision.Route`/`autonomy`, which retain final authority; it never approves or
   bypasses a human boundary.
+- **Environment configuration (global, optional).** The decision layer can also
+  be configured from the environment, so one local environment covers every
+  project — including controller-launched runs, which inherit SOP's environment:
+  `SOP_DECISION_ENABLED`, `SOP_DECISION_PROVIDER`,
+  `SOP_DECISION_ADAPTER_PROVIDER`, `SOP_DECISION_ADAPTER_COMMAND` (a JSON array
+  of strings, or whitespace-separated fields; no shell), and
+  `SOP_DECISION_ADAPTER_MODEL`. Precedence is **explicit project configuration >
+  environment > built-in deterministic default**: a field the project set is
+  never overwritten, and a project that sets `decision.enabled: false` stays
+  disabled even when `SOP_DECISION_ENABLED=true`. An unparseable value fails
+  closed at load. The `.env` file is never loaded automatically by SOP; exported
+  variables (or an operator-supplied `.env`) are what apply.
 - **Live inference authorization.** Running a real adapter incurs inference and is
   gated (Gate W3-4); enabling the adapter by default is a separate production-policy
   decision (Gate W3-3).

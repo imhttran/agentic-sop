@@ -50,7 +50,7 @@ func decisionEvidenceDeps(p decision.Provider, err error) deps {
 // has.
 func decisionEvidenceConfig(enabled bool) config.Config {
 	cfg := config.Default()
-	cfg.Decision.Enabled = enabled
+	cfg.Decision.Enabled = bp(enabled)
 	cfg.Decision.Provider = "deterministic"
 	return cfg
 }
