@@ -3,7 +3,8 @@
 This guide shows how to install the SOP skills so Zed's agent exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, and the RAG skills `/rag-schema`, `/rag-test`, and `/rag-ingest`,
+`/sop-continue`, `/sop-browser-test`, and the RAG skills `/rag-schema`, `/rag-test`,
+and `/rag-ingest`,
 and how each one calls SOP.
 
 The commands are **thin adapters**. Capability aliases call `sop prompt`;
@@ -86,6 +87,7 @@ scripts/install/install-skills.sh zed --uninstall
 | `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
+| `/sop-browser-test` | _UI verification_  | no       | verify a running UI with the Playwright MCP             |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
@@ -130,6 +132,11 @@ reconciliation authorizes it. It stops for human review on any semantic change,
 nondeterminism, unsafe state, or pending approval, and never commits or pushes by
 default. Its contract is
 [the tracked skill](../../skills/sop-continue/SKILL.md).
+
+`/sop-browser-test` verifies a **running application** with the existing Playwright
+MCP — a smoke test, a mobile layout check, or the approval workflow. It observes the UI
+and reads SOP's state; it fixes no capability and never replaces SOP's validation,
+review, or approval authority.
 
 For capability aliases, everything after the command name is prompt data, passed
 to SOP as a single argument.

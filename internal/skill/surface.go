@@ -33,6 +33,9 @@ var Commands = []Command{
 	{Name: "sop-end-to-end", Capability: "", Delegation: "sop run"},
 	{Name: "sop-historicalize", Capability: "", Delegation: "sop plan historicalize"},
 	{Name: "sop-continue", Capability: "", Delegation: "sop continue"},
+	// A verification companion to /sop-end-to-end: it observes a running application
+	// through the Playwright MCP and reads SOP's approval state, and fixes no capability.
+	{Name: "sop-browser-test", Capability: "", Delegation: "sop approvals --json"},
 
 	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
 	// existing read-only capability. They fix a read-only capability only, so they can

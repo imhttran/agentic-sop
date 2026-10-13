@@ -127,6 +127,21 @@ sop reconcile "docs/plans/PLAN-Example.md" --list-changed --json
 
 Surface SOP's required human decision and wait for explicit resolution.
 
+## BROWSER VERIFICATION
+
+When the work under test changes observable UI behavior, verify it in a real browser
+with the `/sop-browser-test` skill (the existing Playwright MCP), proportional to scope
+and risk:
+
+- A change that alters a rendered page, a control, routing, or an approval surface
+  warrants a browser pass; a small backend-only change does not.
+- When a browser check is obligatory and the Playwright MCP is unavailable, fail closed:
+  report the missing MCP and do not claim the UI was verified.
+- Prefer the running server and existing fixtures, and do not repeat a browser pass whose
+  inputs (revision, viewport, surface) are unchanged.
+- Browser verification observes the running application; it never replaces SOP's own
+  validation, review, or approval authority, and it never crosses a human boundary.
+
 ## REPORT
 
 Return a concise evidence-backed summary:
@@ -143,6 +158,8 @@ Return a concise evidence-backed summary:
 - BLOCK/BLOCKED, FAIL, or execution error: link the latest relevant `sop-run.log`
   at the error line, following [SOP failure reporting](../sop/SKILL.md#failure-behavior).
 - Human approval required: actual applicable request/action, or none established.
+- Browser verification (when the change is UI-facing): the surface and viewport
+  checked and any console/network errors; `NOT RUN` when the change is backend-only.
 - Recommended next action: SOP-provided continuation or exact operator decision.
 - Historicalization (optional, never automatic): when every task is satisfied and no gate is pending, the plan is a candidate for historicalization as a separate, explicit operator step (`/sop-historicalize`). End-to-end execution does not historicalize a plan automatically and never crosses a human approval boundary.
 
