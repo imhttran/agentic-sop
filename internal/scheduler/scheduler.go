@@ -310,3 +310,28 @@ func index(tasks []*domain.Task) map[string]*domain.Task {
 	}
 	return byID
 }
+
+// HasRunnable reports whether a runnable task is currently eligible (the Tier-1
+// selection predicate), without selecting or mutating anything. It lets the graph
+// driver decide whether to continue after a task-local block WITHOUT invoking Next,
+// which would trigger the Tier-2 automatic recovery (requeue) of a blocked task.
+func (s *Scheduler) HasRunnable() bool {
+	tasks, err := s.store.List()
+	if err != nil {
+		return false
+	}
+	byID := index(tasks)
+	for _, task := range tasks {
+		if !task.IsRunnable() {
+			continue
+		}
+		if _, satisfied := task.ResolveDependencies(byID); !satisfied {
+			continue
+		}
+		if !task.CanTransitionTo(domain.READY) {
+			continue
+		}
+		return true
+	}
+	return false
+}
