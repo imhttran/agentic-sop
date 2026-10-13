@@ -31,7 +31,13 @@ func adapterProfileRegistry(cfg config.Config) (*bridge.Registry, error) {
 				"low": decision.Low, "medium": decision.Medium, "high": decision.High, "human": decision.Human,
 			}},
 		}}), nil
+	case "clef":
+		return bridge.NewRegistry(&bridge.Profile{Name: "clef", Version: 1, Kinds: map[string]bridge.KindSpec{
+			adapterDecisionKind: {Type: bridge.TypeChoice, ChoiceMap: map[string]decision.Choice{
+				"LOW": decision.Low, "MEDIUM": decision.Medium, "HIGH": decision.High, "HUMAN": decision.Human,
+			}},
+		}}), nil
 	default:
-		return nil, fmt.Errorf("config: unknown decision.adapter_provider %q (want nimble, julia)", name)
+		return nil, fmt.Errorf("config: unknown decision.adapter_provider %q (want nimble, julia, clef)", name)
 	}
 }
