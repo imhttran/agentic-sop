@@ -13,9 +13,9 @@ here.
 
 ### `pre-performance-closure/`
 
-Evidence for the Pre-Performance Closure work (the active plan
-[`../plans/PLAN-Pre-Performance-Closure-Remaining.md`](../plans/PLAN-Pre-Performance-Closure-Remaining.md)),
-`CLOSE-004`…`CLOSE-011`.
+Evidence for the Pre-Performance Closure work, `CLOSE-004`…`CLOSE-011`. The plan is
+`COMPLETE` and archived, its document at
+[`../history/plans/PLAN-Pre-Performance-Closure-Remaining.md`](../history/plans/PLAN-Pre-Performance-Closure-Remaining.md).
 
 - `CLOSE-004-controller-deterministic-baseline.md`
 - `CLOSE-005-controller-verification.md`
@@ -26,9 +26,9 @@ Evidence for the Pre-Performance Closure work (the active plan
   `CLOSE-009-operator-measurement-*.{md,json,jsonl}` raw evidence)
 - `CLOSE-011-final-readiness.md`
 
-**Kept operational:** the active plan declares files in this directory as its
-task deliverables, and SOP matches deliverables by path, so this directory is not
-moved.
+**Kept operational:** the (archived) Pre-Performance Closure plan declares files in
+this directory as its task deliverables, and SOP matches deliverables by path, so
+this directory is not moved.
 
 ### `finish-pre-performance-closure/`
 

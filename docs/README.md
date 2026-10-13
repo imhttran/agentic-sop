@@ -105,17 +105,22 @@ reader signal, not lifecycle authority.
 
 Current:
 
-- [plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md](plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md) —
-  **active** plan (plan id `plan-controller-mobile-approvals-and-dashboard`): the
-  phone approvals inbox, model-selection display, and documentation work. Recorded
-  by SOP in `.agent-sdlc/plan.meta.json`; every stage is `verify-first`. Executed
-  via `sop run docs/plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md`.
-- [plans/README.md](plans/README.md) — what belongs in `plans/` versus
+- **[plans/README.md](plans/README.md)** — what belongs in `plans/` versus
   `history/plans/`.
 
-The previous plan, Pre-Performance Closure (CLOSE-005…CLOSE-011), is **complete
-and archived** (disposition `COMPLETE`); its document now lives at
-[history/plans/PLAN-Pre-Performance-Closure-Remaining.md](history/plans/PLAN-Pre-Performance-Closure-Remaining.md).
+No plan is currently active: SOP records none (`.agent-sdlc/plan.meta.json` has an
+empty source, and `sop status` reports no plan).
+
+Completed and archived (disposition `COMPLETE`) — kept at their recorded source path
+because SOP's archive matches a plan by that path:
+
+- [plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md](plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md) —
+  plan id `plan-controller-mobile-approvals-and-dashboard`: the phone approvals inbox,
+  model-selection display, and documentation work. Archived `COMPLETE` (see
+  `.agent-sdlc/archive/plan-controller-mobile-approvals-and-dashboard/`).
+- The earlier Pre-Performance Closure plan (CLOSE-005…CLOSE-011) is likewise
+  `COMPLETE`; its document lives at
+  [history/plans/PLAN-Pre-Performance-Closure-Remaining.md](history/plans/PLAN-Pre-Performance-Closure-Remaining.md).
 
 Historical (completed or superseded — non-normative evidence):
 
@@ -143,7 +148,8 @@ observed; they never override requirements, specifications, or architecture.
 See [reports/README.md](reports/README.md) for the full map.
 
 - [reports/pre-performance-closure/](reports/pre-performance-closure/) —
-  CLOSE-004…CLOSE-011 evidence for the active plan.
+  CLOSE-004…CLOSE-011 evidence for the Pre-Performance Closure work (archived,
+  `COMPLETE`).
 - [reports/finish-pre-performance-closure/](reports/finish-pre-performance-closure/) —
   FP-001…FP-009 and
   [READINESS.md](reports/finish-pre-performance-closure/READINESS.md).
@@ -238,9 +244,9 @@ so moving them would change behavior or break provenance.
 - `docs/PLAN-SOP-Controller.md` — SOP plan-archive source path (its `sha256` is
   recorded in `.agent-sdlc/archive/plan-sop-controller/plan.meta.json` and in the
   retirement record), so it is not moved.
-- `docs/plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md` — SOP's recorded
-  active plan source (matched by path in `.agent-sdlc/plan.meta.json`), so it is
-  not moved while SOP records it.
+- `docs/plans/PLAN-Controller-Mobile-Approvals-and-Dashboard.md` — the
+  mobile-approvals plan (`COMPLETE`, archived): SOP's archive records this file as
+  the plan's source path, so it is not moved.
 - `docs/tasks/CLOSE-004.md` — task source executed via `sop run --task`.
 - `docs/reports/pre-performance-closure/` — the (now archived) Pre-Performance
   Closure plan declares files in this directory as its task deliverables, so the
