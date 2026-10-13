@@ -79,6 +79,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/QUALITY.md](specs/QUALITY.md) — the deterministic quality gate and the bounded fix loop.
 - [specs/HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) — human gates: when approval is required and what must not bypass it.
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
+- [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
 
 ## Topic Ownership
@@ -104,6 +105,7 @@ single owner. This table is that map.
 | Quality gate and fix loop                                                                 | [QUALITY.md](specs/QUALITY.md)                                                         | REVIEW.md                                                                                                                                                                                       |
 | Human approval                                                                            | [HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md)                                           | [APPROVALS.md](guides/APPROVALS.md)                                                                                                                                                             |
 | Recovery, retry, and resume                                                               | [RECOVERY.md](specs/RECOVERY.md)                                                       | [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md)                                                                                                                                      |
+| Decision telemetry (routing/escalation/gate decisions)                                    | [DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md)                                   | [PERFORMANCE.md](reference/PERFORMANCE.md)                                                                                                                                                      |
 | Security, command policy, secrets                                                         | [SECURITY.md](specs/SECURITY.md)                                                       | OVERVIEW §14                                                                                                                                                                                    |
 | Routing and provider rules                                                                | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md)         | Configuration reference and architecture seams                                                                                                                                                  |
 | JEV / OpenJEV analysis                                                                    | [OPENJEV.md](specs/OPENJEV.md)                                                         | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md); [JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md)                                                                                    |
@@ -169,6 +171,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](history/plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery. **Implemented**; archived by SOP.
 - [plans/PLAN-SOP-Performance.md](plans/PLAN-SOP-Performance.md) — performance and timing. **Implemented** (PERF008 and PERF010–PERF012, PERF014 deferred with evidence); the shipped behavior is described in [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis. **Implemented**; PLAN runs the bounded DISCOVERY → tool-free SYNTHESIS lifecycle.
+- [plans/PLAN-Decision-Telemetry-Extension.md](plans/PLAN-Decision-Telemetry-Extension.md) — Decision Telemetry (TEL-001–TEL-007): extend the run-metrics aggregator with the decisions SOP records (model tier, override, escalation, JEV invocation) without changing decision authority. **In progress**; the model-tier, override, escalation, and JEV dimensions are implemented in `internal/runmetrics`, and adapter agreement/confidence remain UNAVAILABLE (no recorded source).
 
 ## Testing
 
@@ -185,6 +188,7 @@ is owned by the documents they link.
 - [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) — the Phase 9 adoption decision (ORCH-012): multi-agent orchestration is verified, and the deterministic gate keeps it **opt-in** — default execution stays single-agent.
 - [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
 - [reports/planner/SOP-PLANNER-CAP-001-capability-context.md](reports/planner/SOP-PLANNER-CAP-001-capability-context.md) — the per-task planner capability-context fix: the compiled capability inventory is now authoritative at the task-level planning boundary, so a repository discovery target is no longer promoted to an external prerequisite capability.
+- [reports/decision-telemetry/TEL-001-reconciliation.md](reports/decision-telemetry/TEL-001-reconciliation.md) — the Decision Telemetry reconciliation and metric register (TEL-001/TEL-002): what existing telemetry already records, the new decision dimensions with their numerator/denominator/coverage, and the two dimensions (adapter agreement, confidence) that stay UNAVAILABLE because nothing records them.
 
 ## Historical Documentation
 

@@ -40,10 +40,19 @@ func aggregate(ev []runEvidence) Aggregate {
 		metrics = append(metrics, metricFor(m, ev, corpus))
 	}
 
+	// Decision telemetry (TEL-002–TEL-005) is appended after the seven RM-002
+	// metrics: the RM-002 contract and its order are unchanged.
+	decisions := aggregateDecisions(ev, corpus)
+
 	artifacts := artifactPresence(ev)
 
-	unavailable := make([]string, 0, len(metrics))
+	unavailable := make([]string, 0, len(metrics)+len(decisions))
 	for _, m := range metrics {
+		if m.Value == UNAVAILABLE {
+			unavailable = append(unavailable, string(m.Metric))
+		}
+	}
+	for _, m := range decisions {
 		if m.Value == UNAVAILABLE {
 			unavailable = append(unavailable, string(m.Metric))
 		}
@@ -53,6 +62,7 @@ func aggregate(ev []runEvidence) Aggregate {
 	return Aggregate{
 		CorpusRuns:  corpus,
 		Metrics:     metrics,
+		Decisions:   decisions,
 		Artifacts:   artifacts,
 		Unavailable: unavailable,
 	}

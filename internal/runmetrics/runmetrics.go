@@ -58,6 +58,7 @@ const (
 	attemptFileName        = "attempt.txt"
 	continuationsFileName  = "continuations.txt"
 	reviewFileName         = "review.json"
+	routingFileName        = "routing.json"
 )
 
 // Metric identifies one emitted RM-002 metric dimension. The names match the
@@ -136,8 +137,23 @@ type MetricResult struct {
 	// Sources names the recorded artifacts this metric reads, in the register's
 	// order. It is evidence, never a gate/budget/routing field.
 	Sources []string `json:"sources,omitempty"`
+	// Breakdown, when present, carries a deterministic distribution for the metric
+	// (for example the model-tier and source counts). It is omitted for metrics
+	// whose value is a single rate or magnitude, so the RM-002 metrics are
+	// unchanged.
+	Breakdown []BreakdownEntry `json:"breakdown,omitempty"`
 	// Note explains how the numerator is measured or why a value is UNAVAILABLE.
 	Note string `json:"note,omitempty"`
+}
+
+// BreakdownEntry is one labeled group count in a metric's distribution. Group
+// names the dimension (for example "tier"), Key the group value (for example
+// "small"), and Count the recorded number of runs. Entries are emitted in a
+// deterministic order.
+type BreakdownEntry struct {
+	Group string `json:"group"`
+	Key   string `json:"key"`
+	Count int    `json:"count"`
 }
 
 // ArtifactState classifies one recorded artifact's presence for the corpus.
@@ -170,6 +186,7 @@ type ArtifactPresence struct {
 type Aggregate struct {
 	CorpusRuns  int                `json:"corpus_runs"`
 	Metrics     []MetricResult     `json:"metrics"`
+	Decisions   []MetricResult     `json:"decisions"`
 	Artifacts   []ArtifactPresence `json:"artifacts"`
 	Unavailable []string           `json:"unavailable"`
 }
@@ -225,6 +242,21 @@ type runEvidence struct {
 	continuations    int  // continuations.txt parsed integer
 	continuationsOK  bool // continuations.txt carried a well-formed nonnegative integer
 
+	// Decision-selection evidence from model-selection.json (model.Selection):
+	// the recorded class, provider, model, selecting source, and fallback flag.
+	selClass    string
+	selProvider string
+	selModel    string
+	selSource   string
+	selFallback bool
+
+	// Routing-decision evidence from routing.json (run.RoutingArtifact): its
+	// presence, whether it parsed, and the typed routing source
+	// (policy/manual_override/default/escalation).
+	hasRouting      bool
+	routingReadable bool
+	routingSource   string
+
 	// metricsData is the parsed metrics.json shape (internal/perf.Task).
 	metricsData perf.Task
 	counts      perf.Counts
@@ -279,10 +311,27 @@ func readEvidence(projectDir, id string) runEvidence {
 			Provider string `json:"provider"`
 			Model    string `json:"model"`
 			Source   string `json:"source"`
+			Fallback bool   `json:"fallback"`
 		}
 		if readJSON(filepath.Join(dir, modelSelectionFileName), &sel) {
 			ev.modelSelReadable = true
 			ev.routed = firstNonEmpty(sel.Class, sel.Provider, sel.Model, sel.Source) != ""
+			ev.selClass = strings.ToLower(strings.TrimSpace(sel.Class))
+			ev.selProvider = strings.TrimSpace(sel.Provider)
+			ev.selModel = strings.TrimSpace(sel.Model)
+			ev.selSource = strings.ToLower(strings.TrimSpace(sel.Source))
+			ev.selFallback = sel.Fallback
+		}
+	}
+	if present(dir, routingFileName) {
+		ev.hasRouting = true
+		var rt struct {
+			Class  string `json:"class"`
+			Source string `json:"source"`
+		}
+		if readJSON(filepath.Join(dir, routingFileName), &rt) {
+			ev.routingReadable = true
+			ev.routingSource = strings.ToLower(strings.TrimSpace(rt.Source))
 		}
 	}
 	ev.hasClass = present(dir, classificationFileName)

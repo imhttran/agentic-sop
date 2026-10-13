@@ -122,6 +122,104 @@
       "note": "no provider-independent token count is persisted; never inferred from text, byte, or diff size; informational only and never an input to a gate, budget, or routing decision"
     }
   ],
+  "decisions": [
+    {
+      "metric": "model_tier_distribution",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "runs",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "sources": [
+        "model-selection.json"
+      ],
+      "note": "numerator counts runs with a recorded model selection; the breakdown is computed over those runs only. Routing is opt-in, so a run without model-selection.json is UNAVAILABLE, never a default tier"
+    },
+    {
+      "metric": "decision_override_rate",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator counts runs whose model-selection.json records source \"cli\" (an explicit --model-class override); a run without a recorded source is UNAVAILABLE"
+    },
+    {
+      "metric": "decision_escalation_rate",
+      "status": "PARTIAL",
+      "value": "0.0",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 1,
+      "artifacts_present": 1,
+      "valid_measurements": 1,
+      "unavailable_measurements": 0,
+      "numerator": 0,
+      "denominator": 1,
+      "coverage_pct": 100,
+      "note": "numerator counts a recorded recovery escalation (routing.json source \"escalation\") or a NEEDS_HUMAN terminal decision; absence is UNAVAILABLE, never a recorded zero escalation"
+    },
+    {
+      "metric": "jev_invocation",
+      "status": "AVAILABLE",
+      "value": "0",
+      "unit": "calls",
+      "total_runs": 1,
+      "eligible_runs": 1,
+      "artifacts_present": 1,
+      "valid_measurements": 1,
+      "unavailable_measurements": 0,
+      "numerator": 0,
+      "denominator": 1,
+      "coverage_pct": 100,
+      "sources": [
+        "metrics.json"
+      ],
+      "note": "numerator sums the recorded JEV.Invocations over runs whose metrics.json parsed; a present metrics.json with no JEV section is a recorded zero, an absent metrics.json is UNAVAILABLE"
+    },
+    {
+      "metric": "adapter_agreement",
+      "status": "UNAVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "runs",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "no run artifact records a decision-adapter (shadow) recommendation or its agreement with a deterministic expectation; shadow evaluation has no runtime implementation, so the value is UNAVAILABLE and is never inferred"
+    },
+    {
+      "metric": "decision_confidence",
+      "status": "UNAVAILABLE",
+      "value": "UNAVAILABLE",
+      "unit": "confidence",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "a routing decision's confidence is not persisted in any run artifact; the value is UNAVAILABLE and is never inferred from a signal or a class"
+    }
+  ],
   "artifacts": [
     {
       "name": "approval.json",
@@ -188,6 +286,10 @@
     }
   ],
   "unavailable": [
+    "adapter_agreement",
+    "decision_confidence",
+    "decision_override_rate",
+    "model_tier_distribution",
     "routing_finding_severity",
     "token_usage"
   ]

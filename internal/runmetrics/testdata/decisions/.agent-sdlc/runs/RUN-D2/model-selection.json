@@ -1,0 +1,6 @@
+{
+  "class": "large",
+  "provider": "ollama",
+  "model": "m",
+  "source": "router"
+}

@@ -1,0 +1,9 @@
+{
+  "class": "small",
+  "provider": "ollama",
+  "model": "m",
+  "locality": "local",
+  "source": "cli",
+  "fallback": true,
+  "reason": "explicit CLI model class"
+}
