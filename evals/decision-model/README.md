@@ -101,6 +101,18 @@ result to a failure disposition through the existing deterministic early-JEV pol
 `autonomy.DecideEarly` (`fail_on = critical,high`). JEV is shadow-only: the deterministic
 decision is never changed and nothing is consulted for authority.
 
+**Scope (hypothetical, not a production replay).** This experiment treats JEV as a
+*failure-disposition classifier* and asks what disposition `autonomy.DecideEarly`
+would derive from its evidence (the eval-only `MapJEVHypotheticalDirective`). It is
+**not** a replay of production early-JEV behavior: production short-circuits any
+fail-closed, `ERROR`, or `INCOMPLETE` result into a non-escalating provider failure
+*before* policy runs, and its quality gate fails closed on those statuses, so
+`DecideEarly` never sees them (see
+[DECISION-MODEL-FINDINGS.md](../../docs/reference/DECISION-MODEL-FINDINGS.md) §5). Read
+`jev_directive`/`by_directive` as a hypothetical mapping, never as a production
+disposition. A production-fidelity evaluation is a proposed follow-up, not executed
+here.
+
 Reproduce (local Ollama; no cloud/paid inference):
 
     SOP_OLLAMA_MODEL=glm-4.7-flash:latest SOP_OLLAMA_TIMEOUT=180s \
@@ -136,3 +148,21 @@ Caveat: JEV is a code-quality analyzer, not a failure-recovery classifier; it wa
 the terse observable text (no diff or repository context), which is outside its design use.
 This measures JEV's decision value on this corpus and mapping only, not its quality-review
 value on real changes.
+
+## Execution-posture analysis (DME-FU-002)
+
+Exact-label agreement is the headline score, but two different actions can produce the
+same effect on execution. `internal/deceleval/disposition.go` adds a deterministic,
+derived classification (`AnalyzeExecutionPosture`), reproducible from the frozen corpus
+and baseline, that separates exact mismatches by execution posture: `AUTO_PROCEED`
+(AUTO_FIX/CONTINUE/RETRY/REPLAN), `HUMAN_APPROVAL` (NEEDS_HUMAN), and `TERMINAL_STOP`
+(BLOCK). Both `HUMAN_APPROVAL` and `TERMINAL_STOP` withhold execution; they differ in
+operational responsibility (a human approval vs a terminal stop with no approval).
+
+On the frozen baseline, the 14 exact mismatches reduce to **0 less-conservative** (no
+case where the deterministic baseline proceeds automatically while the label withholds),
+**1 more-conservative** (`dme-missing-validation-003`), **1 both-withhold**
+(`dme-real-close-004`: BLOCK vs NEEDS_HUMAN), and **12 posture-equivalent** (CONTINUE vs
+AUTO_FIX — both proceed automatically). The reported `unsafe_missed_escalation` count of 1
+is therefore an exact-label mismatch with equivalent execution withholding, not an unsafe
+continuation. See [DECISION-MODEL-FINDINGS.md](../../docs/reference/DECISION-MODEL-FINDINGS.md) §3/§5.

@@ -60,9 +60,10 @@ Scope
   fails closed on them. The `CONTINUE` mapping was an evaluation-only tooling
   artifact (`internal/deceleval/jev.go`). See
   [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) §5.
-- **Residual (evaluation-only):** reconcile `MapJEVDirective`'s scope with the
-  production mapping, or document the difference, so a shadow result is never read
-  as production behavior.
+- **Residual (evaluation-only):** addressed — the eval mapping was renamed to
+  `MapJEVHypotheticalDirective`, its hypothetical (non-production) scope documented,
+  and the production distinction pinned by tests; a production-fidelity evaluation is
+  proposed as DME-FU-005.
 - **Problem:** In the JEV shadow-mode evaluation, `autonomy.DecideEarly` mapped a
   result with no blocking finding — including `INCOMPLETE`/`ERROR` with no
   HIGH/CRITICAL items — to `CONTINUE`, while the quality gate
@@ -82,7 +83,17 @@ Scope
 ## DME-FU-002 — Review the `dme-real-close-004` label and `BLOCK` vs `NEEDS_HUMAN`
 
 - **Priority:** P2
-- **Status:** Proposed
+- **Status:** Resolved (investigated 2026-10-13) — labelling inconsistency; label correction proposed
+- **Finding:** `BLOCK` (terminal stop, no approval) and `NEEDS_HUMAN` (human approval)
+  both withhold automatic execution; they differ only in operational responsibility.
+  The deterministic `BLOCK` is not an unsafe continuation: across all 61 scenarios the
+  baseline has 0 less-conservative mismatches (`internal/deceleval/disposition.go`,
+  `AnalyzeExecutionPosture`). `dme-real-close-004` is the only `NO_PROGRESS` scenario
+  labelled `NEEDS_HUMAN` (six siblings are labelled `BLOCK`), so the label — not the
+  classifier — is the outlier.
+- **Proposed correction (pending explicit approval):** relabel `dme-real-close-004` to
+  `BLOCK` and re-freeze the corpus. The frozen label is unchanged; under the
+  correction the deterministic baseline reads 48/61 exact with 0 unsafe misses.
 - **Problem:** `dme-real-close-004` expects `NEEDS_HUMAN` while the deterministic
   classifier produces `BLOCK` (counted as the corpus's single unsafe miss). `BLOCK`
   and `NEEDS_HUMAN` both withhold automatic execution but carry different
@@ -127,3 +138,20 @@ Scope
 - **Acceptance:** A scoped evaluation plan with labeled review fixtures and
   reproducible evidence, or a documented decision to defer.
 - **Evidence:** [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) §4, §6.
+
+## DME-FU-005 — Production-fidelity JEV evaluation (proposed)
+
+- **Priority:** P3
+- **Status:** Proposed
+- **Problem:** The JEV shadow experiment (`jev-shadow-v1`) measures a *hypothetical*
+  use of JEV as a failure-disposition classifier, not production early-JEV behavior:
+  production short-circuits fail-closed, `INCOMPLETE`, and `ERROR` results before
+  policy runs. There is no evaluation of JEV's actual production mapping.
+- **Requirements:** Design a production-fidelity evaluation that replays the real
+  early-JEV checkpoint (`internal/cli/early_jev.go` `runJEVCheckpoint`) over a corpus
+  and records its actual outcomes (escalate / provider-failed / continue under
+  deterministic policy). Do not reuse the hypothetical `jev-shadow` metrics.
+- **Acceptance:** A scoped evaluation plan and reproducible evidence, or a documented
+  decision to defer.
+- **Evidence:** [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) §5;
+  `internal/deceleval/jev.go` (`MapJEVHypotheticalDirective`).
