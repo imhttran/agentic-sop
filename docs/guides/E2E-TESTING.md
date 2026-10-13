@@ -72,8 +72,8 @@ Linux/CI-compatible and never blocks a Go-only environment. Run `npm install` to
 
 ## Test coverage
 
-The suite has one project (`webkit-iphone`, the iPhone 13 viewport) and six spec files —
-34 tests:
+The suite has one project (`webkit-iphone`, the iPhone 13 viewport) and seven spec files —
+38 tests:
 
 - `tests/e2e/approvals.spec.ts` (7) — the cross-project approvals inbox: it renders on a
   phone viewport with no horizontal overflow; a pending gate shows enough context to
@@ -102,6 +102,10 @@ The suite has one project (`webkit-iphone`, the iPhone 13 viewport) and six spec
 - `tests/e2e/diagnostics.spec.ts` (3) — Copy details writes a structured, secret-free
   approval summary; Copy error copies the error-page diagnostic; and copy reports failure
   when the clipboard is unavailable.
+- `tests/e2e/nav.spec.ts` (4) — the responsive top bar: at 320/375/430 px the header never
+  overflows horizontally, the brand and Sign out button stay single-line and tappable, and
+  every nav link is one line; and at 1024 px the brand and nav remain on one row (the phone
+  rule does not leak to desktop).
 
 The tests assert on accessible roles, labels, and text, and they verify SOP's
 authoritative record (`sop approval <task-id>`), not just the screen.

@@ -832,3 +832,40 @@ ul.decisions-list {
     padding: 0.2rem 0.6rem;
     font-size: 0.8rem;
 }
+
+/* Narrow viewport (phone): the top bar wraps into two tidy rows — identity + Sign out,
+   then the nav — instead of cramming three groups onto one line and letting each wrap.
+   Nothing wraps inside an item, so the header keeps one predictable height, stays
+   touch-friendly, and never overflows horizontally. Desktop (>640px) is unchanged. */
+@media (max-width: 640px) {
+    .topbar {
+        flex-wrap: wrap;
+        gap: 0.4rem 0.75rem;
+        padding: 0.55rem 0.9rem;
+    }
+
+    .brand {
+        white-space: nowrap;
+    }
+
+    /* Nav takes its own full-width row so its links spread out and stay tappable. */
+    .nav {
+        order: 3;
+        flex-basis: 100%;
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1.1rem;
+        margin-top: 0.15rem;
+    }
+
+    .nav a {
+        margin-right: 0;
+        white-space: nowrap;
+        padding: 0.35rem 0;
+    }
+
+    /* Sign out stays on the identity row, pinned right, and never wraps. */
+    .signout-btn {
+        white-space: nowrap;
+    }
+}
