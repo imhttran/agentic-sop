@@ -1,7 +1,7 @@
 # PLAN — SOP Acceptance-Verification Hardening
 
 **Type:** Correctness-hardening plan (verification, lifecycle gating, recovery). **Planning only — no runtime change.**
-**Status:** PROPOSED — not activated. Requires operator approval before any task runs.
+**Status:** IMPLEMENTED — integrated on `integration/sop-hardening` (based on `main` @ `c54eef3`). See the completion section at the end.
 **Baseline:** `agentic-sop` `main` @ `3be4a90`.
 **Derived from:** observed RAG-023/RAG-024/RAG-025 runs (SOP PASS + outcome `PARTIAL`; `ALREADY_SATISFIED` rejected with 0 mutations; a missing deliverable still reaching `LOCAL_DONE`).
 **Does not** change any production RAG behaviour; it hardens SOP's own acceptance verification.
@@ -205,3 +205,8 @@ graph TD
 4. **SOP-HARD-04** (supported recovery), then **SOP-HARD-05** (regression coverage).
 
 This plan is **PROPOSED**: do not activate, implement, commit, or push until the operator approves.
+
+
+## Completion status (integrated)
+
+All five requirements are implemented and integrated onto `main`: SOP-HARD-01 lifecycle verdict gate (`lifecycle.verdict_gate`, default off); SOP-HARD-02 executable acceptance checks preserved on `main` + authoring lint (`internal/planner/lint.go`); SOP-HARD-03 verified `ALREADY_SATISFIED` preserved on `main` + normalized matching/evidence-only correction/structured rejections; SOP-HARD-04 `sop verify` + `sop outcome --waive` (designated-approver, criterion-scoped, append-only audit); SOP-HARD-05 RAG-025 regression coverage. Full `go test ./...` green.
