@@ -22,6 +22,7 @@ import (
 	"github.com/imhttran/sop-decision-adapters/internal/providers/clef"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/julia"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/nimble"
+	"github.com/imhttran/sop-decision-adapters/internal/shadow"
 )
 
 func main() {
@@ -33,6 +34,8 @@ func main() {
 	switch os.Args[1] {
 	case "decide":
 		os.Exit(runDecide(os.Args[2:]))
+	case "shadow":
+		os.Exit(runShadow(os.Args[2:]))
 	case "help", "-h", "--help":
 		usage(os.Stdout)
 	default:
@@ -226,11 +229,56 @@ func sortedKeys(m map[string]decision.Answer) []string {
 	return keys
 }
 
+func runShadow(args []string) int {
+	fs := flag.NewFlagSet("shadow", flag.ContinueOnError)
+	var (
+		in  = fs.String("in", "", "path to a shadow run-sheet JSON file")
+		out = fs.String("out", "", "path to write the evidence artifact (default: stdout)")
+	)
+	if err := fs.Parse(args); err != nil {
+		return 2
+	}
+	if strings.TrimSpace(*in) == "" {
+		fmt.Fprintln(os.Stderr, "shadow: -in is required")
+		return 2
+	}
+	data, err := os.ReadFile(*in)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shadow: read %s: %v\n", *in, err)
+		return 2
+	}
+	var rs shadow.RunSheet
+	if err := json.Unmarshal(data, &rs); err != nil {
+		fmt.Fprintf(os.Stderr, "shadow: decode %s: %v\n", *in, err)
+		return 2
+	}
+	ev, err := shadow.ProduceEvidence(rs)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shadow: %v\n", err)
+		return 2
+	}
+	encoded, err := shadow.MarshalEvidence(ev)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "shadow: encode: %v\n", err)
+		return 1
+	}
+	if strings.TrimSpace(*out) == "" || *out == "-" {
+		_, _ = os.Stdout.Write(encoded)
+		return 0
+	}
+	if err := os.WriteFile(*out, encoded, 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "shadow: write %s: %v\n", *out, err)
+		return 1
+	}
+	return 0
+}
+
 func usage(w io.Writer) {
 	fmt.Fprint(w, `sop-decision-adapter - decision-model adapter CLI
 
 Usage:
   sop-decision-adapter decide [flags]
+  sop-decision-adapter shadow -in sheet.json [-out evidence.json]
 
 Flags (decide):
   -provider string    decision provider to use (default "nimble"; available: nimble, julia, clef)

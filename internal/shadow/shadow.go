@@ -51,9 +51,9 @@ const (
 // SOP outcome). A reference is keyed by question ID.
 type Reference struct {
 	// QuestionID identifies the question this reference answers.
-	QuestionID string
+	QuestionID string "json:\"question_id\""
 	// Choice is the reference choice for a CHOICE question.
-	Choice string
+	Choice string "json:\"choice\""
 }
 
 // Case is one primary decision under observation, together with the reference
@@ -186,9 +186,30 @@ func (r *Recorder) evaluateSource(ctx context.Context, src Source, c Case, prima
 	start := time.Now()
 	obs, err := observeSafely(ctx, src, c)
 	elapsed := time.Since(start)
+	r.recordOutcome(c, src.Name(), primary, obs, elapsed, err)
+}
+
+// RecordSupplied records a source outcome that was obtained off the shadow path,
+// with an explicit latency, reusing the harness classification, counters, and
+// containment. It performs no Observe call and no model call: it exists so an
+// offline producer can replay a recorded observation set into deterministic
+// evidence. When comparable is false the case is gated out of the source exactly
+// as evaluateSource gates it. The primary decision result is never affected.
+func (r *Recorder) RecordSupplied(c Case, srcName, primary string, comparable bool, obs Observation, latency time.Duration, err error) {
+	if !comparable {
+		r.records = append(r.records, CaseRecord{CaseID: c.ID, Source: srcName, Label: LabelSkippedNotComparable, Primary: primary})
+		return
+	}
+	r.recordOutcome(c, srcName, primary, obs, latency, err)
+}
+
+// recordOutcome classifies one obtained source outcome and records it. It is the
+// single classification path shared by evaluateSource (live observation) and
+// RecordSupplied (offline replay), so the two never diverge.
+func (r *Recorder) recordOutcome(c Case, srcName, primary string, obs Observation, elapsed time.Duration, err error) {
 	r.latencies = append(r.latencies, elapsed)
 
-	rec := CaseRecord{CaseID: c.ID, Source: src.Name(), Primary: primary, Latency: elapsed}
+	rec := CaseRecord{CaseID: c.ID, Source: srcName, Primary: primary, Latency: elapsed}
 
 	if err != nil {
 		label := classifyError(err)
@@ -240,7 +261,7 @@ func (r *Recorder) evaluateSource(ctx context.Context, src Source, c Case, prima
 
 	rec.Shadow = obs.Choice
 
-	if src.Name() == "nimble" {
+	if srcName == "nimble" {
 		r.nimbleTotal++
 	}
 
@@ -253,13 +274,13 @@ func (r *Recorder) evaluateSource(ctx context.Context, src Source, c Case, prima
 	if obs.Choice == c.Reference.Choice {
 		rec.Label = LabelAgreement
 		r.agreements++
-		if src.Name() == "nimble" {
+		if srcName == "nimble" {
 			r.nimbleAgree++
 		}
 	} else {
 		rec.Label = LabelDisagreement
 		r.disagreements++
-		if src.Name() == "nimble" {
+		if srcName == "nimble" {
 			r.nimbleDisagree++
 		}
 	}
