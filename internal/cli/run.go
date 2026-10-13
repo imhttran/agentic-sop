@@ -283,8 +283,9 @@ type lifeResult struct {
 	satisfaction  *agent.CompletionEvidence
 	// outcome is the objective-level acceptance verdict derived from the task
 	// specification after the gate. It is nil when the task declared no objective;
-	// it distinguishes PASS/LOCAL_DONE from verified completion and never changes
-	// the lifecycle transition.
+	// it distinguishes PASS/LOCAL_DONE from verified completion and, when the
+	// operator-enabled verdict gate (SOP-HARD-01) is ON, records the resolved local
+	// lifecycle disposition on that verdict.
 	outcome *outcomeArtifact
 	perf    perf.Task
 	// jevDoc is the JEV run artifact written during the lifecycle, or nil when
@@ -1109,6 +1110,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		satisfaction = nil
 	}
 	_ = rn.SetStage(stage)
+	// Derive the objective-level verdict and resolve the local lifecycle through
+	// the operator-enabled verdict gate (SOP-HARD-01). deriveGatedOutcome is the
+	// single production call site for the gate: with the flag OFF (the default) it
+	// records nothing extra, so the lifecycle is unchanged; with the flag ON it
+	// records the resolved disposition (and any observable waiver denial) on the
+	// artifact before it is persisted and rendered.
 	return lifeResult{
 		gate:           gate,
 		cycles:         cycles,
@@ -1117,7 +1124,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		report:         report,
 		verifiedFirst:  verifiedFirst,
 		satisfaction:   satisfaction,
-		outcome:        deriveOutcome(spec, dir, gate),
+		outcome:        deriveGatedOutcome(cfg, spec, dir, gate),
 		jevDoc:         jevDoc,
 		jevPath:        jevArtifactRef(dir, rn),
 		classification: class,

@@ -391,9 +391,24 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		}
 		if !isTool {
 			if final["completion"] == agent.AlreadySatisfied {
-				if !h.verifySatisfied(ctx, req, st, proof, final) {
-					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", "acceptance verification failed")
-					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
+				if ok, rej := h.verifySatisfiedDetailed(ctx, req, st, proof, final); !ok {
+					// Bounded, evidence-only correction: only when the rejection is missing/invalid
+					// criterion evidence, ask the model ONCE to map the missing criteria to files
+					// it actually read. Validation, fingerprint, mutation and missing-deliverable
+					// rejections are not correctable this way and fall through.
+					if (rej.Code == RejectMissingCriterionEvidence || rej.Code == RejectUnreadEvidencePath) && !proof.evidenceCorrectionUsed {
+						if missing, ok := h.missingCriterionEvidence(ctx, req, st, proof, final); ok {
+							proof.evidenceCorrectionUsed = true
+							h.recordImplementEvent(req, "ALREADY_SATISFIED evidence incomplete; one correction requested", rej.String())
+							messages = append(messages,
+								chatMessage{Role: "assistant", Content: raw},
+								chatMessage{Role: "user", Content: alreadySatisfiedEvidenceCorrection(missing)},
+							)
+							continue
+						}
+					}
+					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", rej.String())
+					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence [%s] (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, rej.Code, h.cfg.Model, st.repositoryMutations, iteration)
 					if !st.mutationObserved {
 						return "", &changeIncompleteError{message}
 					}
@@ -401,6 +416,12 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 				}
 				ev.alreadySatisfied = true
 				h.recordImplementEvent(req, agent.AlreadySatisfied, "repository_mutations=0; acceptance and validation verified")
+			} else if proof.evidenceCorrectionUsed && !st.mutationObserved {
+				// After the one permitted evidence correction was requested, a zero-mutation
+				// run that does not return an ACCEPTED ALREADY_SATISFIED fails closed, rather
+				// than treating an unsupported completion as success.
+				message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, h.cfg.Model, st.repositoryMutations, iteration)
+				return "", &changeIncompleteError{message}
 			}
 			h.recordImplementTurn(req, st.phase, iteration, "outcome", "", progressOK, false, false)
 			encoded, err := json.Marshal(final)

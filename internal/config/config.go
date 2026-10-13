@@ -141,6 +141,11 @@ type Config struct {
 	// (ORCH-011). It is OFF by default: an omitted block leaves single-agent
 	// execution unchanged, so introducing Phase 9 changes no default behavior.
 	Orchestration Orchestration `yaml:"orchestration"`
+	// Lifecycle configures the operator-enabled verdict gate (SOP-HARD-01).
+	// It is OFF by default: an omitted block leaves the local lifecycle (the
+	// LOCAL_DONE transition) exactly as it was. See internal/outcome and
+	// docs/reference/LIFECYCLE-VERDICT-GATE.md.
+	Lifecycle Lifecycle `yaml:"lifecycle"`
 }
 
 // Project holds project metadata.
@@ -287,6 +292,12 @@ func (q Quality) RequiresTests() bool {
 // omitted value defaults to requiring approval.
 type Human struct {
 	ApprovalBeforeCommit *bool `yaml:"approval_before_commit"`
+	// DesignatedApprovers names the identities authorized to grant a criterion-scoped
+	// waiver of an unmet required deliverable/check (SOP-HARD-04). It is empty by
+	// default, so no one is designated and every waiver fails closed. A waiver records
+	// the approver, reason, timestamp, and an append-only audit record; it is never
+	// implied and never silently applied. See docs/reference/OUTCOME-RECOVERY-WAIVER.md.
+	DesignatedApprovers []string `yaml:"designated_approvers"`
 }
 
 // RequiresApprovalBeforeCommit reports whether a human must approve before
@@ -451,6 +462,37 @@ type Orchestration struct {
 	// DecompositionLimit bounds how many work units one orchestration run may emit
 	// (ORCH-003). A zero value keeps the canonical bounded default.
 	DecompositionLimit int `yaml:"decomposition_limit"`
+}
+
+// Lifecycle configures the operator-enabled verdict gate (SOP-HARD-01).
+//
+// The gate ties the local lifecycle's terminal LOCAL_DONE transition to the
+// objective-level outcome verdict. It is OFF by default: VerdictGate is a plain
+// bool whose zero value is false, so an omitted `lifecycle` block (or an omitted
+// field) leaves the lifecycle byte-identical to before. The block is additive, so
+// an existing configuration without it keeps loading and behaving identically.
+//
+// When the gate is ON, a PARTIAL verdict caused by an unmet REQUIRED deliverable
+// or REQUIRED executable check does not yield LOCAL_DONE unless a valid waiver
+// from a designated approver exists (see internal/outcome). An informational-only
+// PARTIAL and a HOLD keep their existing mapping. Enabling the gate is explicit:
+// nothing infers it. See docs/reference/LIFECYCLE-VERDICT-GATE.md.
+type Lifecycle struct {
+	// VerdictGate turns on the operator-enabled verdict gate. It is false by
+	// default, so the local lifecycle is unchanged unless an operator opts in.
+	VerdictGate bool `yaml:"verdict_gate"`
+}
+
+// VerdictGateEnabled reports whether the operator-enabled lifecycle verdict gate
+// (SOP-HARD-01) is on. It is the single source of truth for the gate's enabled
+// state: an omitted `lifecycle` block (the default) leaves it off, so the local
+// lifecycle — the LOCAL_DONE transition — is unchanged. Nothing enables it by
+// default, and no other configuration is consulted.
+//
+// It uses a value receiver so it is callable on both a Config value (for example
+// the built-in Default()) and a *Config, without duplicating defaulting logic.
+func (c Config) VerdictGateEnabled() bool {
+	return c.Lifecycle.VerdictGate
 }
 
 // Providers configures the optional provider/runtime inspection layer (Phase 4).
@@ -659,6 +701,9 @@ func (c *Config) applyDefaults() {
 	if strings.TrimSpace(c.Autonomy.Level) == "" {
 		c.Autonomy.Level = string(autonomy.DefaultLevel)
 	}
+	// The lifecycle verdict gate is deliberately left untouched: its zero value is
+	// false, so an omitted `lifecycle` block (the default) keeps the gate OFF and
+	// the local lifecycle unchanged. Nothing here enables it.
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -976,6 +1021,14 @@ early_jev:
 
 human:
   approval_before_commit: true
+  # designated_approvers names the identities authorized to grant a criterion-scoped
+  # waiver of an unmet required deliverable/check (SOP-HARD-04). Empty by default: no
+  # one is designated, so every waiver fails closed. A waiver record carries the
+  # approver, reason, timestamp, and append-only audit evidence; it is never silently
+  # applied. See docs/reference/OUTCOME-RECOVERY-WAIVER.md.
+  #
+  # designated_approvers:
+  #   - operator
 
 autonomy:
   # low | balanced | high
@@ -1043,6 +1096,15 @@ autonomy:
 #     endpoint: http://127.0.0.1:8000
 #   openai_compatible:
 #     endpoint: http://127.0.0.1:8000
+
+# The lifecycle verdict gate (SOP-HARD-01) is an operator-enabled flag. It is
+# OFF by default, so the local lifecycle (the LOCAL_DONE transition) is
+# unchanged. When ON, a PARTIAL verdict caused by an unmet required
+# deliverable/check does not yield LOCAL_DONE unless a valid waiver from a
+# designated approver exists. See docs/reference/LIFECYCLE-VERDICT-GATE.md.
+#
+# lifecycle:
+#   verdict_gate: false
 
 workflow:
   # local | pull-request

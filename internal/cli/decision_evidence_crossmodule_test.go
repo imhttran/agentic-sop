@@ -37,9 +37,31 @@ import (
 // out-of-module fixture. TestMain builds it once and removes it after the run.
 var crossModuleFixDir string
 
+// fastTier reports whether the fast validation tier is active (go test -short).
+// testing.Short() cannot be called before the testing flags are parsed (it panics
+// inside TestMain), so the -test.short flag is read directly from os.Args.
+func fastTier() bool {
+	for _, arg := range os.Args[1:] {
+		if arg == "-test.short" || arg == "-test.short=true" {
+			return true
+		}
+	}
+	return false
+}
+
 // TestMain builds the out-of-module fake provider once for the whole test binary.
 // A missing Go toolchain is not fatal: the cross-module tests skip.
 func TestMain(m *testing.M) {
+	// Fast validation tier: the internal/cli package is the slow end-to-end suite
+	// (~10 minutes; 651 tests driving real processes). Routine SOP validation runs
+	// `go test -short ./...`, which skips this package, plus a focused
+	// `go test ./internal/cli/ -run ApplyLifecycleGate` entry that still exercises the
+	// HARD-01 lifecycle-gate wiring. The full suite is the separate regression gate
+	// (`go test ./...`, no -short) and is never removed. See .agent-sdlc/config.yaml.
+	if fastTier() {
+		os.Exit(0)
+	}
+
 	if dir, err := buildFakeProvider(); err == nil {
 		crossModuleFixDir = dir
 	}

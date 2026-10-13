@@ -278,6 +278,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runApproval(rest, stdout, stderr, d)
 	case "approvals":
 		return runApprovals(rest, stdout, stderr, d)
+	case "verify":
+		return runVerify(rest, stdout, stderr, d.getwd)
+	case "outcome":
+		return runOutcome(rest, stdout, stderr, d.getwd)
 	case "reconcile":
 		return runReconcile(rest, stdout, stderr, d)
 	case "index":
@@ -349,6 +353,10 @@ Commands:
   resume    report the next legal action for interrupted work
   continue  check (read-only) whether the active plan is safe to continue via
             sop run: reconcile-before-continue (--check, --json)
+  verify    reprint a task's recorded per-criterion outcome verdict (read-only)
+  outcome   print a task's recorded outcome, or record a designated-approver,
+            criterion-scoped waiver: outcome <task-id> --waive <criterion>
+            --reason R --by NAME [--scope S]
   version   print the CLI version
   help      show this help
 `)
