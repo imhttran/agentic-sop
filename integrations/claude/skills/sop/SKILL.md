@@ -52,9 +52,9 @@ Thin aliases in the same install expose one capability each:
 /sop-continue <plan>      continue an already-active plan: reconcile the source
                           plan, compiled plan, and persisted SOP state before
                           continuing (`sop continue --check`, then `sop run`)
-/sop-browser-test [--mobile] [--approvals]
-                          verify a running web UI with the Playwright MCP
-                          (smoke test, mobile layout, approval workflow)
+/sop-browser-test [--mobile] [--approvals] [--update]
+                          run and maintain a project's persistent Playwright
+                          tests (mobile layout, approval workflow, update)
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)
@@ -76,9 +76,9 @@ Explicit `/sop-continue` requests use the `sop-continue` skill. That skill never
 reimplements SOP: it reconciles the active plan through `sop continue --check`
 (read-only) and continues through `sop run` only when reconciliation authorizes it.
 
-Explicit `/sop-browser-test` requests verify a **running application** through the
-existing Playwright MCP. That skill observes the UI and reads SOP's state; it fixes
-no capability and never replaces SOP's validation, review, or approval authority.
+Explicit `/sop-browser-test` requests run and maintain a project's persistent
+Playwright suite and verify SOP's state for state-changing flows. That skill fixes no
+capability and never replaces SOP's validation, review, or approval authority.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test

@@ -129,18 +129,20 @@ Surface SOP's required human decision and wait for explicit resolution.
 
 ## BROWSER VERIFICATION
 
-When the work under test changes observable UI behavior, verify it in a real browser
-with the `/sop-browser-test` skill (the existing Playwright MCP), proportional to scope
-and risk:
+Verify UI behavior with the `/sop-browser-test` skill, which runs the project's
+persistent Playwright tests. It adds no approval checkpoint and no second lifecycle:
 
-- A change that alters a rendered page, a control, routing, or an approval surface
-  warrants a browser pass; a small backend-only change does not.
-- When a browser check is obligatory and the Playwright MCP is unavailable, fail closed:
-  report the missing MCP and do not claim the UI was verified.
-- Prefer the running server and existing fixtures, and do not repeat a browser pass whose
-  inputs (revision, viewport, surface) are unchanged.
-- Browser verification observes the running application; it never replaces SOP's own
-  validation, review, or approval authority, and it never crosses a human boundary.
+- A change to a rendered page, a control, routing, or an approval surface runs the
+  affected browser tests; a high-risk UI change runs the broader suite. A backend-only
+  change runs no browser test unless it changed user-facing behavior.
+- A changed UI contract updates the project's persistent tests in the same run
+  (`/sop-browser-test --update`); do not leave the suite stale.
+- Targeted tests stay mandatory for relevant work; browser tests run only when relevant,
+  and unchanged verification is not repeated.
+- If a required browser dependency (the runner or its browsers) is missing, report a
+  blocker and do not claim the UI passed.
+- Browser verification never replaces SOP's own validation, review, or approval
+  authority, and never crosses a human boundary.
 
 ## REPORT
 

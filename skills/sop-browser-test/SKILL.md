@@ -1,131 +1,123 @@
 ---
 name: sop-browser-test
 description: |-
-  Verify a running web UI with the existing Playwright MCP.
+  Discover, run, and maintain a project's persistent Playwright tests.
   /sop-browser-test, /sop-browser-test --mobile, /sop-browser-test --approvals,
-  /sop-browser-test --mobile --approvals.
-  Use for "smoke test the app", "check the UI", "verify the mobile layout", or
-  "does the approval page work" when the operator wants real browser verification of
-  a running application. A thin verification layer over the Playwright MCP: it
-  discovers how the target starts, drives a real browser, checks for errors, verifies
-  backend state, and reports evidence. It adds no framework, no server, and no
-  orchestration of its own, and it never replaces SOP as the workflow authority.
+  /sop-browser-test --update, and combined filters (--mobile --approvals).
+  Use for "run the browser tests", "verify the UI", "check the mobile layout", or
+  "update the approval tests" when the operator wants a project's version-controlled
+  Playwright suite executed or maintained against the real application. It runs and
+  maintains the project's own suite; it never fabricates a suite, never replaces
+  persistent tests with ad-hoc browsing, and never replaces SOP as the workflow authority.
 disable-model-invocation: false
 ---
 
 # SOP Browser Test
 
-Verify a running web application with the existing **Playwright MCP**. This skill is a
-thin verification layer: it discovers how the target project starts, drives a real
-browser, checks for errors, and reports evidence. It never plans, implements, or mutates
-the target repository, and it never reimplements SOP.
+Run and maintain a project's **persistent, version-controlled** browser tests. This
+skill is a thin executor and maintainer over the project's existing Playwright Test
+suite: it discovers the project's own configuration and commands, runs the relevant
+tests, and updates them when UI behavior changes. It introduces no framework, no runner,
+and no server, and it never reports an unrun or skipped suite as a pass.
 
-The four usage patterns are **instructions to this skill**, never CLI flags:
+Arguments are **instructions to this skill**, never SOP CLI flags:
 
-- `/sop-browser-test` — a smoke test: the app loads and its main surfaces render.
-- `/sop-browser-test --mobile` — the same on a phone-sized viewport, checking responsive layout.
-- `/sop-browser-test --approvals` — the approval workflow, when the target supports it.
-- `/sop-browser-test --mobile --approvals` — both together.
-
-Scale the test to scope and risk: one surface for a narrow change, the full flow for a
-workflow change. A small backend-only change does not need a browser pass.
+- `/sop-browser-test` — run the project's existing browser tests.
+- `/sop-browser-test --mobile` — run the mobile-specific tests.
+- `/sop-browser-test --approvals` — run the approval-workflow tests.
+- `/sop-browser-test --update` — bring the tests up to date with changed UI behavior.
+- Combined filters, for example `/sop-browser-test --mobile --approvals`.
 
 ## DISCOVER
 
-Identify the target application and how it runs; do not invent a URL or a command.
+Find the project's real setup; assume nothing and invent no option.
 
-- The target is normally the project Zed is open on. Read its own documentation and
-  configuration (a getting-started guide, a README, a Makefile or task runner, a package
-  manifest) to learn its URL, port, startup command, and any required test token.
-- Determine the authentication the project documents (for example a `?token=` link or a
-  cookie) and load it exactly as documented. Never guess a credential and never print one.
-- If the target is a SOP project, read its authority state first:
+- Read the package manifest `scripts` (for example a `test:e2e` script), any
+  `playwright.config.*`, the `tests/` tree, and the project's README or getting-started
+  guide.
+- Record the suite's own filters: the `projects` it declares, the tags it uses (a
+  `test.describe('...', { tag: '@mobile' })` marker, or an `@approvals` tag), and the
+  runner's matching flags (a project name, a tag or name `--grep`, `--ui`, `--headed`).
+- Find the application's URL, startup procedure, and any test credential the suite needs,
+  from the project's documentation. Never invent a URL, a port, or a secret.
+- If the project is SOP-governed, its validation configuration declares the deterministic
+  checks; the browser suite is additional, never a replacement for them.
 
-  ```bash
-  sop status
-  ```
-
-- Prefer an already-running local server. If a health endpoint answers, reuse it rather
-  than starting a second instance.
+If the project has **no Playwright suite**, STOP and report that plainly. Do not run
+ad-hoc browser exploration in its place, and do not fabricate a suite.
 
 ## PREFLIGHT
 
-- Confirm the Playwright MCP is available (the `browser_*` tools). If a check is
-  obligatory and the MCP is unavailable, fail closed: report the missing MCP and do not
-  report the UI as verified.
-- For `--approvals`, confirm `sop` is on `PATH`; if it is not, the approval verification
-  is `NOT RUN`, not a pass.
-- Default to loopback. Do not test a production or shared remote host without the
-  operator's explicit authorization.
-- Never render, log, or transmit credentials, tokens, cookies, or secrets.
+- Confirm the project's browser-test dependencies are installed and a browser is
+  available. If the runner (`@playwright/test`) or its browsers are missing, report a
+  **blocker**; do not install dependencies without the operator's authorization.
+- The **Playwright MCP** (the `browser_*` tools) is optional: use it to explore a screen
+  or diagnose a failure, never instead of the persistent suite.
+- Map `--mobile` and `--approvals` to the project's **own** filters discovered above. If
+  the project declares no such filter, say so rather than guessing.
+- Never expose credentials. Default to loopback; never test production without explicit
+  authorization.
+- If `sop` is not on `PATH`, the approval-workflow state verification is `NOT RUN`, not a
+  pass: report it and fail closed rather than claiming success.
 
 ## RUN
 
-When no healthy server is already running, start a disposable local instance using the
-project's documented mechanism, in the background, bound to loopback, with any required
-test token supplied from the environment. Follow the project's own guide for the exact
-invocation rather than inventing one. Record the exact URL the browser will drive.
+Run the project's documented command, scoped to the request; a filter is the suite's
+own, never invented. A project that ships its suite in package scripts exposes a test
+script (commonly `test:e2e`); otherwise use the runner directly:
+
+```bash
+npm run test:e2e
+npx playwright test --grep @mobile
+npx playwright test --grep @approvals
+```
+
+- `--mobile` selects the mobile tags or projects; `--approvals` the approval tests; both
+  together select the intersection.
+- Keep a passing run quiet; capture the configured `screenshot` and `trace` on failure.
+- Read the runner's own counts. A test that did not run — skipped, filtered out, or
+  blocked by a missing dependency — is **not a pass**.
 
 ## VERIFY
 
-Drive the real application through the Playwright MCP; do not infer rendering from code.
-
-- Navigate, then read the accessibility snapshot and assert on visible text.
-- Click, type, and submit real controls; after an action, confirm the page changed.
-- With `--mobile`, set a phone viewport (about 390x844) and check the layout is usable:
-  no horizontal scrolling, controls reachable, text legible.
-- Check for failures: console errors, failed network requests, visible error text, and a
-  blank or unchanged page after an action.
-- Capture a screenshot for the evidence, and a trace when the MCP supports it.
-- For any state-changing action, verify the backend state changed. The UI is not the
-  authority.
-
-## APPROVALS
-
-Run this only when the target exposes a human approval surface (for the SOP Controller,
-the `/approvals` inbox, backed by `sop approvals --json` and `sop approve`/`sop decline`).
-
-- Read SOP's authoritative gates first:
+- Trust the runner's result, not the UI's appearance alone.
+- On failure, open the captured trace or screenshot with the Playwright MCP to identify
+  the cause, then report the failing test, its assertion, and the evidence.
+- For a state-changing workflow (the approval inbox is the canonical example), verify the
+  **backend** state, not just the screen. Read SOP's authoritative record:
 
   ```bash
   sop approvals --json
-  ```
-
-- Prepare two separate disposable approvals so Approve and Decline are exercised
-  independently, each in its own disposable project or task. Create them only through
-  SOP's own lifecycle (drive a disposable fixture to a genuine human gate); never
-  fabricate a gate, and never approve or decline the operator's real work.
-- In the browser, open the approval surface and confirm each gate shows enough context
-  to decide: the target, the gate kind, SOP's reported reason, and the requested time.
-- Decide one gate Approve and the other Decline, then confirm the surface reflects each
-  decision (the decided gate disappears).
-- Verify SOP's authoritative state for each:
-
-  ```bash
   sop approval <task-id>
   ```
 
-  Require `Approval: APPROVED` for the approved gate and `Approval: DECLINED` for the
-  declined one, and check that the actor/note the UI sent was recorded. A decision SOP
-  refuses (a stale or not-applicable gate) is a conflict, never a pass.
+  Require `Approval: APPROVED` or `Approval: DECLINED` as applicable, with the recorded
+  provenance. A decision SOP refuses is a conflict, never a pass.
+
+## UPDATE (--update)
+
+Bring the persistent tests in step with changed UI behavior.
+
+- Identify the affected behavior and the tests that cover it.
+- Update or add only those tests. Preserve valid existing assertions; do not rewrite
+  unrelated tests.
+- Prefer accessible roles, labels, and text, and deterministic auto-waiting assertions
+  over brittle selectors, CSS paths, and fixed delays.
+- Keep the tests evolving with the application while this skill stays stable.
+- Re-run the affected tests after editing, and report the result.
 
 ## CLEANUP
 
-Remove only what the test created: stop a server the test started, and delete the
-disposable projects or fixtures it created. Leave any pre-existing server and any
-operator-owned resource untouched.
+The project's suite owns its own fixtures and teardown. Remove only resources this run
+created; never delete or alter operator-owned state or a pre-existing server.
 
 ## REPORT
 
 Return a concise, evidence-backed result:
 
-- MCP: present and functional, or `UNAVAILABLE` (in which case the browser check is
-  failed, never a pass).
-- Target: URL, viewport(s), and whether the app was started or reused.
-- Surfaces: what rendered, any console or network errors, and the screenshots.
-- Approvals: each gate's decision and SOP's authoritative transition (`APPROVED` /
-  `DECLINED`) with the recorded provenance.
-- Defects: what failed, with exact evidence; fix a genuine defect only when the target's
-  own tests cover the change.
-- Cleanup: what was torn down, and what pre-existing resource was left alone.
-- Limitations: anything the browser could not verify (for example a real physical device).
+- Suite: its path, the command run, and the filters applied.
+- Result: passed, failed, and skipped counts, and the runner's exit status.
+- Evidence: the failing test and its assertion, with the screenshot or trace path.
+- Backend verification: the authoritative state transition for any state-changing flow.
+- Blockers: a missing runner, browser, or dependency; or a project with no browser suite.
+- Limitations: what the browser could not verify, for example a real physical device.

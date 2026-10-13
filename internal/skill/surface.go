@@ -18,6 +18,11 @@ type Command struct {
 	// Delegation is the exact text the command's SKILL.md must contain — the call it
 	// makes into the SOP CLI. A command that fixes no capability must not embed one.
 	Delegation string
+	// RunsProjectTests marks a command whose shell examples are the target project's
+	// own test-runner commands (for example Playwright) rather than `sop` invocations:
+	// it runs and maintains a project's persistent browser suite. Every other command
+	// stays a thin SOP CLI client, so the shell-example invariant is waived only here.
+	RunsProjectTests bool
 }
 
 // Commands is the canonical SOP command surface. Every supported agent installs
@@ -33,9 +38,9 @@ var Commands = []Command{
 	{Name: "sop-end-to-end", Capability: "", Delegation: "sop run"},
 	{Name: "sop-historicalize", Capability: "", Delegation: "sop plan historicalize"},
 	{Name: "sop-continue", Capability: "", Delegation: "sop continue"},
-	// A verification companion to /sop-end-to-end: it observes a running application
-	// through the Playwright MCP and reads SOP's approval state, and fixes no capability.
-	{Name: "sop-browser-test", Capability: "", Delegation: "sop approvals --json"},
+	// A verification companion to /sop-end-to-end: it runs and maintains a project's
+	// persistent Playwright suite and reads SOP's approval state; it fixes no capability.
+	{Name: "sop-browser-test", Capability: "", Delegation: "sop approvals --json", RunsProjectTests: true},
 
 	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
 	// existing read-only capability. They fix a read-only capability only, so they can
