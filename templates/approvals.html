@@ -21,13 +21,21 @@
 
             <div id="approvals-cmd"></div>
 
+            {{/* The refresher is a SIBLING of the gate list, never an ancestor.
+            htmx inherits hx-select/hx-target/hx-swap into descendants, so if it
+            wrapped the forms, their approve/decline command fragment would be
+            selected away before it rendered: the decision would run but nothing
+            would appear and no status poll would start. */}}
             <div
-                id="approvals-list"
+                id="approvals-refresh"
                 hx-get="/approvals"
                 hx-select="#approvals-list"
                 hx-swap="outerHTML"
+                hx-target="#approvals-list"
                 hx-trigger="approvalsChanged from:body"
-            >
+            ></div>
+
+            <div id="approvals-list">
                 {{if .Pending}}
                 <div class="cards">
                     {{range .Projects}}{{if .Entries}}
@@ -132,7 +140,7 @@
                 {{else if not .Unread}}
                 <p class="muted">
                     Approval gates:
-                    <span class="badge s-unavailable">{{unavailable}}</span>
+                    <span class="badge">none</span>
                     <span class="small"
                         >SOP reports no applicable approval gate for any
                         observed project.</span

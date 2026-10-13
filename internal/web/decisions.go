@@ -32,13 +32,24 @@ type decisionsData struct {
 	Project sopclient.ProjectDetail
 	Gates   []decisionGate
 	Accepts []decisionAccept
+	// GatesUnread is set when SOP did not report an approval listing for this
+	// project. It is an absence, distinct from "no gates": the panel must not
+	// claim there is no gate when the listing could not be read
+	// (docs/specs/HUMAN-APPROVAL.md).
+	GatesUnread bool
 	// ChangedTasksError is set when the listing could not be read.
 	ChangedTasksError string
 }
 
 // decisions projects from reads the caller already has; it makes no SOP call.
 func decisions(base baseData, project sopclient.ProjectDetail, changed sopclient.ChangedTasks, changedErr string) decisionsData {
-	d := decisionsData{baseData: base, Project: project, ChangedTasksError: changedErr}
+	d := decisionsData{
+		baseData:          base,
+		Project:           project,
+		ChangedTasksError: changedErr,
+		// An unreported listing is an absence, never "no gates".
+		GatesUnread: !project.ApprovalsReported,
+	}
 
 	// A task appears only when SOP's approval listing reports an applicable gate.
 	for _, t := range project.Tasks {

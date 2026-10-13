@@ -77,15 +77,23 @@ func TestApprovalsInboxWiresListRefresh(t *testing.T) {
 	srv, _, _ := decisionServer(t, "")
 	_, body := get(t, srv.URL+"/approvals")
 
+	// The refresher carries the hx-* wiring and must be a SIBLING of the list.
 	for _, want := range []string{
-		`id="approvals-list"`,
+		`id="approvals-refresh"`,
 		`hx-get="/approvals"`,
 		`hx-select="#approvals-list"`,
+		`hx-target="#approvals-list"`,
 		"approvalsChanged from:body",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("inbox missing refresh wiring %q", want)
 		}
+	}
+	// The forms' container must stay a plain div: htmx inherits hx-select from an
+	// ancestor, which would select the approve/decline command fragment away and
+	// leave the decision rendering empty.
+	if !strings.Contains(body, `<div id="approvals-list">`) {
+		t.Errorf("gate-list container must be a plain div so the decision forms inherit no hx-select")
 	}
 }
 

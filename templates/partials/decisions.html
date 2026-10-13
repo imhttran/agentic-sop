@@ -1,105 +1,186 @@
-{{- /* C2-006: project-level human-decision surface. This partial
-       aggregates the two human decisions SOP reports for a project - approval
-       gates (approve/decline) and changed-executed tasks pending accept - into
-       one stacked, mobile-safe panel. It is a READ-ONLY projection: it renders
-       no state of its own and every control is a POST form carrying CSRF that
-       delegates to an existing task-scoped command route. The controller never
-       decides that a decision is required and never computes eligibility:
-       approve/decline are offered only for gates SOP reports applicable, and
-       accept only for tasks SOP reports changed-executed and still pending.
-
-       Its command-status target is #decisions-cmd, a UNIQUE element id, so on a
-       page that also hosts the Commands panel (which owns #cmd) the decision
-       fragments swap into this panel's own container and never collide with the
-       Commands fragment. The duplicate-id ambiguity the shared #cmd target
-       created is thereby removed.
-
-       Every task id, note, actor, and plan-derived value is treated as
-       untrusted input: it is rendered through html/template auto-escaping and
-       only ever placed in a form value or a URL path segment built by the
-       server, never interpolated into a shell string. */ -}}
+{{- /* C2-006: project-level human-decision surface. This partial aggregates the
+two human decisions SOP reports for a project - approval gates (approve/decline)
+and changed-executed tasks pending accept - into one stacked, mobile-safe panel.
+It is a READ-ONLY projection: it renders no state of its own and every control
+is a POST form carrying CSRF that delegates to an existing task-scoped command
+route. The controller never decides that a decision is required and never
+computes eligibility: approve/decline are offered only for gates SOP reports
+applicable, and accept only for tasks SOP reports changed-executed and still
+pending. Its command-status target is #decisions-cmd, a UNIQUE element id, so on
+a page that also hosts the Commands panel (which owns #cmd) the decision
+fragments swap into this panel's own container and never collide with the
+Commands fragment. The duplicate-id ambiguity the shared #cmd target created is
+thereby removed. Every task id, note, actor, and plan-derived value is treated
+as untrusted input: it is rendered through html/template auto-escaping and only
+ever placed in a form value or a URL path segment built by the server, never
+interpolated into a shell string. */ -}}
 <section class="panel decisions" id="decisions">
-  <div class="panel-head"><h2>Human decisions</h2></div>
+    <div class="panel-head"><h2>Human decisions</h2></div>
 
-  <h3 class="decisions-sub">Approval gates</h3>
-  {{if .Gates}}
-  <ul class="decisions-list">
-    {{range .Gates}}
-    <li class="decisions-item">
-      <div class="decisions-meta">
-        <a class="decisions-task" href="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}"
-          >{{.TaskID}}</a
+    <h3 class="decisions-sub">Approval gates</h3>
+    {{if .Gates}}
+    <ul class="decisions-list">
+        {{range .Gates}}
+        <li class="decisions-item">
+            <div class="decisions-meta">
+                <a
+                    class="decisions-task"
+                    href="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}"
+                    >{{.TaskID}}</a
+                >
+                {{if .Title}}<span class="decisions-title">{{.Title}}</span
+                >{{end}} {{if .Kind}}<span class="badge s-blocked"
+                    >{{.Kind}}</span
+                >{{end}}
+            </div>
+            <p class="muted small">
+                SOP reports an applicable approval gate for this task. Approve
+                or decline delegates the decision to SOP's own application
+                operation; the controller never decides.
+            </p>
+            <div class="decisions-actions">
+                <form
+                    class="inline decisions-form"
+                    hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/approve"
+                    hx-target="#decisions-cmd"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}" />
+                    <input
+                        class="input"
+                        type="text"
+                        name="by"
+                        placeholder="by (actor, optional)"
+                        autocomplete="off"
+                    />
+                    <input
+                        class="input"
+                        type="text"
+                        name="note"
+                        placeholder="note (optional)"
+                        autocomplete="off"
+                    />
+                    <button
+                        class="btn primary"
+                        hx-disabled-elt="this"
+                        title="sop approve {{.TaskID}}"
+                    >
+                        Approve
+                    </button>
+                </form>
+                <form
+                    class="inline decisions-form"
+                    hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/decline"
+                    hx-target="#decisions-cmd"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}" />
+                    <input
+                        class="input"
+                        type="text"
+                        name="by"
+                        placeholder="by (actor, optional)"
+                        autocomplete="off"
+                    />
+                    <input
+                        class="input"
+                        type="text"
+                        name="note"
+                        placeholder="note (optional)"
+                        autocomplete="off"
+                    />
+                    <button
+                        class="btn danger"
+                        hx-disabled-elt="this"
+                        title="sop decline {{.TaskID}}"
+                    >
+                        Decline
+                    </button>
+                </form>
+            </div>
+        </li>
+        {{end}}
+    </ul>
+    {{else if .GatesUnread}}
+    <p class="muted">
+        Approval gates: <span class="badge s-unavailable">{{unavailable}}</span>
+        <span class="small"
+            >SOP did not report an approval listing for this project; this is an
+            absence, not "no gates". Check the SOP CLI (<code>SOP_BIN</code>)
+            and the project state.</span
         >
-        {{if .Title}}<span class="decisions-title">{{.Title}}</span>{{end}}
-        {{if .Kind}}<span class="badge s-blocked">{{.Kind}}</span>{{end}}
-      </div>
-      <p class="muted small">
-        SOP reports an applicable approval gate for this task. Approve or decline
-        delegates the decision to SOP's own application operation; the controller
-        never decides.
-      </p>
-      <div class="decisions-actions">
-        <form class="inline decisions-form" hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/approve" hx-target="#decisions-cmd" hx-swap="innerHTML">
-          <input type="hidden" name="csrf" value="{{$.CSRF}}" />
-          <input class="input" type="text" name="by" placeholder="by (actor, optional)" autocomplete="off" />
-          <input class="input" type="text" name="note" placeholder="note (optional)" autocomplete="off" />
-          <button class="btn primary" hx-disabled-elt="this" title="sop approve {{.TaskID}}">Approve</button>
-        </form>
-        <form class="inline decisions-form" hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/decline" hx-target="#decisions-cmd" hx-swap="innerHTML">
-          <input type="hidden" name="csrf" value="{{$.CSRF}}" />
-          <input class="input" type="text" name="by" placeholder="by (actor, optional)" autocomplete="off" />
-          <input class="input" type="text" name="note" placeholder="note (optional)" autocomplete="off" />
-          <button class="btn danger" hx-disabled-elt="this" title="sop decline {{.TaskID}}">Decline</button>
-        </form>
-      </div>
-    </li>
-    {{end}}
-  </ul>
-  {{else}}
-  <p class="muted">
-    Approval gates: <span class="badge s-unavailable">{{unavailable}}</span>
-    <span class="small">SOP reports no applicable approval gate for this project.</span>
-  </p>
-  {{end}}
-
-  <h3 class="decisions-sub">Changed executed tasks pending accept</h3>
-  {{if .ChangedTasksError}}
-  <p class="muted">
-    Changed executed tasks: <span class="badge s-unavailable">unavailable</span>
-    <span class="small">SOP did not report a changed-executed-task listing: {{.ChangedTasksError}}</span>
-  </p>
-  {{else if .Accepts}}
-  <ul class="decisions-list">
-    {{range .Accepts}}
-    <li class="decisions-item">
-      <div class="decisions-meta">
-        <a class="decisions-task" href="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}"
-          >{{.TaskID}}</a
+    </p>
+    {{else}}
+    <p class="muted">
+        Approval gates: <span class="badge">none</span>
+        <span class="small"
+            >SOP reports no applicable approval gate for this project.</span
         >
-        {{if .Title}}<span class="decisions-title">{{.Title}}</span>{{end}}
-        {{if .Stage}}<span class="badge {{stageClass .Stage}}">{{.Stage}}</span>{{end}}
-      </div>
-      {{if .ChangeSummary}}<p class="muted small">{{.ChangeSummary}}</p>{{end}}
-      <div class="decisions-actions">
-        <form class="inline decisions-form" hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/accept-changed" hx-target="#decisions-cmd" hx-swap="innerHTML">
-          <input type="hidden" name="csrf" value="{{$.CSRF}}" />
-          <button class="btn" hx-disabled-elt="this" title="sop reconcile --accept-changed {{.TaskID}}">Accept changed</button>
-        </form>
-      </div>
-    </li>
+    </p>
     {{end}}
-  </ul>
-  {{else}}
-  <p class="muted">
-    Changed executed tasks: <span class="badge s-unavailable">{{unavailable}}</span>
-    <span class="small">SOP reports no changed executed tasks awaiting accept.</span>
-  </p>
-  {{end}}
 
-  <div id="decisions-cmd"></div>
-  <p class="muted small">
-    Every decision here is a POST delegated to SOP's own application operation,
-    which validates at command time. Read state only is rendered on GET; no
-    command is started by viewing this panel.
-  </p>
+    <h3 class="decisions-sub">Changed executed tasks pending accept</h3>
+    {{if .ChangedTasksError}}
+    <p class="muted">
+        Changed executed tasks:
+        <span class="badge s-unavailable">unavailable</span>
+        <span class="small"
+            >SOP did not report a changed-executed-task listing:
+            {{.ChangedTasksError}}</span
+        >
+    </p>
+    {{else if .Accepts}}
+    <ul class="decisions-list">
+        {{range .Accepts}}
+        <li class="decisions-item">
+            <div class="decisions-meta">
+                <a
+                    class="decisions-task"
+                    href="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}"
+                    >{{.TaskID}}</a
+                >
+                {{if .Title}}<span class="decisions-title">{{.Title}}</span
+                >{{end}} {{if .Stage}}<span class="badge {{stageClass .Stage}}"
+                    >{{.Stage}}</span
+                >{{end}}
+            </div>
+            {{if .ChangeSummary}}
+            <p class="muted small">{{.ChangeSummary}}</p>
+            {{end}}
+            <div class="decisions-actions">
+                <form
+                    class="inline decisions-form"
+                    hx-post="/projects/{{$.Project.Summary.ID}}/tasks/{{.TaskID}}/commands/accept-changed"
+                    hx-target="#decisions-cmd"
+                    hx-swap="innerHTML"
+                >
+                    <input type="hidden" name="csrf" value="{{$.CSRF}}" />
+                    <button
+                        class="btn"
+                        hx-disabled-elt="this"
+                        title="sop reconcile --accept-changed {{.TaskID}}"
+                    >
+                        Accept changed
+                    </button>
+                </form>
+            </div>
+        </li>
+        {{end}}
+    </ul>
+    {{else}}
+    <p class="muted">
+        Changed executed tasks:
+        <span class="badge">none</span>
+        <span class="small"
+            >SOP reports no changed executed tasks awaiting accept.</span
+        >
+    </p>
+    {{end}}
+
+    <div id="decisions-cmd"></div>
+    <p class="muted small">
+        Every decision here is a POST delegated to SOP's own application
+        operation, which validates at command time. Read state only is rendered
+        on GET; no command is started by viewing this panel.
+    </p>
 </section>
