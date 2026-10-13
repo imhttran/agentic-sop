@@ -47,7 +47,20 @@ No Node, no npm, no PostgreSQL. Server-rendered HTML plus HTMX — no SPA.
 
 ```bash
 go run ./cmd/sop-controller     # foreground
-# → http://127.0.0.1:8080
+```
+
+On start it prints the URLs to open. With network access enabled it also prints the LAN
+URL (detected from the machine's interfaces, never hardcoded):
+
+```text
+SOP Controller started
+
+Local:      http://localhost:8080
+Network:    http://192.168.86.249:8080
+Approvals:  http://192.168.86.249:8080/approvals
+
+Auth:       enabled
+Press Ctrl+C to stop
 ```
 
 By default it reads SOP state from the current directory

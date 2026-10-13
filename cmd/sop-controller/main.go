@@ -2,8 +2,10 @@
 package main
 
 import (
+	"fmt"
 	"io/fs"
 	"log"
+	"net"
 	"net/http"
 
 	assets "sop-controller"
@@ -57,8 +59,18 @@ func main() {
 		Discovery:      report,
 	})
 
-	log.Printf("SOP Controller listening on http://%s (%d project(s), poll %s, attention %s)", cfg.Addr, len(roots), cfg.PollInterval, cfg.AttentionInterval)
-	if err := http.ListenAndServe(cfg.Addr, handler); err != nil {
+	// Bind explicitly so the startup summary can report the actual bound port: a
+	// dynamically allocated ":0" port only exists once the listener is open.
+	ln, err := net.Listen("tcp", cfg.Addr)
+	if err != nil {
+		log.Fatalf("listen on %s: %v", cfg.Addr, err)
+	}
+	log.Printf("SOP Controller bound to %s (%d project(s), poll %s, attention %s)", ln.Addr(), len(roots), cfg.PollInterval, cfg.AttentionInterval)
+	fmt.Print(web.StartupSummary(
+		web.ResolveStartupURLs(ln.Addr(), "http", cfg.AllowNetwork, web.LANAddresses()),
+		cfg.AllowNetwork,
+	))
+	if err := http.Serve(ln, handler); err != nil {
 		log.Fatal(err)
 	}
 }
