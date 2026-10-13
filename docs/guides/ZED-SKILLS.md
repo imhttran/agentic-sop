@@ -87,7 +87,7 @@ scripts/install/install-skills.sh zed --uninstall
 | `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
-| `/sop-browser-test` | _browser suite_    | no       | run the project's persistent Playwright tests            |
+| `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
@@ -135,8 +135,9 @@ default. Its contract is
 
 `/sop-browser-test` runs and maintains a project's **persistent Playwright tests** — the
 smoke, mobile-layout, and approval suites — and verifies SOP's state for state-changing
-flows. With `--update` it brings those tests in step with changed UI behavior. It fixes
-no capability and never replaces SOP's validation, review, or approval authority.
+flows. With `--audit` it reports coverage gaps for a UI change; with `--update` it brings
+the tests in step with changed UI behavior. It fixes no capability and never replaces
+SOP's validation, review, or approval authority.
 
 For capability aliases, everything after the command name is prompt data, passed
 to SOP as a single argument.

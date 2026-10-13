@@ -129,14 +129,20 @@ Surface SOP's required human decision and wait for explicit resolution.
 
 ## BROWSER VERIFICATION
 
-Verify UI behavior with the `/sop-browser-test` skill, which runs the project's
-persistent Playwright tests. It adds no approval checkpoint and no second lifecycle:
+Verify UI behavior with the `/sop-browser-test` skill, which runs and analyzes the
+project's persistent Playwright tests. It adds no approval checkpoint and no second
+lifecycle:
 
 - A change to a rendered page, a control, routing, or an approval surface runs the
   affected browser tests; a high-risk UI change runs the broader suite. A backend-only
   change runs no browser test unless it changed user-facing behavior.
-- A changed UI contract updates the project's persistent tests in the same run
+- For a UI change, analyze coverage of the changed behavior (`/sop-browser-test --audit`)
+  and update the persistent tests for confirmed behavior changes in the same run
   (`/sop-browser-test --update`); do not leave the suite stale.
+- Keep the analysis lightweight: scope it to the changed files and affected workflows by
+  default, and reserve a full-suite coverage audit for an explicit request or a
+  substantial UI change.
+- Never delete or weaken a valid assertion to make a run pass.
 - Targeted tests stay mandatory for relevant work; browser tests run only when relevant,
   and unchanged verification is not repeated.
 - If a required browser dependency (the runner or its browsers) is missing, report a

@@ -1,31 +1,35 @@
 ---
 name: sop-browser-test
 description: |-
-  Discover, run, and maintain a project's persistent Playwright tests.
+  Detect UI changes, analyze browser-test coverage, and run or maintain a project's
+  persistent Playwright tests.
   /sop-browser-test, /sop-browser-test --mobile, /sop-browser-test --approvals,
-  /sop-browser-test --update, and combined filters (--mobile --approvals).
-  Use for "run the browser tests", "verify the UI", "check the mobile layout", or
-  "update the approval tests" when the operator wants a project's version-controlled
-  Playwright suite executed or maintained against the real application. It runs and
-  maintains the project's own suite; it never fabricates a suite, never replaces
-  persistent tests with ad-hoc browsing, and never replaces SOP as the workflow authority.
+  /sop-browser-test --audit, /sop-browser-test --update, and combined filters.
+  Use for "run the browser tests", "verify the UI", "what browser tests are missing",
+  "check the mobile layout", or "update the approval tests" when the operator wants a
+  project's version-controlled Playwright suite analyzed, executed, or maintained against
+  the real application. It works from the project's own suite; it never fabricates a suite,
+  never replaces persistent tests with ad-hoc browsing, and never replaces SOP as the
+  workflow authority.
 disable-model-invocation: false
 ---
 
 # SOP Browser Test
 
-Run and maintain a project's **persistent, version-controlled** browser tests. This
-skill is a thin executor and maintainer over the project's existing Playwright Test
-suite: it discovers the project's own configuration and commands, runs the relevant
-tests, and updates them when UI behavior changes. It introduces no framework, no runner,
-and no server, and it never reports an unrun or skipped suite as a pass.
+Analyze, run, and maintain a project's **persistent, version-controlled** browser tests.
+This skill is a thin executor and maintainer over the project's existing Playwright Test
+suite: it discovers the project's own configuration and commands, detects which UI
+behavior a change touches, runs the relevant tests, and updates them when that behavior
+changes. It introduces no framework, no runner, and no server, and it never reports an
+unrun or skipped suite as a pass.
 
 Arguments are **instructions to this skill**, never SOP CLI flags:
 
 - `/sop-browser-test` — run the project's existing browser tests.
 - `/sop-browser-test --mobile` — run the mobile-specific tests.
 - `/sop-browser-test --approvals` — run the approval-workflow tests.
-- `/sop-browser-test --update` — bring the tests up to date with changed UI behavior.
+- `/sop-browser-test --audit` — report browser-test coverage gaps for the current change (read-only).
+- `/sop-browser-test --update` — add or update persistent tests for the confirmed UI change.
 - Combined filters, for example `/sop-browser-test --mobile --approvals`.
 
 ## DISCOVER
@@ -94,17 +98,55 @@ npx playwright test --grep @approvals
   Require `Approval: APPROVED` or `Approval: DECLINED` as applicable, with the recorded
   provenance. A decision SOP refuses is a conflict, never a pass.
 
+## CHANGE ANALYSIS
+
+Scope the analysis to the change, never the whole application.
+
+- Start from Git: the changed and staged files, relative to the project's base or the
+  active work. Fall back to the files the operator names.
+
+  ```bash
+  git status --porcelain
+  git diff --name-only
+  ```
+
+- Map those files to UI behavior: routes, templates, components, and the handlers behind
+  them. Trace only the workflows the changes affect.
+- Compare each changed behavior with the suite: which test covers it, which assertion
+  would catch a regression, and where a route, template, or control has no test.
+- Classify every changed behavior as **new** (functionality with no test), **changed**
+  (behavior whose test is now stale), **covered** (unchanged behavior, already tested), or
+  **gap** (a regression risk with no test).
+
+Keep it lightweight: work from the changed files and the affected workflows by default.
+Reserve a full-suite coverage audit for an explicit `--audit`, or a substantial UI change
+(a route, template, or workflow added, removed, or redefined).
+
+## AUDIT (--audit)
+
+Report the coverage picture for the current change; modify nothing.
+
+- For each changed UI behavior, give the route, template, or component, the covering test
+  (its path and title) or `NO TEST`, and the regression risk of the gap.
+- Summarize new functionality, changed behavior whose tests are stale, and uncovered
+  regression coverage.
+- Write nothing and run nothing destructive. It is fine to run the existing suite to
+  confirm the current state, and to report that run.
+
 ## UPDATE (--update)
 
-Bring the persistent tests in step with changed UI behavior.
+Bring the persistent tests in step with the confirmed UI change.
 
-- Identify the affected behavior and the tests that cover it.
-- Update or add only those tests. Preserve valid existing assertions; do not rewrite
-  unrelated tests.
+- Act on the analysis: add tests for new functionality, and update the tests whose
+  behavior changed. Touch only the affected files.
+- Preserve valid existing assertions. Never delete or weaken a valid assertion merely to
+  make a run pass; when a test is wrong, correct the behavior contract it encodes and say
+  why.
 - Prefer accessible roles, labels, and text, and deterministic auto-waiting assertions
   over brittle selectors, CSS paths, and fixed delays.
+- Re-run the affected tests after editing and report the result. Leave unrelated tests
+  untouched.
 - Keep the tests evolving with the application while this skill stays stable.
-- Re-run the affected tests after editing, and report the result.
 
 ## CLEANUP
 
@@ -117,6 +159,8 @@ Return a concise, evidence-backed result:
 
 - Suite: its path, the command run, and the filters applied.
 - Result: passed, failed, and skipped counts, and the runner's exit status.
+- Coverage: the changed behaviors analyzed, the tests added or updated, and the remaining
+  gaps (`NO TEST`), with the regression risk of each.
 - Evidence: the failing test and its assertion, with the screenshot or trace path.
 - Backend verification: the authoritative state transition for any state-changing flow.
 - Blockers: a missing runner, browser, or dependency; or a project with no browser suite.
