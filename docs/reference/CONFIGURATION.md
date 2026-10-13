@@ -250,6 +250,24 @@ SOP's state database.
   diagnostic (`discovery_allowance=`), and the discovery activity that actually
   occurred is recorded in `progress_summary.discovery`; the model never chooses it.
 
+  A single task may declare its **own** allowance, so tasks in one plan can differ.
+  A plan stage or task file carries an optional `Discovery iterations` field (JSON
+  `discovery_iterations`):
+
+  ```markdown
+  ## S007 — Multi-package refactor
+
+  ### Discovery iterations
+
+  24
+  ```
+
+  Precedence is **task override → `SOP_OLLAMA_DISCOVERY_ITERATIONS` → built-in default**,
+  applied per invocation, so a task-specific value never leaks into another task. The
+  task value is bounded by the same limits as the operator allowance (negative or
+  above the maximum fails plan validation loudly; a value at or above the ceiling is
+  clamped below it), so a task cannot weaken the stall/no-progress guard.
+
 - The `tool` harness's `IMPLEMENT`/`FIX` iteration ceilings can be raised with
   `SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` (positive integers;
   an unset or invalid value keeps the built-in ceiling, and the soft thresholds scale

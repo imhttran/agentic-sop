@@ -2,6 +2,7 @@ package planner
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -61,6 +62,10 @@ func (p *Plan) RenderMarkdown() string {
 		if stage.ExecutionMode != "" {
 			b.WriteString("\n### Execution\n\n")
 			b.WriteString(renderList([]string{string(stage.ExecutionMode)}))
+		}
+		if stage.DiscoveryIterations > 0 {
+			b.WriteString("\n### Discovery iterations\n\n")
+			b.WriteString(renderList([]string{strconv.Itoa(stage.DiscoveryIterations)}))
 		}
 		b.WriteString("\n")
 	}

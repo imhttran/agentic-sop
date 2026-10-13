@@ -245,13 +245,15 @@ finalization thresholds are unchanged.
 
 **Required.** The discovery allowance is a task-scoped, operator-configurable, bounded
 execution limit (`internal/budget`: `DiscoveryIterations`, §9's `implementNowAfter`
-default), overridable with `SOP_OLLAMA_DISCOVERY_ITERATIONS`. It MUST be bounded: a
-malformed value keeps the base, a value below the minimum is raised, a value above the
-maximum is clamped, and the effective window is always capped strictly below the
-capability's hard iteration ceiling. It MUST NOT be a per-model or per-provider
-hardcoding. Discovery credit MUST remain limited to the effective window, and the
-configured allowance MUST be recorded in the diagnostics and run trace. The model MUST
-NOT set or extend it.
+default), overridable with `SOP_OLLAMA_DISCOVERY_ITERATIONS`. Precedence is **task
+override → operator environment → built-in default**, resolved per invocation, so a
+task-specific value never leaks into another task. A plan stage or task file may
+declare its own `discovery_iterations` (carried on the agent request); a negative or
+above-maximum value MUST fail plan validation loudly, and the effective window MUST be
+clamped strictly below the capability's hard iteration ceiling. It MUST NOT be a
+per-model or per-provider hardcoding. Discovery credit MUST remain limited to the
+effective window, and the configured allowance MUST be recorded in the diagnostics and
+run trace. The model MUST NOT set or extend it.
 
 **Observational progress signals.** The harness marks the activity events it emits
 with the progress it has already substantiated — a first-seen inspection

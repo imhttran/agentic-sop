@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
@@ -57,6 +58,13 @@ type Stage struct {
 	// first; "verify-first" runs deterministic validation before any agent and only
 	// invokes one when that validation fails.
 	ExecutionMode domain.ExecutionMode `json:"execution_mode,omitempty"`
+	// DiscoveryIterations is optional: the per-task discovery allowance (IMPLEMENT/FIX
+	// model turns of credited repository discovery before non-mutating turns become
+	// stale). It overrides the operator environment allowance and the built-in default
+	// for THIS task only; a zero or absent value keeps the environment/default
+	// resolution. It is bounded by the same limits as the operator allowance and can
+	// never exceed the capability's hard iteration ceiling.
+	DiscoveryIterations int `json:"discovery_iterations,omitempty"`
 	// Requires names the capabilities this stage depends on. Each must be declared
 	// in the plan's capability inventory, and a stage may not depend on one whose
 	// status is UNKNOWN: synthesis must not build work on a capability it could
@@ -106,6 +114,12 @@ func (p *Plan) Validate() error {
 		}
 		if !domain.KnownExecutionMode(stage.ExecutionMode) {
 			return fmt.Errorf("plan: stage %s has unknown execution_mode %q", stage.ID, stage.ExecutionMode)
+		}
+		if stage.DiscoveryIterations < 0 {
+			return fmt.Errorf("plan: stage %s has negative discovery_iterations %d", stage.ID, stage.DiscoveryIterations)
+		}
+		if stage.DiscoveryIterations > budget.MaxDiscoveryIterations {
+			return fmt.Errorf("plan: stage %s discovery_iterations %d exceeds the maximum %d", stage.ID, stage.DiscoveryIterations, budget.MaxDiscoveryIterations)
 		}
 	}
 

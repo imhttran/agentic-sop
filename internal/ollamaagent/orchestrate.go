@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -309,6 +310,14 @@ func (p implementPhase) label() string {
 // cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
 	b := h.cfg.EffectiveBudget()
+	// A task may declare its own discovery allowance. It overrides the operator
+	// environment allowance (already folded into b by EffectiveBudget) and the built-in
+	// default for THIS invocation only, so a per-task setting can never leak into
+	// another task. It is bounded by the same limits as the operator allowance, and
+	// discoveryTurns further caps it strictly below the capability's hard ceiling.
+	if req.DiscoveryIterations > 0 {
+		b.DiscoveryIterations = budget.ClampDiscovery(req.DiscoveryIterations)
+	}
 	policy := policyFor(req.Capability, b) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},

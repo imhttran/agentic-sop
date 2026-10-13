@@ -266,9 +266,12 @@ func TestMigrationAddsExecutionModeToExistingDatabase(t *testing.T) {
 	}
 	saveDependency(t, s, "T001")
 
-	// Simulate a pre-v3 database: drop the column and lower the recorded version,
-	// so reopening must migrate it back rather than fail.
+	// Simulate a pre-v3 database: drop the columns added at v3 and v4 and lower the
+	// recorded version, so reopening must migrate it back rather than fail.
 	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN execution_mode"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN discovery_iterations"); err != nil {
 		t.Fatalf("drop column: %v", err)
 	}
 	if _, err := s.db.Exec("PRAGMA user_version = 2"); err != nil {
@@ -298,6 +301,88 @@ func TestMigrationAddsExecutionModeToExistingDatabase(t *testing.T) {
 	}
 	if got.ExecutionMode != "" {
 		t.Errorf("a migrated task must default to the implement mode, got %q", got.ExecutionMode)
+	}
+	if got.DiscoveryIterations != 0 {
+		t.Errorf("a migrated task must default to no discovery override, got %d", got.DiscoveryIterations)
+	}
+}
+
+// TestMigrationAddsDiscoveryIterationsToExistingDatabase proves a database created
+// before the per-task discovery allowance migrates in place: the column is added, the
+// recorded version advances, existing rows survive, and a migrated task defaults to
+// no override (0), so the operator environment allowance keeps applying.
+func TestMigrationAddsDiscoveryIterationsToExistingDatabase(t *testing.T) {
+	dbPath := testDB(t)
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	saveDependency(t, s, "T001")
+
+	// Simulate a pre-v4 database: drop the discovery column and lower the version.
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN discovery_iterations"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("PRAGMA user_version = 3"); err != nil {
+		t.Fatalf("set user_version: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	s2, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("reopen (migrate) failed: %v", err)
+	}
+	defer s2.Close()
+
+	var version int
+	if err := s2.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		t.Fatalf("reading user_version failed: %v", err)
+	}
+	if version != schemaVersion {
+		t.Errorf("expected schema version %d after migration, got %d", schemaVersion, version)
+	}
+
+	got, err := s2.Get("T001")
+	if err != nil {
+		t.Fatalf("expected T001 to survive migration: %v", err)
+	}
+	if got.DiscoveryIterations != 0 {
+		t.Errorf("a migrated task must default to no discovery override, got %d", got.DiscoveryIterations)
+	}
+}
+
+// TestRoundTripsPerTaskDiscoveryAllowance proves two persisted tasks in the same graph
+// can carry different discovery allowances and that each survives a save/read
+// round-trip, so a per-task setting authored in a plan can be honored at run time.
+func TestRoundTripsPerTaskDiscoveryAllowance(t *testing.T) {
+	dbPath := testDB(t)
+	s, err := Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer s.Close()
+
+	now := fixedTime()
+	tasks := []*domain.Task{
+		{ID: "A", Title: "wider", Status: domain.PLANNED, DiscoveryIterations: 24, MaxAttempts: 3, CreatedAt: now, UpdatedAt: now},
+		{ID: "B", Title: "default", Status: domain.PLANNED, DiscoveryIterations: 0, MaxAttempts: 3, CreatedAt: now, UpdatedAt: now},
+	}
+	for _, task := range tasks {
+		if err := s.Save(task); err != nil {
+			t.Fatalf("Save %s: %v", task.ID, err)
+		}
+	}
+
+	for _, want := range tasks {
+		got, err := s.Get(want.ID)
+		if err != nil {
+			t.Fatalf("Get %s: %v", want.ID, err)
+		}
+		if got.DiscoveryIterations != want.DiscoveryIterations {
+			t.Errorf("task %s discovery iterations = %d, want %d", want.ID, got.DiscoveryIterations, want.DiscoveryIterations)
+		}
 	}
 }
 

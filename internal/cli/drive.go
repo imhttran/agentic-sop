@@ -948,11 +948,12 @@ func specFromTask(task *domain.Task) *taskfile.Spec {
 		}
 	}
 	return &taskfile.Spec{
-		ID:                 task.ID,
-		Title:              task.Title,
-		Description:        task.Objective,
-		AcceptanceCriteria: criteria,
-		ExecutionMode:      task.ExecutionMode,
+		ID:                  task.ID,
+		Title:               task.Title,
+		Description:         task.Objective,
+		AcceptanceCriteria:  criteria,
+		ExecutionMode:       task.ExecutionMode,
+		DiscoveryIterations: task.DiscoveryIterations,
 	}
 }
 

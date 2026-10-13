@@ -34,6 +34,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -895,6 +896,7 @@ func redefineTask(cur, d *domain.Task) *domain.Task {
 	updated.Objective = d.Objective
 	updated.AcceptanceCriteria = d.AcceptanceCriteria
 	updated.ExecutionMode = d.ExecutionMode
+	updated.DiscoveryIterations = d.DiscoveryIterations
 	updated.DependencyIDs = append([]string{}, d.DependencyIDs...)
 	updated.UpdatedAt = time.Now().UTC()
 	return &updated
@@ -946,7 +948,7 @@ func autoReconcile(cur, desired *domain.Task, autoAccept func(ExecutedChange) au
 // provenance records exactly which two definitions were swapped.
 func definitionHash(t *domain.Task) string {
 	sum := sha256.New()
-	for _, part := range []string{t.ID, t.Title, t.Objective, t.AcceptanceCriteria, string(t.ExecutionMode)} {
+	for _, part := range []string{t.ID, t.Title, t.Objective, t.AcceptanceCriteria, string(t.ExecutionMode), strconv.Itoa(t.DiscoveryIterations)} {
 		_, _ = io.WriteString(sum, part)
 		sum.Write([]byte{0})
 	}
@@ -1110,6 +1112,9 @@ func describeTaskDifference(cur, desired *domain.Task) string {
 	}
 	if !sameExecutionMode(cur.ExecutionMode, desired.ExecutionMode) {
 		lines = append(lines, fmt.Sprintf("  execution mode: %q -> %q", cur.ExecutionMode, desired.ExecutionMode))
+	}
+	if cur.DiscoveryIterations != desired.DiscoveryIterations {
+		lines = append(lines, fmt.Sprintf("  discovery iterations: %d -> %d", cur.DiscoveryIterations, desired.DiscoveryIterations))
 	}
 	if !sameStringSet(cur.DependencyIDs, desired.DependencyIDs) {
 		lines = append(lines, fmt.Sprintf("  dependencies: [%s] -> [%s]", strings.Join(cur.DependencyIDs, ", "), strings.Join(desired.DependencyIDs, ", ")))

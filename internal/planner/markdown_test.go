@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
@@ -108,6 +109,38 @@ func TestPlanFromMarkdownExecutionMode(t *testing.T) {
 	}
 	if plan.Stages[0].ExecutionMode != domain.ExecutionVerifyFirst {
 		t.Errorf("execution mode = %q, want %q (normalized)", plan.Stages[0].ExecutionMode, domain.ExecutionVerifyFirst)
+	}
+}
+
+// TestPlanFromMarkdownDiscoveryIterations proves a per-stage discovery allowance is read
+// from the rendered shape, validates, and round-trips through RenderMarkdown unchanged,
+// so two stages in one plan can declare different allowances.
+func TestPlanFromMarkdownDiscoveryIterations(t *testing.T) {
+	doc := "# Implementation Plan\n\n## Project\n\nP\n\n## Summary\n\nS\n\n## S001 — Explore\n\nRead widely.\n\n### Dependencies\n\nNone\n\n### Acceptance Criteria\n\n- done\n\n### Discovery iterations\n\n30 — a multi-package task.\n"
+	plan, err := PlanFromMarkdown(doc)
+	if err != nil {
+		t.Fatalf("PlanFromMarkdown failed: %v", err)
+	}
+	if len(plan.Stages) != 1 {
+		t.Fatalf("stages = %d, want 1", len(plan.Stages))
+	}
+	if plan.Stages[0].DiscoveryIterations != 30 {
+		t.Fatalf("discovery iterations = %d, want 30", plan.Stages[0].DiscoveryIterations)
+	}
+	if err := plan.Validate(); err != nil {
+		t.Fatalf("a plan with a discovery allowance must validate: %v", err)
+	}
+
+	rendered := plan.RenderMarkdown()
+	if !strings.Contains(rendered, "### Discovery iterations") {
+		t.Errorf("rendered plan should carry the discovery section:\n%s", rendered)
+	}
+	got, err := PlanFromMarkdown(rendered)
+	if err != nil {
+		t.Fatalf("re-parse failed: %v", err)
+	}
+	if got.Stages[0].DiscoveryIterations != 30 {
+		t.Errorf("round-tripped discovery iterations = %d, want 30", got.Stages[0].DiscoveryIterations)
 	}
 }
 
@@ -253,6 +286,40 @@ func TestCompilePrefersDeterministic(t *testing.T) {
 func TestCompileRequiresAgentForFallback(t *testing.T) {
 	if _, err := New(nil).Compile(context.Background(), "not a plan"); err == nil {
 		t.Error("expected an error when there is no agent to normalize")
+	}
+}
+
+// TestValidateRejectsBadDiscoveryIterations proves an invalid per-task allowance fails
+// the plan loudly rather than reaching execution: a negative value and a value above
+// the maximum are both rejected.
+func TestValidateRejectsBadDiscoveryIterations(t *testing.T) {
+	base := func() *Plan {
+		return &Plan{
+			Project: "P",
+			Summary: "S",
+			Stages: []Stage{{
+				ID: "S001", Title: "T", Objective: "O",
+				AcceptanceCriteria: []string{"ok"},
+			}},
+		}
+	}
+
+	negative := base()
+	negative.Stages[0].DiscoveryIterations = -3
+	if err := negative.Validate(); err == nil {
+		t.Error("a negative discovery_iterations must be rejected")
+	}
+
+	excessive := base()
+	excessive.Stages[0].DiscoveryIterations = budget.MaxDiscoveryIterations + 1
+	if err := excessive.Validate(); err == nil {
+		t.Error("a discovery_iterations above the maximum must be rejected")
+	}
+
+	atMax := base()
+	atMax.Stages[0].DiscoveryIterations = budget.MaxDiscoveryIterations
+	if err := atMax.Validate(); err != nil {
+		t.Errorf("the maximum discovery_iterations must validate: %v", err)
 	}
 }
 

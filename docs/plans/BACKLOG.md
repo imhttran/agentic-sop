@@ -160,17 +160,22 @@ roughly the same amount of discovery before mutation.
 
 ### Resolution
 
-The allowance is now a canonical, operator-configurable, bounded execution limit rather
-than a hard-coded window — deliberately **not** a per-model table (no
-`Codex = 18 / DeepSeek = 12 / Nemotron = 10` hardcoding):
+The allowance is now a canonical, bounded execution limit with a precedence chain —
+deliberately **not** a per-model table (no `Codex = 18 / DeepSeek = 12 / Nemotron = 10`
+hardcoding):
 
-- `internal/budget` carries `DiscoveryIterations` (default `12`, the historical
-  window), overridable with `SOP_OLLAMA_DISCOVERY_ITERATIONS`, so an unconfigured project
-  is unchanged.
+- **Task override → operator environment → built-in default.** A plan stage or task
+  file may declare its own `discovery_iterations` (carried through the persisted task
+  and the agent request for that invocation only, so it never leaks into another
+  task); absent it, `SOP_OLLAMA_DISCOVERY_ITERATIONS` applies; absent that, the built-in
+  default (`12`, the historical window) applies, so an unconfigured project is
+  unchanged.
+- `internal/budget` carries `DiscoveryIterations` (default `12`), overridable with
+  `SOP_OLLAMA_DISCOVERY_ITERATIONS`; a per-task value is bounded by the same limits.
 - It is bounded: a malformed value keeps the base, a value below
   `MinDiscoveryIterations` is raised, a value above `MaxDiscoveryIterations` is clamped,
-  and the effective window is always capped strictly below the capability's hard
-  iteration ceiling.
+  a negative or above-maximum plan/task value fails validation loudly, and the effective
+  window is always capped strictly below the capability's hard iteration ceiling.
 - The capability policy (`DiscoveryWindow`) resolves it once per invocation; the
   existing discovery/stale machinery (`observeDiscovery`, `mutationConvergenceRequired`,
   `staleLimitFor`) reads that single value, so a widened allowance lets a discovery-heavy
@@ -182,7 +187,11 @@ than a hard-coded window — deliberately **not** a per-model table (no
 
 Evidence: `internal/budget/budget_test.go` (bounds, clamp, base preservation),
 `internal/ollamaagent/discovery_budget_test.go` (widened/narrow allowances move the
-no-progress stop point but stay bounded; provider-agnostic),
+no-progress stop point but stay bounded; per-invocation isolation; precedence;
+provider-agnostic), `internal/cli/discovery_budget_cli_test.go` (two tasks in one run
+reach the agent with different allowances and none leaks), `internal/store` (column
+round-trip and migration), `internal/planner` and `internal/taskfile` (parse/render and
+validation), `internal/planflow` (a discovery change is material),
 `internal/ollamaagent/policy_test.go`, and the `evals/budgets/` fixtures.
 
 ## Earlier multi-package discovery observations

@@ -703,14 +703,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		}
 		implStop := rec.Measure(perf.StageImplement)
 		impl, err := a.Generate(ctx, agent.Request{
-			Capability:         agent.Implement,
-			AcceptanceCriteria: spec.AcceptanceCriteria,
-			ValidationCommands: completionValidationCommands(cfg),
-			Task:               spec.Render(),
-			Input:              input,
-			Deliverables:       reports,
-			RawOutputEvidence:  rawOutputEvidence(spec),
-			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
+			Capability:          agent.Implement,
+			AcceptanceCriteria:  spec.AcceptanceCriteria,
+			ValidationCommands:  completionValidationCommands(cfg),
+			Task:                spec.Render(),
+			Input:               input,
+			Deliverables:        reports,
+			RawOutputEvidence:   rawOutputEvidence(spec),
+			DiscoveryIterations: spec.DiscoveryIterations,
+			OutputRequirements:  "Implement the plan in the working tree and summarize the changes.",
 		})
 		implStop()
 		rec.AgentCall()
@@ -992,14 +993,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		rec.InputAssembled(0, len(fixInput))
 		fixStop := rec.Measure(perf.StageFix)
 		fix, err := a.Generate(ctx, agent.Request{
-			Capability:         agent.Fix,
-			AcceptanceCriteria: spec.AcceptanceCriteria,
-			ValidationCommands: completionValidationCommands(cfg),
-			Task:               spec.Render(),
-			Input:              fixInput,
-			Deliverables:       reports,
-			RawOutputEvidence:  rawOutputEvidence(spec),
-			OutputRequirements: "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
+			Capability:          agent.Fix,
+			AcceptanceCriteria:  spec.AcceptanceCriteria,
+			ValidationCommands:  completionValidationCommands(cfg),
+			Task:                spec.Render(),
+			Input:               fixInput,
+			Deliverables:        reports,
+			RawOutputEvidence:   rawOutputEvidence(spec),
+			DiscoveryIterations: spec.DiscoveryIterations,
+			OutputRequirements:  "Fix the failing checks and blocking findings in the working tree and summarize the changes.",
 		})
 		fixStop()
 		rec.AgentCall()

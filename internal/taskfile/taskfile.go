@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -36,6 +37,12 @@ type Spec struct {
 	// default). An unrecognized value is ignored rather than failing, so an
 	// unrelated "Execution" section cannot break a task file.
 	ExecutionMode domain.ExecutionMode
+	// DiscoveryIterations is the optional per-task discovery allowance (IMPLEMENT/FIX
+	// model turns of credited repository discovery before non-mutating turns become
+	// stale). Zero or absent keeps the operator environment allowance and the built-in
+	// default. A non-numeric or non-positive value is ignored, so it cannot unbound a
+	// run.
+	DiscoveryIterations int
 }
 
 var (
@@ -128,6 +135,14 @@ func Parse(data []byte) (*Spec, error) {
 					spec.ExecutionMode = mode
 				}
 			}
+		case "discovery iterations", "discovery iteration", "discovery budget", "discovery allowance":
+			if v := firstText(sec.lines); v != "" {
+				// The value may carry a trailing note ("24 — widened for multi-package work");
+				// take the leading token so a documented value still parses.
+				if n, err := strconv.Atoi(strings.Fields(v)[0]); err == nil && n > 0 {
+					spec.DiscoveryIterations = n
+				}
+			}
 		}
 	}
 
@@ -171,6 +186,9 @@ func (s *Spec) Render() string {
 	writeList(&b, "Dependencies", s.Dependencies)
 	if s.ExecutionMode != "" {
 		fmt.Fprintf(&b, "\n## Execution\n\n- %s\n", s.ExecutionMode)
+	}
+	if s.DiscoveryIterations > 0 {
+		fmt.Fprintf(&b, "\n## Discovery iterations\n\n%d\n", s.DiscoveryIterations)
 	}
 	return strings.TrimRight(b.String(), "\n") + "\n"
 }

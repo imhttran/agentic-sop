@@ -200,20 +200,131 @@ func TestNarrowDiscoveryAllowanceStillTerminatesBounded(t *testing.T) {
 	}
 }
 
-// TestDiscoveryAllowanceIsProviderAgnostic proves the allowance is a deterministic
-// execution limit carried on the policy, not a model- or provider-derived value: the
-// same budget yields the same window regardless of the configured model, so no
-// per-model hardcoding is involved.
-func TestDiscoveryAllowanceIsProviderAgnostic(t *testing.T) {
-	b := budget.Defaults()
-	b.DiscoveryIterations = 20
-	want := policyFor(agent.Implement, b).DiscoveryWindow
-	for _, model := range []string{"deepseek-v4.1-flash:cloud", "codex", "nemotron", "some-other-model"} {
+// TestPerTaskDiscoveryAllowanceDoesNotLeakAcrossInvocations proves the per-task
+// allowance is applied to exactly one invocation: the SAME harness runs two
+// invocations with different allowances (as two tasks in one run would), each stops at
+// its own window plus the stale bound, and the second invocation's stop is unaffected
+// by the first's override. The two no-progress diagnostics record their own allowance.
+func TestPerTaskDiscoveryAllowanceDoesNotLeakAcrossInvocations(t *testing.T) {
+	const firstWindow = 20 // > default, < ceiling
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", firstWindow+maxNoProgressIterations+maxNoProgressIterations+implementNowAfter+8)
+
+	responses := make([]string, 0, 96)
+	for i := 0; i < 96; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	fake, srv := newFakeOllama(t, responses...)
+
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 500
+	cfg.Budget = budget.Defaults()
+
+	h := New(cfg, dir)
+
+	// Invocation 1: a task that declares its own widened allowance.
+	req1 := implementRequest()
+	req1.DiscoveryIterations = firstWindow
+	_, err1 := h.Execute(context.Background(), req1)
+	var stalled1 *noProgressError
+	if !errors.As(err1, &stalled1) {
+		t.Fatalf("invocation 1 err = %v, want *noProgressError", err1)
+	}
+	if got, want := fake.count(), firstWindow+maxNoProgressIterations; got != want {
+		t.Errorf("invocation 1 turns = %d, want %d", got, want)
+	}
+	firstTurns := fake.count()
+
+	// Invocation 2: a task that declares no allowance, on the SAME harness. It must
+	// stop at the built-in default window, not inherit invocation 1's override.
+	req2 := implementRequest()
+	_, err2 := h.Execute(context.Background(), req2)
+	var stalled2 *noProgressError
+	if !errors.As(err2, &stalled2) {
+		t.Fatalf("invocation 2 err = %v, want *noProgressError", err2)
+	}
+	if got, want := fake.count()-firstTurns, implementNowAfter+maxNoProgressIterations; got != want {
+		t.Errorf("invocation 2 turns = %d, want %d (the default window; the override must not leak)", got, want)
+	}
+
+	if want := fmt.Sprintf("discovery_allowance=%d", firstWindow); !strings.Contains(err1.Error(), want) {
+		t.Errorf("invocation 1 err = %q, want %s", err1.Error(), want)
+	}
+	if want := fmt.Sprintf("discovery_allowance=%d", implementNowAfter); !strings.Contains(err2.Error(), want) {
+		t.Errorf("invocation 2 err = %q, want %s", err2.Error(), want)
+	}
+}
+
+// TestTaskDiscoveryOverridePrecedence proves the precedence task override -> operator
+// environment allowance -> built-in default: a positive request value wins over the
+// configured operator allowance, and an absent request value falls back to the
+// operator allowance (not the built-in default).
+func TestTaskDiscoveryOverridePrecedence(t *testing.T) {
+	const operatorWindow = 8
+	newHarness := func(t *testing.T, dir string) *Harness {
+		t.Helper()
 		cfg := testConfig("http://127.0.0.1:0")
-		cfg.Model = model
-		cfg.Budget = b
-		if got := policyFor(agent.Implement, cfg.EffectiveBudget()).DiscoveryWindow; got != want {
-			t.Errorf("model %q discovery window = %d, want %d (the allowance must not depend on the model)", model, got, want)
-		}
+		cfg.Budget = budget.Defaults()
+		cfg.Budget.DiscoveryIterations = operatorWindow // the operator environment allowance
+		return New(cfg, dir)
+	}
+
+	// A task override wins over the operator allowance.
+	h := newHarness(t, t.TempDir())
+	req := implementRequest()
+	req.DiscoveryIterations = 20
+	if got := policyWindowForRequest(h, req); got != 20 {
+		t.Errorf("task override window = %d, want 20 (task wins over the operator allowance)", got)
+	}
+
+	// An absent task override falls back to the operator allowance, not the default.
+	req2 := implementRequest()
+	if got := policyWindowForRequest(h, req2); got != operatorWindow {
+		t.Errorf("absent override window = %d, want the operator allowance %d", got, operatorWindow)
+	}
+}
+
+// policyWindowForRequest resolves the discovery window the phased engine will use for
+// req under h's configuration, mirroring executePhased's override precedence without
+// running a model turn.
+func policyWindowForRequest(h *Harness, req agent.Request) int {
+	b := h.cfg.EffectiveBudget()
+	if req.DiscoveryIterations > 0 {
+		b.DiscoveryIterations = budget.ClampDiscovery(req.DiscoveryIterations)
+	}
+	return policyFor(req.Capability, b).DiscoveryWindow
+}
+
+// TestTaskDiscoveryOverrideIsBounded proves an invalid task value cannot bypass the
+// safety limits: an excessive override is clamped below the capability's hard ceiling,
+// so a no-progress run still terminates within the ceiling rather than running
+// unbounded, and the effective window never reaches the ceiling.
+func TestTaskDiscoveryOverrideIsBounded(t *testing.T) {
+	dir := t.TempDir()
+	seedToolFiles(t, dir, "pkg", maxIterationsImplement+maxNoProgressIterations+8)
+
+	responses := make([]string, 0, maxIterationsImplement+maxNoProgressIterations+4)
+	for i := 0; i < maxIterationsImplement+maxNoProgressIterations+4; i++ {
+		responses = append(responses, readToolCall(i))
+	}
+	fake, srv := newFakeOllama(t, responses...)
+
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 500
+	cfg.Budget = budget.Defaults()
+
+	h := New(cfg, dir)
+	req := implementRequest()
+	req.DiscoveryIterations = 1_000_000 // far beyond every bound
+
+	if got := policyWindowForRequest(h, req); got >= maxIterationsImplement {
+		t.Errorf("effective window = %d, want strictly below the %d ceiling", got, maxIterationsImplement)
+	}
+
+	if _, err := h.Execute(context.Background(), req); err == nil {
+		t.Fatal("an excessive override must still terminate, not run forever")
+	}
+	if got := fake.count(); got >= maxIterationsImplement {
+		t.Errorf("turns = %d, want strictly below the %d-iteration ceiling", got, maxIterationsImplement)
 	}
 }

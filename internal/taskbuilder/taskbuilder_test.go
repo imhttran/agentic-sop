@@ -75,6 +75,21 @@ func TestBuildCarriesExecutionMode(t *testing.T) {
 	}
 }
 
+func TestBuildCarriesDiscoveryIterations(t *testing.T) {
+	plan := validPlan()
+	plan.Stages[1].DiscoveryIterations = 24
+	tasks, err := Build(plan)
+	if err != nil {
+		t.Fatalf("Build failed: %v", err)
+	}
+	if tasks[0].DiscoveryIterations != 0 {
+		t.Errorf("S001 discovery iterations = %d, want 0 (no override)", tasks[0].DiscoveryIterations)
+	}
+	if tasks[1].DiscoveryIterations != 24 {
+		t.Errorf("S002 discovery iterations = %d, want 24", tasks[1].DiscoveryIterations)
+	}
+}
+
 func TestBuildInitializesWorkflowFields(t *testing.T) {
 	tasks, err := Build(validPlan())
 	if err != nil {

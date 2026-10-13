@@ -63,6 +63,15 @@ type Request struct {
 	// artifact), and it tells the agent that a summary or placeholder does not
 	// satisfy that requirement.
 	RawOutputEvidence bool `json:"raw_output_evidence,omitempty"`
+	// DiscoveryIterations, when positive, is the task-scoped discovery allowance for
+	// THIS invocation: how many model turns an unmutated IMPLEMENT/FIX run may spend
+	// on novel repository discovery before non-mutating turns become stale. It is
+	// caller-owned task data and overrides the operator environment allowance and the
+	// built-in default for this invocation only, so it can never leak into another
+	// task. Zero keeps the environment/default resolution. It is bounded by the same
+	// limits as the operator allowance and can never exceed the capability's hard
+	// iteration ceiling.
+	DiscoveryIterations int `json:"discovery_iterations,omitempty"`
 }
 
 // Validate rejects requests the transport must not send to a harness.

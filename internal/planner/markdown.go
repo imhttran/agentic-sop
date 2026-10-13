@@ -7,6 +7,7 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -169,6 +170,10 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 			// ("- done" then "  (already merged)"); take the mode itself.
 			if mode, ok := domain.ParseExecutionMode(executionModeValue(item)); ok {
 				cur.stage.ExecutionMode = mode
+			}
+		case "discovery iterations", "discovery iteration", "discovery budget", "discovery allowance":
+			if n, ok := discoveryValue(item); ok {
+				cur.stage.DiscoveryIterations = n
 			}
 		}
 	}
@@ -582,6 +587,10 @@ func (t *taskStage) stage() (Stage, error) {
 			if mode, ok := domain.ParseExecutionMode(executionModeValue(f.value)); ok {
 				s.ExecutionMode = mode
 			}
+		case "discovery iterations", "discovery iteration", "discovery budget", "discovery allowance":
+			if n, ok := discoveryValue(f.value); ok {
+				s.DiscoveryIterations = n
+			}
 		}
 	}
 	// The objective is the stage's prose: an explicit Objective, else the Scope, which
@@ -661,4 +670,15 @@ func executionModeValue(value string) string {
 		return strings.TrimSpace(value[:cut])
 	}
 	return strings.TrimSpace(value)
+}
+
+// discoveryValue parses a per-task discovery allowance from a plan field, tolerating a
+// trailing note ("40 — widened for multi-package work"). A non-positive or
+// non-numeric value is ignored so a malformed field cannot unbound a run.
+func discoveryValue(value string) (int, bool) {
+	n, err := strconv.Atoi(executionModeValue(value))
+	if err != nil || n <= 0 {
+		return 0, false
+	}
+	return n, true
 }

@@ -163,6 +163,28 @@ func TestEmphasisChangeInSemanticsIsMaterial(t *testing.T) {
 	}
 }
 
+// TestDiscoveryIterationsChangeIsMaterial proves a change to a task's discovery
+// allowance is an executable-semantics change, so it reconciles like any other
+// definition change and is never silently ignored.
+func TestDiscoveryIterationsChangeIsMaterial(t *testing.T) {
+	base := &domain.Task{ID: "S001", Title: "T", Objective: "Do it.", AcceptanceCriteria: "- x"}
+	changed := *base
+	changed.DiscoveryIterations = 24
+
+	if equivalentExecutedChange(base, &changed) {
+		t.Error("a discovery-allowance change is material")
+	}
+	if sameTaskDefinition(base, &changed) {
+		t.Error("sameTaskDefinition must treat a discovery-allowance change as different")
+	}
+	if !sameTaskDefinition(base, base) {
+		t.Error("identical task definitions must compare equal")
+	}
+	if definitionHash(base) == definitionHash(&changed) {
+		t.Error("definitionHash must differ when the discovery allowance differs")
+	}
+}
+
 // TestEmphasisFoldIsDeterministicWithoutAgent proves the deterministic comparison
 // folds emphasis with no agent configured, demonstrating provider/model neutrality.
 func TestEmphasisFoldIsDeterministicWithoutAgent(t *testing.T) {

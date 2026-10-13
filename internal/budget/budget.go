@@ -100,6 +100,24 @@ func Defaults() Budget {
 	}
 }
 
+// ClampDiscovery bounds a task- or operator-supplied discovery allowance to
+// [MinDiscoveryIterations, MaxDiscoveryIterations]. A non-positive value returns the
+// built-in default, because a discovery allowance is never zero (zero means "unset").
+// It is the single place a caller clamps an explicit allowance, so the task, operator,
+// and default paths cannot drift.
+func ClampDiscovery(n int) int {
+	if n <= 0 {
+		return DefaultDiscoveryIterations
+	}
+	if n < MinDiscoveryIterations {
+		return MinDiscoveryIterations
+	}
+	if n > MaxDiscoveryIterations {
+		return MaxDiscoveryIterations
+	}
+	return n
+}
+
 // Resolve returns base with the operator environment overrides applied. base lets
 // a caller start from a non-default value (for example a Config that already
 // carries a tool-call limit), so integration does not silently reset it. A value

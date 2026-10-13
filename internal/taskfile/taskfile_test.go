@@ -203,6 +203,40 @@ func TestParseIgnoresUnknownExecutionMode(t *testing.T) {
 	}
 }
 
+func TestParseDiscoveryIterations(t *testing.T) {
+	doc := "# T001 — Explore\n\n## Objective\n\nWiden discovery.\n\n## Discovery iterations\n\n24 — a multi-package task needs more exploration.\n"
+	spec, err := Parse([]byte(doc))
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+	if spec.DiscoveryIterations != 24 {
+		t.Errorf("DiscoveryIterations = %d, want 24", spec.DiscoveryIterations)
+	}
+	// The value round-trips through Render and Parse.
+	reparsed, err := Parse([]byte(spec.Render()))
+	if err != nil {
+		t.Fatalf("Parse(Render) failed: %v", err)
+	}
+	if reparsed.DiscoveryIterations != 24 {
+		t.Errorf("reparsed DiscoveryIterations = %d, want 24", reparsed.DiscoveryIterations)
+	}
+}
+
+func TestParseIgnoresInvalidDiscoveryIterations(t *testing.T) {
+	// A non-numeric or non-positive allowance must be ignored, so it can never unbound
+	// a run; the task keeps the default resolution (0).
+	for _, value := range []string{"many", "0", "-4"} {
+		doc := "# T001 — Do work\n\n## Discovery iterations\n\n" + value + "\n"
+		spec, err := Parse([]byte(doc))
+		if err != nil {
+			t.Fatalf("Parse(%q) failed: %v", value, err)
+		}
+		if spec.DiscoveryIterations != 0 {
+			t.Errorf("Parse(%q) DiscoveryIterations = %d, want 0", value, spec.DiscoveryIterations)
+		}
+	}
+}
+
 func TestRenderExecutionModeRoundTrips(t *testing.T) {
 	spec := &Spec{Title: "Verify boundary", ExecutionMode: domain.ExecutionVerifyFirst}
 	rendered := spec.Render()
