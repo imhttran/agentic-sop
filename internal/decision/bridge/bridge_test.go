@@ -393,3 +393,29 @@ func TestRequestJSONShape(t *testing.T) {
 		t.Fatalf("request JSON = %s", data)
 	}
 }
+
+// TestInterpretPassesAdapterDiagnostics proves optional adapter diagnostics (for
+// example the serving provider of a failover chain) pass through as advisory
+// evidence, never overriding the class-only keys, and never changing the decision.
+func TestInterpretPassesAdapterDiagnostics(t *testing.T) {
+	b := mustBuild(t, testRegistry(), decision.Request{UseCase: "complexity", Subject: "s"})
+	out, err := b.Interpret(Result{
+		Provider: "demo",
+		Answers:  map[string]Answer{"complexity": {Type: TypeChoice, Choice: "high", Confidence: fptr(0.9)}},
+		Diagnostics: map[string]string{
+			"served_provider": "nimble", "fallback": "primary unavailable", "profile": "spoof",
+		},
+	})
+	if err != nil {
+		t.Fatalf("Interpret: %v", err)
+	}
+	if out.Diagnostics["served_provider"] != "nimble" || out.Diagnostics["fallback"] == "" {
+		t.Errorf("adapter diagnostics not passed through: %v", out.Diagnostics)
+	}
+	if out.Diagnostics["profile"] != "demo" {
+		t.Errorf("profile = %q, want demo (adapter must not override class-only keys)", out.Diagnostics["profile"])
+	}
+	if out.Choice != decision.High {
+		t.Errorf("choice = %v, want High (diagnostics must not change the decision)", out.Choice)
+	}
+}

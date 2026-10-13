@@ -513,3 +513,38 @@ func TestDecisionEvidenceLivePathEscalates(t *testing.T) {
 		})
 	}
 }
+
+// TestDecisionEvidenceRecordsAdvisoryAttribution proves the diagnostic-only fields
+// record the serving provider / fallback reason (from adapter diagnostics) and that
+// they never change the governed decision.
+func TestDecisionEvidenceRecordsAdvisoryAttribution(t *testing.T) {
+	ev := decision.Decision{Choice: decision.Low, Confidence: 0.9, Metadata: map[string]string{
+		"served_provider": "nimble", "fallback": "primary unavailable",
+	}}
+	doc := newDecisionEvidenceDoc("benign", "", ev)
+	if doc.ServedProvider != "nimble" || doc.FallbackReason != "primary unavailable" {
+		t.Fatalf("attribution not recorded: %+v", doc)
+	}
+	doc.LatencyMS = 12 // set by the caller after the provider call
+
+	in := decisionEvidenceResult(autoFixClassification())
+	out := applyDecisionEvidence(context.Background(), decisionEvidenceConfig(true),
+		decisionEvidenceDeps(&fakeDecisionProvider{name: "clef", dec: ev}, nil), benignSpec(), in)
+	if !reflect.DeepEqual(out, in) {
+		t.Fatalf("advisory attribution must not change the governed decision:\n got %+v\nwant %+v", out, in)
+	}
+}
+
+// TestEvaluateAdvisoryDecisionDisabledIsDeterministic proves the advisory seam is
+// a strict no-op when the decision layer is disabled: no provider is consulted and
+// the final action equals the deterministic baseline.
+func TestEvaluateAdvisoryDecisionDisabledIsDeterministic(t *testing.T) {
+	cfg := config.Default() // decision layer off by default
+	out := EvaluateAdvisoryDecision(context.Background(), cfg, autoFixClassification(), benignSpec())
+	if out.Consulted {
+		t.Error("a disabled decision layer must not consult a provider")
+	}
+	if out.FinalAction != out.BaselineAction {
+		t.Errorf("final %q != baseline %q for a no-op advisory layer", out.FinalAction, out.BaselineAction)
+	}
+}

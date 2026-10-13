@@ -163,26 +163,35 @@ func decisionEvidenceEscalation(ctx context.Context, cfg config.Config, d deps, 
 	}
 	callCtx, cancel := context.WithTimeout(ctx, decisionEvidenceTimeout)
 	defer cancel()
+	started := time.Now()
 	dec, err := provider.Decide(callCtx, decisionEvidenceRequest(spec, cls))
+	// Observed provider-call latency, recorded as diagnostic-only evidence. It never
+	// influences the outcome.
+	latencyMS := int(time.Since(started).Milliseconds())
+	docAfterCall := func(outcomeClass, failureLabel string, dc decision.Decision) *decisionEvidenceDoc {
+		d := newDecisionEvidenceDoc(outcomeClass, failureLabel, dc)
+		d.LatencyMS = latencyMS
+		return d
+	}
 	if err != nil {
 		// Unavailable, timed out, cancelled, unsupported, indeterminate, malformed, or
 		// a process failure: never a success, never an approval. The governed baseline
 		// stands.
-		return autonomy.Decision{}, false, err, newDecisionEvidenceDoc("unavailable", decisionEvidenceFailureLabel(err), decision.Decision{})
+		return autonomy.Decision{}, false, err, docAfterCall("unavailable", decisionEvidenceFailureLabel(err), decision.Decision{})
 	}
 	// SOP owns validation: the provider is never trusted to validate its own result.
 	if err := decision.Validate(dec); err != nil {
 		// Rejected by SOP's validator: the canonical choice/confidence are NOT recorded,
 		// so a rejected result can never be read as accepted evidence.
-		return autonomy.Decision{}, false, err, newDecisionEvidenceDoc("rejected", decisionEvidenceFailureLabel(err), decision.Decision{})
+		return autonomy.Decision{}, false, err, docAfterCall("rejected", decisionEvidenceFailureLabel(err), decision.Decision{})
 	}
 	if !decisionEvidenceAdverse(dec) {
 		// Benign or lower-attention evidence adds nothing: a provider can never make
 		// SOP less conservative than the governed baseline. Confidence is evidence,
 		// never authorization, so a high-confidence benign choice still adds nothing.
-		return autonomy.Decision{}, false, nil, newDecisionEvidenceDoc("benign", "", dec)
+		return autonomy.Decision{}, false, nil, docAfterCall("benign", "", dec)
 	}
-	return autonomy.Decide(decisionEvidenceClassification(dec), cfg.AutonomyPolicy()), true, nil, newDecisionEvidenceDoc("accepted", "", dec)
+	return autonomy.Decide(decisionEvidenceClassification(dec), cfg.AutonomyPolicy()), true, nil, docAfterCall("accepted", "", dec)
 }
 
 // newDecisionEvidenceDoc builds a sanitized SEAM-004 evidence record. Choice and
@@ -200,6 +209,14 @@ func newDecisionEvidenceDoc(outcomeClass, failureLabel string, dec decision.Deci
 	if outcomeClass == "benign" || outcomeClass == "accepted" {
 		doc.Choice = string(dec.Choice)
 		doc.Confidence = dec.Confidence
+	}
+	// Advisory attribution from the adapter's diagnostics (via the bridge). Recorded
+	// only; SOP policy never reads it.
+	if v := strings.TrimSpace(dec.Metadata["served_provider"]); v != "" {
+		doc.ServedProvider = v
+	}
+	if v := strings.TrimSpace(dec.Metadata["fallback"]); v != "" {
+		doc.FallbackReason = v
 	}
 	return doc
 }
@@ -260,6 +277,12 @@ type decisionEvidenceDoc struct {
 	BaselineAction string  `json:"baseline_action,omitempty"`
 	FinalAction    string  `json:"final_action,omitempty"`
 	Escalated      bool    `json:"escalated"`
+	// Diagnostic-only attribution (DME-002): which backend served and how long the
+	// provider call took. These fields never influence a decision, transition, or
+	// approval, and are absent (UNAVAILABLE) when not observed.
+	ServedProvider string `json:"served_provider,omitempty"`
+	FallbackReason string `json:"fallback_reason,omitempty"`
+	LatencyMS      int    `json:"latency_ms,omitempty"`
 }
 
 // decisionEvidenceAdverse reports whether validated provider evidence adds
