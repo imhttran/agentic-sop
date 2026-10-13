@@ -46,6 +46,10 @@ type Config struct {
 	// SessionFile persists remembered-device sessions across restarts (owner-only
 	// permissions); empty keeps them in memory only.
 	SessionFile string
+	// Operator is the configured decision actor (SOP_CONTROLLER_OPERATOR). When set, it
+	// is recorded as the actor for approve/decline, so attribution does not depend on an
+	// editable browser field; empty leaves the browser-provided actor in use.
+	Operator string
 }
 
 // LoadEnvFiles mirrors the previous loader: a personal .env wins (existing env
@@ -110,6 +114,7 @@ func Load() Config {
 		AccessToken:       os.Getenv("SOP_CONTROLLER_TOKEN"),
 		SessionTTL:        durationOr("SOP_CONTROLLER_SESSION_TTL", 0),
 		SessionFile:       sessionFileEnv(),
+		Operator:          strings.TrimSpace(os.Getenv("SOP_CONTROLLER_OPERATOR")),
 	}
 	if !c.AllowNetwork && !isLoopback(c.Addr) {
 		log.Printf("[config] %q is not loopback; restricting to 127.0.0.1 (set SOP_CONTROLLER_ALLOW_NETWORK=true to allow)", c.Addr)

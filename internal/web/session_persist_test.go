@@ -103,6 +103,25 @@ func TestLogoutSurvivesRestart(t *testing.T) {
 	}
 }
 
+// TestSessionStoreReadyProbesWritability proves the startup probe distinguishes a disabled
+// store, a writable one, and an unwritable one, without creating the store itself.
+func TestSessionStoreReadyProbesWritability(t *testing.T) {
+	if SessionStoreReady("") {
+		t.Error("an empty file must report persistence disabled")
+	}
+	if !SessionStoreReady(filepath.Join(t.TempDir(), "sub", "sessions.json")) {
+		t.Error("a creatable path must report ready")
+	}
+	// A path whose parent is a regular file cannot be created (portable, no privileges).
+	blocker := filepath.Join(t.TempDir(), "afile")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if SessionStoreReady(filepath.Join(blocker, "sessions.json")) {
+		t.Error("a path under a regular file must report not ready")
+	}
+}
+
 // TestExpiredSessionNotRestored proves an already-expired persisted session is dropped on
 // load rather than resurrected.
 func TestExpiredSessionNotRestored(t *testing.T) {

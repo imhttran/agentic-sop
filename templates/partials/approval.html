@@ -1,75 +1,106 @@
 {{- /* CTRL011: Human approval boundary panel. Rendered ONLY when SOP reports an
-       actual approval boundary for this task (TaskDetail.Approval.Present). The
-       controller never decides that approval is required and never manufactures
-       an approval: it shows SOP's reported gate and delegates the approve/decline
-       ACTION to SOP's own application operation (`sop approve` / `sop decline`,
-       C2-002). When SOP reports no boundary the panel shows an explicit absence
-       and offers no control.
-       SOP validates the gate at command time and a stale decision is reported
-       as a conflict. The actor/note fields are forwarded as `--by` / `--note`. */ -}}
-{{$a := .Approval}}
-{{if $a.Present}}
+actual approval boundary for this task (TaskDetail.Approval.Present). The
+controller never decides that approval is required and never manufactures an
+approval: it shows SOP's reported gate and delegates the approve/decline ACTION
+to SOP's own application operation (`sop approve` / `sop decline`, C2-002). When
+SOP reports no boundary the panel shows an explicit absence and offers no
+control. SOP validates the gate at command time and a stale decision is reported
+as a conflict. The actor/note fields are forwarded as `--by` / `--note`. */ -}}
+{{$a := .Approval}} {{if $a.Present}}
 <dl class="facts approval-facts">
-  <div>
-    <dt>Gate</dt>
-    <dd><span class="badge s-blocked">{{$a.Kind}}</span></dd>
-  </div>
-  <div>
-    <dt>Task</dt>
-    <dd><code>{{$a.Target}}</code></dd>
-  </div>
-  {{if $a.Stage}}
-  <div>
-    <dt>Run stage</dt>
-    <dd><span class="badge {{stageClass $a.Stage}}">{{$a.Stage}}</span></dd>
-  </div>
-  {{end}}
-  {{if $a.Disposition}}
-  <div>
-    <dt>Disposition</dt>
-    <dd><span class="badge {{dispositionClass $a.Disposition}}">{{$a.Disposition}}</span></dd>
-  </div>
-  {{end}}
-  {{if $a.FinalGateRecorded}}
-  <div>
-    <dt>Final plan gate</dt>
-    <dd>{{$a.FinalGate}}</dd>
-  </div>
-  {{end}}
-</dl>
-{{if $a.Evidence}}<p class="muted small">SOP-reported reason: {{$a.Evidence}}</p>{{end}}
-<div class="actions">
-  <form
-    class="inline approval-form"
-    method="post"
-    action="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
-    hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
-    hx-target="#cmd"
-    hx-swap="innerHTML"
-  >
-    <input type="hidden" name="csrf" value="{{.CSRF}}" />
-    <input class="input" type="text" name="by" placeholder="by (actor, optional)" autocomplete="off" />
-    <textarea class="input decision-note" name="note" rows="1" placeholder="decision note (optional)" autocomplete="off"></textarea>
-    <div class="decision-buttons">
-      <button class="btn primary" type="submit" hx-disabled-elt="this">Approve (SOP gate)</button>
-      <button class="btn danger" type="submit" formaction="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline" hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline" hx-disabled-elt="this">Decline</button>
+    <div>
+        <dt>Gate</dt>
+        <dd><span class="badge s-blocked">{{$a.Kind}}</span></dd>
     </div>
-  </form>
+    <div>
+        <dt>Task</dt>
+        <dd><code>{{$a.Target}}</code></dd>
+    </div>
+    {{if $a.Stage}}
+    <div>
+        <dt>Run stage</dt>
+        <dd><span class="badge {{stageClass $a.Stage}}">{{$a.Stage}}</span></dd>
+    </div>
+    {{end}} {{if $a.Disposition}}
+    <div>
+        <dt>Disposition</dt>
+        <dd>
+            <span class="badge {{dispositionClass $a.Disposition}}"
+                >{{$a.Disposition}}</span
+            >
+        </dd>
+    </div>
+    {{end}} {{if $a.FinalGateRecorded}}
+    <div>
+        <dt>Final plan gate</dt>
+        <dd>{{$a.FinalGate}}</dd>
+    </div>
+    {{end}}
+</dl>
+{{if $a.Evidence}}
+<p class="muted small">SOP-reported reason: {{$a.Evidence}}</p>
+{{end}}
+<div class="actions">
+    <form
+        class="inline approval-form"
+        method="post"
+        action="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
+        hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/approve"
+        hx-target="#cmd"
+        hx-swap="innerHTML"
+    >
+        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+        {{if .Operator}}<input
+            class="input"
+            type="text"
+            value="{{.Operator}}"
+            readonly
+            aria-label="acting as {{.Operator}}"
+        />{{else}}<input
+            class="input"
+            type="text"
+            name="by"
+            placeholder="by (actor, optional)"
+            autocomplete="off"
+        />{{end}}
+        <textarea
+            class="input decision-note"
+            name="note"
+            rows="1"
+            placeholder="decision note (optional)"
+            autocomplete="off"
+        ></textarea>
+        <div class="decision-buttons">
+            <button class="btn primary" type="submit" hx-disabled-elt="this">
+                Approve (SOP gate)
+            </button>
+            <button
+                class="btn danger"
+                type="submit"
+                formaction="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline"
+                hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/decline"
+                hx-disabled-elt="this"
+            >
+                Decline
+            </button>
+        </div>
+    </form>
 </div>
 <div id="cmd"></div>
 <p class="muted small">
-  The controller does not approve work itself: the action is delegated to SOP's
-  application operation, which validates the gate at command time and records the
-  decision with SOP provenance. No <code>--run</code> is passed, so recording a
-  decision does not start execution. Declining writes nothing locally and
-  manufactures no failure; a rejected (stale) decision is reported as a conflict.
+    The controller does not approve work itself: the action is delegated to
+    SOP's application operation, which validates the gate at command time and
+    records the decision with SOP provenance. No <code>--run</code> is passed,
+    so recording a decision does not start execution. Declining writes nothing
+    locally and manufactures no failure; a rejected (stale) decision is reported
+    as a conflict.
 </p>
 {{else}}
 <p class="muted">
-  Approval: <span class="badge s-unavailable">{{unavailable}}</span>
-  <span class="small"
-    >SOP reports no human approval boundary for this task; no approval action is
-    offered.</span
-  >
+    Approval: <span class="badge s-unavailable">{{unavailable}}</span>
+    <span class="small"
+        >SOP reports no human approval boundary for this task; no approval
+        action is offered.</span
+    >
 </p>
 {{end}}

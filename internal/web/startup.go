@@ -21,14 +21,15 @@ type StartupURLs struct {
 }
 
 // SessionInfo describes remembered-device sessions for the startup banner: their lifetime
-// and whether they persist across restarts. It never carries a secret.
+// and the store that holds them. It never carries a secret.
 type SessionInfo struct {
 	// Lifetime is the effective session lifetime (already clamped).
 	Lifetime time.Duration
-	// Persisted reports whether sessions survive a controller restart.
-	Persisted bool
-	// File is the persistence path, shown only when Persisted is true.
+	// File is the configured persistence path ("" disables persistence).
 	File string
+	// PersistError is non-empty when File is set but its store is not writable, so the
+	// banner never claims a durability the controller cannot deliver.
+	PersistError string
 }
 
 // ResolveStartupURLs computes the URLs to advertise for a bound listener. It never
@@ -107,8 +108,13 @@ func StartupSummary(u StartupURLs, authEnabled bool, session SessionInfo) string
 
 // sessionLine describes the remembered-device session lifetime and store, without secrets.
 func sessionLine(s SessionInfo) string {
-	where := "in memory only (ends on restart)"
-	if s.Persisted && s.File != "" {
+	var where string
+	switch {
+	case s.File == "":
+		where = "in memory only (ends on restart)"
+	case s.PersistError != "":
+		where = "persistence unavailable (" + s.PersistError + "); in memory only"
+	default:
 		where = "persisted to " + s.File
 	}
 	return fmt.Sprintf("%s remembered, %s", formatLifetime(s.Lifetime), where)

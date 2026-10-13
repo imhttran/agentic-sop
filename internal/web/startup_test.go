@@ -113,9 +113,8 @@ func TestResolveStartupURLsScheme(t *testing.T) {
 func TestStartupSummaryHasNoSecrets(t *testing.T) {
 	u := ResolveStartupURLs(tcp("0.0.0.0", 8090), "http", true, []net.IP{net.ParseIP("192.168.86.249")})
 	out := StartupSummary(u, true, SessionInfo{
-		Lifetime:  30 * 24 * time.Hour,
-		Persisted: true,
-		File:      ".run/sessions.json",
+		Lifetime: 30 * 24 * time.Hour,
+		File:     ".run/sessions.json",
 	})
 	for _, want := range []string{
 		"SOP Controller started", "Local:      http://localhost:8090",
@@ -134,9 +133,13 @@ func TestStartupSummaryHasNoSecrets(t *testing.T) {
 			t.Errorf("summary must not contain %q:\n%s", forbidden, out)
 		}
 	}
-	// A non-persisted store is reported plainly, and disabled auth shows no session line.
+	// A non-persisted store is reported plainly; an unwritable one is called out; and
+	// disabled auth shows no session line.
 	if mem := StartupSummary(u, true, SessionInfo{Lifetime: time.Hour}); !strings.Contains(mem, "1h0m0s remembered, in memory only") {
 		t.Errorf("summary should describe an in-memory session store:\n%s", mem)
+	}
+	if bad := StartupSummary(u, true, SessionInfo{Lifetime: time.Hour, File: "/nope/s.json", PersistError: "store not writable"}); !strings.Contains(bad, "persistence unavailable (store not writable); in memory only") {
+		t.Errorf("summary must not claim durability when persistence fails:\n%s", bad)
 	}
 	if !strings.Contains(StartupSummary(u, false, SessionInfo{}), "Auth:       disabled") {
 		t.Errorf("summary should report disabled auth when no token is required")

@@ -26,6 +26,12 @@ import (
 // recorded-argv accessor so a test can assert the exact `sop approve`/
 // `sop decline` invocation the handler drove.
 func decisionServer(t *testing.T, sopBody string) (*httptest.Server, string, func() []string) {
+	return decisionServerOperator(t, sopBody, "")
+}
+
+// decisionServerOperator is decisionServer with a configured decision actor
+// (SOP_CONTROLLER_OPERATOR), for the attribution tests.
+func decisionServerOperator(t *testing.T, sopBody, operator string) (*httptest.Server, string, func() []string) {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, ".agent-sdlc")
@@ -69,7 +75,7 @@ func decisionServer(t *testing.T, sopBody string) (*httptest.Server, string, fun
 	if err != nil {
 		t.Fatal(err)
 	}
-	srv := httptest.NewServer(NewServer(Options{SOP: sop, Views: views, StaticFS: staticFS, Poll: time.Second, CommandTimeout: time.Minute}))
+	srv := httptest.NewServer(NewServer(Options{SOP: sop, Views: views, StaticFS: staticFS, Poll: time.Second, CommandTimeout: time.Minute, Operator: operator}))
 	t.Cleanup(srv.Close)
 	return srv, config.ProjectID(root), args
 }
@@ -156,6 +162,45 @@ func waitDecision(t *testing.T, srv *httptest.Server, project, task, verb string
 	}
 	t.Fatal("decision command did not finish")
 	return ""
+}
+
+// A configured decision actor (SOP_CONTROLLER_OPERATOR) is authoritative: a
+// browser-supplied actor field cannot impersonate another operator, and the note is
+// still preserved. Without it, the actor field is used (see
+// TestApproveDelegatesWithMetadata).
+func TestConfiguredOperatorOverridesActorField(t *testing.T) {
+	srv, id, args := decisionServerOperator(t, "", "svc-operator")
+	code, _ := postApproval(t, srv, id, "x1", "approve", "Impostor", "looks-good")
+	if code != http.StatusOK {
+		t.Fatalf("approve POST = %d, want 200", code)
+	}
+	waitDecision(t, srv, id, "x1", "approve")
+	got := args()
+	want := []string{"approve", "x1", "--by", "svc-operator", "--note", "looks-good"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Fatalf("sop argv = %v, want the configured operator %v", got, want)
+	}
+}
+
+// With a configured operator the approval form shows it read-only and offers no editable
+// actor field; without one the editable field remains (backwards compatible).
+func TestOperatorFieldRendersReadOnlyWhenConfigured(t *testing.T) {
+	srv, id, _ := decisionServerOperator(t, "", "svc-operator")
+	code, body := get(t, srv.URL+"/projects/"+id+"/tasks/x1")
+	if code != http.StatusOK {
+		t.Fatalf("task page = %d, want 200", code)
+	}
+	if strings.Contains(body, `name="by"`) {
+		t.Error("a configured operator must not render an editable actor field")
+	}
+	if !strings.Contains(body, "svc-operator") {
+		t.Error("the decision form must show the configured operator")
+	}
+
+	srv2, id2, _ := decisionServer(t, "")
+	if _, body2 := get(t, srv2.URL+"/projects/"+id2+"/tasks/x1"); !strings.Contains(body2, `name="by"`) {
+		t.Error("without a configured operator the editable actor field must remain")
+	}
 }
 
 // The approve control invokes exactly `sop approve <task-id>` and forwards the

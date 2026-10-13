@@ -50,10 +50,10 @@ Approval and reconciliation are **distinct human-decision domains**. They have
 distinct SOP-owned evidence and distinct delegated operations, and neither
 decision satisfies the other:
 
-| Domain | SOP-owned evidence | Delegated operation |
-| --- | --- | --- |
-| **Approval** — the task-level human gate | SOP-reported human classification / gate and stage (`NEEDS_HUMAN`, human classification kind, `WAITING_FOR_HUMAN`, human-`BLOCKED`) | `sop approve` / `sop decline` |
-| **Reconciliation** — the changed-executed-task decision | `sop reconcile <PLAN.md> --list-changed --json` | `sop reconcile <PLAN.md> --accept-changed <TASK_ID>` |
+| Domain                                                  | SOP-owned evidence                                                                                                                  | Delegated operation                                  |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------- |
+| **Approval** — the task-level human gate                | SOP-reported human classification / gate and stage (`NEEDS_HUMAN`, human classification kind, `WAITING_FOR_HUMAN`, human-`BLOCKED`) | `sop approve` / `sop decline`                        |
+| **Reconciliation** — the changed-executed-task decision | `sop reconcile <PLAN.md> --list-changed --json`                                                                                     | `sop reconcile <PLAN.md> --accept-changed <TASK_ID>` |
 
 - An approval decision MUST NOT be treated as satisfying a reconciliation
   decision, and a reconciliation decision MUST NOT be treated as satisfying an
@@ -77,6 +77,11 @@ decision satisfies the other:
   `sop decline <task-id> [--by NAME] [--note TEXT]` with no `--run`. A rejected
   (stale/not-applicable) decision MUST be surfaced as an explicit conflict, not
   a `500` and not a fabricated success.
+- Actor attribution MUST NOT treat a browser-editable field as a verified identity. When
+  `SOP_CONTROLLER_OPERATOR` is configured, the controller MUST record that actor for
+  approve/decline and ignore the form's actor field (the forms render it read-only);
+  otherwise the browser-provided actor is recorded as an unverified label. The decision
+  note MUST always be taken from the request and forwarded unchanged.
 
 ## Commit Gate
 

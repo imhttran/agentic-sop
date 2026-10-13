@@ -22,6 +22,9 @@ type Handlers struct {
 	discoveryReport config.DiscoveryReport
 	// accessToken is the configured SOP_CONTROLLER_TOKEN ("" when auth is off).
 	accessToken string
+	// operator is the configured decision actor (SOP_CONTROLLER_OPERATOR); when empty the
+	// browser-provided actor field is used. It is never a verified identity either way.
+	operator string
 	// sessions holds authenticated login sessions; loginLimiter throttles sign-ins.
 	sessions     *sessionStore
 	loginLimiter *attemptLimiter
@@ -33,6 +36,9 @@ type baseData struct {
 	Nav  string
 	// SignedIn reports an active login session, so the nav offers Sign out.
 	SignedIn bool
+	// Operator is the configured decision actor, so the decision forms can show it
+	// read-only instead of offering an editable actor field.
+	Operator string
 }
 
 type projectsPage struct {
@@ -103,13 +109,13 @@ func (h *Handlers) base(r *http.Request, nav string) baseData {
 			signedIn = h.sessions.valid(id)
 		}
 	}
-	return baseData{CSRF: csrfToken(r), Poll: h.poll, Nav: nav, SignedIn: signedIn}
+	return baseData{CSRF: csrfToken(r), Poll: h.poll, Nav: nav, SignedIn: signedIn, Operator: h.operator}
 }
 
 // baseForProject is base for a project fragment. r may be nil for an internal
 // projection, in which case CSRF is empty (the fragment only renders state).
 func (h *Handlers) baseForProject(project string) baseData {
-	return baseData{CSRF: "", Poll: h.poll, Nav: "projects"}
+	return baseData{CSRF: "", Poll: h.poll, Nav: "projects", Operator: h.operator}
 }
 
 func (h *Handlers) render(w http.ResponseWriter, status int, name string, data any) {

@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"sop-controller/internal/sopclient"
 )
@@ -43,10 +44,17 @@ func (h *Handlers) declineStatus(w http.ResponseWriter, r *http.Request) {
 }
 
 // approvalOptions reads the optional actor/note. They reach SOP as discrete argv
-// elements, never a shell string.
-func approvalOptions(r *http.Request) sopclient.DecisionOptions {
+// elements, never a shell string. When a decision actor is configured
+// (SOP_CONTROLLER_OPERATOR) it is authoritative and the browser-supplied field is
+// ignored: an editable browser field is a label, never a verified identity. The note is
+// always taken from the request.
+func (h *Handlers) approvalOptions(r *http.Request) sopclient.DecisionOptions {
+	by := strings.TrimSpace(h.operator)
+	if by == "" {
+		by = strings.TrimSpace(r.FormValue("by"))
+	}
 	return sopclient.DecisionOptions{
-		By:   r.FormValue("by"),
+		By:   by,
 		Note: r.FormValue("note"),
 	}
 }
@@ -65,7 +73,7 @@ func (h *Handlers) approvalCommand(w http.ResponseWriter, r *http.Request, verb 
 		h.notFound(w, r, "Task not found")
 		return
 	}
-	opts := approvalOptions(r)
+	opts := h.approvalOptions(r)
 	key := taskCommandKey(verb, taskID)
 	_, _ = h.runner.Start(project, key, func(ctx context.Context) (string, error) {
 		return fn(ctx, project, taskID, opts)

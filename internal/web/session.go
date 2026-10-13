@@ -92,6 +92,29 @@ func EffectiveSessionTTL(ttl time.Duration) time.Duration {
 	return ttl
 }
 
+// SessionStoreReady probes whether a remembered-device store at file is writable: its
+// parent directory is creatable and the path can be created. An empty file means
+// persistence is disabled. It probes with a sibling ".probe" file and never truncates or
+// disturbs an existing store, so the banner can report durability honestly.
+func SessionStoreReady(file string) bool {
+	if file == "" {
+		return false
+	}
+	if dir := filepath.Dir(file); dir != "" && dir != "." {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			return false
+		}
+	}
+	probe := file + ".probe"
+	f, err := os.OpenFile(probe, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		return false
+	}
+	_ = f.Close()
+	_ = os.Remove(probe)
+	return true
+}
+
 func newSessionStore(token string, ttl time.Duration, file string) *sessionStore {
 	s := &sessionStore{
 		ttl:      EffectiveSessionTTL(ttl),

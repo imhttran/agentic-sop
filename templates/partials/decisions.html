@@ -48,13 +48,19 @@ interpolated into a shell string. */ -}}
                     hx-swap="innerHTML"
                 >
                     <input type="hidden" name="csrf" value="{{$.CSRF}}" />
-                    <input
+                    {{if $.Operator}}<input
+                        class="input"
+                        type="text"
+                        value="{{$.Operator}}"
+                        readonly
+                        aria-label="acting as {{$.Operator}}"
+                    />{{else}}<input
                         class="input"
                         type="text"
                         name="by"
                         placeholder="by (actor, optional)"
                         autocomplete="off"
-                    />
+                    />{{end}}
                     <textarea
                         class="input decision-note"
                         name="note"

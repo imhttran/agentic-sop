@@ -58,6 +58,7 @@ func main() {
 		AccessToken:    cfg.AccessToken,
 		SessionTTL:     cfg.SessionTTL,
 		SessionFile:    cfg.SessionFile,
+		Operator:       cfg.Operator,
 		Discovery:      report,
 	})
 
@@ -68,14 +69,17 @@ func main() {
 		log.Fatalf("listen on %s: %v", cfg.Addr, err)
 	}
 	log.Printf("SOP Controller bound to %s (%d project(s), poll %s, attention %s)", ln.Addr(), len(roots), cfg.PollInterval, cfg.AttentionInterval)
+	session := web.SessionInfo{
+		Lifetime: web.EffectiveSessionTTL(cfg.SessionTTL),
+		File:     cfg.SessionFile,
+	}
+	if session.File != "" && !web.SessionStoreReady(session.File) {
+		session.PersistError = "store not writable"
+	}
 	fmt.Print(web.StartupSummary(
 		web.ResolveStartupURLs(ln.Addr(), "http", cfg.AllowNetwork, web.LANAddresses()),
 		cfg.AllowNetwork,
-		web.SessionInfo{
-			Lifetime:  web.EffectiveSessionTTL(cfg.SessionTTL),
-			Persisted: cfg.SessionFile != "",
-			File:      cfg.SessionFile,
-		},
+		session,
 	))
 	if err := http.Serve(ln, handler); err != nil {
 		log.Fatal(err)

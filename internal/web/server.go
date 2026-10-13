@@ -26,6 +26,9 @@ type Options struct {
 	// SessionFile persists remembered-device sessions across restarts; empty keeps them
 	// in memory only.
 	SessionFile string
+	// Operator is the configured decision actor; when set it is recorded for
+	// approve/decline instead of the browser-provided actor field.
+	Operator string
 	// Discovery feeds /discovery; zero renders an empty report.
 	Discovery config.DiscoveryReport
 }
@@ -34,6 +37,7 @@ type Options struct {
 func NewServer(opts Options) http.Handler {
 	h := &Handlers{sop: opts.SOP, views: opts.Views, poll: opts.Poll, attention: opts.Attention, runner: NewCommandRunner(opts.CommandTimeout), discoveryReport: opts.Discovery}
 	h.accessToken = opts.AccessToken
+	h.operator = opts.Operator
 	h.sessions = newSessionStore(opts.AccessToken, opts.SessionTTL, opts.SessionFile)
 	h.loginLimiter = newAttemptLimiter(loginMaxAttempts, loginWindow)
 

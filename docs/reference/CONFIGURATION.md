@@ -19,6 +19,7 @@ wins and is never overwritten; `.env.dev` only fills in for development).
 | `SOP_CONTROLLER_COMMAND_TIMEOUT` | `15m`                | Upper bound for a single SOP command (run, resume, validate, review)          |
 | `SOP_CONTROLLER_ALLOW_NETWORK`   | `false`              | Opt-in to binding a non-loopback address                                      |
 | `SOP_CONTROLLER_TOKEN`           | —                    | Required access token when network mode is on (Keychain-backed launcher)      |
+| `SOP_CONTROLLER_OPERATOR`        | —                    | Configured decision actor for approve/decline; empty uses the browser field   |
 | `SOP_CONTROLLER_SESSION_TTL`     | `720h`               | Remembered-device session lifetime; capped at 30 days (zero uses the default) |
 | `SOP_CONTROLLER_SESSION_FILE`    | `.run/sessions.json` | Persisted remembered-device sessions (owner-only); empty keeps them in memory |
 
@@ -40,6 +41,12 @@ wins and is never overwritten; `.env.dev` only fills in for development).
   `SOP_CONTROLLER_TOKEN` in the environment overrides the Keychain for that run. The token
   is used only as the controller's environment variable — never a command argument, never
   printed or logged. See [../guides/HTTPS-ACCESS.md](../guides/HTTPS-ACCESS.md).
+- `SOP_CONTROLLER_OPERATOR` names the actor recorded for approve/decline decisions.
+  When set, it is authoritative and the form's actor field is ignored (the forms render it
+  read-only), because an editable browser field is a label, never a verified identity. When
+  unset, the browser-provided actor is used as before. This is a single-operator
+  attribution label, not multi-user authentication. See
+  [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md).
 - `SOP_CONTROLLER_DISCOVERY_DEPTH` reads a positive integer; an empty,
   unparseable, or non-positive value falls back to the default.
 - `SOP_CONTROLLER_SESSION_TTL` bounds a remembered device. It is capped at **30
