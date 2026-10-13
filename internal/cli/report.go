@@ -101,6 +101,7 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	// a disabled JEV adds no noise. It is human-readable only.
 	writeEarlyReport(stdout, filepath.Join(runsRoot, id))
 	writeApprovalReport(stdout, dir, id)
+	writeWaiverReport(stdout, dir, id)
 	writePerformance(stdout, dir, doc)
 	// Read-only reuse-decision surfacing (VER-003). It renders the recorded
 	// evidence key, the reuse-vs-run decision, the answering store, the prior run,
@@ -138,6 +139,27 @@ func writeApprovalReport(w io.Writer, dir, taskID string) {
 		}
 		if d.LifecycleAction != "" {
 			fmt.Fprintf(w, "  %-12s %s\n", "Lifecycle:", d.LifecycleAction)
+		}
+	}
+}
+
+// writeWaiverReport renders any designated-approver waivers recorded for the task
+// (SOP-HARD-04) from the durable append-only audit, so a waived required criterion is
+// surfaced. It renders nothing when no waiver was recorded.
+func writeWaiverReport(w io.Writer, dir, taskID string) {
+	recs, err := readWaiverRecords(dir, taskID)
+	if err != nil || len(recs) == 0 {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Waivers:")
+	for _, r := range recs {
+		fmt.Fprintf(w, "  %-12s %s\n", "Criterion:", r.CriterionID)
+		fmt.Fprintf(w, "  %-12s %s\n", "Approver:", r.Approver)
+		fmt.Fprintf(w, "  %-12s %s\n", "Recorded:", r.RecordedAt)
+		fmt.Fprintf(w, "  %-12s %s\n", "Reason:", r.Reason)
+		if r.Scope != "" {
+			fmt.Fprintf(w, "  %-12s %s\n", "Scope:", r.Scope)
 		}
 	}
 }
