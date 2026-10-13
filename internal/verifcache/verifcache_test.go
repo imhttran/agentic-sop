@@ -129,7 +129,7 @@ func TestUnmarshalRejectsIncompatibleSchema(t *testing.T) {
 
 // TestUnmarshalCannotFabricateAHit proves a corrupt digest is recomputed, not trusted.
 func TestUnmarshalCannotFabricateAHit(t *testing.T) {
-	c, err := Unmarshal([]byte(`{"schema":"verifcache/1","entries":[{"identity":{"schema":"verifcache/1","repository":"repo-abc","command":"go test ./...","environment":"env-1","verifier":"sop/testrunner@1"},"digest":"deadbeef","passed":true,"source":"s"}]}`))
+	c, err := Unmarshal([]byte(`{"schema":"verifcache/2","entries":[{"identity":{"schema":"verifcache/2","repository":"repo-abc","command":"go test ./...","environment":"env-1","verifier":"sop/testrunner@1"},"digest":"deadbeef","passed":true,"source":"s"}]}`))
 	if err != nil {
 		t.Fatal(err)
 	}
