@@ -49,6 +49,10 @@ func TestReportDecisionsText(t *testing.T) {
 	}
 	for _, want := range []string{
 		"Decision telemetry (corpus 1 runs)",
+		"Model Selection",
+		"SMALL",
+		"LARGE",
+		"Total",
 		"model_tier_distribution",
 		"tier large: 1",
 		"jev_invocation",

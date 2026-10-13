@@ -191,6 +191,7 @@ is owned by the documents they link.
 - [reports/decision-telemetry/TEL-001-reconciliation.md](reports/decision-telemetry/TEL-001-reconciliation.md) — the Decision Telemetry reconciliation and metric register (TEL-001/TEL-002): what existing telemetry already records, the new decision dimensions with their numerator/denominator/coverage, and the two dimensions (adapter agreement, confidence) that stay UNAVAILABLE because nothing records them.
 - [reports/decision-telemetry/TEL-003-integration.md](reports/decision-telemetry/TEL-003-integration.md) — the TEL-003 decision-adapter integration: the `sop-decision-adapters` shadow harness emits a versioned `shadow-evidence.json` artifact, read read-only by `internal/runmetrics` to compute adapter invocation, agreement, confidence, latency, and invalid/indeterminate/timeout rates with explicit denominators. **Implemented** (both repositories).
 - [reports/decision-telemetry/TEL-006-cli-report.md](reports/decision-telemetry/TEL-006-cli-report.md) — the TEL-006 CLI: the opt-in, read-only `sop report --decisions [--format text\|json]` command over the `internal/runmetrics` aggregator, with sample output, coverage limits, and verification evidence.
+- [reports/decision-telemetry/TEL-008-model-selection.md](reports/decision-telemetry/TEL-008-model-selection.md) — the TEL-008 `Model Selection` percentage summary (SMALL/MEDIUM/LARGE counts and one-decimal percentages, explicit missing coverage) added to the `--decisions` text output; JSON and goldens unchanged.
 
 ## Historical Documentation
 

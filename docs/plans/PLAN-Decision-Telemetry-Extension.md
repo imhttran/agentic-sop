@@ -1,9 +1,10 @@
 # PLAN — Decision Telemetry Extension
 
 **Status:** COMPLETE — TEL-001 through TEL-007 are implemented on
-`feat/decision-telemetry` (TEL-003 spans `sop-decision-adapters` and `agentic-sop`).
-Verification (TEL-007) ran for the changed packages in both repositories, and the
-`--decisions` CLI (TEL-006) is covered by targeted CLI tests.
+`feat/decision-telemetry` (TEL-003 spans `sop-decision-adapters` and `agentic-sop`),
+plus TEL-008 (the `Model Selection` percentage summary). Verification (TEL-007) ran
+for the changed packages in both repositories, and the `--decisions` CLI (TEL-006)
+is covered by targeted CLI tests.
 
 **Primary repository:** agentic-sop
 **Related repositories:** sop-decision-adapters, sop-controller
@@ -96,3 +97,4 @@ aggregator remains unwired to any CLI command, as guarded by
 | TEL-005 | Done   | `decision_override_rate`, `decision_escalation_rate`                                                                                                                                                                                                                                             |
 | TEL-006 | Done   | `Aggregate.Decisions`, `RenderText`/`RenderDecisions`, and the opt-in read-only `sop report --decisions [--format text\|json]` (`internal/cli/report_decisions.go`); the unwired guard allows only that entry point                                                                              |
 | TEL-007 | Done   | `internal/runmetrics/decision_test.go`; gofmt/vet/build/race green                                                                                                                                                                                                                               |
+| TEL-008 | Done   | `Model Selection` percentage summary (SMALL/MEDIUM/LARGE counts + one-decimal percentages, explicit `Missing`) in `RenderDecisions`; text-only, JSON/goldens unchanged; see [TEL-008-model-selection.md](../reports/decision-telemetry/TEL-008-model-selection.md) |

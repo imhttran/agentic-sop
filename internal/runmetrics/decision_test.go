@@ -186,8 +186,8 @@ func TestAdapterMetricsFromEvidence(t *testing.T) {
 	}
 
 	lat := findDecision(t, agg, MetricAdapterLatency)
-	if lat.Numerator != 102 || lat.Denominator != 5 || lat.Value != "10" {
-		t.Errorf("adapter latency = %+v, want num=102 den=5 value=10 (p50)", lat)
+	if lat.Numerator != 5 || lat.Denominator != 5 || lat.Value != "10" {
+		t.Errorf("adapter latency = %+v, want num=5 den=5 value=10 (p50)", lat)
 	}
 	wantLat := []BreakdownEntry{
 		{Group: "latency", Key: "p50_ms", Count: 10},
@@ -280,5 +280,72 @@ func TestDecisionReproducibleAndRender(t *testing.T) {
 	}
 	if RenderText(first) != RenderText(second) {
 		t.Error("rendered text is not deterministic")
+	}
+}
+
+// TestRenderDecisionsModelSelection proves the Model Selection block reports the
+// SMALL/MEDIUM/LARGE counts with one-decimal percentages over the valid recorded
+// selections, in the fixed order, plus an explicit Missing line. It is derived from
+// the already-computed model_tier_distribution metric (no artifact is reread).
+func TestRenderDecisionsModelSelection(t *testing.T) {
+	agg := Aggregate{
+		CorpusRuns: 120,
+		Decisions: []MetricResult{{
+			Metric: MetricModelTier, Status: StatusPartial, Value: "100", Unit: "runs",
+			TotalRuns: 120, ValidMeasurements: 100, Numerator: 100, Denominator: 100,
+			Breakdown: []BreakdownEntry{
+				{Group: "tier", Key: "small", Count: 42},
+				{Group: "tier", Key: "medium", Count: 38},
+				{Group: "tier", Key: "large", Count: 20},
+			},
+		}},
+	}
+	out := RenderDecisions(agg)
+	if !strings.Contains(out, "Model Selection") {
+		t.Fatalf("missing Model Selection block:\n%s", out)
+	}
+	for _, want := range []string{"42.0%", "38.0%", "20.0%", "Total", "100", "Missing", "20"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("Model Selection missing %q:\n%s", want, out)
+		}
+	}
+	// Deterministic order SMALL < MEDIUM < LARGE.
+	si := strings.Index(out, "SMALL")
+	mi := strings.Index(out, "MEDIUM")
+	li := strings.Index(out, "LARGE")
+	if !(si < mi && mi < li) {
+		t.Errorf("tier order not SMALL,MEDIUM,LARGE:\n%s", out)
+	}
+	if RenderDecisions(agg) != out {
+		t.Error("Model Selection render is not deterministic")
+	}
+}
+
+// TestRenderDecisionsModelSelectionUnavailable proves a zero denominator renders the
+// tier percentages as UNAVAILABLE rather than 0%, and reports the whole corpus as
+// missing.
+func TestRenderDecisionsModelSelectionUnavailable(t *testing.T) {
+	agg := Aggregate{
+		CorpusRuns: 3,
+		Decisions: []MetricResult{{
+			Metric: MetricModelTier, Status: StatusPartial, Value: UNAVAILABLE,
+			TotalRuns: 3, UnavailableMeasurements: 3,
+		}},
+	}
+	out := RenderDecisions(agg)
+	start := strings.Index(out, "Model Selection")
+	if start < 0 {
+		t.Fatalf("missing Model Selection block:\n%s", out)
+	}
+	end := strings.Index(out[start:], "\n\n")
+	block := out[start : start+end]
+	if !strings.Contains(block, "UNAVAILABLE") {
+		t.Errorf("zero denominator should render UNAVAILABLE:\n%s", block)
+	}
+	if strings.Contains(block, "0.0%") {
+		t.Errorf("zero denominator must not render 0%%:\n%s", block)
+	}
+	if !strings.Contains(block, "Missing") || !strings.Contains(block, "3") {
+		t.Errorf("missing coverage should be reported:\n%s", block)
 	}
 }

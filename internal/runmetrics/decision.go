@@ -369,10 +369,73 @@ func RenderText(agg Aggregate) string {
 func RenderDecisions(agg Aggregate) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Decision telemetry (corpus %d runs)\n\n", agg.CorpusRuns)
+	renderModelSelection(&b, agg)
 	for _, r := range agg.Decisions {
 		renderMetric(&b, r)
 	}
 	return b.String()
+}
+
+// renderModelSelection renders the model-selection percentage summary: the
+// SMALL/MEDIUM/LARGE counts over the runs with a valid recorded model selection,
+// each as a one-decimal percentage, in the fixed small→medium→large order. It reuses
+// the already-computed model_tier_distribution metric (no artifact is reread and no
+// aggregation is duplicated): the denominator is that metric's denominator (the
+// valid recorded selections) and the counts come from its tier breakdown. Missing
+// coverage is reported separately, and a zero denominator renders UNAVAILABLE rather
+// than 0%.
+func renderModelSelection(b *strings.Builder, agg Aggregate) {
+	small, medium, large, den, missing := tierCounts(agg)
+
+	fmt.Fprintln(b, "Model Selection")
+	for _, row := range []struct {
+		name string
+		n    int
+	}{
+		{"SMALL", small},
+		{"MEDIUM", medium},
+		{"LARGE", large},
+	} {
+		if den > 0 {
+			fmt.Fprintf(b, "  %-8s %5d  (%.1f%%)\n", row.name, row.n, float64(row.n)/float64(den)*100)
+			continue
+		}
+		fmt.Fprintf(b, "  %-8s %5d  (UNAVAILABLE)\n", row.name, row.n)
+	}
+	fmt.Fprintf(b, "  %-8s %5d\n", "Total", den)
+	fmt.Fprintf(b, "  %-8s %5d  (no recorded selection)\n", "Missing", missing)
+	fmt.Fprintln(b)
+}
+
+// tierCounts reads the model_selection distribution from the already-computed
+// model_tier_distribution metric: the SMALL/MEDIUM/LARGE counts, the denominator
+// (valid recorded selections), and the missing count (runs with no usable
+// selection). It performs no I/O and rereads no artifact.
+func tierCounts(agg Aggregate) (small, medium, large, den, missing int) {
+	for _, r := range agg.Decisions {
+		if r.Metric != MetricModelTier {
+			continue
+		}
+		den = r.Denominator
+		missing = r.TotalRuns - r.ValidMeasurements
+		for _, e := range r.Breakdown {
+			if e.Group != "tier" {
+				continue
+			}
+			switch e.Key {
+			case "small":
+				small = e.Count
+			case "medium":
+				medium = e.Count
+			case "large":
+				large = e.Count
+			}
+		}
+		return small, medium, large, den, missing
+	}
+	// No model_tier_distribution metric (unreachable in practice): report the whole
+	// corpus as missing rather than fabricating a distribution.
+	return 0, 0, 0, 0, agg.CorpusRuns
 }
 
 // renderMetric writes one metric's summary line and breakdown.
