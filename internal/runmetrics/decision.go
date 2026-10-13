@@ -107,29 +107,38 @@ func decisionMetricFor(m Metric, ev []runEvidence, corpus int) MetricResult {
 		return r
 
 	case MetricOverride:
-		// Source: model-selection.json source=="cli" (a --model-class override).
-		// Present when the file exists; valid when it parsed and recorded a source.
-		present := count(ev, func(e runEvidence) bool { return e.hasModelSel })
-		valid := count(ev, func(e runEvidence) bool { return e.modelSelReadable && e.selSource != "" })
-		num := count(ev, func(e runEvidence) bool { return e.modelSelReadable && e.selSource == sourceCLI })
-		return rate(m, StatusPartial, corpus, present, valid, num, valid,
-			"numerator counts runs whose model-selection.json records source \"cli\" (an explicit --model-class override); a run without a recorded source is UNAVAILABLE")
-
-	case MetricEscalation:
-		// Sources: routing.json source=="escalation" (a recovery class escalation)
-		// or report.json decision==NEEDS_HUMAN (a human escalation). Present when
-		// either artifact exists; valid when a routing source or a terminal decision
-		// was recorded. Numerator counts a recorded escalation of either kind.
-		present := count(ev, func(e runEvidence) bool { return e.hasRouting || e.hasReport })
+		// Manual-override provenance is recorded in two places: routing.json source
+		// "manual_override" (the routing decision) and model-selection.json source "cli"
+		// (the model layer). An override is any run recording either. The denominator is
+		// every run that recorded provenance (a routing source or a selection source); a
+		// run that recorded neither is UNAVAILABLE.
+		present := count(ev, func(e runEvidence) bool { return e.hasModelSel || e.hasRouting })
 		valid := count(ev, func(e runEvidence) bool {
-			return (e.routingReadable && e.routingSource != "") || e.reportDecided
+			return (e.modelSelReadable && e.selSource != "") || (e.routingReadable && e.routingSource != "")
 		})
 		num := count(ev, func(e runEvidence) bool {
-			return (e.routingReadable && e.routingSource == sourceEscalation) ||
-				(e.reportDecided && e.approvalRequested)
+			return (e.routingReadable && e.routingSource == sourceManualOverride) ||
+				(e.modelSelReadable && e.selSource == sourceCLI)
 		})
 		return rate(m, StatusPartial, corpus, present, valid, num, valid,
-			"numerator counts a recorded recovery escalation (routing.json source \"escalation\") or a NEEDS_HUMAN terminal decision; absence is UNAVAILABLE, never a recorded zero escalation")
+			"numerator counts runs recording a manual override in either the routing decision (routing.json source \"manual_override\") or the model selection (model-selection.json source \"cli\"); the denominator is runs that recorded a routing or selection source, so an unrecorded override is UNAVAILABLE")
+
+	case MetricEscalation:
+		// Model-class escalation ONLY (Phase 5 recovery): a routing decision with source
+		// "escalation", or an escalated retry recorded under attempts/ (attempt >= 2). A
+		// human approval is NOT an escalation and is reported separately by
+		// human_approval_frequency. The denominator is every run that recorded
+		// escalation-relevant evidence (a routing decision or attempt records); a run with
+		// neither is UNAVAILABLE.
+		present := count(ev, func(e runEvidence) bool { return e.hasRouting || e.hasAttemptRecords })
+		valid := count(ev, func(e runEvidence) bool {
+			return (e.routingReadable && e.routingSource != "") || e.attemptRecordsReadable
+		})
+		num := count(ev, func(e runEvidence) bool {
+			return (e.routingReadable && e.routingSource == sourceEscalation) || e.escalatedAttempts > 0
+		})
+		return rate(m, StatusPartial, corpus, present, valid, num, valid,
+			"numerator counts a recorded model escalation (routing.json source \"escalation\" or an escalated retry: attempts/ attempt >= 2). Human approvals are not escalations and are reported by human_approval_frequency; absence is UNAVAILABLE, never a recorded zero")
 
 	case MetricJEVInvoke:
 		// Source: metrics.json JEV.Invocations. Present when metrics.json exists;
@@ -339,8 +348,9 @@ func validTier(s string) bool {
 // artifacts record, so the aggregator matches them by value rather than importing
 // a provider- or model-specific package.
 const (
-	sourceCLI        = "cli"
-	sourceEscalation = "escalation"
+	sourceCLI            = "cli"
+	sourceEscalation     = "escalation"
+	sourceManualOverride = "manual_override"
 )
 
 // RenderText renders a deterministic, human-readable summary of an aggregate: the

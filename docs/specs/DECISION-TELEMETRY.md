@@ -137,6 +137,20 @@ The aggregator MUST stay off the production execution path: exactly one CLI file
 routing, or approval file may. The seven RM-002 metrics and the decision dimensions
 are unchanged in definition and order.
 
+## Metric semantics (TEL-009)
+
+- `decision_escalation_rate` measures **model-class escalation only**: a routing
+  decision with source `escalation`, or an escalated retry recorded under `attempts/`
+  (`attempt >= 2`). A human approval is NOT an escalation and is reported solely by
+  `human_approval_frequency`.
+- `decision_override_rate` reads a manual override from either provenance —
+  `routing.json source == "manual_override"` or `model-selection.json source ==
+"cli"` — over the runs that recorded a routing or selection source.
+- `retry_efficiency` is a **rate** (a percentage of eligible runs), not a bare count.
+- `model-selection.json` is versioned (`schema_version: 1`). A historical artifact with
+  no version is the initial version; an unknown version is `UNAVAILABLE`, never
+  interpreted.
+
 ## Invariants
 
 These invariants are normative and MUST hold for any implementation.

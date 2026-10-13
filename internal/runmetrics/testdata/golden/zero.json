@@ -56,8 +56,8 @@
     {
       "metric": "retry_efficiency",
       "status": "PARTIAL",
-      "value": "0",
-      "unit": "runs",
+      "value": "0.0",
+      "unit": "%",
       "total_runs": 1,
       "eligible_runs": 1,
       "artifacts_present": 1,
@@ -66,12 +66,7 @@
       "numerator": 0,
       "denominator": 1,
       "coverage_pct": 100,
-      "sources": [
-        "attempt.txt",
-        "continuations.txt",
-        "classification.json"
-      ],
-      "note": "numerator counts runs with a positive escalation signal (nonempty attempt.txt, continuations.txt \u003e 0, or classification.json); absence is UNAVAILABLE, never 0 retries, and continuations.txt of 0 is a recorded zero"
+      "note": "retry rate: the share of eligible runs (those carrying retry evidence) that recorded a retry signal (nonempty attempt.txt, continuations.txt \u003e 0, or classification.json); absence is UNAVAILABLE, never 0 retries, and continuations.txt of 0 is a recorded zero"
     },
     {
       "metric": "human_approval_frequency",
@@ -154,22 +149,22 @@
       "numerator": 0,
       "denominator": 0,
       "coverage_pct": 0,
-      "note": "numerator counts runs whose model-selection.json records source \"cli\" (an explicit --model-class override); a run without a recorded source is UNAVAILABLE"
+      "note": "numerator counts runs recording a manual override in either the routing decision (routing.json source \"manual_override\") or the model selection (model-selection.json source \"cli\"); the denominator is runs that recorded a routing or selection source, so an unrecorded override is UNAVAILABLE"
     },
     {
       "metric": "decision_escalation_rate",
       "status": "PARTIAL",
-      "value": "0.0",
+      "value": "UNAVAILABLE",
       "unit": "%",
       "total_runs": 1,
-      "eligible_runs": 1,
-      "artifacts_present": 1,
-      "valid_measurements": 1,
-      "unavailable_measurements": 0,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
       "numerator": 0,
-      "denominator": 1,
-      "coverage_pct": 100,
-      "note": "numerator counts a recorded recovery escalation (routing.json source \"escalation\") or a NEEDS_HUMAN terminal decision; absence is UNAVAILABLE, never a recorded zero escalation"
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator counts a recorded model escalation (routing.json source \"escalation\" or an escalated retry: attempts/ attempt \u003e= 2). Human approvals are not escalations and are reported by human_approval_frequency; absence is UNAVAILABLE, never a recorded zero"
     },
     {
       "metric": "jev_invocation",
@@ -414,6 +409,7 @@
     "adapter_latency",
     "adapter_timeout_failure",
     "decision_confidence",
+    "decision_escalation_rate",
     "decision_override_rate",
     "model_tier_distribution",
     "routing_finding_severity",

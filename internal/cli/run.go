@@ -1752,12 +1752,28 @@ func modelSelectionDoc(routing model.Result) *model.Selection {
 }
 
 // writeModelSelectionArtifact persists the resolved model-routing evidence as a
-// run artifact beside report.json, so the selected class/provider/model, the
-// layer that chose it, whether a fallback was used, and why are all durable.
-// It is written before the lifecycle so it survives a run that stops early. It
-// is evidence only: nothing reads it back to drive a decision.
+// versioned run artifact beside report.json, so the selected class/provider/model,
+// the layer that chose it, whether a fallback was used, and why are all durable. It
+// is written before the lifecycle so it survives a run that stops early. It is
+// evidence only: nothing reads it back to drive a decision.
 func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection) {
-	writeRunJSON(rn, "model-selection.json", sel)
+	art := runpkg.ModelSelectionArtifact{
+		SchemaVersion: runpkg.ModelSelectionVersion,
+		Class:         string(sel.Class),
+		Provider:      sel.Provider,
+		Model:         sel.Model,
+		Locality:      string(sel.Locality),
+		Source:        string(sel.Source),
+		Fallback:      sel.Fallback,
+		Reason:        sel.Reason,
+	}
+	// Fail closed on an unsupported version rather than persist an artifact a
+	// consumer cannot interpret. The write itself stays best-effort, like the other
+	// run artifacts: it never changes the run's outcome.
+	if err := art.Validate(); err != nil {
+		return
+	}
+	writeRunJSON(rn, "model-selection.json", art)
 }
 
 // relDir returns target relative to base when possible, else target.

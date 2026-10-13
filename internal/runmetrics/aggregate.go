@@ -120,7 +120,9 @@ func metricFor(m Metric, ev []runEvidence, corpus int) MetricResult {
 		// Readable: at least one parsed. Numerator: runs recording a positive retry
 		// signal (a nonempty attempt, a continuations count greater than zero, or a
 		// parseable classification record). A present continuations.txt of "0" is a
-		// recorded zero, not a retry.
+		// recorded zero, not a retry. The value is the RATE (percentage) of eligible
+		// runs recording a retry signal, not a bare count: the bare count both read as a
+		// rate and equalled its own denominator, which was misleading.
 		present := count(ev, func(e runEvidence) bool {
 			return e.hasAttempt || e.hasContinuatn || e.hasClass
 		})
@@ -130,9 +132,8 @@ func metricFor(m Metric, ev []runEvidence, corpus int) MetricResult {
 		num := count(ev, func(e runEvidence) bool {
 			return e.hasAttempt || (e.continuationsOK && e.continuations > 0) || e.classReadable
 		})
-		return countMetric(m, StatusPartial, corpus, present, readable, num, readable, "runs",
-			[]string{attemptFileName, continuationsFileName, classificationFileName},
-			"numerator counts runs with a positive escalation signal (nonempty attempt.txt, continuations.txt > 0, or classification.json); absence is UNAVAILABLE, never 0 retries, and continuations.txt of 0 is a recorded zero")
+		return rate(m, StatusPartial, corpus, present, readable, num, readable,
+			"retry rate: the share of eligible runs (those carrying retry evidence) that recorded a retry signal (nonempty attempt.txt, continuations.txt > 0, or classification.json); absence is UNAVAILABLE, never 0 retries, and continuations.txt of 0 is a recorded zero")
 
 	case MetricApproval:
 		// Artifacts present: approval.json or report.json. Valid: an approval

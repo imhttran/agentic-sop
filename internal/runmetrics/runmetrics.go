@@ -60,12 +60,19 @@ const (
 	reviewFileName         = "review.json"
 	routingFileName        = "routing.json"
 	shadowEvidenceFileName = "shadow-evidence.json"
+	attemptsDirName        = "attempts"
 )
 
 // shadowEvidenceSchemaVersion is the only shadow-evidence schema version this
 // aggregator interprets. It mirrors internal/shadow.EvidenceSchemaVersion in
 // sop-decision-adapters; a newer version is present but UNAVAILABLE, never guessed.
 const shadowEvidenceSchemaVersion = 1
+
+// modelSelectionSchemaVersion is the current model-selection artifact version. A
+// historical model-selection.json written before versioning has no schema_version
+// field (decoded as 0) and is treated as this initial version; any other version is
+// present but UNAVAILABLE, never guessed.
+const modelSelectionSchemaVersion = 1
 
 // shadowEvidence mirrors the versioned, offline shadow-evidence artifact produced
 // by sop-decision-adapters (internal/shadow.Evidence). It is read-only diagnostic
@@ -306,6 +313,15 @@ type runEvidence struct {
 	// approvalRequested is true when approval.json records a request or a
 	// report.json records the NEEDS_HUMAN terminal decision.
 	approvalRequested bool
+
+	// Model-escalation evidence from the structured attempt records under attempts/
+	// (Phase 5). hasAttemptRecords is the directory's presence; attemptRecordsReadable
+	// is true when at least one record parsed; escalatedAttempts counts records with
+	// attempt >= 2. These are the ONLY model-escalation evidence: a human approval is
+	// not a model escalation.
+	hasAttemptRecords      bool
+	attemptRecordsReadable bool
+	escalatedAttempts      int
 }
 
 // readEvidence reads one run directory through file-presence signals, matching
@@ -342,13 +358,18 @@ func readEvidence(projectDir, id string) runEvidence {
 	if present(dir, modelSelectionFileName) {
 		ev.hasModelSel = true
 		var sel struct {
-			Class    string `json:"class"`
-			Provider string `json:"provider"`
-			Model    string `json:"model"`
-			Source   string `json:"source"`
-			Fallback bool   `json:"fallback"`
+			SchemaVersion int    `json:"schema_version"`
+			Class         string `json:"class"`
+			Provider      string `json:"provider"`
+			Model         string `json:"model"`
+			Source        string `json:"source"`
+			Fallback      bool   `json:"fallback"`
 		}
-		if readJSON(filepath.Join(dir, modelSelectionFileName), &sel) {
+		// A recorded schema_version must be known. A historical artifact with no
+		// version (decoded as 0) is the initial version; any other version is present
+		// but UNAVAILABLE, never interpreted.
+		if readJSON(filepath.Join(dir, modelSelectionFileName), &sel) &&
+			(sel.SchemaVersion == 0 || sel.SchemaVersion == modelSelectionSchemaVersion) {
 			ev.modelSelReadable = true
 			ev.routed = firstNonEmpty(sel.Class, sel.Provider, sel.Model, sel.Source) != ""
 			ev.selClass = strings.ToLower(strings.TrimSpace(sel.Class))
@@ -377,6 +398,26 @@ func readEvidence(projectDir, id string) runEvidence {
 		if readJSON(filepath.Join(dir, shadowEvidenceFileName), &se) && se.SchemaVersion == shadowEvidenceSchemaVersion {
 			ev.shadowReadable = true
 			ev.shadowCases = se.Cases
+		}
+	}
+	// Structured attempt records (Phase 5): the model-escalation evidence. A record
+	// with attempt >= 2 is an escalated retry; the initial attempt (1) is not an
+	// escalation. A missing attempts/ directory yields no records.
+	if entries, err := os.ReadDir(filepath.Join(dir, attemptsDirName)); err == nil {
+		ev.hasAttemptRecords = true
+		for _, e := range entries {
+			if e.IsDir() || !strings.HasSuffix(e.Name(), ".json") {
+				continue
+			}
+			var rec struct {
+				Attempt int `json:"attempt"`
+			}
+			if readJSON(filepath.Join(dir, attemptsDirName, e.Name()), &rec) && rec.Attempt >= 1 {
+				ev.attemptRecordsReadable = true
+				if rec.Attempt >= 2 {
+					ev.escalatedAttempts++
+				}
+			}
 		}
 	}
 	ev.hasClass = present(dir, classificationFileName)
