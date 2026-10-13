@@ -1,6 +1,12 @@
 # PLAN — Decision Model Effectiveness Evaluation
 
-**Status:** PROPOSED — awaiting approval. Planning only; no benchmark has been run.
+**Status:** EVALUATION COMPLETE — the corpus, deterministic baseline, advisory
+comparison, recovery-question experiment, and JEV shadow-mode evaluation have run.
+**Conclusion:** keep deterministic governance; do not promote the tested AI
+failure-disposition configurations. Consolidated findings:
+[DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md). DME-006–DME-010
+(statistical reporting, safety-regression checks, performance benchmarking, results
+report, decision rule) remain open as follow-ups.
 
 **Scope:** Decide whether the local advisory decision system (`CLEF-4bit` via oMLX with a
 local Bespoke-Nimble-9B backup, behind SEAM-004) measurably improves on SOP's
@@ -21,6 +27,30 @@ agentic-sop (with `sop-decision-adapters` as the adapter under evaluation).
 Both run against the **same** scenarios. The advisory recommendation and the final
 governed SOP action are recorded and reported **separately**; the models and the
 deterministic classifier are **never treated as ground truth**.
+
+## Results (completed)
+
+The evaluation ran against the frozen 61-scenario corpus (hash `9937cc46…`); the
+JEV shadow-mode evaluation ran over the same corpus. Full detail, populations, and
+reconciliation: [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md).
+
+| Configuration | Correct | Exact agreement |
+| --- | ---: | ---: |
+| Deterministic Go | 47/61 | 77.0% |
+| Go + CLEF/Nimble (change-risk) | 40/61 | 65.6% |
+| JEV shadow mapping | 8/61 | 13.1% |
+
+- **Useful escalations: 0** for both advisory configurations and for JEV.
+- The DME-005 **recovery-question** experiment was marginally better than the
+  change-risk question but still trailed deterministic Go (held-out 41: 30
+  deterministic vs 27 change-risk vs 28 recovery), with 0 useful escalations.
+- The JEV **shadow** mapping never produced `BLOCK` and regressed 39
+  deterministic-correct decisions (0 improvements).
+
+**Outcome:** keep deterministic governance; retain AI for evidence-generation and
+review tasks; do not promote the tested AI failure-disposition configurations.
+Outstanding follow-ups are tracked in [docs/BACKLOG.md](../BACKLOG.md) (see also §6
+of the consolidated findings).
 
 ## 1. Existing telemetry coverage and limitations (Phase 1, inspected)
 

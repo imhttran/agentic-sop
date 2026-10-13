@@ -114,6 +114,7 @@ single owner. This table is that map.
 | Future work                                                                               | [BACKLOG.md](plans/BACKLOG.md)                                                         | Numbered implementation plans                                                                                                                                                                   |
 | Performance measurements                                                                  | [PERFORMANCE.md](reference/PERFORMANCE.md)                                             | Closure plan and point-in-time baseline reports                                                                                                                                                 |
 | Reliability evaluation                                                                    | [EVALUATION.md](reference/EVALUATION.md)                                               | Run trace (`trace.json`) and progress signals                                                                                                                                                   |
+| Decision-model findings (advisory vs deterministic)                                       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                     | [EVALUATION.md](reference/EVALUATION.md); [OPENJEV.md](specs/OPENJEV.md)                                                                                                                        |
 | Multi-agent orchestration                                                                 | [architecture/orchestration.md](architecture/orchestration.md)                         | [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md); adoption record in [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) |
 
 ## Reference
@@ -129,6 +130,7 @@ single owner. This table is that map.
 - [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
 - [reference/EVALUATION.md](reference/EVALUATION.md) — the deterministic evaluation harness: fixture contract, layout, and the failure → regression workflow.
+- [reference/DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) — consolidated DME-003/004/005 and JEV shadow-mode findings: what was tested, verified results, architectural conclusions, and remaining investigation.
 
 ## Guides
 

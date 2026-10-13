@@ -177,6 +177,7 @@ Start at **[docs/README.md](docs/README.md)** for the complete categorized index
 | Providers and harnesses       | [Agent provider](docs/specs/AGENT-PROVIDER.md), [model routing](docs/specs/MODEL-ROUTING.md) |
 | CLI and configuration         | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md)          |
 | Usage and development         | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
+| Decision-model findings       | [Decision-model findings](docs/reference/DECISION-MODEL-FINDINGS.md)                         |
 | Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation)            |
 
 ## License
