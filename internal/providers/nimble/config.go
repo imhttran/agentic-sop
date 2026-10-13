@@ -16,6 +16,17 @@ const (
 	DefaultModel = "nimble"
 	// DefaultTimeout bounds a single Nimble/Ollama call.
 	DefaultTimeout = 30 * time.Second
+	// DefaultScoreURL is the conventional standalone Nimble /score endpoint.
+	DefaultScoreURL = "http://127.0.0.1:8001/score"
+)
+
+// Transport selectors for the Nimble provider.
+const (
+	// TransportSystemOne is the Ollama /v1/systemone transport; it is the default
+	// and is preserved unchanged.
+	TransportSystemOne = "systemone"
+	// TransportScore is the standalone Nimble /score transport.
+	TransportScore = "score"
 )
 
 // Config holds the Nimble provider's connection settings.
@@ -27,6 +38,12 @@ type Config struct {
 	Model string
 	// Timeout bounds a single request.
 	Timeout time.Duration
+	// Transport selects the wire protocol: TransportSystemOne (default) or
+	// TransportScore. The default preserves the existing /v1/systemone transport.
+	Transport string
+	// ScoreURL is the standalone /score endpoint, used only when Transport is
+	// TransportScore.
+	ScoreURL string
 }
 
 // WithDefaults returns a copy of cfg with zero fields replaced by defaults.
@@ -40,19 +57,29 @@ func (c Config) WithDefaults() Config {
 	if c.Timeout <= 0 {
 		c.Timeout = DefaultTimeout
 	}
+	if strings.TrimSpace(c.Transport) == "" {
+		c.Transport = TransportSystemOne
+	}
+	if strings.TrimSpace(c.ScoreURL) == "" {
+		c.ScoreURL = DefaultScoreURL
+	}
 	return c
 }
 
 // ConfigFromEnv reads Nimble configuration from the environment:
 //
-//	OLLAMA_BASE_URL  backend root URL (default http://localhost:11434)
-//	NIMBLE_MODEL     model name          (default "nimble")
-//	NIMBLE_TIMEOUT   request timeout     (default 30s, Go duration syntax)
+//	OLLAMA_BASE_URL   backend root URL      (default http://localhost:11434)
+//	NIMBLE_MODEL      model name             (default "nimble")
+//	NIMBLE_TIMEOUT    request timeout         (default 30s, Go duration syntax)
+//	NIMBLE_TRANSPORT  "systemone" (default) or "score"
+//	NIMBLE_SCORE_URL  standalone /score URL   (default http://127.0.0.1:8001/score)
 func ConfigFromEnv() Config {
 	return Config{
-		BaseURL: envOr("OLLAMA_BASE_URL", DefaultBaseURL),
-		Model:   envOr("NIMBLE_MODEL", DefaultModel),
-		Timeout: envDurationOr("NIMBLE_TIMEOUT", DefaultTimeout),
+		BaseURL:   envOr("OLLAMA_BASE_URL", DefaultBaseURL),
+		Model:     envOr("NIMBLE_MODEL", DefaultModel),
+		Timeout:   envDurationOr("NIMBLE_TIMEOUT", DefaultTimeout),
+		Transport: envOr("NIMBLE_TRANSPORT", TransportSystemOne),
+		ScoreURL:  envOr("NIMBLE_SCORE_URL", DefaultScoreURL),
 	}.WithDefaults()
 }
 

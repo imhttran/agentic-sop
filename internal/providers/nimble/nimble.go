@@ -16,6 +16,7 @@ package nimble
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/imhttran/sop-decision-adapters/decision"
@@ -25,6 +26,9 @@ import (
 type Provider struct {
 	cfg       Config
 	transport Transport
+	// scorer is set only for the standalone /score transport; the SystemOne
+	// transport is unchanged and leaves it nil.
+	scorer Scorer
 }
 
 // New builds a Nimble provider. A nil transport defaults to an HTTPTransport
@@ -35,7 +39,11 @@ func New(cfg Config, transport Transport) *Provider {
 	if transport == nil {
 		transport = NewHTTPTransport(cfg.BaseURL, cfg.Timeout)
 	}
-	return &Provider{cfg: cfg, transport: transport}
+	p := &Provider{cfg: cfg, transport: transport}
+	if cfg.Transport == TransportScore {
+		p.scorer = NewScoreTransport(cfg.ScoreURL, cfg.Timeout)
+	}
+	return p
 }
 
 // NewFromEnv builds a Nimble provider from environment configuration.
@@ -56,6 +64,9 @@ func (p *Provider) Name() string { return ProviderName }
 //
 // Model presence is verified through the backend's model listing endpoint.
 func (p *Provider) Available(ctx context.Context) bool {
+	if p.cfg.Transport == TransportScore {
+		return p.scorer != nil && p.scorer.Health(ctx) == nil
+	}
 	models, err := p.transport.ListModels(ctx)
 	if err != nil {
 		return false
@@ -90,6 +101,10 @@ func (p *Provider) Decide(ctx context.Context, req decision.DecisionRequest) (de
 		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
 	}
 
+	if p.cfg.Transport == TransportScore {
+		return p.decideScore(ctx, req)
+	}
+
 	sysReq, err := BuildSystemOneRequest(p.cfg.Model, req)
 	if err != nil {
 		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
@@ -105,6 +120,27 @@ func (p *Provider) Decide(ctx context.Context, req decision.DecisionRequest) (de
 		return decision.DecisionResult{}, providerErr(decision.KindMalformedResponse, err)
 	}
 
+	return result, nil
+}
+
+// decideScore runs the standalone /score transport: translate to the scoring
+// schema, POST /score, and normalize the response into the decision contract.
+func (p *Provider) decideScore(ctx context.Context, req decision.DecisionRequest) (decision.DecisionResult, error) {
+	if p.scorer == nil {
+		return decision.DecisionResult{}, providerErr(decision.KindProviderFailure, fmt.Errorf("nimble: score transport is not configured"))
+	}
+	scoreReq, err := BuildScoreRequest(req)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
+	}
+	resp, err := p.scorer.Score(ctx, scoreReq)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(classifyTransportError(err), err)
+	}
+	result, err := NormalizeScoreResponse(resp, req)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(decision.KindMalformedResponse, err)
+	}
 	return result, nil
 }
 

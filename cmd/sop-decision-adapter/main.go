@@ -20,6 +20,7 @@ import (
 
 	"github.com/imhttran/sop-decision-adapters/decision"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/clef"
+	"github.com/imhttran/sop-decision-adapters/internal/providers/fallback"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/julia"
 	"github.com/imhttran/sop-decision-adapters/internal/providers/nimble"
 	"github.com/imhttran/sop-decision-adapters/internal/shadow"
@@ -139,7 +140,27 @@ const availableProviders = "nimble, julia, clef"
 
 // newProvider resolves the requested provider name. The switch is the seam for
 // additional adapters.
+// newProvider builds the selected provider and, when SOP_DECISION_FALLBACK names a
+// different provider, wraps it in a primary->backup failover chain. The chain
+// reuses the same provider implementations; it adds no new framework.
 func newProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
+	primary, err := buildProvider(name, baseURL, model, timeout)
+	if err != nil {
+		return nil, err
+	}
+	fb := strings.TrimSpace(os.Getenv("SOP_DECISION_FALLBACK"))
+	if fb == "" || strings.EqualFold(fb, strings.TrimSpace(name)) {
+		return primary, nil
+	}
+	backup, err := buildProvider(fb, "", "", timeout)
+	if err != nil {
+		return nil, err
+	}
+	return fallback.New(primary, backup), nil
+}
+
+// buildProvider resolves one provider by name.
+func buildProvider(name, baseURL, model string, timeout time.Duration) (decision.Provider, error) {
 	switch strings.ToLower(strings.TrimSpace(name)) {
 	case "", "nimble":
 		cfg := nimble.ConfigFromEnv()

@@ -22,6 +22,7 @@ package clef
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/imhttran/sop-decision-adapters/decision"
@@ -35,6 +36,9 @@ var ErrDisabled = errors.New("clef: provider is disabled (set CLEF_ENABLED to en
 type Provider struct {
 	cfg       Config
 	transport transport
+	// chat is set only for the OpenAI-compatible chat-completions transport; the
+	// SystemOne transport is unchanged and leaves it nil.
+	chat chatTransport
 }
 
 // New builds a Clef provider. A nil transport defaults to an httpTransport
@@ -50,7 +54,11 @@ func New(cfg Config, tr transport) *Provider {
 	if tr == nil {
 		tr = newHTTPTransport(cfg.BaseURL, cfg.Timeout)
 	}
-	return &Provider{cfg: cfg, transport: tr}
+	p := &Provider{cfg: cfg, transport: tr}
+	if cfg.Transport == TransportChat {
+		p.chat = newHTTPChatTransport(cfg.BaseURL, cfg.Timeout)
+	}
+	return p
 }
 
 // NewFromEnv builds a Clef provider from environment configuration. Clef is
@@ -74,6 +82,13 @@ func (p *Provider) Name() string { return ProviderName }
 func (p *Provider) Available(ctx context.Context) bool {
 	if !p.cfg.Enabled() {
 		return false
+	}
+	if p.cfg.Transport == TransportChat {
+		if p.chat == nil {
+			return false
+		}
+		models, err := p.chat.Models(ctx)
+		return err == nil && p.hasModel(models)
 	}
 	models, err := p.transport.ListModels(ctx)
 	if err != nil {
@@ -121,6 +136,10 @@ func (p *Provider) Decide(ctx context.Context, req decision.DecisionRequest) (de
 		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
 	}
 
+	if p.cfg.Transport == TransportChat {
+		return p.decideChat(ctx, req)
+	}
+
 	sysReq, err := BuildSystemOneRequest(p.cfg.Model, req)
 	if err != nil {
 		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
@@ -136,6 +155,28 @@ func (p *Provider) Decide(ctx context.Context, req decision.DecisionRequest) (de
 		return decision.DecisionResult{}, providerErr(decision.KindMalformedResponse, err)
 	}
 
+	return result, nil
+}
+
+// decideChat runs the OpenAI-compatible chat-completions transport: translate to
+// a chat request, POST /v1/chat/completions, and normalize the model's decision
+// JSON into the decision contract.
+func (p *Provider) decideChat(ctx context.Context, req decision.DecisionRequest) (decision.DecisionResult, error) {
+	if p.chat == nil {
+		return decision.DecisionResult{}, providerErr(decision.KindProviderFailure, fmt.Errorf("clef: chat transport is not configured"))
+	}
+	chatReq, err := BuildChatRequest(p.cfg.Model, req)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(decision.KindInvalidRequest, err)
+	}
+	resp, err := p.chat.Chat(ctx, chatReq)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(classifyTransportError(err), err)
+	}
+	result, err := NormalizeChatResponse(resp, req)
+	if err != nil {
+		return decision.DecisionResult{}, providerErr(decision.KindMalformedResponse, err)
+	}
 	return result, nil
 }
 

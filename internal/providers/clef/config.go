@@ -22,6 +22,16 @@ const (
 	DefaultTimeout = 30 * time.Second
 )
 
+// Transport selectors for the Clef provider.
+const (
+	// TransportSystemOne is the Ollama /v1/systemone transport; it is the default
+	// and is preserved unchanged.
+	TransportSystemOne = "systemone"
+	// TransportChat is the OpenAI-compatible /v1/chat/completions transport
+	// (for example oMLX serving clef-4bit).
+	TransportChat = "chat"
+)
+
 // Config holds the Clef provider's connection settings.
 //
 // Enable is the single gate that turns the adapter on. It defaults to false in
@@ -38,6 +48,9 @@ type Config struct {
 	Timeout time.Duration
 	// Enable explicitly enables the Clef provider. Required operator action.
 	Enable bool
+	// Transport selects the wire protocol: TransportSystemOne (default) or
+	// TransportChat. The default preserves the /v1/systemone transport.
+	Transport string
 }
 
 // Enabled reports whether the provider is explicitly enabled.
@@ -55,6 +68,9 @@ func (c Config) WithDefaults() Config {
 	if c.Timeout <= 0 {
 		c.Timeout = DefaultTimeout
 	}
+	if strings.TrimSpace(c.Transport) == "" {
+		c.Transport = TransportSystemOne
+	}
 	return c
 }
 
@@ -64,15 +80,17 @@ func (c Config) WithDefaults() Config {
 //	CLEF_MODEL       model name          (default "clef-flash")
 //	CLEF_TIMEOUT     request timeout     (default 30s, Go duration syntax)
 //	CLEF_ENABLED     explicit enable flag (default false; required to enable)
+//	CLEF_TRANSPORT   "systemone" (default) or "chat" (OpenAI /v1/chat/completions)
 //
 // CLEF_ENABLED is a deliberate opt-in: any other value than "1"/"true"/"yes"
 // (case-insensitive) leaves the provider disabled.
 func ConfigFromEnv() Config {
 	return Config{
-		BaseURL: envOr("OLLAMA_BASE_URL", DefaultBaseURL),
-		Model:   envOr("CLEF_MODEL", DefaultModel),
-		Timeout: envDurationOr("CLEF_TIMEOUT", DefaultTimeout),
-		Enable:  envBool("CLEF_ENABLED"),
+		BaseURL:   envOr("OLLAMA_BASE_URL", DefaultBaseURL),
+		Model:     envOr("CLEF_MODEL", DefaultModel),
+		Timeout:   envDurationOr("CLEF_TIMEOUT", DefaultTimeout),
+		Enable:    envBool("CLEF_ENABLED"),
+		Transport: envOr("CLEF_TRANSPORT", TransportSystemOne),
 	}.WithDefaults()
 }
 
