@@ -52,10 +52,23 @@ func JEVDispositionForAction(a autonomy.Action) string {
 	}
 }
 
-// MapJEVDirective maps a validated JEV result to a failure disposition through the
-// existing deterministic early-JEV policy. ok is false when JEV produced no usable
-// structured evidence (no actionable recommendation).
-func MapJEVDirective(res jev.Result, failOn []string, p autonomy.Policy) (directive string, ok bool) {
+// MapJEVHypotheticalDirective maps a validated JEV result to the failure
+// disposition that autonomy.DecideEarly WOULD produce if the recovery policy
+// consumed JEV evidence directly. It is HYPOTHETICAL evaluation tooling.
+//
+// It is NOT the production early-JEV behavior. Production
+// (internal/cli/early_jev.go runJEVCheckpoint) short-circuits any fail-closed,
+// ERROR, or INCOMPLETE result (and any result without valid structured evidence)
+// into a non-escalating ProviderFailed outcome BEFORE policy is applied, so
+// production never routes INCOMPLETE/ERROR into DecideEarly; the quality-gate path
+// (quality.NewJEVEvidence) separately fails closed on them. This function
+// deliberately bypasses that guard so the experiment can characterize "JEV used as
+// a failure-disposition classifier". Its output MUST NOT be read as production
+// behavior; see docs/reference/DECISION-MODEL-FINDINGS.md §5.
+//
+// ok is false when JEV produced no usable structured evidence (no actionable
+// recommendation).
+func MapJEVHypotheticalDirective(res jev.Result, failOn []string, p autonomy.Policy) (directive string, ok bool) {
 	if res.StructuredEvidence == nil {
 		return "", false
 	}

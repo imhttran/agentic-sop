@@ -69,6 +69,7 @@ func main() {
 	fmt.Printf("corpus_sha256=%s\n", corpusSHA)
 	fmt.Printf("jev_provider=%s jev_model=%s\n", provider, model)
 	fmt.Printf("fail_on=%v revision=%s input=%s\n", failOn, deceleval.JEVEvaluationRevision, deceleval.JEVInputMode)
+	fmt.Printf("scope=HYPOTHETICAL failure-disposition mapping (JEV used as a classifier); NOT production early-JEV behavior\n")
 
 	ctx := context.Background()
 	obs := make([]deceleval.JEVObservation, 0, len(c.Scenarios))
@@ -122,7 +123,7 @@ func runOne(ctx context.Context, analyzer jev.Analyzer, failOn []string, policy 
 	rec.Status = string(outcome.Result.Status)
 	rec.FindingCount = len(outcome.Result.Findings)
 	rec.MaxSeverity = maxSeverity(outcome.Result.Findings)
-	directive, ok := deceleval.MapJEVDirective(outcome.Result, failOn, policy)
+	directive, ok := deceleval.MapJEVHypotheticalDirective(outcome.Result, failOn, policy)
 	rec.Directive = directive
 	rec.Actionable = ok
 	return rec
@@ -149,6 +150,7 @@ func report(res deceleval.JEVResult, sha string) {
 	fmt.Printf("improved=%d worsened=%d agree_with_deterministic=%d\n", m.Improved, m.Worsened, m.AgreeWithDeterminism)
 	fmt.Printf("terminal_total=%d terminal_evaluated=%d\n", m.TerminalTotal, m.TerminalEvaluated)
 	fmt.Printf("by_directive=%v by_status=%v\n", m.ByDirective, m.ByStatus)
+	fmt.Printf("note: by_directive is the HYPOTHETICAL mapping, not production early-JEV disposition\n")
 	fmt.Printf("latency_median_ms=%.0f latency_p95_ms=%.0f\n", m.LatencyMedianMS, m.LatencyP95MS)
 	// Surface the terminal scenario the task calls out explicitly.
 	for _, r := range res.Records {

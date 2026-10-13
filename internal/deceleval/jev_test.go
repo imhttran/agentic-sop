@@ -25,15 +25,16 @@ func TestJEVDispositionForAction(t *testing.T) {
 	}
 }
 
-// TestMapJEVDirective proves the mapping goes through the existing early-JEV
-// policy: a clean PASS continues, a blocking finding reaches a human boundary,
-// and a result with no structured evidence is not actionable.
-func TestMapJEVDirective(t *testing.T) {
+// TestMapJEVHypotheticalDirective proves the HYPOTHETICAL failure-disposition
+// mapping (JEV used as a classifier, bypassing the production status guard): a
+// clean PASS continues, a blocking finding reaches a human boundary, and a result
+// with no structured evidence is not actionable.
+func TestMapJEVHypotheticalDirective(t *testing.T) {
 	failOn := []string{"critical", "high"}
 	p := autonomy.PolicyFor(autonomy.Balanced)
 
 	// No structured evidence -> not actionable.
-	if d, ok := MapJEVDirective(jev.Result{Status: jev.StatusPass}, failOn, p); ok || d != "" {
+	if d, ok := MapJEVHypotheticalDirective(jev.Result{Status: jev.StatusPass}, failOn, p); ok || d != "" {
 		t.Errorf("nil evidence: got (%q,%v), want (\"\",false)", d, ok)
 	}
 
@@ -42,7 +43,7 @@ func TestMapJEVDirective(t *testing.T) {
 		Version: jev.EvidenceVersion, Purpose: jev.PurposeQuality,
 		Severity: jev.SeverityInfo, Status: jev.EvidencePass,
 	}}
-	if d, ok := MapJEVDirective(pass, failOn, p); !ok || d != "CONTINUE" {
+	if d, ok := MapJEVHypotheticalDirective(pass, failOn, p); !ok || d != "CONTINUE" {
 		t.Errorf("pass: got (%q,%v), want (\"CONTINUE\",true)", d, ok)
 	}
 
@@ -52,13 +53,31 @@ func TestMapJEVDirective(t *testing.T) {
 		Severity: jev.SeverityHigh, Status: jev.EvidenceFindings,
 		Items: []jev.EvidenceItem{{Purpose: jev.PurposeSecurity, Severity: jev.SeverityHigh, Category: jev.CategoryDestructive}},
 	}}
-	if d, ok := MapJEVDirective(blocking, failOn, p); !ok || d != "NEEDS_HUMAN" {
+	if d, ok := MapJEVHypotheticalDirective(blocking, failOn, p); !ok || d != "NEEDS_HUMAN" {
 		t.Errorf("blocking: got (%q,%v), want (\"NEEDS_HUMAN\",true)", d, ok)
 	}
 
 	// A HIGH finding is non-blocking when failOn does not name it.
-	if d, ok := MapJEVDirective(blocking, []string{"critical"}, p); !ok || d != "CONTINUE" {
+	if d, ok := MapJEVHypotheticalDirective(blocking, []string{"critical"}, p); !ok || d != "CONTINUE" {
 		t.Errorf("non-blocking failOn: got (%q,%v), want (\"CONTINUE\",true)", d, ok)
+	}
+}
+
+// TestJEVHypotheticalDirectiveIsNotProductionBehavior pins the evaluation-fidelity
+// distinction: the HYPOTHETICAL mapping consumes an INCOMPLETE/ERROR result and
+// returns CONTINUE (it classifies solely by finding severity), whereas production
+// (internal/cli/early_jev.go runJEVCheckpoint) short-circuits those statuses to a
+// non-escalating ProviderFailed outcome and never routes them here. The production
+// side is proven by TestEarlyTriageIncompleteStatusDoesNotEscalate in internal/cli.
+func TestJEVHypotheticalDirectiveIsNotProductionBehavior(t *testing.T) {
+	failOn := []string{"critical", "high"}
+	p := autonomy.PolicyFor(autonomy.Balanced)
+	incomplete := jev.Result{Status: jev.StatusIncomplete, StructuredEvidence: &jev.Evidence{
+		Version: jev.EvidenceVersion, Purpose: jev.PurposeTaskTriage,
+		Severity: jev.SeverityLow, Status: jev.EvidenceIncomplete,
+	}}
+	if d, ok := MapJEVHypotheticalDirective(incomplete, failOn, p); !ok || d != "CONTINUE" {
+		t.Errorf("hypothetical INCOMPLETE: got (%q,%v), want (\"CONTINUE\",true) — production does NOT do this", d, ok)
 	}
 }
 
