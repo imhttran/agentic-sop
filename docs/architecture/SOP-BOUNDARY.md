@@ -105,6 +105,28 @@ Consequential actions remain governed by SOP policy and explicit human gates
 model, or optional capability may bypass a human gate. See
 [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md).
 
+## Decision Responsibilities
+
+SOP separates who produces evidence from who decides. This division is
+**evidence-based**, not a preference — see
+[../reference/DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md):
+
+- **Deterministic Go — execution, policy, and safety boundaries.** Workflow state,
+  failure classification, retry/fix bounds, and the human/terminal boundaries are
+  deterministic, reproducible, and testable. This is the only authority that
+  executes, and it is never model-dependent.
+- **AI advisory — experimental decision evidence.** The optional SEAM-004 advisory
+  checkpoint may only _add attention_; it never lowers a decision or bypasses a gate.
+  It remains **experimental and is not a production default**: on the frozen
+  decision-model corpus it produced zero useful escalations and more errors than
+  deterministic Go, under both question phrasings tested.
+- **JEV — code-quality analysis and structured review evidence.** JEV returns
+  findings and structured evidence for the quality gate; it does not decide. It is
+  not a failure-disposition classifier and was not promoted as one.
+- **Human — approvals and authority-boundary decisions.** Destructive, irreversible,
+  security-sensitive, ambiguous, and approval-boundary changes remain explicit human
+  decisions; no model or capability may bypass them.
+
 ## Optional Capabilities
 
 Optional capabilities (OpenJEV, external review, compression, parallelism) are

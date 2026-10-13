@@ -291,6 +291,174 @@ The post-Phase-8 governance pass (POST8-001) is complete. The remaining Phase 8
 follow-up is the persistent cross-run verification cache, tracked above as
 `VERIFCACHE-PERSISTENCE`.
 
+## Execution profiles and task-state closure
+
+The following items were recorded under the former top-level `docs/BACKLOG.md` and are
+consolidated here (the single backlog owner):
+
+## SOP-LC-001 — Automatic Task-State Closure with Evidence Reuse
+
+- **Priority:** P2
+- **Status:** IMPLEMENTED (2026-10-12)
+- **Problem:** `sop run` could not close a plan whose tasks were already implemented
+  and committed: an empty-diff task still invoked the optional JEV analysis, whose
+  fail-closed result stopped the run at a retry/human boundary (`LC-001 RETRY
+(requeued)`), so a green tree left the plan ACTIVE. Completing the tasks required a
+  separate operator command per task, each re-running the full validation suite.
+- **Requirements:**
+  - Skip JEV when there is no reviewable change (an empty diff with no task-owned
+    change evidence), mirroring review's "no changes to review" guard.
+  - Reuse valid, task-scoped validation evidence across the plan (already provided by
+    the run-session verification cache).
+  - Complete already-satisfied verify-first tasks without an agent call, progress the
+    lifecycle automatically, and close the plan on completion.
+  - Preserve deterministic acceptance, audit history, and human approval boundaries;
+    never fabricate completion for insufficient evidence.
+- **Acceptance:** A 12-task plan with sufficient evidence closes in one governed
+  workflow without 12 redundant validation runs.
+- **Evidence:** `internal/cli/run.go` gates the JEV invocation on a reviewable change;
+  `internal/cli/sop_lc_001_test.go` proves one `sop run` closes a 12-task
+  already-committed plan (archived `COMPLETE`), with 0 agent calls, 0 JEV invocations,
+  and 1 validation run reused across the 12 tasks; a second invocation is idempotent;
+  a task with insufficient evidence fails closed and does not complete.
+
+## SOP-EXEC-001 — Lightweight Execution Profiles
+
+P2 · Proposed
+Target: agentic-sop/docs/plans/BACKLOG.md
+Scope
+
+- Add --mode=light|standard|full to sop run.
+- Support the same flag in SOP skills.
+- Default to standard.
+- Keep mandatory targeted verification in every mode.
+- Minimize preflight for low-risk tasks.
+- Automatically escalate when scope or risk increases.
+- Preserve Git and policy safeguards.
+  Acceptance criteria
+- Small tasks execute without unnecessary full-suite checks.
+- Targeted tests remain mandatory where applicable.
+- Failed targeted tests prevent PASS.
+- No applicable tests are reported explicitly.
+- Existing behavior remains backward-compatible.
+
+## Decision-model evaluation follow-ups (DME-FU-001–005)
+
+Follow-ups from the DME decision-model evaluation; the consolidated findings live in
+[DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) and the promotion
+criteria in [AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTION-CRITERIA.md).
+
+## DME-FU-001 — Investigate `DecideEarly` handling of `INCOMPLETE`/`ERROR`
+
+- **Priority:** P1
+- **Status:** Resolved (investigated 2026-10-13) — no production defect
+- **Finding:** Production never routes `INCOMPLETE`/`ERROR` to `DecideEarly`: the
+  early-JEV checkpoint (`internal/cli/early_jev.go`) short-circuits fail-closed,
+  `ERROR`, and `INCOMPLETE` results into a non-escalating `ProviderFailed` outcome
+  before policy is applied, and the quality-gate path (`quality.NewJEVEvidence`)
+  fails closed on them. The `CONTINUE` mapping was an evaluation-only tooling
+  artifact (`internal/deceleval/jev.go`). See
+  [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5.
+- **Residual (evaluation-only):** addressed — the eval mapping was renamed to
+  `MapJEVHypotheticalDirective`, its hypothetical (non-production) scope documented,
+  and the production distinction pinned by tests; a production-fidelity evaluation is
+  proposed as DME-FU-005.
+- **Problem:** In the JEV shadow-mode evaluation, `autonomy.DecideEarly` mapped a
+  result with no blocking finding — including `INCOMPLETE`/`ERROR` with no
+  HIGH/CRITICAL items — to `CONTINUE`, while the quality gate
+  (`quality.NewJEVEvidence`/`quality.Evaluate`) treats `INCOMPLETE`/`ERROR` as
+  fail-closed evidence that is never a pass. The two consumers disagree on the
+  safety semantics of an incomplete analysis.
+- **Requirements:** Confirm whether this is reachable in the real execution path
+  (the early-JEV checkpoints), whether the divergence is intentional per consumer,
+  and whether `DecideEarly` should fail closed on `INCOMPLETE`/`ERROR`.
+- **Acceptance:** A written finding with the production reachability path (or a
+  "not reachable" determination) and a decision on fail-closed semantics; any code
+  change carries targeted tests.
+- **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5;
+  `evals/decision-model/jev-shadow.results.json` (`dme-provider-fault-002`,
+  `dme-real-as-clef-005` ERROR; `dme-real-close-001`, `dme-real-rsh-002` INCOMPLETE).
+
+## DME-FU-002 — Review the `dme-real-close-004` label and `BLOCK` vs `NEEDS_HUMAN`
+
+- **Priority:** P2
+- **Status:** Resolved (investigated 2026-10-13) — labelling inconsistency; label correction proposed
+- **Finding:** `BLOCK` (terminal stop, no approval) and `NEEDS_HUMAN` (human approval)
+  both withhold automatic execution; they differ only in operational responsibility.
+  The deterministic `BLOCK` is not an unsafe continuation: across all 61 scenarios the
+  baseline has 0 less-conservative mismatches (`internal/deceleval/disposition.go`,
+  `AnalyzeExecutionPosture`). `dme-real-close-004` is the only `NO_PROGRESS` scenario
+  labelled `NEEDS_HUMAN` (six siblings are labelled `BLOCK`), so the label — not the
+  classifier — is the outlier.
+- **Proposed correction (pending explicit approval):** relabel `dme-real-close-004` to
+  `BLOCK` and re-freeze the corpus. The frozen label is unchanged; under the
+  correction the deterministic baseline reads 48/61 exact with 0 unsafe misses.
+- **Problem:** `dme-real-close-004` expects `NEEDS_HUMAN` while the deterministic
+  classifier produces `BLOCK` (counted as the corpus's single unsafe miss). `BLOCK`
+  and `NEEDS_HUMAN` both withhold automatic execution but carry different
+  operational responsibilities (a terminal stop with no approval vs a human approval
+  boundary). Whether the frozen label should be `BLOCK` or `NEEDS_HUMAN` has not been
+  adjudicated.
+- **Requirements:** Independently review the label against the recorded failure and
+  document the intended semantics; if the label changes, re-freeze the corpus and
+  record a new corpus revision (labels are otherwise frozen).
+- **Acceptance:** A written adjudication with rationale; the corpus hash recorded for
+  any revision; downstream metrics re-derived where the label changes.
+- **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5.
+
+## DME-FU-003 — Define evidence-based criteria for reconsidering AI failure disposition
+
+- **Priority:** P2
+- **Status:** Documentation complete (2026-10-13) — threshold approval pending
+- **Deliverable:** [AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTION-CRITERIA.md) —
+  separate evaluation scopes, the deterministic baseline, hard safety gates,
+  effectiveness requirements, evaluation methodology, staged promotion, and decision
+  outcomes (with established vs proposed thresholds).
+- **Problem:** The evaluated AI configurations produced zero useful escalations and
+  more errors than deterministic Go, so no AI failure-disposition configuration is
+  promoted. There is no agreed, pre-registered bar for when reconsideration would be
+  justified.
+- **Requirements:** Turn the plan's decision rule into concrete, pre-registered
+  thresholds (unsafe misses = 0, false-escalation ceiling, latency budget, and at
+  least one of accuracy or useful-escalation rate showing a supported improvement),
+  and name the evidence a candidate configuration must produce first.
+- **Acceptance:** A written, pre-registered acceptance bar a candidate must meet
+  before it can influence production decisions.
+- **Evidence:**
+  [PLAN-Decision-Model-Effectiveness-Evaluation.md](PLAN-Decision-Model-Effectiveness-Evaluation.md#decision-rule-retain--tune--disable).
+
+## DME-FU-004 — Evaluate JEV's code-review effectiveness on real changes
+
+- **Priority:** P2 · Conditional
+- **Status:** Proposed (only if warranted)
+- **Problem:** JEV was evaluated for failure disposition using only terse failure
+  text (no diffs or repository context), which is outside its primary review use
+  case. Its value as a code-quality/review mechanism therefore remains unmeasured.
+- **Requirements:** If JEV's review value matters, evaluate it on real diffs and
+  repository context against the quality gate's own criteria — a distinct
+  experiment, not a re-run of the decision-disposition corpus. Do not promote JEV as
+  a failure-disposition classifier regardless of that result.
+- **Acceptance:** A scoped evaluation plan with labeled review fixtures and
+  reproducible evidence, or a documented decision to defer.
+- **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §4, §6.
+
+## DME-FU-005 — Production-fidelity JEV evaluation (proposed)
+
+- **Priority:** P3
+- **Status:** Proposed
+- **Problem:** The JEV shadow experiment (`jev-shadow-v1`) measures a *hypothetical*
+  use of JEV as a failure-disposition classifier, not production early-JEV behavior:
+  production short-circuits fail-closed, `INCOMPLETE`, and `ERROR` results before
+  policy runs. There is no evaluation of JEV's actual production mapping.
+- **Requirements:** Design a production-fidelity evaluation that replays the real
+  early-JEV checkpoint (`internal/cli/early_jev.go` `runJEVCheckpoint`) over a corpus
+  and records its actual outcomes (escalate / provider-failed / continue under
+  deterministic policy). Do not reuse the hypothetical `jev-shadow` metrics.
+- **Acceptance:** A scoped evaluation plan and reproducible evidence, or a documented
+  decision to defer.
+- **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5;
+  `internal/deceleval/jev.go` (`MapJEVHypotheticalDirective`).
+
 ## Status and roadmap
 
 See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities

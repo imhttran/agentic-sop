@@ -114,6 +114,8 @@ single owner. This table is that map.
 | Future work                                                                               | [BACKLOG.md](plans/BACKLOG.md)                                                         | Numbered implementation plans                                                                                                                                                                   |
 | Performance measurements                                                                  | [PERFORMANCE.md](reference/PERFORMANCE.md)                                             | Closure plan and point-in-time baseline reports                                                                                                                                                 |
 | Reliability evaluation                                                                    | [EVALUATION.md](reference/EVALUATION.md)                                               | Run trace (`trace.json`) and progress signals                                                                                                                                                   |
+| Decision-model findings (advisory vs deterministic)                                       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                     | [EVALUATION.md](reference/EVALUATION.md); [OPENJEV.md](specs/OPENJEV.md)                                                                                                                        |
+| AI decision-model promotion criteria | [AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md) | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) |
 | Multi-agent orchestration                                                                 | [architecture/orchestration.md](architecture/orchestration.md)                         | [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md); adoption record in [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) |
 
 ## Reference
@@ -129,6 +131,8 @@ single owner. This table is that map.
 - [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
 - [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
 - [reference/EVALUATION.md](reference/EVALUATION.md) — the deterministic evaluation harness: fixture contract, layout, and the failure → regression workflow.
+- [reference/DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) — consolidated DME-003/004/005 and JEV shadow-mode findings: what was tested, verified results, architectural conclusions, and remaining investigation.
+- [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md) — proposed criteria for reconsidering AI-assisted failure disposition: separate evaluation scopes, hard safety gates, effectiveness thresholds, staged promotion, and decision outcomes.
 
 ## Guides
 
@@ -154,7 +158,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 `scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
-- [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases).
+- [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases), including the decision-model evaluation follow-ups (DME-FU-001–005) and their promotion criteria [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md).
 - [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Active**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
 - [plans/PLAN-Pre-Performance-Closure.md](history/plans/PLAN-Pre-Performance-Closure.md) — **COMPLETE**: the executed CLOSE-001–CLOSE-011 DAG reconciled and verified both SOP and sop-controller, dogfooded and resumed, inventoried existing metrics, measured four workloads, and recorded the readiness verdict. All eleven tasks are `LOCAL_DONE` and the plan's final gate passed; it introduces no new performance architecture and does not start the performance phase.
 - [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; retained under `plans/` because SOP's plan archives reference its path; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
