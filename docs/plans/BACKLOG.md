@@ -421,6 +421,63 @@ criteria in [AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTI
 - **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5;
   `internal/deceleval/jev.go` (`MapJEVHypotheticalDirective`).
 
+## Developer Preview carry-forward (from the superseded plan)
+
+Carried forward when `plan-sop-developer-preview` was disposed `SUPERSEDED`
+(2026-10-13); each item's status was re-checked against `main` at that time. The original
+register and its HOLD verdict are preserved in
+[history/developer-preview/](../history/developer-preview/README.md); the plan remains at
+[PLAN-SOP-Developer-Preview.md](PLAN-SOP-Developer-Preview.md). Two preview findings are
+no longer open and are **not** carried: the documentation link gate (KI-03) now passes
+(`scripts/checks/check-doc-links.sh` → `broken links: 0`), and the acceptance-verification
+escape (KI-01/KI-05) now has a mechanism — structured acceptance checks plus the opt-in
+`lifecycle.verdict_gate` (default OFF). Three items remain:
+
+### DP-01 — `examples/` is referenced but absent (was KI-09)
+
+- **Priority:** P3
+- **Status:** Open (re-verified 2026-10-13)
+- **Problem:** the shipped SOP skill tells users examples live in `examples/`
+  (`review.md`, `plan.md`, `diagnose.md`, `implement.md`), but no `examples/` directory
+  exists in the repository, so the reference dangles.
+- **Requirements:** add the referenced example files, or remove/redirect the reference.
+- **Acceptance:** `examples/` exists with the named files, or the reference is corrected;
+  `scripts/checks/check-doc-links.sh` still passes.
+- **Evidence:** `ls -d examples` → absent; [skills/sop/SKILL.md](../../skills/sop/SKILL.md).
+
+### DP-02 — the governed harness cannot run `./install.sh` (was KI-04)
+
+- **Priority:** P3
+- **Status:** Open (re-verified 2026-10-13)
+- **Problem:** `internal/commandpolicy` classifies any unrecognized program as
+  `REQUIRES_APPROVAL`, so a governed task cannot verify install/quickstart: the PREVIEW-002
+  run parked at the approval boundary and its deliverable had to be operator-produced.
+  There is no sanctioned, unattended install-verification step.
+- **Requirements:** admit a sanctioned install step in the governed harness, or document
+  install verification as an explicit operator-run step.
+- **Acceptance:** a deterministic, governed install-verification path exists, or the
+  operator-run nature is documented in the install/quickstart guidance.
+- **Evidence:** `internal/commandpolicy/commandpolicy.go` (`Classify` default →
+  `RequiresApproval`); [history/developer-preview/QUICKSTART-VERIFICATION.md](../history/developer-preview/QUICKSTART-VERIFICATION.md).
+
+### DP-03 — cross-repository controller/adapter verification is unverified (was KI-02/KI-07)
+
+- **Priority:** P2
+- **Status:** Open (re-verified 2026-10-13)
+- **Problem:** the governed harness is repository-root confined, so governed tasks cannot
+  reach the sibling `sop-controller` / `sop-decision-adapters` repositories and cannot run
+  remote-ref Git commands. Controller runtime parity and live `decision.provider: command`
+  dispatch remain unverified, so no production/GO claim can cover the controller
+  integration surface. Adapter *shadow* evidence now exists
+  ([TEL-003](../reports/decision-telemetry/TEL-003-integration.md)), but live dispatch is
+  still unobserved.
+- **Requirements:** provide an operator-authorized cross-repository integration workspace
+  (or equivalent) that can exercise controller parity and live decision-adapter dispatch.
+- **Acceptance:** a recorded, reproducible run covering the controller runtime and live
+  decision-adapter dispatch, or a documented decision to defer the claim.
+- **Evidence:** [ETOE-010 final reliability report](../reports/end-to-end-reliability/ETOE-010-final-reliability-report.md);
+  [history/developer-preview/KNOWN-ISSUES.md](../history/developer-preview/KNOWN-ISSUES.md) KI-02/KI-07.
+
 ## Status and roadmap
 
 See [PROJECT-STATUS.md](../reference/PROJECT-STATUS.md) for implemented capabilities

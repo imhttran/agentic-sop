@@ -177,6 +177,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-Ollama-Agent-Plan-Synthesis.md](plans/PLAN-Ollama-Agent-Plan-Synthesis.md) — Ollama PLAN discovery and synthesis. **Implemented**; PLAN runs the bounded DISCOVERY → tool-free SYNTHESIS lifecycle.
 - [plans/PLAN-Decision-Telemetry-Extension.md](plans/PLAN-Decision-Telemetry-Extension.md) — Decision Telemetry (TEL-001–TEL-007): extend the run-metrics aggregator with the decisions SOP records (model tier, override, escalation, JEV invocation) without changing decision authority. **In progress**; the model-tier, override, escalation, and JEV dimensions are implemented in `internal/runmetrics`, and adapter agreement/confidence remain UNAVAILABLE (no recorded source).
 - [plans/PLAN-TEL-009-Telemetry-Reporting-Corrections.md](plans/PLAN-TEL-009-Telemetry-Reporting-Corrections.md) — TEL-009: correct `decision_escalation_rate` (model escalation only, not human approvals), reconcile `decision_override_rate` provenance, make `retry_efficiency` a rate, and version `model-selection.json`. **Implemented**; reporting/evidence only.
+- [plans/PLAN-SOP-Developer-Preview.md](plans/PLAN-SOP-Developer-Preview.md) — the Developer Preview workstream (PREVIEW-001–005). **SUPERSEDED**: disposed by SOP without executing PREVIEW-002–PREVIEW-005; the deliverables and the **HOLD** readiness verdict are preserved as evidence in [history/developer-preview/](history/developer-preview/README.md), and the still-open findings are carried in [plans/BACKLOG.md](plans/BACKLOG.md) § Developer Preview carry-forward.
 
 ## Testing
 
@@ -220,6 +221,7 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
 - [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
 - [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
+- [history/developer-preview/](history/developer-preview/README.md) — the superseded Developer Preview deliverables (SCOPE, QUICKSTART-VERIFICATION, KNOWN-ISSUES, READINESS) with their operator-authored provenance labelled; the readiness verdict is **HOLD**. The superseded plan remains at [plans/PLAN-SOP-Developer-Preview.md](plans/PLAN-SOP-Developer-Preview.md).
 
 ## Canonical Locations and Kept Paths
 

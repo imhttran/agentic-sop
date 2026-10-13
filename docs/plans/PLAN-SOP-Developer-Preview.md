@@ -1,8 +1,36 @@
 # PLAN — SOP Developer Preview
 
-**Status:** PROPOSED — next proposed workstream; NOT activated, NOT executed.
-**Basis:** HARDEN-001 checkpoint (`harden-001`, commit `1ed7189`) and the ETOE reliability assessment (`plan-sop-end-to-end-reliability`, ACTIVE).
+**Status:** **SUPERSEDED** (SOP plan `plan-sop-developer-preview`). Disposed by SOP on
+2026-10-13 via `sop plan historicalize --disposition SUPERSEDED`; the plan is no longer
+ACTIVE. PREVIEW-001 ran under the governed harness, but PREVIEW-002–PREVIEW-005 were
+**not** governed-completed (see *Disposition* below) and are **not** marked complete.
+**Basis:** HARDEN-001 checkpoint (`harden-001`, commit `1ed7189`) and the ETOE reliability assessment (`plan-sop-end-to-end-reliability`, since archived `COMPLETE`).
 **Independence:** the preview proceeds on `main` and is **independent of the experimental hardening** (`harden-001` is an unmerged branch; acceptance enforcement is **default OFF**, so preview behavior is unchanged).
+
+## Disposition (2026-10-13)
+
+This plan was proposed on 2026-10-09 but never advanced past PREVIEW-001 under the
+governed harness: PREVIEW-002 parked at a human approval boundary (`./install.sh`
+requires approval, and the harness is repository-root confined), and the run loop stops
+at the first non-passing task, so PREVIEW-002–PREVIEW-005 were **not** governed-executed.
+Their deliverables were authored by the operator and the readiness verdict was **HOLD**.
+
+Rather than resume a plan whose central blockers have since partly resolved on `main` —
+the documentation link gate now passes and structured acceptance checks plus the opt-in
+`lifecycle.verdict_gate` now exist — the operator disposed of the workstream
+`SUPERSEDED` (the explicit disposal path that preserves unfinished work truthfully). No
+task outcome was rewritten; PREVIEW-002–PREVIEW-005 remain unresolved, not complete.
+
+- **Lifecycle record (archive):** `.agent-sdlc/archive/plan-sop-developer-preview/`
+  (`plan.json`, `plan.meta.json`, `tasks.json`, `lifecycle.json`; gitignored, retained
+  outside the removed worktree).
+- **Deliverables (preserved evidence):** [docs/history/developer-preview/](../history/developer-preview/README.md)
+  — SCOPE, QUICKSTART-VERIFICATION, KNOWN-ISSUES, READINESS (HOLD), and the index, with
+  operator-authored provenance labelled.
+- **Carried-forward findings:** the still-open items — the missing `examples/`, the
+  governed-install gap, and cross-repository controller/adapter verification — are tracked
+  in [docs/plans/BACKLOG.md](BACKLOG.md) § *Developer Preview carry-forward*.
+- There is no repository-consolidation plan; the findings were carried into the backlog.
 
 ## Project
 
