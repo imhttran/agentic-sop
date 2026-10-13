@@ -1,6 +1,6 @@
 # Controller — Mobile Approvals, Execution Dashboard, and Documentation
 
-> **Document class:** plan · **Lifecycle:** active · **Authority:** the ACTIVE implementation plan; recorded by SOP in `.agent-sdlc/plan.meta.json` (`sop status` reports it).
+> **Document class:** plan · **Lifecycle:** not active · **Authority:** retained for traceability, not a live SOP plan; SOP records none in `.agent-sdlc/plan.meta.json` (`sop status` reports it).
 
 ## Project
 

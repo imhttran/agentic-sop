@@ -37,7 +37,7 @@ Read more: [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.md) and
 
 ## Requirements
 
-- **Go** (1.24+). That is it at build/run time.
+- **Go** (1.27+). That is it at build/run time.
 - The **`sop` CLI** on `PATH` (or `SOP_BIN`) for the Run/Resume/Validate/Review
   commands. Read-only views work without it.
 
