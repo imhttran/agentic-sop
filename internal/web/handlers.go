@@ -500,12 +500,23 @@ func (h *Handlers) renderCommand(w http.ResponseWriter, r *http.Request, project
 			}
 		}
 	}
+	// A decision command runs in the background; the fragment polls this route until
+	// it finishes. When it has, announce it so the approvals inbox can refresh its
+	// gate list and drop a decided gate, instead of leaving a stale card on screen.
+	// The event is a UI-only signal: it carries no decision and changes no state.
+	if !st.Running() && st.State != "idle" {
+		w.Header().Set("HX-Trigger", approvalChangedEvent)
+	}
 	h.render(w, http.StatusOK, "command_status.html", cmdStatusData{
 		baseData:   h.base(r, ""),
 		Command:    st,
 		CommandURL: url,
 	})
 }
+
+// approvalChangedEvent is broadcast (HX-Trigger) when an approve/decline command
+// has finished, so the approvals inbox re-reads SOP and reflects the decision.
+const approvalChangedEvent = "approvalsChanged"
 
 // commandState returns the recorded status for project/key, or an idle
 // placeholder when no command has run yet.

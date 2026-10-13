@@ -2,7 +2,9 @@ package web
 
 import (
 	"database/sql"
+	"io"
 	"io/fs"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -67,6 +69,54 @@ func TestProjectsListShowsAttentionBadge(t *testing.T) {
 	if !strings.Contains(body, "needs attention") {
 		t.Fatalf("attention badge missing from projects list: %q", body)
 	}
+}
+
+// The inbox gate list refreshes itself when a decision finishes, so a decided
+// gate does not linger on screen as a stale card.
+func TestApprovalsInboxWiresListRefresh(t *testing.T) {
+	srv, _, _ := decisionServer(t, "")
+	_, body := get(t, srv.URL+"/approvals")
+
+	for _, want := range []string{
+		`id="approvals-list"`,
+		`hx-get="/approvals"`,
+		`hx-select="#approvals-list"`,
+		"approvalsChanged from:body",
+	} {
+		if !strings.Contains(body, want) {
+			t.Errorf("inbox missing refresh wiring %q", want)
+		}
+	}
+}
+
+// A finished approve/decline command signals the inbox to refresh (HX-Trigger),
+// so the decided gate is re-read from SOP and dropped; a still-running command
+// does not signal.
+func TestDecisionStatusSignalsInboxRefresh(t *testing.T) {
+	srv, id, _ := decisionServer(t, "")
+	if code, _ := postApproval(t, srv, id, "x1", "approve", "", ""); code != http.StatusOK {
+		t.Fatalf("approve POST = %d, want 200", code)
+	}
+	statusURL := srv.URL + "/projects/" + id + "/tasks/x1/commands/approve"
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		req, err := http.NewRequest("GET", statusURL, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		res, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		hit := res.Header.Get("HX-Trigger")
+		_, _ = io.Copy(io.Discard, res.Body)
+		res.Body.Close()
+		if hit == "approvalsChanged" {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	t.Fatal("a finished decision did not signal the inbox to refresh (no HX-Trigger: approvalsChanged)")
 }
 
 // unreadApprovalsServer builds a project whose `sop approvals --json` fails (a
