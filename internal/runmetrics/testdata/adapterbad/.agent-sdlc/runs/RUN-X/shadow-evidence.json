@@ -1,0 +1,6 @@
+{
+  "schema_version": 999,
+  "cases": [
+    {"case_id": "c1", "source": "clef", "comparable": true, "outcome": "shadow_agreement", "reference": "a", "latency_ms": 10}
+  ]
+}

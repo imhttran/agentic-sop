@@ -29,7 +29,13 @@ func TestDecisionMetricOrder(t *testing.T) {
 		MetricOverride,
 		MetricEscalation,
 		MetricJEVInvoke,
+		MetricAdapterInvocation,
 		MetricAdapter,
+		MetricAdapterConfidence,
+		MetricAdapterLatency,
+		MetricAdapterInvalidChoice,
+		MetricAdapterIndeterminate,
+		MetricAdapterTimeoutFailure,
 		MetricConfidence,
 	}
 	got := make([]Metric, 0, len(agg.Decisions))
@@ -115,30 +121,131 @@ func TestDecisionJEVInvocation(t *testing.T) {
 	}
 }
 
-// TestDecisionAdapterAndConfidenceUnavailable proves the two dimensions with no
-// recorded source are UNAVAILABLE on every fixture, with zero numerator and
-// denominator, and are never fabricated as an agreement or a confidence.
+// TestDecisionAdapterAndConfidenceUnavailable proves the routing-confidence
+// dimension is UNAVAILABLE on every fixture (no recorded source), and the
+// adapter-agreement dimension is UNAVAILABLE where no usable shadow evidence
+// exists (missing artifact, or an unknown schema version).
 func TestDecisionAdapterAndConfidenceUnavailable(t *testing.T) {
-	for _, name := range []string{"present", "absent", "zero", "malformed", "partial", "decisions"} {
+	// Routing confidence has no recorded source on any fixture.
+	for _, name := range []string{"present", "absent", "zero", "malformed", "partial", "decisions", "adapterbad"} {
 		agg := fixture(t, name)
-		for _, m := range []Metric{MetricAdapter, MetricConfidence} {
-			r := findDecision(t, agg, m)
-			if r.Status != StatusUnavailable || r.Value != UNAVAILABLE {
-				t.Errorf("%s/%s = %+v, want UNAVAILABLE", name, m, r)
-			}
-			if r.Numerator != 0 || r.Denominator != 0 {
-				t.Errorf("%s/%s has a fraction (%d/%d); UNAVAILABLE must have none", name, m, r.Numerator, r.Denominator)
-			}
-			if r.CoveragePct != 0 {
-				t.Errorf("%s/%s coverage = %v, want 0", name, m, r.CoveragePct)
-			}
+		r := findDecision(t, agg, MetricConfidence)
+		if r.Status != StatusUnavailable || r.Value != UNAVAILABLE {
+			t.Errorf("%s/%s = %+v, want UNAVAILABLE", name, MetricConfidence, r)
+		}
+		if r.Numerator != 0 || r.Denominator != 0 {
+			t.Errorf("%s/%s has a fraction (%d/%d); UNAVAILABLE must have none", name, MetricConfidence, r.Numerator, r.Denominator)
+		}
+	}
+	// Adapter agreement is UNAVAILABLE without usable evidence: no artifact, or an
+	// unknown schema version (present but not interpreted).
+	for _, name := range []string{"present", "absent", "zero", "malformed", "partial", "adapterbad"} {
+		agg := fixture(t, name)
+		r := findDecision(t, agg, MetricAdapter)
+		if r.Value != UNAVAILABLE {
+			t.Errorf("%s/%s = %+v, want UNAVAILABLE", name, MetricAdapter, r)
+		}
+		if r.Numerator != 0 || r.Denominator != 0 {
+			t.Errorf("%s/%s has a fraction (%d/%d); UNAVAILABLE must have none", name, MetricAdapter, r.Numerator, r.Denominator)
 		}
 	}
 }
 
-// TestDecisionAbsentIsUnavailable proves a run with no model-selection.json and
-// no routing.json is UNAVAILABLE for the tier and override dimensions, never a
-// "default" tier or a zero override.
+// TestAdapterMetricsFromEvidence proves the adapter dimensions are computed from a
+// recorded shadow-evidence artifact with explicit numerators and denominators that
+// reproduce the adapter harness's definitions (comparable observations, referenced
+// comparisons, nearest-rank percentiles).
+func TestAdapterMetricsFromEvidence(t *testing.T) {
+	agg := fixture(t, "decisions")
+
+	inv := findDecision(t, agg, MetricAdapterInvocation)
+	if inv.Status != StatusPartial || inv.Numerator != 6 || inv.Denominator != 6 || inv.Value != "6" {
+		t.Errorf("adapter invocation = %+v, want num=6 den=6 value=6", inv)
+	}
+	if inv.CoveragePct != 50.0 {
+		t.Errorf("adapter invocation coverage = %v, want 50.0 (1 of 2 runs)", inv.CoveragePct)
+	}
+
+	agr := findDecision(t, agg, MetricAdapter)
+	if agr.Status != StatusPartial || agr.Numerator != 1 || agr.Denominator != 2 || agr.Value != "50.0" {
+		t.Errorf("adapter agreement = %+v, want num=1 den=2 value=50.0", agr)
+	}
+	wantBreakdown := []BreakdownEntry{
+		{Group: "source:clef", Key: "agreement", Count: 1},
+		{Group: "source:clef", Key: "disagreement", Count: 0},
+		{Group: "source:nimble", Key: "agreement", Count: 0},
+		{Group: "source:nimble", Key: "disagreement", Count: 1},
+	}
+	if !reflect.DeepEqual(agr.Breakdown, wantBreakdown) {
+		t.Errorf("adapter agreement breakdown = %+v, want %+v", agr.Breakdown, wantBreakdown)
+	}
+
+	conf := findDecision(t, agg, MetricAdapterConfidence)
+	if conf.Numerator != 1 || conf.Denominator != 5 || conf.Value != "20.0" {
+		t.Errorf("adapter confidence = %+v, want num=1 den=5 value=20.0", conf)
+	}
+
+	lat := findDecision(t, agg, MetricAdapterLatency)
+	if lat.Numerator != 102 || lat.Denominator != 5 || lat.Value != "10" {
+		t.Errorf("adapter latency = %+v, want num=102 den=5 value=10 (p50)", lat)
+	}
+	wantLat := []BreakdownEntry{
+		{Group: "latency", Key: "p50_ms", Count: 10},
+		{Group: "latency", Key: "p95_ms", Count: 50},
+	}
+	if !reflect.DeepEqual(lat.Breakdown, wantLat) {
+		t.Errorf("adapter latency breakdown = %+v, want %+v", lat.Breakdown, wantLat)
+	}
+
+	for _, tc := range []struct {
+		m    Metric
+		want string
+	}{
+		{MetricAdapterInvalidChoice, "20.0"},
+		{MetricAdapterIndeterminate, "20.0"},
+		{MetricAdapterTimeoutFailure, "20.0"},
+	} {
+		r := findDecision(t, agg, tc.m)
+		if r.Numerator != 1 || r.Denominator != 5 || r.Value != tc.want {
+			t.Errorf("%s = %+v, want num=1 den=5 value=%s", tc.m, r, tc.want)
+		}
+	}
+}
+
+// TestAdapterUnknownSchemaIsUnavailable proves a present shadow-evidence artifact
+// at an unknown schema version is present but UNAVAILABLE, never interpreted.
+func TestAdapterUnknownSchemaIsUnavailable(t *testing.T) {
+	agg := fixture(t, "adapterbad")
+	inv := findDecision(t, agg, MetricAdapterInvocation)
+	if inv.ArtifactsPresent != 1 {
+		t.Errorf("adapter invocation artifacts_present = %d, want 1 (file present)", inv.ArtifactsPresent)
+	}
+	if inv.ValidMeasurements != 0 || inv.Value != UNAVAILABLE {
+		t.Errorf("adapter invocation = %+v, want valid=0 value=UNAVAILABLE", inv)
+	}
+	if r := findDecision(t, agg, MetricAdapter); r.Value != UNAVAILABLE {
+		t.Errorf("adapter agreement on unknown schema = %+v, want UNAVAILABLE", r)
+	}
+}
+
+// TestAdapterDeterministic proves the adapter dimensions are deterministic across
+// two aggregations over identical evidence.
+func TestAdapterDeterministic(t *testing.T) {
+	dir := filepath.Join("testdata", "decisions")
+	first, err := AggregateProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := AggregateProject(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, _ := json.Marshal(first.Decisions)
+	b, _ := json.Marshal(second.Decisions)
+	if string(a) != string(b) {
+		t.Errorf("adapter decision metrics are not deterministic:\n%s\n%s", a, b)
+	}
+}
 func TestDecisionAbsentIsUnavailable(t *testing.T) {
 	agg := fixture(t, "absent")
 	for _, m := range []Metric{MetricModelTier, MetricOverride} {

@@ -189,6 +189,7 @@ is owned by the documents they link.
 - [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
 - [reports/planner/SOP-PLANNER-CAP-001-capability-context.md](reports/planner/SOP-PLANNER-CAP-001-capability-context.md) — the per-task planner capability-context fix: the compiled capability inventory is now authoritative at the task-level planning boundary, so a repository discovery target is no longer promoted to an external prerequisite capability.
 - [reports/decision-telemetry/TEL-001-reconciliation.md](reports/decision-telemetry/TEL-001-reconciliation.md) — the Decision Telemetry reconciliation and metric register (TEL-001/TEL-002): what existing telemetry already records, the new decision dimensions with their numerator/denominator/coverage, and the two dimensions (adapter agreement, confidence) that stay UNAVAILABLE because nothing records them.
+- [reports/decision-telemetry/TEL-003-integration.md](reports/decision-telemetry/TEL-003-integration.md) — the TEL-003 decision-adapter integration: the `sop-decision-adapters` shadow harness emits a versioned `shadow-evidence.json` artifact, read read-only by `internal/runmetrics` to compute adapter invocation, agreement, confidence, latency, and invalid/indeterminate/timeout rates with explicit denominators. **Implemented** (both repositories).
 
 ## Historical Documentation
 

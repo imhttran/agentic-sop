@@ -59,7 +59,34 @@ const (
 	continuationsFileName  = "continuations.txt"
 	reviewFileName         = "review.json"
 	routingFileName        = "routing.json"
+	shadowEvidenceFileName = "shadow-evidence.json"
 )
+
+// shadowEvidenceSchemaVersion is the only shadow-evidence schema version this
+// aggregator interprets. It mirrors internal/shadow.EvidenceSchemaVersion in
+// sop-decision-adapters; a newer version is present but UNAVAILABLE, never guessed.
+const shadowEvidenceSchemaVersion = 1
+
+// shadowEvidence mirrors the versioned, offline shadow-evidence artifact produced
+// by sop-decision-adapters (internal/shadow.Evidence). It is read-only diagnostic
+// evidence: it never drives routing, approval, or execution.
+type shadowEvidence struct {
+	SchemaVersion int          `json:"schema_version"`
+	Cases         []shadowCase `json:"cases"`
+}
+
+// shadowCase is one recorded shadow observation from the evidence artifact.
+type shadowCase struct {
+	CaseID     string   `json:"case_id"`
+	Source     string   `json:"source"`
+	Comparable bool     `json:"comparable"`
+	Outcome    string   `json:"outcome"`
+	Primary    string   `json:"primary,omitempty"`
+	Shadow     string   `json:"shadow,omitempty"`
+	Reference  string   `json:"reference,omitempty"`
+	Confidence *float64 `json:"confidence,omitempty"`
+	LatencyMS  int64    `json:"latency_ms"`
+}
 
 // Metric identifies one emitted RM-002 metric dimension. The names match the
 // seven dimensions fixed by docs/reports/run-metrics/RM-002-metric-register.md.
@@ -257,6 +284,14 @@ type runEvidence struct {
 	routingReadable bool
 	routingSource   string
 
+	// Decision-adapter shadow evidence from shadow-evidence.json (TEL-003): its
+	// presence, whether it parsed at a known schema version, and the recorded
+	// observations. It is produced offline by sop-decision-adapters and read here
+	// as written; it never drives a decision.
+	hasShadow      bool
+	shadowReadable bool
+	shadowCases    []shadowCase
+
 	// metricsData is the parsed metrics.json shape (internal/perf.Task).
 	metricsData perf.Task
 	counts      perf.Counts
@@ -332,6 +367,16 @@ func readEvidence(projectDir, id string) runEvidence {
 		if readJSON(filepath.Join(dir, routingFileName), &rt) {
 			ev.routingReadable = true
 			ev.routingSource = strings.ToLower(strings.TrimSpace(rt.Source))
+		}
+	}
+	if present(dir, shadowEvidenceFileName) {
+		ev.hasShadow = true
+		var se shadowEvidence
+		// Only a known schema version is usable; an unknown version is present but
+		// UNAVAILABLE, never interpreted. A malformed file is likewise unusable.
+		if readJSON(filepath.Join(dir, shadowEvidenceFileName), &se) && se.SchemaVersion == shadowEvidenceSchemaVersion {
+			ev.shadowReadable = true
+			ev.shadowCases = se.Cases
 		}
 	}
 	ev.hasClass = present(dir, classificationFileName)

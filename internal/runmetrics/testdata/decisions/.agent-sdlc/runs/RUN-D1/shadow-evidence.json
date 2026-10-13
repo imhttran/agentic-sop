@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {"case_id": "c1", "source": "clef", "comparable": true, "outcome": "shadow_agreement", "primary": "a", "shadow": "a", "reference": "a", "confidence": 0.9, "latency_ms": 10},
+    {"case_id": "c1", "source": "nimble", "comparable": true, "outcome": "shadow_disagreement", "primary": "a", "shadow": "b", "reference": "a", "latency_ms": 30},
+    {"case_id": "c2", "source": "clef", "comparable": true, "outcome": "shadow_timeout", "latency_ms": 50},
+    {"case_id": "c3", "source": "clef", "comparable": false, "outcome": "skipped_not_comparable", "latency_ms": 0},
+    {"case_id": "c4", "source": "clef", "comparable": true, "outcome": "shadow_invalid_choice", "shadow": "z", "latency_ms": 5},
+    {"case_id": "c5", "source": "clef", "comparable": true, "outcome": "shadow_indeterminate", "latency_ms": 7}
+  ]
+}

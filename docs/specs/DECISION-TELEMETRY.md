@@ -94,6 +94,33 @@ instrumentation architecture.
   and MUST render nothing (or an explicit "not recorded") for a run that recorded
   no decisions or an older artifact that predates the field.
 
+## Decision-adapter evidence (shadow evaluation)
+
+SOP MUST NOT run a decision provider in production to gather telemetry. Adapter
+comparisons are produced **offline and out of band** by
+`sop-decision-adapters`, which records them in a versioned artifact that SOP reads
+read-only.
+
+- **Artifact.** `<run>/shadow-evidence.json`, schema version `1`. It carries one
+  record per (case, source) with `case_id`, `source` (provenance), `comparable`,
+  `outcome`, `primary`, `shadow`, `reference`, `confidence` (nullable), and
+  `latency_ms`.
+- **Producer.** `sop-decision-adapters` emits the artifact by replaying recorded
+  observations through its existing shadow harness; it performs no model call in
+  the replay path and is deterministic.
+- **Consumer.** `internal/runmetrics` ingests the artifact read-only and emits the
+  adapter dimensions (`adapter_invocation`, `adapter_agreement`, `adapter_confidence`,
+  `adapter_latency`, `adapter_invalid_choice`, `adapter_indeterminate`,
+  `adapter_timeout_failure`). The denominators mirror the harness: comparable
+  observations (a `skipped_not_comparable` record is excluded), and agreement counts
+  only comparisons that recorded a reference.
+- **Unknown version.** An artifact at an unrecognized schema version is present but
+  `UNAVAILABLE`, never interpreted. A missing artifact is `UNAVAILABLE` and
+  contributes no observation.
+- **Authority.** The evidence is diagnostic only: it MUST NOT be read by routing,
+  approval, or execution, MUST NOT be inferred where unmeasured, and MUST NOT be
+  treated as proof of correctness. A consumer is never wired into the primary path.
+
 ## Invariants
 
 These invariants are normative and MUST hold for any implementation.

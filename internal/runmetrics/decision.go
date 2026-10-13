@@ -3,6 +3,7 @@ package runmetrics
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -38,9 +39,26 @@ const (
 	MetricEscalation Metric = "decision_escalation_rate"
 	// MetricJEVInvoke is the recorded JEV decision-layer invocation count.
 	MetricJEVInvoke Metric = "jev_invocation"
-	// MetricAdapter is decision-adapter agreement with deterministic expectations.
+
+	// Adapter telemetry (TEL-003), sourced from shadow-evidence.json.
+
+	// MetricAdapterInvocation is the count of recorded shadow observations.
+	MetricAdapterInvocation Metric = "adapter_invocation"
+	// MetricAdapter is decision-adapter agreement with the reference outcome
+	// (deterministic expectation or recorded SOP outcome).
 	MetricAdapter Metric = "adapter_agreement"
-	// MetricConfidence is the recorded decision confidence.
+	// MetricAdapterConfidence is the recorded adapter confidence coverage.
+	MetricAdapterConfidence Metric = "adapter_confidence"
+	// MetricAdapterLatency is the recorded adapter observation latency (p50/p95).
+	MetricAdapterLatency Metric = "adapter_latency"
+	// MetricAdapterInvalidChoice is the recorded invalid-choice rate.
+	MetricAdapterInvalidChoice Metric = "adapter_invalid_choice"
+	// MetricAdapterIndeterminate is the recorded indeterminate rate.
+	MetricAdapterIndeterminate Metric = "adapter_indeterminate"
+	// MetricAdapterTimeoutFailure is the recorded timeout/failure rate.
+	MetricAdapterTimeoutFailure Metric = "adapter_timeout_failure"
+
+	// MetricConfidence is the recorded routing decision confidence.
 	MetricConfidence Metric = "decision_confidence"
 )
 
@@ -51,7 +69,13 @@ var decisionMetricOrder = []Metric{
 	MetricOverride,
 	MetricEscalation,
 	MetricJEVInvoke,
+	MetricAdapterInvocation,
 	MetricAdapter,
+	MetricAdapterConfidence,
+	MetricAdapterLatency,
+	MetricAdapterInvalidChoice,
+	MetricAdapterIndeterminate,
+	MetricAdapterTimeoutFailure,
 	MetricConfidence,
 }
 
@@ -123,20 +147,108 @@ func decisionMetricFor(m Metric, ev []runEvidence, corpus int) MetricResult {
 			[]string{metricsFileName},
 			"numerator sums the recorded JEV.Invocations over runs whose metrics.json parsed; a present metrics.json with no JEV section is a recorded zero, an absent metrics.json is UNAVAILABLE")
 
+	case MetricAdapterInvocation:
+		// Source: shadow-evidence.json. Present when the file exists; valid when it
+		// parsed at the known schema version. The numerator is the recorded observation
+		// count across valid runs; a run without evidence contributes no observation
+		// (UNAVAILABLE), never a zero.
+		present := count(ev, func(e runEvidence) bool { return e.hasShadow })
+		valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
+		obs := shadowObservations(ev)
+		return countMetric(m, StatusPartial, corpus, present, valid, len(obs), len(obs), "observations",
+			[]string{shadowEvidenceFileName},
+			"numerator counts recorded shadow observations across runs whose shadow-evidence.json parsed; a run without evidence is UNAVAILABLE and contributes no observation")
+
 	case MetricAdapter:
-		// No recorded source: shadow/decision-adapter evaluation is a documented
-		// mode with no runtime implementation in this repository, and no run
-		// artifact carries an adapter recommendation or its agreement. UNAVAILABLE
-		// for every run; never inferred and never treated as agreement or dissent.
-		return MetricResult{
-			Metric:                  MetricAdapter,
-			Status:                  StatusUnavailable,
-			Value:                   UNAVAILABLE,
-			TotalRuns:               corpus,
-			UnavailableMeasurements: corpus,
-			Unit:                    "runs",
-			Note:                    "no run artifact records a decision-adapter (shadow) recommendation or its agreement with a deterministic expectation; shadow evaluation has no runtime implementation, so the value is UNAVAILABLE and is never inferred",
+		// Agreement: the shadow choice equals the reference (deterministic expectation or
+		// recorded SOP outcome). Only comparable observations that recorded a reference
+		// form the denominator, exactly as the adapter harness defines AgreementRate; a
+		// recorded no-reference agreement is not counted. Agreement is evidence, not
+		// proof of correctness.
+		present := count(ev, func(e runEvidence) bool { return e.hasShadow })
+		valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
+		num, den := 0, 0
+		bySource := map[string][2]int{}
+		for _, o := range comparableObservations(ev) {
+			switch {
+			case o.Outcome == outcomeAgreement && o.Reference != "":
+				num++
+				den++
+				inc(bySource, o.Source, 0)
+			case o.Outcome == outcomeDisagreement:
+				den++
+				inc(bySource, o.Source, 1)
+			}
 		}
+		r := rate(m, StatusPartial, corpus, present, valid, num, den,
+			"numerator counts comparable shadow observations whose choice equals the recorded reference over those that recorded one; a no-reference record is not an agreement")
+		r.Breakdown = sourceAgreementBreakdown(bySource)
+		return r
+
+	case MetricAdapterConfidence:
+		// Confidence coverage: comparable observations that recorded a confidence, over
+		// all comparable observations. A recorded confidence is bucketed; a missing one
+		// is not a zero confidence.
+		present := count(ev, func(e runEvidence) bool { return e.hasShadow })
+		valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
+		obs := comparableObservations(ev)
+		num := 0
+		buckets := map[string]int{}
+		for _, o := range obs {
+			if o.Confidence != nil {
+				num++
+				buckets[confidenceBucket(*o.Confidence)]++
+			}
+		}
+		r := rate(m, StatusPartial, corpus, present, valid, num, len(obs),
+			"numerator counts comparable observations that recorded a confidence; a missing confidence is not a zero. Buckets are fixed [0,1] ranges")
+		r.Breakdown = confidenceBreakdown(buckets)
+		return r
+
+	case MetricAdapterLatency:
+		// Latency: nearest-rank p50/p95 over comparable observations' recorded latency.
+		// The numerator is the summed latency over the denominator (the comparable
+		// observations); the value reports p50 and the breakdown reports p50 and p95.
+		present := count(ev, func(e runEvidence) bool { return e.hasShadow })
+		valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
+		lat := make([]int, 0, len(ev))
+		sum := 0
+		for _, o := range comparableObservations(ev) {
+			lat = append(lat, int(o.LatencyMS))
+			sum += int(o.LatencyMS)
+		}
+		r := base(m, StatusPartial, corpus, present, valid, sum, len(lat), "ms",
+			"numerator sums recorded observation latency over the comparable observations; the value is p50 and the breakdown reports p50/p95 (nearest-rank). Latency is diagnostic only")
+		if len(lat) > 0 {
+			sort.Ints(lat)
+			p50 := lat[nearestRankIndex(len(lat), 0.50)]
+			p95 := lat[nearestRankIndex(len(lat), 0.95)]
+			r.Value = strconv.Itoa(p50)
+			r.Breakdown = []BreakdownEntry{
+				{Group: "latency", Key: "p50_ms", Count: p50},
+				{Group: "latency", Key: "p95_ms", Count: p95},
+			}
+		}
+		return r
+
+	case MetricAdapterInvalidChoice:
+		return adapterOutcomeRate(m, ev, corpus, "invalid-choice rate: comparable observations whose choice is not in the question's allowed set",
+			func(o shadowCase) bool { return o.Outcome == outcomeInvalidChoice })
+
+	case MetricAdapterIndeterminate:
+		return adapterOutcomeRate(m, ev, corpus, "indeterminate rate: comparable observations classified indeterminate (an empty-choice observation)",
+			func(o shadowCase) bool { return o.Outcome == outcomeIndeterminate })
+
+	case MetricAdapterTimeoutFailure:
+		return adapterOutcomeRate(m, ev, corpus, "timeout/failure rate: comparable observations ending in a timeout, provider error, or malformed response",
+			func(o shadowCase) bool {
+				switch o.Outcome {
+				case outcomeTimeout, outcomeError, outcomeMalformed:
+					return true
+				default:
+					return false
+				}
+			})
 
 	case MetricConfidence:
 		// No recorded source: a routing decision's confidence is not persisted (the
@@ -262,4 +374,122 @@ func renderMetric(b *strings.Builder, r MetricResult) {
 	for _, e := range r.Breakdown {
 		fmt.Fprintf(b, "  %s %s: %d\n", e.Group, e.Key, e.Count)
 	}
+}
+
+// Adapter outcome labels. They mirror internal/shadow in sop-decision-adapters; the
+// aggregator matches them by value rather than importing a provider package.
+const (
+	outcomeAgreement     = "shadow_agreement"
+	outcomeDisagreement  = "shadow_disagreement"
+	outcomeTimeout       = "shadow_timeout"
+	outcomeError         = "shadow_error"
+	outcomeMalformed     = "shadow_malformed"
+	outcomeInvalidChoice = "shadow_invalid_choice"
+	outcomeIndeterminate = "shadow_indeterminate"
+)
+
+// shadowObservations flattens the recorded shadow observations across runs whose
+// evidence parsed at the known schema version.
+func shadowObservations(ev []runEvidence) []shadowCase {
+	var out []shadowCase
+	for _, e := range ev {
+		if e.shadowReadable {
+			out = append(out, e.shadowCases...)
+		}
+	}
+	return out
+}
+
+// comparableObservations are the observations a source actually evaluated. A
+// non-comparable record is excluded, matching the adapter harness denominator.
+func comparableObservations(ev []runEvidence) []shadowCase {
+	obs := shadowObservations(ev)
+	out := make([]shadowCase, 0, len(obs))
+	for _, o := range obs {
+		if o.Comparable {
+			out = append(out, o)
+		}
+	}
+	return out
+}
+
+// adapterOutcomeRate emits an adapter rate metric: the numerator counts comparable
+// observations matching match; the denominator is the comparable observations.
+func adapterOutcomeRate(m Metric, ev []runEvidence, corpus int, note string, match func(shadowCase) bool) MetricResult {
+	present := count(ev, func(e runEvidence) bool { return e.hasShadow })
+	valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
+	obs := comparableObservations(ev)
+	num := 0
+	for _, o := range obs {
+		if match(o) {
+			num++
+		}
+	}
+	return rate(m, StatusPartial, corpus, present, valid, num, len(obs), note)
+}
+
+func inc(m map[string][2]int, key string, i int) {
+	v := m[key]
+	v[i]++
+	m[key] = v
+}
+
+// sourceAgreementBreakdown renders agreement/disagreement counts per source in a
+// deterministic order.
+func sourceAgreementBreakdown(bySource map[string][2]int) []BreakdownEntry {
+	keys := make([]string, 0, len(bySource))
+	for k := range bySource {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []BreakdownEntry
+	for _, k := range keys {
+		out = append(out,
+			BreakdownEntry{Group: "source:" + k, Key: "agreement", Count: bySource[k][0]},
+			BreakdownEntry{Group: "source:" + k, Key: "disagreement", Count: bySource[k][1]},
+		)
+	}
+	return out
+}
+
+func confidenceBucket(c float64) string {
+	switch {
+	case c < 0.2:
+		return "0.0-0.2"
+	case c < 0.4:
+		return "0.2-0.4"
+	case c < 0.6:
+		return "0.4-0.6"
+	case c < 0.8:
+		return "0.6-0.8"
+	default:
+		return "0.8-1.0"
+	}
+}
+
+// confidenceBreakdown renders the fixed confidence buckets in a deterministic
+// order, initializing all five so an empty bucket is an explicit zero.
+func confidenceBreakdown(buckets map[string]int) []BreakdownEntry {
+	order := []string{"0.0-0.2", "0.2-0.4", "0.4-0.6", "0.6-0.8", "0.8-1.0"}
+	out := make([]BreakdownEntry, 0, len(order))
+	for _, k := range order {
+		out = append(out, BreakdownEntry{Group: "confidence", Key: k, Count: buckets[k]})
+	}
+	return out
+}
+
+// nearestRankIndex returns the zero-based sorted index for percentile p using the
+// nearest-rank method (the adapter harness's definition).
+func nearestRankIndex(n int, p float64) int {
+	if n <= 0 {
+		return 0
+	}
+	rk := int(p*float64(n) + 0.999999)
+	if rk < 1 {
+		rk = 1
+	}
+	if rk > n {
+		rk = n
+	}
+	return rk - 1
 }

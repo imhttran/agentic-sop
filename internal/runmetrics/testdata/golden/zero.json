@@ -190,10 +190,10 @@
       "note": "numerator sums the recorded JEV.Invocations over runs whose metrics.json parsed; a present metrics.json with no JEV section is a recorded zero, an absent metrics.json is UNAVAILABLE"
     },
     {
-      "metric": "adapter_agreement",
-      "status": "UNAVAILABLE",
+      "metric": "adapter_invocation",
+      "status": "PARTIAL",
       "value": "UNAVAILABLE",
-      "unit": "runs",
+      "unit": "observations",
       "total_runs": 1,
       "eligible_runs": 0,
       "artifacts_present": 0,
@@ -202,7 +202,127 @@
       "numerator": 0,
       "denominator": 0,
       "coverage_pct": 0,
-      "note": "no run artifact records a decision-adapter (shadow) recommendation or its agreement with a deterministic expectation; shadow evaluation has no runtime implementation, so the value is UNAVAILABLE and is never inferred"
+      "sources": [
+        "shadow-evidence.json"
+      ],
+      "note": "numerator counts recorded shadow observations across runs whose shadow-evidence.json parsed; a run without evidence is UNAVAILABLE and contributes no observation"
+    },
+    {
+      "metric": "adapter_agreement",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator counts comparable shadow observations whose choice equals the recorded reference over those that recorded one; a no-reference record is not an agreement"
+    },
+    {
+      "metric": "adapter_confidence",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "breakdown": [
+        {
+          "group": "confidence",
+          "key": "0.0-0.2",
+          "count": 0
+        },
+        {
+          "group": "confidence",
+          "key": "0.2-0.4",
+          "count": 0
+        },
+        {
+          "group": "confidence",
+          "key": "0.4-0.6",
+          "count": 0
+        },
+        {
+          "group": "confidence",
+          "key": "0.6-0.8",
+          "count": 0
+        },
+        {
+          "group": "confidence",
+          "key": "0.8-1.0",
+          "count": 0
+        }
+      ],
+      "note": "numerator counts comparable observations that recorded a confidence; a missing confidence is not a zero. Buckets are fixed [0,1] ranges"
+    },
+    {
+      "metric": "adapter_latency",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "ms",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "numerator sums recorded observation latency over the comparable observations; the value is p50 and the breakdown reports p50/p95 (nearest-rank). Latency is diagnostic only"
+    },
+    {
+      "metric": "adapter_invalid_choice",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "invalid-choice rate: comparable observations whose choice is not in the question's allowed set"
+    },
+    {
+      "metric": "adapter_indeterminate",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "indeterminate rate: comparable observations classified indeterminate (an empty-choice observation)"
+    },
+    {
+      "metric": "adapter_timeout_failure",
+      "status": "PARTIAL",
+      "value": "UNAVAILABLE",
+      "unit": "%",
+      "total_runs": 1,
+      "eligible_runs": 0,
+      "artifacts_present": 0,
+      "valid_measurements": 0,
+      "unavailable_measurements": 1,
+      "numerator": 0,
+      "denominator": 0,
+      "coverage_pct": 0,
+      "note": "timeout/failure rate: comparable observations ending in a timeout, provider error, or malformed response"
     },
     {
       "metric": "decision_confidence",
@@ -287,6 +407,12 @@
   ],
   "unavailable": [
     "adapter_agreement",
+    "adapter_confidence",
+    "adapter_indeterminate",
+    "adapter_invalid_choice",
+    "adapter_invocation",
+    "adapter_latency",
+    "adapter_timeout_failure",
     "decision_confidence",
     "decision_override_rate",
     "model_tier_distribution",
