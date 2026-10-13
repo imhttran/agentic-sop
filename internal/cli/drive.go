@@ -423,6 +423,8 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	sch := scheduler.New(st)
 	completed := 0
 	tasksEntered := 0
+	sawBlock := false
+	var blockedIDs []string
 
 	// Each iteration either completes a task (→ LOCAL_DONE), resumes and completes
 	// an interrupted one, blocks one, or requeues one blocked task for recovery
@@ -448,6 +450,13 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 			fmt.Fprintf(stdout, "Remaining tasks are unchanged and normally runnable; inspect with sop status and continue with sop run.\n")
 			return exitOK
 		}
+		// ONESHOT-005: when this invocation has parked a task-local block and no
+		// independent runnable task remains, stop WITHOUT calling Next, so the
+		// scheduler does not requeue (and thereby overwrite) the blocked task.
+		if len(blockedIDs) > 0 && !sch.HasRunnable() {
+			return reportBlockedTasks(stderr, blockedIDs)
+		}
+
 		res, err := sch.Next(ctx)
 		if err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -472,7 +481,16 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 					// re-selected, so no later work runs after any block.
 					continue
 				}
-				return code
+				if stage, ok := runpkg.Load(dir, id); ok && stage == runpkg.WaitingForHuman {
+					return code
+				}
+				if !taskIsBlocked(st, id) {
+					return code
+				}
+				sawBlock = true
+				blockedIDs = append(blockedIDs, id)
+				fmt.Fprintf(stdout, "Blocked: %s (task-local failure); continuing with independent tasks\n", id)
+				continue
 			}
 			completed++
 		case scheduler.RecoveredTask:
@@ -503,9 +521,15 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 			completed++
 		case scheduler.AllDone:
 			fmt.Fprintf(stdout, "all tasks done (%d completed this run)\n", completed)
+			if sawBlock {
+				return reportBlockedTasks(stderr, blockedIDs)
+			}
 			return exitOK
 		default:
 			fmt.Fprintf(stdout, "no runnable task (%s)\n", res.Outcome)
+			if sawBlock {
+				return reportBlockedTasks(stderr, blockedIDs)
+			}
 			return exitOK
 		}
 	}
@@ -1009,3 +1033,25 @@ func requeueTask(saver taskSaver, task *domain.Task, spend bool) error {
 	task.UpdatedAt = staged.UpdatedAt
 	return nil
 }
+
+func reportBlockedTasks(stderr io.Writer, ids []string) int {
+	if len(ids) == 0 {
+		return exitError
+	}
+	fmt.Fprintf(stderr, "run: %d task(s) blocked and not recovered: %s\n", len(ids), strings.Join(ids, ", "))
+	return exitError
+}
+func taskIsBlocked(st graphStore, id string) bool {
+	tasks, err := st.List()
+	if err != nil {
+		return false
+	}
+	for _, t := range tasks {
+		if t.ID == id {
+			return t.IsBlocked()
+		}
+	}
+	return false
+}
+
+// blockedThisRun reports whether id blocked earlier in this invocation.
