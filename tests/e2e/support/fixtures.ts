@@ -113,6 +113,21 @@ export function createPendingApproval(
   return { id, root, task };
 }
 
+// createEmptyProject builds a disposable SOP project that declares no approval gate, so
+// the controller's decisions panel must report a reported-empty listing ("none") rather
+// than the absence label. It runs `sop init` only — no task is driven to a gate.
+export function createEmptyProject(kind: string): ApprovalFixture {
+  const id = `e2e-${kind}-${rand()}`;
+  const root = path.join(WORK_DIR, "projects", id);
+  fs.mkdirSync(root, { recursive: true });
+  run("sop", ["init"], { cwd: root });
+  const cfgPath = path.join(root, ".agent-sdlc", "config.yaml");
+  let cfg = fs.readFileSync(cfgPath, "utf8");
+  cfg = cfg.replace(/^(\s*)name:\s*.*$/m, `$1name: "${id}"`);
+  fs.writeFileSync(cfgPath, cfg);
+  return { id, root, task: "" };
+}
+
 // buildController compiles the controller binary into the work directory. The Go
 // toolchain is the only build dependency; Node is never required to build the app.
 export function buildController(): string {
