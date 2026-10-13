@@ -145,8 +145,10 @@ and the Go tests never require Node. Run it with:
 npm run test:e2e
 ```
 
-See [docs/guides/E2E-TESTING.md](docs/guides/E2E-TESTING.md) for setup, coverage,
-debugging, and maintenance.
+A `pre-push` git hook runs the suite automatically when the dev dependencies are installed
+(`npm install`), and skips cleanly when they are not, so it never blocks a Go-only
+environment. See [docs/guides/E2E-TESTING.md](docs/guides/E2E-TESTING.md) for setup,
+coverage, debugging, and maintenance.
 
 ## Documentation
 

@@ -56,24 +56,52 @@ npx playwright test decisions.spec.ts
 npx playwright test --grep "Approve"
 ```
 
+## Pre-push hook
+
+The repository's `.githooks/` directory holds the git hooks (activated once with
+`git config core.hooksPath .githooks`). `pre-commit` runs the Go checks; `pre-push` runs
+this browser suite before a push — but only when the dev dependencies are installed:
+
+```text
+→ playwright e2e
+```
+
+On a machine without `node_modules` (a Linux box, CI, a fresh clone) it prints
+`→ e2e skipped (no node_modules; ...)` and lets the push through, so it stays
+Linux/CI-compatible and never blocks a Go-only environment. Run `npm install` to enable it.
+
 ## Test coverage
 
-The suite has one project (`webkit-iphone`, the iPhone 13 viewport) and three spec
-files — 13 tests:
+The suite has one project (`webkit-iphone`, the iPhone 13 viewport) and six spec files —
+34 tests:
 
-- `tests/e2e/approvals.spec.ts` — the cross-project approvals inbox (6 tests):
-  renders on a phone viewport with no horizontal overflow; a pending gate shows
-  enough context to decide; the mobile form inputs and controls stay usable;
-  **Approve** submits and updates authoritative SOP state (`APPROVED`); **Decline**
-  submits and updates authoritative SOP state (`DECLINED`); a stale decision (a gate
+- `tests/e2e/approvals.spec.ts` (7) — the cross-project approvals inbox: it renders on a
+  phone viewport with no horizontal overflow; a pending gate shows enough context to
+  decide; each approval has exactly one shared Decision Note field; the mobile controls and
+  the shared form stay usable; **Approve** submits the shared note and updates authoritative
+  SOP state (`APPROVED`); **Decline** does the same (`DECLINED`); and a stale decision (a gate
   resolved out-of-band) is reported as a conflict, not a 500.
-- `tests/e2e/decisions.spec.ts` — the project "Human decisions" panel (2 tests): a
-  project with a pending gate shows the gate and its approve/decline controls; a
-  reported-empty listing reads "none" and never the "not run" absence label.
-- `tests/e2e/security.spec.ts` — authentication and CSRF (5 tests): an
-  unauthenticated request is rejected (401), a wrong token is rejected (401), and
-  the access token is accepted (200); a state-changing POST without a CSRF token is
-  rejected (403), and with a wrong CSRF token is rejected (403).
+- `tests/e2e/decisions.spec.ts` (2) — the project "Human decisions" panel: a project with a
+  pending gate shows the gate and its approve/decline controls; a reported-empty listing
+  reads "none" and never the "not run" absence label.
+- `tests/e2e/security.spec.ts` (5) — authentication and CSRF: an unauthenticated request is
+  rejected (401), a wrong token is rejected (401), and the access-token header is accepted
+  (200); a state-changing POST without a CSRF token is rejected (403), and with a wrong CSRF
+  token is rejected (403).
+- `tests/e2e/login.spec.ts` (9) — token login over the controller's own routes: a valid
+  token signs in and sets an HTTP-only session cookie; an invalid token is rejected with
+  feedback; authenticated navigation works across pages; the session survives reloads with
+  no token in browser storage; sign out ends the session; the login and logout POSTs are
+  CSRF-protected; an unauthenticated approval action is blocked; the token never appears in
+  the page, the URL, or storage; and the login layout fits a phone viewport.
+- `tests/e2e/sessions.spec.ts` (8) — remembered devices: a first-time device must present
+  the token; a remembered device reopens without it; a new browser context is not
+  authenticated; the session survives a controller restart; rotating the token invalidates
+  remembered sessions; the session cookie is HttpOnly, SameSite, and at most 30 days; behind
+  the HTTPS proxy it is Secure; and an authenticated session still requires CSRF.
+- `tests/e2e/diagnostics.spec.ts` (3) — Copy details writes a structured, secret-free
+  approval summary; Copy error copies the error-page diagnostic; and copy reports failure
+  when the clipboard is unavailable.
 
 The tests assert on accessible roles, labels, and text, and they verify SOP's
 authoritative record (`sop approval <task-id>`), not just the screen.
@@ -86,13 +114,13 @@ project is touched.
 **Disposable SOP projects.** `global-setup` creates five throwaway SOP projects
 under the ignored `.e2e/` directory:
 
-| Fixture | Purpose |
-| --- | --- |
-| `approve` | a pending gate for the approve test |
-| `decline` | a pending gate for the decline test |
-| `stale` | a pending gate the stale test resolves out-of-band |
+| Fixture    | Purpose                                                         |
+| ---------- | --------------------------------------------------------------- |
+| `approve`  | a pending gate for the approve test                             |
+| `decline`  | a pending gate for the decline test                             |
+| `stale`    | a pending gate the stale test resolves out-of-band              |
 | `readonly` | a pending gate read (never decided) by the render/context tests |
-| `empty` | a project with no gate, so the decisions panel reports "none" |
+| `empty`    | a project with no gate, so the decisions panel reports "none"   |
 
 Each approval is a **genuine gate**: the fixture runs `sop init` and then `sop run`
 with `SOP_AGENT_COMMAND` pointed at `tests/e2e/fixtures/fake-agent.sh`, a small

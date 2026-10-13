@@ -1,0 +1,20 @@
+#!/bin/sh
+# Runs before `git push` once activated (`git config core.hooksPath .githooks`).
+# The browser (Playwright) suite is development-only: it needs Node and the dev
+# dependencies, which the Go build and Go tests never require. When those are absent
+# (CI, a Linux box, a fresh clone) the suite is skipped rather than failing the push,
+# so this stays Linux/CI-compatible and never blocks a Go-only environment.
+set -e
+
+if [ ! -d node_modules/@playwright/test ]; then
+	echo "→ e2e skipped (no node_modules; run 'npm install' to enable Playwright)"
+	exit 0
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+	echo "→ e2e skipped (npm not on PATH)"
+	exit 0
+fi
+
+echo "→ playwright e2e"
+npm run test:e2e
