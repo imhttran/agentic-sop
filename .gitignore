@@ -20,6 +20,9 @@
 .run/
 /sop-controller
 
+# Caddy local HTTPS data: CA and certificate private keys must never be committed.
+.caddy/
+
 # Playwright end-to-end test tooling (development only; never needed to build or run)
 node_modules/
 /test-results/

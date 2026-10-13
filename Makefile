@@ -13,7 +13,7 @@ PID  := .run/sop-controller.pid
 LOG  := .run/sop-controller.log
 ADDR ?= 127.0.0.1:8080
 
-.PHONY: help run start stop restart status logs build test test-race fmt vet tidy clean
+.PHONY: help run start stop restart status logs https https-stop build test test-race fmt vet tidy clean
 
 help:
 	@echo "SOP Controller"
@@ -24,6 +24,8 @@ help:
 	@echo "  make restart   stop, then start"
 	@echo "  make status    is it running? (also pings /healthz)"
 	@echo "  make logs      tail the background log"
+	@echo "  make https     run behind the Caddy HTTPS proxy (needs SOP_CONTROLLER_TOKEN)"
+	@echo "  make https-stop  stop the HTTPS proxy"
 	@echo ""
 	@echo "  make build     build ./cmd/sop-controller to $(BIN)"
 	@echo "  make test      go test ./..."
@@ -37,6 +39,13 @@ help:
 
 run:
 	SOP_CONTROLLER_ADDR=$(ADDR) go run ./cmd/sop-controller
+
+# Start the controller on loopback behind the Caddy HTTPS proxy (see docs/guides/HTTPS-ACCESS.md).
+https:
+	./scripts/https-proxy.sh
+
+https-stop:
+	./scripts/https-proxy.sh stop
 
 build:
 	@mkdir -p .run
