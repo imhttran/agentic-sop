@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Sign in — SOP Controller</title>
+        <link rel="stylesheet" href="/static/app.css" />
+    </head>
+    <body>
+        <main class="wrap login">
+            <h1>SOP Controller</h1>
+            <form class="panel login-form" method="post" action="/login">
+                <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                <input type="hidden" name="next" value="{{.Next}}" />
+                <label class="login-label" for="token">Access token</label>
+                <input
+                    class="input"
+                    id="token"
+                    name="token"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                    autofocus
+                />
+                {{if .Error}}
+                <p class="login-error" role="alert">{{.Error}}</p>
+                {{end}}
+                <button class="btn primary login-submit" type="submit">
+                    Sign In
+                </button>
+            </form>
+            <p class="muted small">
+                Enter the token configured in <code>SOP_CONTROLLER_TOKEN</code>. It is sent
+                only to this server and never stored in the page or the URL.
+            </p>
+        </main>
+        {{template "scripts.html" .}}
+    </body>
+</html>

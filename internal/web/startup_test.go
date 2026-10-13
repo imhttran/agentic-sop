@@ -4,6 +4,7 @@ import (
 	"net"
 	"strings"
 	"testing"
+	"time"
 )
 
 func tcp(host string, port int) net.Addr {
@@ -84,7 +85,7 @@ func TestResolveStartupURLsNoNetworkWhenDisabled(t *testing.T) {
 	if len(u.Network) != 0 {
 		t.Errorf("network access disabled must advertise no LAN URL, got %v", u.Network)
 	}
-	if strings.Contains(StartupSummary(u, false), "192.168.86.249") {
+	if strings.Contains(StartupSummary(u, false, SessionInfo{}), "192.168.86.249") {
 		t.Errorf("summary leaked a LAN URL while network access was disabled")
 	}
 }
@@ -111,12 +112,18 @@ func TestResolveStartupURLsScheme(t *testing.T) {
 // The summary never contains a secret, and reports the auth state.
 func TestStartupSummaryHasNoSecrets(t *testing.T) {
 	u := ResolveStartupURLs(tcp("0.0.0.0", 8090), "http", true, []net.IP{net.ParseIP("192.168.86.249")})
-	out := StartupSummary(u, true)
+	out := StartupSummary(u, true, SessionInfo{
+		Lifetime:  30 * 24 * time.Hour,
+		Persisted: true,
+		File:      ".run/sessions.json",
+	})
 	for _, want := range []string{
 		"SOP Controller started", "Local:      http://localhost:8090",
 		"Network:    http://192.168.86.249:8090",
 		"Approvals:  http://192.168.86.249:8090/approvals",
-		"Auth:       enabled", "Press Ctrl+C to stop",
+		"Auth:       enabled",
+		"Sessions:   30d remembered, persisted to .run/sessions.json",
+		"Press Ctrl+C to stop",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("summary missing %q:\n%s", want, out)
@@ -127,7 +134,11 @@ func TestStartupSummaryHasNoSecrets(t *testing.T) {
 			t.Errorf("summary must not contain %q:\n%s", forbidden, out)
 		}
 	}
-	if !strings.Contains(StartupSummary(u, false), "Auth:       disabled") {
+	// A non-persisted store is reported plainly, and disabled auth shows no session line.
+	if mem := StartupSummary(u, true, SessionInfo{Lifetime: time.Hour}); !strings.Contains(mem, "1h0m0s remembered, in memory only") {
+		t.Errorf("summary should describe an in-memory session store:\n%s", mem)
+	}
+	if !strings.Contains(StartupSummary(u, false, SessionInfo{}), "Auth:       disabled") {
 		t.Errorf("summary should report disabled auth when no token is required")
 	}
 }

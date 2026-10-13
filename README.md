@@ -116,13 +116,19 @@ SOP_CONTROLLER_ADDR=0.0.0.0:8080 \
 ```
 
 Network mode requires the token, and every state-changing request is `POST` with
-a CSRF token. The controller never renders secrets or forwards provider
-credentials to SOP. See [docs/specs/SECURITY.md](docs/specs/SECURITY.md) and
+a CSRF token. Enter the token once on the sign-in page (`/login`); the browser keeps
+it in a session cookie, never in the URL. The device is then **remembered for up to 30
+days** — it reopens the dashboard without re-entering the token, even across controller
+restarts, until the session expires, is signed out, or the token is rotated. The
+controller never renders secrets or forwards provider credentials to SOP. See
+[docs/specs/SECURITY.md](docs/specs/SECURITY.md) and
 [docs/guides/GETTING-STARTED.md](docs/guides/GETTING-STARTED.md#phone--same-network-access).
 
 For **secure HTTPS** access from an iPhone, run the controller behind Caddy on loopback —
 `make https` (or `scripts/https-proxy.sh`) starts the controller on `127.0.0.1:8090` and a
-local-CA HTTPS reverse proxy on the LAN, so only the TLS listener is exposed. See
+local-CA HTTPS reverse proxy on the LAN, so only the TLS listener is exposed. The access
+token is kept in the macOS Keychain (created on first run); rotate it with
+`scripts/keychain-token.sh rotate`. See
 [docs/guides/HTTPS-ACCESS.md](docs/guides/HTTPS-ACCESS.md).
 
 The task detail view also reports SOP's recorded **model selection** (its class,

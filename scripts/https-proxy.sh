@@ -12,12 +12,17 @@
 #   scripts/https-proxy.sh          start the controller + proxy (Ctrl+C stops both)
 #   scripts/https-proxy.sh stop     stop a proxy started earlier
 #
-# Environment (all optional except SOP_CONTROLLER_TOKEN):
-#   SOP_CONTROLLER_TOKEN          required: the access token the proxy preserves
+# Environment (all optional):
+#   SOP_CONTROLLER_TOKEN          access token; overrides the Keychain when set
 #   SOP_CONTROLLER_HTTPS_HOST     LAN hostname (default: <LocalHostName>.local)
 #   SOP_CONTROLLER_HTTPS_PORT     Caddy HTTPS port (default: 8443)
 #   SOP_CONTROLLER_UPSTREAM_PORT  controller loopback port (default: 8090)
 #   SOP_CONTROLLER_PROJECTS       projects the controller observes (default: this repo)
+#
+# The access token is loaded from the macOS Keychain (service "sop-controller",
+# account "controller-token") and created there on first run; see
+# scripts/keychain-token.sh. The token is never printed, logged, or passed as a
+# command argument.
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -53,14 +58,27 @@ start) ;;
 	;;
 esac
 
-if [ -z "${SOP_CONTROLLER_TOKEN:-}" ]; then
-	echo "https-proxy: set SOP_CONTROLLER_TOKEN first; the proxy preserves token authentication" >&2
-	exit 1
-fi
 command -v caddy >/dev/null 2>&1 || {
 	echo "https-proxy: caddy not found (install it: brew install caddy)" >&2
 	exit 1
 }
+
+# Resolve the access token: an explicit SOP_CONTROLLER_TOKEN wins, then the macOS
+# Keychain, then a freshly generated token stored in the Keychain (never overwriting
+# an existing one). The value stays in a shell variable — never an argument, a log,
+# or the printed banner — and is exported only into the controller's own environment.
+token=${SOP_CONTROLLER_TOKEN:-}
+if [ -z "$token" ]; then
+	token=$("$repo_dir/scripts/keychain-token.sh" get 2>/dev/null || true)
+fi
+if [ -z "$token" ]; then
+	"$repo_dir/scripts/keychain-token.sh" init
+	token=$("$repo_dir/scripts/keychain-token.sh" get)
+fi
+if [ -z "$token" ]; then
+	echo "https-proxy: no access token (set SOP_CONTROLLER_TOKEN or run scripts/keychain-token.sh init)" >&2
+	exit 1
+fi
 
 mkdir -p "$run_dir" "$data_dir"
 
@@ -71,11 +89,13 @@ mkdir -p "$run_dir" "$data_dir"
 # proxy preserves auth even though the listener is local.
 (
 	cd "$repo_dir"
-	exec env \
-		SOP_CONTROLLER_ADDR="127.0.0.1:$upstream_port" \
-		SOP_CONTROLLER_ALLOW_NETWORK=true \
-		SOP_CONTROLLER_PROJECTS="$projects" \
-		"$run_dir/sop-controller" >>"$run_dir/https-proxy.log" 2>&1
+	# Export into this subshell only: the token reaches the controller but not Caddy or
+	# the parent shell, and it is never an argument to any command.
+	export SOP_CONTROLLER_TOKEN="$token"
+	export SOP_CONTROLLER_ADDR="127.0.0.1:$upstream_port"
+	export SOP_CONTROLLER_ALLOW_NETWORK=true
+	export SOP_CONTROLLER_PROJECTS="$projects"
+	exec "$run_dir/sop-controller" >>"$run_dir/https-proxy.log" 2>&1
 ) &
 controller_pid=$!
 echo "$controller_pid" >"$pid_file"
@@ -97,9 +117,11 @@ Controller (loopback): http://127.0.0.1:$upstream_port
 HTTPS (LAN):           https://$host:$https_port
 Approvals:             https://$host:$https_port/approvals
 
-First visit needs your access token once (it sets a cookie; the token is never printed
-here and never stored in this output):
-  https://$host:$https_port/?token=<your-token>
+Sign in once with your access token (the form posts it to the server; it is never printed
+here and never placed in a URL):
+  https://$host:$https_port/login
+The token is stored in the macOS Keychain. To reveal it (to type at /login):
+  security find-generic-password -s sop-controller -a controller-token -w
 Then open:
   https://$host:$https_port/approvals
 

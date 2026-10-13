@@ -20,12 +20,19 @@ type Handlers struct {
 	attention       time.Duration
 	runner          *CommandRunner
 	discoveryReport config.DiscoveryReport
+	// accessToken is the configured SOP_CONTROLLER_TOKEN ("" when auth is off).
+	accessToken string
+	// sessions holds authenticated login sessions; loginLimiter throttles sign-ins.
+	sessions     *sessionStore
+	loginLimiter *attemptLimiter
 }
 
 type baseData struct {
 	CSRF string
 	Poll time.Duration
 	Nav  string
+	// SignedIn reports an active login session, so the nav offers Sign out.
+	SignedIn bool
 }
 
 type projectsPage struct {
@@ -90,7 +97,13 @@ type cmdStatusData struct {
 }
 
 func (h *Handlers) base(r *http.Request, nav string) baseData {
-	return baseData{CSRF: csrfToken(r), Poll: h.poll, Nav: nav}
+	signedIn := false
+	if h.sessions != nil {
+		if id, ok := sessionID(r); ok {
+			signedIn = h.sessions.valid(id)
+		}
+	}
+	return baseData{CSRF: csrfToken(r), Poll: h.poll, Nav: nav, SignedIn: signedIn}
 }
 
 // baseForProject is base for a project fragment. r may be nil for an internal

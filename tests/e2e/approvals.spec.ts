@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { signIn, url } from "./support/auth";
 import { copiedText, stubClipboard } from "./support/clipboard";
 import {
   NEEDS_HUMAN_REASON,
@@ -7,10 +8,7 @@ import {
 } from "./support/fixtures";
 import { loadState } from "./support/state";
 
-// The state global-setup wrote: the controller's base URL and token, and one
-// disposable project per decision path.
 const state = loadState();
-const withToken = (p: string) => `${state.baseURL}${p}?token=${state.token}`;
 
 // projectCard scopes to one project's section in the inbox, so the (unique) task id in
 // each section is never ambiguous with another project's gate.
@@ -25,7 +23,8 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
   test.beforeEach(async ({ page }) => {
     // Make the clipboard deterministic for the whole file (Copy error / Copy details).
     await stubClipboard(page);
-    await page.goto(withToken("/approvals"));
+    await signIn(page);
+    await page.goto(url("/approvals"));
   });
 
   test("1. inbox renders on a phone viewport without horizontal overflow", async ({

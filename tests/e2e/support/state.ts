@@ -25,6 +25,9 @@ export interface E2EState {
   baseURL: string;
   token: string;
   sopBin: string;
+  // Path to the controller binary global-setup built, so a test can restart its own
+  // dedicated instance (restart/rotation coverage).
+  bin: string;
   projects: {
     approve: ApprovalFixture;
     decline: ApprovalFixture;

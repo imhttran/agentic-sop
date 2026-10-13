@@ -33,7 +33,13 @@ export default async function globalSetup(): Promise<void> {
   };
 
   const roots = Object.values(projects).map((p) => p.root);
-  const child = startController(bin, roots, port, token);
+  const child = startController(
+    bin,
+    roots,
+    port,
+    token,
+    path.join(WORK_DIR, "sessions.json"),
+  );
 
   const baseURL = `http://127.0.0.1:${port}`;
   await waitForHealth(baseURL);
@@ -46,6 +52,7 @@ export default async function globalSetup(): Promise<void> {
     baseURL,
     token,
     sopBin: process.env.SOP_BIN ?? "sop",
+    bin,
     projects,
   };
   fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));

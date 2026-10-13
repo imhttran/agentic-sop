@@ -792,3 +792,43 @@ ul.decisions-list {
         background: rgba(255, 107, 97, 0.12);
     }
 }
+
+/* Login */
+.login {
+    max-width: 26rem;
+}
+
+.login-form {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    padding: 1rem;
+}
+
+.login-label {
+    font-size: 0.85rem;
+    color: var(--muted);
+}
+
+.login-form .input {
+    width: 100%;
+}
+
+.login-submit {
+    width: 100%;
+}
+
+.login-error {
+    margin: 0;
+    color: #b42318;
+}
+
+/* Sign out (in the top bar) */
+.signout {
+    margin-left: auto;
+}
+
+.signout-btn {
+    padding: 0.2rem 0.6rem;
+    font-size: 0.8rem;
+}

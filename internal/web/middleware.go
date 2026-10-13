@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"log"
 	"net/http"
-	"strings"
 	"time"
 )
 
@@ -16,8 +15,7 @@ type ctxKey int
 const csrfKey ctxKey = iota
 
 const (
-	csrfCookie   = "sop_ctrl_csrf"
-	accessCookie = "sop_ctrl_access"
+	csrfCookie = "sop_ctrl_csrf"
 )
 
 func newToken() string {
@@ -46,7 +44,7 @@ func csrfProtect(next http.Handler) http.Handler {
 			token = newToken()
 			http.SetCookie(w, &http.Cookie{
 				Name: csrfCookie, Value: token, Path: "/",
-				HttpOnly: true, SameSite: http.SameSiteStrictMode,
+				HttpOnly: true, Secure: isHTTPS(r), SameSite: http.SameSiteStrictMode,
 			})
 		}
 		if r.Method != http.MethodGet && r.Method != http.MethodHead {
@@ -61,35 +59,6 @@ func csrfProtect(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), csrfKey, token)))
 	})
-}
-
-// accessToken gates every route except health and static assets (network mode).
-func accessToken(token string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/healthz" || strings.HasPrefix(r.URL.Path, "/static/") {
-				next.ServeHTTP(w, r)
-				return
-			}
-			if q := r.URL.Query().Get("token"); q != "" && subtle.ConstantTimeCompare([]byte(q), []byte(token)) == 1 {
-				http.SetCookie(w, &http.Cookie{
-					Name: accessCookie, Value: token, Path: "/",
-					HttpOnly: true, SameSite: http.SameSiteLaxMode,
-				})
-				next.ServeHTTP(w, r)
-				return
-			}
-			provided := r.Header.Get("X-Access-Token")
-			if c, err := r.Cookie(accessCookie); err == nil {
-				provided = c.Value
-			}
-			if subtle.ConstantTimeCompare([]byte(provided), []byte(token)) != 1 {
-				http.Error(w, "access token required", http.StatusUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
 }
 
 func logRequests(next http.Handler) http.Handler {

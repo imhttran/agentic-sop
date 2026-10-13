@@ -16,19 +16,20 @@ keeps its access token and CSRF protection.
 ## Prerequisites
 
 - **Caddy** on `PATH` (`brew install caddy`).
-- **`SOP_CONTROLLER_TOKEN`** set in your environment — the access token the proxy
-  preserves. It is never printed and never committed.
 - The **Go** toolchain (the launcher builds the controller).
+- Nothing else to prepare: the launcher keeps the access token in the **macOS
+  Keychain** and creates one on first run (see below). An explicit
+  `SOP_CONTROLLER_TOKEN` in the environment overrides the Keychain for a single run.
 
 ## Start
 
 ```bash
-export SOP_CONTROLLER_TOKEN="choose-a-token"
 scripts/https-proxy.sh          # or: make https
 ```
 
-The launcher builds the controller, starts it on `127.0.0.1:8090` with token auth
-enforced, starts Caddy, and prints the URLs. Ctrl+C stops both.
+The launcher builds the controller, resolves the access token, starts the controller on
+`127.0.0.1:8090` with token auth enforced, starts Caddy, and prints the URLs. Ctrl+C stops
+both.
 
 ```text
 SOP Controller → Caddy HTTPS proxy
@@ -43,6 +44,30 @@ iPhone on the same Wi-Fi resolves over mDNS. Override it with
 `SOP_CONTROLLER_HTTPS_HOST`, or the ports with `SOP_CONTROLLER_HTTPS_PORT` and
 `SOP_CONTROLLER_UPSTREAM_PORT`. Stop a backgrounded proxy with
 `scripts/https-proxy.sh stop`.
+
+## Access token in the Keychain
+
+The launcher loads the token from the login Keychain — service `sop-controller`, account
+`controller-token` — and, when none exists, generates a strong random one and stores it
+there (never overwriting an existing one). It is used only as the controller's own
+environment variable: never a command argument, never printed, never logged, never
+committed.
+
+```bash
+scripts/keychain-token.sh init     # create one if absent (idempotent; never overwrites)
+scripts/keychain-token.sh rotate   # replace it with a new one (ends existing sessions)
+make token-rotate                  # shortcut for the line above
+```
+
+To reveal the token so you can type it on the sign-in page (keep it out of logs):
+
+```bash
+security find-generic-password -s sop-controller -a controller-token -w   # or: make token-show
+```
+
+`rotate` stores a new token; the running controller keeps the old one until you restart
+it, and any signed-in browser session ends. Setting `SOP_CONTROLLER_TOKEN` in the
+environment overrides the Keychain for that run only.
 
 ## Trust the certificate on the iPhone
 
@@ -61,14 +86,22 @@ once. The CA is at `.caddy/caddy/pki/authorities/local/root.crt` (never committe
 > device**. Emulation (curl, a desktop browser) validates the certificate chain and
 > hostname, but not iOS's trust store.
 
-The first visit needs your access token once, which sets a cookie:
+The first visit opens the sign-in page, where you enter your access token once (it sets a
+session cookie; the token is never placed in the URL). Reveal the stored token with the
+`security find-generic-password …` command above.
 
 ```text
-https://<host>:8443/?token=<your-token>
+https://<host>:8443/login
 ```
 
-After that, open `https://<host>:8443/approvals` directly. The token is never printed by
-the launcher and never logged (the controller logs only the request path, not the query).
+After that, open `https://<host>:8443/approvals` directly — the device is remembered for up
+to **30 days**: the session persists across navigation, browser restarts, and controller
+restarts until it expires, and **Sign out** in the top bar ends it. The token is never
+logged (the controller logs only the request path, not the query or body).
+
+To revoke every remembered device at once, run `make sessions-clear` and restart the
+controller (a running controller keeps its in-memory sessions until then). The startup
+summary reports the effective lifetime and whether sessions are persisted.
 
 ## Security
 
@@ -76,14 +109,17 @@ the launcher and never logged (the controller logs only the request path, not th
   the LAN directly. Caddy is the only LAN listener.
 - **Certificate-validated TLS.** Caddy's local CA — no ACME, no public internet, and
   certificate verification is never disabled.
-- **Authentication and CSRF preserved.** The controller keeps `SOP_CONTROLLER_TOKEN` and
-  the double-submit CSRF cookie; requests through the proxy are authenticated exactly as
-  on loopback.
-- **Proxy headers.** The controller does not trust `X-Forwarded-*` or the `Host` header,
-  so nothing the proxy adds affects authorization or CSRF.
+- **Authentication and CSRF preserved.** In network mode the controller requires a
+  login; the token is entered once at `/login` and carried in a `Secure`, `HttpOnly`,
+  `SameSite` session cookie, with the double-submit CSRF cookie on every state-changing
+  request. The token is never placed in a URL or logged.
+- **Proxy headers.** The controller honors `X-Forwarded-Proto` only from the loopback
+  proxy (to mark cookies `Secure`) and otherwise ignores `X-Forwarded-*` and `Host`, so
+  nothing the proxy adds affects authorization or CSRF.
 - **Secrets.** Caddy's CA and certificate private keys live under the ignored `.caddy/`
-  directory and are never committed; no token or key is printed or embedded in the
-  documented URLs.
+  directory and are never committed. The access token lives in the macOS Keychain and is
+  passed only as the controller's environment variable — never a command argument, and no
+  token or key is printed, logged, or embedded in the documented URLs.
 
 ## Verify
 

@@ -8,17 +8,19 @@ wins and is never overwritten; `.env.dev` only fills in for development).
 
 ## Environment Variables
 
-| Variable                         | Default          | Purpose                                                              |
-| -------------------------------- | ---------------- | -------------------------------------------------------------------- |
-| `SOP_CONTROLLER_ADDR`            | `127.0.0.1:8080` | Listen address (loopback enforced unless network mode is on)         |
-| `SOP_CONTROLLER_PROJECTS`        | `.`              | Comma-separated explicit project roots containing `.agent-sdlc/`     |
-| `SOP_CONTROLLER_WORKSPACES`      | —                | Comma-separated workspace roots scanned for SOP projects             |
-| `SOP_CONTROLLER_DISCOVERY_DEPTH` | `4`              | Maximum directory depth below a workspace root during discovery      |
-| `SOP_BIN`                        | `sop`            | SOP CLI used for commands                                            |
-| `SOP_CONTROLLER_POLL`            | `3s`             | HTMX polling cadence for active views                                |
-| `SOP_CONTROLLER_COMMAND_TIMEOUT` | `15m`            | Upper bound for a single SOP command (run, resume, validate, review) |
-| `SOP_CONTROLLER_ALLOW_NETWORK`   | `false`          | Opt-in to binding a non-loopback address                             |
-| `SOP_CONTROLLER_TOKEN`           | —                | Required access token when network mode is on                        |
+| Variable                         | Default              | Purpose                                                                       |
+| -------------------------------- | -------------------- | ----------------------------------------------------------------------------- |
+| `SOP_CONTROLLER_ADDR`            | `127.0.0.1:8080`     | Listen address (loopback enforced unless network mode is on)                  |
+| `SOP_CONTROLLER_PROJECTS`        | `.`                  | Comma-separated explicit project roots containing `.agent-sdlc/`              |
+| `SOP_CONTROLLER_WORKSPACES`      | —                    | Comma-separated workspace roots scanned for SOP projects                      |
+| `SOP_CONTROLLER_DISCOVERY_DEPTH` | `4`                  | Maximum directory depth below a workspace root during discovery               |
+| `SOP_BIN`                        | `sop`                | SOP CLI used for commands                                                     |
+| `SOP_CONTROLLER_POLL`            | `3s`                 | HTMX polling cadence for active views                                         |
+| `SOP_CONTROLLER_COMMAND_TIMEOUT` | `15m`                | Upper bound for a single SOP command (run, resume, validate, review)          |
+| `SOP_CONTROLLER_ALLOW_NETWORK`   | `false`              | Opt-in to binding a non-loopback address                                      |
+| `SOP_CONTROLLER_TOKEN`           | —                    | Required access token when network mode is on (Keychain-backed launcher)      |
+| `SOP_CONTROLLER_SESSION_TTL`     | `720h`               | Remembered-device session lifetime; capped at 30 days (zero uses the default) |
+| `SOP_CONTROLLER_SESSION_FILE`    | `.run/sessions.json` | Persisted remembered-device sessions (owner-only); empty keeps them in memory |
 
 ### Notes
 
@@ -29,9 +31,27 @@ wins and is never overwritten; `.env.dev` only fills in for development).
 - `SOP_CONTROLLER_ADDR` is forced back to loopback when it names a non-loopback
   host and `SOP_CONTROLLER_ALLOW_NETWORK` is not `true`.
 - `SOP_CONTROLLER_ALLOW_NETWORK=true` requires `SOP_CONTROLLER_TOKEN`; the
-  controller refuses to start without it.
+  controller refuses to start without it. In network mode the token is entered once on
+  `/login` and carried in a `Secure`, `HttpOnly`, `SameSite` session cookie; the token is
+  never accepted from the URL.
+- For the documented HTTPS launcher (`scripts/https-proxy.sh`, `make https`) the token
+  is loaded from the macOS **Keychain** (service `sop-controller`, account
+  `controller-token`; created on first run by `scripts/keychain-token.sh`). An explicit
+  `SOP_CONTROLLER_TOKEN` in the environment overrides the Keychain for that run. The token
+  is used only as the controller's environment variable — never a command argument, never
+  printed or logged. See [../guides/HTTPS-ACCESS.md](../guides/HTTPS-ACCESS.md).
 - `SOP_CONTROLLER_DISCOVERY_DEPTH` reads a positive integer; an empty,
   unparseable, or non-positive value falls back to the default.
+- `SOP_CONTROLLER_SESSION_TTL` bounds a remembered device. It is capped at **30
+  days**, and a session is dropped when the configured token changes. A sign-out revokes
+  just that device immediately.
+- `SOP_CONTROLLER_SESSION_FILE` persists remembered-device sessions (owner-only, mode
+  `0600`; only hashed session identifiers and the token's fingerprint are written — never
+  the raw token or session id) so a signed-in browser survives a controller restart.
+  Empty string keeps sessions in memory only (they then end on restart). Keep the default
+  under the ignored `.run/` directory; never commit it. Deleting the file (or running
+  `make sessions-clear`) and restarting revokes every remembered device. See
+  [../specs/SECURITY.md](../specs/SECURITY.md).
 - The controller also reads `SOP_CONTROLLER_ENV` / `NODE_ENV` to decide whether
   to seed `.env.dev` during development. These are not part of normal runtime
   configuration.

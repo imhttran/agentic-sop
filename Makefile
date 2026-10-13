@@ -12,8 +12,10 @@ BIN  := .run/sop-controller
 PID  := .run/sop-controller.pid
 LOG  := .run/sop-controller.log
 ADDR ?= 127.0.0.1:8080
+# Remembered-device session store; override with SOP_CONTROLLER_SESSION_FILE (mirrors the controller).
+SOP_CONTROLLER_SESSION_FILE ?= .run/sessions.json
 
-.PHONY: help run start stop restart status logs https https-stop build test test-race fmt vet tidy clean
+.PHONY: help run start stop restart status logs https https-stop token-rotate token-show sessions-clear build test test-race fmt vet tidy clean
 
 help:
 	@echo "SOP Controller"
@@ -24,8 +26,11 @@ help:
 	@echo "  make restart   stop, then start"
 	@echo "  make status    is it running? (also pings /healthz)"
 	@echo "  make logs      tail the background log"
-	@echo "  make https     run behind the Caddy HTTPS proxy (needs SOP_CONTROLLER_TOKEN)"
+	@echo "  make https     run behind the Caddy HTTPS proxy (token from the macOS Keychain)"
 	@echo "  make https-stop  stop the HTTPS proxy"
+	@echo "  make token-rotate  replace the Keychain access token (ends existing sessions)"
+	@echo "  make token-show    print the Keychain access token (to sign in on a phone)"
+	@echo "  make sessions-clear  delete persisted remembered-device sessions"
 	@echo ""
 	@echo "  make build     build ./cmd/sop-controller to $(BIN)"
 	@echo "  make test      go test ./..."
@@ -46,6 +51,21 @@ https:
 
 https-stop:
 	./scripts/https-proxy.sh stop
+
+# Replace the access token stored in the macOS Keychain (see docs/guides/HTTPS-ACCESS.md).
+token-rotate:
+	./scripts/keychain-token.sh rotate
+
+# Print the access token so it can be typed on the sign-in page. Keep it out of logs.
+token-show:
+	@./scripts/keychain-token.sh get
+
+# Delete the persisted remembered-device sessions, so every remembered browser signs in
+# again after the controller restarts. A running controller keeps its in-memory sessions
+# until it restarts, so follow this with `make restart` (or re-run the HTTPS launcher).
+sessions-clear:
+	@rm -f "$(SOP_CONTROLLER_SESSION_FILE)"
+	@echo "cleared remembered sessions ($(SOP_CONTROLLER_SESSION_FILE)) — restart the controller to apply"
 
 build:
 	@mkdir -p .run

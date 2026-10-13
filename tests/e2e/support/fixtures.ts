@@ -158,12 +158,14 @@ export function freePort(): Promise<number> {
 
 // startController runs the controller in network mode bound to loopback, so the access
 // token is enforced. It runs from the work directory, so the repository's own `.env`
-// (developer credentials) is never loaded.
+// (developer credentials) is never loaded. `sessionFile` isolates remembered-device
+// persistence; it defaults to a file under the work directory.
 export function startController(
   bin: string,
   roots: string[],
   port: number,
   token: string,
+  sessionFile: string = path.join(WORK_DIR, "sessions.json"),
 ): ChildProcess {
   const child = spawn(bin, [], {
     cwd: WORK_DIR,
@@ -173,11 +175,30 @@ export function startController(
       SOP_CONTROLLER_ALLOW_NETWORK: "true",
       SOP_CONTROLLER_TOKEN: token,
       SOP_CONTROLLER_ADDR: `127.0.0.1:${port}`,
+      SOP_CONTROLLER_SESSION_FILE: sessionFile,
       SOP_BIN: process.env.SOP_BIN ?? "sop",
     },
     stdio: ["ignore", "inherit", "inherit"],
   });
   return child;
+}
+
+// stopController stops a controller started by startController and waits for it to exit,
+// so a test can restart it (for persistence/rotation coverage) on a clean port.
+export async function stopController(child: ChildProcess): Promise<void> {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  await new Promise<void>((resolve) => {
+    child.once("exit", () => resolve());
+    child.kill("SIGTERM");
+    setTimeout(() => {
+      try {
+        child.kill("SIGKILL");
+      } catch {
+        // Already gone.
+      }
+      resolve();
+    }, 3000);
+  });
 }
 
 export async function waitForHealth(

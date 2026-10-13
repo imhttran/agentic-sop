@@ -78,6 +78,9 @@ Each command is bounded by `SOP_CONTROLLER_COMMAND_TIMEOUT` (see
 | Method | Path                                                       | Purpose                                                                                 |
 | ------ | ---------------------------------------------------------- | --------------------------------------------------------------------------------------- |
 | `GET`  | `/healthz`                                                 | health check                                                                            |
+| `GET`  | `/login`                                                   | token sign-in page (network mode; never gated)                                          |
+| `POST` | `/login`                                                   | submit the access token and open a session (CSRF-protected)                             |
+| `POST` | `/logout`                                                  | end the session and clear its cookie (CSRF-protected)                                   |
 | `GET`  | `/`                                                        | home / landing                                                                          |
 | `GET`  | `/projects`                                                | project overview (FR-1)                                                                 |
 | `GET`  | `/approvals`                                               | pending-approvals inbox across projects (P0; read-only on GET)                          |

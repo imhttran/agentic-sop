@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -40,6 +41,11 @@ type Config struct {
 	AllowNetwork bool
 	// AccessToken gates access when AllowNetwork is on.
 	AccessToken string
+	// SessionTTL bounds an authenticated login session; zero uses the web default.
+	SessionTTL time.Duration
+	// SessionFile persists remembered-device sessions across restarts (owner-only
+	// permissions); empty keeps them in memory only.
+	SessionFile string
 }
 
 // LoadEnvFiles mirrors the previous loader: a personal .env wins (existing env
@@ -102,6 +108,8 @@ func Load() Config {
 		AttentionInterval: ResolveAttentionInterval(os.Getenv(AttentionPollEnv)),
 		AllowNetwork:      boolOr("SOP_CONTROLLER_ALLOW_NETWORK", false),
 		AccessToken:       os.Getenv("SOP_CONTROLLER_TOKEN"),
+		SessionTTL:        durationOr("SOP_CONTROLLER_SESSION_TTL", 0),
+		SessionFile:       sessionFileEnv(),
 	}
 	if !c.AllowNetwork && !isLoopback(c.Addr) {
 		log.Printf("[config] %q is not loopback; restricting to 127.0.0.1 (set SOP_CONTROLLER_ALLOW_NETWORK=true to allow)", c.Addr)
@@ -111,6 +119,16 @@ func Load() Config {
 		log.Fatal("[config] SOP_CONTROLLER_ALLOW_NETWORK=true requires SOP_CONTROLLER_TOKEN")
 	}
 	return c
+}
+
+// sessionFileEnv resolves the remembered-device session store path: unset uses the
+// default under the ignored .run directory, and an explicitly empty value disables
+// persistence (sessions then end on restart).
+func sessionFileEnv() string {
+	if v, ok := os.LookupEnv("SOP_CONTROLLER_SESSION_FILE"); ok {
+		return strings.TrimSpace(v)
+	}
+	return filepath.Join(".run", "sessions.json")
 }
 
 // ResolveAttentionInterval: empty or unparseable means AttentionIntervalDefault;

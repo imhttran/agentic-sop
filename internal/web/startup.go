@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net"
 	"strings"
+	"time"
 )
 
 // StartupURLs is the set of access URLs advertised when the controller starts. Every
@@ -17,6 +18,17 @@ type StartupURLs struct {
 	Network []string
 	// Approvals is the /approvals link, reached via the primary URL.
 	Approvals string
+}
+
+// SessionInfo describes remembered-device sessions for the startup banner: their lifetime
+// and whether they persist across restarts. It never carries a secret.
+type SessionInfo struct {
+	// Lifetime is the effective session lifetime (already clamped).
+	Lifetime time.Duration
+	// Persisted reports whether sessions survive a controller restart.
+	Persisted bool
+	// File is the persistence path, shown only when Persisted is true.
+	File string
 }
 
 // ResolveStartupURLs computes the URLs to advertise for a bound listener. It never
@@ -67,9 +79,10 @@ func ResolveStartupURLs(bound net.Addr, scheme string, networkEnabled bool, lanI
 	return u
 }
 
-// StartupSummary renders the human-readable startup banner. authEnabled reports whether
-// an access token is required; no token or other secret is ever printed.
-func StartupSummary(u StartupURLs, authEnabled bool) string {
+// StartupSummary renders the human-readable startup banner. authEnabled reports whether an
+// access token is required; session describes remembered-device sessions. No token or
+// other secret is ever printed.
+func StartupSummary(u StartupURLs, authEnabled bool, session SessionInfo) string {
 	var b strings.Builder
 	b.WriteString("SOP Controller started\n\n")
 	if u.Local != "" {
@@ -84,11 +97,30 @@ func StartupSummary(u StartupURLs, authEnabled bool) string {
 	b.WriteString("\n")
 	if authEnabled {
 		b.WriteString("Auth:       enabled\n")
+		b.WriteString("Sessions:   " + sessionLine(session) + "\n")
 	} else {
 		b.WriteString("Auth:       disabled (loopback only)\n")
 	}
 	b.WriteString("Press Ctrl+C to stop\n")
 	return b.String()
+}
+
+// sessionLine describes the remembered-device session lifetime and store, without secrets.
+func sessionLine(s SessionInfo) string {
+	where := "in memory only (ends on restart)"
+	if s.Persisted && s.File != "" {
+		where = "persisted to " + s.File
+	}
+	return fmt.Sprintf("%s remembered, %s", formatLifetime(s.Lifetime), where)
+}
+
+// formatLifetime renders a session lifetime compactly: whole days as "30d", otherwise the
+// standard duration form.
+func formatLifetime(d time.Duration) string {
+	if d > 0 && d%(24*time.Hour) == 0 {
+		return fmt.Sprintf("%dd", int(d/(24*time.Hour)))
+	}
+	return d.String()
 }
 
 // LANAddresses returns the usable non-loopback interface addresses, IPv4 first, so the

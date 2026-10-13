@@ -21,6 +21,11 @@ type Options struct {
 	CommandTimeout time.Duration
 	AllowNetwork   bool
 	AccessToken    string
+	// SessionTTL bounds an authenticated session; zero uses the default.
+	SessionTTL time.Duration
+	// SessionFile persists remembered-device sessions across restarts; empty keeps them
+	// in memory only.
+	SessionFile string
 	// Discovery feeds /discovery; zero renders an empty report.
 	Discovery config.DiscoveryReport
 }
@@ -28,11 +33,19 @@ type Options struct {
 // NewServer builds the HTTP handler for the dashboard.
 func NewServer(opts Options) http.Handler {
 	h := &Handlers{sop: opts.SOP, views: opts.Views, poll: opts.Poll, attention: opts.Attention, runner: NewCommandRunner(opts.CommandTimeout), discoveryReport: opts.Discovery}
+	h.accessToken = opts.AccessToken
+	h.sessions = newSessionStore(opts.AccessToken, opts.SessionTTL, opts.SessionFile)
+	h.loginLimiter = newAttemptLimiter(loginMaxAttempts, loginWindow)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.FS(opts.StaticFS))))
 
 	mux.HandleFunc("GET /healthz", h.health)
+	// Token login (network mode): the sign-in page, its submission, and logout. The
+	// token is validated server-side and never appears in a URL.
+	mux.HandleFunc("GET /login", h.loginPage)
+	mux.HandleFunc("POST /login", h.loginSubmit)
+	mux.HandleFunc("POST /logout", h.logout)
 	mux.HandleFunc("GET /{$}", h.home)
 	mux.HandleFunc("GET /projects", h.projects)
 	// P0 cross-project pending-approvals inbox (read-only; controls POST to the
@@ -74,7 +87,7 @@ func NewServer(opts Options) http.Handler {
 	var handler http.Handler = mux
 	handler = csrfProtect(handler)
 	if opts.AllowNetwork {
-		handler = accessToken(opts.AccessToken)(handler)
+		handler = authGate(opts.AccessToken, h.sessions, handler)
 	}
 	handler = logRequests(handler)
 	return handler

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
-	"net/url"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1039,47 +1038,25 @@ func TestAccessTokenValidation(t *testing.T) {
 		t.Errorf("AC FAILED: /healthz should not require token, got %d", code)
 	}
 
-	// With token in query param, should work and set cookie
-	client := &http.Client{}
-	req, err := http.NewRequest("GET", srv.URL+"/projects?token=test-token-12345", nil)
+	// A token in the URL is no longer a credential (tokens must never appear in URLs).
+	if code, _ := get(t, srv.URL+"/projects?token=test-token-12345"); code != http.StatusUnauthorized {
+		t.Errorf("AC FAILED: a token in the URL must not authenticate, got %d", code)
+	}
+
+	// A browser navigation is redirected to the login page.
+	req, err := http.NewRequest("GET", srv.URL+"/projects", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
-	resp, err := client.Do(req)
+	req.Header.Set("Accept", "text/html")
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := noRedirect.Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("AC FAILED: With correct token should get 200, got %d", resp.StatusCode)
-	}
-
-	// Subsequent requests with cookie should work
-	if len(resp.Cookies()) > 0 {
-		jar, err := cookiejar.New(&cookiejar.Options{})
-		if err != nil {
-			t.Fatal(err)
-		}
-		client.Jar = jar
-		for _, cookie := range resp.Cookies() {
-			u, err := url.Parse(srv.URL)
-			if err != nil {
-				t.Fatal(err)
-			}
-			client.Jar.SetCookies(u, []*http.Cookie{cookie})
-		}
-		req2, err := http.NewRequest("GET", srv.URL+"/projects", nil)
-		if err != nil {
-			t.Fatal(err)
-		}
-		resp2, err := client.Do(req2)
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer resp2.Body.Close()
-		if resp2.StatusCode != http.StatusOK {
-			t.Errorf("AC FAILED: With token cookie should get 200, got %d", resp2.StatusCode)
-		}
+	if resp.StatusCode != http.StatusSeeOther || !strings.HasPrefix(resp.Header.Get("Location"), "/login") {
+		t.Errorf("AC FAILED: browser navigation should redirect to /login, got %d %q", resp.StatusCode, resp.Header.Get("Location"))
 	}
 }
 

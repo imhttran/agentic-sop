@@ -56,6 +56,8 @@ func main() {
 		CommandTimeout: cfg.CommandTimeout,
 		AllowNetwork:   cfg.AllowNetwork,
 		AccessToken:    cfg.AccessToken,
+		SessionTTL:     cfg.SessionTTL,
+		SessionFile:    cfg.SessionFile,
 		Discovery:      report,
 	})
 
@@ -69,6 +71,11 @@ func main() {
 	fmt.Print(web.StartupSummary(
 		web.ResolveStartupURLs(ln.Addr(), "http", cfg.AllowNetwork, web.LANAddresses()),
 		cfg.AllowNetwork,
+		web.SessionInfo{
+			Lifetime:  web.EffectiveSessionTTL(cfg.SessionTTL),
+			Persisted: cfg.SessionFile != "",
+			File:      cfg.SessionFile,
+		},
 	))
 	if err := http.Serve(ln, handler); err != nil {
 		log.Fatal(err)
