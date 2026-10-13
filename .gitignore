@@ -19,3 +19,9 @@
 # Build + run artifacts
 .run/
 /sop-controller
+
+# Playwright end-to-end test tooling (development only; never needed to build or run)
+node_modules/
+/test-results/
+/playwright-report/
+/.e2e/

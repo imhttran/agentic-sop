@@ -1,0 +1,133 @@
+import { expect, test, type Page } from "@playwright/test";
+import {
+  NEEDS_HUMAN_REASON,
+  sopApprove,
+  sopApprovalState,
+} from "./support/fixtures";
+import { loadState } from "./support/state";
+
+// The state global-setup wrote: the controller's base URL and token, and one
+// disposable project per decision path.
+const state = loadState();
+const withToken = (p: string) => `${state.baseURL}${p}?token=${state.token}`;
+
+// projectCard scopes to one project's section in the inbox, so the (unique) task id in
+// each section is never ambiguous with another project's gate.
+function projectCard(page: Page, id: string) {
+  return page
+    .locator("section.decisions")
+    .filter({ has: page.getByRole("heading", { name: id, exact: true }) })
+    .locator(".decisions-item");
+}
+
+test.describe("approvals inbox (mobile, WebKit)", () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto(withToken("/approvals"));
+  });
+
+  test("1. inbox renders on a phone viewport without horizontal overflow", async ({
+    page,
+  }) => {
+    await expect(
+      page.getByRole("heading", { name: "Pending approvals" }),
+    ).toBeVisible();
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - window.innerWidth,
+    );
+    expect(
+      overflow,
+      "the page must not scroll horizontally on a phone",
+    ).toBeLessThanOrEqual(1);
+  });
+
+  test("2. a pending gate shows enough context to decide", async ({ page }) => {
+    const card = projectCard(page, state.projects.readonly.id);
+    await expect(card).toHaveCount(1);
+    await expect(
+      card.getByRole("link", { name: state.projects.readonly.task }),
+    ).toBeVisible();
+    await expect(card).toContainText("NEEDS_HUMAN");
+    await expect(card).toContainText(NEEDS_HUMAN_REASON);
+    await expect(card).toContainText("Requested");
+    await expect(card.getByRole("button", { name: "Approve" })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Decline" })).toBeVisible();
+  });
+
+  test("8. mobile controls and form inputs stay usable", async ({ page }) => {
+    const card = projectCard(page, state.projects.readonly.id);
+    const by = card.getByPlaceholder("by (actor, optional)").first();
+    await by.fill("phone tester");
+    await expect(by).toHaveValue("phone tester");
+
+    const box = await by.boundingBox();
+    const viewport = page.viewportSize();
+    expect(box).not.toBeNull();
+    expect(viewport).not.toBeNull();
+    expect(box!.x + box!.width).toBeLessThanOrEqual(viewport!.width + 1);
+    await expect(card.getByRole("button", { name: "Approve" })).toBeEnabled();
+  });
+
+  test("3. Approve submits and updates authoritative SOP state", async ({
+    page,
+  }) => {
+    const fixture = state.projects.approve;
+    const card = projectCard(page, fixture.id);
+    await expect(card).toHaveCount(1);
+
+    const approveForm = card
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Approve" }) });
+    await approveForm.getByPlaceholder("by (actor, optional)").fill("e2e");
+    await approveForm.getByPlaceholder("note (optional)").fill("approve e2e");
+    await approveForm.getByRole("button", { name: "Approve" }).click();
+
+    await expect(page.locator("#approvals-cmd")).toContainText(
+      "SOP recorded the approval decision.",
+    );
+    await expect(projectCard(page, fixture.id)).toHaveCount(0);
+
+    const record = sopApprovalState(fixture.root, fixture.task);
+    expect(record).toContain("Approval: APPROVED");
+    expect(record).toContain("Decided by: e2e");
+  });
+
+  test("4. Decline submits and updates authoritative SOP state", async ({
+    page,
+  }) => {
+    const fixture = state.projects.decline;
+    const card = projectCard(page, fixture.id);
+    await expect(card).toHaveCount(1);
+
+    const declineForm = card
+      .locator("form")
+      .filter({ has: page.getByRole("button", { name: "Decline" }) });
+    await declineForm.getByPlaceholder("by (actor, optional)").fill("e2e");
+    await declineForm.getByPlaceholder("note (optional)").fill("decline e2e");
+    await declineForm.getByRole("button", { name: "Decline" }).click();
+
+    await expect(page.locator("#approvals-cmd")).toContainText(
+      "SOP recorded the decline/withhold decision.",
+    );
+    await expect(projectCard(page, fixture.id)).toHaveCount(0);
+
+    const record = sopApprovalState(fixture.root, fixture.task);
+    expect(record).toContain("Approval: DECLINED");
+    expect(record).toContain("Decided by: e2e");
+  });
+
+  test("7. a stale decision is reported as a conflict", async ({ page }) => {
+    const fixture = state.projects.stale;
+    const card = projectCard(page, fixture.id);
+    await expect(card).toHaveCount(1);
+
+    // Another operator resolves the gate out-of-band; the page still shows it, so the
+    // decision the UI submits is now stale. SOP must refuse it as a conflict, not a 500.
+    sopApprove(fixture.root, fixture.task);
+    expect(sopApprovalState(fixture.root, fixture.task)).toContain(
+      "Approval: APPROVED",
+    );
+
+    await card.getByRole("button", { name: "Decline" }).click();
+    await expect(page.locator("#approvals-cmd")).toContainText("conflict");
+  });
+});

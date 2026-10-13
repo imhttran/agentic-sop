@@ -111,6 +111,40 @@ The task detail view also reports SOP's recorded **model selection** (its class,
 locality, and whether a fallback was used) and run usage counts when SOP persisted
 them; the controller reports the selection and never chooses a model.
 
+## Browser Tests (Playwright)
+
+Optional, development-only end-to-end tests that drive the real dashboard in a browser
+(WebKit, iPhone viewport) against disposable SOP projects. The Go build and tests never
+need Node.
+
+One-time setup:
+
+```bash
+npm install
+npx playwright install webkit
+```
+
+Run:
+
+```bash
+npm run test:e2e          # the whole suite
+npm run test:e2e:ui       # Playwright's interactive UI
+npm run test:e2e:headed   # watch the browser
+```
+
+Each run builds the controller, allocates a free loopback port, creates disposable SOP
+projects with genuine pending approvals, and removes them (and the server) afterwards —
+all under the ignored `.e2e/` directory. Nothing is left behind, and no developer or
+production project is touched.
+
+On failure a screenshot is kept in `test-results/`, and a trace on the first retry.
+Inspect them with `npx playwright show-trace test-results/<test>/trace.zip`.
+
+**Limitations.** WebKit emulating an iPhone viewport is not real iPhone Safari: it does
+not reproduce iOS-specific WebKit quirks, on-device rendering or touch behavior, or a
+physical device's networking. Treat a green run as strong regression coverage, not as
+proof that a real handset behaves identically.
+
 ## Documentation
 
 Start at the documentation index: **[docs/README.md](docs/README.md)** — it maps
