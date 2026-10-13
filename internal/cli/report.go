@@ -135,6 +135,12 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	writeEarlyReport(stdout, filepath.Join(runsRoot, id))
 	writeApprovalReport(stdout, dir, id)
 	writePerformance(stdout, dir, doc)
+	// Read-only reuse-decision surfacing (VER-003). It renders the recorded
+	// evidence key, the reuse-vs-run decision, the answering store, the prior run,
+	// and the invalidation reason by reading the run's append-only decision record.
+	// It never rewrites the record or any archive and transitions no state, and it
+	// degrades to an "unknown" line when no readable decision exists.
+	writeReuseDecisionSummary(stdout, dir, id)
 	// Structured run trace summary, when the run persisted one. It renders nothing
 	// for an older run with no trace, so existing behavior is unchanged.
 	writeTraceReport(stdout, filepath.Join(runsRoot, id))

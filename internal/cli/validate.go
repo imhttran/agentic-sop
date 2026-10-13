@@ -51,7 +51,7 @@ func runValidate(args []string, stdout, stderr io.Writer, getwd func() (string, 
 		return exitOK
 	}
 
-	result, cached := validateWithCache(context.Background(), dir, cfg, useCache)
+	result, cached, reuse := validateWithCache(context.Background(), dir, cfg, useCache)
 	for _, r := range result.Results {
 		fmt.Fprintf(stdout, "%-6s %-12s %s (%.2fs)\n", r.Status, r.Category, r.Command, r.Duration.Seconds())
 		if r.Status != testrunner.Pass {
@@ -70,6 +70,10 @@ func runValidate(args []string, stdout, stderr io.Writer, getwd func() (string, 
 		verdict += " (cached)"
 	}
 	fmt.Fprintln(stdout, verdict)
+	// Read-only reuse provenance. It names the evidence key, the reuse-vs-run
+	// decision, the answering store, and the miss reason. It changes no PASS/FAIL
+	// semantics and performs no state transition.
+	writeReuseProvenance(stdout, reuse)
 	if result.Passed() {
 		return exitOK
 	}
@@ -77,43 +81,86 @@ func runValidate(args []string, stdout, stderr io.Writer, getwd func() (string, 
 }
 
 // validateWithCache runs the configured validation, reusing a cached result when the
-// verification cache is enabled and the identity matches exactly.
+// verification cache is enabled and the extended identity matches exactly.
 //
 // The cache is consulted only for a clean working tree. HEAD alone does not identify a
 // dirty tree, so an uncommitted change is never served from cache: that is a false miss,
-// never a false hit. The identity also includes the command set, the relevant
-// environment, and the verifier version, so a changed command, toolchain, or SOP version
-// invalidates the entry.
-func validateWithCache(ctx context.Context, dir string, cfg *config.Config, useCache bool) (testrunner.SuiteResult, bool) {
+// never a false hit. The identity is the extended verifcache/2 identity: effective
+// validation inputs (path + content hash, including uncommitted changes), the command
+// set, the relevant environment and toolchain, the command-policy classification, the
+// validation scope, and the verifier version. Reuse occurs only for an exact identity
+// match AND a VERIFIED verdict; every mismatch, and failed/partial/hold/incomplete/
+// untrusted evidence, runs. A dirty tree is always an explicit miss.
+//
+// The lookup/store route through the opt-in shared cross-worktree store, disabled by
+// default via SOP_VERIFY_CACHE_SHARED, so the default path is local-only. Each decision
+// is recorded append-only when a run-relative record path is available.
+func validateWithCache(ctx context.Context, dir string, cfg *config.Config, useCache bool) (testrunner.SuiteResult, bool, validateReuse) {
 	if !useCache {
-		return validate.Run(ctx, dir, cfg.Validation), false
+		return validate.Run(ctx, dir, cfg.Validation), false, validateReuse{}
 	}
 	head, dirty := repoState(dir)
+	id := buildValidateIdentity(dir, cfg, head, dirty)
+	reuse := validateReuse{Consulted: true, KeyDigest: id.Digest(), Scope: id.Scope}
 	if dirty {
-		return validate.Run(ctx, dir, cfg.Validation), false
+		// A dirty working tree is never served from cache: an explicit miss with
+		// the fail-closed reason.
+		reuse.Reason = "dirty working tree is never served from cache"
+		if err := recordDecision(decisionRecordPath(dir), id, false, verifcache.SourceLocal, reuse.Reason, verifcache.Entry{}); err != nil {
+			reuse.RecordErr = err.Error()
+		}
+		return validate.Run(ctx, dir, cfg.Validation), false, reuse
 	}
 
-	id := verifcache.Identity{
-		Schema:      verifcache.SchemaVersion,
-		Repository:  verifcache.RepositoryIdentity(head, false, ""),
-		Command:     verifcache.CommandIdentity(checkCommands(cfg.Validation)),
-		Environment: verifcache.EnvironmentIdentity(validationEnv()),
-		Verifier:    "sop/validate@" + Version,
-	}
 	cache := loadVerifyCache(dir)
-	if hit := cache.Lookup(id); hit.Hit {
-		var suite testrunner.SuiteResult
-		if json.Unmarshal([]byte(hit.Entry.Output), &suite) == nil {
-			return suite, true
+	shared := sharedStoreFromEnv()
+	// SharedStore.Lookup consults the local cache first and, when the shared store
+	// is enabled, the shared store; it returns the first exact identity match.
+	hit, source := shared.Lookup(cache, id)
+	if hit.Hit {
+		if decision := verifcache.Decide(hit.Entry, id); decision.Reusable {
+			var suite testrunner.SuiteResult
+			if json.Unmarshal([]byte(hit.Entry.Output), &suite) == nil {
+				reuse.Reused = true
+				reuse.Store = source
+				reuse.Reason = decision.Reason
+				if err := recordDecision(decisionRecordPath(dir), id, true, source, decision.Reason, hit.Entry); err != nil {
+					reuse.RecordErr = err.Error()
+				}
+				return suite, true, reuse
+			}
+		} else {
+			// An exact-match entry that is not reusable (non-VERIFIED evidence) is a
+			// miss: it must never be reused as PASS.
+			reuse.Reason = decision.Reason
+			reuse.MatchPresent = true
 		}
+	}
+	if !hit.Hit {
+		reuse.Reason = verifcache.Decide(verifcache.Entry{}, id).Reason
 	}
 
 	suite := validate.Run(ctx, dir, cfg.Validation)
 	if data, err := json.Marshal(suite); err == nil {
-		cache.Store(id, verifcache.Result{Passed: suite.Passed(), Output: string(data), Source: "sop validate"})
-		_ = saveVerifyCache(dir, cache)
+		entry, err := shared.Store(cache, id, verifcache.Result{Passed: suite.Passed(), Output: string(data), Source: "sop validate", Verdict: verdictOf(suite)})
+		if err == nil {
+			_ = saveVerifyCache(dir, cache)
+		}
+		if err := recordDecision(decisionRecordPath(dir), id, false, source, reuse.Reason, entry); err != nil {
+			reuse.RecordErr = err.Error()
+		}
 	}
-	return suite, false
+	return suite, false, reuse
+}
+
+// verdictOf classifies a fresh validation result for the cache's fail-closed reuse
+// rule. A passing suite is VERIFIED; a failing suite is FAILED. Only VERIFIED
+// evidence may ever be reused as PASS.
+func verdictOf(suite testrunner.SuiteResult) verifcache.Verdict {
+	if suite.Passed() {
+		return verifcache.VerdictVerified
+	}
+	return verifcache.VerdictFailed
 }
 
 // checkCommands lists the configured verification commands in run order.
@@ -124,12 +171,6 @@ func checkCommands(v config.Validation) []string {
 		out = append(out, c.Command)
 	}
 	return out
-}
-
-// validationEnv is the relevant environment a cached verification depends on. The
-// toolchain resolves through PATH, so a different toolchain invalidates the entry.
-func validationEnv() map[string]string {
-	return map[string]string{"PATH": os.Getenv("PATH")}
 }
 
 func verifyCachePath(dir string) string {
