@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/commandpolicy"
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -24,6 +25,13 @@ import (
 // AUTHORIZED TASK SPECIFICATION — never from a model-generated completion claim.
 // The verdict (VERIFIED / PARTIAL / HOLD) is recorded as an artifact and reported,
 // so a task's PASS/LOCAL_DONE is never equated with verified objective completion.
+//
+// The operator-enabled verdict gate (SOP-HARD-01, internal/config.Lifecycle) may
+// additionally gate the terminal LOCAL_DONE transition on that verdict: with the
+// gate ON, a PARTIAL from an unmet REQUIRED deliverable/check does not yield
+// LOCAL_DONE unless a valid, designated-approver waiver exists. The gate is OFF by
+// default, so an omitted flag leaves the lifecycle unchanged (the gate adds no
+// lifecycle/waiver evidence on the flag-off path).
 //
 // An operator-declared deterministic acceptance check (a SAFE argv vector, never a
 // shell) is the verifiable half of acceptance: when a stage declares checks, every
@@ -54,12 +62,25 @@ import (
 // equated with verified objective completion.
 
 // outcomeArtifact is the persisted objective-level verdict: the status, the
-// per-criterion evidence, and the reasons. It is diagnostic record only; nothing
-// reads it back to drive a decision.
+// per-criterion evidence, and the reasons, plus the resolved local lifecycle
+// disposition. It is diagnostic record only; the lifecycle field records what the
+// operator-enabled verdict gate resolved (LOCAL_DONE / NEEDS_HUMAN), and nothing here
+// writes SOP state.
+//
+// Lifecycle and WaiverDenied are set ONLY when the operator-enabled verdict gate is
+// ON, so the flag-off artifact carries neither field (the omitempty contract) and
+// the flag-off output stays exactly as it was before the gate existed.
 type outcomeArtifact struct {
-	Status   outcome.Status            `json:"status"`
-	Criteria []outcome.CriterionResult `json:"criteria"`
-	Reasons  []string                  `json:"reasons"`
+	Status    outcome.Status            `json:"status"`
+	Criteria  []outcome.CriterionResult `json:"criteria"`
+	Reasons   []string                  `json:"reasons"`
+	Lifecycle outcome.Lifecycle         `json:"lifecycle,omitempty"`
+	// WaiverDenied records that the verdict gate blocked LOCAL_DONE because the
+	// PARTIAL had an unmet required deliverable/check and no valid waiver was
+	// supplied. It is the observable denial: a missing or invalid waiver is never a
+	// silent downgrade. It is set only for the waivable PARTIAL case, never for a
+	// HOLD (which is non-waivable, so there is no waiver to deny).
+	WaiverDenied bool `json:"waiver_denied,omitempty"`
 }
 
 // deriveOutcome computes the objective-level verdict from the task specification.
@@ -88,23 +109,27 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		},
 	})
 
-	for i, d := range spec.Deliverables {
-		p, ok := deliverablePath(d)
-		if !ok {
-			continue
+	// A declared deliverable may list more than one path (for example
+	// "`a/x.go`, `a/y.go` — prose"), so every path-like token becomes its own required
+	// criterion and prose-only deliverables contribute none. This is what keeps a
+	// multi-path bullet from collapsing into a single malformed token.
+	deliverableIndex := 0
+	for _, d := range spec.Deliverables {
+		for _, p := range deliverablePaths(d) {
+			deliverableIndex++
+			path := p
+			criteria = append(criteria, outcome.Criterion{
+				ID:          fmt.Sprintf("deliverable-%d", deliverableIndex),
+				Required:    true,
+				Description: d,
+				Check: func() error {
+					if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
+						return fmt.Errorf("deliverable %q not present", path)
+					}
+					return nil
+				},
+			})
 		}
-		path := p
-		criteria = append(criteria, outcome.Criterion{
-			ID:          fmt.Sprintf("deliverable-%d", i+1),
-			Required:    true,
-			Description: d,
-			Check: func() error {
-				if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
-					return fmt.Errorf("deliverable %q not present", path)
-				}
-				return nil
-			},
-		})
 	}
 
 	// Operator-authorized deterministic acceptance checks: each is validated into an
@@ -198,6 +223,77 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		res.PropagateEvidence(e.id, e.run.argv, e.run.exitCode, e.run.output)
 	}
 	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
+}
+
+// waiverForTask returns the designated-approver waiver supplied for this run, or nil
+// when none was supplied.
+//
+// The repository provides no designated-approver identity source, so the only
+// supply path today is an explicit operator input; absent that, there is no valid
+// waiver and the gate fails closed to NEEDS_HUMAN (the denial is observable). This
+// is the explicit, documented placeholder contract: it intentionally returns nil
+// rather than inventing an approver identity, so the gate is strictly fail-closed
+// on the live path. The valid-waiver branch is exercised directly at the
+// outcome-package level (outcome.ValidateWaiver / outcome.ResolveLifecycle). Any
+// future operator-supplied waiver is owned by the CLI/config layer; this stub is
+// where it would be read.
+func waiverForTask(spec *taskfile.Spec) *outcome.Waiver {
+	_ = spec
+	return nil
+}
+
+// applyLifecycleGate records the resolved local lifecycle disposition on the outcome
+// artifact using the operator-enabled verdict gate (SOP-HARD-01).
+//
+// With the gate OFF (the default) it records NOTHING: the lifecycle field stays empty
+// and WaiverDenied stays false, so the flag-off artifact and output are byte-identical
+// to before the gate existed. With the gate ON, it records the resolved disposition:
+// a PARTIAL from an unmet required deliverable/check resolves to NEEDS_HUMAN (and sets
+// WaiverDenied, the observable denial) unless a valid, designated-approver waiver
+// covers every unmet required criterion; an informational-only PARTIAL and VERIFIED
+// resolve to LOCAL_DONE; a HOLD resolves to NEEDS_HUMAN without setting WaiverDenied
+// (a HOLD is an authority boundary, not a waiver the operator failed to supply).
+func applyLifecycleGate(cfg config.Config, spec *taskfile.Spec, res *outcomeArtifact) {
+	applyLifecycleGateWithWaiver(cfg, spec, res, waiverForTask(spec))
+}
+
+// applyLifecycleGateWithWaiver is applyLifecycleGate with an explicit waiver: the
+// caller supplies the designated-approver waiver (nil when none was recorded). The
+// run path supplies the recorded waiver (recordedWaiverForTask); the package-local
+// tests call the 3-argument form, which passes the no-waiver path.
+func applyLifecycleGateWithWaiver(cfg config.Config, spec *taskfile.Spec, res *outcomeArtifact, waiver *outcome.Waiver) {
+	if res == nil {
+		return
+	}
+	r := outcome.Result{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
+	// Flag OFF (the default): the lifecycle is unchanged — ResolveLifecycle returns
+	// LOCAL_DONE for every verdict — so the recorded disposition is LOCAL_DONE and no
+	// waiver denial is possible. Flag ON: the pinned lifecycle table applies.
+	res.Lifecycle = outcome.ResolveLifecycle(cfg.VerdictGateEnabled(), r, waiver)
+	// The waiver denial is observable only for the waivable PARTIAL case: a HOLD is
+	// non-waivable, so there is no missing waiver to report (its NEEDS_HUMAN is the
+	// authority boundary itself, not a denied waiver).
+	if cfg.VerdictGateEnabled() && res.Status == outcome.Partial && r.HasUnmetRequired() && res.Lifecycle != outcome.LocalDone {
+		res.WaiverDenied = true
+	}
+}
+
+// deriveGatedOutcome derives the objective-level verdict and, when the
+// operator-enabled verdict gate is ON, resolves and records the local lifecycle
+// disposition on it. It is the single production call site for the gate: every
+// lifecycle path that records an outcome verdict routes through here, so the flag-on
+// acceptance behavior is exercised in a real run rather than only in unit tests.
+func deriveGatedOutcome(cfg config.Config, spec *taskfile.Spec, dir string, gate quality.Result) *outcomeArtifact {
+	res := deriveOutcome(spec, dir, gate)
+	// A recorded, designated-approver waiver is the only input that can resolve a
+	// gated PARTIAL-with-unmet-required to LOCAL_DONE. It is read from the task's
+	// append-only audit; absent one, the gate fails closed (waiver == nil).
+	var waiver *outcome.Waiver
+	if spec != nil {
+		waiver = recordedWaiverForTask(dir, spec.ID)
+	}
+	applyLifecycleGateWithWaiver(cfg, spec, res, waiver)
+	return res
 }
 
 // rejectedGoFlagForms are the flag names whose presence in any spelling (-flag
@@ -377,23 +473,67 @@ func boundOutput(s string) string {
 	return detail
 }
 
-// deliverablePath extracts a repository-relative path from a declared deliverable,
-// or reports ok=false when the deliverable is prose rather than a path. It accepts
-// a bare first token that looks like a path (contains a slash or a dot) and rejects
-// absolute and parent-escaping forms.
-func deliverablePath(s string) (string, bool) {
-	fields := strings.Fields(strings.TrimSpace(s))
-	if len(fields) == 0 {
-		return "", false
+// deliverablePaths extracts every repository-relative path a declared deliverable
+// names, in order and de-duplicated. A deliverable bullet may list several paths (for
+// example "`internal/a.go`, `internal/b.go` — prose"); each becomes its own
+// deliverable so it is verified individually. Backtick-quoted tokens are preferred
+// when present; otherwise each comma/semicolon-separated piece contributes its first
+// path-like field. Prose-only deliverables contribute no path.
+func deliverablePaths(s string) []string {
+	seen := map[string]bool{}
+	var out []string
+	add := func(p string) {
+		if p == "" || seen[p] || !looksLikeDeliverablePath(p) {
+			return
+		}
+		seen[p] = true
+		out = append(out, p)
 	}
-	p := strings.Trim(fields[0], "`\"'")
-	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "..") {
-		return "", false
+	for _, span := range backtickSpans(s) {
+		add(span)
 	}
-	if !strings.Contains(p, "/") && !strings.Contains(p, ".") {
-		return "", false
+	if len(out) > 0 {
+		return out
 	}
-	return p, true
+	// No backtick-quoted path: fall back to each comma/semicolon-separated piece's
+	// first field, with surrounding backticks/quotes/punctuation trimmed.
+	for _, piece := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' }) {
+		fields := strings.Fields(strings.TrimSpace(piece))
+		if len(fields) == 0 {
+			continue
+		}
+		add(strings.Trim(fields[0], "`\"'.,"))
+	}
+	return out
+}
+
+// backtickSpans returns the contents of each `backtick`-delimited span in s, in order.
+func backtickSpans(s string) []string {
+	var spans []string
+	for {
+		i := strings.IndexByte(s, '`')
+		if i < 0 {
+			return spans
+		}
+		rest := s[i+1:]
+		j := strings.IndexByte(rest, '`')
+		if j < 0 {
+			return spans
+		}
+		spans = append(spans, rest[:j])
+		s = rest[j+1:]
+	}
+}
+
+// looksLikeDeliverablePath reports whether p is a plausible repository-relative path
+// rather than a command, flag, or prose. It rejects empty, absolute, parent-escaping,
+// and whitespace-bearing tokens (so "go test ./..." is never mistaken for a path) and
+// requires a path separator or a dot.
+func looksLikeDeliverablePath(p string) bool {
+	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "..") || strings.ContainsAny(p, " \t") {
+		return false
+	}
+	return strings.Contains(p, "/") || strings.Contains(p, ".")
 }
 
 // writeOutcomeArtifact persists the verdict beside the other run artifacts.
@@ -406,7 +546,12 @@ func writeOutcomeArtifact(rn *runpkg.Run, res *outcomeArtifact) {
 
 // writeOutcomeSummary prints the objective-level verdict beneath the gate summary,
 // so an operator sees VERIFIED/PARTIAL/HOLD separately from PASS/LOCAL_DONE. It
-// renders nothing when the task declared no objective (res == nil).
+// renders nothing when the task declared no objective (res == nil). It also surfaces
+// the gate's resolution when the operator-enabled verdict gate is ON: the resolved
+// lifecycle, and — for the waivable PARTIAL case — an explicit denial line, so the
+// denial is observable rather than a silent downgrade. With the gate OFF the
+// lifecycle/waiver fields are empty and nothing extra is rendered, so the flag-off
+// output is unchanged.
 func writeOutcomeSummary(w io.Writer, res *outcomeArtifact) {
 	if res == nil {
 		return
@@ -414,6 +559,12 @@ func writeOutcomeSummary(w io.Writer, res *outcomeArtifact) {
 	fmt.Fprintf(w, "outcome: %s\n", res.Status)
 	for _, r := range res.Reasons {
 		fmt.Fprintf(w, "  - %s\n", r)
+	}
+	if res.Lifecycle != "" {
+		fmt.Fprintf(w, "lifecycle: %s\n", res.Lifecycle)
+	}
+	if res.WaiverDenied {
+		fmt.Fprintln(w, "  waiver: denied — a required deliverable/check is unmet and no valid designated-approver waiver exists")
 	}
 }
 
@@ -426,6 +577,12 @@ func writeOutcomeReport(b *strings.Builder, res *outcomeArtifact) {
 	}
 	b.WriteString("\n## Outcome\n\n")
 	fmt.Fprintf(b, "- Status: `%s`\n", res.Status)
+	if res.Lifecycle != "" {
+		fmt.Fprintf(b, "- Lifecycle: `%s`\n", res.Lifecycle)
+	}
+	if res.WaiverDenied {
+		b.WriteString("- Waiver: denied — a required deliverable/check is unmet and no valid designated-approver waiver exists\n")
+	}
 	for _, cr := range res.Criteria {
 		state := "met"
 		switch {

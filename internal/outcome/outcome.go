@@ -155,3 +155,139 @@ func (r *Result) PropagateEvidence(id string, argv []string, exitCode int, outpu
 		return
 	}
 }
+
+// HasUnmetRequired reports whether the verdict carries at least one required
+// criterion that was not met. It is the classification the lifecycle gate reads: a
+// PARTIAL from an unmet REQUIRED deliverable or REQUIRED executable check is exactly a
+// result whose status is Partial and whose unmet criteria include at least one
+// Required one. A PARTIAL from informational (non-required) criteria only, and a HOLD,
+// both return false here and keep their existing lifecycle mapping.
+func (r Result) HasUnmetRequired() bool {
+	for _, cr := range r.Criteria {
+		if cr.Required && !cr.Met {
+			return true
+		}
+	}
+	return false
+}
+
+// Lifecycle is the local lifecycle disposition the verdict resolves to. LOCAL_DONE is
+// the terminal transition for a locally completed task; NEEDS_HUMAN is the existing
+// human boundary. The lifecycle is expressed with the pinned terminology
+// (LOCAL_DONE / PARTIAL / HOLD) and is returned by ResolveLifecycle.
+type Lifecycle string
+
+const (
+	// LocalDone: the local lifecycle completed and reached its terminal transition.
+	LocalDone Lifecycle = "LOCAL_DONE"
+	// NeedsHuman: the lifecycle stopped at the human boundary instead of completing.
+	NeedsHuman Lifecycle = "NEEDS_HUMAN"
+)
+
+// Waiver is a designated approver's explicit, criterion-scoped record authorizing a
+// required-criterion failure to be waived so a legitimate LOCAL_DONE is explicit. A
+// waiver is never implied: it must name the approver, the criteria it covers, a
+// reason, and a timestamp.
+type Waiver struct {
+	// Approver identifies the designated approver who granted the waiver (attribution).
+	// An empty Approver is not a designated approver and the waiver is invalid.
+	Approver string
+	// Criteria names the required criteria this waiver covers (criterion-scoped). It
+	// must name every unmet required criterion the waiver intends to cover.
+	Criteria []string
+	// Reason is the approver's recorded justification. A waiver without a reason is
+	// invalid: it is never silently applied.
+	Reason string
+	// RecordedAt is the approver's timestamp for the grant.
+	RecordedAt string
+}
+
+// ErrNoDesignatedApprover is returned when a waiver cannot be validated because the
+// repository provides no designated-approver identity source. It is a distinct,
+// explicit error: the unsupported path never silently accepts a waiver.
+var ErrNoDesignatedApprover = fmt.Errorf("outcome: no designated-approver identity source is available; a waiver cannot be validated")
+
+// ValidateWaiver reports whether w is a valid waiver covering every unmet required
+// criterion of the result r. A waiver is valid only when:
+//
+//   - the result is a PARTIAL with at least one unmet required criterion
+//     (informational-only PARTIAL and HOLD are never waivable here);
+//   - the designated approver is identified (a non-empty approver);
+//   - the waiver carries a reason and a recording timestamp;
+//   - the waiver names, criterion-scoped, every unmet required criterion of r.
+//
+// It fails closed: any unmet required criterion the waiver does not name makes the
+// waiver invalid, so a partial waiver can never silently waive the rest. A HOLD (an
+// authority boundary) is never waivable.
+func ValidateWaiver(r Result, w Waiver) error {
+	if r.Status == Hold {
+		return fmt.Errorf("outcome: a HOLD (authority boundary crossed) is not waivable")
+	}
+	if !r.HasUnmetRequired() {
+		return fmt.Errorf("outcome: no unmet required criterion to waive")
+	}
+	if w.Approver == "" {
+		return fmt.Errorf("outcome: waiver requires a designated approver; %w", ErrNoDesignatedApprover)
+	}
+	if w.Reason == "" {
+		return fmt.Errorf("outcome: waiver requires a recorded reason")
+	}
+	if w.RecordedAt == "" {
+		return fmt.Errorf("outcome: waiver requires a recording timestamp")
+	}
+	covered := make(map[string]bool, len(w.Criteria))
+	for _, id := range w.Criteria {
+		covered[id] = true
+	}
+	for _, cr := range r.Criteria {
+		if cr.Required && !cr.Met && !covered[cr.ID] {
+			return fmt.Errorf("outcome: waiver does not cover required criterion %s; a waiver must name every unmet required criterion", cr.ID)
+		}
+	}
+	return nil
+}
+
+// ResolveLifecycle maps an outcome verdict to the local lifecycle disposition.
+//
+// With the operator-enabled verdict gate OFF (the default), the mapping is the
+// existing, unchanged behavior: every verdict the lifecycle reaches here yields
+// LOCAL_DONE — the verdict is reported only and never changes the transition. This is
+// the byte-identical flag-off path.
+//
+// With the gate ON, the pinned lifecycle semantics apply:
+//
+//   - VERIFIED                              -> LOCAL_DONE
+//   - PARTIAL with an unmet REQUIRED
+//     deliverable/check, no valid waiver    -> NEEDS_HUMAN (does not yield LOCAL_DONE)
+//   - PARTIAL with an unmet REQUIRED
+//     deliverable/check, valid waiver       -> LOCAL_DONE
+//   - PARTIAL from informational-only
+//     criteria (no unmet required)          -> LOCAL_DONE
+//   - HOLD                                  -> NEEDS_HUMAN
+//
+// The waiver is consulted only for the PARTIAL-with-unmet-required case; it can never
+// turn a HOLD into LOCAL_DONE. It never consults a model or a confidence score.
+func ResolveLifecycle(gateEnabled bool, r Result, waiver *Waiver) Lifecycle {
+	if !gateEnabled {
+		return LocalDone
+	}
+	switch r.Status {
+	case Verified:
+		return LocalDone
+	case Hold:
+		return NeedsHuman
+	case Partial:
+		if !r.HasUnmetRequired() {
+			// Informational-only PARTIAL: informational criteria do not gate.
+			return LocalDone
+		}
+		if waiver != nil {
+			if err := ValidateWaiver(r, *waiver); err == nil {
+				return LocalDone
+			}
+		}
+		return NeedsHuman
+	default:
+		return LocalDone
+	}
+}

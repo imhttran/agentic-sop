@@ -3,6 +3,7 @@ package ollamaagent
 import (
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -194,5 +195,309 @@ func TestAlreadySatisfiedAfterFiveInspections(t *testing.T) {
 				t.Fatal("nudge omitted already-satisfied contract")
 			}
 		})
+	}
+}
+
+// --- SOP-HARD-03: accept verified existing work with zero mutations ---
+
+// TestAlreadySatisfiedRejectsMissingDeliverable: a declared required deliverable that
+// is absent rejects the claim even when every criterion is inspected and validated.
+func TestAlreadySatisfiedRejectsMissingDeliverable(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	req.Capability = agent.Implement
+	req.Deliverables = []string{"docs/reports/SOP-HARD-01.md"} // absent from the fixture
+	turns := []string{readAdd, readAddTest, validateAdd, satisfiedFinal}
+	_, srv := newFakeOllama(t, turns...)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 20
+	h := New(cfg, dir)
+	ev := &mutationEvidence{}
+	if _, _, err := h.CompleteWithEvidence(context.Background(), req, ev); err == nil || ev.alreadySatisfied {
+		t.Fatalf("missing deliverable accepted: err=%v evidence=%+v", err, ev)
+	}
+}
+
+// TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver: a required validation command
+// that is not executed is accepted only when an authorized waiver names it.
+func TestAlreadySatisfiedAcceptsAuthorizedValidationWaiver(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	gitInit(t, dir)
+	commitAll(t, dir, "existing implementation")
+	req.Capability = agent.Implement
+	req.ValidationCommands = []string{"go test ./...", "go vet ./..."}
+	req.ValidationWaivers = []string{"go vet ./..."} // authorized; unavailable here
+	fake, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 20
+	native := NewNativeAgent(cfg, dir, nil)
+	response, err := native.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.VerifiedAlreadySatisfied {
+		t.Fatalf("authorized validation waiver not accepted: %+v", response)
+	}
+	_ = fake
+}
+
+// TestAlreadySatisfiedNormalizedCriterionMatch: a criterion differing only by case and
+// whitespace from the evidence is accepted (content match, not byte match).
+func TestAlreadySatisfiedNormalizedCriterionMatch(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	gitInit(t, dir)
+	commitAll(t, dir, "existing implementation")
+	req.Capability = agent.Implement
+	req.AcceptanceCriteria = []string{"ADD returns the   SUM"} // normalizes to the evidence criterion
+	fake, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 20
+	native := NewNativeAgent(cfg, dir, nil)
+	response, err := native.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.VerifiedAlreadySatisfied {
+		t.Fatalf("normalized criterion match not accepted: %+v", response)
+	}
+	_ = fake
+}
+
+// --- SOP-HARD-03: bounded, evidence-only correction ---
+
+// satisfiedFinalNoEvidence carries an ALREADY_SATISFIED claim with no criterion
+// evidence, so it is rejected for missing coverage (and nothing else).
+const satisfiedFinalNoEvidence = `{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[]}}`
+
+// TestAlreadySatisfiedEvidenceCorrectionAccepted: an otherwise-sound claim with no
+// criterion evidence is corrected once, and the corrected (complete) evidence is
+// accepted by the deterministic verifier with no repository mutation.
+func TestAlreadySatisfiedEvidenceCorrectionAccepted(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	gitInit(t, dir)
+	commitAll(t, dir, "existing implementation")
+	req.Capability = agent.Implement
+	_, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, satisfiedFinalNoEvidence, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	native := NewNativeAgent(cfg, dir, nil)
+	response, err := native.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.VerifiedAlreadySatisfied {
+		t.Fatalf("corrected evidence not accepted: %+v", response)
+	}
+}
+
+// TestAlreadySatisfiedEvidenceCorrectionExhausted: a second incomplete claim is not
+// corrected again; the claim is rejected (at most one correction per claim).
+func TestAlreadySatisfiedEvidenceCorrectionExhausted(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	req.Capability = agent.Implement
+	_, srv := newFakeOllama(t, readAdd, readAddTest, validateAdd, satisfiedFinalNoEvidence, satisfiedFinalNoEvidence)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	h := New(cfg, dir)
+	ev := &mutationEvidence{}
+	if _, _, err := h.CompleteWithEvidence(context.Background(), req, ev); err == nil || ev.alreadySatisfied {
+		t.Fatalf("exhausted correction accepted: err=%v evidence=%+v", err, ev)
+	}
+}
+
+// TestAlreadySatisfiedEvidenceCorrectionRejectsUnreadPath: evidence mapping a criterion
+// to a file the agent did not read is not correctable (not a missing-coverage case) and
+// is rejected outright.
+func TestAlreadySatisfiedEvidenceCorrectionRejectsUnreadPath(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	req.Capability = agent.Implement
+	// add_test.go is never read, so the satisfiedFinal evidence path is uninspected.
+	_, srv := newFakeOllama(t, readAdd, validateAdd, satisfiedFinal, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	h := New(cfg, dir)
+	ev := &mutationEvidence{}
+	if _, _, err := h.CompleteWithEvidence(context.Background(), req, ev); err == nil || ev.alreadySatisfied {
+		t.Fatalf("unread-path evidence accepted: err=%v evidence=%+v", err, ev)
+	}
+}
+
+// TestAlreadySatisfiedEvidenceCorrectionFromUnreadPath: a claim whose evidence maps a
+// criterion to an unread path is still offered the single correction; the corrected
+// claim (read-backed) is accepted, and the invalid one is never accepted on its own.
+func TestAlreadySatisfiedEvidenceCorrectionFromUnreadPath(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	gitInit(t, dir)
+	commitAll(t, dir, "existing implementation")
+	req.Capability = agent.Implement
+	// First claim maps to add_test.go (not read); then the model re-reads and re-claims.
+	_, srv := newFakeOllama(t, readAdd, validateAdd,
+		`{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"Add returns the sum","paths":["add_test.go"]}]}}`,
+		readAddTest, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	native := NewNativeAgent(cfg, dir, nil)
+	response, err := native.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.VerifiedAlreadySatisfied {
+		t.Fatalf("correction from unread path not accepted: %+v", response)
+	}
+}
+
+// --- SOP-HARD-03: structured rejection diagnostics ---
+
+func satisfProof(baseline string) *satisfactionProof {
+	return &satisfactionProof{baseline: baseline, reads: map[string]bool{}, commands: map[string]bool{}, ran: map[string]bool{}}
+}
+
+func evidenceFinal(criterion string, paths []any) map[string]any {
+	return map[string]any{
+		"status":   string(agent.OutcomeCompleted),
+		"evidence": map[string]any{"acceptance": []any{map[string]any{"criterion": criterion, "paths": paths}}},
+	}
+}
+
+func TestVerifySatisfiedDetailedRejectionCodes(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.go", "package a\n")
+	cfg := testConfig("http://127.0.0.1:1")
+	h := New(cfg, dir)
+	req := agent.Request{Capability: agent.Implement, AcceptanceCriteria: []string{"c1"}, ValidationCommands: []string{"go vet ./..."}}
+
+	canonical := canonicalPath(t, dir, "a.go")
+	// readOnly has the evidence path read but the required validation NOT executed.
+	readOnly := satisfProof("fp")
+	readOnly.reads[canonical] = true
+
+	cases := []struct {
+		name  string
+		st    *executionState
+		p     *satisfactionProof
+		final map[string]any
+		want  RejectionCode
+	}{
+		{"repository mutation", &executionState{mutationObserved: true}, satisfProof("fp"), evidenceFinal("c1", []any{"a.go"}), RejectRepositoryMutation},
+		{"missing baseline", &executionState{}, satisfProof(""), evidenceFinal("c1", []any{"a.go"}), RejectMissingBaseline},
+		{"completion status", &executionState{}, satisfProof("fp"), map[string]any{"status": string(agent.OutcomeFailed)}, RejectCompletionStatus},
+		{"malformed evidence", &executionState{}, satisfProof("fp"), map[string]any{"status": string(agent.OutcomeCompleted), "evidence": "not-an-object"}, RejectMalformedEvidence},
+		{"missing criterion evidence", &executionState{}, satisfProof("fp"), map[string]any{"status": string(agent.OutcomeCompleted), "evidence": map[string]any{"acceptance": []any{}}}, RejectMissingCriterionEvidence},
+		{"unread evidence path", &executionState{}, satisfProof("fp"), evidenceFinal("c1", []any{"missing.go"}), RejectUnreadEvidencePath},
+		{"validation not executed", &executionState{}, readOnly, evidenceFinal("c1", []any{"a.go"}), RejectValidationNotExecuted},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ok, rej := h.verifySatisfiedDetailed(context.Background(), req, c.st, c.p, c.final)
+			if ok {
+				t.Fatalf("accepted, want rejection")
+			}
+			if rej.Code != c.want {
+				t.Fatalf("code = %s, want %s (detail=%s)", rej.Code, c.want, rej.String())
+			}
+		})
+	}
+}
+
+func TestSatisfactionRejectionStringIsSecretFree(t *testing.T) {
+	r := SatisfactionRejection{Code: RejectUnreadEvidencePath, Criterion: "c1", Path: "x.go"}
+	got := r.String()
+	if !strings.Contains(got, "UNREAD_EVIDENCE_PATH") || !strings.Contains(got, "criterion=c1") || !strings.Contains(got, "path=x.go") {
+		t.Fatalf("String() = %q", got)
+	}
+}
+
+func canonicalPath(t *testing.T, dir, name string) string {
+	t.Helper()
+	c, err := filepath.EvalSymlinks(filepath.Join(dir, name))
+	if err != nil {
+		t.Fatalf("evalsymlinks %s: %v", name, err)
+	}
+	return c
+}
+
+// --- SOP-HARD-03 recovery-path regression: multi-path entry with one unread file ---
+
+// TestVerifySatisfiedUnreadMultiPathMismatch reproduced the HARD-04 blocker: a
+// criterion whose evidence entry cites two files where only ONE was inspected is
+// rejected by the verifier (UNREAD_EVIDENCE_PATH) while the one-shot correction
+// trigger does not offer a correction (it treated the criterion as covered because a
+// single cited path had been read). The two paths now agree, so the correction fires.
+func TestVerifySatisfiedUnreadMultiPathMismatch(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "a.go", "package a\n")
+	writeFile(t, dir, "b.go", "package a\n")
+	cfg := testConfig("http://127.0.0.1:1")
+	h := New(cfg, dir)
+	req := agent.Request{Capability: agent.Implement, AcceptanceCriteria: []string{"c1"}, ValidationCommands: []string{"go vet ./..."}}
+
+	fp, err := h.tools.RepositoryFingerprint(context.Background())
+	if err != nil {
+		t.Fatalf("fingerprint: %v", err)
+	}
+	p := satisfProof(fp)
+	p.reads[canonicalPath(t, dir, "a.go")] = true // A inspected; B deliberately not.
+	id := commandIdentity("go vet ./...")
+	p.ran[id] = true
+	p.commands[id] = true
+
+	final := evidenceFinal("c1", []any{"a.go", "b.go"})
+
+	// The verifier rejects: every cited path must have been inspected.
+	if ok, rej := h.verifySatisfiedDetailed(context.Background(), req, &executionState{}, p, final); ok || rej.Code != RejectUnreadEvidencePath {
+		t.Fatalf("verify: ok=%v code=%s, want rejection UNREAD_EVIDENCE_PATH", ok, rej.Code)
+	}
+
+	// The correction trigger must offer the single evidence-only correction for the
+	// same input: a criterion citing any unread path is uncovered.
+	missing, offered := h.missingCriterionEvidence(context.Background(), req, &executionState{}, p, final)
+	if !offered {
+		t.Fatalf("the correction was not offered for a criterion with an unread cited path (mismatch not fixed): missing=%v", missing)
+	}
+	if len(missing) != 1 || missing[0] != "c1" {
+		t.Fatalf("missing criteria = %v, want [c1]", missing)
+	}
+	// The trigger never weakens the verifier: the invalid claim is still rejected.
+	if ok, _ := h.verifySatisfiedDetailed(context.Background(), req, &executionState{}, p, final); ok {
+		t.Fatal("the invalid multi-path claim must never be accepted")
+	}
+}
+
+// multiPathUnreadClaim cites two files while only add.go has been read: it is the
+// multi-path form of an incomplete claim that the single correction is meant to fix.
+const multiPathUnreadClaim = `{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"Add returns the sum","paths":["./add.go","add_test.go"]}]}}`
+
+// TestAlreadySatisfiedEvidenceCorrectionMultiPathAccepted: a claim whose evidence cites
+// two files while only one was read now triggers the single correction; once the agent
+// reads the second file, the corrected claim is accepted (zero mutations).
+func TestAlreadySatisfiedEvidenceCorrectionMultiPathAccepted(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	gitInit(t, dir)
+	commitAll(t, dir, "existing implementation")
+	req.Capability = agent.Implement
+	_, srv := newFakeOllama(t, readAdd, validateAdd, multiPathUnreadClaim, readAddTest, satisfiedFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	native := NewNativeAgent(cfg, dir, nil)
+	response, err := native.Generate(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !response.VerifiedAlreadySatisfied {
+		t.Fatalf("multi-path correction not accepted: %+v", response)
+	}
+}
+
+// TestAlreadySatisfiedEvidenceCorrectionMultiPathExhausted: the single correction is
+// consumed at most once; a second multi-path-incomplete claim is rejected outright.
+func TestAlreadySatisfiedEvidenceCorrectionMultiPathExhausted(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	req.Capability = agent.Implement
+	_, srv := newFakeOllama(t, readAdd, validateAdd, multiPathUnreadClaim, multiPathUnreadClaim)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 30
+	h := New(cfg, dir)
+	ev := &mutationEvidence{}
+	if _, _, err := h.CompleteWithEvidence(context.Background(), req, ev); err == nil || ev.alreadySatisfied {
+		t.Fatalf("exhausted multi-path correction accepted: err=%v evidence=%+v", err, ev)
 	}
 }

@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -58,7 +59,17 @@ func runStatus(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	}
 
 	for _, task := range tasks {
-		fmt.Fprintf(stdout, "%s %s %s\n", task.ID, task.Status, task.Title)
+		line := fmt.Sprintf("%s %s %s", task.ID, task.Status, task.Title)
+		// Surface a recorded designated-approver waiver (SOP-HARD-04) beside the task,
+		// so a waived required criterion is visible from `sop status`.
+		if recs, err := readWaiverRecords(dir, task.ID); err == nil && len(recs) > 0 {
+			ids := make([]string, 0, len(recs))
+			for _, r := range recs {
+				ids = append(ids, r.CriterionID)
+			}
+			line += fmt.Sprintf("  [waived: %s]", strings.Join(ids, ","))
+		}
+		fmt.Fprintln(stdout, line)
 	}
 	return exitOK
 }

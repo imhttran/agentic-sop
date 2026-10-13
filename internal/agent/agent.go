@@ -54,6 +54,10 @@ type Request struct {
 	// data: the agent must produce them, but they grant no completion,
 	// validation, or approval by themselves.
 	Deliverables []string `json:"deliverables,omitempty"`
+	// ValidationWaivers names required validation commands an authorized approver has
+	// explicitly waived because the environment cannot run them. A waived command is
+	// accepted without execution; a command neither executed nor waived fails closed.
+	ValidationWaivers []string `json:"validation_waivers,omitempty"`
 	// RawOutputEvidence reports that the task's contract explicitly requires raw
 	// command output in its deliverable. It is derived from the task data (never the
 	// artifact), and it tells the agent that a summary or placeholder does not
