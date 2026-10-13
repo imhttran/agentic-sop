@@ -189,6 +189,8 @@ Concrete interfaces, values, commands, and states.
   SOP projects the controller observes, explicitly or by workspace discovery.
 - [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md) — build, test, format, and
   develop the controller.
+- [guides/E2E-TESTING.md](guides/E2E-TESTING.md) — run, debug, and maintain the
+  Playwright browser end-to-end tests.
 
 ## Current Boundary References at Retained Historical Paths
 
