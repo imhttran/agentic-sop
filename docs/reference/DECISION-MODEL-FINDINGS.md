@@ -300,4 +300,4 @@ configurations. Retain AI for appropriate evidence-generation and review tasks.*
   escalations, false escalations within a pre-registered threshold, changes only
   where labeled, bounded latency, and at least one of decision accuracy or useful
   escalation rate showing a supported improvement — the decision rule in the
-  [plan](../plans/PLAN-Decision-Model-Effectiveness-Evaluation.md#decision-rule-retain--tune--disable).
+  [plan](../plans/PLAN-Decision-Model-Effectiveness-Evaluation.md#decision-rule-retain--tune--disable). The concrete, pre-registered thresholds and the staged promotion path are defined in [AI-DECISION-PROMOTION-CRITERIA.md](AI-DECISION-PROMOTION-CRITERIA.md).
