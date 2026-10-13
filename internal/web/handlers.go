@@ -325,9 +325,14 @@ func (h *Handlers) command(w http.ResponseWriter, r *http.Request) {
 	switch verb {
 	case startVerb, "run":
 		// `run` and `start` both mean start-or-continue: StartOrContinue picks
-		// `sop run` or `sop resume` from SOP's state.
+		// `sop run` or `sop resume` from SOP's state. A non-zero exit while SOP reports
+		// an open gate is a human boundary, not a failure: it is surfaced as "blocked",
+		// read from SOP state, never a fabricated transition.
 		fn = func(ctx context.Context) (string, error) {
 			res, err := h.sop.StartOrContinue(ctx, project)
+			if err != nil && h.gatePending(ctx, project) {
+				return res.Message, &blockedError{msg: "SOP parked this plan at a human approval gate. Open approvals to decide, then continue."}
+			}
 			return res.Message, err
 		}
 	case "resume":
@@ -545,4 +550,15 @@ func (h *Handlers) commandState(project, key string) CommandState {
 		return CommandState{Verb: key, State: "idle"}
 	}
 	return st
+}
+
+// gatePending reports whether SOP now reports an open approval gate for the project.
+// It reads SOP's listing; a failed or unreadable listing is an absence, not a gate.
+func (h *Handlers) gatePending(ctx context.Context, project string) bool {
+	for _, pa := range h.sop.PendingApprovals(ctx) {
+		if pa.ProjectID == project && len(pa.Entries) > 0 {
+			return true
+		}
+	}
+	return false
 }

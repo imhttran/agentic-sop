@@ -62,12 +62,25 @@ func (cr *CommandRunner) Start(project, verb string, fn func(ctx context.Context
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), cr.timeout)
 		defer cancel()
+		// Live output (DP-010): the command tees its output through this sink as it
+		// runs, so the status fragment shows progress before it finishes. The sink
+		// shares cr.mu with Status, so a reader never sees a torn string.
+		ctx = sopclient.WithProgress(ctx, &liveWriter{cr: cr, st: st})
 		out, err := fn(ctx)
 
 		cr.mu.Lock()
 		defer cr.mu.Unlock()
-		st.Output = bound(out, 8000)
+		st.Output = boundOutput(out, maxOutput)
 		if err != nil {
+			// A non-zero exit that SOP reports as an open human gate is a boundary, not
+			// a failure: surface it as "blocked". This reads SOP state; it invents no
+			// transition.
+			var be *blockedError
+			if errors.As(err, &be) {
+				st.State = "blocked"
+				st.Error = be.Error()
+				return
+			}
 			st.State = "error"
 			st.Error = err.Error()
 			// SOP's own refusal is a conflict; the controller's pre-SOP precondition errors
@@ -93,10 +106,34 @@ func (cr *CommandRunner) Status(project, verb string) (CommandState, bool) {
 	return *st, true
 }
 
-// bound caps retained output so a runaway command can't bloat memory or the UI.
-func bound(s string, n int) string {
+// maxOutput bounds retained output so a runaway command can't bloat memory or the UI.
+const maxOutput = 8000
+
+// boundOutput caps retained output, keeping the most recent bytes (the tail) so the
+// live progress shown before a command finishes is what a reader sees at the end.
+func boundOutput(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n] + "\n… (output truncated)"
+	return "… (earlier output truncated)\n" + s[len(s)-n:]
 }
+
+// liveWriter appends a command's output to its CommandState as it runs, under the
+// runner mutex, keeping the retained output bounded.
+type liveWriter struct {
+	cr *CommandRunner
+	st *CommandState
+}
+
+func (w *liveWriter) Write(p []byte) (int, error) {
+	w.cr.mu.Lock()
+	defer w.cr.mu.Unlock()
+	w.st.Output = boundOutput(w.st.Output+string(p), maxOutput)
+	return len(p), nil
+}
+
+// blockedError marks a delegated start/run that SOP reports parked at a human
+// approval gate. The runner maps it to the "blocked" state rather than a failure.
+type blockedError struct{ msg string }
+
+func (e *blockedError) Error() string { return e.msg }

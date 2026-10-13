@@ -207,7 +207,7 @@ func TestTaskActivityEmptyState(t *testing.T) {
 	if code != 200 {
 		t.Fatalf("activity fragment: %d", code)
 	}
-	if !strings.Contains(body, "No structured activity recorded yet") {
+	if !strings.Contains(body, "No activity recorded") {
 		t.Errorf("empty activity state not shown: %q", body)
 	}
 }

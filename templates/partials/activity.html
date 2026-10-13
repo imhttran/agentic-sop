@@ -17,8 +17,8 @@
     {{end}}
 </ol>
 {{else}}
-<p class="muted">
-    No structured activity recorded yet. SOP records activity as a run executes;
-    a run started from this dashboard streams here.
-</p>
+<div class="empty-state" role="status">
+    <p class="muted">No activity recorded.</p>
+    <p class="muted small">SOP persists structured activity only while a run executes, so an older run or a run with activity capture off has no activity artifact. Missing activity is not evidence that a run succeeded — see the command status and the recorded stage above.</p>
+</div>
 {{end}}

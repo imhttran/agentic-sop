@@ -9,7 +9,7 @@
 {{else}}
 <div class="cmd cmd-{{$c.State}}{{if $c.Conflict}} cmd-conflict{{end}}">
   <div class="cmd-head">
-    <span class="badge {{if $c.Running}}s-running{{else if $c.Conflict}}s-blocked{{else if eq $c.State "error"}}s-failed{{else}}s-completed{{end}}">sop {{$c.Verb}} · {{if $c.Conflict}}conflict{{else}}{{$c.State}}{{end}}</span>
+    <span class="badge {{if $c.Running}}s-running{{else if $c.Conflict}}s-blocked{{else if eq $c.State "blocked"}}s-blocked{{else if eq $c.State "error"}}s-failed{{else}}s-completed{{end}}">sop {{$c.Verb}} · {{if $c.Conflict}}conflict{{else}}{{$c.State}}{{end}}</span>
     <span class="muted small">started {{since $c.Started}}</span>
   </div>
   {{if $c.Stage}}
@@ -17,8 +17,9 @@
   {{end}}
   {{if $c.Conflict}}
   <div class="error-text">SOP rejected this decision (the gate may be stale or no longer applicable). Re-read the task and retry: {{$c.Error}}</div>
+  {{else if eq $c.State "blocked"}}<div class="muted small">Blocked at a human approval gate: {{$c.Error}}</div>
   {{else if $c.Error}}<div class="error-text">{{$c.Error}}</div>{{end}}
-  {{if or $c.Conflict $c.Error}}
+  {{if or $c.Conflict (eq $c.State "error")}}
   {{$result := $c.State}}{{if $c.Conflict}}{{$result = "conflict"}}{{end}}
   <span class="copy-control">
     <button type="button" class="btn copy-btn" aria-label="Copy error" data-copy="{{printf "SOP command diagnostic\nCommand: sop %s\nTask: %s\nResult: %s\nMessage: %s" $c.Verb $c.TaskID $result $c.Error}}">Copy error</button>
