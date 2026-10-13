@@ -284,7 +284,7 @@
       "numerator": 0,
       "denominator": 0,
       "coverage_pct": 0,
-      "note": "numerator sums recorded observation latency over the comparable observations; the value is p50 and the breakdown reports p50/p95 (nearest-rank). Latency is diagnostic only"
+      "note": "denominator is the comparable observations; the value is the nearest-rank p50 and the breakdown reports p50/p95. Latency is diagnostic only"
     },
     {
       "metric": "adapter_invalid_choice",

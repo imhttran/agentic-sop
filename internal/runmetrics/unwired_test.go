@@ -11,9 +11,19 @@ import (
 
 const importPath = "github.com/imhttran/agentic-sop/internal/runmetrics"
 
-// TestNoProductionImportOfRunmetrics asserts that no package outside
-// internal/runmetrics imports it, and that the testdata and test helper files
-// are the only references. It walks the repository from the package root.
+// allowedImporters is the closed set of files outside internal/runmetrics that may
+// reference runmetrics. It names exactly the approved, read-only `sop report
+// --decisions` entry point and its test. Every other file must not import or
+// reference runmetrics, so no production execution path (run, execute, routing,
+// approval) can reach the aggregator.
+var allowedImporters = map[string]bool{
+	"internal/cli/report_decisions.go":      true,
+	"internal/cli/report_decisions_test.go": true,
+}
+
+// TestNoProductionImportOfRunmetrics asserts that runmetrics is imported only by
+// its own package and the approved read-only CLI entry point. Any other importer is
+// an offender: the aggregator must stay off the production execution path.
 func TestNoProductionImportOfRunmetrics(t *testing.T) {
 	root := repoRoot(t)
 
@@ -36,8 +46,10 @@ func TestNoProductionImportOfRunmetrics(t *testing.T) {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, path)
-		// The runmetrics package itself (including its tests) is allowed.
-		if strings.HasPrefix(filepath.ToSlash(rel), "internal/runmetrics/") {
+		rel = filepath.ToSlash(rel)
+		// The runmetrics package itself (including its tests) is allowed, as is the
+		// approved read-only CLI entry point (and its test).
+		if strings.HasPrefix(rel, "internal/runmetrics/") || allowedImporters[rel] {
 			return nil
 		}
 		f, perr := parser.ParseFile(fset, path, nil, parser.ImportsOnly)
@@ -59,8 +71,10 @@ func TestNoProductionImportOfRunmetrics(t *testing.T) {
 	}
 }
 
-// TestNoCLIModification checks that no file under internal/cli references the
-// runmetrics package, so the library is wired to no CLI command.
+// TestNoCLIModification asserts that the only files under internal/cli that
+// reference runmetrics are the approved read-only report entry point and its test.
+// Every other CLI file — in particular the run/execute/routing/approval path — must
+// not reference it, so the aggregator cannot become a production dependency.
 func TestNoCLIModification(t *testing.T) {
 	root := repoRoot(t)
 	cliDir := filepath.Join(root, "internal", "cli")
@@ -72,12 +86,15 @@ func TestNoCLIModification(t *testing.T) {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), ".go") {
 			continue
 		}
+		if allowedImporters["internal/cli/"+e.Name()] {
+			continue
+		}
 		data, err := os.ReadFile(filepath.Join(cliDir, e.Name()))
 		if err != nil {
 			t.Fatal(err)
 		}
 		if strings.Contains(string(data), "runmetrics") {
-			t.Errorf("internal/cli/%s references runmetrics", e.Name())
+			t.Errorf("internal/cli/%s references runmetrics; only the approved report entry point may", e.Name())
 		}
 	}
 }

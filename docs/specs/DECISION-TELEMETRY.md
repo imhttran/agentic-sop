@@ -121,6 +121,22 @@ read-only.
   approval, or execution, MUST NOT be inferred where unmeasured, and MUST NOT be
   treated as proof of correctness. A consumer is never wired into the primary path.
 
+## Command surface
+
+`sop report --decisions [--format text|json]` is the opt-in, read-only way to read
+the aggregate. It MUST:
+
+- take no run id and read only recorded artifacts under `.agent-sdlc/runs/`;
+- make no model call, evaluation, retry, approval, or execution, and open no
+  network connection;
+- render deterministically — the human-readable summary, or the aggregate JSON;
+- report `UNAVAILABLE` distinctly from a measured zero, and never infer a value.
+
+The aggregator MUST stay off the production execution path: exactly one CLI file
+(`report_decisions.go`) may import `internal/runmetrics`, and no run, execute,
+routing, or approval file may. The seven RM-002 metrics and the decision dimensions
+are unchanged in definition and order.
+
 ## Invariants
 
 These invariants are normative and MUST hold for any implementation.

@@ -212,13 +212,11 @@ func decisionMetricFor(m Metric, ev []runEvidence, corpus int) MetricResult {
 		present := count(ev, func(e runEvidence) bool { return e.hasShadow })
 		valid := count(ev, func(e runEvidence) bool { return e.shadowReadable })
 		lat := make([]int, 0, len(ev))
-		sum := 0
 		for _, o := range comparableObservations(ev) {
 			lat = append(lat, int(o.LatencyMS))
-			sum += int(o.LatencyMS)
 		}
-		r := base(m, StatusPartial, corpus, present, valid, sum, len(lat), "ms",
-			"numerator sums recorded observation latency over the comparable observations; the value is p50 and the breakdown reports p50/p95 (nearest-rank). Latency is diagnostic only")
+		r := base(m, StatusPartial, corpus, present, valid, len(lat), len(lat), "ms",
+			"denominator is the comparable observations; the value is the nearest-rank p50 and the breakdown reports p50/p95. Latency is diagnostic only")
 		if len(lat) > 0 {
 			sort.Ints(lat)
 			p50 := lat[nearestRankIndex(len(lat), 0.50)]
@@ -357,6 +355,20 @@ func RenderText(agg Aggregate) string {
 		renderMetric(&b, r)
 	}
 	b.WriteString("\nDecision telemetry\n\n")
+	for _, r := range agg.Decisions {
+		renderMetric(&b, r)
+	}
+	return b.String()
+}
+
+// RenderDecisions renders only the decision-telemetry dimensions of an aggregate:
+// the model-tier/override/escalation/JEV dimensions followed by the adapter
+// dimensions, each with its value, coverage, numerator/denominator, breakdown, and
+// UNAVAILABLE markers. It is the human-readable body of `sop report --decisions`
+// and is deterministic: two aggregates over identical inputs render identically.
+func RenderDecisions(agg Aggregate) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Decision telemetry (corpus %d runs)\n\n", agg.CorpusRuns)
 	for _, r := range agg.Decisions {
 		renderMetric(&b, r)
 	}

@@ -1,9 +1,9 @@
 # PLAN — Decision Telemetry Extension
 
-**Status:** IN PROGRESS — TEL-001, TEL-002, TEL-003, TEL-004, TEL-005 and the in-repo
-part of TEL-006 are implemented on `feat/decision-telemetry`; the `sop report`
-surface of TEL-006 remains pending (see the status table below). Verification
-(TEL-007) ran for the changed packages in both repositories.
+**Status:** COMPLETE — TEL-001 through TEL-007 are implemented on
+`feat/decision-telemetry` (TEL-003 spans `sop-decision-adapters` and `agentic-sop`).
+Verification (TEL-007) ran for the changed packages in both repositories, and the
+`--decisions` CLI (TEL-006) is covered by targeted CLI tests.
 
 **Primary repository:** agentic-sop
 **Related repositories:** sop-decision-adapters, sop-controller
@@ -87,12 +87,12 @@ section **after** the seven RM-002 metrics, which are byte-for-byte unchanged. T
 aggregator remains unwired to any CLI command, as guarded by
 `internal/runmetrics/unwired_test.go`.
 
-| Task    | Status                 | Where                                                                                                                                                                                                                                                                                            |
-| ------- | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| TEL-001 | Done                   | [TEL-001-reconciliation.md](../reports/decision-telemetry/TEL-001-reconciliation.md)                                                                                                                                                                                                             |
-| TEL-002 | Done                   | same report, §2 (the metric register)                                                                                                                                                                                                                                                            |
-| TEL-003 | Done                   | Cross-repo evidence contract: producer in `sop-decision-adapters` (`internal/shadow` + `shadow` CLI) emits versioned `shadow-evidence.json`; read-only consumer metrics in `internal/runmetrics/decision.go`; see [TEL-003-integration.md](../reports/decision-telemetry/TEL-003-integration.md) |
-| TEL-004 | Done                   | `model_tier_distribution` (`internal/runmetrics/decision.go`)                                                                                                                                                                                                                                    |
-| TEL-005 | Done                   | `decision_override_rate`, `decision_escalation_rate`                                                                                                                                                                                                                                             |
-| TEL-006 | Partial — library only | `Aggregate.Decisions` + `RenderText`; no CLI command (unwired guard)                                                                                                                                                                                                                             |
-| TEL-007 | Done                   | `internal/runmetrics/decision_test.go`; gofmt/vet/build/race green                                                                                                                                                                                                                               |
+| Task    | Status | Where                                                                                                                                                                                                                                                                                            |
+| ------- | ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| TEL-001 | Done   | [TEL-001-reconciliation.md](../reports/decision-telemetry/TEL-001-reconciliation.md)                                                                                                                                                                                                             |
+| TEL-002 | Done   | same report, §2 (the metric register)                                                                                                                                                                                                                                                            |
+| TEL-003 | Done   | Cross-repo evidence contract: producer in `sop-decision-adapters` (`internal/shadow` + `shadow` CLI) emits versioned `shadow-evidence.json`; read-only consumer metrics in `internal/runmetrics/decision.go`; see [TEL-003-integration.md](../reports/decision-telemetry/TEL-003-integration.md) |
+| TEL-004 | Done   | `model_tier_distribution` (`internal/runmetrics/decision.go`)                                                                                                                                                                                                                                    |
+| TEL-005 | Done   | `decision_override_rate`, `decision_escalation_rate`                                                                                                                                                                                                                                             |
+| TEL-006 | Done   | `Aggregate.Decisions`, `RenderText`/`RenderDecisions`, and the opt-in read-only `sop report --decisions [--format text\|json]` (`internal/cli/report_decisions.go`); the unwired guard allows only that entry point                                                                              |
+| TEL-007 | Done   | `internal/runmetrics/decision_test.go`; gofmt/vet/build/race green                                                                                                                                                                                                                               |

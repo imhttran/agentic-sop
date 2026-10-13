@@ -25,15 +25,48 @@ import (
 // severity, and the final gate.
 func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
 	detailed := false
+	decisions := false
+	format := "text"
 	var rest []string
-	for _, a := range args {
-		switch a {
-		case "--detailed":
+	for i := 0; i < len(args); i++ {
+		a := args[i]
+		switch {
+		case a == "--detailed":
 			detailed = true
+		case a == "--decisions":
+			decisions = true
+		case a == "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, "usage: sop report [run-id] [--detailed] | sop report --decisions [--format text|json]")
+				return exitUsage
+			}
+			i++
+			format = args[i]
+		case strings.HasPrefix(a, "--format="):
+			format = strings.TrimPrefix(a, "--format=")
 		default:
 			rest = append(rest, a)
 		}
 	}
+	if format != "text" && format != "json" {
+		fmt.Fprintln(stderr, "report: unknown --format (want text or json)")
+		return exitUsage
+	}
+
+	// Decision telemetry (TEL-006): an opt-in, project-wide, read-only aggregate of
+	// the decisions SOP recorded. It takes no run id and never touches execution.
+	if decisions {
+		if len(rest) > 0 {
+			fmt.Fprintln(stderr, "usage: sop report --decisions [--format text|json]")
+			return exitUsage
+		}
+		dir, ok := projectDir(getwd, stderr)
+		if !ok {
+			return exitError
+		}
+		return runReportDecisions(dir, format == "json", stdout, stderr)
+	}
+
 	if len(rest) > 1 {
 		fmt.Fprintln(stderr, "usage: sop report [run-id] [--detailed]")
 		return exitUsage
