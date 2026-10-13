@@ -1,6 +1,10 @@
 # PLAN — SOP Autonomous End-to-End Execution (AUTONOMY)
 
-**Status:** ACTIVE (SOP plan `plan-sop-autonomy`) — **consolidated authoritative plan**.
+**Status:** **HISTORICALIZED — COMPLETE** (SOP plan `plan-sop-autonomy`) — **consolidated
+authoritative plan**. Closed by SOP on 2026-10-13 via `sop plan historicalize`: all three
+tasks (`AUTONOMY-001`, `AUTONOMY-004`, `AUTONOMY-005`) reached `LOCAL_DONE` and the plan left
+ACTIVE selection. The audit record is retained at `.agent-sdlc/archive/plan-sop-autonomy/`
+(gitignored; `plan.json`, `plan.meta.json`, `tasks.json`, `lifecycle.json`).
 **Basis:** reconciled against the verified existing implementation at `d9f7722`; consolidated
 2026-10-09 with the operator-authored `docs/plans/PLAN-SOP-AUTONOMY-001-UPDATED.md`
 ("SOP Autonomous Outcome Execution" / Autonomous Decision Contract) into this single
