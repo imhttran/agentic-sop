@@ -183,6 +183,39 @@ func TestEarlyTriageProviderFailureContinues(t *testing.T) {
 	}
 }
 
+// An INCOMPLETE (or ERROR) analysis is never routed to the decision policy: even
+// when its evidence carries a blocking HIGH item, production records a provider
+// failure and does not escalate. This proves the production path differs from the
+// HYPOTHETICAL evaluation mapping (internal/deceleval MapJEVHypotheticalDirective),
+// which maps an INCOMPLETE result with no blocking item to CONTINUE.
+func TestEarlyTriageIncompleteStatusDoesNotEscalate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, earlyJEVTriageConfig)
+	a := &earlyCountingAgent{}
+	analyzer := &earlyFakeAnalyzer{result: jev.Result{
+		Status: jev.StatusIncomplete,
+		StructuredEvidence: &jev.Evidence{
+			Version: jev.EvidenceVersion, Purpose: jev.PurposeTaskTriage,
+			Severity: jev.SeverityHigh, Status: jev.EvidenceIncomplete,
+			Items: []jev.EvidenceItem{{Purpose: jev.PurposeTaskTriage, Severity: jev.SeverityHigh, Category: jev.CategorySecurity}},
+		},
+	}}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("an INCOMPLETE analysis must not block: code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "NEEDS_HUMAN (early JEV triage)") {
+		t.Errorf("an INCOMPLETE status must not escalate even with a blocking item: %q", stdout)
+	}
+	if a.impl != 1 {
+		t.Errorf("implementation ran %d times, want 1", a.impl)
+	}
+}
+
 // A pre-execution finding only escalates when its gate is enabled; enabling only
 // pre_execution leaves triage off.
 func TestEarlyPreExecutionGateEscalates(t *testing.T) {

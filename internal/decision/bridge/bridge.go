@@ -92,6 +92,11 @@ type Result struct {
 	Model    string            `json:"model,omitempty"`
 	Answers  map[string]Answer `json:"answers"`
 	Usage    Usage             `json:"usage"`
+	// Diagnostics is optional, advisory, adapter-supplied metadata (for example the
+	// serving provider of a failover chain). It is passed through to
+	// decision.Result.Diagnostics and MUST NOT be read by SOP policy. An adapter
+	// that omits it (older builds) simply yields no diagnostics.
+	Diagnostics map[string]string `json:"diagnostics,omitempty"`
 }
 
 // ScoreBand maps an inclusive upper score bound to a canonical choice. Bands are
@@ -405,6 +410,17 @@ func (b Built) diagnostics(res Result) map[string]string {
 	}
 	if b.profile.Deprecated {
 		d["deprecated"] = "true"
+	}
+	// Advisory adapter diagnostics pass through without overriding the class-only
+	// keys (profile/model), so a misbehaving adapter can never rewrite them.
+	for k, v := range res.Diagnostics {
+		k = strings.TrimSpace(k)
+		if k == "" {
+			continue
+		}
+		if _, ok := d[k]; !ok {
+			d[k] = v
+		}
 	}
 	return d
 }
