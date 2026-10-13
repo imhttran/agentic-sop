@@ -49,7 +49,7 @@ reconciliation: [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDING
 
 **Outcome:** keep deterministic governance; retain AI for evidence-generation and
 review tasks; do not promote the tested AI failure-disposition configurations.
-Outstanding follow-ups are tracked in [docs/BACKLOG.md](../BACKLOG.md) (see also §6
+Outstanding follow-ups are tracked in [plans/BACKLOG.md](BACKLOG.md) (see also §6
 of the consolidated findings).
 
 ## 1. Existing telemetry coverage and limitations (Phase 1, inspected)
