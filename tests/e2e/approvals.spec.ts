@@ -1,4 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
+import { copiedText, stubClipboard } from "./support/clipboard";
 import {
   NEEDS_HUMAN_REASON,
   sopApprove,
@@ -22,6 +23,8 @@ function projectCard(page: Page, id: string) {
 
 test.describe("approvals inbox (mobile, WebKit)", () => {
   test.beforeEach(async ({ page }) => {
+    // Make the clipboard deterministic for the whole file (Copy error / Copy details).
+    await stubClipboard(page);
     await page.goto(withToken("/approvals"));
   });
 
@@ -147,5 +150,14 @@ test.describe("approvals inbox (mobile, WebKit)", () => {
 
     await card.getByRole("button", { name: "Decline" }).click();
     await expect(page.locator("#approvals-cmd")).toContainText("conflict");
+
+    // The command fragment offers Copy error, which copies the concise diagnostic.
+    await page
+      .locator("#approvals-cmd")
+      .getByRole("button", { name: "Copy error" })
+      .click();
+    const copied = await copiedText(page);
+    expect(copied).toContain("SOP command diagnostic");
+    expect(copied).toContain("Result: conflict");
   });
 });

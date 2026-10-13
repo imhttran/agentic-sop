@@ -70,6 +70,23 @@ func TestApprovalsInboxUsesOneSharedDecisionNote(t *testing.T) {
 	}
 }
 
+// Each inbox gate offers a Copy details control whose text is assembled from
+// SOP-reported fields, with an accessible status line for the copy feedback.
+func TestApprovalsInboxOffersCopyDetails(t *testing.T) {
+	srv, _, _ := decisionServer(t, "")
+	_, body := get(t, srv.URL+"/approvals")
+
+	if !strings.Contains(body, "data-copy=") || !strings.Contains(body, "Copy details") {
+		t.Fatalf("inbox is missing a Copy details control")
+	}
+	if !strings.Contains(body, "Task: x1") {
+		t.Errorf("copy details text should name the task")
+	}
+	if !strings.Contains(body, "data-copy-status") || !strings.Contains(body, `aria-live="polite"`) {
+		t.Errorf("copy control is missing its accessible status line")
+	}
+}
+
 // A failed `sop approvals --json` is shown as an unread listing, never as "no
 // gates": a failing SOP must be distinguishable from a quiet one.
 func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {

@@ -18,6 +18,13 @@
   {{if $c.Conflict}}
   <div class="error-text">SOP rejected this decision (the gate may be stale or no longer applicable). Re-read the task and retry: {{$c.Error}}</div>
   {{else if $c.Error}}<div class="error-text">{{$c.Error}}</div>{{end}}
+  {{if or $c.Conflict $c.Error}}
+  {{$result := $c.State}}{{if $c.Conflict}}{{$result = "conflict"}}{{end}}
+  <span class="copy-control">
+    <button type="button" class="btn copy-btn" aria-label="Copy error" data-copy="{{printf "SOP command diagnostic\nCommand: sop %s\nTask: %s\nResult: %s\nMessage: %s" $c.Verb $c.TaskID $result $c.Error}}">Copy error</button>
+    <span class="copy-status" data-copy-status role="status" aria-live="polite"></span>
+  </span>
+  {{end}}
   {{if $c.Output}}<pre class="diag">{{$c.Output}}</pre>{{end}}
   {{if $c.Running}}
   <div hx-get="{{.CommandURL}}" hx-trigger="load delay:1s" hx-swap="outerHTML"></div>

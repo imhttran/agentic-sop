@@ -24,6 +24,22 @@
                     <span class="badge {{statusClass .Task.Status}}"
                         >{{.Task.Status}}</span
                     >
+                    <span class="copy-control">
+                        <button
+                            type="button"
+                            class="btn copy-btn"
+                            aria-label="Copy task details"
+                            data-copy="{{printf "SOP Controller task\nProject: %s\nTask: %s\nStatus: %s\nState: %s\nStage: %s\nAttempts: %d" .ProjectID .Task.ID .Task.Status .Task.State .Task.RunStatus.Stage .Task.Attempt}}"
+                        >
+                            Copy details
+                        </button>
+                        <span
+                            class="copy-status"
+                            data-copy-status
+                            role="status"
+                            aria-live="polite"
+                        ></span>
+                    </span>
                 </div>
                 <div class="meta-row">
                     <span class="badge {{statusClass .Task.State}}"

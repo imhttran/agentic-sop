@@ -727,6 +727,29 @@ ul.decisions-list {
     min-width: 0;
 }
 
+/* Copy-to-clipboard controls: a compact button with an adjacent live status line. */
+.copy-control {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    min-width: 0;
+}
+
+.copy-btn {
+    padding: 0.2rem 0.55rem;
+    font-size: 0.8rem;
+}
+
+.copy-status {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.copy-status.copy-failed {
+    color: #b42318;
+}
+
 /* Narrow viewport: stack everything, no horizontal scrolling, generous tap
    targets with clear separation between approve/decline/accept controls. */
 @media (max-width: 640px) {

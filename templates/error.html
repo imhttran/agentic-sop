@@ -11,6 +11,10 @@
   <main class="wrap">
     <h1>{{.Status}}</h1>
     <p class="error-text">{{.Message}}</p>
+    <span class="copy-control">
+      <button type="button" class="btn copy-btn" aria-label="Copy error" data-copy="{{printf "SOP Controller error\nStatus: %v\nMessage: %s" .Status .Message}}">Copy error</button>
+      <span class="copy-status" data-copy-status role="status" aria-live="polite"></span>
+    </span>
     <p><a href="/projects">← Back to projects</a></p>
   </main>
   {{template "scripts.html" .}}

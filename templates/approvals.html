@@ -53,6 +53,22 @@
                                     {{if .Kind}}<span class="badge s-blocked"
                                         >{{.Kind}}</span
                                     >{{end}}
+                                    <span class="copy-control">
+                                        <button
+                                            type="button"
+                                            class="btn copy-btn"
+                                            aria-label="Copy approval details"
+                                            data-copy="{{printf "SOP Controller approval\nProject: %s\nTask: %s\nGate: %s\nStatus: %s\nRequested: %s\nReason: %s" $proj.ProjectName .TaskID .Kind .Status .RequestedAt .Reason}}"
+                                        >
+                                            Copy details
+                                        </button>
+                                        <span
+                                            class="copy-status"
+                                            data-copy-status
+                                            role="status"
+                                            aria-live="polite"
+                                        ></span>
+                                    </span>
                                 </div>
                                 {{if .Reason}}
                                 <p class="muted small">
