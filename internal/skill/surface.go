@@ -49,6 +49,11 @@ var Commands = []Command{
 	{Name: "rag-test", Capability: "design_tests", Delegation: "sop prompt --capability design_tests"},
 	{Name: "rag-ingest", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "sop-cleanup", Capability: "", Delegation: "sop status"},
+	// The completion half of a merge/publish: it verifies the published target,
+	// historicalizes eligible plans through SOP, and removes only fully-merged,
+	// clean worktrees and branches. It fixes no capability; historicalization is
+	// the governed SOP call it delegates.
+	{Name: "sop-publish", Capability: "", Delegation: "sop plan historicalize"},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts

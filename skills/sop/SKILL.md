@@ -65,6 +65,10 @@ Thin aliases in the same install expose one capability each:
                           (capability: plan, read-only)
 /sop-cleanup <path>       inspect, classify, and PROPOSE worktree cleanup;
                           read-only by default (`sop status`)
+/sop-publish <plan>       complete an authorized merge and publish: verify the
+                          published target, historicalize eligible plans through
+                          SOP, and remove only fully-merged clean worktrees and
+                          branches
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
@@ -80,6 +84,12 @@ Explicit `/sop-browser-test` requests run, audit the coverage of, and maintain a
 project's persistent Playwright suite, and verify SOP's state for state-changing flows.
 That skill fixes no capability and never replaces SOP's validation, review, or approval
 authority.
+
+Explicit `/sop-publish` requests complete an already-authorized merge and publish:
+they verify the published target contains the intended commits, close eligible plans
+through `sop plan historicalize`, preserve lifecycle evidence, and remove only
+fully-merged clean worktrees and local branches. That skill never infers completion
+from a merge, never marks a plan superseded, and never force-removes or rewrites.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
