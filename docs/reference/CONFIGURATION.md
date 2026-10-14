@@ -232,10 +232,41 @@ SOP's state database.
   | `SOP_OLLAMA_FIX_ITERATIONS`       | FIX iteration ceiling                            | `24`    |
   | `SOP_OLLAMA_STALE_ITERATIONS`     | consecutive-stale-turn bound (no-progress guard) | `5`     |
   | `SOP_OLLAMA_TOOL_CALLS`           | tool calls per invocation                        | `80`    |
+  | `SOP_OLLAMA_DISCOVERY_ITERATIONS` | task-scoped discovery allowance (model turns)   | `12`    |
 
   A negative limit is rejected. The applied limits are recorded in each run's
   `trace.json` and shown by `sop report`. The harness owns and enforces the budget;
   the model never sets or extends it.
+
+- **Task-scoped discovery allowance.** `SOP_OLLAMA_DISCOVERY_ITERATIONS` sets how many
+  model turns an unmutated `IMPLEMENT`/`FIX` run may spend on novel, successful
+  repository discovery before non-mutating turns become stale and the run must make
+  the change or return a truthful outcome. It is a widened *allowance*, not a disabled
+  guard: a malformed value keeps the default, a value below `1` is raised to `1`, and
+  a value at or above the capability's iteration ceiling is capped below it, so the
+  allowance can never unbound a run or disable the safety ceiling. Unset, behavior is
+  byte-for-byte the historical fixed window (`12`). The configured allowance is
+  recorded in `trace.json` (`budgets.discovery_iterations`) and in the no-progress
+  diagnostic (`discovery_allowance=`), and the discovery activity that actually
+  occurred is recorded in `progress_summary.discovery`; the model never chooses it.
+
+  A single task may declare its **own** allowance, so tasks in one plan can differ.
+  A plan stage or task file carries an optional `Discovery iterations` field (JSON
+  `discovery_iterations`):
+
+  ```markdown
+  ## S007 — Multi-package refactor
+
+  ### Discovery iterations
+
+  24
+  ```
+
+  Precedence is **task override → `SOP_OLLAMA_DISCOVERY_ITERATIONS` → built-in default**,
+  applied per invocation, so a task-specific value never leaks into another task. The
+  task value is bounded by the same limits as the operator allowance (negative or
+  above the maximum fails plan validation loudly; a value at or above the ceiling is
+  clamped below it), so a task cannot weaken the stall/no-progress guard.
 
 - The `tool` harness's `IMPLEMENT`/`FIX` iteration ceilings can be raised with
   `SOP_OLLAMA_IMPLEMENT_ITERATIONS` and `SOP_OLLAMA_FIX_ITERATIONS` (positive integers;

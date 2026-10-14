@@ -12,7 +12,7 @@ import (
 
 const driverName = "sqlite"
 
-const taskColumns = `id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason,
+const taskColumns = `id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason,
 	       attempt, max_attempts, created_at, updated_at`
 
 type Store struct {
@@ -50,7 +50,7 @@ func (s *Store) Close() error {
 }
 
 // schemaVersion is the current on-disk schema version.
-const schemaVersion = 3
+const schemaVersion = 4
 
 func (s *Store) migrate() error {
 	var version int
@@ -67,6 +67,7 @@ func (s *Store) migrate() error {
 		0: s.createSchema,
 		1: s.migrateHandoffs,
 		2: s.migrateExecutionMode,
+		3: s.migrateDiscoveryIterations,
 	}
 	for version < schemaVersion {
 		migrate, ok := migrations[version]
@@ -154,6 +155,18 @@ func (s *Store) migrateExecutionMode() error {
 	return err
 }
 
+// migrateDiscoveryIterations adds the per-task discovery_iterations column (schema
+// version 4) so a task's own discovery allowance survives a restart. Existing rows
+// default to 0, which means "unset": the operator environment allowance and the
+// built-in default keep applying, so a migrated database is unchanged.
+func (s *Store) migrateDiscoveryIterations() error {
+	if _, err := s.db.Exec(`ALTER TABLE tasks ADD COLUMN discovery_iterations INTEGER NOT NULL DEFAULT 0`); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("PRAGMA user_version = 4")
+	return err
+}
+
 func (s *Store) Save(task *domain.Task) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -196,20 +209,21 @@ func upsertTask(tx *sql.Tx, task *domain.Task) error {
 func upsertTaskRow(tx *sql.Tx, task *domain.Task) error {
 	_, err := tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			objective = excluded.objective,
 			acceptance_criteria = excluded.acceptance_criteria,
 			execution_mode = excluded.execution_mode,
+			discovery_iterations = excluded.discovery_iterations,
 			status = excluded.status,
 			blocked_reason = excluded.blocked_reason,
 			attempt = excluded.attempt,
 			max_attempts = excluded.max_attempts,
 			created_at = excluded.created_at,
 			updated_at = excluded.updated_at
-	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
+	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode), task.DiscoveryIterations,
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
@@ -367,9 +381,9 @@ func (s *Store) ClearTasks() error {
 func insertTaskRow(tx *sql.Tx, task *domain.Task) error {
 	_, err := tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, execution_mode, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode),
+		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode), task.DiscoveryIterations,
 		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
@@ -452,10 +466,11 @@ type rowScanner interface {
 func scanTask(sc rowScanner) (*domain.Task, error) {
 	task := &domain.Task{}
 	var status, blockedReason, executionMode string
+	var discoveryIterations int
 	var createdAtStr, updatedAtStr string
 
 	err := sc.Scan(&task.ID, &task.Title, &task.Objective, &task.AcceptanceCriteria,
-		&executionMode, &status, &blockedReason, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
+		&executionMode, &discoveryIterations, &status, &blockedReason, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, err
 	}
@@ -467,6 +482,7 @@ func scanTask(sc rowScanner) (*domain.Task, error) {
 	task.Status = taskStatus
 	task.BlockedReason = domain.BlockedReason(blockedReason)
 	task.ExecutionMode = domain.ExecutionMode(executionMode)
+	task.DiscoveryIterations = discoveryIterations
 
 	if task.CreatedAt, err = parseTimestamp(createdAtStr); err != nil {
 		return nil, fmt.Errorf("parse created_at: %w", err)

@@ -24,7 +24,7 @@ composing existing components (below); its workstreams map to delivered work as:
 | ------------------------------------------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | AUTONOMY-001 Plan reconciliation & decision authority   | **SATISFIED**            | this consolidation + the Decision Contract mapping; `docs/reports/autonomy/AUTONOMY-001-outcome.md`                                                                                |
 | AUTONOMY-002 Autonomous continuation & bounded judgment | **NO_CHANGE_REQUIRED**   | `internal/autonomy` policy + `internal/cli` wiring already automate routine decisions; `internal/cli/autonomy_test.go` and the `internal/{recovery,scheduler,continuation}` suites |
-| AUTONOMY-003 Independent outcome acceptance             | **IMPLEMENTED (narrow)** | new `internal/outcome` verifier + tests; generic enforcement `PARTIAL` (owned by unmerged `harden-001`)                                                                            |
+| AUTONOMY-003 Independent outcome acceptance             | **IMPLEMENTED (narrow)** | new `internal/outcome` verifier + tests; generic enforcement `PARTIAL` (the SOP-HARD hardening that owns it, `harden-001`, merged into `main` at `9604bec`)                                                                            |
 | AUTONOMY-004 Automated regression & outcome report      | **IMPLEMENTED**          | `internal/cli/autonomy_cleanup_scenario_test.go`, `internal/cli/autonomy_outcome_contract_test.go`, `docs/reports/autonomy/AUTONOMY-001-outcome.md`                                |
 | AUTONOMY-005 Optional UX seam                           | **NOT_REQUIRED**         | `sop prompt --capability implement` is the single-prompt entry point (`internal/cli/prompt.go`); no usability gap prevents the contract                                            |
 
@@ -176,7 +176,8 @@ AUTONOMY-001 ──► AUTONOMY-004 ──► AUTONOMY-005
 - Out of scope (per `docs/PRD.md` §15): unlimited autonomous execution, large multi-agent
   swarms, automatic deployment, autonomous secret creation, bypassing branch protections,
   self-modifying policy, automatic acceptance of every AI review suggestion.
-- `harden-001` is not merged and is out of scope for this plan.
+- `harden-001` (SOP-HARD) is merged into `main` (`9604bec`); its acceptance-verification hardening is
+  integrated and no longer out of scope.
 
 ## Delivered out-of-band (operator, 2026-10-09)
 

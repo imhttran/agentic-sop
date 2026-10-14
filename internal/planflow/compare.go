@@ -50,6 +50,7 @@ func sameTaskDefinition(a, b *domain.Task) bool {
 		sameAcceptanceCriteria(splitCriteria(a.AcceptanceCriteria), splitCriteria(b.AcceptanceCriteria)) &&
 		sameAcceptanceChecks(a.AcceptanceChecks, b.AcceptanceChecks) &&
 		sameExecutionMode(a.ExecutionMode, b.ExecutionMode) &&
+		a.DiscoveryIterations == b.DiscoveryIterations &&
 		sameStringSet(a.DependencyIDs, b.DependencyIDs)
 }
 
@@ -63,6 +64,7 @@ func equivalentExecutedChange(cur, desired *domain.Task) bool {
 	return sameAcceptanceCriteria(splitCriteria(cur.AcceptanceCriteria), splitCriteria(desired.AcceptanceCriteria)) &&
 		sameAcceptanceChecks(cur.AcceptanceChecks, desired.AcceptanceChecks) &&
 		sameExecutionMode(cur.ExecutionMode, desired.ExecutionMode) &&
+		cur.DiscoveryIterations == desired.DiscoveryIterations &&
 		sameStringSet(cur.DependencyIDs, desired.DependencyIDs)
 }
 
@@ -360,6 +362,7 @@ func sameStage(a, b planner.Stage) bool {
 		canonicalProse(a.Objective) == canonicalProse(b.Objective) &&
 		sameStageKind(a.Kind, b.Kind) &&
 		sameExecutionMode(a.ExecutionMode, b.ExecutionMode) &&
+		a.DiscoveryIterations == b.DiscoveryIterations &&
 		sameAcceptanceCriteria(a.AcceptanceCriteria, b.AcceptanceCriteria) &&
 		sameAcceptanceChecks(a.AcceptanceChecks, b.AcceptanceChecks) &&
 		sameStringSet(a.Dependencies, b.Dependencies) &&

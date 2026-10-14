@@ -2,6 +2,6 @@
   "name": "budget-configured",
   "description": "An operator override changes the applied limit and the trace records it.",
   "expected": {
-    "budgets": { "implement_iterations": { "equal": 64 } }
+    "budgets": { "implement_iterations": { "equal": 64 }, "discovery_iterations": { "equal": 12 } }
   }
 }

@@ -1,7 +1,7 @@
 # PLAN — End-to-End One-Shot Hardening
 
-**Type:** Reliability-hardening plan for SOP's own end-to-end execution (`sop run`). **Planning only — no runtime change.**
-**Status:** PROPOSED — not activated. Requires operator approval before any task runs.
+**Type:** Reliability-hardening plan for SOP's own end-to-end execution (`sop run`). Delivered as runtime change (graph continuation + regression tests).
+**Status:** IMPLEMENTED — committed on `feat/end-to-end-one-shot` (`340dc17`) and integrated into `main` at `c54eef3` (OneShot combined with decision telemetry / SEAM-004). ONESHOT-001..006 delivered.
 **Baseline:** `agentic-sop` `main` @ `72a463c` (includes the merged Validation Evidence Reuse work).
 **Derived from:** the Validation Evidence Reuse execution (VER-001..VER-004) in worktree `agentic-sop-ver` @ `8b99ae0`.
 **Does not** change product behavior; it hardens SOP's ability to complete an approved multi-task plan without repeated manual intervention for recoverable failures.

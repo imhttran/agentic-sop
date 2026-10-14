@@ -64,6 +64,7 @@ func Evaluate(t runtrace.Trace, f Fixture) Result {
 		checkCount("budgets.fix_iterations", b.FixIterations, t.Budgets.FixIterations, add)
 		checkCount("budgets.stale_iterations", b.StaleIterations, t.Budgets.StaleIterations, add)
 		checkCount("budgets.tool_calls", b.ToolCalls, t.Budgets.ToolCalls, add)
+		checkCount("budgets.discovery_iterations", b.DiscoveryIterations, t.Budgets.DiscoveryIterations, add)
 	}
 
 	if rp := f.Expected.Replans; rp != nil {

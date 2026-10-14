@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/budget"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -309,6 +310,14 @@ func (p implementPhase) label() string {
 // cannot extend it. Repetitive exploration can terminate sooner.
 func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
 	b := h.cfg.EffectiveBudget()
+	// A task may declare its own discovery allowance. It overrides the operator
+	// environment allowance (already folded into b by EffectiveBudget) and the built-in
+	// default for THIS invocation only, so a per-task setting can never leak into
+	// another task. It is bounded by the same limits as the operator allowance, and
+	// discoveryTurns further caps it strictly below the capability's hard ceiling.
+	if req.DiscoveryIterations > 0 {
+		b.DiscoveryIterations = budget.ClampDiscovery(req.DiscoveryIterations)
+	}
 	policy := policyFor(req.Capability, b) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
@@ -316,6 +325,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 	}
 
 	st := newExecutionState()
+	// Apply the task-scoped discovery allowance the capability policy resolved from
+	// the canonical budget, so every discovery/stale decision reads one value.
+	st.discoveryWindow = policy.DiscoveryWindow
 	proof := h.satisfactionProof(ctx, req)
 	deliverables := req.Deliverables
 	var (
@@ -473,7 +485,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		// threshold withholds the command and git tools: the invocation owes the
 		// deliverable, and more validation is not progress toward it. File reads
 		// and writes stay available so the agent can compose it.
-		needDeliverable := len(deliverables) > 0 && iteration >= implementNowAfter && h.deliverableMissing(deliverables)
+		needDeliverable := len(deliverables) > 0 && iteration >= st.discoveryLimit() && h.deliverableMissing(deliverables)
 		if needDeliverable && policy.Allows(name) && !deliverableTool(name) {
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			detail := "a required deliverable is missing; create it with the file tools first"
@@ -672,7 +684,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 					advice = append(advice, implementFinalInstruction)
 				}
 				h.recordImplementEvent(req, implementFinalizeEvent, "")
-			case !st.mutationObserved && st.counters.interactions >= implementNowAfter:
+			case !st.mutationObserved && st.counters.interactions >= st.discoveryLimit():
 				// Bounded discovery can reach implement-now; subsequent inspections no
 				// longer earn discovery credit and tools remain available for mutation.
 				// An unmutated run is steered on EVERY interaction past the implement-now
@@ -725,10 +737,10 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 // staleLimitFor returns the consecutive-stale bound that actually applies to this
 // invocation. Its configured value alone is not coherent for a declared
 // deliverable: a missing deliverable owes the invocation a write, and the harness
-// escalates that write only at implementNowAfter, so a stale bound below that
-// point would end the run NO_PROGRESS before the escalation could ever fire —
-// the invocation would never be told to create the deliverable that is blocking
-// it.
+// escalates that write only at the discovery window boundary, so a stale bound
+// below that point would end the run NO_PROGRESS before the escalation could ever
+// fire — the invocation would never be told to create the deliverable that is
+// blocking it.
 //
 // While a declared deliverable is missing and the escalation has not yet been
 // issued, the bound is therefore raised to the escalation point so the write
@@ -743,8 +755,8 @@ func (h *Harness) staleLimitFor(deliverables []string, st *executionState, confi
 	if !h.deliverableMissing(deliverables) {
 		return configured
 	}
-	if configured < implementNowAfter {
-		return implementNowAfter
+	if escalation := st.discoveryLimit(); configured < escalation {
+		return escalation
 	}
 	return configured
 }
@@ -808,8 +820,8 @@ func (e *noProgressError) Error() string { return e.msg }
 // classifier's retryable-incomplete disposition (CONTINUE).
 func (h *Harness) implementNoProgressError(req agent.Request, st *executionState, ev *mutationEvidence, iteration int, lastTool, lastRequest string) error {
 	marker := strings.ToUpper(string(req.Capability)) + "_NO_PROGRESS"
-	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive stale iterations (provider=ollama, model=%s, iterations=%d, discovery_inspections=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
-		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, iteration, len(st.discoverySeen), st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
+	msg := fmt.Sprintf("%s: the Ollama agent %s made no repository progress after %d consecutive stale iterations (provider=ollama, model=%s, iterations=%d, discovery_allowance=%d, discovery_inspections=%d, repository_mutations=%d, changed_files=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		marker, req.Capability, st.consecutiveNoProgress, h.cfg.Model, iteration, st.discoveryLimit(), len(st.discoverySeen), st.repositoryMutations, len(ev.mutationPaths()), st.counters.toolCalls, terminationNoProgress, actionSuffix(lastTool, lastRequest))
 	if inspected := st.inspectedSummary(); inspected != "" {
 		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
 			st.phase.label(), inspected)
@@ -825,8 +837,8 @@ func (h *Harness) implementNoProgressError(req agent.Request, st *executionState
 // implementNoProgressError carries the same checkpoint. Kept for the fallback path
 // described on terminationNoChange.
 func (h *Harness) noChangeError(req agent.Request, policy CapabilityPolicy, st *executionState, lastTool, lastRequest string) error {
-	msg := fmt.Sprintf("the Ollama agent %s made no repository change after %d iterations (model=%s, tool_calls=%d, termination=%s%s); a retry may succeed",
-		req.Capability, policy.MaxIterations, h.cfg.Model, st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))
+	msg := fmt.Sprintf("the Ollama agent %s made no repository change after %d iterations (model=%s, discovery_allowance=%d, tool_calls=%d, termination=%s%s); a retry may succeed",
+		req.Capability, policy.MaxIterations, h.cfg.Model, st.discoveryLimit(), st.counters.interactions, terminationNoChange, actionSuffix(lastTool, lastRequest))
 	if inspected := st.inspectedSummary(); inspected != "" {
 		msg += fmt.Sprintf("\ncontinuation checkpoint (phase=%s, inspected=%s): resume from the intended change rather than repeating repository discovery",
 			st.phase.label(), inspected)

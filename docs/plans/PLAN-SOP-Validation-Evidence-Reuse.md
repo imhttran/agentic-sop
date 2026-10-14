@@ -1,7 +1,7 @@
 # PLAN — SOP Validation Evidence Reuse
 
-**Type:** Capability plan (reuse of deterministic validation evidence). **Planning only — no runtime change.**
-**Status:** PROPOSED — not activated. Requires operator approval before any task runs.
+**Type:** Capability plan (reuse of deterministic validation evidence). Delivered as runtime change (`internal/verifcache`, `sop validate --cache`).
+**Status:** IMPLEMENTED — VER-001..VER-004 shipped; the plan's ALREADY_SATISFIED follow-up (SOP-HARD-03) landed with the SOP-HARD integration (`9604bec`) on `main`.
 **Baseline:** `agentic-sop` `main` @ `8980826`.
 **Worktree:** isolated `agentic-sop-ver` on branch `plan/ver-evidence-reuse` (based on `8980826`). Primary `main`, `recovery/rag025`, and the 30 uncommitted hardening paths are **not** modified.
 **Git policy:** solo-developer local mode (`workflow.mode: local`); native git, minimal overhead, no PR workflow, and no automatic commit or push.
@@ -237,8 +237,10 @@ Documentation only; this section changes no task.
   `internal/cli` reuse/cache tests) and documentation is complete
   (`docs/reference/EVIDENCE-REUSE.md`); the SOP task could not run because it depends on VER-003.
 
-Follow-up backlog (recorded, not implemented): ALREADY_SATISFIED acceptance-verification
-robustness (SOP-HARD-03); approval-recovery churn (repeated NEEDS_HUMAN around no-change
-completions); task-appropriate validation tiers (the LOW tier is unreachable without a
-verify-first declaration, and the standard set must currently be narrowed because the full
-suite hangs on a pre-existing `internal/cli` test).
+Follow-up backlog (recorded): the ALREADY_SATISFIED acceptance-verification robustness this
+plan tracked as a follow-up (SOP-HARD-03) is now implemented and merged into `main`
+(`9604bec`), so VER-003's blocked-then-recoverable status is resolved by the combined
+implementation. The remaining recorded follow-ups are approval-recovery churn
+(repeated NEEDS_HUMAN around no-change completions) and task-appropriate validation
+tiers (the LOW tier is unreachable without a verify-first declaration); see
+[BACKLOG.md](BACKLOG.md).

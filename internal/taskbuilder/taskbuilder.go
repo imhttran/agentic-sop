@@ -53,20 +53,21 @@ func Build(plan *planner.Plan) ([]*domain.Task, error) {
 			checks = append([]string{}, stage.AcceptanceChecks...)
 		}
 		tasks = append(tasks, &domain.Task{
-			ID:                 stage.ID,
-			Title:              stage.Title,
-			Objective:          stage.Objective,
-			AcceptanceCriteria: SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
-			AcceptanceChecks:   checks,
-			ExecutionMode:      stage.ExecutionMode,
-			Status:             status,
-			BlockedReason:      domain.NO_REASON,
-			Attempt:            0,
-			MaxAttempts:        domain.DefaultRetryPolicy().MaxAttempts,
-			DependencyIDs:      append([]string{}, stage.Dependencies...),
-			Attempts:           []domain.Attempt{},
-			CreatedAt:          now,
-			UpdatedAt:          now,
+			ID:                  stage.ID,
+			Title:               stage.Title,
+			Objective:           stage.Objective,
+			AcceptanceCriteria:  SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
+			AcceptanceChecks:    checks,
+			ExecutionMode:       stage.ExecutionMode,
+			DiscoveryIterations: stage.DiscoveryIterations,
+			Status:              status,
+			BlockedReason:       domain.NO_REASON,
+			Attempt:             0,
+			MaxAttempts:         domain.DefaultRetryPolicy().MaxAttempts,
+			DependencyIDs:       append([]string{}, stage.Dependencies...),
+			Attempts:            []domain.Attempt{},
+			CreatedAt:           now,
+			UpdatedAt:           now,
 		})
 	}
 	return tasks, nil

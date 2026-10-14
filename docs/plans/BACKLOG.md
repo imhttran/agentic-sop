@@ -26,9 +26,11 @@ AGENT-005 are delivered:
   to change strategy once on the same class after a recoverable failure
   (`internal/recovery`; `models.replan_enabled` / `models.max_replans`), recorded in
   `trace.json` (schema 4) and asserted by `evals/replan/`.
-- **Task-Scoped Discovery Budgets** (see
-  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets)) — deferred; the
-  discovery allowance remains fixed (a soft threshold, not a hard budget).
+- **Task-Scoped Discovery Budgets** — **delivered**: the productive-discovery allowance
+  is a canonical, operator-configurable, bounded execution limit
+  (`internal/budget`: `DiscoveryIterations`; `SOP_OLLAMA_DISCOVERY_ITERATIONS`), recorded
+  in `trace.json` and enforced per task by the existing discovery/stale machinery. See
+  [Task-Scoped Discovery Budgets](#task-scoped-discovery-budgets).
 
 Metrics to capture: run latency, token and tool-call counts, and reliability
 measurements. This is distinct from the earlier, already-implemented
@@ -54,11 +56,12 @@ complete and closed. The capabilities this section once listed as deferred are n
 - **EVALUATED / REJECTED** — vector retrieval (CTX-009): a deterministic
   evaluation found no improvement over BM25, so BM25 is retained and no vector
   retrieval shipped.
-- **DELIVERED BUT OPT-IN** — the verification cache (`sop validate --cache`),
-  the prompt result cache (`sop prompt --cache`), and decision memory on the run
-  path (`context.decision_memory`); adaptive routing is live within the opt-in
-  routing path.
-- **DEFERRED FOLLOW-UP** — a persistent cross-run verification cache, tracked
+- **DELIVERED BUT OPT-IN** — the verification cache (`sop validate --cache`), the
+  portable cross-worktree evidence store (`SOP_VERIFY_CACHE_SHARED`, VER-002), the
+  prompt result cache (`sop prompt --cache`), and decision memory on the run path
+  (`context.decision_memory`); adaptive routing is live within the opt-in routing
+  path.
+- **DELIVERED (OPT-IN)** — the persistent cross-run verification cache, tracked
   below as VERIFCACHE-PERSISTENCE.
 
 The Git-SHA summary cache once named here was not shipped as a distinct component; the
@@ -70,14 +73,24 @@ post-Phase-8 governance:
 
 ## Persistent cross-run verification cache (VERIFCACHE-PERSISTENCE)
 
-**Status:** Backlog (deferred). The Phase 8 verification cache (`internal/verifcache`,
-CTX-007) is reachable today only as the per-invocation `sop validate --cache`, which is
-consulted for a clean working tree. A persistent, cross-run verification cache is
-deliberately **not** wired: it would reuse verification evidence across execution
-sessions, repository states, and environments, a different trust boundary from the
-existing in-session `sessionValidation` reuse. It requires a separate, evidence-gated
-design (identity inputs, invalidation, and false-hit analysis) and is recorded here as
-`VERIFCACHE-PERSISTENCE` rather than implemented.
+**Status:** Delivered (opt-in). VER-001–VER-004 shipped the portable, cross-worktree
+verification-evidence store (`internal/verifcache/store.go`, `SharedStore`) behind the
+opt-in `SOP_VERIFY_CACHE_SHARED` location, plus an append-only reuse-decision record
+(`verify-cache-decisions.jsonl`). It reuses the existing CTX-007 cache primitives — no
+second identity or cache implementation — and a hit is returned only for exact
+`Identity` equivalence; every failure mode (unreadable file, schema mismatch, corrupt
+or partial entry) yields a miss, never a hit. Concurrent writers are serialized by an
+advisory lock and committed with an atomic rename, so a shared store cannot lose prior
+evidence or leave a truncated document. It is disabled by default, so an unconfigured
+project is unchanged.
+
+Remaining trust-boundary note (design, not a defect): cross-environment reuse assumes
+the identity inputs (repository state, validation commands, toolchain) are genuinely
+equivalent across the sharing worktrees. The store treats a shared location as
+trusted operator input; the false-hit analysis for sharing across *heterogeneous*
+environments (not just sibling worktrees of one repository) remains future work. That
+is the residual item below, not the previously-described "deliberately not wired" gap,
+which is closed.
 
 ## Performance telemetry gaps
 
@@ -136,25 +149,50 @@ tool loop to mirror), and [../specs/PROVIDERS.md](../specs/PROVIDERS.md) §2a.
 
 ## Task-Scoped Discovery Budgets
 
-**Priority:** High  
-**Status:** Backlog  
-**Depends on:** Bounded productive IMPLEMENT/FIX discovery (`8f426e2`)
+**Priority:** High. **Status:** Delivered. **Depends on:** Bounded productive IMPLEMENT/FIX discovery (`8f426e2`).
 
 ### Problem
 
-IMPLEMENT/FIX currently allow productive discovery through a fixed turn threshold
-before stale/no-progress semantics take over.
+IMPLEMENT/FIX previously allowed productive discovery through a fixed turn threshold
+before stale/no-progress semantics took over. This prevented short premature
+termination, but the fixed threshold still assumed that different agents/models require
+roughly the same amount of discovery before mutation.
 
-This prevents short premature termination, but the fixed threshold still assumes
-different agents/models require roughly the same amount of discovery.
+### Resolution
 
-A future agent may legitimately require more discovery turns before mutation.
+The allowance is now a canonical, bounded execution limit with a precedence chain —
+deliberately **not** a per-model table (no `Codex = 18 / DeepSeek = 12 / Nemotron = 10`
+hardcoding):
 
-We should avoid provider/model-specific limits such as:
+- **Task override → operator environment → built-in default.** A plan stage or task
+  file may declare its own `discovery_iterations` (carried through the persisted task
+  and the agent request for that invocation only, so it never leaks into another
+  task); absent it, `SOP_OLLAMA_DISCOVERY_ITERATIONS` applies; absent that, the built-in
+  default (`12`, the historical window) applies, so an unconfigured project is
+  unchanged.
+- `internal/budget` carries `DiscoveryIterations` (default `12`), overridable with
+  `SOP_OLLAMA_DISCOVERY_ITERATIONS`; a per-task value is bounded by the same limits.
+- It is bounded: a malformed value keeps the base, a value below
+  `MinDiscoveryIterations` is raised, a value above `MaxDiscoveryIterations` is clamped,
+  a negative or above-maximum plan/task value fails validation loudly, and the effective
+  window is always capped strictly below the capability's hard iteration ceiling.
+- The capability policy (`DiscoveryWindow`) resolves it once per invocation; the
+  existing discovery/stale machinery (`observeDiscovery`, `mutationConvergenceRequired`,
+  `staleLimitFor`) reads that single value, so a widened allowance lets a discovery-heavy
+  run keep making credited progress without ever bypassing the stale guard, the
+  convergence enforcement, or the approval boundaries.
+- It is recorded in `trace.json` (`budgets.discovery_iterations`), in the no-progress
+  diagnostic (`discovery_allowance=`), and observed discovery in
+  `progress_summary.discovery`.
 
-- Codex = 18 turns
-- DeepSeek = 12 turns
-- Nemotron = 10 turns
+Evidence: `internal/budget/budget_test.go` (bounds, clamp, base preservation),
+`internal/ollamaagent/discovery_budget_test.go` (widened/narrow allowances move the
+no-progress stop point but stay bounded; per-invocation isolation; precedence;
+provider-agnostic), `internal/cli/discovery_budget_cli_test.go` (two tasks in one run
+reach the agent with different allowances and none leaks), `internal/store` (column
+round-trip and migration), `internal/planner` and `internal/taskfile` (parse/render and
+validation), `internal/planflow` (a discovery change is material),
+`internal/ollamaagent/policy_test.go`, and the `evals/budgets/` fixtures.
 
 ## Earlier multi-package discovery observations
 

@@ -66,6 +66,7 @@ type BudgetExpectation struct {
 	FixIterations       *CountAssertion `json:"fix_iterations,omitempty"`
 	StaleIterations     *CountAssertion `json:"stale_iterations,omitempty"`
 	ToolCalls           *CountAssertion `json:"tool_calls,omitempty"`
+	DiscoveryIterations *CountAssertion `json:"discovery_iterations,omitempty"`
 }
 
 // ExecutionExpectation asserts what executed. Only the identity that is stable
@@ -183,6 +184,7 @@ func (e Expectation) validate() error {
 		counts["budgets.fix_iterations"] = b.FixIterations
 		counts["budgets.stale_iterations"] = b.StaleIterations
 		counts["budgets.tool_calls"] = b.ToolCalls
+		counts["budgets.discovery_iterations"] = b.DiscoveryIterations
 	}
 	if r := e.Replans; r != nil {
 		counts["replans.count"] = r.Count

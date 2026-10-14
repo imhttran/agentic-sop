@@ -3,7 +3,7 @@
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-browser-test`, and the RAG skills `/rag-schema`, `/rag-test`,
+`/sop-continue`, `/sop-browser-test`, `/sop-publish`, and the RAG skills `/rag-schema`, `/rag-test`,
 and `/rag-ingest`,
 and how each one calls SOP.
 
@@ -100,6 +100,7 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
 | `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
+| `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or

@@ -133,6 +133,11 @@ type BudgetLimits struct {
 	StaleIterations int `json:"stale_iterations"`
 	// ToolCalls bounds executed tool calls in one invocation.
 	ToolCalls int `json:"tool_calls"`
+	// DiscoveryIterations is the task-scoped, bounded discovery allowance an
+	// unmutated IMPLEMENT/FIX run may spend on novel repository discovery before
+	// non-mutating turns become stale. The observed discovery activity that actually
+	// occurred is recorded separately in ProgressSummary.Discovery.
+	DiscoveryIterations int `json:"discovery_iterations"`
 }
 
 // Execution records what actually executed, keeping the routing DECISION (the

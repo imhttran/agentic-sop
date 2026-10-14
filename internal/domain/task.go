@@ -36,12 +36,18 @@ type Task struct {
 	Status           TaskStatus
 	BlockedReason    BlockedReason
 	ExecutionMode    ExecutionMode
-	Attempt          int
-	MaxAttempts      int
-	DependencyIDs    []string
-	Attempts         []Attempt
-	CreatedAt        time.Time
-	UpdatedAt        time.Time
+	// DiscoveryIterations is the optional per-task discovery allowance (IMPLEMENT/FIX
+	// model turns of credited repository discovery before non-mutating turns become
+	// stale). Zero means the task declares none and the operator environment allowance
+	// (then the built-in default) applies. It is part of the executable definition, so a
+	// change is reconciled like any other definition change.
+	DiscoveryIterations int
+	Attempt             int
+	MaxAttempts         int
+	DependencyIDs       []string
+	Attempts            []Attempt
+	CreatedAt           time.Time
+	UpdatedAt           time.Time
 }
 
 // transitions is the authoritative state machine. Every workflow decision
