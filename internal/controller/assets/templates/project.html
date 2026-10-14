@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{{.Project.Summary.Name}} — SOP Controller</title>
+        <link rel="stylesheet" href="/static/app.css" />
+    </head>
+    <body>
+        {{template "nav.html" .}}
+        <main class="wrap">
+            <div class="crumbs">
+                <a href="/projects">Projects</a>
+                <span>/</span> {{.Project.Summary.Name}}
+            </div>
+
+            <section class="hero">
+                <div class="hero-head">
+                    <h1>{{.Project.Summary.Name}}</h1>
+                    <span class="pill state-{{.Project.Summary.State}}"
+                        >{{.Project.Summary.State}}</span
+                    >
+                </div>
+                <div class="progress big">
+                    <span
+                        style="width: {{.Project.Summary.PercentComplete}}%"
+                    ></span>
+                </div>
+                <div class="muted">
+                    {{.Project.Summary.Completed}}/{{.Project.Summary.Total}}
+                    complete · {{.Project.Summary.PercentComplete}}%{{if
+                    .Project.Summary.Branch}} · branch
+                    {{.Project.Summary.Branch}}{{end}}{{if
+                    .Project.Plan.Recorded}} · plan
+                    {{.Project.Plan.Source}}{{end}}
+                </div>
+                <div class="counts">
+                    {{if .Project.Summary.NeedsAttention}}
+                    <a class="badge s-attention" href="#decisions"
+                        >{{.Project.Summary.NeedsAttention}} needs your
+                        attention</a
+                    >
+                    {{end}}
+                    <span class="badge s-completed"
+                        >{{.Project.Summary.Completed}} complete</span
+                    >
+                    <span class="badge s-running"
+                        >{{.Project.Summary.Running}} running</span
+                    >
+                    <span class="badge s-ready"
+                        >{{.Project.Summary.Ready}} ready</span
+                    >
+                    <span class="badge s-planned"
+                        >{{.Project.Summary.Planned}} planned</span
+                    >
+                    <span class="badge s-blocked"
+                        >{{.Project.Summary.Blocked}} blocked</span
+                    >
+                    <span class="badge s-failed"
+                        >{{.Project.Summary.FixRequired}} fix required</span
+                    >
+                    {{if and .Project.Plan.Recorded (ne .Project.Plan.FinalGate
+                    "UNKNOWN")}}
+                    <span class="badge {{levelClass .Project.Plan.FinalGate}}"
+                        >plan gate {{.Project.Plan.FinalGate}}</span
+                    >
+                    {{end}} {{$active := activeTask .Project}}{{if $active}}
+                    <a
+                        class="badge s-running"
+                        href="/projects/{{$.Project.Summary.ID}}/tasks/{{$active}}"
+                        >active {{$active}}</a
+                    >
+                    {{end}}
+                </div>
+            </section>
+
+            {{template "decisions.html" .Decisions}}
+
+            <section class="panel">
+                <div class="panel-head"><h2>Commands</h2></div>
+                {{$active := activeTask .Project}}
+                <div class="actions">
+                    {{if and (not $active) (ne .Project.Summary.State "complete")}}
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.Project.Summary.ID}}/commands/start"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button
+                            class="btn primary"
+                            hx-disabled-elt="this"
+                            title="Start an idle plan or continue an incomplete plan; SOP selects the runnable task (sop run / sop resume)"
+                        >
+                            Start / Continue
+                        </button>
+                    </form>
+                    {{end}}
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.Project.Summary.ID}}/commands/validate"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button class="btn" hx-disabled-elt="this">Validate</button>
+                    </form>
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.Project.Summary.ID}}/commands/review"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button class="btn" hx-disabled-elt="this">Review</button>
+                    </form>
+                    {{if .Project.HasRetryableBlocked}}
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.Project.Summary.ID}}/commands/retry-all"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button
+                            class="btn"
+                            hx-disabled-elt="this"
+                            title="Requeue every BLOCKED task that still has retry budget (sop retry --all)"
+                        >
+                            Retry all blocked
+                        </button>
+                    </form>
+                    {{else}}
+                    <p class="muted">
+                        Retry all blocked:
+                        <span class="badge s-unavailable">{{unavailable}}</span>
+                        <span class="small">No BLOCKED task currently has retry budget remaining.</span>
+                    </p>
+                    {{end}}
+                    {{if .Project.PlanSource}}
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.Project.Summary.ID}}/commands/reconcile"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button
+                            class="btn"
+                            hx-disabled-elt="this"
+                            title="Reconcile {{.Project.PlanSource}} with the active plan (sop reconcile)"
+                        >
+                            Reconcile plan
+                        </button>
+                    </form>
+                    {{end}}
+                </div>
+                {{if $active}}
+                <div class="actions">
+                    <p class="muted">
+                        Stop: <span class="badge s-unavailable">{{unavailable}}</span>
+                        <span class="small"
+                            >SOP exposes no cancellation application operation;
+                            stopping this run is a SOP lifecycle decision the
+                            controller cannot simulate.</span
+                        >
+                    </p>
+                </div>
+                {{end}}
+                <div id="cmd"></div>
+            </section>
+
+            {{template "changed_tasks.html" .}}
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Plan performance</h2>
+                    <span class="muted small"
+                        >SOP-measured time for the active plan's run</span
+                    >
+                </div>
+                {{template "plan_performance.html" .Project.PlanPerformance}}
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Tasks</h2></div>
+                <div
+                    id="tasks"
+                    hx-get="/projects/{{.Project.Summary.ID}}/tasks"
+                    hx-trigger="every {{.Poll}}s"
+                    hx-swap="innerHTML"
+                >
+                    {{template "task_list.html" .}}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Activity</h2></div>
+                <div
+                    id="activity"
+                    data-activity-live
+                    data-project="{{.Project.Summary.ID}}"
+                    data-stream-url="/projects/{{.Project.Summary.ID}}/activity/stream"
+                    data-window-url="/projects/{{.Project.Summary.ID}}/activity/window"
+                    data-poll-ms="{{.Poll.Milliseconds}}"
+                >
+                    <p class="muted">Loading…</p>
+                </div>
+            </section>
+        </main>
+        {{template "scripts.html" .}}
+    </body>
+</html>

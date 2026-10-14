@@ -31,7 +31,7 @@ func writeRepoFile(t *testing.T, root, name, content string) {
 func TestToolsListsExactlyTheInitialTools(t *testing.T) {
 	want := []string{
 		"read_file", "write_file", "create_file", "delete_file", "restore_file",
-		"list_files", "search_files", "run_command", "git_status", "git_diff",
+		"copy_file", "rewrite_file", "list_files", "search_files", "run_command", "git_status", "git_diff",
 	}
 	got := Tools()
 	if strings.Join(got, ",") != strings.Join(want, ",") {

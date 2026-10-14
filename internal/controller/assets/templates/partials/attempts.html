@@ -1,0 +1,19 @@
+{{if .Attempts}}
+<ol class="timeline attempts">
+  {{range .Attempts}}
+  <li class="tl-item">
+    <span class="tl-dot {{statusClass .Status}}" aria-hidden="true"></span>
+    <div class="tl-body">
+      <div class="tl-head">
+        <span class="badge {{statusClass .Status}}">{{.Status}}</span>
+        <span class="muted small">attempt {{.Number}}</span>
+        <time class="muted small">{{since .Timestamp}}</time>
+      </div>
+      {{if .Reason}}<div class="tl-text">{{.Reason}}</div>{{end}}
+    </div>
+  </li>
+  {{end}}
+</ol>
+{{else}}
+<p class="muted">No attempts recorded yet.</p>
+{{end}}

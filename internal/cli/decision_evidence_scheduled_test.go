@@ -22,6 +22,7 @@ import (
 // boundary, and SOP — not the provider — records the approval request and requeues
 // the task. With no provider, the same task continues automatically, unchanged.
 func TestScheduledTaskDecisionEvidenceEscalates(t *testing.T) {
+	clearDecisionEnv(t)
 	const cfgEnabled = "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\ndecision:\n  enabled: true\n  provider: command\n  command:\n    - placeholder\n"
 	const cfgDisabled = "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\n"
 

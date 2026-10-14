@@ -1,0 +1,23 @@
+{{- /* CTRL008: JEV (independent verification) panel. Renders SOP's persisted JEV
+       analysis when present and an explicit not-run absence otherwise. It is a
+       JEV verdict, visually distinct from Validation, Review, and Quality. */ -}}
+{{$jev := .Run.JEV}}
+{{if $jev}}
+<dl class="facts">
+  <div>
+    <dt>JEV status</dt>
+    <dd><span class="badge {{levelClass $jev.Status}}">JEV {{evidenceState true $jev.Status}}</span></dd>
+  </div>
+  <div>
+    <dt>Findings</dt>
+    <dd>{{$jev.Findings}}</dd>
+  </div>
+</dl>
+{{if $jev.Summary}}<p>{{$jev.Summary}}</p>{{end}}
+{{if $jev.Reason}}<p class="muted small">{{$jev.Reason}}</p>{{end}}
+{{else}}
+<p class="muted">
+  <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small">SOP persisted no JEV analysis for this run.</span>
+</p>
+{{end}}

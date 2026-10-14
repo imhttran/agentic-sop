@@ -55,6 +55,12 @@ func (h *Harness) writeFile(args map[string]any, mustNotExist bool) (string, err
 	if !ok {
 		return "", errors.New(`missing required argument "content"`)
 	}
+	// A trailing separator names a directory; these tools act on files only. There
+	// is no directory tool, and write_file creates missing parents, so a directory
+	// path is a mistake to correct rather than a silent regular-file create.
+	if raw, _ := args["path"].(string); strings.HasSuffix(strings.TrimSpace(raw), "/") {
+		return "", errors.New(`path ends in "/" (a directory); these tools create regular files only. Write the file you want — write_file creates any missing parent directories — rather than creating a directory`)
+	}
 	p, err := h.resolveArg(args, "path", true, accessWrite)
 	if err != nil {
 		return "", err
@@ -65,12 +71,140 @@ func (h *Harness) writeFile(args map[string]any, mustNotExist bool) (string, err
 		}
 	}
 	if err := os.MkdirAll(filepath.Dir(p.abs), 0o755); err != nil {
+		if blocked, ok := parentNotDir(filepath.Dir(p.abs)); ok {
+			rel, rerr := filepath.Rel(p.root, blocked)
+			if rerr != nil {
+				rel = blocked
+			}
+			return "", fmt.Errorf("cannot create the directory for %s: a file already exists at %q; delete it with delete_file first, or choose a different path", p.rel, filepath.ToSlash(rel))
+		}
 		return "", fmt.Errorf("write %s: %w", p.rel, err)
 	}
 	if err := os.WriteFile(p.abs, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.rel, err)
 	}
 	return fmt.Sprintf("wrote %d bytes to %s", len(content), p.rel), nil
+}
+
+// parentNotDir returns the first existing path component of dir (dir or one of
+// its ancestors) that is not a directory, so a failed parent-directory create can
+// explain the collision instead of surfacing a raw "not a directory" errno. It
+// never deletes or modifies anything.
+func parentNotDir(dir string) (string, bool) {
+	for d := dir; ; {
+		info, err := os.Lstat(d)
+		if err == nil {
+			if info.IsDir() {
+				return "", false
+			}
+			return d, true
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return "", false
+		}
+		d = parent
+	}
+}
+
+// copyFile performs a byte-exact copy of one file from an authorized source root
+// (default: the primary repository) into the writable repository root. It exists so
+// a governed task can import a file deterministically — the file bytes never pass
+// through a model — while staying inside the same confinement: the source is read
+// through an authorized root, the destination is written through a writable root,
+// and both are audited. It refuses a directory path on either side.
+func (h *Harness) copyFile(args map[string]any) (string, error) {
+	source, _ := args["source"].(string)
+	if strings.TrimSpace(source) == "" {
+		return "", errors.New(`missing required argument "source"`)
+	}
+	dest, _ := args["dest"].(string)
+	if strings.TrimSpace(dest) == "" {
+		return "", errors.New(`missing required argument "dest"`)
+	}
+	if strings.HasSuffix(strings.TrimSpace(source), "/") || strings.HasSuffix(strings.TrimSpace(dest), "/") {
+		return "", errors.New(`copy_file copies a single file; a path ending in "/" names a directory`)
+	}
+	src, err := h.resolveArg(map[string]any{"path": source, "root": args["source_root"]}, "path", true, accessRead)
+	if err != nil {
+		return "", err
+	}
+	dst, err := h.resolveArg(map[string]any{"path": dest}, "path", true, accessWrite)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(src.abs)
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", fmt.Errorf("copy_file: source %q does not exist under root %q (resolved to %s); the source path is relative to that root", src.rel, src.root, src.abs)
+		}
+		return "", fmt.Errorf("copy_file: read %s: %w", src.rel, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("copy_file: %s is a directory", src.rel)
+	}
+	data, err := os.ReadFile(src.abs)
+	if err != nil {
+		return "", fmt.Errorf("copy_file: read %s: %w", src.rel, err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dst.abs), 0o755); err != nil {
+		if blocked, ok := parentNotDir(filepath.Dir(dst.abs)); ok {
+			rel, rerr := filepath.Rel(dst.root, blocked)
+			if rerr != nil {
+				rel = blocked
+			}
+			return "", fmt.Errorf("cannot create the directory for %s: a file already exists at %q; delete it with delete_file first, or choose a different path", dst.rel, filepath.ToSlash(rel))
+		}
+		return "", fmt.Errorf("copy_file: write %s: %w", dst.rel, err)
+	}
+	if err := os.WriteFile(dst.abs, data, 0o644); err != nil {
+		return "", fmt.Errorf("copy_file: write %s: %w", dst.rel, err)
+	}
+	return fmt.Sprintf("copied %d bytes from %s to %s", len(data), src.rel, dst.rel), nil
+}
+
+// rewriteFile replaces every exact occurrence of from with to in one file, so an
+// import rewrite is deterministic and separate from copying. It is idempotent: a
+// file whose from string is already gone (because to is present) is a no-op rather
+// than an error, so re-running an import is safe. It refuses an empty from, a from
+// equal to to, and a file in which neither string appears, and never touches any
+// other file.
+func (h *Harness) rewriteFile(args map[string]any) (string, error) {
+	from, _ := args["from"].(string)
+	to, _ := args["to"].(string)
+	if from == "" {
+		return "", errors.New(`missing required argument "from"`)
+	}
+	if from == to {
+		return "", errors.New(`"from" and "to" are identical; nothing to rewrite`)
+	}
+	p, err := h.resolveArg(args, "path", true, accessWrite)
+	if err != nil {
+		return "", err
+	}
+	info, err := os.Stat(p.abs)
+	if err != nil {
+		return "", fmt.Errorf("rewrite_file: %w", err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("rewrite_file: %s is a directory", p.rel)
+	}
+	data, err := os.ReadFile(p.abs)
+	if err != nil {
+		return "", fmt.Errorf("rewrite_file: %w", err)
+	}
+	text := string(data)
+	switch n := strings.Count(text, from); {
+	case n > 0:
+		if err := os.WriteFile(p.abs, []byte(strings.ReplaceAll(text, from, to)), 0o644); err != nil {
+			return "", fmt.Errorf("rewrite_file: %w", err)
+		}
+		return fmt.Sprintf("rewrote %d occurrence(s) of %q in %s", n, from, p.rel), nil
+	case strings.Contains(text, to):
+		return fmt.Sprintf("already rewritten: %s has no %q (idempotent no-op)", p.rel, from), nil
+	default:
+		return "", fmt.Errorf("rewrite_file: %s contains neither %q nor its replacement; nothing to rewrite", p.rel, from)
+	}
 }
 
 // deleteFile removes a file. It refuses a directory — a recursive delete is not a

@@ -1,0 +1,109 @@
+{{- $t := .Task -}} {{- $run := $t.Run -}} {{- $cls := $run.Classification -}}
+<section class="recovery">
+    {{if $t.NeedsHuman}}
+    <div class="callout callout-human">
+        <div class="callout-head">
+            <span class="badge d-human">NEEDS HUMAN</span>
+            {{if $t.BlockedReason}}<span class="muted small"
+                >{{$t.BlockedReason}}</span
+            >{{end}}
+        </div>
+        <p>
+            {{with $cls}}{{.Reason}}{{else}}SOP stopped at a human boundary;
+            this task is BLOCKED and needs a human decision.{{end}}
+        </p>
+    </div>
+    {{else if $t.Recovering}}
+    <div class="callout callout-auto">
+        <div class="callout-head">
+            <span class="badge {{dispositionClass $t.Recovering}}"
+                >{{$t.Recovering}}</span
+            >
+            {{with $cls}}{{if .Kind}}<span class="badge {{categoryClass (classificationCategory .)}}"
+                >{{categoryLabel (classificationCategory .)}}</span
+            ><span class="muted small">{{.Kind}}</span
+            >{{end}}{{if .Confidence}}<span class="muted small"
+                >· confidence {{.Confidence}}</span
+            >{{end}}{{end}}
+        </div>
+        <p>
+            SOP selected this recovery itself — no human decision is required. A
+            retry here is optional.
+        </p>
+        {{with $cls}}{{if .Reason}}
+        <p class="muted">{{.Reason}}</p>
+        {{end}}{{end}}
+    </div>
+    {{else if $run.Present}}
+    <p class="muted small">
+        Stage <strong>{{$run.Stage}}</strong>{{if $run.Decision}} · decision
+        {{$run.Decision}}{{end}}{{range $run.Reasons}} · {{.}}{{end}}
+    </p>
+    {{else if $t.LatestFailure}}
+    <p class="muted">
+        No run artifacts recorded. SOP's last recorded diagnostic:
+        <strong>{{$t.LatestFailure}}</strong>
+    </p>
+    {{else}}
+    <p class="muted">
+        No run recorded yet. Run this task to give SOP something to observe.
+    </p>
+    {{end}} {{with $cls}}
+    {{$cat := classificationCategory .}}
+    <dl class="facts">
+        <div>
+            <dt>Category</dt>
+            <dd><span class="badge {{categoryClass $cat}}">{{categoryLabel $cat}}</span></dd>
+        </div>
+        <div>
+            <dt>Kind</dt>
+            <dd>{{.Kind}}</dd>
+        </div>
+        <div>
+            <dt>Disposition</dt>
+            <dd>{{.Disposition}}</dd>
+        </div>
+        <div>
+            <dt>Confidence</dt>
+            <dd>{{.Confidence}}</dd>
+        </div>
+    </dl>
+    {{end}}
+
+    <div class="actions">
+        <form
+            class="inline"
+            hx-post="/projects/{{.ProjectID}}/tasks/{{$t.ID}}/commands/retry"
+            hx-target="#cmd"
+            hx-swap="innerHTML"
+        >
+            <input type="hidden" name="csrf" value="{{.CSRF}}" />
+            <button class="btn primary" hx-disabled-elt="this">Retry</button>
+        </form>
+        <form
+            class="inline"
+            hx-post="/projects/{{.ProjectID}}/tasks/{{$t.ID}}/commands/retry-force"
+            hx-target="#cmd"
+            hx-swap="innerHTML"
+        >
+            <input type="hidden" name="csrf" value="{{.CSRF}}" />
+            <button
+                class="btn"
+                hx-disabled-elt="this"
+                title="Retry even when the retry budget is spent (sop retry --force)"
+            >
+                Force retry
+            </button>
+        </form>
+        <form
+            class="inline"
+            hx-post="/projects/{{.ProjectID}}/tasks/{{$t.ID}}/commands/report"
+            hx-target="#cmd"
+            hx-swap="innerHTML"
+        >
+            <input type="hidden" name="csrf" value="{{.CSRF}}" />
+            <button class="btn" hx-disabled-elt="this">Open report</button>
+        </form>
+    </div>
+    <div id="cmd"></div>
+</section>

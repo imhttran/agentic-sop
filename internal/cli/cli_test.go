@@ -414,6 +414,7 @@ func TestRunPlanWritesMarkdown(t *testing.T) {
 }
 
 func TestRunPlanUsesConfiguredProvider(t *testing.T) {
+	clearProviderEnv(t)
 	dir := t.TempDir()
 	writeFile(t, dir, "PRD.md", "# Book RAG\n")
 	initProject(t, dir)

@@ -670,6 +670,13 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 		return res, reconcilePlan{}, nil, nil, err
 	}
 
+	// The task store does not persist operator acceptance checks, so a task reloaded
+	// from the database carries none. Restore them from the recorded machine plan the
+	// active graph mirrors before comparing, so an unchanged checked task is not
+	// reported as changed. A real acceptance-check change is still a change: the
+	// restored value is the recorded plan's, never the requested one.
+	hydrateAcceptanceChecks(active, recorded)
+
 	// A listing is independent of any approval: it reports what would need one.
 	accept := opts.AcceptChanged
 	if mode == reconcileInspect {
@@ -883,6 +890,39 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 	}
 
 	return out, nil
+}
+
+// hydrateAcceptanceChecks restores each active task's plan-declared acceptance
+// checks from the recorded machine plan before reconciliation compares it. The
+// task store does not persist acceptance checks, so a task loaded from the
+// database carries none; without this, every task whose plan declares checks would
+// look changed on every reconciliation. The recorded plan is the plan the active
+// graph mirrors, so its checks are the correct comparison baseline: a real
+// acceptance-check change still differs, because the restored value is the
+// recorded plan's, never the requested one. The stage match mirrors the execution
+// path's planTaskStage identity (ID + Objective + AcceptanceCriteria) so
+// comparison and execution can never disagree about which stage owns a task.
+func hydrateAcceptanceChecks(active []*domain.Task, recorded *planner.Plan) {
+	if recorded == nil || len(recorded.Stages) == 0 {
+		return
+	}
+	byID := make(map[string]planner.Stage, len(recorded.Stages))
+	for _, s := range recorded.Stages {
+		byID[s.ID] = s
+	}
+	for _, t := range active {
+		if t == nil || len(t.AcceptanceChecks) > 0 {
+			continue
+		}
+		stage, ok := byID[t.ID]
+		if !ok || len(stage.AcceptanceChecks) == 0 {
+			continue
+		}
+		if stage.Objective == t.Objective &&
+			strings.Join(stage.AcceptanceCriteria, "\n") == t.AcceptanceCriteria {
+			t.AcceptanceChecks = append([]string{}, stage.AcceptanceChecks...)
+		}
+	}
 }
 
 // redefineTask returns cur carrying d's definition while preserving everything

@@ -1,0 +1,19 @@
+{{if .Validation}}
+<table class="checks">
+  <thead><tr><th>Check</th><th>Command</th><th>Status</th></tr></thead>
+  <tbody>
+    {{range .Validation}}
+    <tr>
+      <td>{{.Category}}</td>
+      <td><code>{{.Command}}</code></td>
+      <td>
+        <span class="badge {{if eq .Status "PASS"}}s-completed{{else if eq .Status "FAIL"}}s-failed{{else}}s-waiting{{end}}">{{.Status}}</span>
+        {{if .Stderr}}<pre class="diag">{{.Stderr}}</pre>{{end}}
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="muted">No validation results yet.</p>
+{{end}}

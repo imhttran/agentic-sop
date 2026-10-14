@@ -84,7 +84,8 @@ func (m *mutationEvidence) mutationPaths() []string {
 func controlledMutation(name string, args map[string]any) bool {
 	switch name {
 	case toolharness.ToolWriteFile, toolharness.ToolCreateFile,
-		toolharness.ToolDeleteFile, toolharness.ToolRestoreFile:
+		toolharness.ToolDeleteFile, toolharness.ToolRestoreFile, toolharness.ToolCopyFile,
+		toolharness.ToolRewriteFile:
 		return true
 	case toolharness.ToolRunCommand:
 		command, _ := args["command"].(string)

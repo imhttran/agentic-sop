@@ -1,0 +1,410 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>{{.Task.ID}} — SOP Controller</title>
+        <link rel="stylesheet" href="/static/app.css" />
+    </head>
+    <body>
+        {{template "nav.html" .}}
+        <main class="wrap task-detail">
+            <div class="crumbs">
+                <a href="/projects">Projects</a> <span>/</span>
+                <a href="/projects/{{.ProjectID}}">{{.ProjectID}}</a>
+                <span>/</span> {{.Task.ID}}
+            </div>
+
+            <section class="hero task-hero">
+                <div class="hero-head">
+                    <h1>
+                        <span class="task-hero-id">{{.Task.ID}}</span>
+                        <span class="task-hero-title">{{.Task.Title}}</span>
+                    </h1>
+                    <span class="badge {{statusClass .Task.Status}}"
+                        >{{.Task.Status}}</span
+                    >
+                    <span class="copy-control">
+                        <button
+                            type="button"
+                            class="btn copy-btn"
+                            aria-label="Copy task details"
+                            data-copy="{{printf "SOP Controller task\nProject: %s\nTask: %s\nStatus: %s\nState: %s\nStage: %s\nAttempts: %d" .ProjectID .Task.ID .Task.Status .Task.State .Task.RunStatus.Stage .Task.Attempt}}"
+                        >
+                            Copy details
+                        </button>
+                        <span
+                            class="copy-status"
+                            data-copy-status
+                            role="status"
+                            aria-live="polite"
+                        ></span>
+                    </span>
+                </div>
+                <div class="meta-row">
+                    <span class="badge {{statusClass .Task.State}}"
+                        >{{.Task.State}}</span
+                    >
+                    {{if .Task.RunStatus.Present}}{{if
+                    .Task.RunStatus.Stage}}<span
+                        class="badge {{stageClass .Task.RunStatus.Stage}}"
+                        >stage {{.Task.RunStatus.Stage}}</span
+                    >{{else}}<span class="badge s-planned"
+                        >stage {{absentLiteral}}</span
+                    >{{end}}{{else}}<span class="badge s-unavailable"
+                        >stage {{unavailable}}</span
+                    >{{end}} {{if .Task.Recovery}}<span
+                        class="badge {{dispositionClass .Task.Recovery}}"
+                        >{{.Task.Recovery}}</span
+                    >{{end}}
+                </div>
+                <div class="muted small current-task-note">
+                    Current task · {{.Task.ID}}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Summary</h2>
+                    <span class="muted small">SOP-persisted detail</span>
+                </div>
+                <dl class="facts detail-facts">
+                    <div>
+                        <dt>Task ID</dt>
+                        <dd>{{.Task.ID}}</dd>
+                    </div>
+                    <div>
+                        <dt>Title</dt>
+                        <dd>{{.Task.Title}}</dd>
+                    </div>
+                    <div>
+                        <dt>State</dt>
+                        <dd>
+                            <span class="badge {{statusClass .Task.State}}"
+                                >{{.Task.State}}</span
+                            >
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Current stage</dt>
+                        <dd>
+                            {{if .Task.RunStatus.Present}}{{if
+                            .Task.RunStatus.Stage}}<span
+                                class="badge {{stageClass .Task.RunStatus.Stage}}"
+                                >{{.Task.RunStatus.Stage}}</span
+                            >{{else}}<span class="badge s-planned"
+                                >{{absentLiteral}}</span
+                            >
+                            <span class="muted small"
+                                >run present; SOP persisted no stage</span
+                            >{{end}}{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Started / elapsed</dt>
+                        <dd>
+                            {{$start := startedAt .Task}}{{if $start.IsZero}}
+                            <span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            >
+                            <span class="muted small"
+                                >SOP persisted no attempt timestamp</span
+                            >
+                            {{else}}
+                            <span class="badge s-running"
+                                >{{since $start}} · {{elapsed .Task}}</span
+                            >
+                            <span class="muted small">since first attempt</span>
+                            {{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Provider / model</dt>
+                        <dd>
+                            {{if hasProviderModel .Task.Run}}<span
+                                class="badge s-running"
+                                >{{evidenceState true .Task.Run.Provider}} /
+                                {{evidenceState true .Task.Run.Model}}</span
+                            >{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Model class</dt>
+                        <dd>
+                            {{if hasModelSelection .Task.Run}}<span
+                                class="badge s-running"
+                                >{{.Task.Run.ModelSelection.Class}}</span
+                            >{{if .Task.Run.ModelSelection.Locality}}<span
+                                class="muted small"
+                                >{{.Task.Run.ModelSelection.Locality}}</span
+                            >{{end}}{{if .Task.Run.ModelSelection.Source}}<span
+                                class="muted small"
+                                >source
+                                {{.Task.Run.ModelSelection.Source}}</span
+                            >{{end}}{{if
+                            .Task.Run.ModelSelection.Fallback}}<span
+                                class="badge s-blocked"
+                                >fallback</span
+                            >{{end}}{{if .Task.Run.ModelSelection.Reason}}<span
+                                class="muted small"
+                                >{{.Task.Run.ModelSelection.Reason}}</span
+                            >{{end}}{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            ><span class="muted small"
+                                >SOP persisted no model-selection record</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Fix cycles</dt>
+                        <dd>
+                            {{if .Task.Run.Present}}<span
+                                class="badge s-running"
+                                >{{.Task.Run.FixCycles}}</span
+                            >{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Retry attempts</dt>
+                        <dd>
+                            {{if hasRetries .Task}}<span class="badge s-running"
+                                >{{retryCount .Task}}</span
+                            ><span class="muted small"
+                                >of {{.Task.MaxAttempts}} attempts</span
+                            >{{else}}<span class="badge s-unavailable"
+                                >{{unavailable}}</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Blocked reason</dt>
+                        <dd>
+                            {{if blocked .Task}}{{if .Task.BlockedReason}}<span
+                                class="badge s-blocked"
+                                >{{.Task.BlockedReason}}</span
+                            >{{else}}<span class="badge s-blocked">blocked</span
+                            >{{end}}{{if .Task.BlockedBy}}<span
+                                class="muted small"
+                                >waiting on {{range .Task.BlockedBy}}{{.}}
+                                {{end}}</span
+                            >{{end}}{{else}}<span class="badge s-ready"
+                                >not blocked</span
+                            >{{end}}
+                        </dd>
+                    </div>
+                    <div>
+                        <dt>Last updated</dt>
+                        <dd>{{since .Task.UpdatedAt}}</dd>
+                    </div>
+                </dl>
+            </section>
+
+            <div class="grid">
+                <section class="panel">
+                    <h2>Objective</h2>
+                    <p>{{.Task.Objective}}</p>
+                    <h3>Acceptance criteria</h3>
+                    {{if .Task.AcceptanceCriteria}}
+                    <pre class="ac">{{.Task.AcceptanceCriteria}}</pre>
+                    {{else}}
+                    <p class="muted">{{unavailable}}</p>
+                    {{end}}
+                </section>
+
+                <section class="panel">
+                    <h2>Dependencies</h2>
+                    {{if .Task.Dependencies}}
+                    <ul class="deps-list">
+                        {{range .Task.Dependencies}}
+                        <li>
+                            <a href="/projects/{{$.ProjectID}}/tasks/{{.}}"
+                                >{{.}}</a
+                            >
+                        </li>
+                        {{end}}
+                    </ul>
+                    {{else}}
+                    <p class="muted">None</p>
+                    {{end}} {{if .Task.BlockedBy}}
+                    <p class="error-text">
+                        Waiting on: {{range .Task.BlockedBy}}{{.}} {{end}}
+                    </p>
+                    {{end}}
+                </section>
+            </div>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Human approval</h2>
+                    <span class="muted small"
+                        >SOP-reported gate; the controller never approves work
+                        itself</span
+                    >
+                </div>
+                {{template "approval.html" .}}
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Status</h2>
+                    <span class="muted small">SOP-persisted evidence</span>
+                </div>
+                {{template "status.html" .Task}}
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Continuation / checkpoint progress</h2>
+                    <span class="muted small"
+                        >bounded progress across agent invocations</span
+                    >
+                </div>
+                {{template "checkpoint.html" .Task}}
+            </section>
+
+            <section class="panel evidence-panel evidence-performance">
+                <div class="panel-head">
+                    <h2>Performance</h2>
+                    <span class="muted small"
+                        >SOP-measured time and operation counts</span
+                    >
+                </div>
+                {{template "performance.html" .Task.Performance}}
+            </section>
+
+            <section class="panel evidence-panel evidence-validation">
+                <div class="panel-head">
+                    <h2>Validation</h2>
+                    <span class="muted small">build/test/lint results</span>
+                </div>
+                {{template "validation.html" .Task}}
+            </section>
+
+            <section class="panel evidence-panel evidence-review">
+                <div class="panel-head">
+                    <h2>Review</h2>
+                    <span class="muted small">code review findings</span>
+                </div>
+                {{template "review.html" .Task}}
+            </section>
+
+            <section class="panel evidence-panel evidence-jev">
+                <div class="panel-head">
+                    <h2>JEV</h2>
+                    <span class="muted small">independent verification</span>
+                </div>
+                {{template "jev.html" .Task}}
+            </section>
+
+            <section class="panel evidence-panel evidence-quality">
+                <div class="panel-head">
+                    <h2>Quality decision</h2>
+                    <span class="muted small">SOP quality verdict</span>
+                </div>
+                {{template "quality.html" .Task}}
+            </section>
+
+            <section class="panel evidence-panel evidence-classification">
+                <div class="panel-head">
+                    <h2>Failure classification</h2>
+                    <span class="muted small">why the run stopped</span>
+                </div>
+                {{template "classification.html" .Task}}
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Recovery disposition</h2>
+                    <span class="muted small">what SOP will do next</span>
+                </div>
+                <div
+                    hx-get="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/recovery"
+                    hx-trigger="every {{.Poll}}s"
+                    hx-swap="innerHTML"
+                >
+                    {{template "recovery.html" .}}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Report</h2>
+                    <span class="muted small"
+                        >SOP-persisted report artifact</span
+                    >
+                </div>
+                {{template "report.html" .Task}}
+                <div class="actions">
+                    <form
+                        class="inline"
+                        hx-post="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/commands/report"
+                        hx-target="#cmd"
+                        hx-swap="innerHTML"
+                    >
+                        <input type="hidden" name="csrf" value="{{.CSRF}}" />
+                        <button class="btn" hx-disabled-elt="this">
+                            Open report
+                        </button>
+                    </form>
+                </div>
+                <div id="cmd"></div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Activity</h2>
+                    <span class="muted small"
+                        >recent SOP activity (stage/action, safe detail), in SOP
+                        append order</span
+                    >
+                </div>
+                <div
+                    hx-get="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/activity"
+                    hx-trigger="every {{.Poll}}s"
+                    hx-swap="innerHTML"
+                >
+                    {{template "activity.html" .}}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head">
+                    <h2>Continuation</h2>
+                    <span class="muted small"
+                        >attempt history recorded by SOP</span
+                    >
+                </div>
+                {{template "attempts.html" .Task}}
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Checks (CI)</h2></div>
+                <div
+                    hx-get="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/ci"
+                    hx-trigger="every {{.Poll}}s"
+                    hx-swap="innerHTML"
+                >
+                    {{template "ci.html" .Task}}
+                </div>
+            </section>
+
+            <section class="panel">
+                <div class="panel-head"><h2>Handoff</h2></div>
+                <div
+                    hx-get="/projects/{{.ProjectID}}/tasks/{{.Task.ID}}/handoff"
+                    hx-trigger="every {{.Poll}}s"
+                    hx-swap="innerHTML"
+                >
+                    {{template "handoff.html" .Task}}
+                </div>
+            </section>
+        </main>
+        {{template "scripts.html" .}}
+    </body>
+</html>

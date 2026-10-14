@@ -1,0 +1,41 @@
+{{- /* CTRL003: render-ready SOP status. Every field reports absence explicitly;
+       UNKNOWN is never a pass. CTRL008 splits Validation / Review / JEV / Quality
+       into dedicated panels below and renders missing evidence as an explicit
+       absence (UNKNOWN / not run) rather than PASS. */ -}}
+<dl class="facts status-facts">
+  <div>
+    <dt>Run</dt>
+    <dd>
+      {{if .RunStatus.Present}}
+        <span class="badge {{stageClass .RunStatus.Stage}}">{{evidenceState .RunStatus.Present .RunStatus.Stage}}</span>
+        {{if .RunStatus.Decision}}<span class="muted small">· {{.RunStatus.Decision}}</span>{{end}}
+        {{if .RunStatus.Active}}<span class="muted small">active</span>{{end}}
+        {{if .RunStatus.Blocked}}<span class="muted small">blocked</span>{{end}}
+      {{else}}
+        <span class="badge s-planned">{{absentLiteral}}</span>
+      {{end}}
+    </dd>
+  </div>
+  <div>
+    <dt>Validation</dt>
+    <dd>{{if .ValidationStatus.Present}}<span class="badge {{levelClass .ValidationStatus.Level}}">{{.ValidationStatus.Level}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
+  </div>
+  <div>
+    <dt>Review</dt>
+    <dd>{{if .ReviewStatus.Present}}<span class="badge {{levelClass .ReviewStatus.Level}}">{{.ReviewStatus.Level}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
+  </div>
+  <div>
+    <dt>Quality / JEV</dt>
+    <dd>
+      {{if .QualityStatus.Present}}<span class="badge {{levelClass .QualityStatus.Level}}">{{.QualityStatus.Level}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}
+    </dd>
+  </div>
+  <div>
+    <dt>Report</dt>
+    <dd>
+      {{if .Report.Present}}<span class="badge s-completed">recorded</span>
+      {{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}
+    </dd>
+  </div>
+</dl>
+<p class="muted small">An absence (UNKNOWN / not run) means SOP persisted no evidence for that step; it is not a pass.</p>

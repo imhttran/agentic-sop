@@ -1,0 +1,11 @@
+{
+  "state": "A schema migration will execute against production during business hours.",
+  "questions": [
+    {
+      "id": "execution_model",
+      "type": "choice",
+      "criteria": "Select the execution model.",
+      "choices": ["SMALL", "MEDIUM", "LARGE"]
+    }
+  ]
+}

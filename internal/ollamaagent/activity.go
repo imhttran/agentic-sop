@@ -66,6 +66,10 @@ func toolActivity(name string, args map[string]any) (stage, action, detail strin
 		return activity.StageDiscover, "listing", path
 	case toolharness.ToolSearchFiles:
 		return activity.StageDiscover, "searching", firstNonEmpty(argString(args, "pattern"), path)
+	case toolharness.ToolCopyFile:
+		return activity.StageChange, "copying", argString(args, "dest")
+	case toolharness.ToolRewriteFile:
+		return activity.StageChange, "rewriting", path
 	case toolharness.ToolGitStatus:
 		return activity.StageDiscover, "inspecting", "git status"
 	case toolharness.ToolGitDiff:

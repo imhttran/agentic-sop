@@ -27,7 +27,16 @@ type MutationObservation struct {
 func (h *Harness) RunObservedMutation(ctx context.Context, name string, args map[string]any) (string, MutationObservation, error) {
 	target := h.root
 	var scopeErr error
-	if name != ToolRunCommand {
+	switch name {
+	case ToolRunCommand:
+		// A command's target is unknown; compare the whole repository tree.
+	case ToolCopyFile:
+		// The mutation is the destination file.
+		var p resolvedPath
+		dest, _ := args["dest"].(string)
+		p, scopeErr = h.resolveArg(map[string]any{"path": dest}, "path", true, accessWrite)
+		target = p.abs
+	default:
 		var p resolvedPath
 		p, scopeErr = h.resolveArg(args, "path", true, accessWrite)
 		target = p.abs

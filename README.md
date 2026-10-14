@@ -111,6 +111,22 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
+The controller and the advisory decision adapter are served by the same unified
+executable:
+
+```bash
+sop controller serve                     # read-only dashboard (SOP_BIN overrides the delegate)
+sop decision decide -provider nimble -file req.json -json
+```
+
+The optional legacy `sop-controller` and `sop-decision-adapter` executables are thin
+wrappers over the same implementations; install them with
+`scripts/install/install-legacy-wrappers.sh`. The controller needs no Node runtime;
+the decision adapter's Julia provider is an optional capability (the
+repository-owned `tools/julia/infer.py` helper plus external weights). The HTTPS/Caddy
+conveniences live under `scripts/controller/` and `integrations/controller/`. Details:
+[docs/guides/SOP-CONTROLLER-DASHBOARD.md](docs/guides/SOP-CONTROLLER-DASHBOARD.md).
+
 ## Agent Skills
 
 Install the `/sop*` agent commands with `./install.sh --skills zed`,

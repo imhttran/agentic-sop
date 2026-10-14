@@ -8,7 +8,8 @@
 	plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
-	model-claude model-deepseek model-status
+	model-claude model-deepseek model-status \
+	controller-build controller-https controller-keychain-token
 
 ENV_FILE := .env
 
@@ -86,3 +87,16 @@ model-deepseek:
 
 model-status:
 	@python3 scripts/switch-large-model.py status
+
+# Controller conveniences (namespaced; they never overwrite a core target). The
+# unified `sop controller serve` command is the primary entry point; these build the
+# legacy wrapper and drive its HTTPS proxy / Keychain token helpers under
+# scripts/controller/ and integrations/controller/.
+controller-build:
+	go build -o "$(CURDIR)/bin/sop-controller" ./cmd/sop-controller
+
+controller-https:
+	./scripts/controller/https-proxy.sh
+
+controller-keychain-token:
+	./scripts/controller/keychain-token.sh

@@ -1,0 +1,34 @@
+{{$c := .Command}}
+{{if eq $c.State "idle"}}
+<div class="cmd cmd-idle">
+  <div class="cmd-head">
+    <span class="badge s-completed">sop {{$c.Verb}} · idle</span>
+    <span class="muted small">no command has run yet</span>
+  </div>
+</div>
+{{else}}
+<div class="cmd cmd-{{$c.State}}{{if $c.Conflict}} cmd-conflict{{end}}">
+  <div class="cmd-head">
+    <span class="badge {{if $c.Running}}s-running{{else if $c.Conflict}}s-blocked{{else if eq $c.State "blocked"}}s-blocked{{else if eq $c.State "error"}}s-failed{{else}}s-completed{{end}}">sop {{$c.Verb}} · {{if $c.Conflict}}conflict{{else}}{{$c.State}}{{end}}</span>
+    <span class="muted small">started {{since $c.Started}}</span>
+  </div>
+  {{if $c.Stage}}
+  <div class="muted small">task {{$c.TaskID}} · stage {{$c.Stage}}{{if $c.Attempt}} · attempt {{$c.Attempt}}{{end}}</div>
+  {{end}}
+  {{if $c.Conflict}}
+  <div class="error-text">SOP rejected this decision (the gate may be stale or no longer applicable). Re-read the task and retry: {{$c.Error}}</div>
+  {{else if eq $c.State "blocked"}}<div class="muted small">Blocked at a human approval gate: {{$c.Error}}</div>
+  {{else if $c.Error}}<div class="error-text">{{$c.Error}}</div>{{end}}
+  {{if or $c.Conflict (eq $c.State "error")}}
+  {{$result := $c.State}}{{if $c.Conflict}}{{$result = "conflict"}}{{end}}
+  <span class="copy-control">
+    <button type="button" class="btn copy-btn" aria-label="Copy error" data-copy="{{printf "SOP command diagnostic\nCommand: sop %s\nTask: %s\nResult: %s\nMessage: %s" $c.Verb $c.TaskID $result $c.Error}}">Copy error</button>
+    <span class="copy-status" data-copy-status role="status" aria-live="polite"></span>
+  </span>
+  {{end}}
+  {{if $c.Output}}<pre class="diag">{{$c.Output}}</pre>{{end}}
+  {{if $c.Running}}
+  <div hx-get="{{.CommandURL}}" hx-trigger="load delay:1s" hx-swap="outerHTML"></div>
+  {{end}}
+</div>
+{{end}}

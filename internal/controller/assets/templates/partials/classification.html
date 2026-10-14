@@ -1,0 +1,38 @@
+{{- /* CTRL008/CTRL009: Failure classification panel. Renders SOP's own verdict
+       on why the run stopped (kind/disposition/confidence/reason) verbatim when
+       present, plus a display-only category badge (Provider / Code or validation
+       / Budget exhausted / Human / Unknown) derived from SOP's Kind. The category
+       is a presentation hint only: the controller never reclassifies the
+       failure, never infers a category from the disposition, and renders an
+       unrecognized or empty Kind as the explicit Unknown category. Evidence
+       (reason/confidence) is shown exactly as SOP persisted it. */ -}}
+{{$cls := .Run.Classification}}
+{{if $cls}}
+{{$cat := classificationCategory $cls}}
+<dl class="facts">
+  <div>
+    <dt>Category</dt>
+    <dd>
+      <span class="badge {{categoryClass $cat}}">{{categoryLabel $cat}}</span>
+    </dd>
+  </div>
+  <div>
+    <dt>Kind</dt>
+    <dd>{{evidenceState true $cls.Kind}}</dd>
+  </div>
+  <div>
+    <dt>Disposition</dt>
+    <dd><span class="badge {{dispositionClass $cls.Disposition}}">{{evidenceState true $cls.Disposition}}</span></dd>
+  </div>
+  <div>
+    <dt>Confidence</dt>
+    <dd>{{evidenceState true $cls.Confidence}}</dd>
+  </div>
+</dl>
+{{if $cls.Reason}}<p>{{$cls.Reason}}</p>{{end}}
+{{else}}
+<p class="muted">
+  <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small">SOP recorded no failure classification; the run has not stopped on a classified failure.</span>
+</p>
+{{end}}

@@ -1,0 +1,8 @@
+# Julia-1-ONNX inference helper dependencies.
+#
+# CPU-only ONNX Runtime is sufficient for Phase 2.1; no GPU package is required.
+# Bounded (not exact-pinned) ranges so a fresh environment resolves reproducibly
+# without freezing to a single patch release.
+onnxruntime>=1.17,<2
+tokenizers>=0.15,<1
+numpy>=1.24,<3

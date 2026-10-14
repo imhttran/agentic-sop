@@ -294,6 +294,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runMemory(rest, stdout, stderr, d)
 	case "providers":
 		return runProviders(rest, stdout, stderr, d)
+	case "controller":
+		return runController(rest, stdout, stderr, d)
+	case "decision":
+		return runDecision(rest, stdout, stderr, d)
 	case "orchestrate":
 		return runOrchestrate(rest, stdout, stderr, d)
 	default:
@@ -349,6 +353,8 @@ Commands:
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
   orchestrate  run the opt-in multi-agent orchestration path for one task (default off)
   providers inspect configured provider runtimes and their models (--models)
+  controller serve the SOP Controller dashboard (read-only)
+  decision  the decision-adapter CLI: decision decide | decision shadow
   eval      run a corpus of task files and report benchmark metrics
   resume    report the next legal action for interrupted work
   continue  check (read-only) whether the active plan is safe to continue via

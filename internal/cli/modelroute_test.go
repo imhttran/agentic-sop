@@ -131,21 +131,29 @@ func TestLoadDotEnvLoadsProjectFile(t *testing.T) {
 	}
 }
 
-// clearModelEnv unsets every model-routing environment variable for the duration
-// of a test and restores the original values afterwards, so a developer's shell
-// (or another test) cannot leak SOP_MODEL_* into a routing assertion.
-func clearModelEnv(t *testing.T) {
-	t.Helper()
+// modelRoutingEnvKeys is the complete model-routing environment namespace. Both the
+// per-test helper (clearModelEnv) and the package TestMain use it, so the whole test
+// binary is independent of a leaked SOP_MODEL_* configuration.
+func modelRoutingEnvKeys() []string {
 	keys := []string{
 		model.EnvDefaultClass, model.EnvFallbackClass, model.EnvAllowCloudFallbackForLocal,
 		model.EnvRoutingEnabled, model.EnvEscalationEnabled, model.EnvMaxEscalations,
+		model.EnvReplanEnabled, model.EnvMaxReplans,
 	}
 	for _, c := range model.Classes {
 		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY"} {
 			keys = append(keys, model.ClassEnvKey(c, f), model.ClassFallbackEnvKey(c, f))
 		}
 	}
-	for _, k := range keys {
+	return keys
+}
+
+// clearModelEnv unsets every model-routing environment variable for the duration
+// of a test and restores the original values afterwards, so a developer's shell
+// (or another test) cannot leak SOP_MODEL_* into a routing assertion.
+func clearModelEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range modelRoutingEnvKeys() {
 		if v, ok := os.LookupEnv(k); ok {
 			t.Cleanup(func() { _ = os.Setenv(k, v) })
 			_ = os.Unsetenv(k)

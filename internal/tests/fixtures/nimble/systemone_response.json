@@ -1,0 +1,33 @@
+{
+  "model": "nimble",
+  "answers": {
+    "risk": {
+      "type": "choice",
+      "choice": "HIGH",
+      "probabilities": {
+        "LOW": 0.0013367338788281202,
+        "MEDIUM": 0.041031786153483775,
+        "HIGH": 0.9576314799676882
+      },
+      "confidence": 0.8349416441131589
+    },
+    "approval_required": {
+      "type": "noul",
+      "noul": 0.9974712183588139
+    },
+    "execution_model": {
+      "type": "choice",
+      "choice": "LARGE",
+      "probabilities": {
+        "SMALL": 0.0016481575652357388,
+        "MEDIUM": 0.03704375624257817,
+        "LARGE": 0.9613080861921861
+      },
+      "confidence": 0.8447327143351214
+    }
+  },
+  "usage": {
+    "input_tokens": 983,
+    "output_tokens": 4
+  }
+}

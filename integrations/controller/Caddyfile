@@ -1,0 +1,29 @@
+# Local HTTPS reverse proxy for the SOP Controller.
+#
+#   iPhone → HTTPS (Caddy) → HTTP 127.0.0.1:8090 → SOP Controller
+#
+# Caddy terminates TLS with its own local CA — no ACME and no public internet — so the
+# certificate is valid once that CA is trusted on the iPhone (see
+# docs/guides/HTTPS-ACCESS.md). The controller stays bound to loopback and keeps token
+# authentication; only this HTTPS listener is reachable on the LAN.
+#
+# The site addresses, the upstream port, and Caddy's data directory are supplied by
+# scripts/https-proxy.sh through the environment.
+
+{
+	# Issue every certificate from Caddy's local CA; never contact a public ACME endpoint.
+	local_certs
+	# No admin API listener.
+	admin off
+	# Do not bind port 80 for an HTTP->HTTPS redirect; the HTTPS listener is the only one.
+	auto_https disable_redirects
+	# Never install Caddy's local CA into the OS trust store: the iPhone trusts it
+	# manually (see docs/guides/HTTPS-ACCESS.md), and the proxy needs no elevated prompt.
+	skip_install_trust
+}
+
+{$SOP_CONTROLLER_HTTPS_SITE:localhost:8443} {
+	tls internal
+	encode zstd gzip
+	reverse_proxy 127.0.0.1:{$SOP_CONTROLLER_UPSTREAM_PORT:8090}
+}

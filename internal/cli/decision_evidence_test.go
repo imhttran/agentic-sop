@@ -20,6 +20,23 @@ import (
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
 
+// clearDecisionEnv neutralizes the decision environment variables so a test sees
+// only the decision block its own fixture config declares; the loader treats an
+// empty value as unset. It mirrors internal/config's clearDecisionEnv so the
+// provider choice is driven by the fixture, not the operator's .env.
+func clearDecisionEnv(t *testing.T) {
+	t.Helper()
+	for _, k := range []string{
+		"SOP_DECISION_ENABLED",
+		"SOP_DECISION_PROVIDER",
+		"SOP_DECISION_ADAPTER_PROVIDER",
+		"SOP_DECISION_ADAPTER_COMMAND",
+		"SOP_DECISION_ADAPTER_MODEL",
+	} {
+		t.Setenv(k, "")
+	}
+}
+
 // fakeDecisionProvider is a test-only, provider-neutral decision provider. It
 // returns a canned result and records the request it received, so a test can prove
 // what crossed the boundary without a real model or process.
@@ -455,6 +472,7 @@ func runInjectedCLIWithDecision(t *testing.T, dir, diff string, a agent.Agent, n
 // automatic continuation into a human boundary, while a benign provider and a
 // disabled capability leave the governed result unchanged.
 func TestDecisionEvidenceLivePathEscalates(t *testing.T) {
+	clearDecisionEnv(t)
 	const cfgEnabled = "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\ndecision:\n  enabled: true\n  provider: deterministic\n"
 	const cfgDisabled = "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\n"
 

@@ -52,6 +52,15 @@ func fastTier() bool {
 // TestMain builds the out-of-module fake provider once for the whole test binary.
 // A missing Go toolchain is not fatal: the cross-module tests skip.
 func TestMain(m *testing.M) {
+	// The package's lifecycle tests assert plain, unrouted behavior. Neutralize the
+	// model-routing namespace for the whole test binary so a leaked SOP_MODEL_*
+	// variable (a developer shell, a loaded .env, or an execution run) cannot fail
+	// model routing before a test reaches the behavior under test. Individual tests
+	// that need routing set it with t.Setenv afterwards.
+	for _, k := range modelRoutingEnvKeys() {
+		_ = os.Unsetenv(k)
+	}
+
 	// Fast validation tier: the internal/cli package is the slow end-to-end suite
 	// (~10 minutes; 651 tests driving real processes). Routine SOP validation runs
 	// `go test -short ./...`, which skips this package, plus a focused
@@ -341,6 +350,7 @@ func TestCrossModuleProviderFailureIsRecorded(t *testing.T) {
 // external process supplies evidence to a real `run --task`, and only an adverse
 // choice adds a human boundary.
 func TestCrossModuleLivePathEndToEnd(t *testing.T) {
+	clearDecisionEnv(t)
 	cfgEnabled := "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\ndecision:\n  enabled: true\n  provider: command\n  command:\n    - placeholder\n"
 	cfgDisabled := "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nautonomy:\n  level: high\n"
 

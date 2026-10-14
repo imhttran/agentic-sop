@@ -1,0 +1,28 @@
+{{- /* CTRL008: Validation is its OWN concept, distinct from Review/JEV/Quality.
+       It renders SOP's persisted aggregate ValidationStatus and the individual
+       build/test/lint checks. A missing artifact is an explicit absence
+       (UNKNOWN / not run), never a PASS. */ -}}
+{{if .ValidationStatus.Present}}
+<dl class="facts">
+  <div><dt>Result</dt><dd><span class="badge {{levelClass .ValidationStatus.Level}}">{{.ValidationStatus.Level}}</span></dd></div>
+</dl>
+{{else}}
+<p class="muted">Validation: <span class="badge s-planned">{{absentLiteral}}</span> — SOP persisted no validation evidence; this is not a pass.</p>
+{{end}}
+{{if .Validation}}
+<table class="checks">
+  <thead><tr><th>Category</th><th>Command</th><th>Status</th><th>Exit</th></tr></thead>
+  <tbody>
+    {{range .Validation}}
+    <tr>
+      <td data-label="Category">{{.Category}}</td>
+      <td data-label="Command"><code>{{.Command}}</code></td>
+      <td data-label="Status"><span class="badge {{levelClass .Status}}">{{.Status}}</span></td>
+      <td data-label="Exit">{{.ExitCode}}</td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else if .ValidationStatus.Present}}
+<p class="muted">No individual checks recorded.</p>
+{{end}}

@@ -61,7 +61,7 @@ Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 // read-only capability is not tempted by a mutation tool it could not use.
 func toolReference(policy CapabilityPolicy) string {
 	var b strings.Builder
-	b.WriteString("Tools (paths are relative to the repository root and may not escape it):\n")
+	b.WriteString("Tools (paths are relative to the selected root and may not escape it; the default root is the primary repository):\n")
 	for _, name := range policy.ToolList() {
 		fmt.Fprintf(&b, "- %s: %s\n", name, toolUsage[name])
 	}
@@ -71,11 +71,15 @@ func toolReference(policy CapabilityPolicy) string {
 	return b.String()
 }
 
-// toolUsage documents each tool's arguments in one line.
+// toolUsage documents each tool's arguments in one line. The file tools take a
+// path RELATIVE to the selected root (default: the primary repository root) and an
+// optional "root" naming an exactly-authorized absolute repository path.
 var toolUsage = map[string]string{
-	toolharness.ToolReadFile:    `{"path": "...", "root": "..."}                   read a file (root: optional authorized-root path)`,
-	toolharness.ToolWriteFile:   `{"path": "...", "content": "...", "root": "..."}  create or overwrite a file`,
-	toolharness.ToolCreateFile:  `{"path": "...", "content": "...", "root": "..."}  fail if the file already exists`,
+	toolharness.ToolReadFile:    `{"path": "...", "root": "..."}                   read a file (path relative to the selected root)`,
+	toolharness.ToolWriteFile:   `{"path": "...", "content": "...", "root": "..."}  write/overwrite a file; creates any missing parent directories`,
+	toolharness.ToolCreateFile:  `{"path": "...", "content": "...", "root": "..."}  create a NEW regular file; fails if it exists (never a directory)`,
+	toolharness.ToolCopyFile:    `{"source": "...", "source_root": "...", "dest": "..."}  byte-exact copy of one file from an authorized root into this repository (deterministic; use to import files)`,
+	toolharness.ToolRewriteFile: `{"path": "...", "from": "...", "to": "..."}  exact, idempotent string replacement in one file (deterministic; use for import-path rewrites)`,
 	toolharness.ToolListFiles:   `{"path": "...", "root": "..."}                   list a directory (path/root optional)`,
 	toolharness.ToolSearchFiles: `{"pattern": "...", "path": "...", "root": "..."}  substring search`,
 	toolharness.ToolRunCommand:  `{"command": "go test ./...", "cwd": "..."}       allow-listed commands (cwd: optional authorized-root path)`,
@@ -97,6 +101,11 @@ make the change, then finalize. You will be told when to stop exploring and
 return your outcome; if you have gathered context but not yet made the change,
 you will be told to implement and keep your tools. Do not keep working to prove
 every acceptance criterion yourself.
+
+To add files under a new directory, just write the file: write_file creates any
+missing parent directories. create_file only makes a regular file at that exact
+path and never a directory, and there is no directory tool — do not try to create
+a directory by calling create_file with a trailing slash.
 
 When the implementation is complete, return the required final response immediately.
 

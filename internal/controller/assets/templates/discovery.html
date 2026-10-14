@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Discovery — SOP Controller</title>
+        <link rel="stylesheet" href="/static/app.css" />
+    </head>
+    <body>
+        {{template "nav.html" .}}
+        <main class="wrap">
+            <h1>Project discovery</h1>
+            <p class="muted">
+                The controller reads only explicit projects and directories
+                beneath the workspace roots configured here. It never scans the
+                wider filesystem, and it never infers extra roots.
+            </p>
+
+            <h2>Workspace roots</h2>
+            {{if .Discovery.Workspaces}}
+            <ul class="roots">
+                {{range .Discovery.Workspaces}}
+                <li><code>{{.}}</code></li>
+                {{end}}
+            </ul>
+            <p class="muted small">Maximum discovery depth: {{.Discovery.MaxDepth}}</p>
+            {{else}}
+            <p class="muted">
+                None configured. Set
+                <code>SOP_CONTROLLER_WORKSPACES</code> to one or more roots to
+                discover SOP projects beneath them.
+            </p>
+            {{end}}
+
+            <h2>Explicit projects</h2>
+            {{if .Discovery.Explicit}}
+            <ul class="roots">
+                {{range .Discovery.Explicit}}
+                <li><code>{{.}}</code></li>
+                {{end}}
+            </ul>
+            {{else}}
+            <p class="muted">None configured (<code>SOP_CONTROLLER_PROJECTS</code>).</p>
+            {{end}}
+
+            <h2>Registered projects</h2>
+            {{if .Discovery.Projects}}
+            <table class="tasks">
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Root</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Discovery.Projects}}
+                    <tr>
+                        <td data-label="Project">
+                            <a href="/projects/{{.ID}}">{{.ID}}</a>
+                        </td>
+                        <td data-label="Root"><code>{{.Root}}</code></td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="muted">
+                No SOP projects found. A directory is a project only when it has
+                a valid <code>.agent-sdlc/config.yaml</code> and an initialized
+                <code>.agent-sdlc/state.db</code>.
+            </p>
+            {{end}}
+
+            <h2>Skipped candidates</h2>
+            {{if .Discovery.Diagnostics}}
+            <p class="muted">
+                These look like SOP projects but were not registered. Each is
+                reported here instead of silently ignored.
+            </p>
+            <table class="tasks">
+                <thead>
+                    <tr>
+                        <th>Path</th>
+                        <th>Reason</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Discovery.Diagnostics}}
+                    <tr>
+                        <td data-label="Path"><code>{{.Path}}</code></td>
+                        <td data-label="Reason">{{.Reason}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+            {{else}}
+            <p class="muted">None — every configured root was usable.</p>
+            {{end}}
+        </main>
+        {{template "scripts.html" .}}
+    </body>
+</html>

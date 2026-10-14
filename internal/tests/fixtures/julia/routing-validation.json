@@ -1,0 +1,38 @@
+{
+  "description": "Phase 2 held-out validation set for Julia execution-class routing. Newly authored cases, NOT paraphrases of the Phase 1 calibration set. Used only to confirm a candidate method after it is frozen on the calibration set; never used to select thresholds, exemplars, or ensemble rules.",
+  "classes": ["LOW", "MEDIUM", "HIGH"],
+  "cases": [
+    { "id": "val-low-01", "expected": "LOW", "state": "Correct the capitalization in a section heading." },
+    { "id": "val-low-02", "expected": "LOW", "state": "Remove a duplicated blank line in a config file." },
+    { "id": "val-low-03", "expected": "LOW", "state": "Fix a typo in a changelog entry." },
+    { "id": "val-low-04", "expected": "LOW", "state": "Delete a commented-out dead line in a small function." },
+    { "id": "val-low-05", "expected": "LOW", "state": "Add a missing period to a doc comment." },
+    { "id": "val-low-06", "expected": "LOW", "state": "Reorder imports to satisfy the formatter in one file." },
+    { "id": "val-low-07", "expected": "LOW", "state": "Fix a broken anchor link in a markdown page." },
+    { "id": "val-low-08", "expected": "LOW", "state": "Rename a boolean field inside one struct and update its uses." },
+    { "id": "val-low-09", "expected": "LOW", "state": "Fix a log message that prints the wrong variable name." },
+    { "id": "val-low-10", "expected": "LOW", "state": "Update a version string in a documentation example." },
+
+    { "id": "val-med-01", "expected": "MEDIUM", "state": "Add a limit parameter to an existing report query and apply it in the SQL builder." },
+    { "id": "val-med-02", "expected": "MEDIUM", "state": "Extend an existing enum and its switch statements to handle a new status." },
+    { "id": "val-med-03", "expected": "MEDIUM", "state": "Split a large function into two helpers within the same file." },
+    { "id": "val-med-04", "expected": "MEDIUM", "state": "Add JSON serialization tests for an existing response type." },
+    { "id": "val-med-05", "expected": "MEDIUM", "state": "Implement an existing interface on a new small type used by one caller." },
+    { "id": "val-med-06", "expected": "MEDIUM", "state": "Add a default value to an existing configuration option and document it." },
+    { "id": "val-med-07", "expected": "MEDIUM", "state": "Change an HTTP handler to return 404 instead of 200 when a record is missing, updating its tests." },
+    { "id": "val-med-08", "expected": "MEDIUM", "state": "Cache the result of an existing expensive helper in the same package." },
+    { "id": "val-med-09", "expected": "MEDIUM", "state": "Add a new field to an internal metrics struct and populate it in one place." },
+    { "id": "val-med-10", "expected": "MEDIUM", "state": "Fix a nil-pointer panic in an existing helper by adding a guard." },
+
+    { "id": "val-high-01", "expected": "HIGH", "state": "Introduce per-tenant data isolation across the storage and query layers." },
+    { "id": "val-high-02", "expected": "HIGH", "state": "Change the authentication flow to support refresh tokens with rotation." },
+    { "id": "val-high-03", "expected": "HIGH", "state": "Redesign the job scheduler to support priority preemption." },
+    { "id": "val-high-04", "expected": "HIGH", "state": "Introduce distributed locking for cross-node coordination." },
+    { "id": "val-high-05", "expected": "HIGH", "state": "Change the retry and backoff policy for the primary execution path." },
+    { "id": "val-high-06", "expected": "HIGH", "state": "Implement data retention with irreversible deletion of old records." },
+    { "id": "val-high-07", "expected": "HIGH", "state": "Rework the approval workflow to allow parallel approvers." },
+    { "id": "val-high-08", "expected": "HIGH", "state": "Introduce a service mesh boundary between internal services." },
+    { "id": "val-high-09", "expected": "HIGH", "state": "Change the encryption-at-rest strategy for the database." },
+    { "id": "val-high-10", "expected": "HIGH", "state": "Replace the synchronous request path with an event-driven pipeline." }
+  ]
+}

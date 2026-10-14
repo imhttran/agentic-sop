@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <title>Projects — SOP Controller</title>
+        <link rel="stylesheet" href="/static/app.css" />
+    </head>
+    <body>
+        {{template "nav.html" .}}
+        <main class="wrap">
+            <h1>Projects</h1>
+            {{if .Projects}}
+            <div class="cards">
+                {{range .Projects}}
+                <a class="card" href="/projects/{{.ID}}">
+                    <div class="card-head">
+                        <h2>{{.Name}}</h2>
+                        <span class="pill state-{{.State}}">{{.State}}</span>
+                    </div>
+                    <div class="progress">
+                        <span style="width: {{.PercentComplete}}%"></span>
+                    </div>
+                    <div class="muted small">
+                        {{.Completed}}/{{.Total}} tasks complete ·
+                        {{.PercentComplete}}%
+                    </div>
+                    <div class="counts">
+                        {{if .NeedsAttention}}
+                        <span class="badge s-attention"
+                            >{{.NeedsAttention}} needs attention</span
+                        >
+                        {{end}}
+                        <span class="badge s-running"
+                            >{{.Running}} running</span
+                        >
+                        <span class="badge s-ready">{{.Ready}} ready</span>
+                        <span class="badge s-planned"
+                            >{{.Planned}} planned</span
+                        >
+                        <span class="badge s-blocked"
+                            >{{.Blocked}} blocked</span
+                        >
+                        <span class="badge s-failed"
+                            >{{.FixRequired}} fix required</span
+                        >
+                    </div>
+                    {{if .Branch}}
+                    <div class="muted small">branch {{.Branch}}</div>
+                    {{end}}
+                </a>
+                {{end}}
+            </div>
+            {{else}}
+            <p class="muted">
+                No SOP projects configured. Set
+                <code>SOP_CONTROLLER_PROJECTS</code> to one or more project
+                roots, or <code>SOP_CONTROLLER_WORKSPACES</code> to discover
+                them beneath a workspace root. See
+                <a href="/discovery">Discovery</a> for what was scanned.
+            </p>
+            {{end}}
+        </main>
+        {{template "scripts.html" .}}
+    </body>
+</html>

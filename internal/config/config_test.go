@@ -74,6 +74,7 @@ func TestParseValid(t *testing.T) {
 }
 
 func TestParseDefaults(t *testing.T) {
+	clearDecisionEnv(t)
 	c, err := Parse([]byte("project:\n  name: solo\n"))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)

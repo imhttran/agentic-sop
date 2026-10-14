@@ -1,0 +1,24 @@
+{{- /* CTRL008: Report panel. Renders the presence/location of SOP's persisted
+       report artifact (TaskDetail.Report) when SOP wrote one, and an explicit
+       absence otherwise. The command form that opens the report stays in the
+       enclosing panel; this partial only describes the artifact. */ -}}
+{{if .Report.Present}}
+<dl class="facts">
+  <div>
+    <dt>Report</dt>
+    <dd><span class="badge s-completed">recorded</span></dd>
+  </div>
+  {{if .Report.Name}}
+  <div>
+    <dt>File</dt>
+    <dd><code>{{.Report.Name}}</code></dd>
+  </div>
+  {{end}}
+</dl>
+{{if .Report.Path}}<p class="muted small"><code class="report-path">{{.Report.Path}}</code></p>{{end}}
+{{else}}
+<p class="muted">
+  <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small">SOP persisted no report artifact for this run.</span>
+</p>
+{{end}}

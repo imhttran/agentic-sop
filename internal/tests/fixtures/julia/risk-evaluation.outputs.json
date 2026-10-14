@@ -1,0 +1,17 @@
+{
+  "model": "julia",
+  "answers": {
+    "risk": {
+      "choice": "HIGH",
+      "probabilities": { "LOW": 0.01, "MEDIUM": 0.04, "HIGH": 0.95 },
+      "confidence": 0.83
+    },
+    "execution_model": {
+      "choice": "LARGE",
+      "confidence": 0.84
+    },
+    "approval_required": {
+      "probability": 0.997
+    }
+  }
+}

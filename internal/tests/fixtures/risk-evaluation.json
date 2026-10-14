@@ -1,0 +1,25 @@
+{
+  "state": "A schema migration will execute against production during business hours.",
+  "questions": [
+    {
+      "id": "risk",
+      "type": "choice",
+      "criteria": "Assess the operational risk of the described change.",
+      "choices": ["LOW", "MEDIUM", "HIGH"]
+    },
+    {
+      "id": "approval_required",
+      "type": "boolean",
+      "instructions": "Decide whether the described change should require human approval."
+    },
+    {
+      "id": "execution_model",
+      "type": "choice",
+      "criteria": "Select the execution model.",
+      "choices": ["SMALL", "MEDIUM", "LARGE"]
+    }
+  ],
+  "metadata": {
+    "domain": "change-management"
+  }
+}

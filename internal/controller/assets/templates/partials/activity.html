@@ -1,0 +1,24 @@
+{{if .Events}}
+<ol class="timeline">
+    {{range .Events}}
+    <li class="tl-item" data-cursor="{{.Cursor}}" data-seq="{{.Seq}}">
+        <span class="tl-dot {{stageClass .Stage}}" aria-hidden="true"></span>
+        <div class="tl-body">
+            <div class="tl-head">
+                <span class="badge {{stageClass .Stage}}">{{.Stage}}</span>
+                <time class="muted small">{{since .Timestamp}}</time>
+            </div>
+            <div class="tl-text">
+                {{if .Action}}{{.Action}}{{end}}{{if .Detail}}{{if .Action}}
+                {{end}}<span class="muted">{{.Detail}}</span>{{end}}
+            </div>
+        </div>
+    </li>
+    {{end}}
+</ol>
+{{else}}
+<div class="empty-state" role="status">
+    <p class="muted">No activity recorded.</p>
+    <p class="muted small">SOP persists structured activity only while a run executes, so an older run or a run with activity capture off has no activity artifact. Missing activity is not evidence that a run succeeded — see the command status and the recorded stage above.</p>
+</div>
+{{end}}

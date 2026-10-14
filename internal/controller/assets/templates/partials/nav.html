@@ -1,0 +1,14 @@
+<header class="topbar">
+  <a class="brand" href="/projects">SOP Controller</a>
+  <nav class="nav">
+    <a href="/projects" class="{{if eq .Nav "projects"}}active{{end}}">Projects</a>
+    <a href="/approvals" class="{{if eq .Nav "approvals"}}active{{end}}">Approvals</a>
+    <a href="/discovery" class="{{if eq .Nav "discovery"}}active{{end}}">Discovery</a>
+  </nav>
+  {{if .SignedIn}}
+  <form class="signout" method="post" action="/logout">
+    <input type="hidden" name="csrf" value="{{.CSRF}}" />
+    <button class="btn signout-btn" type="submit">Sign out</button>
+  </form>
+  {{end}}
+</header>

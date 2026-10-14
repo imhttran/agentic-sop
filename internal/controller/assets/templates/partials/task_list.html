@@ -1,0 +1,76 @@
+{{$pid := .Project.Summary.ID}} {{if .Project.Tasks}}
+<table class="tasks">
+    <thead>
+        <tr>
+            <th>Task</th>
+            <th>State</th>
+            <th>Stage</th>
+            <th>Recovery</th>
+            <th>Fix</th>
+            <th>Attempts</th>
+            <th>Updated</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Project.Tasks}}
+        <tr>
+            <td class="task-title" data-label="Task">
+                <a href="/projects/{{$pid}}/tasks/{{.ID}}">{{.Title}}</a>
+                <div class="muted small">{{.ID}}</div>
+                {{if .Dependencies}}
+                <div class="small">
+                    deps: {{range .Dependencies}}<a
+                        class="dep"
+                        href="/projects/{{$pid}}/tasks/{{.}}"
+                        >{{.}}</a
+                    >{{end}}
+                </div>
+                {{end}}
+            </td>
+            <td data-label="State">
+                {{if .NeedsHuman}}
+                <div>
+                    <a
+                        class="badge s-attention"
+                        href="/projects/{{$pid}}/tasks/{{.ID}}"
+                        >Needs your attention</a
+                    >
+                </div>
+                {{end}}
+                <span class="badge {{statusClass .Status}}">{{.State}}</span>
+                <div class="muted small">{{.Status}}</div>
+                {{if .BlockedReason}}
+                <div class="muted small">{{.BlockedReason}}</div>
+                {{end}} {{if not .Eligible}}
+                <div class="muted small">
+                    blocked by {{range .BlockedBy}}{{.}} {{end}}
+                </div>
+                {{end}}
+            </td>
+            <td data-label="Stage">
+                {{if .Stage}}<span class="badge {{stageClass .Stage}}"
+                    >{{.Stage}}</span
+                >{{else}}<span class="muted">—</span>{{end}}
+            </td>
+            <td data-label="Recovery">
+                {{if .Recovery}}<span
+                    class="badge {{dispositionClass .Recovery}}"
+                    >{{.Recovery}}</span
+                >{{else}}<span class="muted">—</span>{{end}}
+            </td>
+            <td class="muted" data-label="Fix">
+                {{if .FixCycles}}{{.FixCycles}}{{else}}<span class="muted">—</span>{{end}}
+            </td>
+            <td class="muted" data-label="Attempts">
+                {{.Attempt}}/{{.MaxAttempts}}
+            </td>
+            <td class="muted small" data-label="Updated">
+                {{since .UpdatedAt}}
+            </td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else}}
+<p class="muted">No tasks planned yet.</p>
+{{end}}

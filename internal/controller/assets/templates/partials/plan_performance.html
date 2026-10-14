@@ -1,0 +1,52 @@
+{{- /* Plan performance panel (read-only): renders SOP's plan-level performance
+       aggregate for the active run (.agent-sdlc/runs/<plan-id>/metrics.json, keyed
+       by SOP's recorded plan.meta.json plan_id). The counts are SOP's own
+       already-aggregated record; the agent/validation/review split is arithmetic
+       over SOP-recorded stage durations using SOP's own category rule. Values are
+       read verbatim and the panel makes no controller judgement. When SOP
+       persisted no aggregate it shows an explicit absence, never a 0s
+       measurement, and it never determines which task runs next. */ -}}
+{{$p := .}}
+{{if $p.Present}}
+<dl class="facts">
+  <div><dt>Plan</dt><dd><code>{{$p.PlanID}}</code></dd></div>
+  <div><dt>Tasks measured</dt><dd>{{$p.Tasks}}</dd></div>
+  <div><dt>Total</dt><dd>{{$p.Total}}</dd></div>
+</dl>
+
+{{$shares := $p.Shares}}
+{{if $shares}}
+<dl class="facts">
+  {{range $shares}}<div>
+    <dt>{{.Name}}</dt>
+    <dd>{{.Duration}} <span class="muted small">{{.Percent}}% of measured</span></dd>
+  </div>{{end}}
+</dl>
+{{end}}
+
+<h3>Operations</h3>
+<dl class="facts">
+  <div><dt>Agent calls</dt><dd>{{$p.AgentCalls}}</dd></div>
+  {{if $p.AgentCallsAvoided}}<div><dt>Agent calls avoided</dt><dd>{{$p.AgentCallsAvoided}}</dd></div>{{end}}
+  <div><dt>Validation runs</dt><dd>{{$p.ValidationRuns}}</dd></div>
+  {{if $p.ValidationReused}}<div><dt>Validation reused</dt><dd>{{$p.ValidationReused}}</dd></div>{{end}}
+  <div><dt>Review runs</dt><dd>{{$p.ReviewRuns}}</dd></div>
+  {{if $p.ReviewReused}}<div><dt>Review reused</dt><dd>{{$p.ReviewReused}}</dd></div>{{end}}
+  <div><dt>Fix cycles</dt><dd>{{$p.FixCycles}}</dd></div>
+  {{if $p.PlanRepairs}}<div><dt>Plan repairs</dt><dd>{{$p.PlanRepairs}}</dd></div>{{end}}
+</dl>
+
+<p class="muted small">
+  Aggregate SOP measured across the active plan's run. Read-only diagnostic
+  evidence; it never selects or orders tasks.
+</p>
+{{else}}
+<p class="muted">
+  Plan performance unavailable.
+  <span class="small"
+    >SOP persisted no plan-level performance aggregate for the active plan (no
+    recorded plan, or a run that predates instrumentation). This is an absence,
+    not a measurement of zero.</span
+  >
+</p>
+{{end}}

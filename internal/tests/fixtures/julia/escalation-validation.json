@@ -1,0 +1,789 @@
+{
+  "description": "Phase 4 held-out dataset for the FROZEN binary escalation question ('Does this task require escalation?'). 100 newly authored, diverse cases (50 escalation / 50 non-escalation) spanning backend, data, infra, security, platform, ops and docs work. Distinct from the routing-calibration, routing-validation and escalation-signal sets. Ground truth is binary: escalation=true for architecture, security/authorization, cross-system, destructive/consequential, or policy/fallback work; false for routine, localized work.",
+  "label": "escalation",
+  "question": "Does this task require escalation?",
+  "cases": [
+    {
+      "id": "esc-001",
+      "escalation": true,
+      "state": "Change the primary key strategy for a high-traffic table."
+    },
+    {
+      "id": "esc-002",
+      "escalation": true,
+      "state": "Introduce per-request cost accounting across services."
+    },
+    {
+      "id": "esc-003",
+      "escalation": true,
+      "state": "Replace the identity provider used for single sign-on."
+    },
+    {
+      "id": "esc-004",
+      "escalation": true,
+      "state": "Change how audit logs are signed and verified."
+    },
+    {
+      "id": "esc-005",
+      "escalation": true,
+      "state": "Migrate the search index to a new engine."
+    },
+    {
+      "id": "esc-006",
+      "escalation": true,
+      "state": "Introduce a global feature-flag evaluation service."
+    },
+    {
+      "id": "esc-007",
+      "escalation": true,
+      "state": "Change the tenant onboarding data model."
+    },
+    {
+      "id": "esc-008",
+      "escalation": true,
+      "state": "Rework the multi-currency ledger rounding rules."
+    },
+    {
+      "id": "esc-009",
+      "escalation": true,
+      "state": "Introduce two-phase commit across two datastores."
+    },
+    {
+      "id": "esc-010",
+      "escalation": true,
+      "state": "Change the network segmentation between tiers."
+    },
+    {
+      "id": "esc-011",
+      "escalation": true,
+      "state": "Replace the internal service discovery mechanism."
+    },
+    {
+      "id": "esc-012",
+      "escalation": true,
+      "state": "Change the retention policy for regulated data."
+    },
+    {
+      "id": "esc-013",
+      "escalation": true,
+      "state": "Introduce end-to-end trace propagation across services."
+    },
+    {
+      "id": "esc-014",
+      "escalation": true,
+      "state": "Change the failover promotion criteria for the primary region."
+    },
+    {
+      "id": "esc-015",
+      "escalation": true,
+      "state": "Rework the payment reconciliation pipeline."
+    },
+    {
+      "id": "esc-016",
+      "escalation": true,
+      "state": "Change how personally identifiable data is tokenized at rest."
+    },
+    {
+      "id": "esc-017",
+      "escalation": true,
+      "state": "Introduce a shared session store replacing sticky sessions."
+    },
+    {
+      "id": "esc-018",
+      "escalation": true,
+      "state": "Change the OAuth scopes granted to a partner integration."
+    },
+    {
+      "id": "esc-019",
+      "escalation": true,
+      "state": "Rework the asynchronous job retry and dead-letter handling."
+    },
+    {
+      "id": "esc-020",
+      "escalation": true,
+      "state": "Change the data partitioning scheme for events."
+    },
+    {
+      "id": "esc-021",
+      "escalation": true,
+      "state": "Introduce hardware security module integration for signing."
+    },
+    {
+      "id": "esc-022",
+      "escalation": true,
+      "state": "Change the authorization model from role-based to attribute-based."
+    },
+    {
+      "id": "esc-023",
+      "escalation": true,
+      "state": "Rework the billing cutover to a new provider."
+    },
+    {
+      "id": "esc-024",
+      "escalation": true,
+      "state": "Change how secrets are injected into workloads."
+    },
+    {
+      "id": "esc-025",
+      "escalation": true,
+      "state": "Introduce a new consistency model for the configuration store."
+    },
+    {
+      "id": "esc-026",
+      "escalation": true,
+      "state": "Change the global rate-limit algorithm."
+    },
+    {
+      "id": "esc-027",
+      "escalation": true,
+      "state": "Rework the multi-tenant encryption key hierarchy."
+    },
+    {
+      "id": "esc-028",
+      "escalation": true,
+      "state": "Change the disaster-recovery recovery-point and recovery-time targets."
+    },
+    {
+      "id": "esc-029",
+      "escalation": true,
+      "state": "Introduce a policy-as-code gate for infrastructure changes."
+    },
+    {
+      "id": "esc-030",
+      "escalation": true,
+      "state": "Change the schema migration toolchain for zero-downtime changes."
+    },
+    {
+      "id": "esc-031",
+      "escalation": true,
+      "state": "Rework the cross-region replication conflict resolution."
+    },
+    {
+      "id": "esc-032",
+      "escalation": true,
+      "state": "Change how the API gateway authenticates upstream calls."
+    },
+    {
+      "id": "esc-033",
+      "escalation": true,
+      "state": "Introduce a quarantine mechanism for untrusted uploads."
+    },
+    {
+      "id": "esc-034",
+      "escalation": true,
+      "state": "Change the scheduler's fairness policy across tenants."
+    },
+    {
+      "id": "esc-035",
+      "escalation": true,
+      "state": "Rework the event-sourcing snapshot and replay strategy."
+    },
+    {
+      "id": "esc-036",
+      "escalation": true,
+      "state": "Change the compliance data-export boundary."
+    },
+    {
+      "id": "esc-037",
+      "escalation": true,
+      "state": "Introduce mutual authentication for a partner data feed."
+    },
+    {
+      "id": "esc-038",
+      "escalation": true,
+      "state": "Change the token revocation propagation model."
+    },
+    {
+      "id": "esc-039",
+      "escalation": true,
+      "state": "Rework cache invalidation across nodes."
+    },
+    {
+      "id": "esc-040",
+      "escalation": true,
+      "state": "Change how the ledger handles reversals and chargebacks."
+    },
+    {
+      "id": "esc-041",
+      "escalation": true,
+      "state": "Introduce a canary analysis gate before full rollout."
+    },
+    {
+      "id": "esc-042",
+      "escalation": true,
+      "state": "Change the authorization cache time-to-live and invalidation."
+    },
+    {
+      "id": "esc-043",
+      "escalation": true,
+      "state": "Rework backup encryption and key rotation."
+    },
+    {
+      "id": "esc-044",
+      "escalation": true,
+      "state": "Change the message ordering guarantees for a critical queue."
+    },
+    {
+      "id": "esc-045",
+      "escalation": true,
+      "state": "Introduce a second factor requirement for privileged actions."
+    },
+    {
+      "id": "esc-046",
+      "escalation": true,
+      "state": "Change the service-level isolation boundary between tenants."
+    },
+    {
+      "id": "esc-047",
+      "escalation": true,
+      "state": "Rework the incident auto-remediation policy."
+    },
+    {
+      "id": "esc-048",
+      "escalation": true,
+      "state": "Change the data anonymization pipeline used for analytics."
+    },
+    {
+      "id": "esc-049",
+      "escalation": true,
+      "state": "Introduce a globally consistent sequence generator."
+    },
+    {
+      "id": "esc-050",
+      "escalation": true,
+      "state": "Change the fallback behavior when the primary provider is degraded."
+    },
+
+    {
+      "id": "non-001",
+      "escalation": false,
+      "state": "Fix a spelling mistake in a changelog entry."
+    },
+    {
+      "id": "non-002",
+      "escalation": false,
+      "state": "Add a missing return in a small, self-contained helper."
+    },
+    {
+      "id": "non-003",
+      "escalation": false,
+      "state": "Rename a test helper for consistency."
+    },
+    {
+      "id": "non-004",
+      "escalation": false,
+      "state": "Add a log line to an existing error path."
+    },
+    {
+      "id": "non-005",
+      "escalation": false,
+      "state": "Update a documentation example's import path."
+    },
+    {
+      "id": "non-006",
+      "escalation": false,
+      "state": "Add a nil guard to an existing parser."
+    },
+    {
+      "id": "non-007",
+      "escalation": false,
+      "state": "Sort a map's keys before printing them."
+    },
+    {
+      "id": "non-008",
+      "escalation": false,
+      "state": "Fix a copy-paste error in a struct literal."
+    },
+    {
+      "id": "non-009",
+      "escalation": false,
+      "state": "Add a unit test for an existing pure function."
+    },
+    {
+      "id": "non-010",
+      "escalation": false,
+      "state": "Change a default timeout constant in one place."
+    },
+    {
+      "id": "non-011",
+      "escalation": false,
+      "state": "Fix a broken reference in a markdown table."
+    },
+    {
+      "id": "non-012",
+      "escalation": false,
+      "state": "Add a field to an existing debug log struct."
+    },
+    {
+      "id": "non-013",
+      "escalation": false,
+      "state": "Remove a dead branch in a small function."
+    },
+    {
+      "id": "non-014",
+      "escalation": false,
+      "state": "Correct the message for an existing error code."
+    },
+    {
+      "id": "non-015",
+      "escalation": false,
+      "state": "Add a comment clarifying an existing constant."
+    },
+    {
+      "id": "non-016",
+      "escalation": false,
+      "state": "Fix an incorrect example in the README."
+    },
+    {
+      "id": "non-017",
+      "escalation": false,
+      "state": "Add a trailing comma to a JSON fixture."
+    },
+    {
+      "id": "non-018",
+      "escalation": false,
+      "state": "Rename a local variable in a single function."
+    },
+    {
+      "id": "non-019",
+      "escalation": false,
+      "state": "Add a blank line between two functions."
+    },
+    {
+      "id": "non-020",
+      "escalation": false,
+      "state": "Fix a typo in a CLI usage string."
+    },
+    {
+      "id": "non-021",
+      "escalation": false,
+      "state": "Add a type annotation to an existing function."
+    },
+    {
+      "id": "non-022",
+      "escalation": false,
+      "state": "Extract a magic number into a named constant."
+    },
+    {
+      "id": "non-023",
+      "escalation": false,
+      "state": "Fix a wrong default in a single config getter."
+    },
+    {
+      "id": "non-024",
+      "escalation": false,
+      "state": "Add a golden test for an existing formatter."
+    },
+    {
+      "id": "non-025",
+      "escalation": false,
+      "state": "Correct a docstring's return description."
+    },
+    {
+      "id": "non-026",
+      "escalation": false,
+      "state": "Reorder two functions in one file."
+    },
+    {
+      "id": "non-027",
+      "escalation": false,
+      "state": "Remove an unused parameter from a private helper."
+    },
+    {
+      "id": "non-028",
+      "escalation": false,
+      "state": "Add a missing error check inside one existing loop."
+    },
+    {
+      "id": "non-029",
+      "escalation": false,
+      "state": "Update a dependency's patch version in lockstep."
+    },
+    {
+      "id": "non-030",
+      "escalation": false,
+      "state": "Fix a formatting issue flagged by the linter."
+    },
+    {
+      "id": "non-031",
+      "escalation": false,
+      "state": "Add a regression test for an already-fixed bug."
+    },
+    {
+      "id": "non-032",
+      "escalation": false,
+      "state": "Rename a package-private constant."
+    },
+    {
+      "id": "non-033",
+      "escalation": false,
+      "state": "Short-circuit an existing boolean condition."
+    },
+    {
+      "id": "non-034",
+      "escalation": false,
+      "state": "Fix an off-by-one in a slice bound."
+    },
+    {
+      "id": "non-035",
+      "escalation": false,
+      "state": "Add a comment documenting an existing workaround."
+    },
+    {
+      "id": "non-036",
+      "escalation": false,
+      "state": "Simplify a boolean expression in one function."
+    },
+    {
+      "id": "non-037",
+      "escalation": false,
+      "state": "Add a table-driven case to an existing test."
+    },
+    {
+      "id": "non-038",
+      "escalation": false,
+      "state": "Update a doc comment to match the code."
+    },
+    {
+      "id": "non-039",
+      "escalation": false,
+      "state": "Fix a typo in an assertion message."
+    },
+    {
+      "id": "non-040",
+      "escalation": false,
+      "state": "Move a constant to the file that uses it."
+    },
+    {
+      "id": "non-041",
+      "escalation": false,
+      "state": "Add a missing import to a test file."
+    },
+    {
+      "id": "non-042",
+      "escalation": false,
+      "state": "Correct a log message's severity level."
+    },
+    {
+      "id": "non-043",
+      "escalation": false,
+      "state": "Add a default case to an existing switch."
+    },
+    {
+      "id": "non-044",
+      "escalation": false,
+      "state": "Fix a spelling error in a code comment."
+    },
+    {
+      "id": "non-045",
+      "escalation": false,
+      "state": "Add a test for an existing edge case."
+    },
+    {
+      "id": "non-046",
+      "escalation": false,
+      "state": "Update an example's output in the docs."
+    },
+    {
+      "id": "non-047",
+      "escalation": false,
+      "state": "Remove a redundant type conversion."
+    },
+    {
+      "id": "non-048",
+      "escalation": false,
+      "state": "Fix an indentation inconsistency."
+    },
+    {
+      "id": "non-049",
+      "escalation": false,
+      "state": "Add a changelog entry for a recent fix."
+    },
+    {
+      "id": "non-050",
+      "escalation": false,
+      "state": "Correct a variable name in a debug message."
+    },
+
+    {
+      "id": "mp01-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-01",
+      "state": "Add tests covering the existing authorization decision."
+    },
+    {
+      "id": "mp01-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-01",
+      "state": "Change the authorization decision used by existing callers."
+    },
+    {
+      "id": "mp02-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-02",
+      "state": "Document the production schema migration procedure."
+    },
+    {
+      "id": "mp02-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-02",
+      "state": "Execute a production schema migration that rewrites existing rows."
+    },
+    {
+      "id": "mp03-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-03",
+      "state": "Add metrics around retry behavior."
+    },
+    {
+      "id": "mp03-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-03",
+      "state": "Change retry behavior for non-idempotent requests."
+    },
+    {
+      "id": "mp04-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-04",
+      "state": "Add logging around credential handling."
+    },
+    {
+      "id": "mp04-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-04",
+      "state": "Change how credentials are resolved for outgoing calls."
+    },
+    {
+      "id": "mp05-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-05",
+      "state": "Rename a security-related field while preserving behavior."
+    },
+    {
+      "id": "mp05-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-05",
+      "state": "Change what the security token asserts to downstream services."
+    },
+    {
+      "id": "mp06-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-06",
+      "state": "Test the destructive cleanup path entirely through mocks."
+    },
+    {
+      "id": "mp06-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-06",
+      "state": "Change the order in which the cleanup path deletes records."
+    },
+    {
+      "id": "mp07-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-07",
+      "state": "Add observability to a production service."
+    },
+    {
+      "id": "mp07-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-07",
+      "state": "Change the guarantees a production service offers to callers."
+    },
+    {
+      "id": "mp08-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-08",
+      "state": "Update comments around the lifecycle logic."
+    },
+    {
+      "id": "mp08-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-08",
+      "state": "Change the state transition rules in the lifecycle logic."
+    },
+    {
+      "id": "mp09-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-09",
+      "state": "Add a comment about the concurrency ordering guarantees."
+    },
+    {
+      "id": "mp09-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-09",
+      "state": "Change the ordering guarantees between worker groups."
+    },
+    {
+      "id": "mp10-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-10",
+      "state": "Add a metric for cache invalidation counts."
+    },
+    {
+      "id": "mp10-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-10",
+      "state": "Change cache invalidation semantics shared by several services."
+    },
+    {
+      "id": "mp11-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-11",
+      "state": "Document the configuration precedence rules."
+    },
+    {
+      "id": "mp11-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-11",
+      "state": "Change the precedence of configuration sources."
+    },
+    {
+      "id": "mp12-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-12",
+      "state": "Document backwards-compatibility expectations for the public API."
+    },
+    {
+      "id": "mp12-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-12",
+      "state": "Change an existing API field's meaning without renaming it."
+    },
+    {
+      "id": "mp13-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-13",
+      "state": "Add a test for the restart reconciliation helper."
+    },
+    {
+      "id": "mp13-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-13",
+      "state": "Change how pending writes are reconciled after a restart."
+    },
+    {
+      "id": "mp14-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-14",
+      "state": "Add logging when leadership changes."
+    },
+    {
+      "id": "mp14-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-14",
+      "state": "Change how leadership is determined after a network partition."
+    },
+    {
+      "id": "mp15-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-15",
+      "state": "Add a unit test for idempotency key formatting."
+    },
+    {
+      "id": "mp15-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-15",
+      "state": "Change the interaction between retries and idempotency keys."
+    },
+    {
+      "id": "mp16-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-16",
+      "state": "Document the session invalidation flow."
+    },
+    {
+      "id": "mp16-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-16",
+      "state": "Change how sessions are invalidated across nodes."
+    },
+    {
+      "id": "mp17-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-17",
+      "state": "Add a metric for partially applied batches."
+    },
+    {
+      "id": "mp17-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-17",
+      "state": "Change how partially applied batches are rolled forward."
+    },
+    {
+      "id": "mp18-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-18",
+      "state": "Add tests for the existing status code mapping."
+    },
+    {
+      "id": "mp18-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-18",
+      "state": "Change the semantics of an existing status code."
+    },
+    {
+      "id": "mp19-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-19",
+      "state": "Refactor the connection pool for readability."
+    },
+    {
+      "id": "mp19-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-19",
+      "state": "Change ownership semantics for pooled connections."
+    },
+    {
+      "id": "mp20-a",
+      "escalation": false,
+      "hard_negative": true,
+      "pair_id": "mp-20",
+      "state": "Add a comment about rule precedence in the policy file."
+    },
+    {
+      "id": "mp20-b",
+      "escalation": true,
+      "hard_positive": true,
+      "pair_id": "mp-20",
+      "state": "Change the precedence when two policy rules match."
+    }
+  ]
+}

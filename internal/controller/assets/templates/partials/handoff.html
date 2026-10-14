@@ -1,0 +1,17 @@
+{{if .Handoff}}
+<div class="handoff">
+    <div class="handoff-head">
+        <span class="badge {{statusClass .Handoff.Status}}"
+            >{{.Handoff.Status}}</span
+        >
+        <span class="muted small">{{since .Handoff.CreatedAt}}</span>
+    </div>
+    {{if .Handoff.CompressionError}}
+    <p class="error-text">Compression error: {{.Handoff.CompressionError}}</p>
+    {{end}} {{if .Handoff.Content}}
+    <pre class="handoff-body">{{.Handoff.Content}}</pre>
+    {{end}}
+</div>
+{{else}}
+<p class="muted">No handoff recorded for this task.</p>
+{{end}}

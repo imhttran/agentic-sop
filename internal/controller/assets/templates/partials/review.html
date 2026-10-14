@@ -1,0 +1,47 @@
+{{- /* CTRL008: Review is its OWN concept, distinct from Validation/JEV/Quality.
+       Review is rendered honestly: when SOP persisted no review evidence the
+       panel shows an explicit absence (not a clean "no findings" pass). The
+       findings list is gated on both review presence AND the findings slice, so
+       a present-but-empty review is not presented as a clean run. */ -}}
+{{$r := .Review}}
+{{$present := .ReviewStatus.Present}}
+{{if $present}}
+{{if $r.Summary}}<p>{{$r.Summary}}</p>{{end}}
+{{if $r.Findings}}
+<ul class="findings">
+  {{range $r.Findings}}
+  <li class="finding">
+    <div class="finding-head">
+      <span class="badge {{severityClass .Severity}}">{{.Severity}}</span>
+      <strong>{{.Title}}</strong>
+      {{if .Location}}<span class="muted small">{{.Location}}</span>{{end}}
+    </div>
+    {{if .Detail}}<div class="muted">{{.Detail}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+{{else}}
+<p class="muted">Review recorded; no findings persisted.</p>
+{{end}}
+{{else}}
+{{if $r.Findings}}
+<ul class="findings">
+  {{range $r.Findings}}
+  <li class="finding">
+    <div class="finding-head">
+      <span class="badge {{severityClass .Severity}}">{{.Severity}}</span>
+      <strong>{{.Title}}</strong>
+      {{if .Location}}<span class="muted small">{{.Location}}</span>{{end}}
+    </div>
+    {{if .Detail}}<div class="muted">{{.Detail}}</div>{{end}}
+  </li>
+  {{end}}
+</ul>
+<p class="muted small">Findings shown above; SOP did not persist an aggregate review verdict.</p>
+{{else}}
+<p class="muted">
+  Review: <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small">SOP persisted no review evidence; this is not a pass.</span>
+</p>
+{{end}}
+{{end}}

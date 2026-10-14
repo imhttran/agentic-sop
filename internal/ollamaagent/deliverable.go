@@ -23,8 +23,8 @@ import (
 func deliverableTool(name string) bool {
 	switch name {
 	case toolharness.ToolReadFile, toolharness.ToolWriteFile,
-		toolharness.ToolCreateFile, toolharness.ToolListFiles,
-		toolharness.ToolSearchFiles:
+		toolharness.ToolCreateFile, toolharness.ToolCopyFile,
+		toolharness.ToolListFiles, toolharness.ToolSearchFiles:
 		return true
 	}
 	return false

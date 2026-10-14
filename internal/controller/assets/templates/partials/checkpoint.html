@@ -1,0 +1,89 @@
+{{- /* CTRL010: Continuation / checkpoint progress panel. Renders the most recent
+       bounded-progress line SOP reported for work spanning multiple agent
+       invocations (e.g. "11/15 cases analyzed, covered: 11, missing: 4,
+       next: ..."). Every value is SOP-reported verbatim: the controller never
+       computes a percentage, interpolates a count, or extrapolates a total.
+       Partial progress (analyzed < total) is labelled in-progress and is never
+       rendered or labelled as task completion; completion still comes only
+       from SOP's own task status/run decision. When SOP reported no checkpoint
+       the panel shows an explicit absence (never a number). Continuation itself
+       remains an SOP lifecycle decision (sop run / sop resume): this panel adds
+       no control that decides or simulates it. */ -}}
+{{$cp := .Checkpoint}}
+{{if $cp.Present}}
+<dl class="facts checkpoint-facts">
+  {{if $cp.Label}}
+  <div>
+    <dt>Checkpoint</dt>
+    <dd>{{$cp.Label}}</dd>
+  </div>
+  {{end}}
+  <div>
+    <dt>Progress</dt>
+    <dd>
+      {{if and $cp.HasAnalyzed $cp.HasTotal}}<span class="badge s-running"
+        >{{$cp.Analyzed}}/{{$cp.Total}} analyzed</span
+      >
+      {{if $cp.InProgress}}<span class="badge s-running">in progress</span
+      ><span class="muted small">partial; not task completion</span>{{else}}<span
+        class="badge s-completed">checkpoint reached</span
+      ><span class="muted small"
+        >SOP-reported checkpoint total; task completion still comes only from
+        SOP's task status</span
+      >{{end}}
+      {{else if $cp.HasAnalyzed}}<span class="badge s-running"
+        >{{$cp.Analyzed}} analyzed</span
+      ><span class="muted small">SOP reported no total</span>
+      {{else if $cp.HasTotal}}<span class="badge s-running"
+        >{{$cp.Total}} total</span
+      ><span class="muted small">SOP reported no analyzed count</span>
+      {{else}}<span class="badge s-unavailable">{{unavailable}}</span
+      ><span class="small"
+        >SOP reported no counters for this checkpoint</span
+      >{{end}}
+    </dd>
+  </div>
+  <div>
+    <dt>Covered</dt>
+    <dd>
+      {{if $cp.HasCovered}}<span class="badge s-running">{{$cp.Covered}}</span
+      >{{else}}<span class="badge s-unavailable">{{unavailable}}</span
+      ><span class="small">SOP reported no covered count</span>{{end}}
+    </dd>
+  </div>
+  <div>
+    <dt>Missing</dt>
+    <dd>
+      {{if $cp.HasMissing}}<span class="badge s-running">{{$cp.Missing}}</span
+      >{{else}}<span class="badge s-unavailable">{{unavailable}}</span
+      ><span class="small">SOP reported no missing count</span>{{end}}
+    </dd>
+  </div>
+  {{if $cp.Next}}
+  <div>
+    <dt>Next</dt>
+    <dd>{{$cp.Next}}</dd>
+  </div>
+  {{end}}
+  {{if $cp.Source}}
+  <div>
+    <dt>Source</dt>
+    <dd><code>{{$cp.Source}}</code></dd>
+  </div>
+  {{end}}
+</dl>
+<p class="muted small">
+  Bounded progress SOP reported for work across agent invocations. It is
+  read-only evidence: it never decides or triggers continuation (that
+  remains SOP's lifecycle via <code>sop run</code> / <code>sop resume</code>),
+  and it is never task completion.
+</p>
+{{else}}
+<p class="muted">
+  Checkpoint: <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small"
+    >SOP persisted no bounded-progress checkpoint for this task; this is not
+    a completion.</span
+  >
+</p>
+{{end}}

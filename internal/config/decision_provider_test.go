@@ -9,6 +9,8 @@ import (
 // is accepted only with a dedicated decision.adapter_command argv, and is rejected
 // when that argv is missing. decision.command keeps its separate meaning.
 func TestDecisionProviderAdapterRequiresCommand(t *testing.T) {
+	// The adapter is opt-in via config; ambient decision env must not supply it.
+	clearDecisionEnv(t)
 	// Accepted with adapter_command.
 	c, err := Parse([]byte("project:\n  name: a\ndecision:\n  provider: adapter\n  adapter_command:\n    - /path/to/adapter\n"))
 	if err != nil {
@@ -38,6 +40,7 @@ func TestDecisionProviderAdapterRequiresCommand(t *testing.T) {
 // non-breaking half of the JEV-202 contract alignment: no provider is added or
 // selected, only unsupported values are refused.
 func TestDecisionProviderRejectsUnsupported(t *testing.T) {
+	clearDecisionEnv(t)
 	rejected := []struct {
 		name     string
 		provider string

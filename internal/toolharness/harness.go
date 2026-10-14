@@ -34,6 +34,8 @@ const (
 	ToolCreateFile  = "create_file"
 	ToolDeleteFile  = "delete_file"
 	ToolRestoreFile = "restore_file"
+	ToolCopyFile    = "copy_file"
+	ToolRewriteFile = "rewrite_file"
 	ToolListFiles   = "list_files"
 	ToolSearchFiles = "search_files"
 	ToolRunCommand  = "run_command"
@@ -46,7 +48,7 @@ const (
 func Tools() []string {
 	return []string{
 		ToolReadFile, ToolWriteFile, ToolCreateFile, ToolDeleteFile, ToolRestoreFile,
-		ToolListFiles, ToolSearchFiles, ToolRunCommand, ToolGitStatus, ToolGitDiff,
+		ToolCopyFile, ToolRewriteFile, ToolListFiles, ToolSearchFiles, ToolRunCommand, ToolGitStatus, ToolGitDiff,
 	}
 }
 
@@ -262,6 +264,10 @@ func (h *Harness) dispatch(ctx context.Context, name string, args map[string]any
 		return h.deleteFile(args)
 	case ToolRestoreFile:
 		return h.restoreFile(ctx, args)
+	case ToolCopyFile:
+		return h.copyFile(args)
+	case ToolRewriteFile:
+		return h.rewriteFile(args)
 	case ToolListFiles:
 		return h.listFiles(args)
 	case ToolSearchFiles:
@@ -329,6 +335,14 @@ func (h *Harness) RecordDenied(name string, args map[string]any, detail string) 
 // diagnostics, never including file content.
 func SummarizeRequest(name string, args map[string]any) string {
 	switch name {
+	case ToolCopyFile:
+		var parts []string
+		for _, key := range []string{"source", "source_root", "dest"} {
+			if v, ok := args[key].(string); ok && strings.TrimSpace(v) != "" {
+				parts = append(parts, key+"="+strings.TrimSpace(v))
+			}
+		}
+		return strings.Join(parts, " ")
 	case ToolRunCommand:
 		command, _ := args["command"].(string)
 		if cwd, ok := args["cwd"].(string); ok && strings.TrimSpace(cwd) != "" {

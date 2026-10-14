@@ -33,8 +33,8 @@ Do not request any more tools.
 Using only the repository context already gathered, produce the required REVIEW response now.
 Do not continue exploring.`,
 	correction: `Repository inspection is complete.
-No additional tools are available.
-Produce the required REVIEW response using the context already gathered.`,
+No additional tools are available. Any further tool call is refused and only wastes this synthesis turn.
+Reply now with the required structured REVIEW JSON result and nothing else (no prose, no tool call).`,
 }
 
 // executeReview runs REVIEW's inspect → synthesize lifecycle and returns the

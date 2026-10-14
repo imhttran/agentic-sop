@@ -26,8 +26,8 @@ work depends on) and any assumptions behind the plan.
 Never report a missing or unknown capability as if it already exists.
 Return the exact structured PLAN response expected by SOP.`,
 	correction: `Repository discovery is complete.
-No additional tools are available.
-Produce the required PLAN response using the context already gathered.`,
+No additional tools are available. Any further tool call is refused and only wastes this synthesis turn.
+Reply now with the required structured PLAN JSON document and nothing else (no prose, no tool call).`,
 }
 
 // executePlan runs PLAN's discovery → synthesis lifecycle and returns the plan

@@ -1,0 +1,14 @@
+{
+  "state": "A schema migration will execute against production during business hours.",
+  "questions": [
+    {
+      "id": "risk",
+      "type": "choice",
+      "criteria": "Assess the operational risk of the described change.",
+      "choices": ["LOW", "MEDIUM", "HIGH"]
+    }
+  ],
+  "metadata": {
+    "domain": "change-management"
+  }
+}

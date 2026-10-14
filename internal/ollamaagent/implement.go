@@ -46,10 +46,12 @@ you return. Do not continue trying to prove the implementation yourself.`
 
 	implementFinalizeCorrection = `Tool execution is complete for this invocation.
 
-No additional tools are available.
+No additional tools are available. Any further tool call is refused and only
+wastes this invocation's remaining turns.
 
-Return the required structured execution outcome now. SOP will perform
-independent validation.`
+Reply now with the required structured execution outcome JSON and nothing else
+(no prose, no tool call): the completion outcome describing what you changed, or
+an honest needs_human/failed outcome. SOP will perform independent validation.`
 
 	// implementConvergenceCorrection is returned when the bounded discovery window
 	// has closed and no mutation has been observed for the stale allowance. The run

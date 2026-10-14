@@ -1,0 +1,66 @@
+{{- /* Performance panel (read-only): renders SOP's own persisted measurement of
+       where a task's run spent its time and how many agent/validation/review/fix
+       operations it cost. Every value is SOP-measured and reported verbatim
+       (.agent-sdlc/runs/<task>/metrics.json); the controller starts no timer and
+       derives no stage duration itself, so this panel is evidence, never a
+       controller judgement (no "slow"/"inefficient" labels). When SOP persisted
+       no record the panel shows an explicit absence, never a row of 0s that would
+       read as a real measurement. Nothing here changes a task's status or next
+       step. */ -}}
+{{$p := .}}
+{{if $p.Present}}
+<dl class="facts">
+  <div><dt>Total</dt><dd>{{$p.Total}}</dd></div>
+  {{if $p.Plan}}<div><dt>Planning</dt><dd>{{$p.Plan}}</dd></div>{{end}}
+  {{if $p.Implement}}<div><dt>Implementation</dt><dd>{{$p.Implement}}</dd></div>{{end}}
+  {{if $p.Validation}}<div><dt>Validation</dt><dd>{{$p.Validation}}</dd></div>{{end}}
+  {{if $p.Review}}<div><dt>Review</dt><dd>{{$p.Review}}</dd></div>{{end}}
+  {{if $p.Fix}}<div><dt>Fix</dt><dd>{{$p.Fix}}</dd></div>{{end}}
+  <div><dt>Agent (plan + implement + fix)</dt><dd>{{$p.Agent}}</dd></div>
+</dl>
+
+{{$shares := $p.Shares}}
+{{if $shares}}
+<dl class="facts">
+  {{range $shares}}<div>
+    <dt>{{.Name}}</dt>
+    <dd>{{.Duration}} <span class="muted small">{{.Percent}}% of measured</span></dd>
+  </div>{{end}}
+</dl>
+{{end}}
+
+{{if or $p.Build $p.Test $p.Lint}}
+<h3>Validation breakdown</h3>
+<dl class="facts">
+  {{if $p.Build}}<div><dt>Build</dt><dd>{{$p.Build}}</dd></div>{{end}}
+  {{if $p.Test}}<div><dt>Tests</dt><dd>{{$p.Test}}</dd></div>{{end}}
+  {{if $p.Lint}}<div><dt>Lint</dt><dd>{{$p.Lint}}</dd></div>{{end}}
+</dl>
+{{end}}
+
+<h3>Operations</h3>
+<dl class="facts">
+  <div><dt>Agent calls</dt><dd>{{$p.AgentCalls}}</dd></div>
+  {{if $p.AgentCallsAvoided}}<div><dt>Agent calls avoided</dt><dd>{{$p.AgentCallsAvoided}}</dd></div>{{end}}
+  <div><dt>Validation runs</dt><dd>{{$p.ValidationRuns}}</dd></div>
+  {{if $p.ValidationReused}}<div><dt>Validation reused</dt><dd>{{$p.ValidationReused}}</dd></div>{{end}}
+  <div><dt>Review runs</dt><dd>{{$p.ReviewRuns}}</dd></div>
+  {{if $p.ReviewReused}}<div><dt>Review reused</dt><dd>{{$p.ReviewReused}}</dd></div>{{end}}
+  <div><dt>Fix cycles</dt><dd>{{$p.FixCycles}}</dd></div>
+  {{if $p.PlanRepairs}}<div><dt>Plan repairs</dt><dd>{{$p.PlanRepairs}}</dd></div>{{end}}
+</dl>
+
+<p class="muted small">
+  Time and counts measured and persisted by SOP
+  (<code>.agent-sdlc/runs/&lt;task&gt;/metrics.json</code>). Read-only diagnostic
+  evidence: it decides nothing about this task's status or next step.
+</p>
+{{else}}
+<p class="muted">
+  Performance metrics unavailable for this run.
+  <span class="small"
+    >SOP persisted no performance record for this task (an older run, or one that
+    has not run). This is an absence, not a measurement of zero.</span
+  >
+</p>
+{{end}}

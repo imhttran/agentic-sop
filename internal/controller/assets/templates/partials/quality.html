@@ -1,0 +1,17 @@
+{{- /* CTRL008: Quality decision panel. Renders SOP's persisted quality verdict
+       (QualityStatus) when present and an explicit not-run absence otherwise; a
+       missing verdict never reads as PASS. Distinct from Validation/Review/JEV. */ -}}
+{{if .QualityStatus.Present}}
+<dl class="facts">
+  <div>
+    <dt>Quality verdict</dt>
+    <dd><span class="badge {{levelClass .QualityStatus.Level}}">{{.QualityStatus.Level}}</span></dd>
+  </div>
+</dl>
+{{if .Run.Decision}}<p class="muted small">Run decision: {{.Run.Decision}}</p>{{end}}
+{{else}}
+<p class="muted">
+  <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small">SOP persisted no quality verdict for this task.</span>
+</p>
+{{end}}
