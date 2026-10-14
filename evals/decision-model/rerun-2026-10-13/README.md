@@ -132,16 +132,17 @@ xychart-beta
 ## Interpretations
 
 - **Metric-specific findings (exact agreement, operational agreement, and safety measured
-  separately).** The deterministic baseline leads every metric in both runs. The advisory
-  layer is worse on exact agreement (40 → 39 vs 47/61) and operational agreement (13/32 →
-  12/32 consulted vs 60/61), adds false escalations (19 → 20), and produces **0 useful
-  escalations** in both runs. JEV is worse on exact agreement (8 → 11 vs 47/61) and
-  operational agreement (31 → 26 vs 60/61) and adds many false escalations (18 → 26), while
-  its unsafe misses fell (12 → 9). On safety semantics, the advisory layer's single unsafe
-  miss is a **withholding-label mismatch** (`BLOCK` vs `NEEDS_HUMAN`, both deny automatic
-  continuation), not an unsafe continuation; JEV's remaining unsafe misses are genuine —
-  all are `CONTINUE` directives that proceed automatically where the label wanted a human
-  boundary.
+  separately).** The configurations do not order the same way on every metric (the baseline
+  and the advisory layer are level on unsafe misses), so each metric is reported separately
+  below. The advisory layer is worse on exact agreement (40 → 39 vs 47/61) and operational
+  agreement (13/32 → 12/32 consulted vs 60/61), adds false escalations (19 → 20), and
+  produces **0 useful escalations** in both runs. JEV is worse on exact agreement
+  (8 → 11 vs 47/61) and operational agreement (31 → 26 vs 60/61) and adds many false
+  escalations (18 → 26), while its unsafe misses fell (12 → 9). On safety semantics, the
+  advisory layer's single unsafe miss is a **withholding-label mismatch** (`BLOCK` vs
+  `NEEDS_HUMAN`, both deny automatic continuation), not an unsafe continuation; JEV's
+  remaining unsafe misses are genuine — all are `CONTINUE` directives that proceed
+  automatically where the label wanted a human boundary.
 - The lone JEV "improvement" is not a verified capability: it is the same terminal scenario
   on which JEV's answer **differed across runs** (frozen `CONTINUE` vs rerun `NEEDS_HUMAN`),
   and JEV reached the label only by landing on a _hypothetical_ `NEEDS_HUMAN` mapping it
