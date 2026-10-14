@@ -59,6 +59,7 @@ Where new documentation belongs:
 - [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
 - [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
 - [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
+- [architecture/JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md) — the ratified JEV decision-contract alignment (Gate 3, 2026-10-11): the accepted contract requirements (§13–§19) and the ratified decisions D1–D7 (§20).
 
 ## Specifications
 
@@ -115,8 +116,12 @@ single owner. This table is that map.
 | Performance measurements                                                                  | [PERFORMANCE.md](reference/PERFORMANCE.md)                                             | Closure plan and point-in-time baseline reports                                                                                                                                                 |
 | Reliability evaluation                                                                    | [EVALUATION.md](reference/EVALUATION.md)                                               | Run trace (`trace.json`) and progress signals                                                                                                                                                   |
 | Decision-model findings (advisory vs deterministic)                                       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                     | [EVALUATION.md](reference/EVALUATION.md); [OPENJEV.md](specs/OPENJEV.md)                                                                                                                        |
-| AI decision-model promotion criteria | [AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md) | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) |
+| AI decision-model promotion criteria                                                      | [AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md)       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                                                                                                                              |
 | Multi-agent orchestration                                                                 | [architecture/orchestration.md](architecture/orchestration.md)                         | [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md); adoption record in [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) |
+| Lifecycle verdict gate and outcome recovery                                               | [LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md)                       | [OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md); [EXECUTION.md](specs/EXECUTION.md) §6b                                                                                      |
+| Validation evidence reuse                                                                 | [EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md)                                       | [VALIDATION.md](specs/VALIDATION.md); [CLI.md](reference/CLI.md)                                                                                                                                |
+| JEV decision contract                                                                     | [JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md)                      | [OPENJEV.md](specs/OPENJEV.md)                                                                                                                                                                  |
+| Repository consolidation and legacy transition                                            | [REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md)                      | [LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md); [reports/consolidation/](reports/consolidation/completion.md)                                                        |
 
 ## Reference
 
@@ -133,6 +138,10 @@ single owner. This table is that map.
 - [reference/EVALUATION.md](reference/EVALUATION.md) — the deterministic evaluation harness: fixture contract, layout, and the failure → regression workflow.
 - [reference/DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) — consolidated DME-003/004/005 and JEV shadow-mode findings: what was tested, verified results, architectural conclusions, and remaining investigation.
 - [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md) — proposed criteria for reconsidering AI-assisted failure disposition: separate evaluation scopes, hard safety gates, effectiveness thresholds, staged promotion, and decision outcomes.
+- [reference/LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md) — the lifecycle verdict gate (SOP-HARD-01): how the terminal `LOCAL_DONE` transition is tied to the objective-level `VERIFIED` / `PARTIAL` / `HOLD` outcome verdict.
+- [reference/OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md) — the supported recovery surface (SOP-HARD-04): the read-only `sop verify` and the designated-approver, criterion-scoped `sop outcome --waive`.
+- [reference/EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md) — validation evidence reuse (VER-001–VER-004): the portable cross-worktree store and `sop validate --cache`.
+- [reference/E2E-ONE-SHOT-DIAGNOSIS.md](reference/E2E-ONE-SHOT-DIAGNOSIS.md) — the end-to-end one-shot diagnosis: the validation-evidence-reuse and ONESHOT-001 evidence with the recorded baseline.
 
 ## Guides
 
@@ -148,6 +157,8 @@ single owner. This table is that map.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, and `/rag-ingest` RAG-domain skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
+- [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, and the preserved legacy wrappers.
+- [guides/LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md) — recommendations for the later, operator-approved transition of the legacy `sop-controller` and `sop-decision-adapters` repositories; **no** retirement is performed.
 - [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
 
 ## Plans
@@ -179,6 +190,37 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-TEL-009-Telemetry-Reporting-Corrections.md](plans/PLAN-TEL-009-Telemetry-Reporting-Corrections.md) — TEL-009: correct `decision_escalation_rate` (model escalation only, not human approvals), reconcile `decision_override_rate` provenance, make `retry_efficiency` a rate, and version `model-selection.json`. **Implemented**; reporting/evidence only.
 - [plans/PLAN-SOP-Developer-Preview.md](plans/PLAN-SOP-Developer-Preview.md) — the Developer Preview workstream (PREVIEW-001–005). **SUPERSEDED**: disposed by SOP without executing PREVIEW-002–PREVIEW-005; the deliverables and the **HOLD** readiness verdict are preserved as evidence in [history/developer-preview/](history/developer-preview/README.md), and the still-open findings are carried in [plans/BACKLOG.md](plans/BACKLOG.md) § Developer Preview carry-forward.
 - [plans/PLAN-SOP-Autonomy.md](plans/PLAN-SOP-Autonomy.md) — the SOP autonomy workstream (AUTONOMY-001/004/005), consolidated into a single authoritative plan. **HISTORICALIZED — COMPLETE** (2026-10-13): all three tasks reached `LOCAL_DONE` and SOP retained the audit record at `.agent-sdlc/archive/plan-sop-autonomy/`.
+- [plans/PLAN-Repository-Consolidation.md](plans/PLAN-Repository-Consolidation.md) — the repository-consolidation plan (MIG-001–MIG-012): unify `sop-controller` and `sop-decision-adapters` into one Go module and one `sop` executable (with thin legacy wrappers) while preserving histories and governance. **HISTORICALIZED — COMPLETE** (2026-10-14). The evidence is [reports/consolidation/](reports/consolidation/completion.md) and the guide [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md); the file stays under `plans/` because SOP's archive records its path.
+
+### Other plans in `plans/`
+
+The remaining plan files, each with the status its own header declares (SOP's active-plan selection is authoritative — it currently reports none). They stay in `plans/` rather than moving to `history/` where that keeps an operational path working; see [Canonical Locations and Kept Paths](#canonical-locations-and-kept-paths).
+
+| Plan                                                                                                                     | Declared status           | Read it for                                                          |
+| ------------------------------------------------------------------------------------------------------------------------ | ------------------------- | -------------------------------------------------------------------- |
+| [plans/ACCEPTANCE-CHECKS-AUTHORING.md](plans/ACCEPTANCE-CHECKS-AUTHORING.md)                                             | guidance                  | how to author a plan stage's deterministic acceptance checks         |
+| [plans/ISSUE-Prompt-Report-Deliverables.md](plans/ISSUE-Prompt-Report-Deliverables.md)                                   | OPEN (deferred)           | the ad-hoc prompt report-deliverable `NO_CHANGES_PRODUCED` follow-up |
+| [plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md](plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md) | PLANNED                   | decision-boundary readiness for Clef-Flash                           |
+| [plans/PLAN-Decision-Model-Effectiveness-Evaluation.md](plans/PLAN-Decision-Model-Effectiveness-Evaluation.md)           | EVALUATION COMPLETE       | the decision-model effectiveness evaluation                          |
+| [plans/PLAN-EV-Context-Run-Evaluation.md](plans/PLAN-EV-Context-Run-Evaluation.md)                                       | PROPOSED                  | the context-engine live-path evaluation                              |
+| [plans/PLAN-End-to-End-One-Shot-Hardening.md](plans/PLAN-End-to-End-One-Shot-Hardening.md)                               | IMPLEMENTED               | the end-to-end one-shot hardening (ONESHOT-001)                      |
+| [plans/PLAN-Implementation-Convergence.md](plans/PLAN-Implementation-Convergence.md)                                     | PROPOSED                  | implementation-convergence work                                      |
+| [plans/PLAN-JEV-Wave-2-Hardening.md](plans/PLAN-JEV-Wave-2-Hardening.md)                                                 | (see file)                | JEV Wave 2 end-to-end hardening                                      |
+| [plans/PLAN-JEV-Wave-3-Adapter-Integration.md](plans/PLAN-JEV-Wave-3-Adapter-Integration.md)                             | APPROVED for registration | JEV Wave 3 adapter integration                                       |
+| [plans/PLAN-Phase-9-Public-Launch.md](plans/PLAN-Phase-9-Public-Launch.md)                                               | (see file)                | Phase 9 public launch and developer adoption                         |
+| [plans/PLAN-Post-Wave3-Production-Readiness.md](plans/PLAN-Post-Wave3-Production-Readiness.md)                           | PROPOSED                  | post-Wave-3 production readiness                                     |
+| [plans/PLAN-Provider-Neutral-Decision-Integration-Seam.md](plans/PLAN-Provider-Neutral-Decision-Integration-Seam.md)     | PLANNED                   | the provider-neutral decision integration seam                       |
+| [plans/PLAN-Review-Scope-And-Output-Hardening.md](plans/PLAN-Review-Scope-And-Output-Hardening.md)                       | PROPOSED                  | review scope and malformed-output hardening                          |
+| [plans/PLAN-Risk-Based-Verification.md](plans/PLAN-Risk-Based-Verification.md)                                           | declared ACTIVE           | risk-based verification and risk-tiered execution                    |
+| [plans/PLAN-RSH-Follow-Up-Hardening.md](plans/PLAN-RSH-Follow-Up-Hardening.md)                                           | PROPOSED                  | RSH follow-up hardening                                              |
+| [plans/PLAN-Run-Metrics-And-Observability.md](plans/PLAN-Run-Metrics-And-Observability.md)                               | PROPOSED                  | run metrics and observability                                        |
+| [plans/PLAN-SOP-AUTONOMY-001-UPDATED.md](plans/PLAN-SOP-AUTONOMY-001-UPDATED.md)                                         | PROPOSED UPDATE           | a proposed update to the SOP autonomy plan                           |
+| [plans/PLAN-SOP-Acceptance-Verification-Hardening.md](plans/PLAN-SOP-Acceptance-Verification-Hardening.md)               | IMPLEMENTED               | SOP acceptance-verification hardening (SOP-HARD)                     |
+| [plans/PLAN-SOP-E2E-Reliability-Hardening.md](plans/PLAN-SOP-E2E-Reliability-Hardening.md)                               | PROPOSED                  | SOP E2E reliability hardening                                        |
+| [plans/PLAN-SOP-End-to-End-Reliability.md](plans/PLAN-SOP-End-to-End-Reliability.md)                                     | PROPOSED                  | SOP end-to-end reliability                                           |
+| [plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md](plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md)                   | PROPOSED                  | SOP lifecycle-consistency hardening                                  |
+| [plans/PLAN-SOP-RUN-ACCEPT-001.md](plans/PLAN-SOP-RUN-ACCEPT-001.md)                                                     | declared ACTIVE           | native deterministic acceptance checks for `sop run`                 |
+| [plans/PLAN-SOP-Validation-Evidence-Reuse.md](plans/PLAN-SOP-Validation-Evidence-Reuse.md)                               | IMPLEMENTED               | SOP validation evidence reuse                                        |
 
 ## Testing
 
@@ -200,6 +242,7 @@ is owned by the documents they link.
 - [reports/decision-telemetry/TEL-006-cli-report.md](reports/decision-telemetry/TEL-006-cli-report.md) — the TEL-006 CLI: the opt-in, read-only `sop report --decisions [--format text\|json]` command over the `internal/runmetrics` aggregator, with sample output, coverage limits, and verification evidence.
 - [reports/decision-telemetry/TEL-008-model-selection.md](reports/decision-telemetry/TEL-008-model-selection.md) — the TEL-008 `Model Selection` percentage summary (SMALL/MEDIUM/LARGE counts and one-decimal percentages, explicit missing coverage) added to the `--decisions` text output; JSON and goldens unchanged.
 - [reports/decision-model-evaluation-2026-10-13.md](reports/decision-model-evaluation-2026-10-13.md) — the 2026-10-13 decision-model evaluation rerun and reconciliation: frozen-versus-rerun results with explicit denominators, findings, reproducibility limits, and the retained DISABLE recommendation; follow-ups are DME-FU-004–DME-FU-007 in [plans/BACKLOG.md](plans/BACKLOG.md).
+- [reports/consolidation/](reports/consolidation/completion.md) — the repository-consolidation evidence (MIG-001–MIG-012): baseline, source map, import rewrites/verification, decision compatibility, CI coverage, documentation, dogfood, performance and the completion report. The controller licensing record is [controller-provenance.md](reports/consolidation/controller-provenance.md); the durable recovery snapshot is [backup-manifest.md](reports/consolidation/backup-manifest.md).
 
 ## Historical Documentation
 
@@ -233,6 +276,7 @@ To keep SOP working, a few paths are intentionally not under the categories abov
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
 - [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) is retained because SOP's plan archives reference its path; completed plans referenced by SOP archives also retain their paths.
+- [plans/PLAN-Repository-Consolidation.md](plans/PLAN-Repository-Consolidation.md) is retained (HISTORICALIZED — COMPLETE) because the SOP archive `.agent-sdlc/archive/plan-repository-consolidation/` records its source path; the reports under [reports/consolidation/](reports/consolidation/completion.md) are its evidence.
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
 
 ## Checking Documentation Links

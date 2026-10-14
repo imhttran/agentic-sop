@@ -172,7 +172,9 @@ interactive-approval, and agentic reliability/evaluation layers (structured run
 trace, progress signals, evaluation harness), plus native deterministic acceptance
 checks ([docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b), are implemented. Detailed delivery status and
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
-future work lives in [BACKLOG.md](docs/plans/BACKLOG.md).
+future work lives in [BACKLOG.md](docs/plans/BACKLOG.md). The controller and the
+advisory decision adapter are consolidated into this one repository and executable
+([docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md)).
 
 The pre-performance closure and measurement plan,
 [Pre-Performance Closure and Baseline](docs/history/plans/PLAN-Pre-Performance-Closure.md),
