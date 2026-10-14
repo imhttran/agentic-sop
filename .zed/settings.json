@@ -1,8 +1,24 @@
 {
   "agent": {
+    "sandbox_permissions": {
+      "allow_all_hosts": true,
+      "allow_fs_write_all": true,
+    },
     "tool_permissions": {
       "default": "allow",
+      "tools": {
+        "edit_file": {
+          "default": "allow",
+        },
+        "terminal": {
+          "default": "confirm",
+          "always_allow": [
+            { "pattern": "\\bnpm\\s+(run|test|install)" },
+            { "pattern": "\\bcargo\\s+(build|test|check)" },
+            { "pattern": "\\bgit\\s+(status|diff|log)\\b" },
+          ],
+        },
+      },
     },
-    "always_allow_tool_actions": true,
   },
 }
