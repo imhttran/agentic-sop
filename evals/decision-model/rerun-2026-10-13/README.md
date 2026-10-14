@@ -102,13 +102,13 @@ xychart-beta
   Nimble backup served). Rerun: CLEF 32, 0 fallbacks.
 - **Same scenarios consulted.** The attention gate is deterministic: the identical 32
   scenarios were consulted in both runs, and the other 29 were ineligible in both.
-- **Identical inputs, different outputs.** Among the 32 scenarios consulted in both runs,
-  the recommendation choice matched on 23/32 and the final governed action on 25/32. For
-  JEV, the raw status matched on 41/61 and the derived directive on 32/61. Because the
-  gate, evidence, prompt, and provider selection are identical, this demonstrates
-  **nondeterministic model output** (unrecorded sampling settings such as temperature/seed)
-  and/or a **silently changed model version** behind the same tag. The artifacts cannot
-  distinguish these two causes.
+- **Outputs differed across runs on identical inputs.** Among the 32 scenarios consulted in
+  both runs, the recommendation choice matched on 23/32 and the final governed action on
+  25/32; for JEV, the raw status matched on 41/61 and the derived directive on 32/61. The
+  gate, evidence, prompt, and provider selection were identical, but the **outputs differed
+  across runs**; because the frozen artifacts record no model version, digest, sampling
+  settings, or backend identity, the **missing model/settings metadata prevents separating
+  sampling variance from configuration changes.**
 - **Latency is not like-for-like.** The advisory added-latency median fell from 3207 ms to
   347 ms (p95 9728 → 411 ms). A 10× shift is consistent with a cold-vs-warm local model
   and/or a changed backend or model size, but the cause cannot be determined from the
@@ -131,20 +131,28 @@ xychart-beta
 
 ## Interpretations
 
-- Agreement with the oracle, operational agreement, and safety are separate measurements.
-  The advisory layer fails all three relative to deterministic Go; JEV fails exact and
-  operational agreement and regresses safety on false escalations, even though its unsafe
-  misses fell.
+- **Metric-specific findings (exact agreement, operational agreement, and safety measured
+  separately).** The deterministic baseline leads every metric in both runs. The advisory
+  layer is worse on exact agreement (40 → 39 vs 47/61) and operational agreement (13/32 →
+  12/32 consulted vs 60/61), adds false escalations (19 → 20), and produces **0 useful
+  escalations** in both runs. JEV is worse on exact agreement (8 → 11 vs 47/61) and
+  operational agreement (31 → 26 vs 60/61) and adds many false escalations (18 → 26), while
+  its unsafe misses fell (12 → 9). On safety semantics, the advisory layer's single unsafe
+  miss is a **withholding-label mismatch** (`BLOCK` vs `NEEDS_HUMAN`, both deny automatic
+  continuation), not an unsafe continuation; JEV's remaining unsafe misses are genuine —
+  all are `CONTINUE` directives that proceed automatically where the label wanted a human
+  boundary.
 - The lone JEV "improvement" is not a verified capability: it is the same terminal scenario
-  on which JEV's answer is **non-reproducible** (frozen `CONTINUE` vs rerun `NEEDS_HUMAN`),
+  on which JEV's answer **differed across runs** (frozen `CONTINUE` vs rerun `NEEDS_HUMAN`),
   and JEV reached the label only by landing on a _hypothetical_ `NEEDS_HUMAN` mapping it
   cannot justify against the terminal stop. Treated as a coincidence, not a demonstrated fix.
 - The advisory unsafe miss and the deterministic unsafe miss are the same scenario and are
   **posture-equivalent withholdings** (`BLOCK` vs `NEEDS_HUMAN` both deny automatic
   continuation); it is an exact-label mismatch, not an unsafe continuation.
-- The rerun cannot be compared to the frozen run as a like-for-like experiment because model
-  versions/settings were never recorded, the provider mix changed, and the outputs are
-  nondeterministic on identical inputs.
+- The rerun cannot be treated as a like-for-like comparison to the frozen run: model
+  versions/settings were never recorded and the provider mix changed, and although the
+  outputs differed across runs on identical inputs, sampling variance cannot be separated
+  from configuration changes with the recorded metadata.
 
 ## Evaluation limitations and gaps
 
@@ -164,8 +172,8 @@ xychart-beta
 - **Keep the deterministic Go layer as the execution-governance authority.** Nothing here
   changes that.
 - **Retain the existing DISABLE recommendation** for the CLEF/Nimble advisory layer and the
-  JEV shadow mapping. The rerun provides no verified improvement and shows the advisory
-  layer is not reproducible.
+  JEV shadow mapping. The rerun provides no verified improvement, and the advisory layer
+  produced different decisions across runs under the recorded conditions.
 - Before any future comparison is treated as evidence, **record model name/version, digest,
   sampling settings, backend URL, and provider mix** in the artifact.
 - If AI decision value is revisited, run the same configuration several times and report the

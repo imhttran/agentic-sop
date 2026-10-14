@@ -304,11 +304,13 @@ Scope
 - No applicable tests are reported explicitly.
 - Existing behavior remains backward-compatible.
 
-## Decision-model evaluation follow-ups (DME-FU-001–005)
+## Decision-model evaluation follow-ups (DME-FU-001–007)
 
 Follow-ups from the DME decision-model evaluation; the consolidated findings live in
 [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) and the promotion
 criteria in [AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTION-CRITERIA.md).
+The 2026-10-13 rerun evidence is preserved in
+[evals/decision-model/rerun-2026-10-13/README.md](../../evals/decision-model/rerun-2026-10-13/README.md).
 
 ## DME-FU-001 — Investigate `DecideEarly` handling of `INCOMPLETE`/`ERROR`
 
@@ -415,11 +417,66 @@ criteria in [AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTI
 - **Requirements:** Design a production-fidelity evaluation that replays the real
   early-JEV checkpoint (`internal/cli/early_jev.go` `runJEVCheckpoint`) over a corpus
   and records its actual outcomes (escalate / provider-failed / continue under
-  deterministic policy). Do not reuse the hypothetical `jev-shadow` metrics.
+  deterministic policy). Do not reuse the hypothetical `jev-shadow` metrics. Assess
+  JEV's intended evidence/code-review role separately under DME-FU-004; this item covers
+  only the production failure-disposition replay.
+- **Dependencies:** DME-FU-006 (evaluation metadata) for a reproducible run.
 - **Acceptance:** A scoped evaluation plan and reproducible evidence, or a documented
   decision to defer.
 - **Evidence:** [DECISION-MODEL-FINDINGS.md](../reference/DECISION-MODEL-FINDINGS.md) §5;
-  `internal/deceleval/jev.go` (`MapJEVHypotheticalDirective`).
+  `internal/deceleval/jev.go` (`MapJEVHypotheticalDirective`);
+  [rerun evidence](../../evals/decision-model/rerun-2026-10-13/README.md).
+
+## DME-FU-006 — Record evaluation metadata for model-backed runs
+
+- **Priority:** P2
+- **Status:** Proposed
+- **Problem:** The frozen advisory artifact (`paired-A-B.results.json`) records only the
+  provider names `clef`/`nimble`; it omits the model name/version/digest, sampling
+  settings, backend identity, provider mix, fallback reasons, harness revision, prompt
+  hash, and corpus hash for that arm. The 2026-10-13 rerun produced different decisions and
+  latencies on identical inputs (advisory exact 40 → 39, false escalations 19 → 20; JEV
+  exact 8 → 11, false escalations 18 → 26), but the absent metadata prevents separating
+  sampling variance from configuration changes and confirming like-for-like comparability.
+- **Requirements:** Before any model-backed evaluation is treated as evidence, capture a
+  machine-readable metadata block recording, per arm: model name/tag and content digest;
+  sampling settings (temperature, top-p, seed) where the backend supports them; backend
+  identity (host/port, no secrets); provider mix and per-record served provider; fallback
+  reasons; harness revision (for example `JEVEvaluationRevision`) and command; prompt hash;
+  and corpus hash. Any field a provider cannot supply (for example a seed) must be recorded
+  explicitly as `UNAVAILABLE`, never omitted or fabricated.
+- **Dependencies:** None. Blocks DME-FU-007.
+- **Acceptance:** The artifact schema carries every listed field (or an explicit
+  `UNAVAILABLE`), a committed example artifact includes them, and a test asserts they are
+  present (or explicitly unavailable) for a model-backed run.
+- **Evidence:** [rerun evidence](../../evals/decision-model/rerun-2026-10-13/README.md)
+  §Configuration differences; `evals/decision-model/paired-A-B.results.json` (provider-only
+  records).
+
+## DME-FU-007 — Repeated-run evaluation for model-backed configurations
+
+- **Priority:** P2
+- **Status:** Proposed (blocked on DME-FU-006)
+- **Problem:** Each evaluated AI configuration was run once. A single before/after pair
+  cannot distinguish a stable capability from run-to-run variation, and the 2026-10-13
+  rerun changed advisory exact agreement (40 → 39), false escalations (19 → 20), and JEV
+  exact agreement (8 → 11), false escalations (18 → 26) on identical inputs under an
+  unrecorded configuration. Per-scenario consistency, escalation behavior, and latency
+  distributions are therefore unknown.
+- **Requirements:** With the configuration held fixed and fully recorded (DME-FU-006), run
+  each model-backed configuration N times (N ≥ 5) over the frozen corpus and report, per
+  configuration: per-scenario agreement (exact-label, operational, and directive/choice);
+  per-scenario decision stability (modal answer and flip rate); escalation and
+  false/unsafe-miss counts with dispersion; and median/p95 latency distributions with
+  variance. Report the deterministic baseline alongside as a zero-variance reference, and
+  preserve the frozen corpus, labels, and the DISABLE recommendation. Do not change
+  production routing or enable any AI layer as a governance authority.
+- **Dependencies:** DME-FU-006 (complete evaluation metadata). Blocked until it lands.
+- **Acceptance:** A reproducible multi-run harness that records every run's metadata and
+  emits per-scenario and aggregate distributions with an explicit variance/uncertainty
+  measure; or a documented decision to defer.
+- **Evidence:** [rerun evidence](../../evals/decision-model/rerun-2026-10-13/README.md);
+  frozen `paired-A-B.results.json` vs the rerun.
 
 ## Developer Preview carry-forward (from the superseded plan)
 
