@@ -548,9 +548,15 @@ func plannerLifecycleGate(ctx context.Context, dir string, cfg config.Config, a 
 		return true, plannerResume(ctx, dir, cfg, a, d, saver, task, sess, svc, q.ID, stdout, stderr)
 	case question.ActionContinue:
 		return true, plannerResume(ctx, dir, cfg, a, d, saver, task, sess, svc, q.ID, stdout, stderr)
+	case question.ActionRoundsExhausted:
+		// The planner round limit is exhausted. Preserve an explicit paused/human boundary
+		// with evidence rather than falling through to the normal lifecycle (which would
+		// retry the task) or looping. No approval is implied by this park.
+		parkPlannerHuman(ctx, dir, task, q.ID, "planner round limit reached; the planner loop is paused for a human decision", stdout, stderr)
+		return true, exitError
 	default:
-		// Human gate, cancellation, terminal task, stale binding, exhausted rounds: the
-		// normal lifecycle owns the task.
+		// Human gate, cancellation, terminal task, or stale binding: the normal lifecycle
+		// owns the task.
 		return false, 0
 	}
 }
@@ -641,7 +647,7 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 		fmt.Fprintf(stdout, "%s planner: effect already present; completion recorded without replay\n", task.ID)
 		return exitOK
 	case markerUncertain:
-		parkPlannerForReview(ctx, dir, task, claimed, "uncertain planner continuation: the success marker is unreadable or malformed", stdout, stderr)
+		parkPlannerHuman(ctx, dir, task, claimed.ID, "uncertain planner continuation: the success marker is unreadable or malformed", stdout, stderr)
 		return exitError
 	}
 	// A prior attempt BEGAN execution (start marker present or unreadable) and may have
@@ -649,7 +655,7 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 	// established, so recovery stops for human review rather than replaying the effect or
 	// marking completion.
 	if plannerEffectStartedState(dir, task.ID, claimed.ID) != markerAbsent {
-		parkPlannerForReview(ctx, dir, task, claimed, "uncertain planner continuation: a prior resumed attempt did not record success", stdout, stderr)
+		parkPlannerHuman(ctx, dir, task, claimed.ID, "uncertain planner continuation: a prior resumed attempt did not record success", stdout, stderr)
 		return exitError
 	}
 
@@ -736,13 +742,14 @@ func plannerContinuationAllowed(svc *question.Service, dir string, cfg config.Co
 	return action == question.ActionApplyThenContinue || action == question.ActionContinue
 }
 
-// parkPlannerForReview stops an uncertain continuation for human review: it parks the run
-// at the existing WAITING_FOR_HUMAN boundary and records an explicit approval request. The
-// continuation is neither replayed nor completed; the human owns the decision.
-func parkPlannerForReview(ctx context.Context, dir string, task *domain.Task, cont *question.Continuation, reason string, stdout, stderr io.Writer) {
+// parkPlannerHuman stops a planner decision for explicit human review: it parks the run at
+// the existing WAITING_FOR_HUMAN boundary and records an explicit approval request. The
+// continuation (if any) is neither replayed nor completed; the human owns the decision.
+// subject names the record (a continuation or question id) in the diagnostic.
+func parkPlannerHuman(ctx context.Context, dir string, task *domain.Task, subject, reason string, stdout, stderr io.Writer) {
 	if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.WaitingForHuman); err != nil {
 		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
 	}
 	recordHumanApprovalRequest(ctx, runpkg.At(runpkg.Dir(dir, task.ID)), task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
-	fmt.Fprintf(stdout, "%s planner: uncertain execution for %s; stopped for human review (no replay, no completion)\n", task.ID, cont.ID)
+	fmt.Fprintf(stdout, "%s planner: stopped for human review (%s): %s\n", task.ID, subject, oneLine(reason))
 }
