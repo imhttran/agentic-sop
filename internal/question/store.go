@@ -50,6 +50,32 @@ type Store interface {
 	// so a submission's validation, deduplication, insertion, state advance, and audit
 	// are one transaction rather than several separately locked calls.
 	Atomic(fn func(tx Store) (bool, error)) error
+	// CreateContinuation records a continuation, idempotent on its stable ID: an
+	// existing ID returns the stored record unchanged.
+	CreateContinuation(c *Continuation) (*Continuation, error)
+	// GetContinuation reads a continuation by ID.
+	GetContinuation(id string) (*Continuation, error)
+	// ListContinuations lists continuations in a state ("" lists all), in order.
+	ListContinuations(state ContinuationState) ([]*Continuation, error)
+	// ClaimContinuation claims, or reclaims after lease expiry, a continuation for a
+	// worker. On success it increments the generation and the attempt count. It
+	// returns the record and whether it was claimed; a completed continuation or an
+	// exhausted attempt budget yields claimed=false.
+	ClaimContinuation(id, worker string, now time.Time, lease time.Duration, maxAttempts int) (*Continuation, bool, error)
+	// VerifyClaim reports whether worker still holds the current generation of id.
+	// It is the fence a worker checks before mutating the run stage/checkpoint.
+	VerifyClaim(id string, generation int, worker string) (bool, error)
+	// CompleteContinuation records completion under the worker's generation. It is
+	// fenced: a stale generation, a different worker, or a non-CLAIMED state yields
+	// completed=false without mutating the record.
+	CompleteContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error)
+	// FenceAndMutate coordinates claim verification with a protected mutation: it runs
+	// mutate() only while the caller still holds the presented generation, under the
+	// store's cross-process lock, so a reclaimed worker cannot write afterward. The
+	// mutation is the caller's checkpoint write; it is not one transaction with the
+	// store's own commit across separate files, but no competing claim or reclaim can
+	// interleave between the verification and the mutation.
+	FenceAndMutate(id string, generation int, worker string, mutate func() error) error
 }
 
 // MemoryStore is the in-memory Store implementation used by the application
@@ -63,6 +89,8 @@ type MemoryStore struct {
 	ansOrder  []string
 	outcomes  map[string]*Outcome
 	outOrder  []string
+	conts     map[string]*Continuation
+	contOrder []string
 	nextID    int
 	now       func() time.Time
 }
@@ -74,6 +102,7 @@ func NewMemoryStore() *MemoryStore {
 		byKey:     map[string]string{},
 		answers:   map[string]*Answer{},
 		outcomes:  map[string]*Outcome{},
+		conts:     map[string]*Continuation{},
 		now:       time.Now,
 	}
 }
@@ -363,6 +392,154 @@ func (m *MemoryStore) Outcomes(questionID string) ([]*Outcome, error) {
 func (m *MemoryStore) Atomic(fn func(tx Store) (bool, error)) error {
 	_, err := fn(m)
 	return err
+}
+
+// CreateContinuation implements Store. Idempotent on the stable ID.
+func (m *MemoryStore) CreateContinuation(c *Continuation) (*Continuation, error) {
+	if c == nil {
+		return nil, fmt.Errorf("%w: nil continuation", ErrInvalidRecord)
+	}
+	if strings.TrimSpace(c.ID) == "" {
+		return nil, fmt.Errorf("%w: missing id", ErrInvalidRecord)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if cur, ok := m.conts[c.ID]; ok {
+		cp := *cur
+		return &cp, nil
+	}
+	stored := *c
+	stored.ContractVersion = ContractVersion
+	if stored.State == "" {
+		stored.State = ContinuationPending
+	}
+	if err := stored.Validate(); err != nil {
+		return nil, err
+	}
+	stored.CreatedAt = m.stamp()
+	stored.UpdatedAt = stored.CreatedAt
+	m.conts[stored.ID] = &stored
+	m.contOrder = append(m.contOrder, stored.ID)
+	cp := stored
+	return &cp, nil
+}
+
+// GetContinuation implements Store.
+func (m *MemoryStore) GetContinuation(id string) (*Continuation, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	return &cp, nil
+}
+
+// ListContinuations implements Store.
+func (m *MemoryStore) ListContinuations(state ContinuationState) ([]*Continuation, error) {
+	if state != "" && !state.Known() {
+		return nil, fmt.Errorf("%w: %q", ErrUnknownState, state)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ids := append([]string(nil), m.contOrder...)
+	sort.Strings(ids)
+	var out []*Continuation
+	for _, id := range ids {
+		c := m.conts[id]
+		if c == nil || (state != "" && c.State != state) {
+			continue
+		}
+		cp := *c
+		out = append(out, &cp)
+	}
+	return out, nil
+}
+
+// ClaimContinuation implements Store. It claims a PENDING continuation or reclaims a
+// CLAIMED one whose lease has expired, incrementing the generation so any previous
+// worker is fenced.
+func (m *MemoryStore) ClaimContinuation(id, worker string, now time.Time, lease time.Duration, maxAttempts int) (*Continuation, bool, error) {
+	if strings.TrimSpace(worker) == "" {
+		return nil, false, fmt.Errorf("%w: empty worker", ErrInvalidRecord)
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	switch {
+	case c.State == ContinuationCompleted:
+		return &cp, false, nil
+	case c.State == ContinuationPending:
+	case c.State == ContinuationClaimed && leaseExpired(c, now, lease):
+	default:
+		return &cp, false, nil // actively claimed by another worker
+	}
+	if maxAttempts > 0 && c.Attempts >= maxAttempts {
+		return &cp, false, fmt.Errorf("%w: %q", ErrClaimBudgetExhausted, id)
+	}
+	c.State = ContinuationClaimed
+	c.Generation++
+	c.ClaimedBy = strings.TrimSpace(worker)
+	c.ClaimedAt = now.UTC()
+	c.Attempts++
+	c.UpdatedAt = now.UTC()
+	cp = *c
+	return &cp, true, nil
+}
+
+// VerifyClaim implements Store.
+func (m *MemoryStore) VerifyClaim(id string, generation int, worker string) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	return c.State == ContinuationClaimed && c.Generation == generation && c.ClaimedBy == strings.TrimSpace(worker), nil
+}
+
+// CompleteContinuation implements Store. It reports transitioned=true only when it
+// moved CLAIMED -> COMPLETED for the presented generation; an already-completed or
+// fenced call returns transitioned=false with the current record.
+func (m *MemoryStore) CompleteContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	if c.State == ContinuationCompleted {
+		return &cp, false, nil
+	}
+	if c.State != ContinuationClaimed || c.Generation != generation || c.ClaimedBy != strings.TrimSpace(worker) {
+		return &cp, false, nil // fenced
+	}
+	c.State = ContinuationCompleted
+	c.CompletedAt = now.UTC()
+	c.UpdatedAt = now.UTC()
+	cp = *c
+	return &cp, true, nil
+}
+
+// FenceAndMutate implements Store. It verifies the claim and runs mutate() while
+// holding the store lock, so no competing claim/reclaim can interleave.
+func (m *MemoryStore) FenceAndMutate(id string, generation int, worker string, mutate func() error) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	if c.State != ContinuationClaimed || c.Generation != generation || c.ClaimedBy != strings.TrimSpace(worker) {
+		return fmt.Errorf("%w: %q", ErrClaimFenced, id)
+	}
+	return mutate()
 }
 
 // reserveNextIDLocked returns the next monotonic record ordinal. Callers hold the

@@ -80,12 +80,15 @@ const (
 	// OutcomeRejected: the submission was refused for a non-stale reason (for
 	// example the question is already terminal, or the body was empty).
 	OutcomeRejected OutcomeKind = "REJECTED"
+	// OutcomeApplied: the answer was applied (ANSWERED -> APPLIED) and a durable
+	// continuation was recorded. Application is not execution and is not an approval.
+	OutcomeApplied OutcomeKind = "APPLIED"
 )
 
 // Known reports whether k is one of the closed submission outcomes.
 func (k OutcomeKind) Known() bool {
 	switch k {
-	case OutcomeAccepted, OutcomeDuplicate, OutcomeStale, OutcomeRejected:
+	case OutcomeAccepted, OutcomeDuplicate, OutcomeStale, OutcomeRejected, OutcomeApplied:
 		return true
 	default:
 		return false
@@ -95,7 +98,7 @@ func (k OutcomeKind) Known() bool {
 // AllOutcomes returns the closed outcome vocabulary in a stable order, so CLI
 // help and MCP schemas can enumerate exactly the contract's outcomes.
 func AllOutcomes() []OutcomeKind {
-	return []OutcomeKind{OutcomeAccepted, OutcomeDuplicate, OutcomeStale, OutcomeRejected}
+	return []OutcomeKind{OutcomeAccepted, OutcomeDuplicate, OutcomeStale, OutcomeRejected, OutcomeApplied}
 }
 
 // Fail-closed sentinels. None of these is ever an approval or a run stage.

@@ -9,6 +9,9 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"time"
+
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 )
 
 // ErrLockUnsupported reports that the platform cannot provide the advisory file
@@ -39,10 +42,11 @@ type FileStore struct {
 
 // fileState is the on-disk shape.
 type fileState struct {
-	ContractVersion int         `json:"contract_version"`
-	Questions       []*Question `json:"questions"`
-	Answers         []*Answer   `json:"answers"`
-	Outcomes        []*Outcome  `json:"outcomes,omitempty"`
+	ContractVersion int             `json:"contract_version"`
+	Questions       []*Question     `json:"questions"`
+	Answers         []*Answer       `json:"answers"`
+	Outcomes        []*Outcome      `json:"outcomes,omitempty"`
+	Continuations   []*Continuation `json:"continuations,omitempty"`
 }
 
 // OpenFileStore opens (or creates) a durable store at path. A missing file is an
@@ -137,6 +141,7 @@ func (f *FileStore) persist() error {
 		Questions:       f.mem.allQuestions(),
 		Answers:         f.mem.allAnswers(),
 		Outcomes:        f.mem.allOutcomes(),
+		Continuations:   f.mem.allContinuations(),
 	}
 	data, err := json.MarshalIndent(st, "", "  ")
 	if err != nil {
@@ -284,6 +289,108 @@ func (f *FileStore) Outcomes(questionID string) ([]*Outcome, error) {
 	return f.mem.Outcomes(questionID)
 }
 
+// CreateContinuation implements Store with write-through persistence.
+func (f *FileStore) CreateContinuation(c *Continuation) (*Continuation, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	out, oerr := f.mem.CreateContinuation(c)
+	if oerr == nil {
+		if perr := f.persist(); perr != nil {
+			return out, perr
+		}
+	}
+	return out, oerr
+}
+
+// GetContinuation implements Store.
+func (f *FileStore) GetContinuation(id string) (*Continuation, error) {
+	done, err := f.beginRead()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	return f.mem.GetContinuation(id)
+}
+
+// ListContinuations implements Store.
+func (f *FileStore) ListContinuations(state ContinuationState) ([]*Continuation, error) {
+	done, err := f.beginRead()
+	if err != nil {
+		return nil, err
+	}
+	defer done()
+	return f.mem.ListContinuations(state)
+}
+
+// ClaimContinuation implements Store with write-through persistence.
+func (f *FileStore) ClaimContinuation(id, worker string, now time.Time, lease time.Duration, maxAttempts int) (*Continuation, bool, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, false, err
+	}
+	defer done()
+	out, claimed, cerr := f.mem.ClaimContinuation(id, worker, now, lease, maxAttempts)
+	if cerr != nil {
+		return out, false, cerr
+	}
+	if claimed {
+		if perr := f.persist(); perr != nil {
+			return out, false, perr
+		}
+	}
+	return out, claimed, nil
+}
+
+// VerifyClaim implements Store.
+func (f *FileStore) VerifyClaim(id string, generation int, worker string) (bool, error) {
+	done, err := f.beginRead()
+	if err != nil {
+		return false, err
+	}
+	defer done()
+	return f.mem.VerifyClaim(id, generation, worker)
+}
+
+// CompleteContinuation implements Store with write-through persistence.
+func (f *FileStore) CompleteContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, false, err
+	}
+	defer done()
+	out, transitioned, cerr := f.mem.CompleteContinuation(id, generation, worker, now)
+	if cerr != nil {
+		return out, false, cerr
+	}
+	if transitioned {
+		if perr := f.persist(); perr != nil {
+			return out, false, perr
+		}
+	}
+	return out, transitioned, nil
+}
+
+// FenceAndMutate implements Store. It verifies the claim and runs mutate() while
+// holding the cross-process lock, so a reclaimed worker cannot write afterward.
+func (f *FileStore) FenceAndMutate(id string, generation int, worker string, mutate func() error) error {
+	done, err := f.beginWrite()
+	if err != nil {
+		return err
+	}
+	defer done()
+	held, verr := f.mem.VerifyClaim(id, generation, worker)
+	if verr != nil {
+		return verr
+	}
+	if !held {
+		return fmt.Errorf("%w: %q", ErrClaimFenced, id)
+	}
+	return mutate()
+}
+
 // loadInto reads the on-disk state into m, fail-closed.
 func loadInto(m *MemoryStore, path string) error {
 	data, err := os.ReadFile(path)
@@ -321,45 +428,21 @@ func loadInto(m *MemoryStore, path string) error {
 			return err
 		}
 	}
+	for _, c := range st.Continuations {
+		c.ContractVersion = ContractVersion
+		if err := m.insertLoadedContinuation(c); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 
 // atomicWriteFile writes data to path atomically: a temp file in the same directory
 // is written, fsynced, renamed over the destination, and the directory is fsynced, so
-// a crash cannot leave a truncated document and the most recent write is durable.
+// a crash cannot leave a truncated document and the most recent write is durable. It
+// delegates to the shared durable-write primitive.
 func atomicWriteFile(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if d, derr := os.Open(dir); derr == nil {
-		_ = d.Sync()
-		_ = d.Close()
-	}
-	return nil
+	return durablefs.WriteFile(path, data)
 }
 
 // --- MemoryStore helpers used by FileStore (load/export) ---
@@ -456,6 +539,37 @@ func (m *MemoryStore) allOutcomes() []*Outcome {
 	for _, id := range ids {
 		if o := m.outcomes[id]; o != nil {
 			cp := *o
+			out = append(out, &cp)
+		}
+	}
+	return out
+}
+
+// insertLoadedContinuation restores a persisted continuation.
+func (m *MemoryStore) insertLoadedContinuation(c *Continuation) error {
+	if c == nil {
+		return fmt.Errorf("%w: nil continuation", ErrInvalidRecord)
+	}
+	if err := c.Validate(); err != nil {
+		return err
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.conts[c.ID] = c
+	m.contOrder = append(m.contOrder, c.ID)
+	return nil
+}
+
+// allContinuations returns every continuation in a stable order for persistence.
+func (m *MemoryStore) allContinuations() []*Continuation {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	ids := append([]string(nil), m.contOrder...)
+	sort.Strings(ids)
+	out := make([]*Continuation, 0, len(ids))
+	for _, id := range ids {
+		if c := m.conts[id]; c != nil {
+			cp := *c
 			out = append(out, &cp)
 		}
 	}

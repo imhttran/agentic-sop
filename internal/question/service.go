@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ContinuationDispatch is the continuation dispatcher invoked after a question
@@ -30,11 +31,20 @@ func (f DispatchFunc) DispatchContinuation(ctx context.Context, questionID strin
 type Service struct {
 	store      Store
 	dispatcher ContinuationDispatch
+	now        func() time.Time
 }
 
 // NewService returns a service over the given store and optional dispatcher.
 func NewService(store Store, dispatcher ContinuationDispatch) *Service {
-	return &Service{store: store, dispatcher: dispatcher}
+	return &Service{store: store, dispatcher: dispatcher, now: time.Now}
+}
+
+// clock returns the service clock in UTC.
+func (s *Service) clock() time.Time {
+	if s.now == nil {
+		return time.Now().UTC()
+	}
+	return s.now().UTC()
 }
 
 // CreateQuestion records a PENDING question. The duplicate/stale outcomes are
@@ -105,11 +115,41 @@ func (s *Service) ListQuestions(state State) ([]*Question, error) {
 // Applying an already-APPLIED question is deterministic and idempotent: the
 // existing APPLIED record is returned and continuation is NOT dispatched again.
 func (s *Service) ApplyAnswer(ctx context.Context, questionID string) (*Question, error) {
-	// 1) Atomically record the ANSWERED -> APPLIED transition. The store's
-	// compare-and-set is the single point that decides who applies: at most one
-	// caller (even under concurrency) observes applied=true, so continuation is
-	// dispatched at most once per applied question.
-	q, applied, err := s.store.ApplyTransition(questionID, StateAnswered, StateApplied)
+	var (
+		q       *Question
+		applied bool
+	)
+	err := s.store.Atomic(func(tx Store) (bool, error) {
+		// 1) Atomically record the ANSWERED -> APPLIED transition. The store's
+		// compare-and-set is the single point that decides who applies: at most one
+		// caller observes applied=true, so continuation is dispatched at most once.
+		cur, ok, aerr := tx.ApplyTransition(questionID, StateAnswered, StateApplied)
+		if aerr != nil {
+			return false, aerr
+		}
+		q, applied = cur, ok
+		if !ok {
+			return false, nil
+		}
+		// 2) The applied answer owes a durable continuation, created in the SAME
+		// transaction, so an observer or crash never sees APPLIED without a pending
+		// continuation. The stable ID makes repeated application target one record.
+		if _, cerr := tx.CreateContinuation(&Continuation{
+			ID:          ContinuationID(cur.ID, cur.RunEpoch),
+			QuestionID:  cur.ID,
+			TaskID:      cur.Identity,
+			RunID:       cur.RunID,
+			RunEpoch:    cur.RunEpoch,
+			ReturnStage: cur.ReturnStage,
+			State:       ContinuationPending,
+		}); cerr != nil {
+			return false, cerr
+		}
+		if aerr := tx.AppendOutcome(&Outcome{QuestionID: cur.ID, Kind: OutcomeApplied, Reason: "answer applied"}); aerr != nil {
+			return false, aerr
+		}
+		return true, nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -129,14 +169,52 @@ func (s *Service) ApplyAnswer(ctx context.Context, questionID string) (*Question
 		}
 	}
 
-	// 2) Only after the APPLIED record is durably recorded does continuation
-	// dispatch. An observer between the two steps always sees APPLIED first.
+	// 3) Continuation dispatch happens only after the applied+continuation transaction
+	// is durable. It is an advisory in-process trigger; the durable continuation record
+	// is what recovery reconciles.
 	if s.dispatcher != nil {
-		if err := s.dispatcher.DispatchContinuation(ctx, q.ID); err != nil {
-			return q, err
+		if derr := s.dispatcher.DispatchContinuation(ctx, q.ID); derr != nil {
+			return q, derr
 		}
 	}
 	return q, nil
+}
+
+// ClaimContinuation claims or reclaims a continuation for worker under a lease. It
+// increments the claim generation, so any previous worker is fenced.
+func (s *Service) ClaimContinuation(id, worker string, lease time.Duration) (*Continuation, bool, error) {
+	return s.store.ClaimContinuation(id, worker, s.clock(), lease, DefaultContinuationMaxAttempts)
+}
+
+// VerifyClaim reports whether worker still holds the current generation of a
+// continuation. It is the fence a worker checks before mutating the run
+// stage/checkpoint, so an expired worker cannot mutate state after it lost the lead.
+func (s *Service) VerifyClaim(id string, generation int, worker string) (bool, error) {
+	return s.store.VerifyClaim(id, generation, worker)
+}
+
+// CompleteContinuation records completion under the worker's generation, fenced. It
+// reports transitioned=true only on an actual CLAIMED -> COMPLETED transition.
+func (s *Service) CompleteContinuation(id string, generation int, worker string) (*Continuation, bool, error) {
+	return s.store.CompleteContinuation(id, generation, worker, s.clock())
+}
+
+// FenceAndMutate coordinates claim verification with a protected mutation (the
+// caller's checkpoint write): mutate runs only while the caller holds the presented
+// generation, under the store's cross-process lock. It replaces a separate
+// VerifyClaim-then-write, which a reclaim could interleave.
+func (s *Service) FenceAndMutate(id string, generation int, worker string, mutate func() error) error {
+	return s.store.FenceAndMutate(id, generation, worker, mutate)
+}
+
+// Continuations lists continuations in a state ("" lists all).
+func (s *Service) Continuations(state ContinuationState) ([]*Continuation, error) {
+	return s.store.ListContinuations(state)
+}
+
+// Continuation returns the continuation for a question in a run epoch.
+func (s *Service) Continuation(questionID, runEpoch string) (*Continuation, error) {
+	return s.store.GetContinuation(ContinuationID(questionID, runEpoch))
 }
 
 // RejectQuestion records REJECTED on the question with a reason.

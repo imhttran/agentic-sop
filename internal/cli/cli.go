@@ -52,6 +52,12 @@ type deps struct {
 	newAgent     func(harness, provider, model string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
+	// plannerAnswer carries the applied planner answer into a resumed stage's
+	// implementation input. It is empty for ordinary runs.
+	plannerAnswer string
+	// resumeFrom, when set to a supported stage, tells the lifecycle to resume at that
+	// stage without repeating earlier completed stages (planner resume).
+	resumeFrom string
 	// snapshotRepository observes file content around IMPLEMENT/FIX for providers
 	// which do not return invocation-scoped mutation paths. It is read-only.
 	snapshotRepository func(context.Context, string) (map[string]string, error)
@@ -246,6 +252,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runQuestion(rest, stdout, stderr, d)
 	case "answer":
 		return runAnswer(rest, stdout, stderr, d)
+	case "planner":
+		return runPlanner(rest, stdout, stderr, d)
 	case "plan":
 		return runPlan(rest, stdout, stderr, d)
 	case "tasks":
@@ -333,6 +341,7 @@ Commands:
             task skip <id> --reason R --evidence F marks it NOT_REQUIRED
   question  show a planner question, or list questions (question list [--state S])
   answer    record a planner answer (records ANSWERED only; never applies or approves)
+  planner   planner continuation: ask | status | continue (opt-in; SPIKE-004)
   plan      generate PLAN.md, or sop plan activate|supersede|complete|historicalize
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)

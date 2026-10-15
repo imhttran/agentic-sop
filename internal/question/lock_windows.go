@@ -14,3 +14,6 @@ func lockFile(f *os.File) error { return ErrLockUnsupported }
 
 // unlockFile is never reached when lockFile fails closed, but is defined for parity.
 func unlockFile(f *os.File) error { return nil }
+
+// tryLockFile fails closed on Windows, like lockFile.
+func tryLockFile(f *os.File) error { return ErrLockUnsupported }

@@ -1,0 +1,748 @@
+package cli
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/question"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/store"
+)
+
+// plannerWorker is the identity the CLI records when it claims a continuation.
+const plannerWorker = "sop-planner-cli"
+
+// plannerLease bounds a CLI-side claim; the durable record, not the lease, is what
+// recovery reconciles.
+const plannerLease = 30 * time.Second
+
+// plannerSettings resolves the opt-in planner settings from configuration, applying
+// the built-in round-limit default.
+func plannerSettings(cfg config.Config) question.PlannerSettings {
+	limit := cfg.Planner.RoundLimit
+	if limit == 0 {
+		limit = 3
+	}
+	return question.PlannerSettings{
+		Enabled:        cfg.Planner.Enabled,
+		Mode:           cfg.Planner.Mode,
+		RoundLimit:     limit,
+		PauseOnTimeout: cfg.Planner.PauseOnTimeout,
+	}
+}
+
+// currentRunEpoch returns a task run's creation timestamp, or "" when none exists.
+func currentRunEpoch(dir, taskID string) string {
+	data, err := os.ReadFile(filepath.Join(dir, config.DirName, "runs", taskID, "state.json"))
+	if err != nil {
+		return ""
+	}
+	var st struct {
+		CreatedAt string `json:"created_at"`
+	}
+	if err := json.Unmarshal(data, &st); err != nil {
+		return ""
+	}
+	return st.CreatedAt
+}
+
+// plannerHumanGate reports whether the task is at a human decision boundary.
+func plannerHumanGate(dir string, task *domain.Task) bool {
+	if stage, ok := runpkg.Load(dir, task.ID); ok && stage == runpkg.WaitingForHuman {
+		return true
+	}
+	if req, ok := runpkg.At(runpkg.Dir(dir, task.ID)).Approval(); ok && req.Status == domain.ApprovalPending {
+		return true
+	}
+	return false
+}
+
+// questionsForTask lists every question whose task identity is taskID, across states.
+func questionsForTask(svc *question.Service, taskID string) ([]*question.Question, error) {
+	var out []*question.Question
+	for _, st := range question.AllStates() {
+		qs, err := svc.ListQuestions(st)
+		if err != nil {
+			return nil, err
+		}
+		for _, q := range qs {
+			if strings.TrimSpace(q.Identity) == taskID {
+				out = append(out, q)
+			}
+		}
+	}
+	return out, nil
+}
+
+// activeQuestion picks the task's actionable question: a PENDING one first, then
+// ANSWERED, then APPLIED.
+func activeQuestion(qs []*question.Question) *question.Question {
+	for _, want := range []question.State{question.StatePending, question.StateAnswered, question.StateApplied} {
+		for _, q := range qs {
+			if q.State == want {
+				return q
+			}
+		}
+	}
+	return nil
+}
+
+// continuationFor returns the continuation for a question, or nil when absent.
+func continuationFor(svc *question.Service, q *question.Question) *question.Continuation {
+	if q == nil {
+		return nil
+	}
+	c, err := svc.Continuation(q.ID, q.RunEpoch)
+	if err != nil {
+		return nil
+	}
+	return c
+}
+
+// runPlanner dispatches `sop planner <ask|status|continue>`.
+func runPlanner(args []string, stdout, stderr io.Writer, d deps) int {
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, "usage: sop planner <ask|status|continue> ...")
+		return exitUsage
+	}
+	switch args[0] {
+	case "ask":
+		return runPlannerAsk(args[1:], stdout, stderr, d)
+	case "status":
+		return runPlannerStatus(args[1:], stdout, stderr, d)
+	case "continue":
+		return runPlannerContinue(args[1:], stdout, stderr, d)
+	default:
+		fmt.Fprintln(stderr, "usage: sop planner <ask|status|continue> ...")
+		return exitUsage
+	}
+}
+
+// runPlannerAsk creates an executor-style question bound to live state and parks the
+// run at WAITING_FOR_PLANNER. It never executes or approves anything.
+func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
+	usage := "usage: sop planner ask <task-id> --question TEXT [--kind K] [--option O]... [--return-stage S]"
+	if len(args) < 1 {
+		fmt.Fprintln(stderr, usage)
+		return exitUsage
+	}
+	taskID := args[0]
+	body, kind, stage := "", "", runpkg.Implementing
+	var options []string
+	for i := 1; i < len(args); i++ {
+		need := func() (string, bool) {
+			if i+1 >= len(args) {
+				return "", false
+			}
+			return args[i+1], true
+		}
+		switch args[i] {
+		case "--question":
+			v, ok := need()
+			if !ok {
+				fmt.Fprintln(stderr, usage)
+				return exitUsage
+			}
+			body, i = v, i+1
+		case "--kind":
+			v, ok := need()
+			if !ok {
+				fmt.Fprintln(stderr, usage)
+				return exitUsage
+			}
+			kind, i = v, i+1
+		case "--option":
+			v, ok := need()
+			if !ok {
+				fmt.Fprintln(stderr, usage)
+				return exitUsage
+			}
+			options, i = append(options, v), i+1
+		case "--return-stage":
+			v, ok := need()
+			if !ok {
+				fmt.Fprintln(stderr, usage)
+				return exitUsage
+			}
+			stage, i = runpkg.Stage(v), i+1
+		default:
+			fmt.Fprintln(stderr, usage)
+			return exitUsage
+		}
+	}
+	if strings.TrimSpace(body) == "" {
+		fmt.Fprintln(stderr, usage)
+		return exitUsage
+	}
+	if !supportedReturnStage(string(stage)) {
+		fmt.Fprintf(stderr, "planner: unsupported return stage %q\n", stage)
+		return exitError
+	}
+
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	if !cfg.Planner.Enabled {
+		fmt.Fprintln(stderr, "planner: planner mode is disabled (set planner.enabled: true)")
+		return exitError
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+	task, err := st.Get(taskID)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	if task.IsSatisfied() {
+		fmt.Fprintf(stderr, "planner: task %s is %s; nothing to ask\n", taskID, task.Status)
+		return exitError
+	}
+	if plannerHumanGate(dir, task) {
+		fmt.Fprintf(stderr, "planner: task %s is at a human gate; the human decision owns it\n", taskID)
+		return exitError
+	}
+
+	svc, fs, err := plannerService(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	_ = fs
+	existing, err := questionsForTask(svc, taskID)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	if strings.TrimSpace(kind) == "" {
+		kind = fmt.Sprintf("planner-round-%d", len(existing)+1)
+	}
+	if len(existing)+1 > plannerSettings(cfg).RoundLimit {
+		fmt.Fprintf(stderr, "planner: task %s reached the planner round limit (%d)\n", taskID, plannerSettings(cfg).RoundLimit)
+		return exitError
+	}
+
+	q, err := svc.CreateQuestion(&question.Question{
+		Identity:        taskID,
+		Kind:            kind,
+		Body:            strings.TrimSpace(body),
+		Options:         options,
+		SubmittedBy:     "executor",
+		Project:         projectIdentity(dir),
+		RunID:           taskID,
+		RunEpoch:        currentRunEpoch(dir, taskID),
+		PlanRevision:    currentPlanRevision(dir),
+		RepoFingerprint: repoFingerprint(dir),
+		ReturnStage:     string(stage),
+		Revision:        1,
+	})
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	if err := runpkg.SetStageOnExisting(dir, taskID, runpkg.WaitingForPlanner); err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	fmt.Fprintf(stdout, "asked %s (PENDING) task %s; run paused at WAITING_FOR_PLANNER\n", q.ID, taskID)
+	return exitOK
+}
+
+// runPlannerStatus reports each task's planner action without mutating anything.
+func runPlannerStatus(args []string, stdout, stderr io.Writer, d deps) int {
+	jsonOut := false
+	for _, a := range args {
+		if a == "--json" {
+			jsonOut = true
+			continue
+		}
+		fmt.Fprintln(stderr, "usage: sop planner status [--json]")
+		return exitUsage
+	}
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+	svc, _, err := plannerService(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	tasks, err := st.List()
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	settings := plannerSettings(cfg)
+	type row struct {
+		Task       string `json:"task"`
+		Question   string `json:"question,omitempty"`
+		State      string `json:"question_state,omitempty"`
+		Action     string `json:"action"`
+		Reason     string `json:"reason,omitempty"`
+		ReturnStag string `json:"return_stage,omitempty"`
+	}
+	var rows []row
+	for _, task := range tasks {
+		v, verr := plannerView(dir, svc, task)
+		if verr != nil {
+			fmt.Fprintf(stderr, "planner: %v\n", verr)
+			return exitError
+		}
+		action, reason := question.Decide(settings, v)
+		r := row{Task: task.ID, Action: string(action), Reason: reason}
+		if v.Question != nil {
+			r.Question = v.Question.ID
+			r.State = string(v.Question.State)
+			r.ReturnStag = v.Question.ReturnStage
+		}
+		rows = append(rows, r)
+	}
+	if jsonOut {
+		enc := json.NewEncoder(stdout)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(map[string]any{"version": 1, "tasks": rows}); err != nil {
+			fmt.Fprintf(stderr, "planner: %v\n", err)
+			return exitError
+		}
+		return exitOK
+	}
+	for _, r := range rows {
+		fmt.Fprintf(stdout, "%s  %s  %s  %s\n", r.Task, actionOrNone(r.Action), r.State, oneLine(r.Reason))
+	}
+	return exitOK
+}
+
+func actionOrNone(a string) string {
+	if a == "" {
+		return "-"
+	}
+	return a
+}
+
+// runPlannerContinue reconciles the planner state. With --apply it applies an
+// ANSWERED answer (creating the durable continuation) and REPORTS an APPLIED continuation
+// as owed work. It never claims a continuation, never modifies the run checkpoint, and
+// never marks a continuation COMPLETED: only the guarded executor path (`sop run`) owns
+// execution and may record completion after the resumed stage work durably succeeds.
+func runPlannerContinue(args []string, stdout, stderr io.Writer, d deps) int {
+	apply := false
+	for _, a := range args {
+		if a == "--apply" {
+			apply = true
+			continue
+		}
+		fmt.Fprintln(stderr, "usage: sop planner continue [--apply]")
+		return exitUsage
+	}
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	defer st.Close()
+	svc, _, err := plannerService(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	settings := plannerSettings(cfg)
+	tasks, err := st.List()
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	ctx := context.Background()
+	for _, task := range tasks {
+		v, verr := plannerView(dir, svc, task)
+		if verr != nil {
+			fmt.Fprintf(stderr, "planner: %v\n", verr)
+			return exitError
+		}
+		action, reason := question.Decide(settings, v)
+		if !apply {
+			fmt.Fprintf(stdout, "%s  %s  %s\n", task.ID, actionOrNone(string(action)), oneLine(reason))
+			continue
+		}
+		if (action == question.ActionApplyThenContinue || action == question.ActionContinue) && v.Question != nil {
+			stage := strings.TrimSpace(v.Question.ReturnStage)
+			if stage == "" {
+				stage = string(runpkg.Implementing)
+			}
+			if !supportedReturnStage(stage) {
+				fmt.Fprintf(stderr, "planner: unsupported return stage %q for %s\n", stage, task.ID)
+				return exitError
+			}
+		}
+		switch action {
+		case question.ActionApplyThenContinue:
+			if _, aerr := svc.ApplyAnswer(ctx, v.Question.ID); aerr != nil {
+				fmt.Fprintf(stderr, "planner: apply %s: %v\n", v.Question.ID, aerr)
+				return exitError
+			}
+			fmt.Fprintf(stdout, "%s  APPLIED %s (continuation pending execution)\n", task.ID, v.Question.ID)
+		case question.ActionContinue:
+			// Reconciliation must NOT consume owed work: it does not claim the continuation,
+			// does not modify the run checkpoint, and does not mark the continuation
+			// COMPLETED. The guarded executor path (`sop run`) performs the stage work and
+			// records completion, so a stage-label-only reconciliation leaves it owed.
+			if v.Question == nil {
+				fmt.Fprintf(stdout, "%s  nothing to continue\n", task.ID)
+				continue
+			}
+			cont := continuationFor(svc, v.Question)
+			if cont == nil {
+				fmt.Fprintf(stdout, "%s  no continuation\n", task.ID)
+				continue
+			}
+			fmt.Fprintf(stdout, "%s  %s PENDING execution (run `sop run` to continue)\n", task.ID, cont.ID)
+		case question.ActionWait:
+			if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.WaitingForPlanner); err != nil {
+				fmt.Fprintf(stderr, "planner: %v\n", err)
+				return exitError
+			}
+			fmt.Fprintf(stdout, "%s  WAITING at WAITING_FOR_PLANNER (%s)\n", task.ID, oneLine(reason))
+		default:
+			fmt.Fprintf(stdout, "%s  %s  %s\n", task.ID, actionOrNone(string(action)), oneLine(reason))
+		}
+	}
+	return exitOK
+}
+
+// plannerService opens the durable question store and service.
+func plannerService(dir string) (*question.Service, *question.FileStore, error) {
+	fs, err := openQuestionStore(dir)
+	if err != nil {
+		return nil, nil, err
+	}
+	return question.NewService(fs, nil), fs, nil
+}
+
+// plannerView builds the authoritative reconcile view for a task.
+func plannerView(dir string, svc *question.Service, task *domain.Task) (question.ReconcileView, error) {
+	qs, err := questionsForTask(svc, task.ID)
+	if err != nil {
+		return question.ReconcileView{}, err
+	}
+	q := activeQuestion(qs)
+	return plannerViewFor(svc, dir, task, qs, q), nil
+}
+
+// plannerViewFor builds a reconcile view from already-loaded questions.
+func plannerViewFor(svc *question.Service, dir string, task *domain.Task, qs []*question.Question, q *question.Question) question.ReconcileView {
+	return question.ReconcileView{
+		TaskID:                 task.ID,
+		TaskTerminal:           task.IsSatisfied(),
+		HumanGate:              plannerHumanGate(dir, task),
+		Rounds:                 len(qs),
+		Question:               q,
+		Continuation:           continuationFor(svc, q),
+		CurrentPlanRevision:    currentPlanRevision(dir),
+		CurrentRunEpoch:        currentRunEpoch(dir, task.ID),
+		CurrentRepoFingerprint: repoFingerprint(dir),
+		Now:                    time.Now().UTC(),
+	}
+}
+
+// withPlannerAnswer appends an applied planner answer to the implementation input so
+// the resumed stage's executor sees the decision.
+func withPlannerAnswer(base, answer string) string {
+	a := strings.TrimSpace(answer)
+	if a == "" {
+		return base
+	}
+	if strings.TrimSpace(base) == "" {
+		return "Planner decision: " + a
+	}
+	return base + "\nPlanner decision: " + a
+}
+
+// appliedAnswer returns the latest recorded answer body for a question.
+func appliedAnswer(svc *question.Service, questionID string) string {
+	_, answers, err := svc.ReadQuestion(questionID)
+	if err != nil || len(answers) == 0 {
+		return ""
+	}
+	return strings.TrimSpace(answers[len(answers)-1].Body)
+}
+
+// plannerLifecycleGate is the executor hook: before the destructive run setup it
+// decides whether the planner owns the task. It parks a PENDING question without
+// resetting the run, and resumes an applied answer from the saved stage. It returns
+// (handled, exitCode): when handled is false the normal lifecycle owns the task (for
+// example a human gate, a terminal task, a stale binding, or no question at all).
+func plannerLifecycleGate(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) (bool, int) {
+	settings := plannerSettings(cfg)
+	if !settings.Enabled {
+		return false, 0
+	}
+	svc, _, err := plannerService(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+		return true, exitError
+	}
+	qs, err := questionsForTask(svc, task.ID)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+		return true, exitError
+	}
+	q := activeQuestion(qs)
+	if q == nil {
+		return false, 0
+	}
+	action, reason := question.Decide(settings, plannerViewFor(svc, dir, task, qs, q))
+	switch action {
+	case question.ActionWait:
+		// Park without New: the run epoch and saved stage are preserved.
+		if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.WaitingForPlanner); err != nil {
+			fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+			return true, exitError
+		}
+		fmt.Fprintf(stdout, "%s PAUSED: WAITING_FOR_PLANNER (%s)\n", task.ID, oneLine(reason))
+		return true, exitError
+	case question.ActionApplyThenContinue:
+		if _, aerr := svc.ApplyAnswer(ctx, q.ID); aerr != nil {
+			fmt.Fprintf(stderr, "%s planner: apply: %v\n", task.ID, aerr)
+			return true, exitError
+		}
+		return true, plannerResume(ctx, dir, cfg, a, d, saver, task, sess, svc, q.ID, stdout, stderr)
+	case question.ActionContinue:
+		return true, plannerResume(ctx, dir, cfg, a, d, saver, task, sess, svc, q.ID, stdout, stderr)
+	default:
+		// Human gate, cancellation, terminal task, stale binding, exhausted rounds: the
+		// normal lifecycle owns the task.
+		return false, 0
+	}
+}
+
+// plannerResume resumes a task's actual stage work from the saved stage, in the same
+// run epoch, with the applied answer available to the executor. The continuation is
+// recorded COMPLETED only after that work durably succeeds.
+//
+// Ordering: execution ownership is acquired FIRST. A worker that cannot obtain it leaves
+// the continuation and the run checkpoint unchanged (it neither claims nor mutates). Only
+// once ownership is held does it claim, revalidate the current guards, and — for a first
+// attempt — modify the checkpoint and run the work.
+func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, svc *question.Service, questionID string, stdout, stderr io.Writer) int {
+	q, _, err := svc.ReadQuestion(questionID)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+		return exitError
+	}
+	cont, cerr := svc.Continuation(q.ID, q.RunEpoch)
+	if cerr != nil || cont == nil {
+		fmt.Fprintf(stdout, "%s planner: no continuation owed\n", task.ID)
+		return exitError
+	}
+	if cont.State == question.ContinuationCompleted {
+		fmt.Fprintf(stdout, "%s planner: continuation already completed\n", task.ID)
+		return exitError
+	}
+	stage := cont.ReturnStage
+	if strings.TrimSpace(stage) == "" {
+		stage = string(runpkg.Implementing)
+	}
+	if !supportedReturnStage(stage) {
+		fmt.Fprintf(stderr, "%s planner: unsupported return stage %q; refusing to resume\n", task.ID, stage)
+		return exitError
+	}
+
+	// Execution ownership FIRST: hold the continuation's execution lock for the WHOLE work so
+	// a second worker cannot run it concurrently, even after the claim lease expires. It is a
+	// separate file from the store lock, so question creation/submission are not blocked. A
+	// worker that cannot acquire it stands down WITHOUT touching the checkpoint or the claim.
+	release, acquired, lerr := question.TryAcquireLock(plannerEffectPath(dir, task.ID, cont.ID) + ".lock")
+	if lerr != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, lerr)
+		return exitError
+	}
+	if !acquired {
+		fmt.Fprintf(stdout, "%s planner: execution held by another worker; standing down (checkpoint unchanged)\n", task.ID)
+		return exitError
+	}
+	defer release()
+
+	claimed, ok, cerr := svc.ClaimContinuation(cont.ID, plannerWorker, plannerLease)
+	if cerr != nil {
+		fmt.Fprintf(stderr, "%s planner: claim: %v\n", task.ID, cerr)
+		return exitError
+	}
+	if !ok || claimed == nil {
+		fmt.Fprintf(stdout, "%s planner: continuation held elsewhere\n", task.ID)
+		return exitError
+	}
+
+	// Revalidate the guards against CURRENT state now that execution ownership is held: a
+	// human gate, a cancelled/terminal task, or changed bindings (plan revision / run epoch /
+	// repository identity) must abort BEFORE the checkpoint is touched.
+	if !plannerContinuationAllowed(svc, dir, cfg, task) {
+		fmt.Fprintf(stdout, "%s planner: continuation no longer permitted (human gate, terminal task, or stale binding); standing down\n", task.ID)
+		return exitError
+	}
+
+	// The success marker's state decides the recovery path. A marker that is present but
+	// unreadable or malformed is UNCERTAIN — never "absent" — so a corrupt success marker
+	// cannot license a replay.
+	switch plannerEffectState(dir, task.ID, claimed.ID) {
+	case markerOK:
+		// The effect already succeeded in a prior attempt (recorded before its completion was
+		// persisted): do NOT replay it; record completion only.
+		if _, _, cerr := svc.CompleteContinuation(claimed.ID, claimed.Generation, plannerWorker); cerr != nil {
+			fmt.Fprintf(stderr, "%s planner: complete: %v\n", task.ID, cerr)
+			return exitError
+		}
+		// The resumed work durably succeeded, so finalize the task now (exactly as the
+		// normal lifecycle path does). Otherwise it stays runnable and a second scheduler
+		// pass finishes it, double-counting the completion.
+		if cerr := completeTask(saver, task); cerr != nil {
+			fmt.Fprintf(stderr, "%s planner: complete task: %v\n", task.ID, cerr)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "%s planner: effect already present; completion recorded without replay\n", task.ID)
+		return exitOK
+	case markerUncertain:
+		parkPlannerForReview(ctx, dir, task, claimed, "uncertain planner continuation: the success marker is unreadable or malformed", stdout, stderr)
+		return exitError
+	}
+	// A prior attempt BEGAN execution (start marker present or unreadable) and may have
+	// completed its effect, but no success marker was persisted. Safe replay cannot be
+	// established, so recovery stops for human review rather than replaying the effect or
+	// marking completion.
+	if plannerEffectStartedState(dir, task.ID, claimed.ID) != markerAbsent {
+		parkPlannerForReview(ctx, dir, task, claimed, "uncertain planner continuation: a prior resumed attempt did not record success", stdout, stderr)
+		return exitError
+	}
+
+	// Checkpoint write happens ONLY now, under execution ownership and after the guards
+	// revalidate: the run is advanced to the saved return stage.
+	if err := svc.FenceAndMutate(claimed.ID, claimed.Generation, plannerWorker, func() error {
+		return runpkg.SetStageOnExisting(dir, task.ID, runpkg.Stage(stage))
+	}); err != nil {
+		fmt.Fprintf(stderr, "%s planner: checkpoint: %v\n", task.ID, err)
+		return exitError
+	}
+
+	// First attempt: durably record that execution is beginning BEFORE running any stage work,
+	// so a crash AFTER the effect but BEFORE the success marker is detected as uncertain. If
+	// this durable write fails, stage work does NOT begin.
+	if merr := writePlannerEffectStarted(dir, task.ID, claimed.ID); merr != nil {
+		fmt.Fprintf(stderr, "%s planner: effect-start marker: %v (no stage work performed)\n", task.ID, merr)
+		return exitError
+	}
+
+	// Resume the EXISTING run: New would reset state.json and clear attempts.
+	rn, err := runpkg.Resume(dir, task.ID)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+		return exitError
+	}
+	spec := specFromTask(task)
+	spec.Deliverables = planTaskDeliverables(dir, task)
+	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
+	_ = rn.Write("task.md", spec.Render())
+	d.plannerAnswer = appliedAnswer(svc, q.ID)
+	d.resumeFrom = stage
+	ctx = taskActivityContext(ctx, rn.Dir(), stdout, task.ID, task.Title)
+	res, lerr := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, failure.ApprovalNone, earlyGateResult{}, stdout)
+
+	// COMPLETION BOUNDARY (explicit): the continuation is completed only when the resumed
+	// stage's work durably succeeded — the lifecycle returned no error AND the run reached
+	// PASSED. A failure or a park leaves it CLAIMED (recoverable) and the checkpoint
+	// resumable; a stage-label change alone never reaches here.
+	if lerr == nil && res.stage == runpkg.Passed {
+		// Make the run checkpoint (the PASSED stage and its recorded results) durable BEFORE
+		// recording success, so the success marker never precedes the persisted checkpoint.
+		if perr := rn.PersistDurable(); perr != nil {
+			fmt.Fprintf(stderr, "%s planner: durable checkpoint: %v (success not recorded)\n", task.ID, perr)
+			return exitError
+		}
+		// Record the durable effect marker BEFORE the completion CAS, so a crash in this
+		// gap is recovered without replaying the (possibly non-idempotent) effect.
+		if merr := writePlannerEffect(dir, task.ID, claimed.ID, claimed.Generation); merr != nil {
+			fmt.Fprintf(stderr, "%s planner: effect marker: %v\n", task.ID, merr)
+			return exitError
+		}
+		if _, _, cerr := svc.CompleteContinuation(claimed.ID, claimed.Generation, plannerWorker); cerr != nil {
+			fmt.Fprintf(stderr, "%s planner: complete: %v\n", task.ID, cerr)
+			return exitError
+		}
+		// Finalize the task now that the resumed work durably succeeded, exactly as the
+		// normal lifecycle path does. Without this the task stays runnable, so the scheduler
+		// finishes it in a second pass and reports two completions for one task.
+		if cerr := completeTask(saver, task); cerr != nil {
+			fmt.Fprintf(stderr, "%s planner: complete task: %v\n", task.ID, cerr)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "%s planner: resumed from %s and completed (generation %d)\n", task.ID, stage, claimed.Generation)
+		return exitOK
+	}
+	if lerr != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, lerr)
+	}
+	fmt.Fprintf(stdout, "%s planner: resumed from %s but NOT completed (stage %s); continuation retained\n", task.ID, stage, res.stage)
+	return exitError
+}
+
+// plannerContinuationAllowed re-reads the authoritative state after execution ownership is
+// held and reports whether continuing is still permitted: the task is not terminal, not at
+// a human gate, not cancelled, and the question's bindings still match the current plan
+// revision, run epoch, and repository identity.
+func plannerContinuationAllowed(svc *question.Service, dir string, cfg config.Config, task *domain.Task) bool {
+	view, err := plannerView(dir, svc, task)
+	if err != nil {
+		return false
+	}
+	action, _ := question.Decide(plannerSettings(cfg), view)
+	return action == question.ActionApplyThenContinue || action == question.ActionContinue
+}
+
+// parkPlannerForReview stops an uncertain continuation for human review: it parks the run
+// at the existing WAITING_FOR_HUMAN boundary and records an explicit approval request. The
+// continuation is neither replayed nor completed; the human owns the decision.
+func parkPlannerForReview(ctx context.Context, dir string, task *domain.Task, cont *question.Continuation, reason string, stdout, stderr io.Writer) {
+	if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.WaitingForHuman); err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+	}
+	recordHumanApprovalRequest(ctx, runpkg.At(runpkg.Dir(dir, task.ID)), task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
+	fmt.Fprintf(stdout, "%s planner: uncertain execution for %s; stopped for human review (no replay, no completion)\n", task.ID, cont.ID)
+}

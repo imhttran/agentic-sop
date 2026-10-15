@@ -146,6 +146,24 @@ type Config struct {
 	// LOCAL_DONE transition) exactly as it was. See internal/outcome and
 	// docs/reference/LIFECYCLE-VERDICT-GATE.md.
 	Lifecycle Lifecycle `yaml:"lifecycle"`
+	// Planner configures the opt-in planner question/continuation feature
+	// (SPIKE-004). It is OFF by default: an omitted block leaves ordinary execution
+	// behavior unchanged.
+	Planner PlannerConfig `yaml:"planner"`
+}
+
+// PlannerConfig is the opt-in planner question/continuation configuration.
+//
+// Enabled turns the feature on. Mode is an informational label (for example
+// "external"). RoundLimit bounds how many planner questions one task may raise
+// (0 means the built-in default). TimeoutSeconds is the response deadline;
+// PauseOnTimeout keeps a timed-out question paused rather than failing it.
+type PlannerConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Mode           string `yaml:"mode"`
+	RoundLimit     int    `yaml:"round_limit"`
+	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	PauseOnTimeout bool   `yaml:"pause_on_timeout"`
 }
 
 // Project holds project metadata.
