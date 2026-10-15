@@ -4,7 +4,7 @@
 # scripts/ are support tooling, grouped by responsibility (install/, packaging/,
 # checks/, agents/).
 
-.PHONY: fmt vet test build check check-plugin install install-all install-ollama-agent \
+.PHONY: fmt vet test test-fast build check check-plugin install install-all install-ollama-agent \
 	plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
@@ -12,6 +12,17 @@
 	controller-build controller-https controller-keychain-token
 
 ENV_FILE := .env
+
+# `make test-fast` runs the suite with TMPDIR on RAM-backed storage where the
+# platform provides it (Linux /dev/shm), which removes the SQLite file-I/O
+# bottleneck without changing any SQLite durability setting. `make test` below is
+# unchanged and remains the ordinary, disk-backed run. Override any input on the
+# command line, e.g. `make test-fast TEST_FAST_PARALLEL=4 TEST_FAST_TIMEOUT=5m`.
+# See docs/guides/DEVELOPMENT.md for when to use it and how it works.
+TEST_FAST_PARALLEL ?= 2
+TEST_FAST_TIMEOUT ?= 3m
+TEST_FAST_TMPDIR ?=
+TEST_FAST_MIN_FREE_MB ?= 512
 
 fmt:
 	go fmt ./...
@@ -21,6 +32,17 @@ vet:
 
 test:
 	go test ./...
+
+# Fast suite: same tests, with TMPDIR on RAM-backed storage when available. The
+# wrapper creates and cleans up a private per-invocation directory, falls back to
+# the system temp dir on macOS/other platforms, and propagates the test exit
+# status. Overridable via the TEST_FAST_* variables above.
+test-fast:
+	SOP_TEST_PARALLEL='$(TEST_FAST_PARALLEL)' \
+	SOP_TEST_TIMEOUT='$(TEST_FAST_TIMEOUT)' \
+	SOP_TEST_TMPDIR='$(TEST_FAST_TMPDIR)' \
+	SOP_TEST_MIN_FREE_MB='$(TEST_FAST_MIN_FREE_MB)' \
+	./scripts/checks/test-fast.sh
 
 build:
 	go build ./...
