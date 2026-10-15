@@ -28,7 +28,12 @@ type Tool struct {
 	Name        string
 	Description string
 	InputSchema map[string]any
-	Handler     func(ctx context.Context, args json.RawMessage) (string, error)
+	// ReadOnly, when true, advertises the MCP annotation readOnlyHint: true in
+	// tools/list so a client (for example ChatGPT) does not gate the call behind a
+	// write-confirmation prompt. It is descriptive only: access is enforced by
+	// which tools the server registers, never by this flag.
+	ReadOnly bool
+	Handler  func(ctx context.Context, args json.RawMessage) (string, error)
 }
 
 // Server is an MCP server exposing a fixed set of tools.
@@ -161,11 +166,15 @@ func (s *Server) toolDescriptors() []map[string]any {
 		if schema == nil {
 			schema = map[string]any{"type": "object", "properties": map[string]any{}}
 		}
-		out = append(out, map[string]any{
+		desc := map[string]any{
 			"name":        t.Name,
 			"description": t.Description,
 			"inputSchema": schema,
-		})
+		}
+		if t.ReadOnly {
+			desc["annotations"] = map[string]any{"readOnlyHint": true}
+		}
+		out = append(out, desc)
 	}
 	return out
 }
@@ -185,6 +194,13 @@ func (s *Server) respond(id json.RawMessage, result any) *rpcResponse {
 
 func (s *Server) fail(id json.RawMessage, code int, message string) *rpcResponse {
 	return &rpcResponse{JSONRPC: "2.0", ID: id, Error: &rpcError{Code: code, Message: message}}
+}
+
+// WithReadOnly returns a copy of the tool marked read-only, so tools/list
+// advertises annotations.readOnlyHint: true for it.
+func (t Tool) WithReadOnly() Tool {
+	t.ReadOnly = true
+	return t
 }
 
 // TextTool builds a tool whose handler ignores arguments and returns text.

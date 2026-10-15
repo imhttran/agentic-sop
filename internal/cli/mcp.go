@@ -11,6 +11,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/approval"
 	"github.com/imhttran/agentic-sop/internal/mcp"
 	"github.com/imhttran/agentic-sop/internal/quality"
+	"github.com/imhttran/agentic-sop/internal/question"
 	"github.com/imhttran/agentic-sop/internal/review"
 	"github.com/imhttran/agentic-sop/internal/store"
 	"github.com/imhttran/agentic-sop/internal/validate"
@@ -20,9 +21,26 @@ import (
 // the same application services as the CLI commands, so the workflow is never
 // reimplemented for MCP. Requests are read from stdin and responses written to
 // stdout; diagnostics go to stderr.
+//
+// With --status-only, only sop_status is registered: every other tool is absent
+// from tools/list and rejected by tools/call, so the restriction is enforced
+// server-side rather than by the client. This is the planner-safe surface for a
+// connection spike, which must expose no human approval action.
 func runMCP(args []string, stdout, stderr io.Writer, d deps) int {
-	if len(args) != 0 {
-		fmt.Fprintln(stderr, "usage: sop mcp")
+	statusOnly, planner := false, false
+	for _, a := range args {
+		switch a {
+		case "--status-only":
+			statusOnly = true
+		case "--planner":
+			planner = true
+		default:
+			fmt.Fprintln(stderr, "usage: sop mcp [--status-only | --planner]")
+			return exitUsage
+		}
+	}
+	if statusOnly && planner {
+		fmt.Fprintln(stderr, "mcp: --status-only and --planner are mutually exclusive")
 		return exitUsage
 	}
 
@@ -31,7 +49,17 @@ func runMCP(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	server := mcp.NewServer(Version, mcpTools(dir, d)...)
+	var tools []mcp.Tool
+	switch {
+	case planner:
+		tools = mcpPlannerTools(dir, d)
+	case statusOnly:
+		tools = mcpToolsWithMode(dir, d, true)
+	default:
+		tools = mcpTools(dir, d)
+	}
+
+	server := mcp.NewServer(Version, tools...)
 	if err := server.Serve(context.Background(), os.Stdin, stdout); err != nil {
 		fmt.Fprintf(stderr, "mcp: %v\n", err)
 		return exitError
@@ -39,14 +67,23 @@ func runMCP(args []string, stdout, stderr io.Writer, d deps) int {
 	return exitOK
 }
 
-// mcpTools is the tool set: status, validate, review, and the human approval
-// boundary over the project. Every tool calls the same application service the
-// CLI uses.
+// mcpTools is the full tool set: status, validate, review, and the human
+// approval boundary over the project. Every tool calls the same application
+// service the CLI uses.
 func mcpTools(dir string, d deps) []mcp.Tool {
+	return mcpToolsWithMode(dir, d, false)
+}
+
+// mcpToolsWithMode builds the tool set for a mode. In status-only mode the
+// approval, validate, and review tools are never registered, so they cannot be
+// listed or called. sop_status is read-only. The full set is unchanged.
+func mcpToolsWithMode(dir string, d deps, statusOnly bool) []mcp.Tool {
+	status := mcpStatusTool(dir)
+	if statusOnly {
+		return []mcp.Tool{status}
+	}
 	return []mcp.Tool{
-		mcp.TextTool("sop_status", "List the persisted tasks for this project.", func(context.Context) (string, error) {
-			return mcpStatus(dir)
-		}),
+		status,
 		mcp.TextTool("sop_validate", "Run the configured build/test/lint commands and report the result.", func(ctx context.Context) (string, error) {
 			return mcpValidate(ctx, dir)
 		}),
@@ -56,6 +93,140 @@ func mcpTools(dir string, d deps) []mcp.Tool {
 		approvalTool("sop_approval", "Report SOP's approval request (if any) for a task.", dir, approvalRead),
 		approvalTool("sop_approve", "Record an approval of a task's active human approval gate.", dir, approvalApprove),
 		approvalTool("sop_decline", "Record a decline of a task's active human approval gate.", dir, approvalDecline),
+	}
+}
+
+// mcpStatusTool is the read-only status tool shared by every mode.
+func mcpStatusTool(dir string) mcp.Tool {
+	return mcp.TextTool("sop_status", "List the persisted tasks for this project.", func(context.Context) (string, error) {
+		return mcpStatus(dir)
+	}).WithReadOnly()
+}
+
+// mcpPlannerTools is the planner-scoped surface: status, question list/get, and answer
+// submission. It deliberately excludes the human approval actions (sop_approve,
+// sop_decline), validation, and review, so a planner role can never approve, decline,
+// or otherwise act on a human gate. Receiving an answer never applies it, approves a
+// task, or resumes execution.
+func mcpPlannerTools(dir string, d deps) []mcp.Tool {
+	return []mcp.Tool{
+		mcpStatusTool(dir),
+		mcpQuestionListTool(dir),
+		mcpQuestionGetTool(dir),
+		mcpAnswerSubmitTool(dir),
+	}
+}
+
+// mcpQuestionListTool lists open (PENDING) questions so a planner can discover them.
+func mcpQuestionListTool(dir string) mcp.Tool {
+	return mcp.TextTool("sop_question_list", "List open (PENDING) planner questions for this project.", func(context.Context) (string, error) {
+		questions, err := listQuestions(dir, question.StatePending)
+		if err != nil {
+			return "", err
+		}
+		if len(questions) == 0 {
+			return "no pending questions", nil
+		}
+		lines := make([]string, 0, len(questions))
+		for _, q := range questions {
+			lines = append(lines, fmt.Sprintf("%s %s rev=%d task=%s %s", q.ID, q.State, q.Revision, q.Identity, q.Body))
+		}
+		return mcp.JoinLines(lines), nil
+	}).WithReadOnly()
+}
+
+// mcpQuestionGetTool returns one question with its answers and audit outcomes as JSON.
+func mcpQuestionGetTool(dir string) mcp.Tool {
+	return mcp.Tool{
+		Name:        "sop_question_get",
+		Description: "Read one planner question and its independently recorded answers.",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"question_id": map[string]any{"type": "string"},
+			},
+			"required": []string{"question_id"},
+		},
+		ReadOnly: true,
+		Handler: func(_ context.Context, raw json.RawMessage) (string, error) {
+			var in struct {
+				QuestionID string `json:"question_id"`
+			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &in); err != nil {
+					return "", fmt.Errorf("invalid arguments: %w", err)
+				}
+			}
+			if strings.TrimSpace(in.QuestionID) == "" {
+				return "", fmt.Errorf("question_id is required")
+			}
+			q, answers, outcomes, err := readQuestion(dir, in.QuestionID)
+			if err != nil {
+				return "", err
+			}
+			doc := map[string]any{"question": toQuestionView(q), "answers": answers, "outcomes": outcomes}
+			data, err := json.Marshal(doc)
+			if err != nil {
+				return "", err
+			}
+			return string(data), nil
+		},
+	}
+}
+
+// mcpAnswerSubmitTool records a planner answer. It records ANSWERED only; it never
+// applies the answer, approves a task, or resumes execution.
+func mcpAnswerSubmitTool(dir string) mcp.Tool {
+	return mcp.Tool{
+		Name:        "sop_answer_submit",
+		Description: "Submit a planner answer to a question (records ANSWERED only; never applies or approves).",
+		InputSchema: map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"question_id":       map[string]any{"type": "string"},
+				"body":              map[string]any{"type": "string"},
+				"answered_by":       map[string]any{"type": "string"},
+				"idempotency_key":   map[string]any{"type": "string"},
+				"expected_revision": map[string]any{"type": "integer"},
+			},
+			"required": []string{"question_id", "body"},
+		},
+		Handler: func(ctx context.Context, raw json.RawMessage) (string, error) {
+			var in struct {
+				QuestionID       string `json:"question_id"`
+				Body             string `json:"body"`
+				AnsweredBy       string `json:"answered_by"`
+				IdempotencyKey   string `json:"idempotency_key"`
+				ExpectedRevision int    `json:"expected_revision"`
+			}
+			if len(raw) > 0 {
+				if err := json.Unmarshal(raw, &in); err != nil {
+					return "", fmt.Errorf("invalid arguments: %w", err)
+				}
+			}
+			res, err := submitPlannerAnswer(ctx, dir, question.SubmitInput{
+				QuestionID:       in.QuestionID,
+				Body:             in.Body,
+				AnsweredBy:       in.AnsweredBy,
+				IdempotencyKey:   in.IdempotencyKey,
+				ExpectedRevision: in.ExpectedRevision,
+			})
+			if err != nil {
+				return "", err
+			}
+			doc := map[string]any{"outcome": string(res.Outcome), "reason": res.Reason}
+			if res.Question != nil {
+				doc["question"] = toQuestionView(res.Question)
+			}
+			if res.Answer != nil {
+				doc["answer_id"] = res.Answer.ID
+			}
+			data, err := json.Marshal(doc)
+			if err != nil {
+				return "", err
+			}
+			return string(data), nil
+		},
 	}
 }
 

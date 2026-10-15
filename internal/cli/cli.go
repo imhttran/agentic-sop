@@ -242,6 +242,10 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runStatus(rest, stdout, stderr, d.getwd)
 	case "task":
 		return runTask(rest, stdout, stderr, d.getwd)
+	case "question":
+		return runQuestion(rest, stdout, stderr, d)
+	case "answer":
+		return runAnswer(rest, stdout, stderr, d)
 	case "plan":
 		return runPlan(rest, stdout, stderr, d)
 	case "tasks":
@@ -327,6 +331,8 @@ Commands:
   status    list persisted tasks
   task <id> show details; task complete <id> --external records an external completion;
             task skip <id> --reason R --evidence F marks it NOT_REQUIRED
+  question  show a planner question, or list questions (question list [--state S])
+  answer    record a planner answer (records ANSWERED only; never applies or approves)
   plan      generate PLAN.md, or sop plan activate|supersede|complete|historicalize
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)
@@ -335,7 +341,7 @@ Commands:
   prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json, --cache)
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
-  mcp       serve tools over the Model Context Protocol (stdio)
+  mcp       serve tools over the Model Context Protocol (stdio; --status-only)
   report    print a concise summary of the latest run (--detailed for full evidence)
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
   approve   record an approval decision on a task's active human approval gate
