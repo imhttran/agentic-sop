@@ -1,7 +1,12 @@
 # SOP End-to-End Dogfood — Repository Consolidation
 
-Status: PROPOSED — approval required before activation or implementation.
-Date: 2026-10-13. All MIG tasks are PLANNED; none has executed.
+Status: HISTORICALIZED — COMPLETE (2026-10-14). The consolidation merge is committed
+(`a8082b6154dd88fd8ac9fd18af5df5e682a751a6`, ancestry-preserving; parents core
+`54aa6a1a8f73a3b6debef0c54472351c2a817080`, controller
+`f8502a500e52420ff0b4935b8abc0ebb5b218f2b`, adapter
+`f319f60df470705db220d67875fdefbe4666e5da`).
+Date: 2026-10-13 (drafted); HISTORICALIZED — COMPLETE 2026-10-14. All MIG tasks reached
+`LOCAL_DONE`; evidence in docs/reports/consolidation/completion.md.
 Intended source path in agentic-sop: docs/plans/PLAN-Repository-Consolidation.md.
 
 ## Project

@@ -47,6 +47,26 @@ SOP is **not** an unrestricted autonomous coding agent: the orchestrator defines
 boundaries, the agent performs specific work, validation checks it, and only then
 does state change. See [docs/PRD.md](docs/PRD.md) for principles and requirements.
 
+### Governance boundaries
+
+- **Deterministic Go is the execution-governance authority.** State transitions,
+failure disposition and every governed outcome are decided by SOP's deterministic
+Go implementation; advisory providers can only *add* attention and can never lower
+risk, approve work or bypass verification.
+- **MIG-006 is compatibility, not capability.** The consolidation's MIG-006 work
+keeps the optional decision adapters compatible behind a single provider contract
+with a bounded fallback (primary provider, an optional backup on primary failure,
+and SOP's deterministic decision provider as the terminal authority). MIG-006 does
+**not** establish decision quality and does **not** authorize enablement.
+- **The scoped DISABLE recommendation stands.** The evaluation in
+[docs/reports/decision-model-evaluation-2026-10-13.md](docs/reports/decision-model-evaluation-2026-10-13.md)
+retains the existing **DISABLE** recommendation for the CLEF/Nimble advisory layer
+and the JEV shadow mapping, scoped to that corpus and those configurations.
+- **No provider work, promotion or enablement.** This consolidation and its
+documentation closure add no provider work, make no promotion, and authorize no
+enablement. Any future reconsideration requires the existing criteria in
+[docs/reference/AI-DECISION-PROMOTION-CRITERIA.md](docs/reference/AI-DECISION-PROMOTION-CRITERIA.md).
+
 ## Basic Architecture
 
 ```text
@@ -111,21 +131,31 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
-The controller and the advisory decision adapter are served by the same unified
-executable:
+The controller and the advisory decision adapter are consolidated components of
+this single `agentic-sop` repository and executable. The consolidation is committed
+as merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6` (parents core, controller and
+adapter), which is an ancestor of the repository's `main`; see
+[docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md).
+They are served by the same unified executable:
 
 ```bash
 sop controller serve                     # read-only dashboard (SOP_BIN overrides the delegate)
 sop decision decide -provider nimble -file req.json -json
+sop decision shadow [...]                # shadow evaluation (advisory only)
 ```
 
-The optional legacy `sop-controller` and `sop-decision-adapter` executables are thin
-wrappers over the same implementations; install them with
+The optional legacy `sop-controller` and `sop-decision-adapter` executables remain
+thin wrappers over the same implementations; install them with
 `scripts/install/install-legacy-wrappers.sh`. The controller needs no Node runtime;
 the decision adapter's Julia provider is an optional capability (the
 repository-owned `tools/julia/infer.py` helper plus external weights). The HTTPS/Caddy
 conveniences live under `scripts/controller/` and `integrations/controller/`. Details:
-[docs/guides/SOP-CONTROLLER-DASHBOARD.md](docs/guides/SOP-CONTROLLER-DASHBOARD.md).
+[docs/guides/SOP-CONTROLLER-DASHBOARD.md](docs/guides/SOP-CONTROLLER-DASHBOARD.md)
+and [docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md).
+
+This consolidation is a repository-level change only. It makes no claim about any
+current local machine state, operator-local archive, installed binaries or CI run
+status, and it introduces no provider work, promotion or enablement.
 
 ## Agent Skills
 
@@ -174,7 +204,14 @@ checks ([docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b), are implemente
 known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
 future work lives in [BACKLOG.md](docs/plans/BACKLOG.md). The controller and the
 advisory decision adapter are consolidated into this one repository and executable
+(`sop controller serve`, `sop decision decide|shadow`), with the legacy
+`sop-controller` and `sop-decision-adapter` executables retained as thin wrappers.
+The consolidation is committed as merge
+`a8082b6154dd88fd8ac9fd18af5df5e682a751a6` and remains **HISTORICALIZED — COMPLETE**
 ([docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md)).
+This wording describes committed and merged repository evidence only; it makes no
+claim about current local machine state, operator-local archive, or CI run status,
+and the governance boundaries above remain in force.
 
 The pre-performance closure and measurement plan,
 [Pre-Performance Closure and Baseline](docs/history/plans/PLAN-Pre-Performance-Closure.md),

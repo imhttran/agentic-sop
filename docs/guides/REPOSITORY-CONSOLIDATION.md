@@ -50,5 +50,13 @@ The legacy executables remain available and behave identically.
 ## History
 
 Full source histories are preserved outside tracked artifacts (bundles + provenance),
-and the ancestry-preserving integration is prepared but **not committed** — its merge
-commit needs separate authorization.
+and the ancestry-preserving integration is **committed** as merge
+`a8082b6154dd88fd8ac9fd18af5df5e682a751a6`, whose parents are the three source tips
+core `54aa6a1a8f73a3b6debef0c54472351c2a817080`,
+controller `f8502a500e52420ff0b4935b8abc0ebb5b218f2b` and
+adapter `f319f60df470705db220d67875fdefbe4666e5da`.
+
+The legacy `sop-controller` and `sop-decision-adapters` repositories remain intact as
+rollback sources. Their deprecation notices, issue/release redirection and archival
+remain separate, later operator-approved decisions; no retirement or deletion has
+occurred.
