@@ -178,6 +178,14 @@ type Validation struct {
 	Build []string `yaml:"build"`
 	Test  []string `yaml:"test"`
 	Lint  []string `yaml:"lint"`
+	// Integration holds the PostgreSQL/pgvector integration validation commands.
+	// They form the postgres-integration validation category required for
+	// migration and database-sensitive changes (RAG-SOP-004 task 1). Unit-only
+	// validation (build/test/lint) never satisfies this category: only a command
+	// configured here, and classified as real PostgreSQL/pgvector operations, is
+	// accepted as proof. The category is kept strictly separate from retrieval
+	// quality. Empty by default, so a project without a database is unaffected.
+	Integration []string `yaml:"integration"`
 }
 
 // ContextEfficiency configures the opt-in Phase 8 context-efficiency facilities on the

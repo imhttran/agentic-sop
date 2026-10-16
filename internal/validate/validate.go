@@ -24,6 +24,11 @@ func Checks(v config.Validation) []testrunner.Check {
 	}
 	add(testrunner.Build, v.Build)
 	add(testrunner.UnitTest, v.Test)
+	// The PostgreSQL integration category runs only its classified commands, and
+	// only when they are configured. A unit-only project has no such command, so
+	// the suite is unchanged. An unclassified entry under validation.integration is
+	// never run, so it can never be mistaken for satisfying the category.
+	checks = append(checks, PostgresChecks(v)...)
 	add(testrunner.Lint, v.Lint)
 	return checks
 }

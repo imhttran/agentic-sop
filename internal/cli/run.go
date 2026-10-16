@@ -935,6 +935,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// empty suite would be mistaken for a passing verification.
 		validationRequired = changeRequired && (implMutation || len(taskChangeEvidence(rn, reports...)) > 0)
 		validationConfigured = validate.Enabled(cfg.Validation)
+		// PostgreSQL integration requirement (RAG-SOP-004): derived from the changed
+		// paths only; configured means a CLASSIFIED integration command exists.
+		postgresRequired := validationRequired && quality.PostgresIntegrationRequired(changedFiles(diff))
+		postgresConfigured := validate.PostgresConfigured(cfg.Validation)
+		postgresPassed := hasCategory(suite, testrunner.PostgresIntegration) && categoryPassed(suite, testrunner.PostgresIntegration)
 
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
@@ -947,6 +952,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 
 			ValidationRequired:   validationRequired,
 			ValidationConfigured: validationConfigured,
+			PostgresRequired:     postgresRequired,
+			PostgresConfigured:   postgresConfigured,
+			PostgresPassed:       postgresPassed,
 		})
 		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 

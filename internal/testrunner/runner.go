@@ -24,6 +24,12 @@ const (
 	IntegrationTest Category = "INTEGRATION_TEST"
 	Lint            Category = "LINT"
 	DockerBuild     Category = "DOCKER_BUILD"
+	// PostgresIntegration is the PostgreSQL/pgvector integration category required
+	// for migration and database-sensitive changes (RAG-SOP-004 task 1). It is a
+	// distinct category from IntegrationTest so it can never be satisfied by a
+	// generic integration or unit command: only a configured, classified
+	// PostgreSQL/pgvector command carries it (see internal/validate/postgres.go).
+	PostgresIntegration Category = "POSTGRES_INTEGRATION"
 )
 
 // Status is the deterministic classification of a check.
@@ -152,6 +158,19 @@ func (r *Runner) Run(ctx context.Context, check Check) Result {
 		result.Status = Pass
 	default:
 		result.Status = Fail
+	}
+
+	// PostgreSQL integration requires structured proof of an executed, passing
+	// test, not merely exit code 0 (an all-skipped run exits 0). Non-PostgreSQL
+	// categories are unchanged.
+	if result.Status == Pass && check.Category == PostgresIntegration {
+		if ok, why := parseGoTestExecuted(result.Stdout); !ok {
+			result.Status = Fail
+			if result.Stderr != "" {
+				result.Stderr += "\n"
+			}
+			result.Stderr += "postgres integration not verified: " + why
+		}
 	}
 	return result
 }
