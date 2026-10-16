@@ -129,6 +129,23 @@ func (h *Harness) CompleteWithEvidence(ctx context.Context, req agent.Request, e
 	// working-tree change since the baseline is reconciliation evidence. The
 	// model's own claim is preserved in the summary note when it disagrees.
 	content, reconciled = h.reconcileOutcome(ctx, baseline, ev, content)
+	// A planner request the model raised is a terminal, non-completion outcome. It is honored
+	// only when the planner is available for this invocation AND the stage supports a planner
+	// continuation (IMPLEMENT); it must then reach the caller unchanged, never wrapped as a
+	// completed outcome. Otherwise — the planner is disabled, the stage is unsupported, or the
+	// request is malformed — it becomes an explicit failure with a clear reason: never a
+	// completed outcome and never a human approval boundary, and no question is created.
+	if outcomeStatus(content) == string(agent.OutcomeNeedsPlanner) {
+		if !plannerAdvertised(req) {
+			return plannerRejectedOutcome(req, "planner questions are not available for this stage in this invocation"), reconciled, nil
+		}
+		if out := agent.ParseOutcome(content); out == nil || out.Planner == nil {
+			return plannerRejectedOutcome(req, "malformed planner request: no planner object"), reconciled, nil
+		} else if perr := out.Planner.Validate(); perr != nil {
+			return plannerRejectedOutcome(req, "malformed planner request: "+perr.Error()), reconciled, nil
+		}
+		return content, reconciled, nil
+	}
 	// A failure that changed nothing did not attempt the work: surface it as a
 	// retryable boundary so SOP requeues instead of blocking.
 	content = h.retryNoChangeFailure(ctx, baseline, ev, content)
@@ -138,18 +155,49 @@ func (h *Harness) CompleteWithEvidence(ctx context.Context, req agent.Request, e
 	return content, reconciled, nil
 }
 
+// plannerRejectedOutcome is the explicit, non-success outcome for a needs_planner response
+// this invocation cannot honor: the planner is unavailable for the stage, or the request is
+// malformed. It is a failure carrying a clear reason — never a completed outcome, and never a
+// human approval boundary — so the run stops without inventing success or manufacturing a
+// gate, and no question is created.
+func plannerRejectedOutcome(req agent.Request, why string) string {
+	reason := fmt.Sprintf("planner request rejected for %s: %s", req.Capability, why)
+	data, err := json.Marshal(outcomeWire{Status: string(agent.OutcomeFailed), Reason: reason})
+	if err != nil {
+		return `{"status":"failed","reason":"planner request rejected"}`
+	}
+	return string(data)
+}
+
 // nonCompletedOutcome reports whether content is a structured outcome that is not
-// "completed" (the failed or needs_human report a model chose to return).
+// "completed" (the failed, needs_human, or needs_planner report a model chose to return).
 func nonCompletedOutcome(content string) bool {
+	switch outcomeStatus(content) {
+	case string(agent.OutcomeFailed), string(agent.OutcomeNeedsHuman), string(agent.OutcomeNeedsPlanner):
+		return true
+	default:
+		return false
+	}
+}
+
+// outcomeStatus returns content's structured-outcome status when it is a JSON object with a
+// recognized status, or "" otherwise. It recognizes needs_planner so a planner request is
+// never mistaken for prose and rewritten by the completed-outcome wrap.
+func outcomeStatus(content string) string {
 	trimmed := strings.TrimSpace(content)
 	if !strings.HasPrefix(trimmed, "{") {
-		return false
+		return ""
 	}
 	var w outcomeWire
 	if err := json.Unmarshal([]byte(trimmed), &w); err != nil {
-		return false
+		return ""
 	}
-	return w.Status == string(agent.OutcomeFailed) || w.Status == string(agent.OutcomeNeedsHuman)
+	switch w.Status {
+	case string(agent.OutcomeCompleted), string(agent.OutcomeNeedsHuman), string(agent.OutcomeFailed), string(agent.OutcomeNeedsPlanner):
+		return w.Status
+	default:
+		return ""
+	}
 }
 
 // wantsOutcome reports whether a capability's expected response is a structured
