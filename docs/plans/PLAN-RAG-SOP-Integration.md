@@ -139,8 +139,9 @@ This stage **must not begin until RAG-SOP-001's contract and ADR are explicitly 
 ### Acceptance Checks
 
 - `go build ./...`
-- `go test -short ./...`
 - `go vet ./...`
+- `go test -tags ragacceptance ./internal/ragclient/...`
+- `go test -short ./...`
 
 ### Dependencies
 

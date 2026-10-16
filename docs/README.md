@@ -60,6 +60,7 @@ Where new documentation belongs:
 - [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
 - [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 - [architecture/JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md) — the ratified JEV decision-contract alignment (Gate 3, 2026-10-11): the accepted contract requirements (§13–§19) and the ratified decisions D1–D7 (§20).
+- [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) — **proposed** (unapproved) design for opt-in, read-only RAG knowledge retrieval: the adapter seam, ownership boundaries, and deterministic context-integration rules. It changes no runtime behaviour and awaits the RAG-SOP-001 architecture approval.
 
 ## Specifications
 
@@ -82,6 +83,10 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
 - [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
+- [specs/RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md) — **proposed** versioned, retrieval-only request/response contract (schema `rag-retrieval/v1`): source metadata, size ceilings, error taxonomy, and fallback/required-evidence rules.
+- [specs/RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md) — **proposed** threat model for RAG retrieval (injection, cross-project leakage, scope, resource, malformed-response) and its fail-closed rules.
+- [specs/RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md) — **proposed** `SOP_RAG_*` configuration and feature-flag design: opt-in, disabled by default, bytes-based budgets, per-project corpus allowlisting.
+- [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) — **proposed** evaluation approach and GO/CONDITIONAL/NO-GO criteria for RAG versus BM25-only.
 
 ## Topic Ownership
 
@@ -121,6 +126,7 @@ single owner. This table is that map.
 | Lifecycle verdict gate and outcome recovery                                               | [LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md)                       | [OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md); [EXECUTION.md](specs/EXECUTION.md) §6b                                                                                      |
 | Validation evidence reuse                                                                 | [EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md)                                       | [VALIDATION.md](specs/VALIDATION.md); [CLI.md](reference/CLI.md)                                                                                                                                |
 | JEV decision contract                                                                     | [JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md)                      | [OPENJEV.md](specs/OPENJEV.md)                                                                                                                                                                  |
+| Knowledge retrieval (RAG) integration — opt-in, retrieval-only                           | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) | [RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md); [RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md); [RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md); [RAG-EVALUATION.md](specs/RAG-EVALUATION.md) |
 | Repository consolidation and legacy transition                                            | [REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md)                      | [LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md); [reports/consolidation/](reports/consolidation/completion.md)                                                        |
 
 ## Reference
