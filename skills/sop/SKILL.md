@@ -63,6 +63,10 @@ Thin aliases in the same install expose one capability each:
 /rag-ingest <request>     RAG: design a safe ingestion pipeline — chunking,
                           concurrency, retries, transactional replacement
                           (capability: plan, read-only)
+/sop-rag-integrate <request>
+                          RAG: assess whether a project needs retrieval
+                          augmentation and produce a scoped integration plan —
+                          or recommend NO-RAG (capability: plan, read-only)
 /sop-cleanup <path>       inspect, classify, and PROPOSE worktree cleanup;
                           read-only by default (`sop status`)
 /sop-publish <plan>       complete an authorized merge and publish: verify the
@@ -95,6 +99,12 @@ The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
 matrix, ingestion safety). They never mutate the repository; applying a change goes
 through `/sop-implement`, and a database change is an operator action.
+
+`/sop-rag-integrate` is the RAG-integration advisor: it fixes the read-only `plan`
+capability and adds a workflow (discover, decide RAG versus NO-RAG, choose stack-native
+libraries, produce a scoped plan, verify) while delegating the governed apply, verify,
+and publish steps to `/sop-implement`, `sop run`, and `/sop-publish`. It never edits the
+target repository and never forces RAG when the existing search is sufficient.
 
 The capability aliases call the command below; the end-to-end entry delegates to
 `sop run`. None carries routing, provider, or lifecycle policy. Install them with
