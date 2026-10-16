@@ -15,10 +15,14 @@ consolidated repository has been used and accepted.
 
 1. **Usage period first.** Run the consolidated repository for a period before any
    transition; keep the legacy checkouts available for rollback.
-2. **History integration (needs separate authorization).** The ancestry-preserving,
-   no-rewrite integration (bundles + a non-committing `ours` merge, verified with
-   `merge-base --is-ancestor`) is prepared but deliberately **not committed**. Its
-   merge commit requires explicit approval and must not rewrite ancestors.
+2. **History integration (committed, 2026-10-14).** The ancestry-preserving,
+   no-rewrite integration is **committed** as merge
+   `a8082b6154dd88fd8ac9fd18af5df5e682a751a6`, verified with
+   `merge-base --is-ancestor`, and its parents are the three source tips:
+   core `54aa6a1a8f73a3b6debef0c54472351c2a817080`,
+   controller `f8502a500e52420ff0b4935b8abc0ebb5b218f2b` and
+   adapter `f319f60df470705db220d67875fdefbe4666e5da`. The merge did not rewrite
+   ancestors; the legacy repositories below remain intact as the rollback path.
 3. **Deprecation notices.** Add a notice to each legacy README pointing at the
    consolidated repository and the unified commands.
 4. **Release/issue redirection.** Redirect legacy release and issue traffic to the

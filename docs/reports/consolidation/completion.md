@@ -5,6 +5,11 @@ State at this initial report: **11 of 16 tasks `LOCAL_DONE`**, `ACTIVE`; no pend
 no commits, pushes, service restarts or repository retirement. (Superseded by _Final status_
 and _Reconciliation_ below; retained as history.)
 
+The closure validation for this migration is recorded in
+[closure-evidence.md](closure-evidence.md): the operator-authorized relative link check
+(`broken links: 0`) and `git diff --check`, the `go build/test/vet` validation gates, evidence
+provenance, and the external-completion reasons for C5/C7.
+
 ## Tasks and execution method (recorded honestly)
 
 | Task                                                    | Status     | Method                                                                                                                                                                                                                                                       |
@@ -71,9 +76,12 @@ overrides). Advisory decisions cannot lower risk, approve work or bypass governa
 
 ## Source / history preservation
 
-Sibling repositories unchanged (HEADs + uncommitted deltas intact; read-only).
-Bundles/rollback from MIG-002 remain valid. **No history-integration commit was
-created.**
+Sibling repositories unchanged (HEADs + uncommitted deltas intact; read-only) and remain
+intact as the rollback path; no retirement or deletion has occurred. Bundles/rollback from
+MIG-002 remain valid. At the time this section was first written **no history-integration
+commit had been created**; the ancestry-preserving merge is now **committed** as
+`a8082b6154dd88fd8ac9fd18af5df5e682a751a6` (parents core/controller/adapter — see
+_Consolidation merge commit — COMMITTED_ below).
 
 ## Files changed (uncommitted, awaiting approval)
 
@@ -159,18 +167,23 @@ gate. The earlier "objective is PARTIAL" note is resolved:
   deliverables are present, its acceptance checks pass, and `sop continue --check` reports
   `PLAN_COMPLETE` (16/16 satisfied). The original `PARTIAL` outcome is preserved as history;
   no waiver or manual state edit was used.
-- **PENDING — history integration (prepared, materialized, not committed).** Full-history
-  bundles were produced outside tracked source and verified (`git bundle verify` = complete
-  history; restore `fsck --full` clean) and now live in the durable backup (below):
+- **COMMITTED — history integration (merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6`).**
+  Full-history bundles were produced outside tracked source and verified (`git bundle verify`
+  = complete history; restore `fsck --full` clean) and now live in the durable backup (below):
   `core.bundle` `38089deb…4219e`, `controller.bundle` `de33fdbc…7f3b35`,
   `adapter.bundle` `536715c3…a9bbee9`, plus `decision-adapters-delta.patch` `6ea5cc9c…38c99b`.
-  The ancestry-preserving integration was demonstrated non-committingly both before and after
-  the move: `git merge --no-commit -s ours --allow-unrelated-histories <controller-tip>
-<adapter-tip>` records **both** tips in `.git/MERGE_HEAD` and leaves the tree identical to
-  core (`54aa6a1`); `git merge --abort` leaves the fixture clean. **No commit was created.**
-  The actual merge commit requires separate approval (see _Prepared history-integration_ below).
+  The ancestry-preserving integration is now **committed** as merge
+  `a8082b6154dd88fd8ac9fd18af5df5e682a751a6`, whose parents are the three source tips:
+  core `54aa6a1a8f73a3b6debef0c54472351c2a817080`,
+  controller `f8502a500e52420ff0b4935b8abc0ebb5b218f2b` and
+  adapter `f319f60df470705db220d67875fdefbe4666e5da`; ancestry was verified with
+  `git merge-base --is-ancestor`. The commit did not rewrite ancestors.
+  _(History: the integration was first demonstrated non-committingly via
+  `git merge --no-commit -s ours --allow-unrelated-histories <controller-tip> <adapter-tip>`,
+  which recorded **both** tips in `.git/MERGE_HEAD` and left the tree identical to core
+  (`54aa6a1`); that earlier prepared-and-uncommitted state is retained here as history.)_
 
-The `--allow-unrelated-histories` flag is required: without it git refuses the merge
+The `--allow-unrelated-histories` flag was required: without it git refused the merge
 (`rc=128`), which the originally documented command omitted.
 
 Nothing above erases history: the `LOCAL_DONE` records, prior run evidence, the earlier
@@ -185,9 +198,10 @@ Nothing above erases history: the `LOCAL_DONE` records, prior run evidence, the 
   `sop continue --check` → `PLAN_COMPLETE` (16/16). No commit, push, CI, deploy, merge or
   repository retirement has occurred.
 - **Remaining limitations (honest):**
-  1. **The consolidation merge commit is uncommitted** — a single ancestry-preserving merge
-     (parents core/controller/adapter) carrying the 259-path content; prepared and verified in a
-     disposable fixture, needs explicit approval.
+  1. **The consolidation merge commit was prepared and verified before commit** — a single
+     ancestry-preserving merge (parents core/controller/adapter) carrying the 259-path content.
+     It is now **committed** as merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6`; the earlier
+     prepared-but-uncommitted state is retained as history.
   2. **Controller licensing resolved** — `sop-controller` ships no `LICENSE`, but the operator
      confirmed ownership and authorized Apache-2.0 for the imported controller source
      (`controller-provenance.md`); no applicable notice existed to preserve.
@@ -328,12 +342,49 @@ mutation was fabricated and `state.db` was never hand-edited.
 
 ---
 
-## Prepared consolidation merge commit (review only — do NOT run without approval)
+## Remaining boundaries
+
+Each boundary is recorded exactly once with an unambiguous status. None of these
+statements infers current local SOP state from historical documents, and none claims
+a fresh CI pass.
+
+1. **Archived state — not rechecked.** The operator-local SOP archive, installed binaries,
+   live services and backup media were **not rechecked** by this closure. The current SOP state
+   was verified directly (`sop status` / `sop approvals`); it is **not inferred** from the
+   historical repository documents above, and a repository merge **does not verify machine
+   deployment** — the committed merge only guarantees repository ancestry and content, not the
+   running local deployment.
+2. **Migration CI — not independently reverified.** Migration CI for the consolidation
+   merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6` is **not independently reverified**
+   (workflow lookup returned no runs); **no fresh CI pass is claimed**. Only the completion
+   report's recorded local BUILD/UNIT_TEST/LINT evidence exists, and it is read as
+   historical, not current.
+3. **Legacy retirement — no retirement.** Legacy notices, issue/release redirection
+   and archival remain **separate decisions**; **no legacy repository was retired or
+   deleted**, and the sibling histories remain the rollback path.
+4. **Provider reliability and performance limitations — neither erased nor waived.**
+   The recorded provider limitations in this completion report remain in force (see
+   _Objective acceptance and remaining limitations_ above: CLEF/oMLX id-reliability,
+   live both-unavailable not exercised, performance/size figures). This closure references
+   them without erasure, softening or waiver.
+5. **Go runtime validation — ran and passed.** `go build ./...`, `go test ./...` and
+   `go vet ./...` ran and passed through SOP's validation gates; no additional runtime suites
+   were run. Documentation validation also passed: the relative documentation link check
+   (0 broken links) and `git diff --check` (PASS).
+
+## Consolidation merge commit — COMMITTED (`a8082b6154dd88fd8ac9fd18af5df5e682a751a6`)
 
 This is the single ancestry-preserving merge commit. Its **parents** preserve the sibling
 histories; its **content** is the staged 259-path migration list — the `ours` strategy only
 guarantees the merge never conflicts on content, it does **not** carry the imported content
-(the content comes from staging). It is **not** performed here.
+(the content comes from staging). The merge is **committed** on `agentic-sop` `main` as
+`a8082b6154dd88fd8ac9fd18af5df5e682a751a6`, with parents core
+`54aa6a1a8f73a3b6debef0c54472351c2a817080`, controller
+`f8502a500e52420ff0b4935b8abc0ebb5b218f2b` and adapter
+`f319f60df470705db220d67875fdefbe4666e5da`.
+
+The procedure below is retained as the historical record of how the merge was prepared and
+performed (review only — the commit already exists; do NOT re-run).
 
 ```
 # 0. Prereqs: index/working tree preserved; core main at 54aa6a1 (verify with git rev-parse).
