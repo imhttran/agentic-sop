@@ -672,7 +672,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// The canonical context the harness supplies to the agent, built from evidence
 		// it already holds. It is deterministic and model-free; the trace records its
 		// summary and nothing reads it back to drive a decision.
-		ctxSummary = implementContext(spec, plan, rn, cfg, trouting, failureCtx, d)
+		var ragCitations []string
+		ctxSummary, ragCitations = implementContext(ctx, spec, plan, rn, cfg, trouting, failureCtx, d)
 		// The Prompt Compiler (CTX-005) owns the structure of the model input: it turns
 		// the canonical context, the prior attempt, and caller observations into
 		// deterministic, bounded, provenance-carrying evidence. It invokes no model.
@@ -690,6 +691,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		input := compiled.Evidence()
+		// Prompt inclusion (RAG-SOP-003 4B-2B2a-3): refresh rag.json after the compiler
+		// has applied its own budget, using exact citation identities.
+		updateRAGPromptInclusion(rn, dir, spec.ID, input, ragCitations)
 		// Record the deterministic input size (canonical context and compiled prompt) for
 		// this attempt. It is diagnostic measurement only (RBV-013): nothing reads it
 		// back, and no value is inferred from text length.
@@ -2005,7 +2009,7 @@ func completionValidationCommands(cfg config.Config) []string {
 // recovery evidence handed to this attempt. It is deterministic and model-free: the
 // harness owns selection, ordering, provenance, and limits, and the model never selects
 // its own context.
-func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) sopctx.Context {
+func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) (sopctx.Context, []string) {
 	execution := sopctx.Item{
 		Source:   sopctx.SourceExecution,
 		Identity: "execution",
@@ -2050,6 +2054,53 @@ func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, c
 	if cfg.ContextEfficiency.Handoff {
 		memory = append(memory, d.handoffItems...)
 	}
+	// RAG knowledge (RAG-SOP-003 4B-2A3b). A task that declares RequiredEvidence uses
+	// the ALREADY-VERIFIED attempt evidence carried on d.ragAttempt (no second
+	// retrieval); it is used only when retrieval succeeded and its corpus is the
+	// authorized configured corpus. Optional tasks keep the existing path. Disabled
+	// RAG yields nil, so the context and prompt are byte-identical.
+	// d.ragAttempt is set (Attempted) only by required-evidence enforcement, which has
+	// already validated every declared identity and the authorized corpus. Reuse that
+	// same evidence; do not retrieve again. Optional tasks (Attempted == false) use
+	// the existing optional path.
+	var knowledge []sopctx.Item
+	if d.ragAttempt.Attempted {
+		if d.ragAttempt.Err == nil {
+			if resolved, rerr := cfg.RAG.Resolved(nil); rerr == nil && resolved.Enabled && d.ragAttempt.Corpus == resolved.Corpus {
+				knowledge = sopctx.KnowledgeItems(d.ragAttempt.Evidence, resolved.TopK, resolved.ContextBudgetBytes)
+			}
+		}
+	} else {
+		knowledge = optionalRAGKnowledge(ctx, cfg, spec, d)
+	}
+	// Content-free RAG telemetry (RAG-SOP-003 4B-2B2a). used_in_context is true only
+	// when knowledge items actually enter the context.
+	rec := ragTelemetry{TaskID: spec.ID, Attempt: d.attemptNumber, Mode: ragModeOptional, Status: ragStatusSucceed, ReasonCode: ragReasonNone}
+	if resolved, rerr := cfg.RAG.Resolved(nil); rerr != nil || !resolved.Enabled {
+		rec.Status, rec.ReasonCode = ragStatusSkipped, ragReasonDisabled
+	} else {
+		rec.Corpus = resolved.Corpus
+	}
+	if d.ragAttempt.Attempted {
+		rec.Mode = ragModeRequired
+		rec.Corpus = d.ragAttempt.Corpus
+		if d.ragAttempt.Err != nil {
+			rec.Status, rec.ReasonCode = ragStatusFailed, ragReasonFailure
+		}
+	}
+	for _, it := range knowledge {
+		if strings.TrimSpace(it.Text) == "" {
+			continue // renderContext skips empty-text items; do not count them as used
+		}
+		rec.EvidenceCount++
+		rec.EvidenceBytes += len(it.Text)
+	}
+	rec.UsedInContext = rec.EvidenceCount > 0
+	if rec.Mode == ragModeOptional && rec.Status == ragStatusSucceed && !rec.UsedInContext && rec.Corpus != "" {
+		rec.Status, rec.ReasonCode = ragStatusFailed, ragReasonFallback
+	}
+	writeRAGTelemetry(rn, rec)
+
 	return sopctx.FromInputs(sopctx.Inputs{
 		TaskID:       spec.ID,
 		Plan:         plan.RenderMarkdown(),
@@ -2057,7 +2108,8 @@ func implementContext(spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, c
 		Execution:    []sopctx.Item{execution},
 		Recovery:     recovery,
 		Memory:       memory,
-	}, sopctx.DefaultLimits())
+		Knowledge:    knowledge,
+	}, sopctx.DefaultLimits()), knowledgeCitations(knowledge)
 }
 
 // applicableDecisionItems returns the durable decisions applicable to the current

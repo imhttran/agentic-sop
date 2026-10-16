@@ -20,11 +20,15 @@ import (
 
 // Spec is the structured form of a Markdown task file.
 type Spec struct {
-	ID                 string
-	Title              string
-	Description        string
-	Requirements       []string
-	Deliverables       []string
+	ID           string
+	Title        string
+	Description  string
+	Requirements []string
+	Deliverables []string
+	// RequiredEvidence names external retrieval evidence this task requires
+	// (RAG-SOP-003): "corpus:<id>" or "source:<prefix>". Empty (the default) means
+	// no required evidence and preserves the existing behavior exactly.
+	RequiredEvidence   []string
 	AcceptanceCriteria []string
 	// AcceptanceChecks are operator-authorized deterministic acceptance checks: each
 	// is a shell command whose exit status 0 means the criterion is met. They are the
@@ -121,6 +125,8 @@ func Parse(data []byte) (*Spec, error) {
 			spec.Requirements = append(spec.Requirements, listItems(sec.lines)...)
 		case "deliverables", "deliverable":
 			spec.Deliverables = append(spec.Deliverables, listItems(sec.lines)...)
+		case "required evidence", "required-evidence":
+			spec.RequiredEvidence = append(spec.RequiredEvidence, listItems(sec.lines)...)
 		case "acceptance criteria", "acceptance", "acceptance criterion":
 			spec.AcceptanceCriteria = append(spec.AcceptanceCriteria, listItems(sec.lines)...)
 		case "acceptance checks", "acceptance check":
@@ -180,6 +186,7 @@ func (s *Spec) Render() string {
 	}
 	writeList(&b, "Requirements", s.Requirements)
 	writeList(&b, "Deliverables", s.Deliverables)
+	writeList(&b, "Required evidence", s.RequiredEvidence)
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
 	writeList(&b, "Acceptance checks", s.AcceptanceChecks)
 	writeList(&b, "Constraints", s.Constraints)

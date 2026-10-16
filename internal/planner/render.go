@@ -53,6 +53,10 @@ func (p *Plan) RenderMarkdown() string {
 		}
 		b.WriteString("\n### Deliverables\n\n")
 		b.WriteString(renderList(stage.Deliverables))
+		if len(stage.RequiredEvidence) > 0 {
+			b.WriteString("\n### Required Evidence\n\n")
+			b.WriteString(renderList(stage.RequiredEvidence))
+		}
 		b.WriteString("\n### Acceptance Criteria\n\n")
 		b.WriteString(renderList(stage.AcceptanceCriteria))
 		if len(stage.AcceptanceChecks) > 0 {

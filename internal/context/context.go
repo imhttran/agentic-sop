@@ -40,12 +40,18 @@ const (
 	// the lowest priority and never overrides current repository, lifecycle, or
 	// verification evidence.
 	SourceMemory Source = "memory"
+	// SourceKnowledgeRAG is optional retrieved knowledge evidence from the RAG
+	// knowledge corpus (RAG-SOP-003). It is untrusted evidence: it carries the
+	// lowest priority and never overrides task, repository, lifecycle, execution,
+	// recovery, or memory evidence, and it can never become an instruction or a
+	// governance setting.
+	SourceKnowledgeRAG Source = "knowledge-rag"
 )
 
 // Valid reports whether s is a known source.
 func (s Source) Valid() bool {
 	switch s {
-	case SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory:
+	case SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory, SourceKnowledgeRAG:
 		return true
 	}
 	return false
@@ -61,6 +67,10 @@ const (
 	PriorityExecution  = 3 // execution identity and budget
 	PriorityRecovery   = 4 // failure/continuation/escalation/replan evidence
 	PriorityGeneric    = 5 // generic bounded context
+	// PriorityKnowledgeRAG is the lowest-priority source: optional retrieved
+	// knowledge evidence. It sorts strictly last, so it can never displace any
+	// existing evidence.
+	PriorityKnowledgeRAG = 6
 )
 
 // Item is one piece of context with deterministic provenance: what it is, where it
@@ -296,6 +306,12 @@ type Inputs struct {
 	// repository. It is included verbatim and carries the lowest priority; it never
 	// overrides current repository, lifecycle, or verification evidence.
 	Memory []Item
+	// Knowledge is optional retrieved knowledge evidence (RAG-SOP-003) already
+	// validated and converted by KnowledgeItems. It is included verbatim and
+	// carries the lowest priority, so it can never displace task, repository,
+	// lifecycle, execution, recovery, or memory evidence. A nil slice leaves the
+	// built context byte-identical to before.
+	Knowledge []Item
 }
 
 // FromInputs assembles the canonical items from already-known evidence and returns
@@ -353,5 +369,6 @@ func FromInputs(in Inputs, lim Limits) Context {
 	items = append(items, in.Execution...)
 	items = append(items, in.Recovery...)
 	items = append(items, in.Memory...)
+	items = append(items, in.Knowledge...)
 	return Build(items, lim)
 }

@@ -64,4 +64,10 @@ const (
 	// (for example via `sop init`) and re-runs. Like NO_PROGRESS, it is not
 	// auto-continued or auto-fixed under unchanged configuration.
 	VALIDATION_NOT_CONFIGURED BlockedReason = "VALIDATION_NOT_CONFIGURED"
+	// REQUIRED_EVIDENCE_MISSING marks a task whose declared required retrieval
+	// evidence (RAG-SOP-003) could not be verified before execution. SOP fails
+	// closed rather than run the task without the evidence it requires. It is a
+	// terminal operator-intervention state, not a human approval, and is not
+	// auto-continued or auto-fixed; recovery uses the existing retry/waiver paths.
+	REQUIRED_EVIDENCE_MISSING BlockedReason = "REQUIRED_EVIDENCE_MISSING"
 )

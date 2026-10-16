@@ -266,12 +266,18 @@ func TestMigrationAddsExecutionModeToExistingDatabase(t *testing.T) {
 	}
 	saveDependency(t, s, "T001")
 
-	// Simulate a pre-v3 database: drop the columns added at v3 and v4 and lower the
-	// recorded version, so reopening must migrate it back rather than fail.
+	// Simulate a pre-v3 database: drop the columns added at v3, v4, and v5 and
+	// lower the recorded version, so reopening must migrate it back rather than fail.
 	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN execution_mode"); err != nil {
 		t.Fatalf("drop column: %v", err)
 	}
 	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN discovery_iterations"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN required_evidence"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN blocked_detail"); err != nil {
 		t.Fatalf("drop column: %v", err)
 	}
 	if _, err := s.db.Exec("PRAGMA user_version = 2"); err != nil {
@@ -319,8 +325,15 @@ func TestMigrationAddsDiscoveryIterationsToExistingDatabase(t *testing.T) {
 	}
 	saveDependency(t, s, "T001")
 
-	// Simulate a pre-v4 database: drop the discovery column and lower the version.
+	// Simulate a pre-v4 database: drop the discovery and required-evidence columns
+	// and lower the version.
 	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN discovery_iterations"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN required_evidence"); err != nil {
+		t.Fatalf("drop column: %v", err)
+	}
+	if _, err := s.db.Exec("ALTER TABLE tasks DROP COLUMN blocked_detail"); err != nil {
 		t.Fatalf("drop column: %v", err)
 	}
 	if _, err := s.db.Exec("PRAGMA user_version = 3"); err != nil {

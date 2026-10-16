@@ -63,6 +63,12 @@ func runTask(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 	fmt.Fprintf(stdout, "Title: %s\n", task.Title)
 	fmt.Fprintf(stdout, "Status: %s\n", task.Status)
 	fmt.Fprintf(stdout, "Attempts: %d\n", len(task.Attempts))
+	if task.BlockedReason != domain.NO_REASON {
+		fmt.Fprintf(stdout, "Blocked: %s\n", task.BlockedReason)
+		if task.BlockedDetail != "" {
+			fmt.Fprintf(stdout, "Missing: %s\n", task.BlockedDetail)
+		}
+	}
 	if n := len(task.Attempts); task.Status == domain.NOT_REQUIRED && n > 0 {
 		fmt.Fprintf(stdout, "Not required: %s\n", task.Attempts[n-1].Reason)
 	}

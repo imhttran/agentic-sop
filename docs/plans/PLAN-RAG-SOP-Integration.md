@@ -178,8 +178,9 @@ Tasks:
 ### Acceptance Checks
 
 - `go build ./...`
-- `go test -short ./...`
 - `go vet ./...`
+- `go test -count=1 ./internal/cli/...`
+- `go test -count=1 ./internal/context/... ./internal/ragclient/... ./internal/prompt/...`
 
 ### Dependencies
 

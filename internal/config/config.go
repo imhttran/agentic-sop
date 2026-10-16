@@ -129,6 +129,10 @@ type Config struct {
 	// the SOP_MODEL_* environment (which a .env file may supply) by
 	// internal/model; an omitted block leaves the agent selection unchanged.
 	Models model.Route `yaml:"models"`
+	// RAG is the opt-in, disabled-by-default RAG knowledge-retrieval configuration
+	// (RAG-SOP-003). An omitted block leaves existing behavior unchanged; the
+	// SOP_RAG_* environment overrides it, resolved by RAGConfig.Resolved.
+	RAG RAGConfig `yaml:"rag"`
 	// Providers configures the optional provider/runtime inspection layer (Phase 4):
 	// per-provider endpoints and the opt-in pre-execution model validation. An
 	// omitted block leaves existing behavior unchanged.

@@ -12,7 +12,7 @@ import (
 
 const driverName = "sqlite"
 
-const taskColumns = `id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason,
+const taskColumns = `id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, required_evidence, status, blocked_reason, blocked_detail,
 	       attempt, max_attempts, created_at, updated_at`
 
 type Store struct {
@@ -50,7 +50,7 @@ func (s *Store) Close() error {
 }
 
 // schemaVersion is the current on-disk schema version.
-const schemaVersion = 4
+const schemaVersion = 6
 
 func (s *Store) migrate() error {
 	var version int
@@ -68,6 +68,8 @@ func (s *Store) migrate() error {
 		1: s.migrateHandoffs,
 		2: s.migrateExecutionMode,
 		3: s.migrateDiscoveryIterations,
+		4: s.migrateRequiredEvidence,
+		5: s.migrateBlockedDetail,
 	}
 	for version < schemaVersion {
 		migrate, ok := migrations[version]
@@ -167,6 +169,31 @@ func (s *Store) migrateDiscoveryIterations() error {
 	return err
 }
 
+// migrateRequiredEvidence adds the per-task required_evidence column (schema
+// version 5) so a task's required retrieval evidence survives a restart
+// (RAG-SOP-003). The value is a JSON array of "corpus:<id>"/"source:<prefix>"
+// strings; existing rows default to '[]', which means "unset", so a migrated
+// database is unchanged.
+func (s *Store) migrateRequiredEvidence() error {
+	if _, err := s.db.Exec(`ALTER TABLE tasks ADD COLUMN required_evidence TEXT NOT NULL DEFAULT '[]'`); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("PRAGMA user_version = 5")
+	return err
+}
+
+// migrateBlockedDetail adds the per-task blocked_detail column (schema version 6)
+// so the exact missing/unauthorized required-evidence identities recorded when a
+// task is blocked survive a restart (RAG-SOP-003). Existing rows default to ”,
+// which means "no detail", so a migrated database is unchanged.
+func (s *Store) migrateBlockedDetail() error {
+	if _, err := s.db.Exec(`ALTER TABLE tasks ADD COLUMN blocked_detail TEXT NOT NULL DEFAULT ''`); err != nil {
+		return err
+	}
+	_, err := s.db.Exec("PRAGMA user_version = 6")
+	return err
+}
+
 func (s *Store) Save(task *domain.Task) error {
 	tx, err := s.db.Begin()
 	if err != nil {
@@ -209,22 +236,25 @@ func upsertTask(tx *sql.Tx, task *domain.Task) error {
 func upsertTaskRow(tx *sql.Tx, task *domain.Task) error {
 	_, err := tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, required_evidence, status, blocked_reason, blocked_detail, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
 			title = excluded.title,
 			objective = excluded.objective,
 			acceptance_criteria = excluded.acceptance_criteria,
 			execution_mode = excluded.execution_mode,
 			discovery_iterations = excluded.discovery_iterations,
+			required_evidence = excluded.required_evidence,
 			status = excluded.status,
 			blocked_reason = excluded.blocked_reason,
+			blocked_detail = excluded.blocked_detail,
 			attempt = excluded.attempt,
 			max_attempts = excluded.max_attempts,
 			created_at = excluded.created_at,
 			updated_at = excluded.updated_at
 	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode), task.DiscoveryIterations,
-		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
+		encodeRequiredEvidence(task.RequiredEvidence),
+		string(task.Status), string(task.BlockedReason), task.BlockedDetail, task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
 }
@@ -381,10 +411,11 @@ func (s *Store) ClearTasks() error {
 func insertTaskRow(tx *sql.Tx, task *domain.Task) error {
 	_, err := tx.Exec(`
 		INSERT INTO tasks
-		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, status, blocked_reason, attempt, max_attempts, created_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		(id, title, objective, acceptance_criteria, execution_mode, discovery_iterations, required_evidence, status, blocked_reason, blocked_detail, attempt, max_attempts, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, task.ID, task.Title, task.Objective, task.AcceptanceCriteria, string(task.ExecutionMode), task.DiscoveryIterations,
-		string(task.Status), string(task.BlockedReason), task.Attempt, task.MaxAttempts,
+		encodeRequiredEvidence(task.RequiredEvidence),
+		string(task.Status), string(task.BlockedReason), task.BlockedDetail, task.Attempt, task.MaxAttempts,
 		task.CreatedAt.UTC().Format(time.RFC3339Nano), task.UpdatedAt.UTC().Format(time.RFC3339Nano))
 	return err
 }
@@ -468,12 +499,19 @@ func scanTask(sc rowScanner) (*domain.Task, error) {
 	var status, blockedReason, executionMode string
 	var discoveryIterations int
 	var createdAtStr, updatedAtStr string
+	var requiredEvidenceJSON string
 
 	err := sc.Scan(&task.ID, &task.Title, &task.Objective, &task.AcceptanceCriteria,
-		&executionMode, &discoveryIterations, &status, &blockedReason, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
+		&executionMode, &discoveryIterations, &requiredEvidenceJSON, &status, &blockedReason, &task.BlockedDetail, &task.Attempt, &task.MaxAttempts, &createdAtStr, &updatedAtStr)
 	if err != nil {
 		return nil, err
 	}
+
+	requiredEvidence, err := decodeRequiredEvidence(requiredEvidenceJSON)
+	if err != nil {
+		return nil, fmt.Errorf("task %s: %w", task.ID, err)
+	}
+	task.RequiredEvidence = requiredEvidence
 
 	taskStatus, ok := normalizeStatus(status)
 	if !ok {
