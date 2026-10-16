@@ -1,13 +1,16 @@
 # RAG engineering skills
 
-Three SOP skills add a Retrieval-Augmented Generation (RAG) engineering checklist to
-the existing read-only capabilities:
+Four SOP skills support RAG engineering. Three add a checklist to an existing
+read-only capability; the fourth, `/sop-rag-integrate`, advises on whether a project
+needs retrieval augmentation at all and produces a scoped integration plan — or a
+NO-RAG recommendation:
 
-| Command        | Capability     | Mutates? | Use for                                                       |
-| -------------- | -------------- | -------- | ------------------------------------------------------------- |
-| `/rag-schema`  | `plan`         | no       | inspect a pgvector schema and plan a safe dimension change     |
-| `/rag-test`    | `design_tests` | no       | design unit, race, integration, end-to-end, and mismatch tests |
-| `/rag-ingest`  | `plan`         | no       | design a safe ingestion pipeline (chunking → store)            |
+| Command               | Capability     | Mutates? | Use for                                                        |
+| --------------------- | -------------- | -------- | -------------------------------------------------------------- |
+| `/rag-schema`         | `plan`         | no       | inspect a pgvector schema and plan a safe dimension change      |
+| `/rag-test`           | `design_tests` | no       | design unit, race, integration, end-to-end, and mismatch tests  |
+| `/rag-ingest`         | `plan`         | no       | design a safe ingestion pipeline (chunking → store)             |
+| `/sop-rag-integrate`  | `plan`         | no       | assess RAG suitability for a project and produce a scoped plan (or NO-RAG) |
 
 They are **domain skills**, not new capabilities: each fixes an existing read-only
 capability and delegates to the canonical `sop` skill, which owns routing, provider
@@ -39,7 +42,7 @@ Claude Code plugin:
 
 See [`INSTALLATION.md`](INSTALLATION.md), [`ZED-SKILLS.md`](ZED-SKILLS.md),
 [`CLAUDE-SKILLS.md`](CLAUDE-SKILLS.md), and [`CLAUDE-PLUGIN.md`](CLAUDE-PLUGIN.md). The
-plugin mirrors the same tree, so the same three commands appear there (namespaced as
+plugin mirrors the same tree, so the same commands appear there (namespaced as
 `/sop:rag-schema`, and so on).
 
 ## Use
@@ -53,6 +56,8 @@ never a shell command. SOP picks the provider and the model.
 /rag-test design the verification for the ingestion and retrieval pipeline, including the dimension-mismatch cases
 
 /rag-ingest design an ingestion pipeline that replaces a document atomically and recovers from a failed embedding without a partial write
+
+/sop-rag-integrate decide whether this Spring Boot service should add vector search or whether full-text search is already enough, choose stack-native libraries, and produce a scoped integration plan
 ```
 
 Each run is recorded under the project's `.agent-sdlc/runs/prompts/<run-id>/` and can be
@@ -75,6 +80,13 @@ inspected with `sop report prompts/<run-id>`.
   retry/backoff classification, transactional replacement, provenance and idempotency,
   and recovery that never leaves a partial write. See
   [`../../skills/rag-ingest/SKILL.md`](../../skills/rag-ingest/SKILL.md).
+- **`/sop-rag-integrate`** — discover the target application (language, framework,
+  database, existing search, security model, deployment), decide whether retrieval
+  augmentation is needed at all (allowing an explicit **NO-RAG**), choose stack-native,
+  provider-neutral libraries, and produce a scoped plan covering only the components the
+  application needs — handing implementation, verification, and publishing to
+  `/sop-implement`, `sop run`, and `/sop-publish`. See
+  [`../../skills/sop-rag-integrate/SKILL.md`](../../skills/sop-rag-integrate/SKILL.md).
 
 ## Safety boundaries
 
@@ -180,10 +192,14 @@ The shipped validators and installers were exercised for this change:
 - `go build ./...` — clean.
 - `./scripts/packaging/build-claude-plugin.sh --check` — the plugin mirror is current.
 - `scripts/install/install-skills.sh {zed,claude} --project <dir>` then `--uninstall` —
-  all 13 commands install as flat, name-matching skill folders and uninstall
+  all 17 commands install as flat, name-matching skill folders and uninstall
   idempotently.
 
 ## Recommended next RAG skills
+
+The integration advisor above now ships the suitability, technology-selection, and
+evaluation guidance that these narrower skills would otherwise each repeat. The
+remaining candidates are:
 
 - `/rag-eval` — design retrieval evaluation: labelled cases, recall/precision at K,
   reranker and rewrite comparisons, and answerability/fact-judge gates.

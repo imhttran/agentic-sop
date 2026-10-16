@@ -42,7 +42,7 @@ Two different things share the "RAG" name; keep them distinct:
 | | Shipped RAG **skills** | RAG **retrieval adapter** (SOP core) |
 | --- | --- | --- |
 | Status | **Shipped** — installed by `./install.sh --skills …` | **Proposed/implemented, disabled by default** — explicit operator opt-in only |
-| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest` | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/retrieval` (BM25 baseline) |
+| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest`, `skills/sop-rag-integrate` | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/retrieval` (BM25 baseline) |
 | Mutates? | No; produces plans/test designs, never a verdict | Can alter retrieved context when explicitly enabled |
 | Docs | [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md), [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md), [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) |
 
@@ -180,7 +180,7 @@ single owner. This table is that map.
 - [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, and inspection.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
-- [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, and `/rag-ingest` RAG-domain skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
+- [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, `/rag-ingest`, and `/sop-rag-integrate` RAG skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
 - [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, the preserved legacy wrappers, and the distinction between the shipped RAG skills and the proposed/implemented RAG retrieval adapter.
 - [guides/LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md) — recommendations for the later, operator-approved transition of the legacy `sop-controller` and `sop-decision-adapters` repositories; **no** retirement is performed.
 - [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).

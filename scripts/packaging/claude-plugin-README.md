@@ -50,6 +50,7 @@ available.
 | `/sop:rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change   |
 | `/sop:rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix         |
 | `/sop:rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                     |
+| `/sop:sop-rag-integrate` | `plan`           | no       | assess a project's RAG suitability and plan its integration |
 | `/sop:sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop:sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop:sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |

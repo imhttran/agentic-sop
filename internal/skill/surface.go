@@ -48,6 +48,11 @@ var Commands = []Command{
 	{Name: "rag-schema", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "rag-test", Capability: "design_tests", Delegation: "sop prompt --capability design_tests"},
 	{Name: "rag-ingest", Capability: "plan", Delegation: "sop prompt --capability plan"},
+	// A RAG-integration advisor: it fixes the read-only plan capability and adds a
+	// RAG-integration methodology (discovery, suitability, technology selection, a scoped
+	// plan, verification), delegating the governed apply/verify/publish steps to
+	// /sop-implement, sop run, and /sop-publish. It never edits the target repository.
+	{Name: "sop-rag-integrate", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "sop-cleanup", Capability: "", Delegation: "sop status"},
 	// The completion half of a merge/publish: it verifies the published target,
 	// historicalizes eligible plans through SOP, and removes only fully-merged,

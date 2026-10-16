@@ -3,8 +3,8 @@
 This guide shows how to install the SOP skills so Zed's agent exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-browser-test`, `/sop-publish`, and the RAG skills `/rag-schema`, `/rag-test`,
-and `/rag-ingest`,
+`/sop-continue`, `/sop-browser-test`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
 The commands are **thin adapters**. Capability aliases call `sop prompt`;
@@ -84,6 +84,7 @@ scripts/install/install-skills.sh zed --uninstall
 | `/rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change    |
 | `/rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix          |
 | `/rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                      |
+| `/sop-rag-integrate` | `plan`           | no       | assess a project's RAG suitability and plan its integration |
 | `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
@@ -96,7 +97,10 @@ default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
 
 The `rag-*` commands are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist. They never mutate
-the repository; see [`RAG-SKILLS.md`](RAG-SKILLS.md).
+the repository; see [`RAG-SKILLS.md`](RAG-SKILLS.md). `/sop-rag-integrate` follows the
+same boundary: it fixes `plan`, advises on whether a project needs retrieval
+augmentation at all (including a NO-RAG outcome), and hands implementation to the
+governed `/sop-implement` lifecycle.
 
 Example, from Zed's agent message editor:
 
