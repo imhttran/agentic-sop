@@ -72,6 +72,13 @@ type Request struct {
 	// limits as the operator allowance and can never exceed the capability's hard
 	// iteration ceiling.
 	DiscoveryIterations int `json:"discovery_iterations,omitempty"`
+	// PlannerAvailable reports that the planner question feature is enabled for this
+	// invocation, so a mutating capability MAY raise a structured needs_planner outcome
+	// instead of proceeding. It is caller-owned invocation data, not configuration: the
+	// harness never reads a config file and decides from this flag alone which stages may
+	// ask (only IMPLEMENT has a supported planner continuation today). The zero value
+	// (false) leaves the capability's existing outcome contract exactly as it was.
+	PlannerAvailable bool `json:"planner_available,omitempty"`
 }
 
 // Validate rejects requests the transport must not send to a harness.
@@ -95,6 +102,9 @@ const (
 	OutcomeCompleted OutcomeStatus = "completed"
 	// OutcomeNeedsHuman: the agent cannot continue without a human decision.
 	OutcomeNeedsHuman OutcomeStatus = "needs_human"
+	// OutcomeNeedsPlanner: the executor needs a bounded planner decision before it
+	// can continue. It carries a structured PlannerRequest; it is not a human gate.
+	OutcomeNeedsPlanner OutcomeStatus = "needs_planner"
 	// OutcomeFailed: the agent could not complete the operation.
 	OutcomeFailed OutcomeStatus = "failed"
 )
@@ -114,6 +124,31 @@ type CompletionEvidence struct {
 	ValidationCommands []string             `json:"validation_commands"`
 }
 
+// PlannerRequest is the structured planner input an executor requests during
+// implementation. The executor raises it; SOP persists the question and parks the run.
+// It carries no approval authority.
+type PlannerRequest struct {
+	// Question is the text the planner must answer.
+	Question string `json:"question"`
+	// Options are the bounded choices offered, when the question is a choice.
+	Options []string `json:"options,omitempty"`
+	// Kind distinguishes the question within the task (defaults to a numbered round).
+	Kind string `json:"kind,omitempty"`
+	// ReturnStage is the run stage to resume after the answer (defaults to IMPLEMENTING).
+	ReturnStage string `json:"return_stage,omitempty"`
+}
+
+// Validate checks a planner request against the transport contract, fail-closed. A request
+// with no question is malformed: it can neither be asked nor continued. It mirrors the
+// request-level rule the lifecycle applies before a question is created, so an executor that
+// receives a malformed planner object refuses it instead of persisting an empty question.
+func (p *PlannerRequest) Validate() error {
+	if p == nil || strings.TrimSpace(p.Question) == "" {
+		return errors.New("planner request has no question")
+	}
+	return nil
+}
+
 // Outcome is the structured execution outcome a command agent returns.
 // Completion names a no-mutation conclusion; it carries no authority by itself.
 type Outcome struct {
@@ -123,6 +158,9 @@ type Outcome struct {
 	ChangesExpected bool
 	Completion      string
 	Evidence        *CompletionEvidence
+	// Planner, when set with Status OutcomeNeedsPlanner, is the structured planner
+	// request the executor raised during implementation.
+	Planner *PlannerRequest
 }
 
 // Response is the raw content returned by an agent, plus, when the command agent

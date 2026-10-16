@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/provider"
+	"github.com/imhttran/agentic-sop/internal/writing"
 )
 
 // EnvAgentHarness selects which harness the composition root builds. It is
@@ -355,6 +356,11 @@ func renderPrompt(r Request) string {
 	if reqs := strings.TrimSpace(r.OutputRequirements); reqs != "" {
 		fmt.Fprintf(&b, "\nOutput requirements:\n%s\n", reqs)
 	}
+	// The shared writing rule rides with every generated prompt, from its single
+	// definition in internal/writing, so the model's prose follows the same rule as
+	// SOP's human-facing responses.
+	b.WriteString("\n")
+	b.WriteString(writing.PromptBlock())
 	return b.String()
 }
 

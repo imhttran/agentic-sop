@@ -40,6 +40,17 @@ const CurrentVersion = 1
 // DefaultMaxFixCycles bounds the review/fix loop when none is configured.
 const DefaultMaxFixCycles = 3
 
+// Human-facing response shapes selected by output.responses. The concise shape is
+// the default: the short status/report summary that still retains failures, unmet
+// checks, the gate, the approval request, and any waiver. The detailed shape adds
+// per-finding detail and the full outcome verdict. The explicit `--detailed` flag
+// selects the detailed shape for one invocation regardless of this setting, and
+// machine-readable (JSON) output is never affected.
+const (
+	ResponseConcise  = "concise"
+	ResponseDetailed = "detailed"
+)
+
 // Default agent settings for new projects (plan AHV2008, PREJEV013).
 //
 // These are the stabilized native Agent Harness path: a tool-enabled
@@ -81,6 +92,9 @@ var (
 	supportedEngines   = map[string]bool{"self": true, "open-code-review": true}
 	supportedSeverity  = map[string]bool{
 		"critical": true, "high": true, "medium": true, "low": true, "info": true,
+	}
+	supportedResponseModes = map[string]bool{
+		ResponseConcise: true, ResponseDetailed: true,
 	}
 )
 
@@ -150,6 +164,63 @@ type Config struct {
 	// LOCAL_DONE transition) exactly as it was. See internal/outcome and
 	// docs/reference/LIFECYCLE-VERDICT-GATE.md.
 	Lifecycle Lifecycle `yaml:"lifecycle"`
+	// Planner configures the opt-in planner question/continuation feature
+	// (SPIKE-004). It is OFF by default: an omitted block leaves ordinary execution
+	// behavior unchanged.
+	Planner PlannerConfig `yaml:"planner"`
+	// Output is the optional human-facing response-output policy. It selects the
+	// default shape of `sop status` and `sop report` output. An omitted block keeps
+	// the concise default, so existing behavior is unchanged; the `--detailed` flag
+	// always overrides it for one invocation.
+	Output Output `yaml:"output"`
+}
+
+// Output is the optional response-output policy. Responses selects the default
+// shape of the human-facing status and report summaries:
+//
+//   - "concise" (the default): the short summary. It still retains failed
+//     checks, unresolved questions, required evidence (including the outcome
+//     verdict), approval requests, and any waiver.
+//   - "detailed": the fuller summary (per-finding detail and the full outcome
+//     verdict), which is also what `--detailed` selects for one invocation.
+//
+// The explicit `sop status --detailed` / `sop report --detailed` flag always wins
+// over the configured value, so an operator can ask for detail without editing
+// policy. Machine-readable output (JSON) is never affected by this setting.
+type Output struct {
+	Responses string `yaml:"responses"`
+}
+
+// ResponsesDetailed reports whether the configured default response shape is the
+// detailed one. It is false for the default concise mode, so an omitted block
+// leaves the concise default in place.
+func (c Config) ResponsesDetailed() bool {
+	return strings.TrimSpace(c.Output.Responses) == ResponseDetailed
+}
+
+// PlannerConfig is the opt-in planner question/continuation configuration.
+//
+// Enabled turns the feature on. Mode is an informational label (for example
+// "external"). RoundLimit bounds how many planner questions one task may raise
+// (0 means the built-in default).
+//
+// TimeoutSeconds is the response deadline applied to a newly created question:
+// a positive value sets the question's deadline to created_at + TimeoutSeconds.
+// Zero means no deadline (and the default for an omitted block), so an answer may
+// arrive at any time. A negative value, or a value whose duration would overflow,
+// is rejected when a question is created. PauseOnTimeout keeps a question whose
+// deadline has passed parked (WAITING_FOR_PLANNER) rather than failing it.
+//
+// Deadline expiry is evaluated only when SOP reads the task's planner state — that
+// is, on command re-entry (`sop run` / the planner gate, or `sop continue`), never by
+// a background timer. A question whose deadline passed is therefore still parked
+// until the next such read; it is never auto-retried.
+type PlannerConfig struct {
+	Enabled        bool   `yaml:"enabled"`
+	Mode           string `yaml:"mode"`
+	RoundLimit     int    `yaml:"round_limit"`
+	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty"`
+	PauseOnTimeout bool   `yaml:"pause_on_timeout"`
 }
 
 // Project holds project metadata.
@@ -569,6 +640,7 @@ func Default() Config {
 			Thresholds: decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4},
 		},
 		Workflow: Workflow{Mode: "local"},
+		Output:   Output{Responses: ResponseConcise},
 	}
 }
 
@@ -716,6 +788,11 @@ func (c *Config) applyDefaults() {
 	// The lifecycle verdict gate is deliberately left untouched: its zero value is
 	// false, so an omitted `lifecycle` block (the default) keeps the gate OFF and
 	// the local lifecycle unchanged. Nothing here enables it.
+	// The response shape defaults to concise, so an omitted `output` block keeps the
+	// short status/report summary.
+	if strings.TrimSpace(c.Output.Responses) == "" {
+		c.Output.Responses = ResponseConcise
+	}
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -772,6 +849,10 @@ func (c *Config) Validate() error {
 	case "local", "pull-request":
 	default:
 		return fmt.Errorf("config: unknown workflow.mode %q (want local, pull-request)", c.Workflow.Mode)
+	}
+	if !supportedResponseModes[strings.TrimSpace(c.Output.Responses)] {
+		return fmt.Errorf("config: unknown output.responses %q (want %s)",
+			c.Output.Responses, strings.Join(sortedKeys(supportedResponseModes), ", "))
 	}
 	if err := c.validateAutonomy(); err != nil {
 		return err
@@ -1117,6 +1198,16 @@ autonomy:
 #
 # lifecycle:
 #   verdict_gate: false
+
+# Human-facing response output. The default shape of the status and report
+# commands is concise; set responses: detailed to make the fuller summary the
+# default. The --detailed flag always overrides this for one invocation. A
+# concise response still retains failed checks, unresolved questions, required
+# evidence, approval requests, and any waiver, and machine-readable output is
+# unaffected.
+output:
+  # concise | detailed
+  responses: concise
 
 workflow:
   # local | pull-request

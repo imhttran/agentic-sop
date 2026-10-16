@@ -13,6 +13,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
@@ -75,6 +76,15 @@ func runReport(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	dir, ok := projectDir(getwd, stderr)
 	if !ok {
 		return exitError
+	}
+
+	// The response shape: the explicit --detailed flag wins; otherwise the configured
+	// default (concise unless output.responses: detailed). A missing or unreadable
+	// configuration leaves the concise default.
+	if !detailed {
+		if cfg, err := loadConfigOrDefault(dir); err == nil {
+			detailed = cfg.ResponsesDetailed()
+		}
 	}
 
 	runsRoot := filepath.Join(dir, stateDirName, "runs")
@@ -350,12 +360,64 @@ func writeReport(w io.Writer, doc runReportDoc, detailed bool) {
 
 	writeJEVSummary(w, doc.JEV)
 	writeClassificationSummary(w, doc.Classification)
+	writeOutcomeVerdict(w, doc.Outcome, detailed)
 
 	if detailed {
 		writeFindingsDetail(w, doc.Findings)
 	}
 
 	fmt.Fprintf(w, "\nNext action: %s\n", nextAction(doc))
+}
+
+// writeOutcomeVerdict renders the objective-level acceptance verdict from the run's
+// recorded artifact, so the concise report preserves the verification evidence it
+// must retain. It renders nothing when the task declared no objective (a nil
+// artifact), so a PASS report without acceptance checks is unchanged.
+//
+// The concise shape lists only the required criteria that were not met (the
+// failures) plus the recorded reasons. The detailed shape lists every criterion with
+// its recorded evidence. It is presentation only: it reads the recorded verdict and
+// never re-derives or changes it.
+func writeOutcomeVerdict(w io.Writer, res *outcomeArtifact, detailed bool) {
+	if res == nil {
+		return
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Outcome:")
+	fmt.Fprintf(w, "  %-12s %s\n", "Status:", res.Status)
+	if res.Lifecycle != "" {
+		fmt.Fprintf(w, "  %-12s %s\n", "Lifecycle:", res.Lifecycle)
+	}
+	if res.WaiverDenied {
+		fmt.Fprintf(w, "  %-12s %s\n", "Waiver:", "denied — a required deliverable/check is unmet and no valid designated-approver waiver exists")
+	}
+	for _, cr := range res.Criteria {
+		if !detailed && (cr.Met || !cr.Required) {
+			continue
+		}
+		label := cr.Description
+		if cr.Command != "" {
+			label = cr.Command
+		}
+		fmt.Fprintf(w, "  %-8s %s — %s (%s)\n", outcomeCriterionState(cr), cr.ID, label, cr.Evidence)
+	}
+	for _, r := range res.Reasons {
+		fmt.Fprintf(w, "  - %s\n", r)
+	}
+}
+
+// outcomeCriterionState labels a criterion the way the report renders it: a met
+// criterion is "met", a non-required unmet criterion is informational, and a
+// required unmet criterion is "not met".
+func outcomeCriterionState(cr outcome.CriterionResult) string {
+	switch {
+	case cr.Met:
+		return "met"
+	case !cr.Required:
+		return "informational"
+	default:
+		return "not met"
+	}
 }
 
 // nextAction derives the single next operator action from the run's recorded outcome.

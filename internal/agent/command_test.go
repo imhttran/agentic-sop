@@ -214,6 +214,31 @@ func TestCommandAgentReturnsOutcome(t *testing.T) {
 	}
 }
 
+// TestParseOutcomeNeedsPlanner proves a structured planner request parses from the
+// executor's output, so a real provider can raise an executor-created question through
+// the actual lifecycle. It compares fields manually because Outcome carries a pointer.
+func TestParseOutcomeNeedsPlanner(t *testing.T) {
+	got := ParseOutcome(`{"status":"needs_planner","planner":{"question":"Which format?","options":["Markdown","plain text"],"return_stage":"IMPLEMENTING"}}`)
+	if got == nil {
+		t.Fatal("got nil, want a needs_planner outcome")
+	}
+	if got.Status != OutcomeNeedsPlanner {
+		t.Fatalf("Status = %q, want %q", got.Status, OutcomeNeedsPlanner)
+	}
+	if got.Planner == nil {
+		t.Fatal("Planner = nil, want a structured request")
+	}
+	if got.Planner.Question != "Which format?" {
+		t.Errorf("Question = %q", got.Planner.Question)
+	}
+	if len(got.Planner.Options) != 2 || got.Planner.Options[0] != "Markdown" || got.Planner.Options[1] != "plain text" {
+		t.Errorf("Options = %v", got.Planner.Options)
+	}
+	if got.Planner.ReturnStage != "IMPLEMENTING" {
+		t.Errorf("ReturnStage = %q", got.Planner.ReturnStage)
+	}
+}
+
 func TestCommandAgentProseHasNoOutcome(t *testing.T) {
 	resp, err := NewCommandAgent(`printf '%s' 'ok'`).Generate(context.Background(), validRequest(Implement))
 	if err != nil {

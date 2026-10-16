@@ -493,7 +493,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 					// re-selected, so no later work runs after any block.
 					continue
 				}
-				if stage, ok := runpkg.Load(dir, id); ok && stage == runpkg.WaitingForHuman {
+				if stage, ok := runpkg.Load(dir, id); ok && (stage == runpkg.WaitingForHuman || stage == runpkg.WaitingForPlanner) {
 					return code
 				}
 				if !taskIsBlocked(st, id) {
@@ -718,6 +718,12 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// declared checks behaves exactly as before.
 	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
 	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
+	// Planner gate: a task parked at WAITING_FOR_PLANNER is resumed, not restarted.
+	// It runs BEFORE the destructive run setup so a parked run is neither reset nor
+	// advanced into a new attempt.
+	if handled, code := plannerLifecycleGate(ctx, dir, cfg, a, d, saver, task, sess, stdout, stderr); handled {
+		return code
+	}
 	// The previous invocation's run stage is read before New resets state.json, so
 	// a task parked at WAITING_FOR_HUMAN stays a human gate on re-entry.
 	priorStage, _ := runpkg.Load(dir, task.ID)
@@ -776,6 +782,13 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
+
+	// A structured planner request parks THIS run at WAITING_FOR_PLANNER. It is not a
+	// human gate and not a failure: the run stops and waits for a planner answer.
+	if res.stage == runpkg.WaitingForPlanner {
+		fmt.Fprintf(stdout, "%s PAUSED: WAITING_FOR_PLANNER (awaiting a planner answer)\n", task.ID)
+		return exitError
+	}
 
 	// A genuine human boundary (the classifier's human disposition, the autonomy
 	// policy's human decision, or the WAITING_FOR_HUMAN stage) records an explicit,
@@ -998,7 +1011,9 @@ var localCompletionPath = []domain.TaskStatus{
 
 // completeTask advances a task to LOCAL_DONE along the local path on a copy,
 // saved once. It continues from wherever the task already is on that path, so a
-// resumed task that already passed some local steps is not sent backwards.
+// resumed task that already passed some local steps is not sent backwards. A task that
+// has not been promoted to READY yet (a caller that bypassed the scheduler) is promoted
+// first, so completing it is always legal.
 func completeTask(saver taskSaver, task *domain.Task) error {
 	start := 0
 	for i, status := range localCompletionPath {
@@ -1008,6 +1023,11 @@ func completeTask(saver taskSaver, task *domain.Task) error {
 		}
 	}
 	staged := *task
+	if staged.Status == domain.PLANNED {
+		if err := staged.Transition(domain.READY); err != nil {
+			return err
+		}
+	}
 	for _, status := range localCompletionPath[start:] {
 		if err := staged.Transition(status); err != nil {
 			return err

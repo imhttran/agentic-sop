@@ -612,28 +612,38 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	}
 
 	if sealed == nil {
-		// Plan (must not mutate the repository). An invalid execution graph is
-		// returned to the agent for correction rather than failing the task; each
-		// repair is a real agent call and is reported in the run metrics.
-		_ = rn.SetStage(runpkg.Planning)
-		ar.Emit(activity.StagePlan, "generating plan", "")
-		stop := rec.Measure(perf.StagePlan)
-		// The compiled plan's capability inventory is authoritative for this task-level
-		// plan (SOP-PLANNER-CAP-001), so the planner records existing capabilities
-		// instead of re-deriving them from task prose and does not promote a repository
-		// discovery target to an external prerequisite. An ad-hoc/no-plan context is
-		// empty and preserves the previous behavior.
-		plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
-			rec.PlanRepair()
+		if d.resumeFrom == string(runpkg.Implementing) {
+			// Resumed run: the PLAN stage already completed in the parked run, so it is NOT
+			// repeated. Load the plan that run produced so earlier stages are preserved.
+			prior, perr := loadPriorPlan(rn)
+			if perr != nil {
+				return lifeResult{}, fmt.Errorf("planner resume: %w", perr)
+			}
+			plan = prior
+		} else {
+			// Plan (must not mutate the repository). An invalid execution graph is
+			// returned to the agent for correction rather than failing the task; each
+			// repair is a real agent call and is reported in the run metrics.
+			_ = rn.SetStage(runpkg.Planning)
+			ar.Emit(activity.StagePlan, "generating plan", "")
+			stop := rec.Measure(perf.StagePlan)
+			// The compiled plan's capability inventory is authoritative for this task-level
+			// plan (SOP-PLANNER-CAP-001), so the planner records existing capabilities
+			// instead of re-deriving them from task prose and does not promote a repository
+			// discovery target to an external prerequisite. An ad-hoc/no-plan context is
+			// empty and preserves the previous behavior.
+			plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
+				rec.PlanRepair()
+				rec.AgentCall()
+				fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
+			}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), loadPlanContext(dir, spec.ID))
+			stop()
 			rec.AgentCall()
-			fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
-		}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), loadPlanContext(dir, spec.ID))
-		stop()
-		rec.AgentCall()
-		if err != nil {
-			return lifeResult{}, fmt.Errorf("plan: %w", err)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("plan: %w", err)
+			}
+			_ = rn.Write("plan.md", plan.RenderMarkdown())
 		}
-		_ = rn.Write("plan.md", plan.RenderMarkdown())
 
 		// Implement: the agent edits the repository; its summary is recorded but Git
 		// remains the authority on what changed. The input carries the deterministic
@@ -687,7 +697,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Task:               spec.Render(),
 			Context:            ctxSummary,
 			Attempt:            attemptBlock,
-			Observations:       d.taskInputs[spec.ID],
+			Observations:       withPlannerAnswer(d.taskInputs[spec.ID], d.plannerAnswer),
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		input := compiled.Evidence()
@@ -716,6 +726,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			RawOutputEvidence:   rawOutputEvidence(spec),
 			DiscoveryIterations: spec.DiscoveryIterations,
 			OutputRequirements:  "Implement the plan in the working tree and summarize the changes.",
+			// The planner is offered to the executor only when the operator enabled it, so a
+			// model-driven executor can raise a planner question the lifecycle can continue.
+			PlannerAvailable: cfg.Planner.Enabled,
 		})
 		implStop()
 		rec.AgentCall()
@@ -752,6 +765,16 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		implMutation = observed
 		legacyNoChange = impl.Outcome != nil && impl.Outcome.Status == agent.OutcomeCompleted &&
 			!impl.Outcome.ChangesExpected && impl.Outcome.Completion == ""
+
+		// Structured planner request raised by the executor during implementation: SOP
+		// persists the question and parks THIS run. It is not a human gate.
+		if impl.Outcome != nil && impl.Outcome.Status == agent.OutcomeNeedsPlanner {
+			if _, perr := raisePlannerQuestion(dir, spec.ID, impl.Outcome.Planner); perr != nil {
+				return lifeResult{}, perr
+			}
+			_ = rn.SetStage(runpkg.WaitingForPlanner)
+			return lifeResult{stage: runpkg.WaitingForPlanner, cycles: cycles, gate: quality.Result{Decision: quality.Continue, Reasons: []string{"planner question raised"}}}, nil
+		}
 
 		if impl.Outcome != nil && impl.Outcome.Status != agent.OutcomeCompleted {
 			if implMutation {
@@ -856,7 +879,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				if serr != nil {
 					return lifeResult{}, fmt.Errorf("review: %w", serr)
 				}
-				reviewTask := d.taskInput(spec.ID, spec.Render())
+				// The applied planner decision is part of the review context on a resumed run: the
+				// reviewer must be able to see that the delegated scope question was answered by the
+				// planner, not decided unilaterally. It is appended AFTER task-input selection (so a
+				// caller override still leads) and is a strict no-op when no answer is present, keeping
+				// a non-planner run's input byte-identical.
+				reviewTask := withPlannerAnswer(d.taskInput(spec.ID, spec.Render()), d.plannerAnswer)
 				reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, reviewDiff)
 				if cached, ok := sess.cachedReview(reviewKey); ok {
 					rec.ReviewReused()
@@ -998,7 +1026,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				return lifeResult{}, fmt.Errorf("fix mutation baseline: %w", err)
 			}
 		}
-		fixInput := d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()))
+		// The same applied decision is carried into the fix context. The ordering matches the
+		// review site: task-input selection/overrides are applied to the base fix context first,
+		// and the applied planner decision is appended LAST so it is never displaced by an
+		// override. It is a strict no-op when no planner answer is present.
+		fixInput := withPlannerAnswer(
+			d.taskInput(spec.ID, fixContext(
+				plan.RenderMarkdown(), report, suite, diff,
+				jevEv, cfg.Quality.JEVFailOn())),
+			d.plannerAnswer)
 		// Record this fix attempt's input size (RBV-013). A fix does not build a canonical
 		// context, so only the prompt size is recorded; the context size keeps its
 		// largest value from the implementation attempt. Metadata only.
@@ -2017,6 +2053,20 @@ func completionValidationCommands(cfg config.Config) []string {
 // recovery evidence handed to this attempt. It is deterministic and model-free: the
 // harness owns selection, ordering, provenance, and limits, and the model never selects
 // its own context.
+// loadPriorPlan reads the plan a parked run already produced, so a resumed run does
+// not repeat the PLAN stage.
+func loadPriorPlan(rn *runpkg.Run) (*planner.Plan, error) {
+	data, err := os.ReadFile(filepath.Join(rn.Dir(), "plan.md"))
+	if err != nil {
+		return nil, fmt.Errorf("read prior plan: %w", err)
+	}
+	p, perr := planner.PlanFromMarkdown(string(data))
+	if perr != nil || p == nil {
+		return nil, fmt.Errorf("parse prior plan: %v", perr)
+	}
+	return p, nil
+}
+
 func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) (sopctx.Context, []string) {
 	execution := sopctx.Item{
 		Source:   sopctx.SourceExecution,
