@@ -104,8 +104,8 @@ func writePlannerEffectStarted(dir, taskID, contID string) error {
 // implementation, bound to live state. It enforces the opt-in toggle and the bounded
 // planner round limit. It carries no approval authority.
 func raisePlannerQuestion(dir, taskID string, req *agent.PlannerRequest) (*question.Question, error) {
-	if req == nil || strings.TrimSpace(req.Question) == "" {
-		return nil, fmt.Errorf("planner: empty question request")
+	if err := req.Validate(); err != nil {
+		return nil, fmt.Errorf("planner: %w", err)
 	}
 	cfg, err := loadConfigOrDefault(dir)
 	if err != nil {

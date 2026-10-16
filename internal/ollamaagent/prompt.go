@@ -53,7 +53,7 @@ Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 	b.WriteString("\n## This capability\n")
 	b.WriteString(capabilityGuidance(req.Capability))
 
-	fmt.Fprintf(&b, "\n\nCapability: %s\n\nOutput requirements:\n%s", req.Capability, outputContract(req.Capability))
+	fmt.Fprintf(&b, "\n\nCapability: %s\n\nOutput requirements:\n%s", req.Capability, contractFor(req))
 	return b.String()
 }
 
@@ -160,6 +160,40 @@ diagnosis is clear.`
 		return `Complete the requested capability, then return the required final response.`
 	}
 }
+
+// contractFor renders the output contract for a request: the capability's base contract,
+// plus the planner outcome when planner support is available for this invocation AND the
+// stage supports a planner continuation.
+func contractFor(req agent.Request) string {
+	contract := outputContract(req.Capability)
+	if plannerAdvertised(req) {
+		contract += plannerOutcomeContract
+	}
+	return contract
+}
+
+// plannerAdvertised reports whether this request may raise a planner question. It requires
+// the planner to be available for the invocation AND the capability to be one whose planner
+// continuation SOP supports. IMPLEMENT resumes at IMPLEMENTING; FIX has no continuation
+// path today (supportedReturnStage accepts only IMPLEMENTING), so FIX is never advertised.
+func plannerAdvertised(req agent.Request) bool {
+	return req.PlannerAvailable && req.Capability == agent.Implement
+}
+
+// plannerOutcomeContract is appended to an IMPLEMENT contract when the planner is
+// available. Its JSON object matches agent.PlannerRequest exactly (question, options), and
+// its guidance keeps authorization decisions as needs_human and requires the model to stop
+// after asking.
+const plannerOutcomeContract = `
+A planner is available for this task, so you may also return:
+{"status": "needs_planner", "planner": {"question": "<the decision you need>", "options": ["<bounded choice>", "..."]}}
+Ask the planner ONLY for scope or implementation clarification you cannot decide yourself
+(for example a format, ordering, or naming choice), and supply "options" when the question
+is a bounded choice. Authorization, permission, and every human approval decision are NOT
+planner questions: report those as needs_human instead. Return needs_planner as your FINAL
+response and stop - do not keep implementing while you wait; the task resumes when the
+answer is applied. Omit "return_stage"; the current stage is the default and the only
+supported value.`
 
 // outputContract describes the JSON the model must end with. SOP's own requests
 // carry prose output requirements for mutating capabilities, so the harness

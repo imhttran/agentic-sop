@@ -722,6 +722,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			RawOutputEvidence:   rawOutputEvidence(spec),
 			DiscoveryIterations: spec.DiscoveryIterations,
 			OutputRequirements:  "Implement the plan in the working tree and summarize the changes.",
+			// The planner is offered to the executor only when the operator enabled it, so a
+			// model-driven executor can raise a planner question the lifecycle can continue.
+			PlannerAvailable: cfg.Planner.Enabled,
 		})
 		implStop()
 		rec.AgentCall()
@@ -872,7 +875,12 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				if serr != nil {
 					return lifeResult{}, fmt.Errorf("review: %w", serr)
 				}
-				reviewTask := d.taskInput(spec.ID, spec.Render())
+				// The applied planner decision is part of the review context on a resumed run: the
+				// reviewer must be able to see that the delegated scope question was answered by the
+				// planner, not decided unilaterally. It is appended AFTER task-input selection (so a
+				// caller override still leads) and is a strict no-op when no answer is present, keeping
+				// a non-planner run's input byte-identical.
+				reviewTask := withPlannerAnswer(d.taskInput(spec.ID, spec.Render()), d.plannerAnswer)
 				reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, reviewDiff)
 				if cached, ok := sess.cachedReview(reviewKey); ok {
 					rec.ReviewReused()
@@ -1006,7 +1014,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				return lifeResult{}, fmt.Errorf("fix mutation baseline: %w", err)
 			}
 		}
-		fixInput := d.taskInput(spec.ID, fixContext(plan.RenderMarkdown(), report, suite, diff, jevEv, cfg.Quality.JEVFailOn()))
+		// The same applied decision is carried into the fix context. The ordering matches the
+		// review site: task-input selection/overrides are applied to the base fix context first,
+		// and the applied planner decision is appended LAST so it is never displaced by an
+		// override. It is a strict no-op when no planner answer is present.
+		fixInput := withPlannerAnswer(
+			d.taskInput(spec.ID, fixContext(
+				plan.RenderMarkdown(), report, suite, diff,
+				jevEv, cfg.Quality.JEVFailOn())),
+			d.plannerAnswer)
 		// Record this fix attempt's input size (RBV-013). A fix does not build a canonical
 		// context, so only the prompt size is recorded; the context size keeps its
 		// largest value from the implementation attempt. Metadata only.
