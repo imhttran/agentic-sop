@@ -6,6 +6,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
+	"github.com/imhttran/agentic-sop/internal/writing"
 )
 
 // systemPrompt states the harness's rules, the capability's policy, the tool
@@ -54,6 +55,11 @@ Reply with exactly one JSON object, no prose and no markdown. To call a tool:
 	b.WriteString(capabilityGuidance(req.Capability))
 
 	fmt.Fprintf(&b, "\n\nCapability: %s\n\nOutput requirements:\n%s", req.Capability, contractFor(req))
+	// The shared writing rule rides with the harness prompt, from its single
+	// definition in internal/writing, so the model's prose follows the same rule as
+	// SOP's human-facing responses.
+	b.WriteString("\n\n")
+	b.WriteString(writing.PromptBlock())
 	return b.String()
 }
 

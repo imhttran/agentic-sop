@@ -5,6 +5,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -13,10 +14,20 @@ import (
 const notInitializedMsg = "project is not initialized; run `sop init`"
 
 // runStatus lists persisted tasks. It never creates state: the database must
-// already exist.
+// already exist. The concise shape is the default; `--detailed` (or a configured
+// output.responses: detailed) adds each task's dependencies and attempt count.
 func runStatus(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
-	if len(args) != 0 {
-		fmt.Fprintln(stderr, "usage: sop status")
+	detailed := false
+	var rest []string
+	for _, a := range args {
+		if a == "--detailed" {
+			detailed = true
+			continue
+		}
+		rest = append(rest, a)
+	}
+	if len(rest) != 0 {
+		fmt.Fprintln(stderr, "usage: sop status [--detailed]")
 		return exitUsage
 	}
 
@@ -28,6 +39,16 @@ func runStatus(args []string, stdout, stderr io.Writer, getwd func() (string, er
 	path := statePath(dir)
 	if !requireState(path, stderr) {
 		return exitError
+	}
+
+	// The response shape: the explicit flag wins; otherwise the configured default
+	// (concise unless output.responses: detailed). A missing or unreadable
+	// configuration leaves the concise default, so `sop status` stays a
+	// read-only-informational command.
+	if !detailed {
+		if cfg, err := loadConfigOrDefault(dir); err == nil {
+			detailed = cfg.ResponsesDetailed()
+		}
 	}
 
 	st, err := store.Open(path)
@@ -70,8 +91,23 @@ func runStatus(args []string, stdout, stderr io.Writer, getwd func() (string, er
 			line += fmt.Sprintf("  [waived: %s]", strings.Join(ids, ","))
 		}
 		fmt.Fprintln(stdout, line)
+		if detailed {
+			writeStatusTaskDetail(stdout, task)
+		}
 	}
 	return exitOK
+}
+
+// writeStatusTaskDetail renders the per-task dependency and attempt detail that the
+// concise status line omits. It prints nothing when a task has neither, so the
+// detailed view adds no empty lines.
+func writeStatusTaskDetail(w io.Writer, task *domain.Task) {
+	if len(task.DependencyIDs) > 0 {
+		fmt.Fprintf(w, "  depends on: %s\n", strings.Join(task.DependencyIDs, ", "))
+	}
+	if n := len(task.Attempts); n > 0 {
+		fmt.Fprintf(w, "  attempts: %d\n", n)
+	}
 }
 
 // requireState reports whether the state database exists, printing a helpful
