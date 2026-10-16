@@ -116,6 +116,9 @@ type outcomeWire struct {
 	ChangesExpected *bool               `json:"changes_expected"`
 	Completion      string              `json:"completion,omitempty"`
 	Evidence        *CompletionEvidence `json:"evidence,omitempty"`
+	// Planner carries the structured planner request when status is needs_planner. It
+	// is the executor-created question SOP persists before parking the run.
+	Planner *PlannerRequest `json:"planner,omitempty"`
 }
 
 // ParseOutcome recognizes a structured execution outcome in content. It returns
@@ -142,6 +145,8 @@ func ParseOutcome(content string) *Outcome {
 		status = OutcomeCompleted
 	case string(OutcomeNeedsHuman):
 		status = OutcomeNeedsHuman
+	case string(OutcomeNeedsPlanner):
+		status = OutcomeNeedsPlanner
 	case string(OutcomeFailed):
 		status = OutcomeFailed
 	default:
@@ -154,6 +159,11 @@ func ParseOutcome(content string) *Outcome {
 		Reason:     strings.TrimSpace(wire.Reason),
 		Completion: wire.Completion,
 		Evidence:   wire.Evidence,
+	}
+	// Planner is meaningful only for a needs_planner outcome. The executor still
+	// validates the request (question text, return stage) before a question is raised.
+	if status == OutcomeNeedsPlanner {
+		outcome.Planner = wire.Planner
 	}
 	// ChangesExpected is meaningful only for a completed outcome; a completed
 	// outcome without the field intends to change the repository (the stricter

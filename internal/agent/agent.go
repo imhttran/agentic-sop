@@ -95,6 +95,9 @@ const (
 	OutcomeCompleted OutcomeStatus = "completed"
 	// OutcomeNeedsHuman: the agent cannot continue without a human decision.
 	OutcomeNeedsHuman OutcomeStatus = "needs_human"
+	// OutcomeNeedsPlanner: the executor needs a bounded planner decision before it
+	// can continue. It carries a structured PlannerRequest; it is not a human gate.
+	OutcomeNeedsPlanner OutcomeStatus = "needs_planner"
 	// OutcomeFailed: the agent could not complete the operation.
 	OutcomeFailed OutcomeStatus = "failed"
 )
@@ -114,6 +117,20 @@ type CompletionEvidence struct {
 	ValidationCommands []string             `json:"validation_commands"`
 }
 
+// PlannerRequest is the structured planner input an executor requests during
+// implementation. The executor raises it; SOP persists the question and parks the run.
+// It carries no approval authority.
+type PlannerRequest struct {
+	// Question is the text the planner must answer.
+	Question string `json:"question"`
+	// Options are the bounded choices offered, when the question is a choice.
+	Options []string `json:"options,omitempty"`
+	// Kind distinguishes the question within the task (defaults to a numbered round).
+	Kind string `json:"kind,omitempty"`
+	// ReturnStage is the run stage to resume after the answer (defaults to IMPLEMENTING).
+	ReturnStage string `json:"return_stage,omitempty"`
+}
+
 // Outcome is the structured execution outcome a command agent returns.
 // Completion names a no-mutation conclusion; it carries no authority by itself.
 type Outcome struct {
@@ -123,6 +140,9 @@ type Outcome struct {
 	ChangesExpected bool
 	Completion      string
 	Evidence        *CompletionEvidence
+	// Planner, when set with Status OutcomeNeedsPlanner, is the structured planner
+	// request the executor raised during implementation.
+	Planner *PlannerRequest
 }
 
 // Response is the raw content returned by an agent, plus, when the command agent

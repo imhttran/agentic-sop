@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 )
 
 // runsDirName is the subdirectory of the project state dir holding runs.
@@ -33,8 +34,12 @@ const (
 	Reviewing       Stage = "REVIEWING"
 	Fixing          Stage = "FIXING"
 	WaitingForHuman Stage = "WAITING_FOR_HUMAN"
-	Passed          Stage = "PASSED"
-	Failed          Stage = "FAILED"
+	// WaitingForPlanner: the run is paused on a planner question. It is a distinct
+	// pause, never a human gate, and the task resumes from the saved stage when the
+	// answer is applied.
+	WaitingForPlanner Stage = "WAITING_FOR_PLANNER"
+	Passed            Stage = "PASSED"
+	Failed            Stage = "FAILED"
 )
 
 // State is the persisted, inspectable run state.
@@ -94,6 +99,55 @@ func Open(projectDir, id string) (*Run, error) {
 		return nil, fmt.Errorf("run: create %s: %w", dir, err)
 	}
 	return &Run{dir: dir}, nil
+}
+
+// SetStageOnExisting updates a run's stage WITHOUT the destructive setup New does: it
+// preserves an existing state.json (its id and created_at) and its attempts evidence,
+// and creates the state at the given stage when none exists. It is the durable
+// checkpoint mutation the planner pause/continue uses.
+func SetStageOnExisting(projectDir, id string, stage Stage) error {
+	dir := filepath.Join(projectDir, config.DirName, runsDirName, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("run: create %s: %w", dir, err)
+	}
+	now := time.Now().UTC()
+	st := State{ID: id, Stage: stage, CreatedAt: now, UpdatedAt: now}
+	if data, err := os.ReadFile(filepath.Join(dir, stateFileName)); err == nil {
+		var cur State
+		if json.Unmarshal(data, &cur) == nil && strings.TrimSpace(cur.ID) != "" {
+			st = cur
+			st.Stage = stage
+			st.UpdatedAt = now
+		}
+	}
+	r := &Run{dir: dir, state: st}
+	return r.save()
+}
+
+// Resume opens a run's EXISTING state WITHOUT New's destructive reset: it preserves
+// state.json (its id and created_at) and the attempts/ evidence, so a parked run is
+// resumed in the same run epoch rather than restarted. A run with no state is
+// initialized at CREATED.
+func Resume(projectDir, id string) (*Run, error) {
+	if strings.TrimSpace(id) == "" {
+		return nil, errors.New("run: id is required")
+	}
+	dir := filepath.Join(projectDir, config.DirName, runsDirName, id)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return nil, fmt.Errorf("run: create %s: %w", dir, err)
+	}
+	r := &Run{dir: dir}
+	if data, err := os.ReadFile(filepath.Join(dir, stateFileName)); err == nil {
+		var st State
+		if json.Unmarshal(data, &st) == nil && strings.TrimSpace(st.ID) != "" {
+			r.state = st
+		}
+	}
+	if strings.TrimSpace(r.state.ID) == "" {
+		now := time.Now().UTC()
+		r.state = State{ID: id, Stage: Created, CreatedAt: now, UpdatedAt: now}
+	}
+	return r, nil
 }
 
 // Dir returns the run directory.
@@ -184,4 +238,16 @@ func (r *Run) save() error {
 	}
 	data = append(data, '\n')
 	return os.WriteFile(filepath.Join(r.dir, stateFileName), data, 0o644)
+}
+
+// PersistDurable writes the run's current state durably: a temp file + fsync + atomic
+// rename + directory fsync. Unlike save it guarantees the checkpoint is on disk before it
+// returns, so a caller that must not record a dependent fact (the planner continuation's
+// success) until the checkpoint is durable can require it.
+func (r *Run) PersistDurable() error {
+	data, err := json.MarshalIndent(r.state, "", "  ")
+	if err != nil {
+		return fmt.Errorf("run: encode state: %w", err)
+	}
+	return durablefs.WriteFile(filepath.Join(r.dir, stateFileName), append(data, '\n'))
 }
