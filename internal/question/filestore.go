@@ -373,6 +373,44 @@ func (f *FileStore) CompleteContinuation(id string, generation int, worker strin
 	return out, transitioned, nil
 }
 
+// SupersedeContinuation implements Store with write-through persistence.
+func (f *FileStore) SupersedeContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, false, err
+	}
+	defer done()
+	out, superseded, cerr := f.mem.SupersedeContinuation(id, generation, worker, now)
+	if cerr != nil {
+		return out, false, cerr
+	}
+	if superseded {
+		if perr := f.persist(); perr != nil {
+			return out, false, perr
+		}
+	}
+	return out, superseded, nil
+}
+
+// ResolveYieldedContinuation implements Store with write-through persistence.
+func (f *FileStore) ResolveYieldedContinuation(id string, now time.Time) (*Continuation, bool, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, false, err
+	}
+	defer done()
+	out, resolved, cerr := f.mem.ResolveYieldedContinuation(id, now)
+	if cerr != nil {
+		return out, false, cerr
+	}
+	if resolved {
+		if perr := f.persist(); perr != nil {
+			return out, false, perr
+		}
+	}
+	return out, resolved, nil
+}
+
 // FenceAndMutate implements Store. It verifies the claim and runs mutate() while
 // holding the cross-process lock, so a reclaimed worker cannot write afterward.
 func (f *FileStore) FenceAndMutate(id string, generation int, worker string, mutate func() error) error {

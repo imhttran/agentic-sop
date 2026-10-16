@@ -92,8 +92,8 @@ func Decide(s PlannerSettings, v ReconcileView) (Action, string) {
 	case StateAnswered:
 		return ActionApplyThenContinue, "answer recorded; apply then continue"
 	case StateApplied:
-		if v.Continuation != nil && v.Continuation.State == ContinuationCompleted {
-			return ActionNone, "continuation completed"
+		if v.Continuation != nil && v.Continuation.State.Terminal() {
+			return ActionNone, "continuation is " + string(v.Continuation.State)
 		}
 		return ActionContinue, "answer applied; continue from the saved stage"
 	default:

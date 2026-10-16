@@ -199,6 +199,22 @@ func (s *Service) CompleteContinuation(id string, generation int, worker string)
 	return s.store.CompleteContinuation(id, generation, worker, s.clock())
 }
 
+// SupersedeContinuation records the terminal, non-completion outcome for a continuation
+// whose owed work yielded to a later planner question in the same task/run, fenced under
+// the worker's generation. It reports superseded=true only on an actual CLAIMED ->
+// SUPERSEDED transition; the continuation is never marked COMPLETED.
+func (s *Service) SupersedeContinuation(id string, generation int, worker string) (*Continuation, bool, error) {
+	return s.store.SupersedeContinuation(id, generation, worker, s.clock())
+}
+
+// ResolveYieldedContinuation is the recovery counterpart: it terminalizes a predecessor
+// continuation whose supersession was never recorded because the process stopped after the
+// successor question was persisted. It reports resolved=true only on an actual CLAIMED ->
+// SUPERSEDED transition; the continuation is never marked COMPLETED.
+func (s *Service) ResolveYieldedContinuation(id string) (*Continuation, bool, error) {
+	return s.store.ResolveYieldedContinuation(id, s.clock())
+}
+
 // FenceAndMutate coordinates claim verification with a protected mutation (the
 // caller's checkpoint write): mutate runs only while the caller holds the presented
 // generation, under the store's cross-process lock. It replaces a separate

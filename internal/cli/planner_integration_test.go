@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -244,7 +245,8 @@ func TestPlannerIntegrationTwoRoundsOneRun(t *testing.T) {
 	if currentRunEpoch(dir, "T001") != epoch {
 		t.Fatal("the run epoch changed between rounds")
 	}
-	answer(t, dir, pendingQuestion(t, dir).ID, "yes")
+	q2 := pendingQuestion(t, dir)
+	answer(t, dir, q2.ID, "yes")
 	// Round 2 resume: the task finally passes.
 	if code, o := run(); code != exitOK {
 		t.Fatalf("round 2 resume code=%d out=%s", code, o)
@@ -257,6 +259,264 @@ func TestPlannerIntegrationTwoRoundsOneRun(t *testing.T) {
 	}
 	if currentRunEpoch(dir, "T001") != epoch {
 		t.Fatal("the run epoch changed across the two rounds")
+	}
+
+	svc := question.NewService(plannerStore(t, dir), nil)
+	// Both answers are applied.
+	for _, qid := range []string{q1.ID, q2.ID} {
+		qq, _, err := svc.ReadQuestion(qid)
+		if err != nil || qq.State != question.StateApplied {
+			t.Fatalf("question %s = %+v err=%v, want APPLIED", qid, qq, err)
+		}
+	}
+	// The task completes (once); the graph-level single-completion count is covered by
+	// TestPlannerResumeCountsOneCompletion.
+	done, err := st.Get("T001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if done.Status != domain.LOCAL_DONE {
+		t.Fatalf("task status = %s, want LOCAL_DONE", done.Status)
+	}
+	// The first round's continuation yielded to the second question and is SUPERSEDED (a
+	// terminal, non-completion outcome), never COMPLETED; the second is COMPLETED.
+	c1, err := svc.Continuation(q1.ID, epoch)
+	if err != nil || c1.State != question.ContinuationSuperseded {
+		t.Fatalf("q1 continuation = %+v err=%v, want SUPERSEDED (not COMPLETED)", c1, err)
+	}
+	if c2, err := svc.Continuation(q2.ID, epoch); err != nil || c2.State != question.ContinuationCompleted {
+		t.Fatalf("q2 continuation = %+v err=%v, want COMPLETED", c2, err)
+	}
+	// No continuation remains CLAIMED or PENDING, and none is claimable after success.
+	all, err := svc.Continuations("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 2 {
+		t.Fatalf("continuations = %d, want 2", len(all))
+	}
+	for _, c := range all {
+		if c.State == question.ContinuationClaimed || c.State == question.ContinuationPending {
+			t.Fatalf("continuation %s remains %s after success", c.ID, c.State)
+		}
+		if _, ok, _ := svc.ClaimContinuation(c.ID, "probe", time.Minute); ok {
+			t.Fatalf("continuation %s is still claimable after success", c.ID)
+		}
+	}
+	// Reconciliation does not execute completed work again.
+	planBefore, implBefore := a.counts()
+	for i := 0; i < 2; i++ {
+		var o2 bytes.Buffer
+		if handled, _ := plannerLifecycleGate(context.Background(), dir, cfg, a, plannerDeps(dir, a, plannerDiff), st, done, newRunSession(), &o2, &o2); handled {
+			t.Fatalf("reconciliation handled completed work: %s", o2.String())
+		}
+	}
+	if planAfter, implAfter := a.counts(); planAfter != planBefore || implAfter != implBefore {
+		t.Fatalf("reconciliation re-executed work: plan %d->%d impl %d->%d", planBefore, planAfter, implBefore, implAfter)
+	}
+}
+
+// TestPlannerContinuationRetainedOnFailure proves a FAILED resumed attempt does not falsely
+// complete owed work: the continuation stays CLAIMED (recoverable) and is neither
+// SUPERSEDED nor COMPLETED, and the task does not complete.
+func TestPlannerContinuationRetainedOnFailure(t *testing.T) {
+	dir, st, task := plannerProject(t)
+	defer st.Close()
+	cfg, _ := loadConfigOrDefault(dir)
+	ask1 := &agent.PlannerRequest{Question: "which format?", Options: []string{"Markdown", "plain text"}}
+	// Round 1 asks; round 2 (resume) reports a finished implementation but the injected
+	// diff is empty, so the lifecycle records an IMPLEMENT failure (no repository changes).
+	a := &scriptedPlannerAgent{asks: []*agent.PlannerRequest{ask1}, impls: []string{"", "no changes"}}
+
+	var out bytes.Buffer
+	if code := runScheduledTask(context.Background(), dir, cfg, a, plannerDeps(dir, a, ""), st, task, newRunSession(), &out, &out); code == exitOK {
+		t.Fatalf("round 1 should pause: %s", out.String())
+	}
+	q1 := pendingQuestion(t, dir)
+	epoch := q1.RunEpoch
+	answer(t, dir, q1.ID, "Markdown")
+
+	out.Reset()
+	if code := runScheduledTask(context.Background(), dir, cfg, a, plannerDeps(dir, a, ""), st, task, newRunSession(), &out, &out); code == exitOK {
+		t.Fatalf("a failed resume must not report success: %s", out.String())
+	}
+	svc := question.NewService(plannerStore(t, dir), nil)
+	c1, err := svc.Continuation(q1.ID, epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c1.State != question.ContinuationClaimed {
+		t.Fatalf("continuation = %s, want CLAIMED (retained; not falsely completed)", c1.State)
+	}
+	if done, _ := st.Get("T001"); done.Status == domain.LOCAL_DONE {
+		t.Fatal("a failed resume completed the task")
+	}
+}
+
+// TestPlannerSupersedeCrashGapRecovery reproduces the crash gap: the successor question is
+// persisted and the predecessor continuation is CLAIMED, but the process stopped before
+// supersession. Recovery selects the successor, resolves the predecessor without replaying
+// its stage work, keeps the successor owed, and leaves no stranded CLAIMED continuation
+// after final success.
+func TestPlannerSupersedeCrashGapRecovery(t *testing.T) {
+	dir, st, task := plannerProject(t)
+	defer st.Close()
+	cfg, _ := loadConfigOrDefault(dir)
+	epoch := currentRunEpoch(dir, "T001")
+	svc := question.NewService(plannerStore(t, dir), nil)
+	seedQ := func(kind, body string) *question.Question {
+		return createQuestion(t, dir, &question.Question{
+			Identity: "T001", Kind: kind, Body: body, Project: projectIdentity(dir), RunID: "T001",
+			RunEpoch: epoch, PlanRevision: currentPlanRevision(dir), ReturnStage: "IMPLEMENTING", Revision: 1,
+		})
+	}
+	// A resume from IMPLEMENTING loads the prior plan, so a parked run needs one.
+	writeFile(t, dir, filepath.Join(config.DirName, "runs", "T001", "plan.md"), plannerResumePlanMD)
+
+	// Predecessor: applied, with a continuation CLAIMED by the (now gone) resumed worker.
+	q1 := seedQ("order", "q1?")
+	if _, err := svc.CreateAnswer(&question.Answer{QuestionID: q1.ID, Body: "sorted"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ApplyAnswer(context.Background(), q1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := svc.ClaimContinuation(question.ContinuationID(q1.ID, epoch), plannerWorker, plannerLease); err != nil || !ok {
+		t.Fatalf("claim predecessor: ok=%v err=%v", ok, err)
+	}
+	// The successor was persisted, but supersession never ran (crash gap).
+	q2 := seedQ("duplicates", "q2?")
+
+	a := &scriptedPlannerAgent{}
+	var out bytes.Buffer
+	handled, code := plannerLifecycleGate(context.Background(), dir, cfg, a, plannerDeps(dir, a, plannerDiff), st, task, newRunSession(), &out, &out)
+	if !handled || code != exitError {
+		t.Fatalf("crash-gap gate handled=%v code=%d out=%s", handled, code, out.String())
+	}
+	// The predecessor is resolved (terminal, not completed), without replaying its work.
+	c1, err := svc.Continuation(q1.ID, epoch)
+	if err != nil || c1.State != question.ContinuationSuperseded {
+		t.Fatalf("predecessor = %+v err=%v, want SUPERSEDED", c1, err)
+	}
+	if _, impl := a.counts(); impl != 0 {
+		t.Fatal("recovery replayed the predecessor's stage work")
+	}
+	// The successor is selected and remains owed (not resolved).
+	if got := pendingQuestion(t, dir); got.ID != q2.ID {
+		t.Fatalf("active question = %s, want the successor %s", got.ID, q2.ID)
+	}
+	if got, err := svc.Continuation(q2.ID, epoch); err == nil && got.State.Terminal() {
+		t.Fatalf("successor continuation = %+v, want non-terminal (still owed)", got)
+	}
+
+	// Final success leaves no stranded CLAIMED or PENDING continuation.
+	answer(t, dir, q2.ID, "remove duplicates")
+	out.Reset()
+	if code := runScheduledTask(context.Background(), dir, cfg, a, plannerDeps(dir, a, plannerDiff), st, task, newRunSession(), &out, &out); code != exitOK {
+		t.Fatalf("resume code=%d out=%s", code, out.String())
+	}
+	if done, _ := st.Get("T001"); done.Status != domain.LOCAL_DONE {
+		t.Fatalf("task status = %s, want LOCAL_DONE", done.Status)
+	}
+	all, err := svc.Continuations("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, c := range all {
+		if c.State == question.ContinuationClaimed || c.State == question.ContinuationPending {
+			t.Fatalf("stranded %s continuation %s after success", c.State, c.ID)
+		}
+		if _, ok, _ := svc.ClaimContinuation(c.ID, "probe", time.Minute); ok {
+			t.Fatalf("continuation %s is still claimable after success", c.ID)
+		}
+	}
+}
+
+// TestPlannerSupersedeRecoveryRespectsHumanGate proves recovery does not bypass a human
+// gate: at a human gate the predecessor is left untouched (still CLAIMED) and the planner
+// does not act.
+func TestPlannerSupersedeRecoveryRespectsHumanGate(t *testing.T) {
+	dir, st, task := plannerProject(t)
+	defer st.Close()
+	cfg, _ := loadConfigOrDefault(dir)
+	// The task is parked at a human boundary before the questions are bound, so their
+	// run-epoch binding matches the run the gate sees.
+	seedGate(t, dir, "T001")
+	epoch := currentRunEpoch(dir, "T001")
+	svc := question.NewService(plannerStore(t, dir), nil)
+	seedQ := func(kind, body string) *question.Question {
+		return createQuestion(t, dir, &question.Question{
+			Identity: "T001", Kind: kind, Body: body, Project: projectIdentity(dir), RunID: "T001",
+			RunEpoch: epoch, PlanRevision: currentPlanRevision(dir), ReturnStage: "IMPLEMENTING", Revision: 1,
+		})
+	}
+	q1 := seedQ("order", "q1?")
+	if _, err := svc.CreateAnswer(&question.Answer{QuestionID: q1.ID, Body: "sorted"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ApplyAnswer(context.Background(), q1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := svc.ClaimContinuation(question.ContinuationID(q1.ID, epoch), plannerWorker, plannerLease); err != nil || !ok {
+		t.Fatalf("claim predecessor: ok=%v err=%v", ok, err)
+	}
+	seedQ("duplicates", "q2?")
+
+	a := &scriptedPlannerAgent{}
+	var out bytes.Buffer
+	if handled, _ := plannerLifecycleGate(context.Background(), dir, cfg, a, plannerDeps(dir, a, plannerDiff), st, task, newRunSession(), &out, &out); handled {
+		t.Fatalf("the planner acted across a human gate: %s", out.String())
+	}
+	c1, err := svc.Continuation(q1.ID, epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c1.State != question.ContinuationClaimed {
+		t.Fatalf("predecessor = %s, want CLAIMED (a human gate must not resolve it)", c1.State)
+	}
+}
+
+// TestPlannerSupersedeRecoveryRespectsStaleBinding proves recovery does not resolve a
+// predecessor whose binding no longer matches the current plan revision — the same stale
+// guard that prevents the planner from resuming it.
+func TestPlannerSupersedeRecoveryRespectsStaleBinding(t *testing.T) {
+	dir, st, task := plannerProject(t)
+	defer st.Close()
+	cfg, _ := loadConfigOrDefault(dir)
+	epoch := currentRunEpoch(dir, "T001")
+	svc := question.NewService(plannerStore(t, dir), nil)
+
+	// Predecessor bound to a SUPERSEDED plan revision; successor bound to the current one.
+	q1 := createQuestion(t, dir, &question.Question{
+		Identity: "T001", Kind: "order", Body: "q1?", Project: projectIdentity(dir), RunID: "T001",
+		RunEpoch: epoch, PlanRevision: "p@old", ReturnStage: "IMPLEMENTING", Revision: 1,
+	})
+	if _, err := svc.CreateAnswer(&question.Answer{QuestionID: q1.ID, Body: "sorted"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := svc.ApplyAnswer(context.Background(), q1.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, err := svc.ClaimContinuation(question.ContinuationID(q1.ID, epoch), plannerWorker, plannerLease); err != nil || !ok {
+		t.Fatalf("claim predecessor: ok=%v err=%v", ok, err)
+	}
+	q2 := createQuestion(t, dir, &question.Question{
+		Identity: "T001", Kind: "duplicates", Body: "q2?", Project: projectIdentity(dir), RunID: "T001",
+		RunEpoch: epoch, PlanRevision: currentPlanRevision(dir), ReturnStage: "IMPLEMENTING", Revision: 1,
+	})
+
+	a := &scriptedPlannerAgent{}
+	var out bytes.Buffer
+	plannerLifecycleGate(context.Background(), dir, cfg, a, plannerDeps(dir, a, plannerDiff), st, task, newRunSession(), &out, &out)
+	c1, err := svc.Continuation(q1.ID, epoch)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c1.State != question.ContinuationClaimed {
+		t.Fatalf("stale predecessor = %s, want CLAIMED (a stale binding must not be resolved)", c1.State)
+	}
+	if got := pendingQuestion(t, dir); got.ID != q2.ID {
+		t.Fatalf("active question = %s, want the successor %s", got.ID, q2.ID)
 	}
 }
 

@@ -19,12 +19,23 @@ const (
 	ContinuationClaimed ContinuationState = "CLAIMED"
 	// ContinuationCompleted: the continuation ran; the state is terminal.
 	ContinuationCompleted ContinuationState = "COMPLETED"
+	// ContinuationSuperseded: the continuation's owed work yielded to a LATER planner
+	// question in the same task/run, so it was taken over by the subsequent round. It is
+	// terminal and is explicitly NOT completed: unfinished work is never marked complete
+	// merely because it parked. A superseded continuation is never claimable and is never
+	// replayed.
+	ContinuationSuperseded ContinuationState = "SUPERSEDED"
 )
+
+// Terminal reports whether a continuation state is terminal (no further transition).
+func (s ContinuationState) Terminal() bool {
+	return s == ContinuationCompleted || s == ContinuationSuperseded
+}
 
 // Known reports whether s is one of the closed continuation states.
 func (s ContinuationState) Known() bool {
 	switch s {
-	case ContinuationPending, ContinuationClaimed, ContinuationCompleted:
+	case ContinuationPending, ContinuationClaimed, ContinuationCompleted, ContinuationSuperseded:
 		return true
 	default:
 		return false

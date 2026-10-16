@@ -192,3 +192,100 @@ func TestContinuationPersistsAcrossReopen(t *testing.T) {
 		t.Fatalf("reopen continuation = %+v err=%v", c, err)
 	}
 }
+
+// TestSupersedeContinuationFencedAndTerminal proves the terminal, non-completion outcome
+// for a continuation that yields to a later planner question: it is fenced like
+// completion, is never claimable, is never COMPLETED, and persists.
+func TestSupersedeContinuationFencedAndTerminal(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "questions.json")
+	fs, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	svc := NewService(fs, nil)
+	now := time.Now().UTC()
+	svc.now = func() time.Time { return now }
+	q, id := appliedQuestion(t, svc)
+
+	a, ok, err := svc.ClaimContinuation(id, "A", 10*time.Second)
+	if err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+	// A fenced supersede (wrong generation) is refused and leaves the claim intact.
+	if _, tr, _ := svc.SupersedeContinuation(id, a.Generation+1, "A"); tr {
+		t.Fatal("a fenced supersede transitioned the continuation")
+	}
+	if held, _ := svc.VerifyClaim(id, a.Generation, "A"); !held {
+		t.Fatal("the fenced supersede disturbed the live claim")
+	}
+	// The holder's supersede records the terminal, non-completion outcome.
+	c, tr, err := svc.SupersedeContinuation(id, a.Generation, "A")
+	if err != nil || !tr || c.State != ContinuationSuperseded {
+		t.Fatalf("supersede = %+v tr=%v err=%v, want SUPERSEDED", c, tr, err)
+	}
+	// Terminal: never completed, never re-claimable, and a repeat supersede is a no-op.
+	if _, tr, _ := svc.CompleteContinuation(id, a.Generation, "A"); tr {
+		t.Fatal("a superseded continuation was completed")
+	}
+	if _, ok, _ := svc.ClaimContinuation(id, "B", time.Minute); ok {
+		t.Fatal("a superseded continuation was re-claimed")
+	}
+	if _, tr, _ := svc.SupersedeContinuation(id, a.Generation, "A"); tr {
+		t.Fatal("a repeat supersede transitioned a terminal continuation")
+	}
+	// Persists across reopen.
+	fs2, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := NewService(fs2, nil).Continuation(q.ID, "e1")
+	if err != nil || got.State != ContinuationSuperseded {
+		t.Fatalf("reopen continuation = %+v err=%v, want SUPERSEDED", got, err)
+	}
+}
+
+// TestResolveYieldedContinuationRecoversCrashGap proves the recovery counterpart: a CLAIMED
+// predecessor whose supersession was never recorded (the crash gap) is terminalized to
+// SUPERSEDED (never COMPLETED), cannot be claimed or completed afterwards, and persists. A
+// non-CLAIMED continuation is never resolved.
+func TestResolveYieldedContinuationRecoversCrashGap(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "questions.json")
+	fs, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	svc := NewService(fs, nil)
+	q, id := appliedQuestion(t, svc)
+
+	// A PENDING continuation is not resolved: only a held one can yield.
+	if _, tr, _ := svc.ResolveYieldedContinuation(id); tr {
+		t.Fatal("a pending continuation was resolved")
+	}
+	// The crash-gap predecessor is CLAIMED.
+	if _, ok, err := svc.ClaimContinuation(id, "A", time.Minute); err != nil || !ok {
+		t.Fatalf("claim: ok=%v err=%v", ok, err)
+	}
+	c, tr, err := svc.ResolveYieldedContinuation(id)
+	if err != nil || !tr || c.State != ContinuationSuperseded {
+		t.Fatalf("resolve = %+v tr=%v err=%v, want SUPERSEDED", c, tr, err)
+	}
+	// Terminal: never completed, never re-claimable, and a repeat resolve is a no-op.
+	if _, tr, _ := svc.CompleteContinuation(id, c.Generation, "A"); tr {
+		t.Fatal("a resolved predecessor was completed")
+	}
+	if _, ok, _ := svc.ClaimContinuation(id, "B", time.Minute); ok {
+		t.Fatal("a resolved predecessor was re-claimed")
+	}
+	if _, tr, _ := svc.ResolveYieldedContinuation(id); tr {
+		t.Fatal("a repeat resolve transitioned a terminal continuation")
+	}
+	// Persists across reopen.
+	fs2, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	got, err := NewService(fs2, nil).Continuation(q.ID, "e1")
+	if err != nil || got.State != ContinuationSuperseded {
+		t.Fatalf("reopen continuation = %+v err=%v, want SUPERSEDED", got, err)
+	}
+}

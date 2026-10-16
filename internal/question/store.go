@@ -69,6 +69,20 @@ type Store interface {
 	// fenced: a stale generation, a different worker, or a non-CLAIMED state yields
 	// completed=false without mutating the record.
 	CompleteContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error)
+	// SupersedeContinuation records the terminal, non-completion outcome for a
+	// continuation whose owed work yielded to a later planner question in the same
+	// task/run. It is fenced exactly like completion (CLAIMED -> SUPERSEDED under the
+	// worker's generation). A superseded continuation is terminal, is never claimable, and
+	// is never COMPLETED.
+	SupersedeContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error)
+	// ResolveYieldedContinuation is the RECOVERY counterpart of SupersedeContinuation. It
+	// records the same terminal, non-completion outcome for a predecessor continuation
+	// whose owed work demonstrably yielded to a LATER, durably persisted question for the
+	// same task/run/plan (the caller has verified that successor exists) but whose
+	// supersession was never recorded because the process stopped. It transitions ONLY
+	// from CLAIMED, so it can never complete, resurrect, or replay work, and it does not
+	// weaken the completion/checkpoint fence.
+	ResolveYieldedContinuation(id string, now time.Time) (*Continuation, bool, error)
 	// FenceAndMutate coordinates claim verification with a protected mutation: it runs
 	// mutate() only while the caller still holds the presented generation, under the
 	// store's cross-process lock, so a reclaimed worker cannot write afterward. The
@@ -472,7 +486,7 @@ func (m *MemoryStore) ClaimContinuation(id, worker string, now time.Time, lease 
 	}
 	cp := *c
 	switch {
-	case c.State == ContinuationCompleted:
+	case c.State.Terminal():
 		return &cp, false, nil
 	case c.State == ContinuationPending:
 	case c.State == ContinuationClaimed && leaseExpired(c, now, lease):
@@ -522,6 +536,56 @@ func (m *MemoryStore) CompleteContinuation(id string, generation int, worker str
 	}
 	c.State = ContinuationCompleted
 	c.CompletedAt = now.UTC()
+	c.UpdatedAt = now.UTC()
+	cp = *c
+	return &cp, true, nil
+}
+
+// SupersedeContinuation implements Store. It records the terminal, non-completion
+// outcome for a continuation whose owed work yielded to a later planner question: it
+// moves CLAIMED -> SUPERSEDED for the presented generation, fenced exactly like
+// completion. A superseded continuation is terminal, is never claimable, and is never
+// COMPLETED, so unfinished work is not marked complete merely because it parked.
+func (m *MemoryStore) SupersedeContinuation(id string, generation int, worker string, now time.Time) (*Continuation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	if c.State.Terminal() {
+		return &cp, false, nil // already terminal
+	}
+	if c.State != ContinuationClaimed || c.Generation != generation || c.ClaimedBy != strings.TrimSpace(worker) {
+		return &cp, false, nil // fenced
+	}
+	c.State = ContinuationSuperseded
+	c.Reason = "superseded by a later planner question in the same task/run"
+	c.UpdatedAt = now.UTC()
+	cp = *c
+	return &cp, true, nil
+}
+
+// ResolveYieldedContinuation implements Store. It is the recovery counterpart of
+// SupersedeContinuation: it terminalizes a predecessor continuation (CLAIMED ->
+// SUPERSEDED) whose supersession was never recorded because the process stopped after the
+// successor question was persisted. It transitions ONLY from CLAIMED, so it can never
+// complete, resurrect, or replay work; a superseded continuation can never afterwards be
+// claimed, completed, or fence-mutated.
+func (m *MemoryStore) ResolveYieldedContinuation(id string, now time.Time) (*Continuation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	if c.State != ContinuationClaimed {
+		return &cp, false, nil // only a held continuation can yield
+	}
+	c.State = ContinuationSuperseded
+	c.Reason = "superseded by a later planner question (recovered after restart)"
 	c.UpdatedAt = now.UTC()
 	cp = *c
 	return &cp, true, nil

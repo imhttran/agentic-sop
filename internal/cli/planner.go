@@ -86,12 +86,22 @@ func questionsForTask(svc *question.Service, taskID string) ([]*question.Questio
 
 // activeQuestion picks the task's actionable question: a PENDING one first, then
 // ANSWERED, then APPLIED.
-func activeQuestion(qs []*question.Question) *question.Question {
+// activeQuestion picks the task's actionable question: a PENDING one first, then
+// ANSWERED, then APPLIED. An APPLIED question whose continuation is terminal (COMPLETED
+// or SUPERSEDED) is not actionable and is skipped, so a later question whose work is still
+// owed is the active one.
+func activeQuestion(svc *question.Service, qs []*question.Question) *question.Question {
 	for _, want := range []question.State{question.StatePending, question.StateAnswered, question.StateApplied} {
 		for _, q := range qs {
-			if q.State == want {
-				return q
+			if q.State != want {
+				continue
 			}
+			if want == question.StateApplied {
+				if c := continuationFor(svc, q); c != nil && c.State.Terminal() {
+					continue
+				}
+			}
+			return q
 		}
 	}
 	return nil
@@ -464,7 +474,7 @@ func plannerView(dir string, svc *question.Service, task *domain.Task) (question
 	if err != nil {
 		return question.ReconcileView{}, err
 	}
-	q := activeQuestion(qs)
+	q := activeQuestion(svc, qs)
 	return plannerViewFor(svc, dir, task, qs, q), nil
 }
 
@@ -526,7 +536,15 @@ func plannerLifecycleGate(ctx context.Context, dir string, cfg config.Config, a 
 		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
 		return true, exitError
 	}
-	q := activeQuestion(qs)
+	// Crash-gap recovery: terminalize any predecessor continuation whose owed work
+	// demonstrably yielded to a LATER successor question (same task, run epoch, plan
+	// binding) but whose supersession was never recorded because the process stopped. Each
+	// predecessor passes the SAME guards that gate its resume (human gate, cancellation,
+	// terminal task, stale binding, disabled mode), so recovery never resolves work the
+	// planner itself would refuse to act on, and it never replays the predecessor's stage
+	// work.
+	plannerResolvePredecessors(svc, dir, cfg, task, qs)
+	q := activeQuestion(svc, qs)
 	if q == nil {
 		return false, 0
 	}
@@ -558,6 +576,76 @@ func plannerLifecycleGate(ctx context.Context, dir string, cfg config.Config, a 
 		// Human gate, cancellation, terminal task, or stale binding: the normal lifecycle
 		// owns the task.
 		return false, 0
+	}
+}
+
+// plannerHasSuccessor reports whether a distinct, durably stored successor question exists
+// for the task: a later question (created after cur) bound to the same task, run epoch, and
+// plan revision, still live (PENDING/ANSWERED/APPLIED). Supersession requires this —
+// WAITING_FOR_PLANNER alone must not be sufficient.
+func plannerHasSuccessor(dir string, task *domain.Task, qs []*question.Question, cur *question.Question) bool {
+	if cur == nil {
+		return false
+	}
+	epoch := strings.TrimSpace(currentRunEpoch(dir, task.ID))
+	plan := strings.TrimSpace(currentPlanRevision(dir))
+	for _, s := range qs {
+		if s.ID == cur.ID {
+			continue
+		}
+		switch s.State {
+		case question.StatePending, question.StateAnswered, question.StateApplied:
+		default:
+			continue // not a live successor
+		}
+		if strings.TrimSpace(s.RunEpoch) != epoch || strings.TrimSpace(s.PlanRevision) != plan {
+			continue // different run/plan binding
+		}
+		if !s.CreatedAt.After(cur.CreatedAt) {
+			continue // not a later question
+		}
+		return true
+	}
+	return false
+}
+
+// plannerResolvePredecessors is the crash-gap recovery: for every APPLIED question whose
+// continuation is non-terminal and which has a distinct successor (see plannerHasSuccessor),
+// it records the terminal, non-completion outcome (SUPERSEDED) so no predecessor is left
+// CLAIMED. It never replays work and never completes a continuation. A predecessor is
+// resolved only when the SAME guards that gate its resume also pass, so a human gate,
+// cancellation, a terminal task, a stale binding, or disabled mode prevent resolution
+// exactly as they prevent executor resume.
+func plannerResolvePredecessors(svc *question.Service, dir string, cfg config.Config, task *domain.Task, qs []*question.Question) {
+	settings := plannerSettings(cfg)
+	for _, q := range qs {
+		if q.State != question.StateApplied {
+			continue
+		}
+		c := continuationFor(svc, q)
+		if c == nil || c.State.Terminal() {
+			continue
+		}
+		if !plannerHasSuccessor(dir, task, qs, q) {
+			continue
+		}
+		if action, _ := question.Decide(settings, plannerViewFor(svc, dir, task, qs, q)); plannerSkipAction(action) {
+			continue
+		}
+		_, _, _ = svc.ResolveYieldedContinuation(c.ID)
+	}
+}
+
+// plannerSkipAction reports whether a Decide action is one of the guards that must stop the
+// planner from acting on a question: disabled mode, cancellation, a human gate, a terminal
+// task, or a stale binding.
+func plannerSkipAction(a question.Action) bool {
+	switch a {
+	case question.ActionDisabled, question.ActionSkipCancelled, question.ActionSkipHumanGate,
+		question.ActionSkipTerminal, question.ActionSkipStale:
+		return true
+	default:
+		return false
 	}
 }
 
@@ -721,6 +809,24 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 		}
 		fmt.Fprintf(stdout, "%s planner: resumed from %s and completed (generation %d)\n", task.ID, stage, claimed.Generation)
 		return exitOK
+	}
+	// The resumed work yielded to a NEW planner question: the run parked at WAITING_FOR_PLANNER
+	// because the executor asked again. Supersession requires that a DISTINCT successor
+	// question was durably persisted for the same task, run epoch, and plan binding —
+	// WAITING_FOR_PLANNER alone is NOT sufficient. The continuation is then recorded
+	// SUPERSEDED (terminal, explicitly NOT completion), so it is neither CLAIMED nor claimable
+	// and is never replayed. A failure or a human gate is NOT superseded (below), so owed work
+	// is never falsely completed by parking.
+	if lerr == nil && res.stage == runpkg.WaitingForPlanner {
+		if qs, qerr := questionsForTask(svc, task.ID); qerr == nil && plannerHasSuccessor(dir, task, qs, q) {
+			if _, tr, cerr := svc.SupersedeContinuation(claimed.ID, claimed.Generation, plannerWorker); cerr != nil {
+				fmt.Fprintf(stderr, "%s planner: supersede: %v\n", task.ID, cerr)
+				return exitError
+			} else if tr {
+				fmt.Fprintf(stdout, "%s planner: resumed from %s; yielded to a new planner question, continuation superseded (generation %d)\n", task.ID, stage, claimed.Generation)
+				return exitError
+			}
+		}
 	}
 	if lerr != nil {
 		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, lerr)
