@@ -156,13 +156,24 @@ type Config struct {
 //
 // Enabled turns the feature on. Mode is an informational label (for example
 // "external"). RoundLimit bounds how many planner questions one task may raise
-// (0 means the built-in default). TimeoutSeconds is the response deadline;
-// PauseOnTimeout keeps a timed-out question paused rather than failing it.
+// (0 means the built-in default).
+//
+// TimeoutSeconds is the response deadline applied to a newly created question:
+// a positive value sets the question's deadline to created_at + TimeoutSeconds.
+// Zero means no deadline (and the default for an omitted block), so an answer may
+// arrive at any time. A negative value, or a value whose duration would overflow,
+// is rejected when a question is created. PauseOnTimeout keeps a question whose
+// deadline has passed parked (WAITING_FOR_PLANNER) rather than failing it.
+//
+// Deadline expiry is evaluated only when SOP reads the task's planner state — that
+// is, on command re-entry (`sop run` / the planner gate, or `sop continue`), never by
+// a background timer. A question whose deadline passed is therefore still parked
+// until the next such read; it is never auto-retried.
 type PlannerConfig struct {
 	Enabled        bool   `yaml:"enabled"`
 	Mode           string `yaml:"mode"`
 	RoundLimit     int    `yaml:"round_limit"`
-	TimeoutSeconds int    `yaml:"timeout_seconds"`
+	TimeoutSeconds int    `yaml:"timeout_seconds,omitempty"`
 	PauseOnTimeout bool   `yaml:"pause_on_timeout"`
 }
 

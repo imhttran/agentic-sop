@@ -23,11 +23,18 @@ MCP initialization error separately.
 
 ### Criterion B — timeout, disconnect, exhausted rounds preserve an explicit waiting/paused condition and evidence
 
-| Claim                                          | Covering tests                                                                                                                 | Kind   |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------ |
-| Timeout pauses                                 | **`TestPlannerTimeoutParksWithoutRetry`** (new), `TestDecidePauseOnTimeout`                                                    | tested |
-| Disconnect / restart while waiting re-parks    | **`TestPlannerRestartWhileWaitingReparks`** (new), `TestContinuationPersistsAcrossReopen`                                      | tested |
-| Exhausted rounds pause at an explicit boundary | **`TestPlannerExhaustedRoundsParkAtHumanBoundary`** (new), `TestDecideGuards` ("rounds exhausted"), `TestCLIPlannerRoundLimit` | tested |
+| Claim                                          | Covering tests                                                                                                                                        | Kind   |
+| ---------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Timeout pauses                                 | **`TestPlannerTimeoutParksWithoutRetry`** (new), `TestDecidePauseOnTimeout`; **production wiring now covered by `planner_timeout_test.go` — see §10** | tested |
+| Disconnect / restart while waiting re-parks    | **`TestPlannerRestartWhileWaitingReparks`** (new), `TestContinuationPersistsAcrossReopen`                                                             | tested |
+| Exhausted rounds pause at an explicit boundary | **`TestPlannerExhaustedRoundsParkAtHumanBoundary`** (new), `TestDecideGuards` ("rounds exhausted"), `TestCLIPlannerRoundLimit`                        | tested |
+
+> **Correction (see §10).** As first written, this section implied the timeout was
+> covered end to end. It was not: the mechanism was unit-tested, but the production path
+> never populated `Question.Deadline` from `planner.timeout_seconds`, and
+> `TestPlannerTimeoutParksWithoutRetry` seeded the deadline directly, so the config→deadline
+> wiring was untested. §10 records the fix and the tests that now exercise the production
+> creation paths.
 
 ### Criterion C — clarification leaves failure counters unchanged; disabled mode preserves prior behavior
 
@@ -187,3 +194,74 @@ go test ./internal/cli/ -run 'TestPlannerTimeoutParksWithoutRetry|TestPlannerRes
 
 Uncommitted on branch `spike-004-planner-continuation`. The completed live demo
 (`.run/planner-live`) and its original `PARTIAL` report are preserved unchanged.
+
+## 10. PR #7 review follow-up — finding dispositions
+
+Dispositions for the findings raised on draft PR #7 (head `05a1219`). This section
+**corrects the timeout claims above** and records the fixes; it does not rewrite any live
+evidence.
+
+### D1 (HIGH) — the response timeout was never wired — FIXED
+
+- **Finding:** `planner.timeout_seconds` was parsed but read nowhere in production, and no
+  production path populated `Question.Deadline`, so `pause_on_timeout` could never fire.
+  `TestPlannerTimeoutParksWithoutRetry` and `TestDecidePauseOnTimeout` seeded the deadline
+  directly, so the config→deadline wiring was untested (the live demo's questions show
+  `deadline: 0001-01-01T00:00:00Z` despite `timeout_seconds: 600`).
+- **Fix:** a single derivation in the store's `CreateQuestion`
+  (`internal/question/store.go`): when the submitted record carries `DeadlineAfter > 0`
+  and no explicit deadline, the deadline is `created_at + DeadlineAfter`, using the record's
+  **own** creation stamp and the store's injectable clock. Both creation paths set it via
+  `plannerTimeout(cfg)` (`internal/cli/planner.go`, `internal/cli/planner_raise.go`).
+- **Policies (now explicit):** `0` ⇒ no deadline (the default); negative or
+  duration-overflowing values ⇒ rejected at creation (fail closed), so no question is
+  recorded. A duplicate creation or a restart returns/loads the existing record, so the
+  deadline is **preserved**; re-entry never extends it.
+- **When expiry is evaluated:** only when SOP reads the planner state — command re-entry
+  (the planner gate on `sop run`, or `sop continue`). There is **no background timer**;
+  an expired question stays parked until that read, and is never auto-retried.
+- **Tests (production creation paths; no direct deadline seeding):**
+  `TestPlannerDeadlineDerivedOnExecutorRaise`, `TestPlannerDeadlineDerivedOnCLIAsk`,
+  `TestPlannerZeroTimeoutMeansNoDeadline`, `TestPlannerInvalidTimeoutRejected`,
+  `TestPlannerDeadlineNotExtendedOnReentry`, `TestPlannerTimeoutExpiryPausesWithEvidence`
+  (`internal/cli/planner_timeout_test.go`). Fail-before-fix proven: with the derivation
+  disabled, the first three fail with "has no deadline" / "no deadline to expire".
+
+### D2 (MEDIUM) — recovery supersede — OWNERSHIP-PROTECTED
+
+- The durable-successor invariant is documented at the store method
+  (`ResolveYieldedContinuation`, `internal/question/store.go`).
+- **The interleaving IS possible, and is now protected against.** `sop planner ask`
+  (`internal/cli/planner.go`) persists a successor question for a task **without** holding
+  the predecessor's execution ownership, while `plannerResume` holds the per-continuation
+  execution lock across the whole resumed stage (acquired before the claim, released on
+  return). A successor can therefore be persisted while the predecessor's own worker is
+  still running its stage, so the successor check alone was **not** sufficient.
+- **Fix:** `plannerResolvePredecessors` now acquires the predecessor's execution lock
+  **first** — the same lock `plannerResume` holds, and the same ordering (execution lock,
+  then the question store), so lock ordering is preserved — and revalidates the successor
+  and binding guards **after** ownership is held. A worker that cannot acquire ownership
+  leaves the continuation `CLAIMED` for its owner to finish.
+- **Regression test:** `TestPlannerRecoveryDefersToHeldExecutionOwnership` — while the owner
+  holds the lock, recovery leaves the predecessor `CLAIMED`; once the lock is released,
+  recovery resolves it. Fail-before-fix proven (bypassing the acquisition supersedes
+  in-flight work). The earlier `TestPlannerRecoveryLeavesActivePredecessorWhenNoSuccessor`
+  covers only the no-successor case and is **not** used as proof of this invariant.
+
+### D3 (LOW) — duplicate stale comment — FIXED
+
+- Removed the repeated `activeQuestion` doc comment in `internal/cli/planner.go`.
+
+### D4 (LOW) — handoff capsule missing on planner success — FIXED
+
+- `plannerResume` now persists the RBV-011 handoff capsule under `context.handoff` on both
+  success paths (normal `PASSED` and success-marker recovery), via `plannerSaveHandoff`,
+  mirroring the normal path's best-effort, non-failing semantics.
+- **Coverage:** `TestPlannerResumeSavesHandoffCapsule` is table-driven over all four cases —
+  normal success and success-marker recovery, each with `context.handoff` **enabled and
+  disabled** — asserting the capsule is present exactly when the flag is on.
+
+### Checks after the fixes
+
+`gofmt` clean; `go vet ./...`; `go build ./...`; `go test ./...`; `check-doc-links.sh`
+(broken links: 0); `go test -race ./...`; a `GOOS=windows` cross-build — all pass.

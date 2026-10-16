@@ -79,9 +79,19 @@ type Store interface {
 	// records the same terminal, non-completion outcome for a predecessor continuation
 	// whose owed work demonstrably yielded to a LATER, durably persisted question for the
 	// same task/run/plan (the caller has verified that successor exists) but whose
-	// supersession was never recorded because the process stopped. It transitions ONLY
-	// from CLAIMED, so it can never complete, resurrect, or replay work, and it does not
-	// weaken the completion/checkpoint fence.
+	// supersession was never recorded because the process stopped.
+	//
+	// INVARIANT (why no claim fence is required): a successor question is only ever raised by
+	// the predecessor's OWN resumed stage, and the raise happens after that stage's work has
+	// returned. A persisted successor therefore proves the predecessor is no longer running:
+	// no worker can be executing the predecessor's stage work while this is called. The
+	// caller must enforce the invariant by requiring a distinct, live successor bound to the
+	// same task, run epoch, and plan revision (see internal/cli plannerResolvePredecessors).
+	//
+	// It transitions ONLY from CLAIMED, so it can never complete, resurrect, or replay work,
+	// and it does not weaken the completion/checkpoint fence: the claim-generation fence on
+	// CompleteContinuation/FenceAndMutate is unchanged, and a superseded continuation can
+	// never afterwards be claimed, completed, or fence-mutated.
 	ResolveYieldedContinuation(id string, now time.Time) (*Continuation, bool, error)
 	// FenceAndMutate coordinates claim verification with a protected mutation: it runs
 	// mutate() only while the caller still holds the presented generation, under the
@@ -191,6 +201,14 @@ func (m *MemoryStore) CreateQuestion(q *Question) (*Question, error) {
 	}
 	stored.CreatedAt = m.stamp()
 	stored.UpdatedAt = stored.CreatedAt
+	// Derive the deadline from the record's OWN creation time, so created_at and deadline
+	// share one clock reading (and are deterministic under the injectable store clock).
+	// DeadlineAfter is an input only; the durable Deadline is what persists. A duplicate
+	// creation never reaches here: it returns the existing record, preserving its deadline.
+	if stored.Deadline.IsZero() && stored.DeadlineAfter > 0 {
+		stored.Deadline = stored.CreatedAt.Add(stored.DeadlineAfter)
+	}
+	stored.DeadlineAfter = 0
 	m.questions[stored.ID] = &stored
 	m.byKey[key] = stored.ID
 	m.order = append(m.order, stored.ID)

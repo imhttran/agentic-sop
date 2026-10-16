@@ -115,6 +115,10 @@ func raisePlannerQuestion(dir, taskID string, req *agent.PlannerRequest) (*quest
 	if !settings.Enabled {
 		return nil, fmt.Errorf("planner: mode is disabled (set planner.enabled: true)")
 	}
+	timeout, terr := plannerTimeout(cfg)
+	if terr != nil {
+		return nil, terr
+	}
 	svc, _, err := plannerService(dir)
 	if err != nil {
 		return nil, err
@@ -150,5 +154,6 @@ func raisePlannerQuestion(dir, taskID string, req *agent.PlannerRequest) (*quest
 		RepoFingerprint: repoFingerprint(dir),
 		ReturnStage:     stage,
 		Revision:        1,
+		DeadlineAfter:   timeout,
 	})
 }

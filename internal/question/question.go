@@ -167,10 +167,16 @@ type Question struct {
 	RepoFingerprint string    `json:"repo_fingerprint,omitempty"`
 	ReturnStage     string    `json:"return_stage,omitempty"`
 	Deadline        time.Time `json:"deadline,omitempty"`
-	Options         []string  `json:"options,omitempty"`
-	EvidenceRefs    []string  `json:"evidence_refs,omitempty"`
-	CreatedAt       time.Time `json:"created_at"`
-	UpdatedAt       time.Time `json:"updated_at"`
+	// DeadlineAfter is an INPUT to creation only. When it is positive and no explicit
+	// Deadline is set, CreateQuestion derives Deadline from the record's OWN creation time
+	// (created_at + DeadlineAfter), so both timestamps share one clock reading. It is never
+	// persisted (json:"-"), so a reloaded record keeps its durable Deadline and never
+	// re-derives one; a duplicate creation returns the existing record unchanged.
+	DeadlineAfter time.Duration `json:"-"`
+	Options       []string      `json:"options,omitempty"`
+	EvidenceRefs  []string      `json:"evidence_refs,omitempty"`
+	CreatedAt     time.Time     `json:"created_at"`
+	UpdatedAt     time.Time     `json:"updated_at"`
 }
 
 // Key returns the duplicate identity key (Identity+Kind). It returns "" when

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -39,6 +40,24 @@ func plannerSettings(cfg config.Config) question.PlannerSettings {
 		RoundLimit:     limit,
 		PauseOnTimeout: cfg.Planner.PauseOnTimeout,
 	}
+}
+
+// plannerTimeout converts planner.timeout_seconds to a Duration for a newly created
+// question's deadline. Zero (the default) means no deadline; a negative value, or a value
+// whose Duration would overflow, is rejected so a misconfiguration fails closed instead of
+// silently wrapping. The deadline is evaluated only on command re-entry, never by a timer.
+func plannerTimeout(cfg config.Config) (time.Duration, error) {
+	secs := cfg.Planner.TimeoutSeconds
+	if secs == 0 {
+		return 0, nil
+	}
+	if secs < 0 {
+		return 0, fmt.Errorf("planner: timeout_seconds must not be negative, got %d", secs)
+	}
+	if int64(secs) > int64(math.MaxInt64)/int64(time.Second) {
+		return 0, fmt.Errorf("planner: timeout_seconds %d overflows a duration", secs)
+	}
+	return time.Duration(secs) * time.Second, nil
 }
 
 // currentRunEpoch returns a task run's creation timestamp, or "" when none exists.
@@ -84,8 +103,6 @@ func questionsForTask(svc *question.Service, taskID string) ([]*question.Questio
 	return out, nil
 }
 
-// activeQuestion picks the task's actionable question: a PENDING one first, then
-// ANSWERED, then APPLIED.
 // activeQuestion picks the task's actionable question: a PENDING one first, then
 // ANSWERED, then APPLIED. An APPLIED question whose continuation is terminal (COMPLETED
 // or SUPERSEDED) is not actionable and is skipped, so a later question whose work is still
@@ -212,6 +229,11 @@ func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintln(stderr, "planner: planner mode is disabled (set planner.enabled: true)")
 		return exitError
 	}
+	timeout, terr := plannerTimeout(cfg)
+	if terr != nil {
+		fmt.Fprintf(stderr, "%v\n", terr)
+		return exitError
+	}
 
 	st, err := store.Open(statePath(dir))
 	if err != nil {
@@ -265,6 +287,7 @@ func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
 		RepoFingerprint: repoFingerprint(dir),
 		ReturnStage:     string(stage),
 		Revision:        1,
+		DeadlineAfter:   timeout,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "planner: %v\n", err)
@@ -609,30 +632,65 @@ func plannerHasSuccessor(dir string, task *domain.Task, qs []*question.Question,
 	return false
 }
 
+// plannerPredecessorResolvable reports whether q is a predecessor whose supersession was
+// never recorded and whose owed work demonstrably yielded: it is APPLIED with a non-terminal
+// continuation, has a distinct, live successor bound to the same task/run/plan, and passes the
+// same Decide guards that gate its resume. It never mutates anything.
+func plannerPredecessorResolvable(svc *question.Service, dir string, cfg config.Config, task *domain.Task, qs []*question.Question, q *question.Question) bool {
+	if q == nil || q.State != question.StateApplied {
+		return false
+	}
+	c := continuationFor(svc, q)
+	if c == nil || c.State.Terminal() {
+		return false
+	}
+	if !plannerHasSuccessor(dir, task, qs, q) {
+		return false
+	}
+	action, _ := question.Decide(plannerSettings(cfg), plannerViewFor(svc, dir, task, qs, q))
+	return !plannerSkipAction(action)
+}
+
 // plannerResolvePredecessors is the crash-gap recovery: for every APPLIED question whose
 // continuation is non-terminal and which has a distinct successor (see plannerHasSuccessor),
 // it records the terminal, non-completion outcome (SUPERSEDED) so no predecessor is left
-// CLAIMED. It never replays work and never completes a continuation. A predecessor is
-// resolved only when the SAME guards that gate its resume also pass, so a human gate,
-// cancellation, a terminal task, a stale binding, or disabled mode prevent resolution
-// exactly as they prevent executor resume.
+// CLAIMED. It never replays work and never completes a continuation.
+//
+// Execution ownership is acquired FIRST, exactly as plannerResume does (the per-continuation
+// execution lock, then the question store), so recovery can never supersede work that is
+// still in flight: a successor question can be persisted while the predecessor's own worker
+// still holds execution ownership — `sop planner ask` records one during a resumed stage, and
+// the executor raise persists one inside it — so a worker that cannot take ownership leaves
+// the continuation CLAIMED for its owner to finish. The successor and binding guards are
+// revalidated AFTER ownership is held, and a predecessor is resolved only when the SAME
+// guards that gate its resume also pass.
 func plannerResolvePredecessors(svc *question.Service, dir string, cfg config.Config, task *domain.Task, qs []*question.Question) {
-	settings := plannerSettings(cfg)
 	for _, q := range qs {
-		if q.State != question.StateApplied {
-			continue
-		}
 		c := continuationFor(svc, q)
-		if c == nil || c.State.Terminal() {
+		if c == nil || !plannerPredecessorResolvable(svc, dir, cfg, task, qs, q) {
 			continue
 		}
-		if !plannerHasSuccessor(dir, task, qs, q) {
-			continue
+		release, ok, err := question.TryAcquireLock(plannerEffectPath(dir, task.ID, c.ID) + ".lock")
+		if err != nil || !ok {
+			continue // in flight (or locking unsupported): leave it CLAIMED for its owner
 		}
-		if action, _ := question.Decide(settings, plannerViewFor(svc, dir, task, qs, q)); plannerSkipAction(action) {
-			continue
+		// Revalidate after acquiring ownership: the successor may have vanished, the bindings may
+		// have changed, or the predecessor may itself have completed while we waited.
+		if fresh, ferr := questionsForTask(svc, task.ID); ferr == nil {
+			var cur *question.Question
+			for _, f := range fresh {
+				if f.ID == q.ID {
+					cur = f
+					break
+				}
+			}
+			if plannerPredecessorResolvable(svc, dir, cfg, task, fresh, cur) {
+				if fc := continuationFor(svc, cur); fc != nil {
+					_, _, _ = svc.ResolveYieldedContinuation(fc.ID)
+				}
+			}
 		}
-		_, _, _ = svc.ResolveYieldedContinuation(c.ID)
+		release()
 	}
 }
 
@@ -732,6 +790,11 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 			fmt.Fprintf(stderr, "%s planner: complete task: %v\n", task.ID, cerr)
 			return exitError
 		}
+		// The run's PASSED artifacts already exist; reopen a handle so the RBV-011 handoff
+		// capsule can read them. Best-effort, mirroring the normal success path.
+		if hrn, herr := runpkg.Resume(dir, task.ID); herr == nil {
+			plannerSaveHandoff(cfg, saver, task, hrn, lifeResult{stage: runpkg.Passed})
+		}
 		fmt.Fprintf(stdout, "%s planner: effect already present; completion recorded without replay\n", task.ID)
 		return exitOK
 	case markerUncertain:
@@ -807,6 +870,9 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 			fmt.Fprintf(stderr, "%s planner: complete task: %v\n", task.ID, cerr)
 			return exitError
 		}
+		// Persist the RBV-011 handoff capsule exactly as the normal success path does
+		// (best-effort, metadata only, under context.handoff).
+		plannerSaveHandoff(cfg, saver, task, rn, res)
 		fmt.Fprintf(stdout, "%s planner: resumed from %s and completed (generation %d)\n", task.ID, stage, claimed.Generation)
 		return exitOK
 	}
@@ -833,6 +899,15 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 	}
 	fmt.Fprintf(stdout, "%s planner: resumed from %s but NOT completed (stage %s); continuation retained\n", task.ID, stage, res.stage)
 	return exitError
+}
+
+// plannerSaveHandoff persists the RBV-011 handoff capsule for a task a planner continuation
+// completed, under the existing context.handoff flag. It mirrors the normal success path:
+// best-effort, metadata only, and it never changes the run outcome.
+func plannerSaveHandoff(cfg config.Config, saver taskSaver, task *domain.Task, rn *runpkg.Run, res lifeResult) {
+	if cfg.ContextEfficiency.Handoff {
+		saveTaskHandoff(saver, task, rn, res)
+	}
 }
 
 // plannerContinuationAllowed re-reads the authoritative state after execution ownership is
