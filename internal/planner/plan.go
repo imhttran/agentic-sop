@@ -70,6 +70,13 @@ type Stage struct {
 	// status is UNKNOWN: synthesis must not build work on a capability it could
 	// not verify.
 	Requires []string `json:"requires,omitempty"`
+	// RequiredEvidence names external retrieval evidence this stage requires
+	// before it may run (RAG-SOP-003). Each item is "corpus:<id>" or
+	// "source:<prefix>". An empty list (the default) declares no required evidence
+	// and preserves the existing behavior exactly. Syntax is validated in
+	// Validate; authorization is enforced at execution time against the operator
+	// allowlist.
+	RequiredEvidence []string `json:"required_evidence,omitempty"`
 }
 
 // Validate performs deterministic structural validation of a Plan. It is the
@@ -123,6 +130,17 @@ func (p *Plan) Validate() error {
 		}
 	}
 
+	// Required evidence (RAG-SOP-003): validate each declaration's syntax and
+	// normalize duplicates deterministically. A stage with no declarations keeps
+	// a nil slice, so an unaffected plan is byte-identical to before.
+	for i := range p.Stages {
+		normalized, err := NormalizeRequiredEvidence(p.Stages[i].RequiredEvidence)
+		if err != nil {
+			return fmt.Errorf("plan: stage %s: %w", p.Stages[i].ID, err)
+		}
+		p.Stages[i].RequiredEvidence = normalized
+	}
+
 	for _, stage := range p.Stages {
 		for _, dep := range stage.Dependencies {
 			if dep == stage.ID {
@@ -153,6 +171,52 @@ func (p *Plan) Validate() error {
 // is the one normalization used for both validation and the missing-capability
 // ownership gate in CapabilityGaps, so the two can never disagree about which
 // requirement names which declared capability.
+// NormalizeRequiredEvidence validates and normalizes a stage's required-evidence
+// declarations (RAG-SOP-003). Each item must be "corpus:<id>" or "source:<prefix>".
+// An empty, malformed, or unknown-kind item is an error; the identity must be
+// non-empty and free of whitespace. Duplicates are dropped, preserving first-seen
+// order, so the result is deterministic. Multiple items are ANDed by the caller:
+// every declared requirement must be satisfiable for the evidence to be present.
+// An empty input returns a nil slice, preserving the pre-existing behavior.
+func NormalizeRequiredEvidence(items []string) ([]string, error) {
+	if len(items) == 0 {
+		return nil, nil
+	}
+
+	out := make([]string, 0, len(items))
+	seen := make(map[string]bool, len(items))
+
+	for _, raw := range items {
+		item := strings.TrimSpace(raw)
+		kind, id, ok := strings.Cut(item, ":")
+		if !ok {
+			return nil, fmt.Errorf("required evidence %q must be \"corpus:<id>\" or \"source:<prefix>\"", raw)
+		}
+
+		kind = strings.ToLower(strings.TrimSpace(kind))
+		id = strings.TrimSpace(id)
+
+		if kind != "corpus" && kind != "source" {
+			return nil, fmt.Errorf("required evidence %q has an unknown kind %q (want corpus or source)", raw, kind)
+		}
+		if id == "" {
+			return nil, fmt.Errorf("required evidence %q has an empty identity", raw)
+		}
+		if strings.ContainsAny(id, " \t\n") {
+			return nil, fmt.Errorf("required evidence %q must not contain whitespace in its identity", raw)
+		}
+
+		norm := kind + ":" + id
+		if seen[norm] {
+			continue
+		}
+		seen[norm] = true
+		out = append(out, norm)
+	}
+
+	return out, nil
+}
+
 func normalizeCapabilityName(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }

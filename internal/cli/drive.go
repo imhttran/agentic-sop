@@ -60,6 +60,15 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// Required-evidence verifier (RAG-SOP-003): disabled RAG yields a nil verifier,
+	// so a task that declares required evidence fails closed. Wiring happens here,
+	// before any task is scheduled; verification itself runs before a task's agent.
+	verifier, verr := newRAGEvidenceVerifier(cfg)
+	if verr != nil {
+		fmt.Fprintf(stderr, "run: %v\n", verr)
+		return exitError
+	}
+	d.evidenceVerifier = verifier
 	routing, err := applyModelRouting(&cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
@@ -352,6 +361,9 @@ func printFailedRecovery(w io.Writer, dir string, task *domain.Task) {
 		fmt.Fprintln(w)
 		if task.BlockedReason != domain.NO_REASON {
 			fmt.Fprintf(w, "Reason: %s\n", task.BlockedReason)
+			if task.BlockedDetail != "" {
+				fmt.Fprintf(w, "Missing: %s\n", task.BlockedDetail)
+			}
 		}
 		fmt.Fprintf(w, "Status: %s\n", task.Status)
 	}
@@ -687,6 +699,17 @@ func parkRunAtHumanBoundary(rn *runpkg.Run, taskID string, stderr io.Writer) {
 // persisted state.
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
+	// Required evidence (RAG-SOP-003 4B-2A2b): ONE attempt-scoped retrieval, validated
+	// before the task consumes any evidence or runs its agent. A task with no declared
+	// required evidence is a no-op, so existing behavior is unchanged.
+	blocked, code, attempt := enforceRequiredEvidenceOnce(ctx, cfg, saver, task, spec, d, stdout, stderr)
+	if blocked {
+		return code
+	}
+	// Carry the verified attempt through the execution chain on the attempt-local
+	// deps copy (never a global). implementContext reads it in Phase 4B-2A3.
+	d.ragAttempt = attempt
+	d.attemptNumber = task.Attempt
 	spec.Deliverables = planTaskDeliverables(dir, task)
 	// Plan-declared acceptance checks are recovered through the same plan-stage
 	// reconciliation as the deliverables and projected into the spec, so the

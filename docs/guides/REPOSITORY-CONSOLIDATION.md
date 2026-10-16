@@ -1,8 +1,9 @@
 # Repository consolidation
 
 This guide records how the SOP controller and the decision adapters were
-consolidated into the single `agentic-sop` module, and the compatibility limits that
-follow from that.
+consolidated into the single `agentic-sop` module, the compatibility limits that
+follow from that, and how the **shipped RAG skills** relate to the
+**proposed/implemented RAG retrieval adapter** in the SOP core.
 
 ## What moved where
 
@@ -32,6 +33,33 @@ the canonical decision seam and the profile bridge are unchanged.
 
 The legacy executables remain available and behave identically.
 
+## Shipped RAG skills vs. the RAG retrieval adapter
+
+These are **two different things** and must not be conflated:
+
+| | Shipped RAG **skills** | RAG **retrieval adapter** (SOP core) |
+| --- | --- | --- |
+| What | Domain skills that fix an existing read-only capability (`plan`, `design_tests`) | An optional retrieval path wired into the SOP lifecycle alongside BM25 |
+| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest` (+ mirrored agent trees) | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/rag*`, `internal/retrieval` (BM25 baseline) |
+| Status | **Shipped** — installed by `./install.sh --skills …` | **Proposed/implemented, disabled by default** — opt-in only |
+| Mutates? | No; produce plans/test designs, never a verdict | Can alter retrieved context when explicitly enabled |
+| Gate | SOP routing, provider validation, lifecycle, approval | Deterministic quality gate, required-evidence gate, retrieval gate |
+| Enablement | Always available with the installer | `SOP_RAG_ENABLED` — default off; explicit operator opt-in only |
+
+- The **shipped RAG skills** are documented in [`RAG-SKILLS.md`](RAG-SKILLS.md); they
+  are provider-independent and never name an embedding runtime or connection string.
+- The **retrieval adapter** is evaluated by RAG-SOP-004; its rollout decision is recorded
+  in [`../specs/RAG-SOP-004-DECISION.md`](../specs/RAG-SOP-004-DECISION.md) and its
+  predeclared criteria in [`../specs/RAG-EVALUATION.md`](../specs/RAG-EVALUATION.md).
+- The required **PostgreSQL integration validation category** that guards
+  database-sensitive changes is a deterministic file-pattern policy, documented in
+  [`../specs/RAG-POSTGRES-VALIDATION-POLICY.md`](../specs/RAG-POSTGRES-VALIDATION-POLICY.md);
+  it is kept strictly separate from retrieval quality.
+
+**Default enablement is unchanged by consolidation or by RAG-SOP-004.** Nothing here
+enables the retrieval adapter automatically; expansion of usage is an explicit operator
+opt-in decision.
+
 ## Compatibility limits and optional requirements
 
 - **Go module**: one module, `go 1.27.1`; the controller's `modernc.org/sqlite`
@@ -44,6 +72,8 @@ The legacy executables remain available and behave identically.
 - **Caddy / HTTPS**: optional; the proxy scripts and Caddyfile are namespaced under
   `scripts/controller/` and `integrations/controller/` and never overwrite a core
   Make target.
+- **Ollama / PostgreSQL**: optional runtimes. The RAG evaluation explicitly tests their
+  **unavailability** as an expected scenario (degrade to BM25-only or fail closed).
 - **Advisory authority**: decisions can only add attention; they cannot lower risk,
   approve work or bypass verification.
 

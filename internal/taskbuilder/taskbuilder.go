@@ -52,12 +52,19 @@ func Build(plan *planner.Plan) ([]*domain.Task, error) {
 		if len(stage.AcceptanceChecks) > 0 {
 			checks = append([]string{}, stage.AcceptanceChecks...)
 		}
+		// Required evidence is carried verbatim (and in order) when declared; an
+		// absent declaration stays nil so an unaffected task round-trips unchanged.
+		var reqEvidence []string
+		if len(stage.RequiredEvidence) > 0 {
+			reqEvidence = append([]string{}, stage.RequiredEvidence...)
+		}
 		tasks = append(tasks, &domain.Task{
 			ID:                  stage.ID,
 			Title:               stage.Title,
 			Objective:           stage.Objective,
 			AcceptanceCriteria:  SerializeAcceptanceCriteria(stage.AcceptanceCriteria),
 			AcceptanceChecks:    checks,
+			RequiredEvidence:    reqEvidence,
 			ExecutionMode:       stage.ExecutionMode,
 			DiscoveryIterations: stage.DiscoveryIterations,
 			Status:              status,

@@ -143,6 +143,10 @@ type Config struct {
 	// the SOP_MODEL_* environment (which a .env file may supply) by
 	// internal/model; an omitted block leaves the agent selection unchanged.
 	Models model.Route `yaml:"models"`
+	// RAG is the opt-in, disabled-by-default RAG knowledge-retrieval configuration
+	// (RAG-SOP-003). An omitted block leaves existing behavior unchanged; the
+	// SOP_RAG_* environment overrides it, resolved by RAGConfig.Resolved.
+	RAG RAGConfig `yaml:"rag"`
 	// Providers configures the optional provider/runtime inspection layer (Phase 4):
 	// per-provider endpoints and the opt-in pre-execution model validation. An
 	// omitted block leaves existing behavior unchanged.
@@ -245,6 +249,14 @@ type Validation struct {
 	Build []string `yaml:"build"`
 	Test  []string `yaml:"test"`
 	Lint  []string `yaml:"lint"`
+	// Integration holds the PostgreSQL/pgvector integration validation commands.
+	// They form the postgres-integration validation category required for
+	// migration and database-sensitive changes (RAG-SOP-004 task 1). Unit-only
+	// validation (build/test/lint) never satisfies this category: only a command
+	// configured here, and classified as real PostgreSQL/pgvector operations, is
+	// accepted as proof. The category is kept strictly separate from retrieval
+	// quality. Empty by default, so a project without a database is unaffected.
+	Integration []string `yaml:"integration"`
 }
 
 // ContextEfficiency configures the opt-in Phase 8 context-efficiency facilities on the

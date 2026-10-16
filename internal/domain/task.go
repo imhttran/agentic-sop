@@ -33,9 +33,21 @@ type Task struct {
 	// field is additive: a checkless task serializes exactly as before (omitempty),
 	// so existing records stay byte-identical.
 	AcceptanceChecks []string `json:"acceptance_checks,omitempty"`
+	// RequiredEvidence names external retrieval evidence the task requires before
+	// it may run (RAG-SOP-003): each item is "corpus:<id>" or "source:<prefix>".
+	// The field is additive: a task with no required evidence serializes exactly
+	// as before (omitempty, nil when absent), so existing records stay
+	// byte-identical. Declaration order is preserved.
+	RequiredEvidence []string `json:"required_evidence,omitempty"`
 	Status           TaskStatus
 	BlockedReason    BlockedReason
-	ExecutionMode    ExecutionMode
+	// BlockedDetail is durable, machine-readable detail recorded when a task is
+	// blocked (RAG-SOP-003): the exact missing/unauthorized required-evidence
+	// identities. It is empty for any other state and is cleared on requeue, so a
+	// stale detail can never describe a later task state. It never holds
+	// credentials or retrieved document content.
+	BlockedDetail string `json:"blocked_detail,omitempty"`
+	ExecutionMode ExecutionMode
 	// DiscoveryIterations is the optional per-task discovery allowance (IMPLEMENT/FIX
 	// model turns of credited repository discovery before non-mutating turns become
 	// stale). Zero means the task declares none and the operator environment allowance
@@ -145,6 +157,7 @@ func (t *Task) Requeue() error {
 	_ = t.AddAttempt(PLANNED, "requeued")
 	t.Status = PLANNED
 	t.BlockedReason = NO_REASON
+	t.BlockedDetail = ""
 	t.UpdatedAt = time.Now()
 	return nil
 }
@@ -158,6 +171,7 @@ func (t *Task) RequeueWithoutSpending() error {
 	}
 	t.Status = PLANNED
 	t.BlockedReason = NO_REASON
+	t.BlockedDetail = ""
 	t.UpdatedAt = time.Now()
 	return nil
 }
@@ -195,6 +209,7 @@ func (t *Task) CompleteExternally() error {
 	}
 	t.Status = LOCAL_DONE
 	t.BlockedReason = NO_REASON
+	t.BlockedDetail = ""
 	t.UpdatedAt = time.Now().UTC()
 	return nil
 }
@@ -217,6 +232,7 @@ func (t *Task) MarkNotRequired(reason string) error {
 	_ = t.AddAttempt(NOT_REQUIRED, reason)
 	t.Status = NOT_REQUIRED
 	t.BlockedReason = NO_REASON
+	t.BlockedDetail = ""
 	t.UpdatedAt = time.Now().UTC()
 	return nil
 }

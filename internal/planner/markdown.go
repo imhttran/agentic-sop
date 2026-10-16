@@ -161,6 +161,8 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 			cur.stage.Requires = append(cur.stage.Requires, item)
 		case "deliverables", "deliverable", "scope", "outputs":
 			cur.stage.Deliverables = append(cur.stage.Deliverables, item)
+		case "required evidence", "required-evidence":
+			cur.stage.RequiredEvidence = append(cur.stage.RequiredEvidence, item)
 		case "acceptance criteria", "acceptance", "acceptance criterion", "tests":
 			cur.stage.AcceptanceCriteria = append(cur.stage.AcceptanceCriteria, item)
 		case "acceptance checks", "acceptance check":

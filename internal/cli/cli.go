@@ -81,6 +81,26 @@ type deps struct {
 	// taskInputs is optional, caller-supplied observation text keyed by task ID.
 	// It supplies context only; it cannot grant tools, mutation or completion.
 	taskInputs map[string]string
+	// evidenceVerifier verifies a task's declared required retrieval evidence
+	// (RAG-SOP-003) before the task runs. It is nil by default: no verifier is
+	// wired (the live RAG client is Package 3), so a task that declares required
+	// evidence fails closed. It can never grant tools, mutation, or completion.
+	evidenceVerifier EvidenceVerifier
+	// ragKnowledge is the injectable optional-RAG provider seam (RAG-SOP-003). It is
+	// nil in production, where the configured ragclient is used; tests inject a
+	// deterministic fake. It can never grant tools, mutation, or completion.
+	ragKnowledge ragKnowledgeFunc
+	// rawEvidence is the injectable RAW-evidence retrieval seam (RAG-SOP-003); it
+	// returns []ragclient.Evidence for required-evidence validation, distinct from
+	// ragKnowledge's context items. Nil in production.
+	rawEvidence rawEvidenceFunc
+	// ragAttempt is the attempt-scoped verified retrieval result (RAG-SOP-003
+	// 4B-2A3a). It is attached to the attempt-local deps copy by runScheduledTask and
+	// read by implementContext; it is never global or shared across tasks/attempts.
+	ragAttempt attemptRetrieval
+	// attemptNumber is the current execution attempt (from task.Attempt), reused for
+	// RAG telemetry association. No new counter is introduced.
+	attemptNumber int
 	// routing is the resolved, non-secret model-routing evidence for this
 	// invocation. The run commands set it after resolution; each task run records
 	// it in its artifacts so the model choice stays auditable after the process

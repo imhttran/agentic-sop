@@ -35,6 +35,20 @@ Where new documentation belongs:
 - clean-room test checklists and their results → `testing/`
 - point-in-time measurement or decision evidence → `reports/`
 
+## Shipped RAG Skills vs. the RAG Retrieval Adapter
+
+Two different things share the "RAG" name; keep them distinct:
+
+| | Shipped RAG **skills** | RAG **retrieval adapter** (SOP core) |
+| --- | --- | --- |
+| Status | **Shipped** — installed by `./install.sh --skills …` | **Proposed/implemented, disabled by default** — explicit operator opt-in only |
+| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest` | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/retrieval` (BM25 baseline) |
+| Mutates? | No; produces plans/test designs, never a verdict | Can alter retrieved context when explicitly enabled |
+| Docs | [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md), [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md), [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) |
+
+Nothing enables the retrieval adapter automatically; expansion of usage follows the
+recorded operator decision in [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
+
 ## Getting Started
 
 - [../README.md](../README.md) — project landing page: what SOP is and a minimal quick start.
@@ -60,6 +74,7 @@ Where new documentation belongs:
 - [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
 - [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 - [architecture/JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md) — the ratified JEV decision-contract alignment (Gate 3, 2026-10-11): the accepted contract requirements (§13–§19) and the ratified decisions D1–D7 (§20).
+- [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) — **proposed** (unapproved) design for opt-in, read-only RAG knowledge retrieval: the adapter seam, ownership boundaries, and deterministic context-integration rules. It changes no runtime behaviour and awaits the RAG-SOP-001 architecture approval.
 
 ## Specifications
 
@@ -82,6 +97,12 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
 - [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
+- [specs/RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md) — **proposed** versioned, retrieval-only request/response contract (schema `rag-retrieval/v1`): source metadata, size ceilings, error taxonomy, and fallback/required-evidence rules.
+- [specs/RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md) — **proposed** threat model for RAG retrieval (injection, cross-project leakage, scope, resource, malformed-response) and its fail-closed rules.
+- [specs/RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md) — **proposed** `SOP_RAG_*` configuration and feature-flag design: opt-in, disabled by default, bytes-based budgets, per-project corpus allowlisting.
+- [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) — the **predeclared** evaluation approach and GO/CONDITIONAL/NO-GO criteria for the RAG retrieval adapter versus BM25-only, fixed before results.
+- [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) — the recorded operator decision report for the RAG retrieval adapter (GO / CONDITIONAL / NO-GO), with per-case evidence, the operational fixture matrix, tradeoffs, and the explicit statement that default enablement is unchanged.
+- [specs/RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md) — the required PostgreSQL integration validation category as a deterministic file-pattern policy for migration/database-sensitive changes, kept strictly separate from retrieval quality; unit-only validation never satisfies it.
 
 ## Topic Ownership
 
@@ -101,7 +122,7 @@ single owner. This table is that map.
 | Outcomes, verified mutation, already-satisfied proof, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md)                                           | Resolved backlog observations in history/                                                                                                                                                       |
 | Prompt execution and work items                                                           | [PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md), [WORK-ITEMS.md](specs/WORK-ITEMS.md) | CLI.md                                                                                                                                                                                          |
 | Task execution, execution modes, and objective acceptance checks                          | [EXECUTION.md](specs/EXECUTION.md)                                                     | Setup and usage guides                                                                                                                                                                          |
-| Validation runner and evidence                                                            | [VALIDATION.md](specs/VALIDATION.md)                                                   | CONFIGURATION.md (`validation.*`)                                                                                                                                                               |
+| Validation runner and evidence                                                            | [VALIDATION.md](specs/VALIDATION.md)                                                   | CONFIGURATION.md (`validation.*`); [RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md) for the PostgreSQL integration category |
 | Review pipeline and severities                                                            | [REVIEW.md](specs/REVIEW.md)                                                           | QUALITY.md                                                                                                                                                                                      |
 | Quality gate and fix loop                                                                 | [QUALITY.md](specs/QUALITY.md)                                                         | REVIEW.md                                                                                                                                                                                       |
 | Human approval                                                                            | [HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md)                                           | [APPROVALS.md](guides/APPROVALS.md)                                                                                                                                                             |
@@ -121,6 +142,9 @@ single owner. This table is that map.
 | Lifecycle verdict gate and outcome recovery                                               | [LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md)                       | [OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md); [EXECUTION.md](specs/EXECUTION.md) §6b                                                                                      |
 | Validation evidence reuse                                                                 | [EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md)                                       | [VALIDATION.md](specs/VALIDATION.md); [CLI.md](reference/CLI.md)                                                                                                                                |
 | JEV decision contract                                                                     | [JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md)                      | [OPENJEV.md](specs/OPENJEV.md)                                                                                                                                                                  |
+| Knowledge retrieval (RAG) integration — opt-in, retrieval-only                           | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) | [RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md); [RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md); [RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md); [RAG-EVALUATION.md](specs/RAG-EVALUATION.md); [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) |
+| Required PostgreSQL integration validation category (database-sensitive changes)          | [RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md)           | [VALIDATION.md](specs/VALIDATION.md); [QUALITY.md](specs/QUALITY.md)                                                                                                                            |
+| Shipped RAG skills vs. the RAG retrieval adapter                                          | [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md)                                          | [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md); [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md)                                                             |
 | Repository consolidation and legacy transition                                            | [REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md)                      | [LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md); [reports/consolidation/](reports/consolidation/completion.md) — committed merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6` (parents core/controller/adapter)                                                        |
 
 ## Reference
@@ -157,7 +181,7 @@ single owner. This table is that map.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, and `/rag-ingest` RAG-domain skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
-- [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, and the preserved legacy wrappers.
+- [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, the preserved legacy wrappers, and the distinction between the shipped RAG skills and the proposed/implemented RAG retrieval adapter.
 - [guides/LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md) — recommendations for the later, operator-approved transition of the legacy `sop-controller` and `sop-decision-adapters` repositories; **no** retirement is performed.
 - [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
 
@@ -170,6 +194,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases), including the decision-model evaluation follow-ups (DME-FU-001–005) and their promotion criteria [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md).
+- [plans/PLAN-RAG-SOP-Integration.md](plans/PLAN-RAG-SOP-Integration.md) — the RAG integration plan (RAG-SOP-001–004): architecture, adapter implementation, required PostgreSQL integration validation, comparative evaluation, and the operator rollout decision. The evaluation criteria are fixed in [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) and the recorded outcome is [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
 - [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Active**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
 - [plans/PLAN-Pre-Performance-Closure.md](history/plans/PLAN-Pre-Performance-Closure.md) — **COMPLETE**: the executed CLOSE-001–CLOSE-011 DAG reconciled and verified both SOP and sop-controller, dogfooded and resumed, inventoried existing metrics, measured four workloads, and recorded the readiness verdict. All eleven tasks are `LOCAL_DONE` and the plan's final gate passed; it introduces no new performance architecture and does not start the performance phase.
 - [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; retained under `plans/` because SOP's plan archives reference its path; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.

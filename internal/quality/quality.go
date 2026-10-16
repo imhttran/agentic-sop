@@ -88,6 +88,24 @@ type Input struct {
 	// the run. When a required validation set is absent, the gate must not pass: an
 	// empty suite is not evidence that a change is correct.
 	ValidationConfigured bool
+	// PostgresRequired reports that this run deterministically requires the
+	// PostgreSQL/pgvector integration validation category because a changed path
+	// matched the migration/database-sensitive file-pattern policy (see
+	// PostgresIntegrationRequired). It is derived from changed paths only, never
+	// from retrieval-quality metrics.
+	PostgresRequired bool
+	// PostgresConfigured reports whether at least one configured validation command
+	// is CLASSIFIED as the PostgreSQL/pgvector integration category (see
+	// validate.PostgresConfigured). A unit-only suite leaves this false even when
+	// ordinary validation is configured, so unit-only validation can never satisfy
+	// the category. When PostgresRequired is true and this is false, the gate fails
+	// closed.
+	PostgresConfigured bool
+	// PostgresPassed reports that a classified PostgreSQL integration check was
+	// present in THIS run's suite and executed successfully. It is false when the
+	// check was not executed, was skipped, or failed, so it cannot be inferred from
+	// configuration or a process exit alone.
+	PostgresPassed bool
 }
 
 // JEVEvidence is a validated snapshot of an optional JEV analysis, shaped for
@@ -157,6 +175,24 @@ func Evaluate(policy config.Quality, in Input) Result {
 	if in.ValidationRequired && !in.ValidationConfigured {
 		reasons = append(reasons, "required validation is not configured")
 		return Result{Decision: Fail, Reasons: reasons}
+	}
+
+	// A migration/database-sensitive change requires the PostgreSQL integration
+	// category (RAG-SOP-004). A unit-only suite cannot satisfy it, so a required but
+	// unconfigured integration check fails closed (FAIL) rather than passing on unit
+	// evidence.
+	if in.PostgresRequired {
+		if !in.PostgresConfigured {
+			reasons = append(reasons, "required PostgreSQL integration validation is not configured")
+			return Result{Decision: Fail, Reasons: reasons}
+		}
+		// Configured is not enough: the classified integration check must have
+		// EXECUTED and passed in this run. A configured-but-not-executed, skipped, or
+		// failed check fails closed.
+		if !in.PostgresPassed {
+			reasons = append(reasons, "required PostgreSQL integration validation did not pass (not executed, skipped, or failed)")
+			return Result{Decision: Fail, Reasons: reasons}
+		}
 	}
 
 	checkFailed := false
