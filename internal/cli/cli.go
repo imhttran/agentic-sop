@@ -336,7 +336,7 @@ Usage:
 
 Commands:
   init      initialize project state (.agent-sdlc/state.db)
-  status    list persisted tasks
+  status    list persisted tasks (--detailed adds dependencies and attempts)
   task <id> show details; task complete <id> --external records an external completion;
             task skip <id> --reason R --evidence F marks it NOT_REQUIRED
   question  show a planner question, or list questions (question list [--state S])
