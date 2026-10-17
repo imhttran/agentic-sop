@@ -66,9 +66,25 @@ SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
 
 Do not use a bare `claude -p`. SOP sends a JSON request on stdin and expects a
 JSON outcome back, and Claude Code in `-p` mode is denied file edits unless they
-are allowed. The wrapper builds the prompt, allows reading and editing the
-repository plus a short list of Go and read-only git commands, and refuses
-commit, push, merge, reset, and clean.
+are allowed. The wrapper builds the prompt and allows Claude to:
+
+- read and edit the repository;
+- run `git status`, `git diff`, and a few Go commands;
+- run your project's own validation commands (`validation.build`, `test`, and
+  `lint` in `.agent-sdlc/config.yaml`), so it can check its work in any language.
+
+Commit, push, merge, reset, and clean are not allowed. A validation command
+containing `,` or `)`, such as `test -z "$(gofmt -l .)"`, cannot be expressed as
+a Claude Code rule and is skipped; SOP still runs it afterwards.
+
+To allow more, list extra Claude Code tool rules, comma-separated:
+
+```dotenv
+SOP_CLAUDE_ALLOWED_TOOLS=Bash(make:*),Bash(pytest:*)
+```
+
+Everything listed runs without asking, so keep commit, push, and other
+SOP-owned operations off it.
 
 ## Example: Haiku SMALL on the API, Opus LARGE on the CLI
 

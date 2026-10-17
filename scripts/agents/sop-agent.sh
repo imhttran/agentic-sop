@@ -16,6 +16,15 @@
 # Environment:
 #   SOP_CLAUDE_MODEL        optional --model for Claude Code
 #   SOP_CLAUDE_EFFORT       optional --effort for Claude Code (low|medium|high|...)
+#   SOP_CLAUDE_ALLOWED_TOOLS optional extra comma-separated Claude Code tool rules
+#                           added to the allow-list, e.g. Bash(make:*). Only adds;
+#                           anything listed here (even git push) is the operator's
+#                           choice.
+#
+# The request's validation_commands (the project's own validation.build/test/lint
+# from .agent-sdlc/config.yaml) are allowed automatically as Bash(<command>:*), so
+# Claude can check its work in any language. A command containing "," or ")" is
+# skipped, because Claude Code's rule syntax cannot express it.
 set -eu
 
 die() { printf 'sop-agent: %s\n' "$1" >&2; exit 1; }
@@ -33,6 +42,23 @@ input=$(printf '%s' "$req" | jq -r '.input // empty')
 # run the common Go checks, nothing else. git commit/push/merge/reset/clean are not
 # in the allow-list, so they are refused rather than pre-approved.
 allowed='Read,Edit,Write,Glob,Grep,LS,Bash(go build:*),Bash(go test:*),Bash(go vet:*),Bash(gofmt:*),Bash(git status:*),Bash(git diff:*)'
+
+# The project's validation commands are operator-owned configuration, not model
+# output, so allowing them adds no model-chosen command.
+validation_note=''
+cmds=$(printf '%s' "$req" | jq -r '.validation_commands[]? // empty')
+while IFS= read -r c; do
+  [ -n "$c" ] || continue
+  case "$c" in
+    *,*|*\)*) printf 'sop-agent: not auto-allowing (unsupported characters): %s\n' "$c" >&2; continue ;;
+  esac
+  allowed="$allowed,Bash($c:*)"
+  validation_note="$validation_note
+- $c"
+done <<CMDS
+$cmds
+CMDS
+[ -n "${SOP_CLAUDE_ALLOWED_TOOLS:-}" ] && allowed="$allowed,$SOP_CLAUDE_ALLOWED_TOOLS"
 
 preamble='You are the implementation agent inside an SOP-controlled repository.
 SOP owns workflow state, validation, review, retries, and human gates; it decides
@@ -62,7 +88,10 @@ $task
 # Context
 $input
 
-# Required response
+${validation_note:+# Validation
+You may run these validation commands to check your work:$validation_note
+
+}# Required response
 $instruction
 The JSON must be valid, complete, and on a single line. End your reply with exactly one line of the form (and nothing after it):
 SOP_JSON: {the json}"
