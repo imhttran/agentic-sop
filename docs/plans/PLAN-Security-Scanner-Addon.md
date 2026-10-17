@@ -54,11 +54,10 @@ service, model call, scanner engine, automatic install, or automatic fix path.
   and persisted attempt/continuation counters already exist.
 
 ### Semgrep Community Edition and Gitleaks CLIs
-- **Status:** UNKNOWN
-- **Evidence:** neither `semgrep` nor `gitleaks` is available on the current
-  machine. Real CLI validation is therefore reported as skipped; adapter
-  conformance and normalization are validated with deterministic fake processes
-  (see `internal/security` tests).
+- **Status:** EXISTS
+- **Evidence:** `scripts/checks/security-integration.sh` provisions pinned
+  Semgrep CE `1.136.0` and Gitleaks `8.30.1` in an isolated tools directory and
+  runs the tagged real-CLI checks with `SOP_SECURITY_INTEGRATION_REQUIRED=1`.
 
 ## Assumptions
 
@@ -192,10 +191,13 @@ Keep rule downloads, hosted uploads, and automatic installation explicit.
 - `internal/security/normalize.go` — severity mapping, safe paths, fingerprinting,
   and untrusted-text bounds.
 - `internal/security/redact.go` — secret-safe native-report sanitization.
-- `internal/security/testdata/` — synthetic Semgrep/Gitleaks reports and seeded
-  insecure-code/secret fixtures.
+- `internal/security/testdata/` — synthetic Semgrep/Gitleaks reports, local
+  Semgrep rules, an optional local Gitleaks config, and seeded insecure-code and
+  secret fixtures.
 - `internal/security/adapters_test.go` — conformance, normalization, fixture, and
   redaction tests.
+- `internal/security/integration_test.go` (`security_integration` tag) — real
+  pinned-CLI clean/seeded, coverage, severity, redaction, and resume checks.
 
 ### Acceptance Criteria
 
@@ -215,6 +217,7 @@ Keep rule downloads, hosted uploads, and automatic installation explicit.
 
 - `go test ./internal/security/...`
 - `go vet ./internal/security/...`
+- `bash scripts/checks/security-integration.sh`
 
 ### Execution
 
@@ -246,6 +249,8 @@ continuation counters, and cancellation behavior.
 - `internal/security/*_test.go`, `internal/quality/*_test.go`,
   `internal/cli/security_test.go` — gate matrix, baseline, expiry, stale-resume,
   report-only, required, disabled, and rollback tests.
+- `internal/cli/security_integration_test.go` (`security_integration` tag) — real
+  `sop security scan` and `sop run` report-only/required checks.
 
 ### Acceptance Criteria
 
@@ -296,11 +301,12 @@ prepare a PR without merging it.
 ### Acceptance Criteria
 
 - The dogfood evidence identifies the scanned commit, tree/content identity, scope,
-  coverage, execution statuses, and actual timings.
+  coverage, execution statuses, actual scanner versions, rules identity, and
+  actual timings.
 - Missing tools and skipped local checks are reported explicitly; no unavailable
   scanner is described as clean.
-- Repository-required checks pass: formatting, vet, build, test, and documentation
-  links.
+- Repository-required checks pass: formatting, vet, build, test, documentation
+  links, and the pinned real-CLI integration script.
 - The PR contains only intended changes and is not merged.
 - Rollback is documented as disabling the add-on through configuration and leaving
   non-security verification unchanged.
@@ -312,6 +318,7 @@ prepare a PR without merging it.
 - `go vet ./...`
 - `bash scripts/checks/check-doc-links.sh`
 - `go test ./internal/planner/... -run TestSecurityScannerPlanCompiles`
+- `bash scripts/checks/security-integration.sh`
 
 ### Execution
 

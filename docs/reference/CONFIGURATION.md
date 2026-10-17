@@ -153,7 +153,8 @@ workflow:
 #       category: secrets
 #       protocol: builtin
 #       command: [gitleaks]
-#       version: "8.28.0"
+#       rules: security/gitleaks.toml # optional local config; built-in rules otherwise
+#       version: "8.30.1"
 ```
 
 ## Field reference
@@ -194,7 +195,7 @@ workflow:
 | `security.timeout_seconds` | `300` | Per-adapter execution deadline. |
 | `security.max_output_bytes` | `1048576` | Per-adapter captured/report size bound. |
 | `security.baseline` | — | Repository-relative reviewed baseline/suppression file. Invalid or expired entries are reported and never silently effective. |
-| `security.adapters` | built-in Semgrep + Gitleaks | Adapter list selected by stable ID and category. `protocol: builtin` wraps a pinned scanner CLI; `protocol: external` speaks `security-scan/v1`. |
+| `security.adapters` | built-in Semgrep + Gitleaks | Adapter list selected by stable ID and category. `protocol: builtin` wraps a pinned scanner CLI; `protocol: external` speaks `security-scan/v1`. `rules` is the local Semgrep rules path or optional Gitleaks config path. |
 | `decision.provider`                         | `deterministic`          | Optional decision layer: `deterministic` (baseline rules, the default), `command` (SEAM-002 external process; requires `decision.command`), or `adapter` (batched adapter connector; requires `decision.adapter_command`).                                                                                                                                                                                                 |
 | `decision.command`                          | —                        | SEAM-002 external process argv: the executable followed by its arguments, in order. Required when `decision.provider: command`.                                                                                                                                                                                                                                                                                            |
 | `decision.adapter_command`                  | —                        | Batched adapter executable argv: the executable followed by its fixed arguments. Required when `decision.provider: adapter`. Separate from `decision.command`.                                                                                                                                                                                                                                                             |

@@ -1,0 +1,9 @@
+rules:
+  - id: sop-integration-command-execution
+    languages: [go]
+    message: Command execution with a synthesized argument.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-78"]
+      confidence: HIGH
+    pattern: exec.Command($ARG)

@@ -69,7 +69,7 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 		case "semgrep":
 			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "gitleaks":
-			return &gitleaksAdapter{id: id, category: category, command: command, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+			return &gitleaksAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		default:
 			return nil, fmt.Errorf("security: unknown built-in adapter %q", id)
 		}

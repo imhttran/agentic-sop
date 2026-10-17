@@ -10,6 +10,8 @@ rollback, and the MVP's measured scope. The normative contract is
 - One or more scanner executables on `PATH`, or absolute paths in the adapter
   command.
 - Local Semgrep rules. The add-on never downloads rules.
+- Optional local Gitleaks configuration. Without one, Gitleaks uses its built-in
+  rules.
 
 The MVP wrappers target Semgrep Community Edition 1.x and Gitleaks 8.x JSON
 output. Pin the versions you actually run:
@@ -46,7 +48,9 @@ security:
       category: secrets
       protocol: builtin
       command: [gitleaks]
-      version: "8.28.0" # replace with the pinned version
+      # Optional local Gitleaks config. Omit it to use Gitleaks' built-in rules.
+      # rules: security/gitleaks.toml
+      version: "8.30.1" # replace with the pinned version
 ```
 
 An omitted `security` block is disabled. The environment may fill omitted
@@ -259,4 +263,10 @@ go test ./internal/planner/... -run TestSecurityScannerPlanCompiles
 go build ./...
 go vet ./...
 bash scripts/checks/check-doc-links.sh
+bash scripts/checks/security-integration.sh
 ```
+
+`scripts/checks/security-integration.sh` provisions pinned Semgrep CE and Gitleaks
+versions in an isolated tools directory, uses explicit local rules, and runs the
+tagged real-CLI checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`: a missing
+binary or version mismatch fails the check. The same script runs in CI.

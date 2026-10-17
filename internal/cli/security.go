@@ -20,7 +20,7 @@ import (
 // NOT_APPLICABLE and executes no scanner.
 func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) == 0 || args[0] != "scan" {
-		fmt.Fprintln(stderr, "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID]")
+		fmt.Fprintln(stderr, "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID] [--config PATH]")
 		return exitUsage
 	}
 	opts, ok := parseSecurityScanArgs(args[1:], stderr)
@@ -35,6 +35,18 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
+	}
+	if opts.config != "" {
+		configPath := opts.config
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(dir, configPath)
+		}
+		loaded, lerr := config.Load(configPath)
+		if lerr != nil {
+			fmt.Fprintf(stderr, "security: config %s: %v\n", configPath, lerr)
+			return exitError
+		}
+		cfg = *loaded
 	}
 	if !cfg.SecurityEnabled() {
 		if opts.json {
@@ -153,11 +165,12 @@ type securityScanOptions struct {
 	baseline string
 	resume   string
 	runID    string
+	config   string
 }
 
 func parseSecurityScanArgs(args []string, stderr io.Writer) (securityScanOptions, bool) {
 	var opts securityScanOptions
-	usage := "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID]"
+	usage := "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID] [--config PATH]"
 	for i := 0; i < len(args); i++ {
 		switch arg := args[i]; {
 		case arg == "--json":
@@ -202,6 +215,15 @@ func parseSecurityScanArgs(args []string, stderr io.Writer) (securityScanOptions
 			opts.runID = strings.TrimSpace(args[i])
 		case strings.HasPrefix(arg, "--run-id="):
 			opts.runID = strings.TrimPrefix(arg, "--run-id=")
+		case arg == "--config":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, usage)
+				return opts, false
+			}
+			i++
+			opts.config = strings.TrimSpace(args[i])
+		case strings.HasPrefix(arg, "--config="):
+			opts.config = strings.TrimPrefix(arg, "--config=")
 		default:
 			fmt.Fprintln(stderr, usage)
 			return opts, false

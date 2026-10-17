@@ -1,0 +1,5 @@
+title = "SOP security integration"
+[[rules]]
+id = "sop-integration-synthetic-token"
+description = "Synthetic integration token"
+regex = '''SOP_FAKE_SECRET_[A-Z0-9_]+'''

@@ -77,6 +77,28 @@ func ComputeScope(ctx context.Context, root, mode string) (Scope, error) {
 	return Scope{Mode: "changed-files", Files: kept}, nil
 }
 
+// relativeFindingPath converts an absolute provider path into a safe
+// repository-relative path. A path outside the workspace is rejected rather
+// than persisted.
+func relativeFindingPath(root, path string) (string, string) {
+	absRoot, err := filepath.Abs(root)
+	if err != nil {
+		return "", "workspace root is invalid"
+	}
+	absPath, err := filepath.Abs(path)
+	if err != nil {
+		return "", "finding path is invalid"
+	}
+	rel, err := filepath.Rel(absRoot, absPath)
+	if err != nil {
+		return "", "finding path cannot be resolved"
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", "finding path escapes the workspace"
+	}
+	return NormalizePath(filepath.ToSlash(rel))
+}
+
 // workspaceDigest computes a deterministic digest of a non-Git workspace. It
 // skips .git and .agent-sdlc, hashes regular-file content, and never follows
 // symbolic links (so a link cannot pull content from outside the workspace).

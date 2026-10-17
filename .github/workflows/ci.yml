@@ -40,6 +40,27 @@ jobs:
       - name: documentation links
         run: bash scripts/checks/check-doc-links.sh
 
+  # Real scanner integration: installs the PINNED Semgrep CE and Gitleaks
+  # binaries in an isolated tools directory and runs the tagged checks. The
+  # script sets SOP_SECURITY_INTEGRATION_REQUIRED=1, so a missing prerequisite
+  # fails the job instead of skipping it.
+  security-integration:
+    name: real Semgrep + Gitleaks integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: provision and run pinned scanners
+        env:
+          SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+        run: bash scripts/checks/security-integration.sh
+
   # The suite under the race detector, which the lifecycle and scheduler tests rely on.
   race:
     name: race detector

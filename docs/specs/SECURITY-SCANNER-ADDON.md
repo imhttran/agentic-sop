@@ -26,7 +26,7 @@ The add-on reuses these existing paths:
 | Concern | Repository path | Behavior |
 | --- | --- | --- |
 | Configuration | `internal/config/config.go`, `internal/config/security.go` | Optional `security` block with strict unknown-key rejection. Disabled by default. |
-| CLI | `internal/cli/security.go`, `internal/cli/cli.go` | `sop security scan`; `--json`, `--report-only`, `--required`, `--scope`, `--baseline`, `--resume`, `--run-id`. |
+| CLI | `internal/cli/security.go`, `internal/cli/cli.go` | `sop security scan`; `--json`, `--report-only`, `--required`, `--scope`, `--baseline`, `--resume`, `--run-id`, `--config`. |
 | Run lifecycle | `internal/cli/run.go`, `internal/cli/security_gate.go` | Optional scan at the existing quality seam; report-only is advisory, required feeds the single quality gate. |
 | Quality gate | `internal/quality/quality.go` | `SecurityEvidence` is folded into PASS/FAIL/NEEDS_HUMAN; it cannot add a second verdict authority. |
 | Artifacts | `internal/run/run.go`, `internal/security/report.go` | Evidence under `.agent-sdlc/runs/<id>/security/`. |
@@ -150,7 +150,9 @@ content identity, policy identity, and sanitized native-report digest.
 ### Gitleaks (`secrets`)
 
 - Invokes `gitleaks detect --source <root> --no-git --redact --report-format
-  json --report-path <restricted-temp> --exit-code 0 --no-banner` directly.
+  json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
+  `security.adapters[].rules` is set, it is passed as `--config <local-config>`
+  and its identity is recorded; otherwise Gitleaks uses its built-in rules.
 - Parses the top-level array or `findings` object shape.
 - Every secret finding is `HIGH`; original provider meaning (`secret`) is
   retained. Messages and metadata are sanitized.
@@ -299,7 +301,12 @@ go test ./internal/planner/... -run TestSecurityScannerPlanCompiles
 go build ./...
 go vet ./...
 bash scripts/checks/check-doc-links.sh
+bash scripts/checks/security-integration.sh
 ```
+
+The last command provisions the pinned real CLIs and runs the tagged integration
+checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`, so missing prerequisites
+fail the check instead of skipping it. CI runs the same script.
 
 Real Semgrep/Gitleaks execution requires the pinned CLIs and local rules in the
 supported integration environment. When a tool is absent, the adapter reports

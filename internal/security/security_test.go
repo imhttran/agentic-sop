@@ -153,9 +153,13 @@ func TestGitleaksAdapterRedactsSeededSecret(t *testing.T) {
 	root := tempWorkspace(t)
 	report := fixture(t, "gitleaks-report.json")
 	secret := "SOP_FAKE_SECRET_DO_NOT_USE_1234567890"
+	rules := filepath.Join(root, "gitleaks.toml")
+	if err := os.WriteFile(rules, []byte("title = \"fixture\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
-		Command: []string{"gitleaks"}, Version: "8.99.0",
+		Command: []string{"gitleaks"}, Rules: rules, Version: "8.99.0",
 	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
 		path := argument(argv, "--report-path")
 		if path == "" {
@@ -184,6 +188,9 @@ func TestGitleaksAdapterRedactsSeededSecret(t *testing.T) {
 	}
 	if len(exec.NativeReport) == 0 || bytes.Contains(exec.NativeReport, []byte(secret)) {
 		t.Errorf("native report missing or contains the seeded secret")
+	}
+	if exec.Provenance.RulesIdentity == "" {
+		t.Error("gitleaks rules identity is empty")
 	}
 
 	// Persist every artifact and verify the secret is absent from all of them.

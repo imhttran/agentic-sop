@@ -19,6 +19,7 @@ type gitleaksAdapter struct {
 	id           string
 	category     Category
 	command      []string
+	rules        string
 	version      string
 	configDigest string
 	exec         Executor
@@ -39,11 +40,24 @@ func (a *gitleaksAdapter) Descriptor() Descriptor {
 }
 
 func (a *gitleaksAdapter) currentProvenance(req Request) (Provenance, error) {
-	return Provenance{
+	prov := Provenance{
 		ScannerVersion:      a.version,
 		ConfigurationDigest: a.configDigest,
 		ContentIdentity:     req.Content,
-	}, nil
+	}
+	if strings.TrimSpace(a.rules) == "" {
+		return prov, nil
+	}
+	rules := a.rules
+	if !isAbsPath(rules) {
+		rules = joinPath(req.WorkspaceRoot, rules)
+	}
+	identity, err := rulesIdentity(rules)
+	if err != nil {
+		return prov, err
+	}
+	prov.RulesIdentity = identity
+	return prov, nil
 }
 
 type gitleaksFinding struct {
@@ -92,6 +106,20 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		"--exit-code", "0",
 		"--no-banner",
 	)
+	if strings.TrimSpace(a.rules) != "" {
+		rules := a.rules
+		if !isAbsPath(rules) {
+			rules = joinPath(req.WorkspaceRoot, rules)
+		}
+		argv = append(argv, "--config", rules)
+		identity, err := rulesIdentity(rules)
+		if err != nil {
+			exec.Status = StatusFailed
+			exec.Diagnostics = []string{"gitleaks configuration is unavailable: " + SanitizeText(err.Error(), MaxDiagnosticBytes)}
+			return finish(exec, nil)
+		}
+		exec.Provenance.RulesIdentity = identity
+	}
 
 	runCtx, cancel := scanContext(ctx, a.timeout)
 	defer cancel()
@@ -146,6 +174,9 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	omitted := 0
 	for _, gf := range findings {
 		path, reason := NormalizePath(gf.File)
+		if filepath.IsAbs(gf.File) {
+			path, reason = relativeFindingPath(req.WorkspaceRoot, gf.File)
+		}
 		if path == "" {
 			exec.Diagnostics = append(exec.Diagnostics, "gitleaks finding path rejected: "+reason)
 		}
@@ -154,12 +185,10 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 			continue
 		}
 		ruleID := firstNonEmpty(gf.RuleID, "generic-secret")
-		fingerprint := strings.TrimSpace(gf.Fingerprint)
-		if fingerprint == "" {
-			fingerprint = StableFingerprint("gitleaks", ruleID, path, gf.StartLine, gf.StartColumn)
-		} else if !strings.HasPrefix(fingerprint, "gitleaks:") {
-			fingerprint = "gitleaks:" + fingerprint
-		}
+		// Gitleaks fingerprints can contain the absolute source path. Use a stable
+		// repository-relative fingerprint instead, so the identifier is reproducible
+		// and never leaks host paths.
+		fingerprint := StableFingerprint("gitleaks", ruleID, path, gf.StartLine, gf.StartColumn)
 		message := firstNonEmpty(gf.Description, "detected secret")
 		message = RedactValues(message, secrets)
 		metadata := map[string]string{}

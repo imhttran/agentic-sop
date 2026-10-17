@@ -200,6 +200,15 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	}
 
 	exec.Coverage = CoverageComplete
+	// Semgrep CE reports some coverage limits only in its human summary rather than
+	// in the JSON paths object. Treat those explicit limits as PARTIAL so a required
+	// gate never claims a full scan when files were skipped or the target set was
+	// restricted to git-tracked files.
+	stderrText := string(stderr)
+	if strings.Contains(stderrText, "Scan skipped") || strings.Contains(stderrText, "semgrepignore") || strings.Contains(stderrText, "Scan was limited to files tracked by git") {
+		exec.Coverage = CoveragePartial
+		exec.Diagnostics = append(exec.Diagnostics, "semgrep reported skipped or restricted targets; coverage is partial")
+	}
 	for _, e := range report.Errors {
 		exec.Diagnostics = append(exec.Diagnostics, SanitizeText("semgrep error: "+e.Type+": "+e.Message, MaxDiagnosticBytes))
 		exec.Coverage = CoveragePartial
@@ -232,7 +241,7 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 			continue
 		}
 		fingerprint := strings.TrimSpace(result.Extra.Fingerprint)
-		if fingerprint == "" {
+		if fingerprint == "" || strings.EqualFold(fingerprint, "requires login") || strings.EqualFold(fingerprint, "unknown") {
 			fingerprint = StableFingerprint("semgrep", result.CheckID, path, result.Start.Line, result.Start.Col)
 		} else if !strings.HasPrefix(fingerprint, "semgrep:") {
 			fingerprint = "semgrep:" + fingerprint
