@@ -77,6 +77,11 @@ Commit, push, merge, reset, and clean are not allowed. A validation command
 containing `,` or `)`, such as `test -z "$(gofmt -l .)"`, cannot be expressed as
 a Claude Code rule and is skipped; SOP still runs it afterwards.
 
+If a task is already done, the wrapper has Claude reply that no change was
+needed. SOP accepts that only when the project sets `validation:` and those
+commands pass. Without `validation:`, the run fails and asks you to configure
+validation.
+
 To allow more, list extra Claude Code tool rules, comma-separated:
 
 ```dotenv
