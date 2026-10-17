@@ -130,9 +130,17 @@ func Load() Config {
 		SessionFile:       sessionFileEnv(),
 		Operator:          strings.TrimSpace(os.Getenv("SOP_CONTROLLER_OPERATOR")),
 	}
-	if !c.AllowNetwork && !isLoopback(c.Addr) {
-		log.Printf("[config] %q is not loopback; restricting to 127.0.0.1 (set SOP_CONTROLLER_ALLOW_NETWORK=true to allow)", c.Addr)
-		c.Addr = "127.0.0.1" + portSuffix(c.Addr)
+	if !c.AllowNetwork {
+		// An empty host (":8080") binds every interface, so it is not loopback, and
+		// an address that does not parse is restricted on the default port.
+		host, port, err := net.SplitHostPort(c.Addr)
+		if err != nil {
+			port = "8080"
+		}
+		if err != nil || !IsLoopbackHost(host) {
+			log.Printf("[config] %q is not loopback; restricting to 127.0.0.1 (set SOP_CONTROLLER_ALLOW_NETWORK=true to allow)", c.Addr)
+			c.Addr = net.JoinHostPort("127.0.0.1", port)
+		}
 	}
 	if c.AllowNetwork && c.AccessToken == "" {
 		log.Fatal("[config] SOP_CONTROLLER_ALLOW_NETWORK=true requires SOP_CONTROLLER_TOKEN")
@@ -163,26 +171,13 @@ func ResolveAttentionInterval(raw string) time.Duration {
 	return d
 }
 
-// isLoopback reports whether addr binds only a loopback host. An empty host
-// (":8080") binds every interface, so it is not loopback, and an address that
-// does not parse is treated as non-loopback so it is restricted.
-func isLoopback(addr string) bool {
-	host, _, err := net.SplitHostPort(addr)
-	if err != nil {
-		return false
-	}
+// IsLoopbackHost reports whether host (no port) is localhost or a loopback IP.
+func IsLoopbackHost(host string) bool {
 	if host == "localhost" {
 		return true
 	}
 	ip := net.ParseIP(host)
 	return ip != nil && ip.IsLoopback()
-}
-
-func portSuffix(addr string) string {
-	if _, port, err := net.SplitHostPort(addr); err == nil {
-		return ":" + port
-	}
-	return ":8080"
 }
 
 func envOr(key, fallback string) string {
