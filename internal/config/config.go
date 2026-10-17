@@ -1062,7 +1062,7 @@ validation:
     - go test ./...
   lint:
     - go vet ./...
-    - test -z "$(gofmt -l .)"
+    - gofmt -l .
 
 review:
   # self | open-code-review

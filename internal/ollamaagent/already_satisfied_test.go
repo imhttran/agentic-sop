@@ -348,7 +348,7 @@ func TestAlreadySatisfiedEvidenceCorrectionFromUnreadPath(t *testing.T) {
 // --- SOP-HARD-03: structured rejection diagnostics ---
 
 func satisfProof(baseline string) *satisfactionProof {
-	return &satisfactionProof{baseline: baseline, reads: map[string]bool{}, commands: map[string]bool{}, ran: map[string]bool{}}
+	return &satisfactionProof{baseline: baseline, reads: map[string]bool{}, commands: map[string]bool{}, ran: map[string]bool{}, commandText: map[string]string{}}
 }
 
 func evidenceFinal(criterion string, paths []any) map[string]any {
@@ -449,12 +449,12 @@ func TestVerifySatisfiedUnreadMultiPathMismatch(t *testing.T) {
 
 	// The correction trigger must offer the single evidence-only correction for the
 	// same input: a criterion citing any unread path is uncovered.
-	missing, offered := h.missingCriterionEvidence(context.Background(), req, &executionState{}, p, final)
+	need, offered := h.correctionNeed(context.Background(), req, &executionState{}, p, final)
 	if !offered {
-		t.Fatalf("the correction was not offered for a criterion with an unread cited path (mismatch not fixed): missing=%v", missing)
+		t.Fatalf("the correction was not offered for a criterion with an unread cited path (mismatch not fixed): need=%+v", need)
 	}
-	if len(missing) != 1 || missing[0] != "c1" {
-		t.Fatalf("missing criteria = %v, want [c1]", missing)
+	if len(need.MissingCriteria) != 1 || need.MissingCriteria[0] != "c1" {
+		t.Fatalf("missing criteria = %v, want [c1]", need.MissingCriteria)
 	}
 	// The trigger never weakens the verifier: the invalid claim is still rejected.
 	if ok, _ := h.verifySatisfiedDetailed(context.Background(), req, &executionState{}, p, final); ok {

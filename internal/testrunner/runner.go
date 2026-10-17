@@ -172,7 +172,42 @@ func (r *Runner) Run(ctx context.Context, check Check) Result {
 			result.Stderr += "postgres integration not verified: " + why
 		}
 	}
+	// A gofmt listing is the formatting gate the generated configuration ships, and
+	// it is deliberately shell-free so the agent command harness can execute it.
+	// gofmt exits 0 whether or not it lists anything, so its exit status is not the
+	// result: the check is met only when it lists no unformatted file.
+	if result.Status == Pass && isGofmtListing(check.Command) {
+		if listed := strings.TrimSpace(result.Stdout); listed != "" {
+			result.Status = Fail
+			if result.Stderr != "" {
+				result.Stderr += "\n"
+			}
+			result.Stderr += "gofmt listed files that are not formatted:\n" + listed
+		}
+	}
 	return result
+}
+
+// isGofmtListing reports whether command is a read-only gofmt invocation that
+// prints the files needing formatting ("gofmt -l ..." or "gofmt -d ..."). A write
+// form ("-w") is not a check. The command is trusted project configuration, so a
+// plain field scan is enough; no shell is involved.
+func isGofmtListing(command string) bool {
+	fields := strings.Fields(command)
+	if len(fields) < 2 || fields[0] != "gofmt" {
+		return false
+	}
+	for _, f := range fields[1:] {
+		if f == "-w" || strings.HasPrefix(f, "-w=") {
+			return false
+		}
+	}
+	for _, f := range fields[1:] {
+		if f == "-l" || f == "-d" || strings.HasPrefix(f, "-l=") {
+			return true
+		}
+	}
+	return false
 }
 
 // RunAll runs checks in order and stops at the first non-passing check

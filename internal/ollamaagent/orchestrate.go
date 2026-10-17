@@ -336,6 +336,9 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 	)
 
 	for iteration := 1; iteration <= policy.MaxIterations; iteration++ {
+		// The correction phase is bounded in model turns as well as tool calls, so it ends on
+		// budget exhaustion even if the model never returns a final claim.
+		proof.correctionTurn()
 		// FINALIZE has a small turn allowance: a model that keeps asking for tools
 		// after implementation is complete is stopped with a phase-specific reason
 		// rather than the generic iteration limit.
@@ -404,21 +407,25 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		if !isTool {
 			if final["completion"] == agent.AlreadySatisfied {
 				if ok, rej := h.verifySatisfiedDetailed(ctx, req, st, proof, final); !ok {
-					// Bounded, evidence-only correction: only when the rejection is missing/invalid
-					// criterion evidence, ask the model ONCE to map the missing criteria to files
-					// it actually read. Validation, fingerprint, mutation and missing-deliverable
-					// rejections are not correctable this way and fall through.
-					if (rej.Code == RejectMissingCriterionEvidence || rej.Code == RejectUnreadEvidencePath) && !proof.evidenceCorrectionUsed {
-						if missing, ok := h.missingCriterionEvidence(ctx, req, st, proof, final); ok {
+					// Bounded, evidence-only correction: at most ONE per invocation. It is offered when
+					// the rejection is invalid/missing criterion evidence or a required validation
+					// command that did not execute or failed. It reopens the read-only repository
+					// tools for a bounded phase so the model can act on the feedback even after the
+					// discovery window closed. It never changes the acceptance conditions; every other
+					// rejection falls through unchanged.
+					if !proof.evidenceCorrectionUsed && correctableRejection(rej.Code) {
+						if need, ok := h.correctionNeed(ctx, req, st, proof, final); ok {
 							proof.evidenceCorrectionUsed = true
+							proof.openCorrectionPhase()
 							h.recordImplementEvent(req, "ALREADY_SATISFIED evidence incomplete; one correction requested", rej.String())
 							messages = append(messages,
 								chatMessage{Role: "assistant", Content: raw},
-								chatMessage{Role: "user", Content: alreadySatisfiedEvidenceCorrection(missing)},
+								chatMessage{Role: "user", Content: alreadySatisfiedEvidenceCorrection(need, proof.observedReads(h.tools.Root()), proof.succeededCommands())},
 							)
 							continue
 						}
 					}
+					proof.closeCorrectionPhase()
 					h.recordImplementEvent(req, "ALREADY_SATISFIED rejected", rej.String())
 					message := fmt.Sprintf("the Ollama agent %s ALREADY_SATISFIED claim lacked verified acceptance evidence [%s] (model=%s, repository_mutations=%d, iteration=%d, termination=no_changes); a retry may succeed", req.Capability, rej.Code, h.cfg.Model, st.repositoryMutations, iteration)
 					if !st.mutationObserved {
@@ -538,7 +545,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		// discovery/stale accounting (mutationConvergenceRequired) and the FINALIZE
 		// RecordDenied mechanism; it introduces no new budget knob. A run that still
 		// refuses falls through to the no-progress termination below.
-		if st.mutationConvergenceRequired(iteration) && nonMutatingRepositoryTool(name, args) {
+		if st.mutationConvergenceRequired(iteration) && nonMutatingRepositoryTool(name, args) && !proof.correctionPermits(name, args) {
 			lastTool, lastReq = name, toolharness.SummarizeRequest(name, args)
 			h.tools.RecordDenied(name, args, "discovery has ended; make the requested repository change or return a truthful outcome")
 			recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, implementConvergenceCorrection, nil))
