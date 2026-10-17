@@ -337,6 +337,11 @@ func (p *satisfactionProof) observedReads(root string) []string {
 	if p == nil || len(p.reads) == 0 {
 		return nil
 	}
+	// Reads are recorded with symlinks resolved, so resolve the root the same way
+	// (on macOS a temp root under /var is really /private/var).
+	if canonical, err := filepath.EvalSymlinks(root); err == nil {
+		root = canonical
+	}
 	prefix := strings.TrimSuffix(filepath.Clean(root), string(filepath.Separator)) + string(filepath.Separator)
 	out := make([]string, 0, len(p.reads))
 	for path := range p.reads {
