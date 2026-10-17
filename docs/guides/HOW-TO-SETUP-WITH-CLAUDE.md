@@ -172,6 +172,10 @@ python3 /path/to/agentic-sop/scripts/switch-large-model.py claude-api
 python3 /path/to/agentic-sop/scripts/switch-large-model.py status
 ```
 
+In the agentic-sop checkout itself, `make model-claude`, `make model-deepseek`,
+and `make model-status` run the same script on the checkout's own `.env`; they
+do not change a managed project's `.env`.
+
 The script rewrites only its BEGIN/END blocks, so keep secrets outside them. It
 also deletes `SOP_AGENT_COMMAND` lines outside its blocks, so for the
 mixed-class example above, edit `.env` by hand instead of running the script.
