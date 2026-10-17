@@ -73,7 +73,7 @@ def switch(profile):
             continue
 
         match = re.match(
-            r"^\s*#?\s*(SOP_MODEL_LARGE_[A-Z_]+|SOP_AGENT_COMMAND|ANTHROPIC_MODEL|SOP_OPENAI_COMPATIBLE_BASE_URL)\s*=",
+            r"^\s*#?\s*(SOP_MODEL_LARGE_[A-Z_]+|SOP_AGENT_COMMAND|ANTHROPIC_MODEL)\s*=",
             line,
         )
 
