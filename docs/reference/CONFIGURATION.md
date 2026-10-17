@@ -383,7 +383,17 @@ secrets and local edits outside those blocks.
 | Profile      | Provider            | How it connects                                                                                                                                          |
 | ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `claude`     | `command`           | Runs the Claude Code CLI through the wrapper: `SOP_AGENT_COMMAND="sh <agentic-sop>/scripts/agents/sop-agent.sh"`, model from `ANTHROPIC_MODEL`. Needs `claude` and `jq`; auth comes from `claude login` (or `ANTHROPIC_API_KEY`). |
-| `claude-api` | `openai_compatible` | Calls the Anthropic API's OpenAI-compatible endpoint: `SOP_OPENAI_COMPATIBLE_BASE_URL=https://api.anthropic.com`, key in `SOP_OPENAI_COMPATIBLE_API_KEY`. |
+| `claude-api` | `openai_compatible` | Calls the Anthropic API's OpenAI-compatible endpoint: `SOP_OPENAI_COMPATIBLE_BASE_URL=https://api.anthropic.com`, key in `SOP_OPENAI_COMPATIBLE_API_KEY`. Read-only: cannot run IMPLEMENT or FIX. |
+
+`claude` is the profile to use when `large` implements tasks, which it does
+whenever it is `SOP_MODEL_DEFAULT_CLASS`. `claude-api` makes a single
+`POST /v1/chat/completions` per request and returns text: it has no tools, it
+cannot edit the repository, and SOP never applies a patch from model output.
+It declares only `REVIEW`, `PLAN`, `DESIGN_TESTS`, and `DIAGNOSE_FAILURE`, and
+SOP's capability guard rejects `IMPLEMENT` and `FIX` on it before any call. Use
+the API only for a class that never implements; keep automatic routing off
+when a smaller class is on the API, since the router can send an
+implementation task to it.
 
 - With `command`, use the wrapper rather than a bare `claude -p`: the wrapper
   builds the prompt from SOP's JSON request, allows file edits, and returns the
@@ -393,8 +403,9 @@ secrets and local edits outside those blocks.
 - With `command`, `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`) decides the model that
   runs and `SOP_CLAUDE_EFFORT` sets `--effort`; `SOP_MODEL_LARGE_NAME` is only the
   label recorded in the model-selection evidence.
-- `SOP_AGENT_COMMAND` is global: every class or plan step that uses the `command`
-  provider runs the same command.
+- `SOP_AGENT_COMMAND` and `SOP_CLAUDE_EFFORT` are global: every class or plan step
+  that uses the `command` provider runs the same command at the same effort, so
+  only one CLI effort level is possible today.
 - With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
   sends the key as a Bearer token. The key is never written to run artifacts.
 
