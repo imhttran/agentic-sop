@@ -15,6 +15,7 @@
 #
 # Environment:
 #   SOP_CLAUDE_MODEL        optional --model for Claude Code
+#   SOP_CLAUDE_EFFORT       optional --effort for Claude Code (low|medium|high|...)
 set -eu
 
 die() { printf 'sop-agent: %s\n' "$1" >&2; exit 1; }
@@ -68,6 +69,7 @@ SOP_JSON: {the json}"
 
 model_args=''
 [ -n "${SOP_CLAUDE_MODEL:-}" ] && model_args="--model $SOP_CLAUDE_MODEL"
+[ -n "${SOP_CLAUDE_EFFORT:-}" ] && model_args="$model_args --effort $SOP_CLAUDE_EFFORT"
 
 # shellcheck disable=SC2086
 errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")

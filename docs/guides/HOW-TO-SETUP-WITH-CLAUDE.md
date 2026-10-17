@@ -14,46 +14,75 @@ separate topic: see [CLAUDE-SKILLS.md](CLAUDE-SKILLS.md) and
 
 | Path | Provider | How SOP calls Claude | Needs |
 | --- | --- | --- | --- |
-| Claude Code CLI | `command` | Runs `SOP_AGENT_COMMAND`, pipes the JSON request on stdin, reads stdout | `claude` on PATH, signed in (`claude login`) or `ANTHROPIC_API_KEY` set |
+| Claude Code CLI | `command` | Runs `SOP_AGENT_COMMAND` (the `sop-agent.sh` wrapper), which prompts Claude and returns SOP's JSON outcome | `claude` and `jq` on PATH, signed in (`claude login`) or `ANTHROPIC_API_KEY` set |
 | Anthropic API | `openai_compatible` | `POST {base}/v1/chat/completions` with the class's model name | `SOP_OPENAI_COMPATIBLE_API_KEY` set to an Anthropic API key |
 
 What matters when choosing:
 
+- **The API path is read-only.** `openai_compatible` makes one chat call and
+  returns text. It has no tools, so it cannot edit the repository, and SOP never
+  applies a patch from model output. It serves only REVIEW, PLAN, DESIGN_TESTS,
+  and DIAGNOSE_FAILURE; SOP rejects IMPLEMENT and FIX on it before any call.
+  Put it only on a class that never runs implementation: never on
+  `SOP_MODEL_DEFAULT_CLASS`, and not on any class when automatic routing
+  (`SOP_MODEL_ROUTING_ENABLED=true`) can pick it for a task.
 - **Per-class models.** The API path sends each class's `SOP_MODEL_<CLASS>_NAME`
   as the model, so SMALL, MEDIUM, and LARGE can each use a different Claude model.
   The CLI path ignores `*_NAME` (it is only the label SOP records); the model
-  comes from `--model` in the command.
+  comes from `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`).
 - **One CLI command.** `SOP_AGENT_COMMAND` is global. Every class that uses
-  provider `command` runs the same command, so at most one class should use the
-  CLI. Plan generation from a PRD also runs `SOP_AGENT_COMMAND`.
+  provider `command` runs the same command and model, so CLI classes cannot
+  differ from each other. Plan generation from a PRD also runs `SOP_AGENT_COMMAND`.
 - **Effort.** SOP has no effort setting. Only the CLI path can set it, with
-  `--effort`.
+  `SOP_CLAUDE_EFFORT`, and that is global too: every CLI class runs at the same
+  effort level.
 
-## Example: Haiku SMALL, Opus-low MEDIUM, Opus LARGE
+## The CLI wrapper
+
+Point `SOP_AGENT_COMMAND` at `scripts/agents/sop-agent.sh` in your agentic-sop
+checkout, by absolute path, since SOP runs it from the managed project:
+
+```dotenv
+SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
+```
+
+Do not use a bare `claude -p`. SOP sends a JSON request on stdin and expects a
+JSON outcome back, and Claude Code in `-p` mode is denied file edits unless they
+are allowed. The wrapper builds the prompt, allows reading and editing the
+repository plus a short list of Go and read-only git commands, and refuses
+commit, push, merge, reset, and clean.
+
+## Example: Haiku SMALL on the API, Opus LARGE on the CLI
+
+LARGE is the default class, so it runs IMPLEMENT and FIX and must use the CLI
+wrapper. SMALL uses the API for read-only work.
 
 ```dotenv
 SOP_MODEL_DEFAULT_CLASS=large
 
-# Anthropic API endpoint, shared by every openai_compatible class.
+# SMALL: Haiku through the Anthropic API (read-only capabilities only).
 SOP_OPENAI_COMPATIBLE_BASE_URL=https://api.anthropic.com
 SOP_OPENAI_COMPATIBLE_API_KEY=sk-ant-...
-
-# SMALL: Haiku through the API.
 SOP_MODEL_SMALL_PROVIDER=openai_compatible
 SOP_MODEL_SMALL_NAME=claude-haiku-5-5
 SOP_MODEL_SMALL_LOCALITY=cloud
 
-# MEDIUM: Opus at low effort through the CLI.
-SOP_MODEL_MEDIUM_PROVIDER=command
-SOP_MODEL_MEDIUM_NAME=claude-opus-5-5
-SOP_MODEL_MEDIUM_LOCALITY=cloud
-SOP_AGENT_COMMAND="claude -p --model claude-opus-5-5 --effort low"
-
-# LARGE: Opus at default effort through the API.
-SOP_MODEL_LARGE_PROVIDER=openai_compatible
+# LARGE: Opus through the CLI wrapper. Runs IMPLEMENT and FIX.
+SOP_MODEL_LARGE_PROVIDER=command
 SOP_MODEL_LARGE_NAME=claude-opus-5-5
 SOP_MODEL_LARGE_LOCALITY=cloud
+SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
+ANTHROPIC_MODEL=claude-opus-5-5
 ```
+
+Send read-only requests to SMALL with `--model-class small`, for example
+`sop prompt --model-class small --capability review "..."`. Keep automatic
+routing off with this setup: it can route an implementation task to SMALL.
+
+To also run MEDIUM on Claude, give it `SOP_MODEL_MEDIUM_PROVIDER=command`. It
+then runs the same command, model, and `SOP_CLAUDE_EFFORT` as LARGE. A
+low-effort MEDIUM next to a default-effort LARGE is not possible today, because
+the effort setting is global.
 
 Remove the SMALL availability-fallback lines (`SOP_MODEL_SMALL_FALLBACK_*`) or
 leave them; they apply only when SMALL's primary model is local.
@@ -67,8 +96,8 @@ overrides every class's model name.
 
 | Profile | LARGE runs on |
 | --- | --- |
-| `claude` (default) | Claude Code CLI, `claude-opus-5-5` |
-| `claude-api` | Anthropic API, `claude-opus-5-5` |
+| `claude` (default) | Claude Code CLI through the wrapper, `claude-opus-5-5` |
+| `claude-api` | Anthropic API, `claude-opus-5-5`; read-only, so only when LARGE is not the default class |
 | `deepseek` | Ollama cloud, `deepseek-v4.1-flash:cloud` |
 
 Switch the active one in `.env`:

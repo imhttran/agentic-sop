@@ -8,13 +8,14 @@ import tempfile
 from pathlib import Path
 
 ENV = Path(".env")
+AGENT_WRAPPER = Path(__file__).resolve().parent / "agents" / "sop-agent.sh"
 
 PROFILES = {
     "claude": {
         "SOP_MODEL_LARGE_PROVIDER": "command",
         "SOP_MODEL_LARGE_NAME": "claude-opus-5-5",
         "SOP_MODEL_LARGE_LOCALITY": "cloud",
-        "SOP_AGENT_COMMAND": '"claude -p --model claude-opus-5-5"',
+        "SOP_AGENT_COMMAND": f'"sh {AGENT_WRAPPER}"',
         "ANTHROPIC_MODEL": "claude-opus-5-5",
     },
     "claude-api": {
