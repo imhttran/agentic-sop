@@ -708,6 +708,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	d.ragAttempt = attempt
 	d.attemptNumber = task.Attempt
 	spec.Deliverables = planTaskDeliverables(dir, task)
+	spec.DeliverableGroups = deliverableGroups(spec)
 	// Plan-declared acceptance checks are recovered through the same plan-stage
 	// reconciliation as the deliverables and projected into the spec, so the
 	// existing deriveOutcome/authorizeAcceptanceCommand/runAcceptanceArgv seam

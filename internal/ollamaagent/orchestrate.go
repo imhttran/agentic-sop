@@ -405,6 +405,21 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			continue
 		}
 		if !isTool {
+			// One bounded existing-work verification opportunity: an invocation that reports
+			// completion without producing an attempt-local change may be completing work that
+			// already exists. Ask once for the existing already-satisfied object; the existing
+			// verifier decides, and this invocation mutation accounting is untouched. It is
+			// skipped when no turn remains, when a mutation was observed, or when a bounded
+			// request was already used, so it cannot loop and resets no budget.
+			if proof.canRequestExistingWork(final, st, iteration, policy.MaxIterations) {
+				proof.existingWorkRequested = true
+				h.recordImplementEvent(req, "existing-work verification requested", "no attempt-local change")
+				messages = append(messages,
+					chatMessage{Role: "assistant", Content: raw},
+					chatMessage{Role: "user", Content: existingWorkVerificationRequest(req)},
+				)
+				continue
+			}
 			if final["completion"] == agent.AlreadySatisfied {
 				if ok, rej := h.verifySatisfiedDetailed(ctx, req, st, proof, final); !ok {
 					// Bounded, evidence-only correction: at most ONE per invocation. It is offered when

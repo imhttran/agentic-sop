@@ -105,9 +105,22 @@ func validatePromptDeliverables(paths []string) ([]string, error) {
 func taskReportDeliverables(spec *taskfile.Spec) []string {
 	var paths []string
 	for _, item := range spec.Deliverables {
+		if path, ok := reportDeliverablePath(item); ok {
+			paths = append(paths, path)
+		}
+	}
+	return paths
+}
+
+// reportDeliverablePath returns the declared report deliverable an item names,
+// and whether it names one. It is the SINGLE definition of the report-deliverable
+// rule, shared by the verified gate (taskReportDeliverables) and the task-text
+// display classification, so the two can never disagree.
+func reportDeliverablePath(item string) (string, bool) {
+	{
 		fields := strings.Fields(item)
 		if len(fields) == 0 {
-			continue
+			return "", false
 		}
 		path := strings.Trim(fields[0], "`")
 		// An exact Markdown path under docs/reports/ that the task explicitly
@@ -117,9 +130,51 @@ func taskReportDeliverables(spec *taskfile.Spec) []string {
 		if !safeRepoPath(path) || filepath.ToSlash(filepath.Clean(path)) != path ||
 			!strings.HasPrefix(path, planflow.ReportsDir+"/") ||
 			filepath.Ext(path) != ".md" {
+			return "", false
+		}
+		return path, true
+	}
+}
+
+// deliverableGroups classifies the declared deliverables of a task for the
+// generated task text, reusing the existing runtime classification:
+// reportDeliverablePath for the verified report files, and deliverablePaths for
+// path-like tokens. A descriptive deliverable is never presented as an artifact
+// the agent must create.
+func deliverableGroups(spec *taskfile.Spec) []taskfile.DeliverableGroup {
+	var files, paths, outcomes []string
+	for _, item := range spec.Deliverables {
+		if _, ok := reportDeliverablePath(item); ok {
+			files = append(files, item)
 			continue
 		}
-		paths = append(paths, path)
+		if len(deliverablePaths(item)) > 0 {
+			paths = append(paths, item)
+			continue
+		}
+		outcomes = append(outcomes, item)
 	}
-	return paths
+	var groups []taskfile.DeliverableGroup
+	if len(files) > 0 {
+		groups = append(groups, taskfile.DeliverableGroup{
+			Heading: "Required deliverable files",
+			Note:    "Create each of these repository files before returning your outcome.",
+			Items:   files,
+		})
+	}
+	if len(paths) > 0 {
+		groups = append(groups, taskfile.DeliverableGroup{
+			Heading: "Declared repository paths",
+			Note:    "These name repository paths. They are not report deliverables, but SOP does verify through the outcome criteria that each path exists at completion.",
+			Items:   paths,
+		})
+	}
+	if len(outcomes) > 0 {
+		groups = append(groups, taskfile.DeliverableGroup{
+			Heading: "Expected outcomes (descriptive)",
+			Note:    "Report these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.",
+			Items:   outcomes,
+		})
+	}
+	return groups
 }

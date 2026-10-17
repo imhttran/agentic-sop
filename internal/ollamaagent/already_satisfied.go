@@ -15,6 +15,11 @@ import (
 
 const alreadySatisfiedInstruction = `If the requested implementation already exists, use the supplied already-satisfied verification contract: inspect its concrete evidence, run every required validation, and explicitly return ALREADY_SATISFIED. Do not manufacture changes. Without verified proof, implement the requested change. The existing discovery, stale, and iteration limits remain in force.`
 
+// alreadySatisfiedContract is the single definition of the already-satisfied
+// verification contract, shared by the standing task prompt and the one bounded
+// existing-work verification request.
+const alreadySatisfiedContract = `If the implementation already exists, read the relevant files and run EVERY required validation command successfully. Then explicitly return {"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact supplied criterion>","paths":["<successfully read repository file>"]}]}}. Map EVERY criterion to concrete inspected files. SOP verifies tool results and unchanged repository state. Reads, narration, no-op writes, and model assertions alone cannot establish completion. Existing discovery, stale, and iteration bounds still apply.`
+
 // satisfactionProof is invocation-local verification, separate from mutation
 // and discovery progress. Validation never resets the stale streak.
 type satisfactionProof struct {
@@ -38,6 +43,9 @@ type satisfactionProof struct {
 	// evidenceCorrectionUsed records that the one permitted evidence-only correction has
 	// already been requested for this invocation, so a claim is corrected at most once.
 	evidenceCorrectionUsed bool
+	// existingWorkRequested records that the single bounded existing-work verification
+	// request has already been made for this invocation, so it is requested at most once.
+	existingWorkRequested bool
 }
 
 func (h *Harness) satisfactionProof(ctx context.Context, req agent.Request) *satisfactionProof {
@@ -362,6 +370,40 @@ func (p *satisfactionProof) succeededCommands() []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// canRequestExistingWork reports whether the one bounded existing-work verification
+// request may be made now. It applies only when the reply claims completion (and is not
+// itself an already-satisfied object), this invocation observed NO repository mutation,
+// the verification contract is available (a fingerprint baseline was captured), neither
+// bounded verification request has been used, and a model turn remains inside the existing
+// iteration ceiling. It changes no counter and resets no budget: an invocation with no turn
+// left, with a mutation already observed, or with a bounded request already used falls
+// through to the existing behaviour unchanged.
+func (p *satisfactionProof) canRequestExistingWork(final map[string]any, st *executionState, iteration, maxIterations int) bool {
+	if p == nil || p.existingWorkRequested || p.evidenceCorrectionUsed || p.baseline == "" {
+		return false
+	}
+	if st == nil || st.mutationObserved {
+		return false
+	}
+	if final["status"] != string(agent.OutcomeCompleted) || final["completion"] == agent.AlreadySatisfied {
+		return false
+	}
+	return iteration < maxIterations
+}
+
+// existingWorkVerificationRequest restates the already-satisfied verification contract
+// once, when an invocation reports completion without producing an attempt-local change.
+// It asks only for evidence-backed verification of work that already exists; it never asks
+// for invented work and never weakens an acceptance condition.
+func existingWorkVerificationRequest(req agent.Request) string {
+	var b strings.Builder
+	b.WriteString("This invocation reported completion but produced no repository change. Do not invent work.\n")
+	b.WriteString("If the implementation already exists in the repository, read the relevant files, run every required validation command, and return the existing already-satisfied object once. If it does not exist, report that truthfully instead.\n\n")
+	fmt.Fprintf(&b, "Already-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
+	b.WriteString(alreadySatisfiedContract)
+	return b.String()
 }
 
 // RejectionCode is a precise, machine-readable reason an ALREADY_SATISFIED claim was
