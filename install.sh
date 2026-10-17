@@ -8,7 +8,9 @@
 #   ./install.sh --skills zed        + the Zed skills (/sop, /sop-plan, ...)
 #   ./install.sh --skills claude     + the Claude Code skills (same commands)
 #   ./install.sh --plugin claude     + prepare the Claude Code plugin
+#   ./install.sh --agent claude      + the Claude Code agent wrapper (sop-agent)
 #   ./install.sh --all               CLI + every present agent's skills + the plugin
+#                                    + the agent wrapper
 #
 # The CLI is built from this checkout and written to a user-writable bin directory
 # (--bin-dir, else $SOP_BIN_DIR, else $GOBIN, else `go env GOPATH`/bin). This script
@@ -32,6 +34,7 @@ repo_dir=$script_dir
 
 skills=none
 plugin=none
+agent=none
 bin_dir=""
 dry_run=0
 # failed records whether any step that ran reported a problem. Every step still runs,
@@ -50,7 +53,10 @@ Options:
                                    (default: none)
   --plugin <none|claude>           prepare the Claude Code plugin package
                                    (default: none)
-  --all                            --skills all --plugin claude
+  --agent <none|claude>            install the Claude Code agent wrapper as
+                                   sop-agent beside sop, for SOP_AGENT_COMMAND
+                                   (default: none)
+  --all                            --skills all --plugin claude --agent claude
   --bin-dir <path>                 where to install the sop binary
                                    (default: $SOP_BIN_DIR, else $GOBIN, else
                                    `go env GOPATH`/bin)
@@ -86,7 +92,13 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --plugin=*) plugin=${1#--plugin=}; shift ;;
-    --all) skills=all; plugin=claude; shift ;;
+    --agent)
+      [ $# -ge 2 ] || { echo "install: --agent requires a value" >&2; exit 2; }
+      agent=$2
+      shift 2
+      ;;
+    --agent=*) agent=${1#--agent=}; shift ;;
+    --all) skills=all; plugin=claude; agent=claude; shift ;;
     --bin-dir)
       [ $# -ge 2 ] || { echo "install: --bin-dir requires a path" >&2; exit 2; }
       bin_dir=$2
@@ -115,6 +127,14 @@ case "$plugin" in
   none | claude) ;;
   *)
     echo "install: unknown --plugin value: $plugin (want none or claude)" >&2
+    exit 2
+    ;;
+esac
+
+case "$agent" in
+  none | claude) ;;
+  *)
+    echo "install: unknown --agent value: $agent (want none or claude)" >&2
     exit 2
     ;;
 esac
@@ -272,6 +292,40 @@ prepare_plugin() {
 EOF
 }
 
+# install_agent copies the Claude Code agent wrapper beside sop as sop-agent, so
+# SOP_AGENT_COMMAND can name a stable installed path instead of this checkout.
+install_agent() {
+  requested=$1
+  target_dir=$2
+  [ "$requested" = none ] && return 0
+  src="$repo_dir/scripts/agents/sop-agent.sh"
+  dest="$target_dir/sop-agent"
+
+  echo
+  echo "Installing the Claude Code agent wrapper:"
+  echo "  to: $dest"
+  if [ "$dry_run" -eq 1 ]; then
+    echo "would: cp $src $dest"
+  else
+    tmp="$target_dir/.sop-agent.$$"
+    cp "$src" "$tmp"
+    chmod 0755 "$tmp"
+    mv -f "$tmp" "$dest"
+    echo "  installed: $dest"
+  fi
+  for tool in claude jq; do
+    command -v "$tool" >/dev/null 2>&1 || echo "  note: $tool is not on PATH; sop-agent needs it"
+  done
+  cat <<EOF
+
+  Point SOP at it in the managed project's .env:
+
+    SOP_AGENT_COMMAND="$dest"
+
+  Re-run this installer after pulling to update it.
+EOF
+}
+
 # --- Report ------------------------------------------------------------------
 
 report_path() {
@@ -309,6 +363,7 @@ echo "  repo:     $repo_dir"
 echo "  bin dir:  $target_dir"
 echo "  skills:   $skills"
 echo "  plugin:   $plugin"
+echo "  agent:    $agent"
 if [ "$dry_run" -eq 1 ]; then
   echo "  dry run:  yes (nothing will be changed)"
 fi
@@ -317,6 +372,7 @@ echo
 install_cli "$target_dir"
 install_skills "$skills"
 prepare_plugin "$plugin"
+install_agent "$agent" "$target_dir"
 report_path "$target_dir"
 
 if [ "$failed" -eq 0 ]; then
