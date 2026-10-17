@@ -37,7 +37,7 @@ const requiredEvidencePlanJSON = `{
 func ragReqEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 }

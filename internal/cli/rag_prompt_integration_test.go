@@ -48,7 +48,7 @@ func (c *ragCapturingAgent) Generate(ctx context.Context, r agent.Request) (agen
 
 func TestRAGEnabledAgentInput(t *testing.T) {
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 
@@ -141,7 +141,7 @@ func TestRAGOptionalFailureAgentInput(t *testing.T) {
 
 	// Enabled RAG with a retriever that fails deterministically.
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 
@@ -165,7 +165,7 @@ func TestRAGOptionalFailureAgentInput(t *testing.T) {
 
 func TestRAGSharedBudgetAgentInput(t *testing.T) {
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 	// A RAG byte budget large enough not to truncate on its own, so the truncation

@@ -73,6 +73,10 @@ Thin aliases in the same install expose one capability each:
                           published target, historicalize eligible plans through
                           SOP, and remove only fully-merged clean worktrees and
                           branches
+/sop-next-action [plan]   determine the single highest-priority safe next action:
+                          read-only status, authorized plan preparation, and
+                          governed execution (`sop status`, `sop continue --check`,
+                          `sop run`)
 ```
 
 Explicit `/sop end-end` or `/sop end-to-end` execution requests use the
