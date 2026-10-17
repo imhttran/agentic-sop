@@ -133,6 +133,10 @@ type Config struct {
 	// Verification is the optional, off-by-default risk-based verification tier.
 	// An omitted block leaves verification unchanged; see verification.go.
 	Verification Verification `yaml:"verification"`
+	// Security is the optional, disabled-by-default security scanner add-on
+	// (Semgrep CE SAST and Gitleaks secret detection). An omitted block leaves
+	// existing behavior unchanged; see security.go.
+	Security SecurityConfig `yaml:"security"`
 	// EarlyJEV is the optional early-JEV checkpoint configuration: its own
 	// top-level namespace, separate from quality.jev (quality-seam JEV),
 	// decision.* (the thresholds layer), and models (agent model routing).
@@ -698,6 +702,9 @@ func Parse(data []byte) (*Config, error) {
 	if err := c.applyDecisionEnv(); err != nil {
 		return nil, err
 	}
+	if err := c.applySecurityEnv(); err != nil {
+		return nil, err
+	}
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -797,6 +804,9 @@ func (c *Config) applyDefaults() {
 	if strings.TrimSpace(c.Output.Responses) == "" {
 		c.Output.Responses = ResponseConcise
 	}
+	// The security add-on is disabled unless explicitly enabled; defaults are
+	// applied only inside an enabled block.
+	c.applySecurityDefaults()
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -859,6 +869,9 @@ func (c *Config) Validate() error {
 			c.Output.Responses, strings.Join(sortedKeys(supportedResponseModes), ", "))
 	}
 	if err := c.validateAutonomy(); err != nil {
+		return err
+	}
+	if err := c.validateSecurity(); err != nil {
 		return err
 	}
 	if err := c.Models.Validate(); err != nil {

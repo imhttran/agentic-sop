@@ -1,0 +1,326 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strings"
+)
+
+// SecurityConfig is the optional security scanner add-on configuration. It is
+// disabled unless explicitly enabled by configuration or SOP_SECURITY_ENABLED;
+// an omitted block leaves existing behavior and configuration bytes unchanged.
+type SecurityConfig struct {
+	// Enabled is a pointer so an omitted value (disabled) is distinguishable from
+	// an explicit false. The environment may fill it when the project omitted it.
+	Enabled *bool `yaml:"enabled"`
+	// Mode is report-only (the MVP default) or required. Report-only records a
+	// verdict without blocking delivery; required blocks on FAIL/INDETERMINATE.
+	Mode string `yaml:"mode"`
+	// Scope is the scan scope. workspace is the MVP default and the only scope
+	// that can satisfy a required full-scan policy.
+	Scope string `yaml:"scope"`
+	// RequiredCategories names the categories a required gate must cover.
+	RequiredCategories []string `yaml:"required_categories"`
+	// FailOn lists normalized severities that produce a FAIL verdict.
+	FailOn []string `yaml:"fail_on"`
+	// UnknownSeverity is the explicit policy for a finding whose provider severity
+	// cannot be mapped: fail, indeterminate, or ignore. It never silently becomes
+	// low severity.
+	UnknownSeverity string `yaml:"unknown_severity"`
+	// TimeoutSeconds bounds one adapter invocation. Zero means the default.
+	TimeoutSeconds int `yaml:"timeout_seconds"`
+	// MaxOutputBytes bounds one adapter's captured and persisted report. Zero
+	// means the default.
+	MaxOutputBytes int `yaml:"max_output_bytes"`
+	// Baseline is the repository-relative reviewed baseline/suppression file. An
+	// absent file means no suppressions.
+	Baseline string `yaml:"baseline"`
+	// Adapters selects the adapters by stable ID and category. It is replaceable
+	// through configuration alone; the runner never branches on a specific ID.
+	Adapters []SecurityAdapterConfig `yaml:"adapters"`
+}
+
+// SecurityAdapterConfig is one configured adapter. Built-in adapters wrap a
+// pinned scanner CLI; external adapters speak the versioned process protocol.
+type SecurityAdapterConfig struct {
+	ID       string   `yaml:"id"`
+	Category string   `yaml:"category"`
+	Protocol string   `yaml:"protocol"`
+	Command  []string `yaml:"command"`
+	// Rules is the local rules path for a Semgrep adapter. It is explicit so a
+	// scan never downloads rules implicitly.
+	Rules string `yaml:"rules"`
+	// Version is the expected/pinned scanner version recorded as provenance. It is
+	// descriptive unless an adapter chooses to enforce it.
+	Version string `yaml:"version"`
+}
+
+// Security categories.
+const (
+	SecurityCategorySAST    = "sast"
+	SecurityCategorySecrets = "secrets"
+)
+
+// Security policies.
+const (
+	SecurityModeReportOnly = "report-only"
+	SecurityModeRequired   = "required"
+	SecurityScopeWorkspace = "workspace"
+	SecurityScopeChanged   = "changed-files"
+
+	SecurityUnknownFail          = "fail"
+	SecurityUnknownIndeterminate = "indeterminate"
+	SecurityUnknownIgnore        = "ignore"
+
+	SecurityProtocolBuiltin  = "builtin"
+	SecurityProtocolExternal = "external"
+)
+
+// Environment configuration for the add-on. Like the other optional layers, the
+// environment fills only values the project omitted, and an explicit project
+// value always wins.
+const (
+	envSecurityEnabled  = "SOP_SECURITY_ENABLED"
+	envSecurityMode     = "SOP_SECURITY_MODE"
+	envSecurityBaseline = "SOP_SECURITY_BASELINE"
+)
+
+// SecurityEnabled reports whether the add-on is explicitly enabled.
+func (c Config) SecurityEnabled() bool {
+	return c.Security.Enabled != nil && *c.Security.Enabled
+}
+
+// ResolveSecurityEnv fills and validates the security block for a Config that was
+// built without a project file (for example config.Default()). It applies the
+// same environment precedence and enabled-block defaults as Parse, so an
+// environment-enabled add-on works in a configless project too. It is a no-op
+// when the add-on is disabled.
+func ResolveSecurityEnv(c *Config) error {
+	if c == nil {
+		return nil
+	}
+	if err := c.applySecurityEnv(); err != nil {
+		return err
+	}
+	c.applySecurityDefaults()
+	return c.validateSecurity()
+}
+
+// applySecurityEnv fills the security block from the environment before defaults
+// are applied. An explicit project value wins.
+func (c *Config) applySecurityEnv() error {
+	if raw, ok := os.LookupEnv(envSecurityEnabled); ok {
+		value, err := parseEnvBool(envSecurityEnabled, raw)
+		if err != nil {
+			return err
+		}
+		if c.Security.Enabled == nil {
+			c.Security.Enabled = &value
+		}
+	}
+	if raw, ok := os.LookupEnv(envSecurityMode); ok && strings.TrimSpace(raw) != "" && strings.TrimSpace(c.Security.Mode) == "" {
+		c.Security.Mode = strings.TrimSpace(raw)
+	}
+	if raw, ok := os.LookupEnv(envSecurityBaseline); ok && strings.TrimSpace(raw) != "" && strings.TrimSpace(c.Security.Baseline) == "" {
+		c.Security.Baseline = strings.TrimSpace(raw)
+	}
+	return nil
+}
+
+// applySecurityDefaults fills omitted settings for an enabled add-on. A disabled
+// block is deliberately left untouched so an unaffected configuration is
+// byte-identical to the previous format.
+func (c *Config) applySecurityDefaults() {
+	if !c.SecurityEnabled() {
+		return
+	}
+	if strings.TrimSpace(c.Security.Mode) == "" {
+		c.Security.Mode = SecurityModeReportOnly
+	}
+	if strings.TrimSpace(c.Security.Scope) == "" {
+		c.Security.Scope = SecurityScopeWorkspace
+	}
+	if len(c.Security.FailOn) == 0 {
+		c.Security.FailOn = []string{"critical", "high"}
+	}
+	if strings.TrimSpace(c.Security.UnknownSeverity) == "" {
+		c.Security.UnknownSeverity = SecurityUnknownIndeterminate
+	}
+	if c.Security.TimeoutSeconds == 0 {
+		c.Security.TimeoutSeconds = 300
+	}
+	if c.Security.MaxOutputBytes == 0 {
+		c.Security.MaxOutputBytes = 1 << 20
+	}
+	if len(c.Security.Adapters) == 0 {
+		c.Security.Adapters = []SecurityAdapterConfig{
+			{ID: "semgrep", Category: SecurityCategorySAST, Protocol: SecurityProtocolBuiltin},
+			{ID: "gitleaks", Category: SecurityCategorySecrets, Protocol: SecurityProtocolBuiltin},
+		}
+	}
+	for i := range c.Security.Adapters {
+		a := &c.Security.Adapters[i]
+		a.ID = strings.TrimSpace(a.ID)
+		a.Category = strings.ToLower(strings.TrimSpace(a.Category))
+		a.Protocol = strings.ToLower(strings.TrimSpace(a.Protocol))
+		if a.Protocol == "" {
+			a.Protocol = SecurityProtocolBuiltin
+		}
+		if a.Category == "" {
+			switch a.ID {
+			case "semgrep":
+				a.Category = SecurityCategorySAST
+			case "gitleaks":
+				a.Category = SecurityCategorySecrets
+			}
+		}
+		if len(a.Command) == 0 {
+			switch a.ID {
+			case "semgrep":
+				a.Command = []string{"semgrep"}
+			case "gitleaks":
+				a.Command = []string{"gitleaks"}
+			}
+		}
+	}
+}
+
+// validateDisabledSecurity validates explicit policy values in a block that does
+// not currently run the add-on. It does not apply defaults or require adapters.
+func validateDisabledSecurity(s SecurityConfig) error {
+	if mode := strings.TrimSpace(s.Mode); mode != "" && mode != SecurityModeReportOnly && mode != SecurityModeRequired {
+		return fmt.Errorf("config: unknown security.mode %q (want report-only, required)", s.Mode)
+	}
+	if scope := strings.TrimSpace(s.Scope); scope != "" && scope != SecurityScopeWorkspace && scope != SecurityScopeChanged {
+		return fmt.Errorf("config: unknown security.scope %q (want workspace, changed-files)", s.Scope)
+	}
+	for _, sev := range s.FailOn {
+		switch strings.ToLower(strings.TrimSpace(sev)) {
+		case "critical", "high", "medium", "low", "info":
+		default:
+			return fmt.Errorf("config: unknown security.fail_on severity %q (want critical, high, medium, low, info)", sev)
+		}
+	}
+	switch unknown := strings.TrimSpace(s.UnknownSeverity); unknown {
+	case "", SecurityUnknownFail, SecurityUnknownIndeterminate, SecurityUnknownIgnore:
+	default:
+		return fmt.Errorf("config: unknown security.unknown_severity %q (want fail, indeterminate, ignore)", unknown)
+	}
+	if b := strings.TrimSpace(s.Baseline); b != "" {
+		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
+			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
+		}
+	}
+	return nil
+}
+
+// validateSecurity rejects a malformed enabled block at load time. A disabled or
+// omitted block has nothing to execute, but explicit policy values are still
+// checked so a later enable cannot carry a bad setting.
+func (c *Config) validateSecurity() error {
+	s := c.Security
+	// A disabled block executes nothing, but an explicitly written policy value must
+	// still be well-formed so a later enable cannot silently carry a bad setting.
+	if !c.SecurityEnabled() {
+		return validateDisabledSecurity(s)
+	}
+	switch strings.TrimSpace(s.Mode) {
+	case SecurityModeReportOnly, SecurityModeRequired:
+	default:
+		return fmt.Errorf("config: unknown security.mode %q (want report-only, required)", s.Mode)
+	}
+	switch strings.TrimSpace(s.Scope) {
+	case SecurityScopeWorkspace, SecurityScopeChanged:
+	default:
+		return fmt.Errorf("config: unknown security.scope %q (want workspace, changed-files)", s.Scope)
+	}
+	if s.TimeoutSeconds <= 0 {
+		return fmt.Errorf("config: security.timeout_seconds must be positive, got %d", s.TimeoutSeconds)
+	}
+	if s.MaxOutputBytes <= 0 {
+		return fmt.Errorf("config: security.max_output_bytes must be positive, got %d", s.MaxOutputBytes)
+	}
+	if strings.TrimSpace(s.Mode) == SecurityModeRequired && len(s.RequiredCategories) == 0 {
+		return fmt.Errorf("config: security.mode %q requires at least one security.required_categories entry", s.Mode)
+	}
+	if len(s.FailOn) == 0 {
+		return fmt.Errorf("config: security.fail_on must not be empty when the add-on is enabled")
+	}
+	for _, sev := range s.FailOn {
+		switch strings.ToLower(strings.TrimSpace(sev)) {
+		case "critical", "high", "medium", "low", "info":
+		default:
+			return fmt.Errorf("config: unknown security.fail_on severity %q (want critical, high, medium, low, info)", sev)
+		}
+	}
+	switch strings.TrimSpace(s.UnknownSeverity) {
+	case SecurityUnknownFail, SecurityUnknownIndeterminate, SecurityUnknownIgnore:
+	default:
+		return fmt.Errorf("config: unknown security.unknown_severity %q (want fail, indeterminate, ignore)", s.UnknownSeverity)
+	}
+	if b := strings.TrimSpace(s.Baseline); b != "" {
+		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
+			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
+		}
+	}
+
+	seen := make(map[string]bool, len(s.Adapters))
+	byCategory := make(map[string]bool, len(s.Adapters))
+	for i, a := range s.Adapters {
+		id := strings.TrimSpace(a.ID)
+		if id == "" {
+			return fmt.Errorf("config: security.adapters[%d].id is required", i)
+		}
+		if seen[id] {
+			return fmt.Errorf("config: duplicate security adapter id %q", id)
+		}
+		seen[id] = true
+		category := strings.ToLower(strings.TrimSpace(a.Category))
+		switch category {
+		case SecurityCategorySAST, SecurityCategorySecrets:
+		default:
+			return fmt.Errorf("config: security adapter %q has unknown category %q (want sast, secrets)", id, a.Category)
+		}
+		byCategory[category] = true
+		protocol := strings.ToLower(strings.TrimSpace(a.Protocol))
+		switch protocol {
+		case SecurityProtocolBuiltin:
+			switch id {
+			case "semgrep":
+				if category != SecurityCategorySAST {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySAST)
+				}
+			case "gitleaks":
+				if category != SecurityCategorySecrets {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySecrets)
+				}
+			default:
+				return fmt.Errorf("config: unknown built-in security adapter %q (want semgrep, gitleaks; use protocol: external for a private adapter)", id)
+			}
+		case SecurityProtocolExternal:
+			// Any stable ID is permitted; the process response is validated.
+		default:
+			return fmt.Errorf("config: security adapter %q has unknown protocol %q (want builtin, external)", id, a.Protocol)
+		}
+		if len(a.Command) == 0 || strings.TrimSpace(a.Command[0]) == "" {
+			return fmt.Errorf("config: security adapter %q requires a command", id)
+		}
+		for _, arg := range a.Command {
+			if strings.ContainsRune(arg, 0) {
+				return fmt.Errorf("config: security adapter %q command contains a NUL byte", id)
+			}
+		}
+	}
+	for _, raw := range s.RequiredCategories {
+		category := strings.ToLower(strings.TrimSpace(raw))
+		switch category {
+		case SecurityCategorySAST, SecurityCategorySecrets:
+		default:
+			return fmt.Errorf("config: unknown security.required_categories entry %q (want sast, secrets)", raw)
+		}
+		if !byCategory[category] {
+			return fmt.Errorf("config: security.required_categories names %q but no configured adapter provides it", category)
+		}
+	}
+	return nil
+}

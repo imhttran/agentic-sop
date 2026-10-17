@@ -106,6 +106,28 @@ type Input struct {
 	// check was not executed, was skipped, or failed, so it cannot be inferred from
 	// configuration or a process exit alone.
 	PostgresPassed bool
+	// Security is the optional security scanner evidence. A nil value means the
+	// add-on is disabled and changes nothing. Report-only evidence is advisory;
+	// required evidence blocks on FAIL or INDETERMINATE, never on PASS.
+	Security *SecurityEvidence
+}
+
+// SecurityEvidence is the security add-on's typed evidence for the single
+// quality gate. It is shaped here (rather than importing internal/security) so
+// the gate remains independent of scanner implementations.
+type SecurityEvidence struct {
+	// Enabled reports that the add-on is configured on.
+	Enabled bool
+	// Required reports required mode (blocks) versus report-only.
+	Required bool
+	// Configured reports that at least one adapter was configured.
+	Configured bool
+	// Verdict is PASS, FAIL, INDETERMINATE, or NOT_APPLICABLE.
+	Verdict string
+	// Blocking counts unsuppressed findings at a fail_on severity.
+	Blocking int
+	// Reason is a bounded explanation used in gate reasons.
+	Reason string
 }
 
 // JEVEvidence is a validated snapshot of an optional JEV analysis, shaped for
@@ -167,6 +189,31 @@ func Evaluate(policy config.Quality, in Input) Result {
 		return Result{Decision: NeedsHuman, Reasons: append(reasons, "human approval required"), Advisories: advisories}
 	}
 
+	// Optional security scanner evidence. Report-only never blocks: its verdict is
+	// recorded as an advisory. Required mode fails closed when the scan is absent,
+	// incomplete, or failing; only PASS passes.
+	securityFailed := false
+	if in.Security != nil && in.Security.Enabled {
+		if in.Security.Required {
+			if !in.Security.Configured {
+				reasons = append(reasons, "required security scan is not configured")
+				securityFailed = true
+			} else {
+				switch strings.ToUpper(strings.TrimSpace(in.Security.Verdict)) {
+				case "PASS":
+					reasons = append(reasons, "required security scan passed")
+				case "FAIL":
+					reasons = append(reasons, securityReason(in.Security, "required security scan failed"))
+					securityFailed = true
+				default:
+					reasons = append(reasons, securityReason(in.Security, "required security scan is indeterminate"))
+					securityFailed = true
+				}
+			}
+		} else {
+			advisories = append(advisories, fmt.Sprintf("security (report-only): %s", securityVerdict(in.Security)))
+		}
+	}
 	// A required validation set that is not configured is never a pass: an empty
 	// suite proves nothing about the change. The gate fails closed (FAIL, not
 	// NEEDS_HUMAN) so the failure is classified and handled deterministically as a
@@ -195,7 +242,9 @@ func Evaluate(policy config.Quality, in Input) Result {
 		}
 	}
 
-	checkFailed := false
+	// A required security failure folds into the ordinary checkFailed path below, so
+	// the existing fix-loop budget and NEEDS_HUMAN boundary still apply.
+	checkFailed := securityFailed
 	if !in.BuildPassed {
 		reasons = append(reasons, "build failed")
 		checkFailed = true
@@ -252,6 +301,23 @@ func Evaluate(policy config.Quality, in Input) Result {
 		reasons = append(reasons, "all required checks passed")
 	}
 	return Result{Decision: Pass, Reasons: reasons, Advisories: advisories}
+}
+
+// securityVerdict returns a non-empty verdict label for advisory output.
+func securityVerdict(ev *SecurityEvidence) string {
+	if ev == nil || strings.TrimSpace(ev.Verdict) == "" {
+		return "INDETERMINATE"
+	}
+	return strings.ToUpper(strings.TrimSpace(ev.Verdict))
+}
+
+// securityReason renders the gate reason, adding the security explanation when
+// the security layer supplied one.
+func securityReason(ev *SecurityEvidence, fallback string) string {
+	if ev == nil || strings.TrimSpace(ev.Reason) == "" {
+		return fallback
+	}
+	return fallback + ": " + strings.TrimSpace(ev.Reason)
 }
 
 // jevReason renders a fail-closed JEV evidence reason, falling back to a generic

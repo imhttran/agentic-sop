@@ -1,0 +1,26 @@
+{
+  "version": "1.99.0",
+  "results": [
+    {
+      "check_id": "go.lang.security.audit.dangerous-exec",
+      "path": "testdata/fixtures/insecure.go",
+      "start": {"line": 7, "col": 2},
+      "end": {"line": 7, "col": 28},
+      "extra": {
+        "message": "Command execution with untrusted input.",
+        "severity": "ERROR",
+        "fingerprint": "semgrep-fixture-fingerprint-1",
+        "metadata": {
+          "cwe": ["CWE-78"],
+          "confidence": "HIGH",
+          "category": "security"
+        }
+      }
+    }
+  ],
+  "errors": [],
+  "paths": {
+    "scanned": ["testdata/fixtures/insecure.go"],
+    "skipped": []
+  }
+}
