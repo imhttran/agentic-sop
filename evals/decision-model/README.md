@@ -38,6 +38,21 @@ Labels are frozen by hash. Verify the corpus is unchanged:
 `CORPUS.sha256`; a changed label fails the test. Editing labels requires an explicit
 re-freeze (regenerate `CORPUS.sha256`) and is recorded as a corpus revision.
 
+### Baseline artifact: integrity vs. reproducibility
+
+The baseline artifact carries two different things: the decisions the deterministic
+classifier made, and how long each one took. Only the first is reproducible, so the
+two are checked separately:
+
+- **Artifact integrity** — `baseline-A.results.json.sha256` is the sha256 of the
+  artifact's exact bytes, so a modified recorded artifact fails its checksum.
+- **Reproducibility / drift** — a fresh run and the recorded artifact are compared
+  through the latency-free canonical projection (`CanonicalHash`), which drops the
+  per-record `latency_ms` and the `latency_median_ms` / `latency_p95_ms` aggregates
+  while keeping every decision-bearing field. Measured latency is still reported in
+  the full artifact for performance analysis, but it cannot make a reproducible run
+  look nondeterministic or trigger a false "baseline drift".
+
 ## Runs
 
 - `baseline-A.results.json` — deterministic-only baseline (DME-003).
