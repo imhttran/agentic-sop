@@ -220,6 +220,16 @@ func instructions(in Input) string {
 	return b.String()
 }
 
+// ItemHeader is the provenance header line renderContext writes for one context
+// item. It is exported so callers that inspect a compiled prompt match the exact
+// rendered form instead of re-deriving it.
+func ItemHeader(source sopctx.Source, identity string) string {
+	if identity == "" {
+		return "### " + string(source)
+	}
+	return "### " + string(source) + ": " + identity
+}
+
 // renderContext renders the ordered context items with explicit provenance. It
 // preserves each item's text verbatim and never reorders or re-ranks them: the
 // Context Engine already fixed the order.
@@ -230,10 +240,7 @@ func renderContext(c sopctx.Context) string {
 			continue
 		}
 		var b strings.Builder
-		header := "### " + string(it.Source)
-		if it.Identity != "" {
-			header += ": " + it.Identity
-		}
+		header := ItemHeader(it.Source, it.Identity)
 		if it.Source == sopctx.SourceKnowledgeRAG {
 			b.WriteString(knowledgeOpen)
 			b.WriteString("\n")

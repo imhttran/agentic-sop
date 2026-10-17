@@ -60,15 +60,12 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	// Required-evidence verifier (RAG-SOP-003): disabled RAG yields a nil verifier,
-	// so a task that declares required evidence fails closed. Wiring happens here,
-	// before any task is scheduled; verification itself runs before a task's agent.
-	verifier, verr := newRAGEvidenceVerifier(cfg)
-	if verr != nil {
-		fmt.Fprintf(stderr, "run: %v\n", verr)
+	// Fail fast on an invalid enabled RAG configuration (RAG-SOP-003), before any
+	// task is scheduled; required evidence itself is enforced per task attempt.
+	if err := validateRAGConfig(cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	d.evidenceVerifier = verifier
 	routing, err := applyModelRouting(&cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)

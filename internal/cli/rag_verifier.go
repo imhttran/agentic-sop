@@ -13,6 +13,8 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/prompt"
 	"github.com/imhttran/agentic-sop/internal/ragclient"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
@@ -47,12 +49,7 @@ func retrieveAttemptEvidence(ctx context.Context, cfg config.Config, spec *taskf
 		evidence, err := d.rawEvidence(ctx, spec, corpus)
 		return attemptRetrieval{Attempted: true, Evidence: evidence, Err: err, Corpus: corpus}
 	}
-	client, err := ragclient.New(ragclient.Config{
-		Executable:     resolved.Executable,
-		AllowedCorpora: resolved.AllowedCorpora,
-		Timeout:        resolved.Timeout(),
-		MaxResults:     resolved.TopK,
-	})
+	client, err := newRAGClient(resolved)
 	if err != nil {
 		return attemptRetrieval{Attempted: true, Err: err, Corpus: corpus}
 	}
@@ -69,77 +66,49 @@ func retrieveAttemptEvidence(ctx context.Context, cfg config.Config, spec *taskf
 // without starting the real producer.
 type ragKnowledgeFunc func(ctx context.Context, spec *taskfile.Spec) ([]sopctx.Item, error)
 
-// retrievalClient is the slice of ragclient.Client the verifier needs. It is an
-// interface so tests can inject a deterministic double; the production value is
-// a *ragclient.Client.
-type retrievalClient interface {
-	Retrieve(ctx context.Context, req ragclient.Request) (ragclient.Response, error)
-}
-
-// ragEvidenceVerifier verifies a task's required retrieval evidence against the
-// configured single corpus through the retrieval-only client (RAG-SOP-003). It
-// never accepts a model assertion, never broadens the corpus, and never falls
-// back: every declared requirement must be satisfied (AND).
-type ragEvidenceVerifier struct {
-	client retrievalClient
-	corpus string
-}
-
-// newRAGEvidenceVerifier resolves the RAG configuration and builds the verifier.
-// It returns (nil, nil) when RAG is disabled, so a task that requires evidence
-// fails closed through the existing nil-verifier path. An invalid *enabled*
-// configuration is an actionable error.
-func newRAGEvidenceVerifier(cfg config.Config) (EvidenceVerifier, error) {
+// validateRAGConfig fails fast, before any task is scheduled, when RAG is enabled
+// but misconfigured (bad settings, or a producer executable that does not exist).
+// Disabled RAG is valid: a task that declares required evidence then fails closed
+// in enforceRequiredEvidenceOnce.
+func validateRAGConfig(cfg config.Config) error {
 	resolved, err := cfg.RAG.Resolved(nil)
-	if err != nil {
-		return nil, err
+	if err != nil || !resolved.Enabled {
+		return err
 	}
-	if !resolved.Enabled {
-		return nil, nil
+	if _, err := newRAGClient(resolved); err != nil {
+		return fmt.Errorf("rag: %w", err)
 	}
-	client, err := ragclient.New(ragclient.Config{
+	return nil
+}
+
+// newRAGClient builds the retrieval client from the resolved RAG configuration;
+// it is the one place the config-to-client mapping lives.
+func newRAGClient(resolved config.RAGConfig) (*ragclient.Client, error) {
+	return ragclient.New(ragclient.Config{
 		Executable:     resolved.Executable,
 		AllowedCorpora: resolved.AllowedCorpora,
 		Timeout:        resolved.Timeout(),
 		MaxResults:     resolved.TopK,
 	})
-	if err != nil {
-		return nil, fmt.Errorf("rag: %w", err)
-	}
-	return &ragEvidenceVerifier{client: client, corpus: strings.TrimSpace(resolved.Corpus)}, nil
-}
-
-// VerifyRequiredEvidence implements EvidenceVerifier. An empty RequiredEvidence
-// is a no-op. Any retrieval failure or unsatisfied identity returns the exact
-// missing identities and a structured error, which the caller maps to BLOCKED.
-func (v *ragEvidenceVerifier) VerifyRequiredEvidence(ctx context.Context, task *domain.Task) ([]string, error) {
-	if task == nil || len(task.RequiredEvidence) == 0 {
-		return nil, nil
-	}
-
-	res, err := v.client.Retrieve(ctx, ragclient.Request{
-		Query:   ragQuery(task),
-		Filters: ragclient.Filters{Corpus: v.corpus},
-	})
-	if err != nil {
-		// The client already enforced the deadline, result-count and
-		// response-size limits and returned a typed failure.
-		return append([]string{}, task.RequiredEvidence...), err
-	}
-
-	return validateRequiredEvidence(task.RequiredEvidence, v.corpus, res.Evidence)
 }
 
 // validateRequiredEvidence checks every declared requirement against the trusted
 // corpus and the retrieved evidence, WITHOUT performing any retrieval. It returns
-// the missing/unauthorized identities (sorted) and a structured error. Corpus
-// authorization, source-prefix matching, AND semantics, and behavior on empty or
-// malformed evidence are preserved exactly.
+// the missing/unauthorized identities (sorted) and a structured error. Requirements
+// are normalized first (planner.NormalizeRequiredEvidence), so hand-written task
+// files get the same rules as planner output; a malformed set fails closed with
+// every declared requirement missing.
 func validateRequiredEvidence(required []string, corpus string, evidence []ragclient.Evidence) ([]string, error) {
-	missing := make([]string, 0, len(required))
-	for _, req := range required {
+	norm, err := planner.NormalizeRequiredEvidence(required)
+	if err != nil {
+		missing := append([]string(nil), required...)
+		sort.Strings(missing)
+		return missing, err
+	}
+	missing := make([]string, 0, len(norm))
+	for _, req := range norm {
 		kind, id, _ := strings.Cut(req, ":")
-		switch strings.ToLower(strings.TrimSpace(kind)) {
+		switch kind {
 		case "corpus":
 			// The single configured corpus is the only authorized one; a request for
 			// another corpus fails closed rather than broadening the search.
@@ -150,8 +119,6 @@ func validateRequiredEvidence(required []string, corpus string, evidence []ragcl
 			if !hasSourcePrefix(evidence, id) {
 				missing = append(missing, req)
 			}
-		default:
-			missing = append(missing, req)
 		}
 	}
 	if len(missing) > 0 {
@@ -159,20 +126,6 @@ func validateRequiredEvidence(required []string, corpus string, evidence []ragcl
 		return missing, fmt.Errorf("required evidence not satisfied: %s", strings.Join(missing, ", "))
 	}
 	return nil, nil
-}
-
-// ragQuery derives a deterministic retrieval query from task metadata (title and
-// objective). It consults no model.
-func ragQuery(task *domain.Task) string {
-	terms := strings.Fields(strings.TrimSpace(task.Title + " " + task.Objective))
-	if len(terms) == 0 {
-		return task.ID
-	}
-	q := strings.Join(terms, " ")
-	if len(q) > 512 {
-		q = q[:512]
-	}
-	return q
 }
 
 // hasCorpus reports whether the response carries usable evidence from corpus.
@@ -219,12 +172,7 @@ func optionalRAGKnowledge(ctx context.Context, cfg config.Config, spec *taskfile
 		}
 		return items
 	}
-	client, err := ragclient.New(ragclient.Config{
-		Executable:     resolved.Executable,
-		AllowedCorpora: resolved.AllowedCorpora,
-		Timeout:        resolved.Timeout(),
-		MaxResults:     resolved.TopK,
-	})
+	client, err := newRAGClient(resolved)
 	if err != nil {
 		return nil
 	}
@@ -280,9 +228,6 @@ func enforceRequiredEvidenceOnce(ctx context.Context, cfg config.Config, saver t
 	}
 	missing, verr := validateRequiredEvidence(task.RequiredEvidence, attempt.Corpus, attempt.Evidence)
 	if verr != nil {
-		if len(missing) == 0 {
-			missing = task.RequiredEvidence
-		}
 		b, c := failRequiredEvidence(saver, task, missing, stdout, stderr)
 		return b, c, attemptRetrieval{}
 	}
@@ -379,9 +324,11 @@ func updateRAGPromptInclusion(rn *runpkg.Run, dir, taskID, evidence string, cita
 	if json.Unmarshal(b, &rec) != nil {
 		return
 	}
+	// Match the whole rendered header line, so citation "kb/a" is not counted
+	// present when only "kb/ab" was compiled.
 	included := true
 	for _, c := range citations {
-		if !strings.Contains(evidence, c) {
+		if !strings.Contains(evidence, prompt.ItemHeader(sopctx.SourceKnowledgeRAG, c)+"\n") {
 			included = false
 		}
 	}
