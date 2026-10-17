@@ -47,7 +47,10 @@ func (c *ragCapturingAgent) Generate(ctx context.Context, r agent.Request) (agen
 }
 
 func TestRAGEnabledAgentInput(t *testing.T) {
-	ragEnabledEnv(t)
+	t.Setenv(config.EnvRAGEnabled, "true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
+	t.Setenv(config.EnvRAGCorpus, "kb")
+	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 
 	calls := 0
 	rag := func(context.Context, *taskfile.Spec) ([]sopctx.Item, error) {
@@ -137,7 +140,10 @@ func TestRAGOptionalFailureAgentInput(t *testing.T) {
 	baseline := runAndCaptureImplInput(t, nil)
 
 	// Enabled RAG with a retriever that fails deterministically.
-	ragEnabledEnv(t)
+	t.Setenv(config.EnvRAGEnabled, "true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
+	t.Setenv(config.EnvRAGCorpus, "kb")
+	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 
 	calls := 0
 	rag := func(context.Context, *taskfile.Spec) ([]sopctx.Item, error) {
@@ -158,7 +164,10 @@ func TestRAGOptionalFailureAgentInput(t *testing.T) {
 }
 
 func TestRAGSharedBudgetAgentInput(t *testing.T) {
-	ragEnabledEnv(t)
+	t.Setenv(config.EnvRAGEnabled, "true")
+	t.Setenv(config.EnvRAGExecutable, trueExecutable())
+	t.Setenv(config.EnvRAGCorpus, "kb")
+	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 	// A RAG byte budget large enough not to truncate on its own, so the truncation
 	// observed below is the SHARED sopctx.DefaultLimits() ceiling, not RAG's.
 	t.Setenv(config.EnvRAGContextBudget, "200000")
