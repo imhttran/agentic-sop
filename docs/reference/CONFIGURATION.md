@@ -416,6 +416,14 @@ implementation task to it.
   `--setting-sources project,local --strict-mcp-config`, so only the managed
   project's `.claude` settings and CLAUDE.md load, with no MCP servers.
   `claude login` still works.
+- `SOP_CLAUDE_MAX_BUDGET_USD` passes `--max-budget-usd`: Claude stops a call
+  once its estimated spend reaches that many US dollars, and the wrapper reports
+  `claude stopped: error_max_budget_usd` (IMPLEMENT/FIX return `failed`;
+  PLAN/REVIEW exit non-zero). Edits made before the stop stay in the working
+  tree. `SOP_CLAUDE_COST_LOG` names a file the wrapper appends one line to per
+  call: time, class, capability, result subtype, `cost=` (USD), and `turns=`.
+  Both are unset by default. SOP discards the command's stderr on success, so
+  the log file is the only place per-call cost appears.
 - `SOP_AGENT_COMMAND` is global: every class or plan step that uses the
   `command` provider runs the same command. SOP sets `SOP_SELECTED_CLASS`
   (`small`, `medium`, `large`) in the command's environment when model routing
