@@ -104,6 +104,18 @@ SOP_CLAUDE_ALLOWED_TOOLS=Bash(make:*),Bash(pytest:*)
 Everything listed runs without asking, so keep commit, push, and other
 SOP-owned operations off it.
 
+Claude also loads your own Claude Code setup: `~/.claude` settings, hooks,
+plugins, CLAUDE.md, skills, and MCP servers. Your personal instructions then
+shape SOP's tasks, and every MCP server starts on every call. To run SOP's calls
+without them:
+
+```dotenv
+SOP_CLAUDE_ISOLATE=1
+```
+
+The managed project's `.claude` settings and CLAUDE.md still load, and
+`claude login` still works.
+
 ## Example: Haiku SMALL on the API, Opus LARGE on the CLI
 
 LARGE is the default class, so it runs IMPLEMENT and FIX and must use the CLI
