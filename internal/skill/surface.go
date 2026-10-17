@@ -54,6 +54,10 @@ var Commands = []Command{
 	// /sop-implement, sop run, and /sop-publish. It never edits the target repository.
 	{Name: "sop-rag-integrate", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "sop-cleanup", Capability: "", Delegation: "sop status"},
+	// A read-only "what should I do next" advisor with prepare and execute modes:
+	// it inspects SOP's own surfaces, delegates to sop run only when authorized, and
+	// fixes no capability.
+	{Name: "sop-next-action", Capability: "", Delegation: "sop status"},
 	// The completion half of a merge/publish: it verifies the published target,
 	// historicalizes eligible plans through SOP, and removes only fully-merged,
 	// clean worktrees and branches. It fixes no capability; historicalization is

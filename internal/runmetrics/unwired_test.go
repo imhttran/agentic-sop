@@ -37,7 +37,7 @@ func TestNoProductionImportOfRunmetrics(t *testing.T) {
 		name := d.Name()
 		if d.IsDir() {
 			switch name {
-			case ".git", ".agent-sdlc", "testdata", "vendor":
+			case ".git", ".agent-sdlc", ".claude", "testdata", "vendor":
 				return filepath.SkipDir
 			}
 			return nil
