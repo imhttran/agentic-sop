@@ -17,6 +17,12 @@ PROFILES = {
         "SOP_AGENT_COMMAND": '"claude -p --model claude-opus-5-5"',
         "ANTHROPIC_MODEL": "claude-opus-5-5",
     },
+    "claude-api": {
+        "SOP_MODEL_LARGE_PROVIDER": "openai_compatible",
+        "SOP_MODEL_LARGE_NAME": "claude-opus-5-5",
+        "SOP_MODEL_LARGE_LOCALITY": "cloud",
+        "SOP_OPENAI_COMPATIBLE_BASE_URL": "https://api.anthropic.com",
+    },
     "deepseek": {
         "SOP_MODEL_LARGE_PROVIDER": "ollama",
         "SOP_MODEL_LARGE_NAME": "deepseek-v4.1-flash:cloud",
@@ -120,8 +126,8 @@ def status():
 
 
 if __name__ == "__main__":
-    if len(sys.argv) != 2 or sys.argv[1] not in ("claude", "deepseek", "status"):
-        sys.exit("Usage: switch-large-model.py {claude|deepseek|status}")
+    if len(sys.argv) != 2 or sys.argv[1] not in (*PROFILES, "status"):
+        sys.exit("Usage: switch-large-model.py {claude|claude-api|deepseek|status}")
 
     if sys.argv[1] == "status":
         status()

@@ -102,7 +102,7 @@ workflow:
 #                         # replanning"); OFF by default
 #   max_replans: 1 # change strategy at most once; 0 disables it
 #   small:
-#     provider: ollama # ollama | llamacpp | mlx | command
+#     provider: ollama # ollama | llamacpp | mlx | openai_compatible | command
 #     name: qwen3:4b
 #     locality: local # local | cloud
 #     fallback: # used only when the local runtime cannot serve the local model
@@ -309,7 +309,7 @@ Resolution order, highest first:
 | `models.max_escalations` / `SOP_MODEL_MAX_ESCALATIONS`                               | `2`                | Bound on automatic escalation (`0` disables it).                             |
 | `models.replan_enabled` / `SOP_MODEL_REPLAN_ENABLED`                                 | `false`            | Enable bounded strategy replanning (same class) after a recoverable failure. |
 | `models.max_replans` / `SOP_MODEL_MAX_REPLANS`                                       | `1`                | Bound on strategy replanning (`0` disables it).                              |
-| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, or `command`.                                   |
+| `models.<class>.provider` / `SOP_MODEL_<CLASS>_PROVIDER`                             | `ollama`           | `ollama`, `llamacpp`, `mlx`, `openai_compatible`, or `command`.              |
 | `models.<class>.name` / `SOP_MODEL_<CLASS>_NAME`                                     | per class (below)  | Model name for the class.                                                    |
 | `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY`                             | per class (below)  | `local` or `cloud`.                                                          |
 | `models.<class>.fallback.provider` / `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`           | class provider     | Provider for the class's runtime fallback.                                   |
@@ -372,6 +372,25 @@ unavailable; cloud fallback`. SMALL's built-in fallback is
   the evidence records `class=SMALL`, `model=nemotron-3-nano:30b-cloud`, and a typed
   `execution_source` of `availability-fallback` (or `primary` normally). A SMALL
   routing decision is never rewritten to MEDIUM because a fallback executed.
+
+### Claude for the large class
+
+`.env.example` ships two Claude profiles for `large`. Switch between them (and
+`deepseek`) with `scripts/switch-large-model.py {claude|claude-api|deepseek|status}`;
+it rewrites only the `# BEGIN/END SOP LARGE MODEL:` blocks in `.env`, so keep
+secrets and local edits outside those blocks.
+
+| Profile      | Provider            | How it connects                                                                                                                                          |
+| ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `claude`     | `command`           | Runs the Claude Code CLI via `SOP_AGENT_COMMAND="claude -p --model claude-opus-5-5"`. Auth comes from `claude login` (or `ANTHROPIC_API_KEY`).          |
+| `claude-api` | `openai_compatible` | Calls the Anthropic API's OpenAI-compatible endpoint: `SOP_OPENAI_COMPATIBLE_BASE_URL=https://api.anthropic.com`, key in `SOP_OPENAI_COMPATIBLE_API_KEY`. |
+
+- With `command`, `--model` decides the model that runs; `SOP_MODEL_LARGE_NAME` is
+  only the label recorded in the model-selection evidence.
+- `SOP_AGENT_COMMAND` is global: every class or plan step that uses the `command`
+  provider runs the same command.
+- With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
+  sends the key as a Bearer token. The key is never written to run artifacts.
 
 ## Automatic model routing
 
