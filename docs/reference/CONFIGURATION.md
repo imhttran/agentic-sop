@@ -411,6 +411,11 @@ implementation task to it.
   project's `validation.build`/`test`/`lint`) as `Bash(<command>:*)`, skipping any
   containing `,` or `)`. `SOP_CLAUDE_ALLOWED_TOOLS` adds further comma-separated
   Claude Code tool rules; it only adds, and whatever it lists is pre-approved.
+- By default Claude loads the operator's own setup (`~/.claude` settings, hooks,
+  plugins, CLAUDE.md, skills, and MCP servers). `SOP_CLAUDE_ISOLATE=1` passes
+  `--setting-sources project,local --strict-mcp-config`, so only the managed
+  project's `.claude` settings and CLAUDE.md load, with no MCP servers.
+  `claude login` still works.
 - `SOP_AGENT_COMMAND` is global: every class or plan step that uses the
   `command` provider runs the same command. SOP sets `SOP_SELECTED_CLASS`
   (`small`, `medium`, `large`) in the command's environment when model routing

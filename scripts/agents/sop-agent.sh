@@ -23,6 +23,11 @@
 #                           added to the allow-list, e.g. Bash(make:*). Only adds;
 #                           anything listed here (even git push) is the operator's
 #                           choice.
+#   SOP_CLAUDE_ISOLATE      set to 1 to skip the operator's own Claude Code setup:
+#                           ~/.claude settings, hooks, plugins, CLAUDE.md, rules,
+#                           and skills, plus every MCP server. The project's
+#                           .claude settings and CLAUDE.md still load, and
+#                           `claude login` still works.
 #
 # The request's validation_commands (the project's own validation.build/test/lint
 # from .agent-sdlc/config.yaml) are allowed automatically as Bash(<command>:*), so
@@ -106,16 +111,17 @@ case "${SOP_SELECTED_CLASS:-}" in
   medium) claude_model=${SOP_CLAUDE_MODEL_MEDIUM:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_MEDIUM:-$claude_effort} ;;
   large) claude_model=${SOP_CLAUDE_MODEL_LARGE:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_LARGE:-$claude_effort} ;;
 esac
-model_args=''
-[ -n "$claude_model" ] && model_args="--model $claude_model"
-[ -n "$claude_effort" ] && model_args="$model_args --effort $claude_effort"
+claude_args=''
+[ -n "$claude_model" ] && claude_args="--model $claude_model"
+[ -n "$claude_effort" ] && claude_args="$claude_args --effort $claude_effort"
+[ "${SOP_CLAUDE_ISOLATE:-}" = 1 ] && claude_args="$claude_args --setting-sources project,local --strict-mcp-config"
 
 # shellcheck disable=SC2086
 errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")
 out=$(printf '%s' "$prompt" | claude -p \
   --output-format json \
   --allowedTools "$allowed" \
-  $model_args 2>"$errlog") || true
+  $claude_args 2>"$errlog") || true
 errtail=$(tail -n 3 "$errlog" 2>/dev/null | tr '\n' ' ' || true)
 rm -f "$errlog"
 
