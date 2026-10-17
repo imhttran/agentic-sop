@@ -5,6 +5,8 @@ import (
 	"net"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/controller/config"
 )
 
 // StartupURLs is the set of access URLs advertised when the controller starts. Every
@@ -44,13 +46,13 @@ func ResolveStartupURLs(bound net.Addr, scheme string, networkEnabled bool, lanI
 
 	var u StartupURLs
 	switch {
-	case host == "" || isLoopbackHost(host) || isUnspecifiedHost(host):
+	case host == "" || config.IsLoopbackHost(host) || isUnspecifiedHost(host):
 		u.Local = formatURL(scheme, "localhost", port, "")
 	default:
 		u.Local = formatURL(scheme, host, port, "")
 	}
 
-	if networkEnabled && !isLoopbackHost(host) {
+	if networkEnabled && !config.IsLoopbackHost(host) {
 		if isUnspecifiedHost(host) {
 			for _, ip := range usableLANIPs(lanIPs) {
 				u.Network = append(u.Network, formatURL(scheme, ip.String(), port, ""))
@@ -222,14 +224,6 @@ func formatURL(scheme, host, port, path string) string {
 		url += path
 	}
 	return url
-}
-
-func isLoopbackHost(host string) bool {
-	if host == "localhost" {
-		return true
-	}
-	ip := net.ParseIP(host)
-	return ip != nil && ip.IsLoopback()
 }
 
 func isUnspecifiedHost(host string) bool {
