@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"errors"
+	"os/exec"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -10,10 +11,21 @@ import (
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
 
+// trueBin returns the absolute path of the platform's `true` executable
+// (/bin/true on Linux, /usr/bin/true on macOS), used as a stand-in producer.
+func trueBin(t *testing.T) string {
+	t.Helper()
+	p, err := exec.LookPath("true")
+	if err != nil {
+		t.Skipf("no true executable on PATH: %v", err)
+	}
+	return p
+}
+
 func ragEnabledEnv(t *testing.T) {
 	t.Helper()
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueBin(t))
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
 }
@@ -55,7 +67,7 @@ func TestRetrieveAttemptEvidenceDisabledDoesNotRetrieve(t *testing.T) {
 
 func TestRetrieveAttemptEvidenceUnauthorizedCorpus(t *testing.T) {
 	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
+	t.Setenv(config.EnvRAGExecutable, trueBin(t))
 	t.Setenv(config.EnvRAGCorpus, "kb")
 	t.Setenv(config.EnvRAGAllowedCorpora, "other") // corpus not in the allowlist
 	called := false

@@ -81,11 +81,6 @@ type deps struct {
 	// taskInputs is optional, caller-supplied observation text keyed by task ID.
 	// It supplies context only; it cannot grant tools, mutation or completion.
 	taskInputs map[string]string
-	// evidenceVerifier verifies a task's declared required retrieval evidence
-	// (RAG-SOP-003) before the task runs. It is nil by default: no verifier is
-	// wired (the live RAG client is Package 3), so a task that declares required
-	// evidence fails closed. It can never grant tools, mutation, or completion.
-	evidenceVerifier EvidenceVerifier
 	// ragKnowledge is the injectable optional-RAG provider seam (RAG-SOP-003). It is
 	// nil in production, where the configured ragclient is used; tests inject a
 	// deterministic fake. It can never grant tools, mutation, or completion.

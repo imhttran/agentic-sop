@@ -78,6 +78,24 @@ func TestKnowledgeDedupAndMissingHash(t *testing.T) {
 	}
 }
 
+// TestKnowledgeOrderedByRank: the budgets keep the best-ranked evidence, not the
+// alphabetically first source; unranked evidence sorts last.
+func TestKnowledgeOrderedByRank(t *testing.T) {
+	a := ragEvidence("kb", "a.md", "S", "h1", "aaaa")
+	a.Rank = 2
+	b := ragEvidence("kb", "b.md", "S", "h2", "bbbb")
+	b.Rank = 1
+	c := ragEvidence("kb", "0.md", "S", "h3", "cccc")
+	c.Rank = 0
+	got := KnowledgeItems([]ragclient.Evidence{a, b, c}, 0, 0)
+	if len(got) != 3 || got[0].Identity != "kb/b.md#S" || got[1].Identity != "kb/a.md#S" || got[2].Identity != "kb/0.md#S" {
+		t.Fatalf("not ordered by rank: %+v", got)
+	}
+	if kept := KnowledgeItems([]ragclient.Evidence{a, b}, 0, 4); len(kept) != 1 || kept[0].Identity != "kb/b.md#S" {
+		t.Fatalf("byte budget dropped the top-ranked item: %+v", kept)
+	}
+}
+
 func TestKnowledgeBudgetAndOrdering(t *testing.T) {
 	ev := []ragclient.Evidence{
 		ragEvidence("kb", "b.md", "S", "h2", "bbbbbb"),

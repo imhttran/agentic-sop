@@ -34,14 +34,6 @@ const requiredEvidencePlanJSON = `{
   ]
 }`
 
-func ragReqEnv(t *testing.T) {
-	t.Helper()
-	t.Setenv(config.EnvRAGEnabled, "true")
-	t.Setenv(config.EnvRAGExecutable, "/bin/true")
-	t.Setenv(config.EnvRAGCorpus, "kb")
-	t.Setenv(config.EnvRAGAllowedCorpora, "kb")
-}
-
 func requiredEvidenceGraph(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -85,7 +77,7 @@ func persistedBlockedDetail(t *testing.T, dir, id string) (domain.TaskStatus, do
 }
 
 func TestRequiredEvidenceSatisfiedRuns(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	calls := 0
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		calls++
@@ -106,7 +98,7 @@ func TestRequiredEvidenceSatisfiedRuns(t *testing.T) {
 }
 
 func TestRequiredEvidenceMissingBlocks(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	calls := 0
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		calls++
@@ -150,7 +142,7 @@ func TestRequiredEvidenceDisabledBlocksWithoutRetrieval(t *testing.T) {
 }
 
 func TestRequiredEvidenceRetrievalErrorBlocks(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	calls := 0
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		calls++
@@ -168,7 +160,7 @@ func TestRequiredEvidenceRetrievalErrorBlocks(t *testing.T) {
 }
 
 func TestEnforceRequiredEvidenceOnceReturnsAttempt(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	saver := &capturingSaver{}
 	task := &domain.Task{ID: "T1", Status: domain.PLANNED, RequiredEvidence: []string{"corpus:kb"}}
 	d := deps{rawEvidence: func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
@@ -185,7 +177,7 @@ func TestEnforceRequiredEvidenceOnceReturnsAttempt(t *testing.T) {
 }
 
 func TestEnforceRequiredEvidenceOnceMissingReturnsZeroAttempt(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	saver := &capturingSaver{}
 	task := &domain.Task{ID: "T1", Status: domain.PLANNED, RequiredEvidence: []string{"corpus:kb"}}
 	d := deps{rawEvidence: func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) { return nil, nil }}
@@ -200,7 +192,7 @@ func TestEnforceRequiredEvidenceOnceMissingReturnsZeroAttempt(t *testing.T) {
 }
 
 func TestRequiredEvidenceReachesAgentPrompt(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	calls := 0
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		calls++
@@ -244,7 +236,7 @@ func requiredEvidenceGraphWith(t *testing.T, planJSON string) string {
 }
 
 func TestRequiredEvidenceAndSemanticsBlocks(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	// Corpus is satisfied but the source prefix is not → AND means BLOCK.
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		return []ragclient.Evidence{{Corpus: "kb", Source: "other/x.md", Text: "e"}}, nil
@@ -266,7 +258,7 @@ func TestRequiredEvidenceAndSemanticsBlocks(t *testing.T) {
 }
 
 func TestRequiredEvidenceCrossCorpusNeverInPrompt(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	// Retrieval returns evidence from ANOTHER corpus; it must never reach the prompt.
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		return []ragclient.Evidence{{Corpus: "other", Source: "docs/a.md", Section: "S", Text: "secret"}}, nil
@@ -298,7 +290,7 @@ func readRAGTelemetry(t *testing.T, dir, id string) map[string]any {
 }
 
 func TestRAGTelemetryRequiredSuccess(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
 		return []ragclient.Evidence{{Corpus: "kb", Source: "docs/a.md", Section: "S", Text: "SECRET-EVIDENCE-BODY"}}, nil
 	}
@@ -343,7 +335,7 @@ func TestRAGTelemetryDisabledSkipped(t *testing.T) {
 }
 
 func TestRAGPreRunFailureReasonCode(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) { return nil, nil }
 	dir := requiredEvidenceGraph(t)
 	a := newReqAgent()
@@ -354,7 +346,7 @@ func TestRAGPreRunFailureReasonCode(t *testing.T) {
 }
 
 func TestRAGTelemetryOptionalSuccess(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	rag := func(context.Context, *taskfile.Spec) ([]sopctx.Item, error) {
 		return []sopctx.Item{{Source: sopctx.SourceKnowledgeRAG, Identity: "kb/docs/a.md#S", Priority: sopctx.PriorityKnowledgeRAG, Text: "opt evidence"}}, nil
 	}
@@ -370,7 +362,7 @@ func TestRAGTelemetryOptionalSuccess(t *testing.T) {
 }
 
 func TestRAGTelemetryOptionalFallback(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	rag := func(context.Context, *taskfile.Spec) ([]sopctx.Item, error) {
 		return nil, errors.New("producer unavailable")
 	}
@@ -390,7 +382,7 @@ func TestRAGTelemetryOptionalFallback(t *testing.T) {
 // leakage. Fixtures are built on the main goroutine (so t.Fatalf is never called
 // from a non-test goroutine); only run(...) executes concurrently.
 func TestRAGConcurrentTasksIsolated(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 
 	mkFixture := func(tag string) (string, *ragCapturingAgent, ragKnowledgeFunc) {
 		dir := t.TempDir()
@@ -450,7 +442,7 @@ func countInput(a *ragCapturingAgent, marker string) bool {
 }
 
 func TestRAGConcurrentRequiredAndOptional(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	rDir := requiredEvidenceGraph(t)
 	rAgent := newReqAgent()
 	raw := func(context.Context, *taskfile.Spec, string) ([]ragclient.Evidence, error) {
@@ -489,7 +481,7 @@ func TestRAGConcurrentRequiredAndOptional(t *testing.T) {
 }
 
 func TestRAGConcurrentRequiredFailureIsolated(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	// Task 1: required evidence missing -> BLOCKED.
 	fDir := requiredEvidenceGraph(t)
 	fAgent := newReqAgent()
@@ -553,7 +545,7 @@ func TestRAGConcurrentDisabledNoRetrieval(t *testing.T) {
 }
 
 func TestRAGTelemetryAttemptUsesCurrentTaskAttempt(t *testing.T) {
-	ragReqEnv(t)
+	ragEnabledEnv(t)
 	dir := t.TempDir()
 	if _, err := runpkg.New(dir, "S001"); err != nil {
 		t.Fatalf("runpkg.New: %v", err)

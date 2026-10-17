@@ -278,7 +278,7 @@ func (c *Client) decode(raw []byte, corpus string) (Response, error) {
 		return Response{}, errf(CodeUnsupportedSchema, "response schema_version %q is not supported", res.SchemaVersion)
 	}
 	if code := strings.TrimSpace(res.Diagnostics.ErrorCode); code != "" && Code(code) != CodeOK && Code(code) != CodeEmpty {
-		return res, errf(Code(code), "producer reported %s", code)
+		return Response{}, errf(Code(code), "producer reported %s", code)
 	}
 	for i := range res.Evidence {
 		ev := &res.Evidence[i]

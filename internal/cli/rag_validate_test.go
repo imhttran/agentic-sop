@@ -27,6 +27,8 @@ func TestValidateRequiredEvidence(t *testing.T) {
 		{"and semantics one unmet", []string{"corpus:kb", "source:missing/"}, "kb", kb, 1},
 		{"empty evidence", []string{"corpus:kb", "source:docs/"}, "kb", []ragclient.Evidence{}, 2},
 		{"malformed requirement", []string{"bogus:x"}, "kb", kb, 1},
+		{"spaces around id", []string{"corpus: kb", "source: docs/"}, "kb", kb, 0},
+		{"empty source prefix never matches", []string{"source:"}, "kb", kb, 1},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
