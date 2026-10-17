@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -23,13 +24,24 @@ type satisfactionProof struct {
 	// ran records that a run_command call was attempted (so a not-executed required
 	// validation is distinguishable from one that executed but failed).
 	ran map[string]bool
+	// commandText maps a command identity to the operator-facing command text, so an
+	// evidence correction can name the validation commands the harness actually observed
+	// execute successfully instead of relying on the model recollection.
+	commandText map[string]string
+	// correctionOpen is true while the single bounded correction phase is open: it reopens
+	// read-only repository tools so the model can act on corrective feedback even after the
+	// discovery window has closed. correctionToolCalls and correctionTurns are the phase own
+	// budgets; they are never the discovery, stale, attempt, or retry counters.
+	correctionOpen      bool
+	correctionToolCalls int
+	correctionTurns     int
 	// evidenceCorrectionUsed records that the one permitted evidence-only correction has
 	// already been requested for this invocation, so a claim is corrected at most once.
 	evidenceCorrectionUsed bool
 }
 
 func (h *Harness) satisfactionProof(ctx context.Context, req agent.Request) *satisfactionProof {
-	p := &satisfactionProof{reads: map[string]bool{}, commands: map[string]bool{}, ran: map[string]bool{}}
+	p := &satisfactionProof{reads: map[string]bool{}, commands: map[string]bool{}, ran: map[string]bool{}, commandText: map[string]string{}}
 	if len(req.AcceptanceCriteria) != 0 && len(req.ValidationCommands) != 0 {
 		p.baseline, _ = h.tools.RepositoryFingerprint(ctx)
 	}
@@ -52,27 +64,93 @@ func normalizeCriterion(s string) string {
 	return strings.Join(strings.Fields(strings.ToLower(s)), " ")
 }
 
-// missingCriterionEvidence returns the declared criteria that the model's submitted
-// evidence does not cover (matched by normalized text), together with whether every
-// OTHER verifier condition already holds (completed status, no mutation, a baseline,
-// a parsed evidence block whose entries all map to files the agent actually read, all
-// required validation commands executed, and an unchanged repository fingerprint). It
-// is used ONLY to decide whether the single permitted evidence-only correction is
-// appropriate; verifySatisfied remains the sole authority on acceptance.
-func (h *Harness) missingCriterionEvidence(ctx context.Context, req agent.Request, st *executionState, p *satisfactionProof, final map[string]any) ([]string, bool) {
+// Correction-phase limits. The phase is a strictly bounded reopening of the read-only
+// repository tools for the single corrective opportunity, so it can never become an
+// unbounded loop: it terminates on either budget, on the corrected claim, or on the
+// existing discovery/stale termination, whichever comes first.
+const (
+	// correctionToolCalls bounds the read-only interactions the correction phase may execute.
+	// One model turn yields at most one tool call (turnToolCall), so the turn budget below
+	// already caps the phase at three tool calls; this bound states the effective limit
+	// rather than an unreachable ceiling.
+	correctionToolCalls = 3
+	// correctionIterations bounds the model turns the correction phase may consume.
+	correctionIterations = 3
+)
+
+// evidenceProblem is one invalid criterion citation, reported with the same reason the
+// verifier would use.
+type evidenceProblem struct {
+	Criterion string
+	Path      string
+	Reason    string // "missing", "directory", or "unread"
+}
+
+// correctionNeed is the deterministic, structured set of reasons a submitted claim cannot be
+// accepted. It exists only to build corrective feedback; it never decides acceptance.
+type correctionNeed struct {
+	MissingCriteria []string
+	InvalidPaths    []evidenceProblem
+	NotExecuted     []string
+	Failed          []string
+}
+
+// actionable reports whether the claim has anything the model can actually correct.
+func (n correctionNeed) actionable() bool {
+	return len(n.MissingCriteria) > 0 || len(n.InvalidPaths) > 0 || len(n.NotExecuted) > 0 || len(n.Failed) > 0
+}
+
+// correctableRejection reports whether a rejection is one the bounded correction may
+// address: invalid or missing criterion evidence, or a required validation command that did
+// not execute or failed. Every other rejection falls through unchanged.
+func correctableRejection(code RejectionCode) bool {
+	switch code {
+	case RejectMissingCriterionEvidence, RejectUnreadEvidencePath, RejectDirectoryEvidence,
+		RejectValidationNotExecuted, RejectValidationFailed:
+		return true
+	}
+	return false
+}
+
+// classifyEvidencePath reports why a cited criterion path is not valid evidence: "missing"
+// when it does not resolve, "directory" when it names a directory, and "unread" when the
+// harness never observed the model read it. An empty reason means the path is read-backed
+// evidence. It mirrors verifySatisfiedDetailed exactly, so feedback and verdict cannot
+// disagree.
+func (h *Harness) classifyEvidencePath(path string, p *satisfactionProof) (string, string) {
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(h.tools.Root(), path)
+	}
+	canonical, err := filepath.EvalSymlinks(filepath.Clean(path))
+	if err != nil {
+		return "", "missing"
+	}
+	if info, statErr := os.Stat(canonical); statErr == nil && info.IsDir() {
+		return canonical, "directory"
+	}
+	if !p.reads[canonical] {
+		return canonical, "unread"
+	}
+	return canonical, ""
+}
+
+// correctionNeed returns the deterministic reasons a submitted claim cannot be accepted,
+// together with whether the single correction is appropriate. It mirrors the verifier
+// preconditions (no mutation, a baseline, a completed status, an unchanged fingerprint) but
+// unlike the acceptance predicate it REPORTS every unmet condition -- invalid criterion
+// evidence, required validation commands that never executed or failed -- so one corrective
+// feedback can name everything the model can fix. It never decides acceptance;
+// verifySatisfied remains the sole authority.
+func (h *Harness) correctionNeed(ctx context.Context, req agent.Request, st *executionState, p *satisfactionProof, final map[string]any) (correctionNeed, bool) {
+	var need correctionNeed
 	if st.mutationObserved || p.baseline == "" || final["status"] != string(agent.OutcomeCompleted) {
-		return nil, false
+		return need, false
 	}
 	data, _ := json.Marshal(final["evidence"])
 	var evidence agent.CompletionEvidence
 	if json.Unmarshal(data, &evidence) != nil {
-		return nil, false
+		return need, false
 	}
-	// A criterion counts as covered only when it has an evidence entry whose EVERY
-	// cited path was actually read — exactly the condition verifySatisfiedDetailed
-	// enforces. An entry that cites any unread (or fabricated) path leaves its criterion
-	// uncovered, so the one-shot correction is offered; the claim is still rejected
-	// while it keeps an unread path, because the verifier never weakens.
 	covered := map[string]bool{}
 	for _, item := range evidence.Acceptance {
 		key := normalizeCriterion(item.Criterion)
@@ -81,55 +159,144 @@ func (h *Harness) missingCriterionEvidence(ctx context.Context, req agent.Reques
 		}
 		allRead := true
 		for _, path := range item.Paths {
-			if !filepath.IsAbs(path) {
-				path = filepath.Join(h.tools.Root(), path)
-			}
-			canonical, err := filepath.EvalSymlinks(filepath.Clean(path))
-			if err != nil || !p.reads[canonical] {
+			if _, reason := h.classifyEvidencePath(path, p); reason != "" {
+				need.InvalidPaths = append(need.InvalidPaths, evidenceProblem{Criterion: item.Criterion, Path: path, Reason: reason})
 				allRead = false
-				break
 			}
 		}
 		if allRead {
 			covered[key] = true
 		}
 	}
-	var missing []string
 	for _, criterion := range req.AcceptanceCriteria {
 		if key := normalizeCriterion(criterion); key != "" && !covered[key] {
-			missing = append(missing, criterion)
+			need.MissingCriteria = append(need.MissingCriteria, criterion)
 		}
 	}
-	if len(missing) == 0 {
-		return nil, false
+	waived := map[string]bool{}
+	for _, w := range req.ValidationWaivers {
+		if id := commandIdentity(w); id != "" {
+			waived[id] = true
+		}
 	}
 	for _, command := range req.ValidationCommands {
 		identity := commandIdentity(command)
-		if identity == "" || !p.commands[identity] {
-			return nil, false
+		if identity == "" || waived[identity] {
+			continue
 		}
+		switch {
+		case p.commands[identity]:
+			// succeeded: nothing to correct
+		case p.ran[identity]:
+			need.Failed = append(need.Failed, command)
+		default:
+			need.NotExecuted = append(need.NotExecuted, command)
+		}
+	}
+	if !need.actionable() {
+		return need, false
 	}
 	after, err := h.tools.RepositoryFingerprint(ctx)
 	if err != nil || after != p.baseline {
-		return nil, false
+		return need, false
 	}
-	return missing, true
+	return need, true
 }
 
-// alreadySatisfiedEvidenceCorrection is the single, bounded, evidence-only request the
-// harness sends when an ALREADY_SATISFIED claim is otherwise sound but does not map
-// every declared criterion. It forbids any repository change and demands that each
-// criterion name a file the agent actually read; it never substitutes for evidence.
-func alreadySatisfiedEvidenceCorrection(missing []string) string {
-	var b strings.Builder
-	b.WriteString("Your ALREADY_SATISFIED claim was rejected: these declared acceptance criteria have no inspected-file evidence:\n")
-	for _, criterion := range missing {
-		fmt.Fprintf(&b, "- %s\n", criterion)
+// openCorrectionPhase starts the bounded correction phase. It resets ONLY the phase own
+// budgets, never the discovery, stale, attempt, or retry counters.
+func (p *satisfactionProof) openCorrectionPhase() {
+	p.correctionOpen = true
+	p.correctionToolCalls = 0
+	p.correctionTurns = 0
+}
+
+// closeCorrectionPhase ends the phase. A closed phase is never reopened.
+func (p *satisfactionProof) closeCorrectionPhase() { p.correctionOpen = false }
+
+// correctionTurn grants the phase one model turn, closing it when the turn budget is spent
+// so the phase terminates even if the model never returns a final claim.
+func (p *satisfactionProof) correctionTurn() bool {
+	if p == nil || !p.correctionOpen {
+		return false
 	}
+	if p.correctionTurns >= correctionIterations {
+		p.correctionOpen = false
+		return false
+	}
+	p.correctionTurns++
+	return true
+}
+
+// correctionPermits reports whether the bounded correction phase authorizes this read-only
+// interaction, consuming the phase tool-call budget and closing the phase when it is spent.
+// Only the read-only repository tools and non-mutating commands are ever permitted, so the
+// phase can neither write nor bypass command policy (the tool harness still classifies and
+// may refuse every command). It never credits discovery and never resets a counter.
+func (p *satisfactionProof) correctionPermits(name string, args map[string]any) bool {
+	if p == nil || !p.correctionOpen {
+		return false
+	}
+	switch name {
+	case toolharness.ToolReadFile, toolharness.ToolListFiles, toolharness.ToolSearchFiles:
+	case toolharness.ToolRunCommand:
+		command, _ := args["command"].(string)
+		if commandMutates(command) {
+			return false
+		}
+	default:
+		return false
+	}
+	if p.correctionToolCalls >= correctionToolCalls {
+		p.correctionOpen = false
+		return false
+	}
+	p.correctionToolCalls++
+	return true
+}
+
+// alreadySatisfiedEvidenceCorrection is the single, bounded, corrective request the harness
+// sends when an ALREADY_SATISFIED claim is otherwise sound but cannot be accepted. It names
+// the harness-owned eligible evidence (files actually read, commands actually executed) and
+// everything still wrong (invalid citations, required commands not executed or failed). It
+// never substitutes for evidence and never weakens the verifier.
+func alreadySatisfiedEvidenceCorrection(need correctionNeed, observedReads, succeeded []string) string {
+	var b strings.Builder
+	b.WriteString("Your ALREADY_SATISFIED claim was rejected. Fix exactly what is listed, then return the same object once more.\n")
+	if len(need.MissingCriteria) > 0 {
+		b.WriteString("Declared acceptance criteria with no valid evidence:\n")
+		for _, criterion := range need.MissingCriteria {
+			fmt.Fprintf(&b, "- %s\n", criterion)
+		}
+	}
+	if len(need.InvalidPaths) > 0 {
+		b.WriteString("Invalid criterion evidence (a criterion is covered only by files you actually read):\n")
+		for _, problem := range need.InvalidPaths {
+			fmt.Fprintf(&b, "- criterion=%q path=%s (%s)\n", problem.Criterion, problem.Path, problem.Reason)
+		}
+	}
+	writeEvidenceList(&b, "Files the harness observed you read in this invocation (eligible criterion evidence):", observedReads)
+	writeEvidenceList(&b, "Validation commands the harness observed execute successfully:", succeeded)
+	writeEvidenceList(&b, "Required validation commands NOT executed (run them):", need.NotExecuted)
+	writeEvidenceList(&b, "Required validation commands that FAILED (fix and re-run them):", need.Failed)
+	b.WriteString("A criterion paths list must name FILES the harness observed you read with read_file. A directory, a package path, or a validation command you ran is NOT file evidence for a criterion and is rejected.\n")
 	b.WriteString("Do NOT change any file. Read the relevant repository files if you have not already, then return the same object with EVERY criterion mapped to files you actually read:\n")
 	b.WriteString(`{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact criterion>","paths":["<file you read>"]}]}}`)
 	b.WriteString("\nA path you did not read, a fabricated claim, or any repository change is rejected. This is the only correction allowed for this claim.")
 	return b.String()
+}
+
+// writeEvidenceList renders one labeled list, saying so explicitly when it is empty rather
+// than omitting the section.
+func writeEvidenceList(b *strings.Builder, heading string, items []string) {
+	b.WriteString(heading + "\n")
+	if len(items) == 0 {
+		b.WriteString("- (none)\n")
+		return
+	}
+	for _, item := range items {
+		fmt.Fprintf(b, "- %s\n", item)
+	}
 }
 
 func (p *satisfactionProof) observe(root, name string, args map[string]any, result string, err error, commandSucceeded bool) {
@@ -144,6 +311,9 @@ func (p *satisfactionProof) observe(root, name string, args map[string]any, resu
 		identity := commandIdentity(command)
 		p.ran[identity] = true
 		p.commands[identity] = err == nil && commandSucceeded
+		if text := strings.TrimSpace(command); text != "" && identity != "" && p.commandText != nil {
+			p.commandText[identity] = text
+		}
 	}
 }
 
@@ -151,6 +321,49 @@ func (p *satisfactionProof) observe(root, name string, args map[string]any, resu
 // inspected files and every caller-owned validation command actually passing.
 // Unknown or changed repository state fails closed. The model selects evidence
 // links; it cannot manufacture tool results or substitute easier validations.
+// observedReads returns the repository-relative paths the harness observed the model read
+// in this invocation, sorted. It is the harness-owned list of eligible criterion evidence,
+// so a correction can name files the model actually read instead of trusting recollection.
+// A path outside the repository root is reported verbatim.
+func (p *satisfactionProof) observedReads(root string) []string {
+	if p == nil || len(p.reads) == 0 {
+		return nil
+	}
+	prefix := strings.TrimSuffix(filepath.Clean(root), string(filepath.Separator)) + string(filepath.Separator)
+	out := make([]string, 0, len(p.reads))
+	for path := range p.reads {
+		if strings.HasPrefix(path, prefix) {
+			out = append(out, filepath.ToSlash(strings.TrimPrefix(path, prefix)))
+			continue
+		}
+		out = append(out, path)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// succeededCommands returns the validation commands the harness observed execute
+// successfully in this invocation, sorted. They are verified separately from criterion
+// evidence and can never be cited in a criterion paths list.
+func (p *satisfactionProof) succeededCommands() []string {
+	if p == nil || len(p.commands) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(p.commands))
+	for identity, ok := range p.commands {
+		if !ok {
+			continue
+		}
+		text := strings.TrimSpace(p.commandText[identity])
+		if text == "" {
+			text = identity
+		}
+		out = append(out, text)
+	}
+	sort.Strings(out)
+	return out
+}
+
 // RejectionCode is a precise, machine-readable reason an ALREADY_SATISFIED claim was
 // rejected. It is diagnostic only: it never changes the acceptance conditions.
 type RejectionCode string
@@ -162,10 +375,14 @@ const (
 	RejectMalformedEvidence        RejectionCode = "MALFORMED_EVIDENCE"
 	RejectMissingCriterionEvidence RejectionCode = "MISSING_CRITERION_EVIDENCE"
 	RejectUnreadEvidencePath       RejectionCode = "UNREAD_EVIDENCE_PATH"
-	RejectDeliverableMissing       RejectionCode = "DELIVERABLE_MISSING"
-	RejectValidationNotExecuted    RejectionCode = "VALIDATION_NOT_EXECUTED"
-	RejectValidationFailed         RejectionCode = "VALIDATION_FAILED"
-	RejectFingerprintMismatch      RejectionCode = "FINGERPRINT_MISMATCH"
+	// RejectDirectoryEvidence: a cited path exists but names a directory (or other
+	// non-regular file). It is never criterion evidence, because the contract requires
+	// files the harness observed being read. The verification outcome is unchanged.
+	RejectDirectoryEvidence     RejectionCode = "DIRECTORY_EVIDENCE"
+	RejectDeliverableMissing    RejectionCode = "DELIVERABLE_MISSING"
+	RejectValidationNotExecuted RejectionCode = "VALIDATION_NOT_EXECUTED"
+	RejectValidationFailed      RejectionCode = "VALIDATION_FAILED"
+	RejectFingerprintMismatch   RejectionCode = "FINGERPRINT_MISMATCH"
 )
 
 // SatisfactionRejection is the structured reason a claim was rejected. It carries only
@@ -243,7 +460,13 @@ func (h *Harness) verifySatisfiedDetailed(ctx context.Context, req agent.Request
 				path = filepath.Join(h.tools.Root(), path)
 			}
 			canonical, err := filepath.EvalSymlinks(filepath.Clean(path))
-			if err != nil || !p.reads[canonical] {
+			if err != nil {
+				return false, SatisfactionRejection{Code: RejectUnreadEvidencePath, Criterion: item.Criterion, Path: path, Detail: "evidence path was not read (or does not exist)"}
+			}
+			if info, statErr := os.Stat(canonical); statErr == nil && info.IsDir() {
+				return false, SatisfactionRejection{Code: RejectDirectoryEvidence, Criterion: item.Criterion, Path: path, Detail: "evidence path is a directory; cite a file you read, never a directory, a package path, or a command"}
+			}
+			if !p.reads[canonical] {
 				return false, SatisfactionRejection{Code: RejectUnreadEvidencePath, Criterion: item.Criterion, Path: path, Detail: "evidence path was not read (or does not exist)"}
 			}
 		}
