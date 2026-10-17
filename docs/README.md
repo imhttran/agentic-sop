@@ -37,17 +37,10 @@ Where new documentation belongs:
 
 ## Shipped RAG Skills vs. the RAG Retrieval Adapter
 
-Two different things share the "RAG" name; keep them distinct:
-
-| | Shipped RAG **skills** | RAG **retrieval adapter** (SOP core) |
-| --- | --- | --- |
-| Status | **Shipped** — installed by `./install.sh --skills …` | **Proposed/implemented, disabled by default** — explicit operator opt-in only |
-| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest`, `skills/sop-rag-integrate` | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/retrieval` (BM25 baseline) |
-| Mutates? | No; produces plans/test designs, never a verdict | Can alter retrieved context when explicitly enabled |
-| Docs | [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md), [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md), [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) |
-
-Nothing enables the retrieval adapter automatically; expansion of usage follows the
-recorded operator decision in [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
+Read [RAG-SKILLS.md](guides/RAG-SKILLS.md) for the shipped read-only skills.
+The [consolidation guide](guides/REPOSITORY-CONSOLIDATION.md#shipped-rag-skills-vs-the-rag-retrieval-adapter)
+compares those skills with the optional runtime retrieval adapter; its rollout
+decision is recorded in [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
 
 ## Getting Started
 
@@ -195,9 +188,9 @@ to `history/` when SOP or the repository still references its path: the archive 
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases), including the decision-model evaluation follow-ups (DME-FU-001–005) and their promotion criteria [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md).
 - [plans/PLAN-RAG-SOP-Integration.md](plans/PLAN-RAG-SOP-Integration.md) — the RAG integration plan (RAG-SOP-001–004): architecture, adapter implementation, required PostgreSQL integration validation, comparative evaluation, and the operator rollout decision. The evaluation criteria are fixed in [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) and the recorded outcome is [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
-- [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Active**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
+- [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Delivery record**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
 - [plans/PLAN-Pre-Performance-Closure.md](history/plans/PLAN-Pre-Performance-Closure.md) — **COMPLETE**: the executed CLOSE-001–CLOSE-011 DAG reconciled and verified both SOP and sop-controller, dogfooded and resumed, inventoried existing metrics, measured four workloads, and recorded the readiness verdict. All eleven tasks are `LOCAL_DONE` and the plan's final gate passed; it introduces no new performance architecture and does not start the performance phase.
-- [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; retained under `plans/` because SOP's plan archives reference its path; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
+- [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) — Phase 3.5: JEV-guided per-task model routing. **Implemented**; the historical document preserves its task definitions; the router is OFF by default, opt-in via `SOP_MODEL_ROUTING_ENABLED=true`.
 - [plans/PLAN-Phase-4-Provider-Runtime.md](plans/PLAN-Phase-4-Provider-Runtime.md) — Phase 4: provider/runtime abstraction, capability discovery, and opt-in model validation. **Implemented** (off by default); see [specs/PROVIDERS.md](specs/PROVIDERS.md).
 - [plans/PLAN-Phase-5-Execution-Recovery.md](plans/PLAN-Phase-5-Execution-Recovery.md) — Phase 5: bounded model escalation and execution recovery. **Implemented** (off by default; opt-in via `SOP_MODEL_ESCALATION_ENABLED=true`); see [specs/RECOVERY.md](specs/RECOVERY.md) §8.
 - [plans/PLAN-Phase-5.4-Unified-Work-Items.md](plans/PLAN-Phase-5.4-Unified-Work-Items.md) — Phase 5.4: unified work items, `sop prompt`, and the SOP skill. **Implemented**; see [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
@@ -205,7 +198,7 @@ to `history/` when SOP or the repository still references its path: the archive 
 - [plans/PLAN-Phase-5.6-Windows-Distribution.md](plans/PLAN-Phase-5.6-Windows-Distribution.md) — Phase 5.6 (P56-001–P56-012): native Windows installation and a script-organization cleanup. **Implemented except P56-011**, the clean-room test on a real Windows machine, which has not been run; see [guides/WINDOWS-INSTALLATION.md](guides/WINDOWS-INSTALLATION.md) and [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md).
 - [plans/PLAN-Phase-6-Interactive-Approval.md](plans/PLAN-Phase-6-Interactive-Approval.md) — Phase 6 (P6-001–P6-011): make SOP's human decision points operable and discoverable by a client — enumerate the gates, list a plan's changed executed tasks before mutating, name the gate a run parked at, and decide interactively. **Implemented**: the read surface (`P6-001`–`P6-004`, `sop approvals` and `sop reconcile --list-changed`) and the interactive surface (`P6-005`–`P6-011`) both shipped; the human workflow is in [guides/APPROVALS.md](guides/APPROVALS.md). See [specs/HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) and [reference/CLI.md](reference/CLI.md).
 - [plans/PLAN-Phase-3-OpenJEV.md](history/plans/PLAN-Phase-3-OpenJEV.md) — Phase 3 implementation plan (P3-001–P3-017): early JEV decision layer (task triage + pre-execution), disabled by default. **Implemented** (P3-001–P3-015) and committed; P3-016 records the dogfood.
-- [plans/PLAN-JEV-Implementation.md](history/plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017). **Implemented**; archived by SOP. Execute with `sop run docs/plans/PLAN-JEV-Implementation.md`.
+- [plans/PLAN-JEV-Implementation.md](history/plans/PLAN-JEV-Implementation.md) — the V1 JEV implementation plan (JEV001–JEV017). **Implemented**; archived by SOP. Read the historical plan for the original task definitions; current execution instructions are in [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md).
 - [plans/PLAN-Agent-Harness-V2.md](history/plans/PLAN-Agent-Harness-V2.md) — the Agent Harness V2 workstream. **Implemented**; archived by SOP (`.agent-sdlc/archive/ahv2/`).
 - [plans/PLAN-Pre-JEV-Stabilization.md](history/plans/PLAN-Pre-JEV-Stabilization.md) — the pre-JEV stabilization workstream. **Implemented**; archived by SOP.
 - [plans/PLAN-Automatic-Blocked-Task-Recovery.md](history/plans/PLAN-Automatic-Blocked-Task-Recovery.md) — automatic blocked-task recovery. **Implemented**; archived by SOP.
@@ -219,7 +212,9 @@ to `history/` when SOP or the repository still references its path: the archive 
 
 ### Other plans in `plans/`
 
-The remaining plan files, each with the status its own header declares (SOP's active-plan selection is authoritative — it currently reports none). They stay in `plans/` rather than moving to `history/` where that keeps an operational path working; see [Canonical Locations and Kept Paths](#canonical-locations-and-kept-paths).
+The remaining plan files, each with the status its own header declares. Run
+`sop status` for the active plan in your checkout; this index does not record
+operator-local lifecycle state. They stay in `plans/` rather than moving to `history/` where that keeps an operational path working; see [Canonical Locations and Kept Paths](#canonical-locations-and-kept-paths).
 
 | Plan                                                                                                                     | Declared status           | Read it for                                                          |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- | -------------------------------------------------------------------- |
@@ -247,12 +242,36 @@ The remaining plan files, each with the status its own header declares (SOP's ac
 | [plans/PLAN-SOP-RUN-ACCEPT-001.md](plans/PLAN-SOP-RUN-ACCEPT-001.md)                                                     | declared ACTIVE           | native deterministic acceptance checks for `sop run`                 |
 | [plans/PLAN-SOP-Validation-Evidence-Reuse.md](plans/PLAN-SOP-Validation-Evidence-Reuse.md)                               | IMPLEMENTED               | SOP validation evidence reuse                                        |
 
+### Planner spike and retained execution records
+
+These files combine plans and point-in-time evidence. Their existing paths and
+recorded outcomes are preserved; they do not identify the currently active plan.
+
+- [plans/RAG-SOP-003-Phase-4B-Execution.md](plans/RAG-SOP-003-Phase-4B-Execution.md) — read for the scoped runtime-context integration execution instructions and acceptance checks.
+- [plans/SOP-Planner-Connection-Spike.md](plans/SOP-Planner-Connection-Spike.md) — read for the planner connection spike plan and its acceptance criteria.
+- [plans/SPIKE-001-baseline-inventory.md](plans/SPIKE-001-baseline-inventory.md) — read for the recorded baseline inventory for the planner spike.
+- [plans/SPIKE-001-disposable-environment.md](plans/SPIKE-001-disposable-environment.md) — read for the disposable target repository and artifact capture setup.
+- [plans/SPIKE-002-connection-discovery.md](plans/SPIKE-002-connection-discovery.md) — read for the operator-designated planner client and connection discovery record.
+- [plans/SPIKE-002-planner-client-transport.md](plans/SPIKE-002-planner-client-transport.md) — read for the original transport discovery and its superseded client-naming gap.
+- [plans/SPIKE-003-closure-checklist.md](plans/SPIKE-003-closure-checklist.md) — read for the recorded human-gate closure checklist, without executing it.
+- [plans/SPIKE-003-repair-proposal.md](plans/SPIKE-003-repair-proposal.md) — read for the proposed question retrieval and answer-submission repair.
+- [plans/SPIKE-004-implementation-proposal.md](plans/SPIKE-004-implementation-proposal.md) — read for the proposed durable executor-question continuation design.
+- [plans/SPIKE-004-live-evidence.md](plans/SPIKE-004-live-evidence.md) — read for the recorded live ChatGPT continuation round trip.
+- [plans/SPIKE-005-verification-report.md](plans/SPIKE-005-verification-report.md) — read for the restart, timeout, stale-state, duplicate, and authority verification evidence.
+- [plans/SPIKE-006-feasibility-report.md](plans/SPIKE-006-feasibility-report.md) — read for the scoped operator-assisted planner feasibility verdict and limitations.
+- [plans/SPIKE-006-live-transcript.md](plans/SPIKE-006-live-transcript.md) — read for the sanitized live two-question demonstration transcript.
+- [plans/planner-live-test-findings.md](plans/planner-live-test-findings.md) — read for the preserved live planner runs and their source-grounded findings.
+- [plans/closure-2026-10-16.md](plans/closure-2026-10-16.md) — read for the dated repository consolidation closure reconciliation and its verification limits.
+
 ## Testing
 
 - [testing/SOP-END-TO-END.md](testing/SOP-END-TO-END.md) — end-to-end skill assessment, authoritative delegation contract, twelve deterministic scenarios, and host-assistant evaluation limits.
 - [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
 
 ## Reports
+
+The [report index](reports/README.md) lists every tracked Markdown report, fixture
+write-up, and run transcript by evidence group.
 
 Point-in-time evidence reports produced by a task. They record what was measured or
 decided at a moment in time and are non-normative: the current behavior they concern
@@ -271,6 +290,9 @@ is owned by the documents they link.
 - [reports/consolidation/closure-evidence.md](reports/consolidation/closure-evidence.md) — the repository-consolidation closure evidence report: the operator-authorized relative link check (`broken links: 0`) and `git diff --check` results, the `go build/test/vet` validation gates, provenance separating local, committed and merged evidence, the external-completion reasons for C5/C7, and the unverified boundaries (archived state, migration CI, legacy retirement, provider limits).
 
 ## Historical Documentation
+
+The [historical plan index](history/plans/README.md) lists each retained plan with
+its original scope and recorded disposition.
 
 Point-in-time or superseded artifacts. Non-normative: they do not define current behavior.
 
@@ -292,6 +314,9 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 - [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
 - [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
 - [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
+- [history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md](history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md) — read for the superseded interim controller-work verdicts.
+- [history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md](history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md) — read for the superseded interim named-plan dogfood record.
+- [history/pre-performance-closure/CLOSE-007-resume-idempotency.md](history/pre-performance-closure/CLOSE-007-resume-idempotency.md) — read for the superseded interim resume and idempotency record.
 - [history/developer-preview/](history/developer-preview/README.md) — the superseded Developer Preview deliverables (SCOPE, QUICKSTART-VERIFICATION, KNOWN-ISSUES, READINESS) with their operator-authored provenance labelled; the readiness verdict is **HOLD**. The superseded plan remains at [plans/PLAN-SOP-Developer-Preview.md](plans/PLAN-SOP-Developer-Preview.md).
 
 ## Canonical Locations and Kept Paths
@@ -300,8 +325,15 @@ Point-in-time or superseded artifacts. Non-normative: they do not define current
 
 To keep SOP working, a few paths are intentionally not under the categories above:
 
+- SOP's recorded active source (`.agent-sdlc/plan.meta.json`) is operational. Never
+  move or reconstruct it as documentation cleanup. A missing recorded source or
+  unresolved approval is a separate SOP lifecycle issue; documentation cleanup
+  does not repair the state database or declare the plan complete.
+- Planner spike evidence remains beside its source plan under `plans/`; its
+  cross-references and recorded execution paths are preserved.
+
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
-- [plans/PLAN-Phase-3.5-Model-Routing.md](history/plans/PLAN-Phase-3.5-Model-Routing.md) is retained because SOP's plan archives reference its path; completed plans referenced by SOP archives also retain their paths.
+- Historical plans already under [history/plans/](history/plans/README.md) stay at their existing paths. Completed plans still referenced at `plans/` are not moved by documentation cleanup; lifecycle transitions belong to SOP.
 - [plans/PLAN-Repository-Consolidation.md](plans/PLAN-Repository-Consolidation.md) is retained (HISTORICALIZED — COMPLETE) because the SOP archive `.agent-sdlc/archive/plan-repository-consolidation/` records its source path; the reports under [reports/consolidation/](reports/consolidation/completion.md) are its evidence.
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
 
