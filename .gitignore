@@ -16,3 +16,8 @@
 # not project content.
 .playwright-mcp/
 .env.bak
+
+# Machine-local overrides and notes (e.g. CLAUDE.local.md, settings.local.json);
+# never checked in.
+*.local
+*.local.*
