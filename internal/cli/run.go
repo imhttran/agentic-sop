@@ -223,7 +223,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 	_ = rn.Write("task.md", spec.Render())
 
-	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
+	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError

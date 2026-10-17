@@ -175,7 +175,7 @@ func escalateTo(ctx context.Context, cfg config.Config, d deps, dec recovery.Dec
 		// claiming the task was escalated.
 		return nil, model.Selection{}, fmt.Errorf("no agent factory is available to build the %s model", dec.ToClass)
 	}
-	na, err := d.newAgent(cfg.Agent.Harness, sel.Provider, sel.Model)
+	na, err := d.newAgent(cfg.Agent.Harness, sel.Provider, sel.Model, string(sel.Class))
 	if err != nil {
 		return nil, model.Selection{}, fmt.Errorf("build agent for class %s: %w", dec.ToClass, err)
 	}

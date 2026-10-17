@@ -72,7 +72,7 @@ func runEscalation(t *testing.T, dir, diffBefore, diffAfter, escalatedModel stri
 	escalated := false
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(harness, provider, model string) (agent.Agent, error) {
+		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
 			models = append(models, model)
 			if model == escalatedModel {
 				escalated = true
@@ -287,7 +287,7 @@ func TestEscalationInfrastructureErrorDoesNotEscalate(t *testing.T) {
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd:          func() (string, error) { return dir, nil },
-		newAgent:       func(string, string, string) (agent.Agent, error) { return errAgent{}, nil },
+		newAgent:       func(string, string, string, string) (agent.Agent, error) { return errAgent{}, nil },
 		readDiff:       func(context.Context, string) (string, error) { return "diff --git a/a.go b/a.go\n-old\n", nil },
 		commit:         func(context.Context, string, string) error { return nil },
 		newGitHub:      func(string) github.Client { return &fakeGitHub{} },

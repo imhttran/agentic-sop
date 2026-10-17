@@ -99,7 +99,7 @@ func runPlan(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	a, err := d.newAgent(harness, provider, model)
+	a, err := d.newAgent(harness, provider, model, "")
 	if err != nil {
 		fmt.Fprintf(stderr, "plan: %v\n", err)
 		return exitError
@@ -345,7 +345,7 @@ func lifecycleAgent(dir string, d deps) agent.Agent {
 	if err != nil {
 		return nil
 	}
-	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model)
+	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		return nil
 	}

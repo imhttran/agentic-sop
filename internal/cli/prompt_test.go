@@ -264,7 +264,7 @@ func runPromptEscalation(t *testing.T, dir, diffAfter, escalatedModel string, je
 	escalated := false
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(harness, provider, model string) (agent.Agent, error) {
+		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
 			models = append(models, model)
 			if model == escalatedModel {
 				escalated = true

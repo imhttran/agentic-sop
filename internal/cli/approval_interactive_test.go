@@ -26,7 +26,7 @@ func runApprovalCLI(t *testing.T, dir, stdin string, interactive bool, a agent.A
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string, string, string) (agent.Agent, error) {
+		newAgent: func(string, string, string, string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}

@@ -98,7 +98,7 @@ func runInjectedCLIWithDiffFunc(t *testing.T, dir string, readDiff func(context.
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string, string, string) (agent.Agent, error) {
+		newAgent: func(string, string, string, string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}

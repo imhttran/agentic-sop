@@ -411,9 +411,12 @@ implementation task to it.
   project's `validation.build`/`test`/`lint`) as `Bash(<command>:*)`, skipping any
   containing `,` or `)`. `SOP_CLAUDE_ALLOWED_TOOLS` adds further comma-separated
   Claude Code tool rules; it only adds, and whatever it lists is pre-approved.
-- `SOP_AGENT_COMMAND` and `SOP_CLAUDE_EFFORT` are global: every class or plan step
-  that uses the `command` provider runs the same command at the same effort, so
-  only one CLI effort level is possible today.
+- `SOP_AGENT_COMMAND` is global: every class or plan step that uses the
+  `command` provider runs the same command. SOP sets `SOP_SELECTED_CLASS`
+  (`small`, `medium`, `large`) in the command's environment when model routing
+  selected the class, and the wrapper reads `SOP_CLAUDE_MODEL_<CLASS>` and
+  `SOP_CLAUDE_EFFORT_<CLASS>` before the global `SOP_CLAUDE_MODEL` and
+  `SOP_CLAUDE_EFFORT`. `sop plan` sets no class, so it uses the globals.
 - With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
   sends the key as a Bearer token. The key is never written to run artifacts.
 

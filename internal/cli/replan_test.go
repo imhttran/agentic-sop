@@ -62,7 +62,7 @@ func runReplanCLI(t *testing.T, dir, diff string, a agent.Agent, jevFake jev.Ana
 	var models []string
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_, _, mdl string) (agent.Agent, error) {
+		newAgent: func(_, _, mdl, _ string) (agent.Agent, error) {
 			models = append(models, mdl)
 			return a, nil
 		},

@@ -41,7 +41,7 @@ func TestRunExplicitReportDeliverable(t *testing.T) {
 	}, dir, io.Discard)}}
 	d := defaultDeps()
 	d.getwd = func() (string, error) { return dir, nil }
-	d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+	d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 	var out, errOut bytes.Buffer
 	if code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d); code != exitOK {
 		t.Fatalf("code=%d stdout=%s stderr=%s", code, &out, &errOut)
@@ -84,7 +84,7 @@ func TestDeclaredReportRequiresInvocationMutation(t *testing.T) {
 			}}
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
-			d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 			var out, errOut bytes.Buffer
 			code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d)
 			if (code == exitOK) != mutate {

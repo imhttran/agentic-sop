@@ -39,7 +39,7 @@ func runRoutingFallbackCLI(t *testing.T, dir, diff string, a agent.Agent, newJEV
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_, _, m string) (agent.Agent, error) {
+		newAgent: func(_, _, m, _ string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}

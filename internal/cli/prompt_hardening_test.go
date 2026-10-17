@@ -30,7 +30,7 @@ func (planOnlyAgent) Capabilities() agent.Capabilities {
 
 // runPromptWithFactory runs `sop prompt ...` with a provider-aware agent factory, so
 // a test can make different providers declare different capabilities.
-func runPromptWithFactory(t *testing.T, dir, diff string, newAgent func(harness, provider, model string) (agent.Agent, error), args ...string) (code int, stdout, stderr string) {
+func runPromptWithFactory(t *testing.T, dir, diff string, newAgent func(harness, provider, model, class string) (agent.Agent, error), args ...string) (code int, stdout, stderr string) {
 	t.Helper()
 	var out, errOut bytes.Buffer
 	d := deps{
@@ -58,7 +58,7 @@ func TestPromptImplementGuardsFinalRoutedAgent(t *testing.T) {
 
 	var providers []string
 	routed := &recordingAgent{}
-	factory := func(_, provider, _ string) (agent.Agent, error) {
+	factory := func(_, provider, _, _ string) (agent.Agent, error) {
 		providers = append(providers, provider)
 		if provider == "mlx" {
 			return planOnlyAgent{&fakeCapabilityAgent{plan: validPlanJSON, review: cleanReviewJSON}}, nil
@@ -97,7 +97,7 @@ func TestPromptImplementRejectsIncapableRoutedSelection(t *testing.T) {
 	// no evidence) is a text-only provider.
 	writeConfig(t, dir, "project:\n  name: x\nagent:\n  harness: tool\n  provider: ollama\nmodels:\n  default_class: large\n  small:\n    provider: mlx\n    name: mlx-small\n    locality: local\n  medium:\n    provider: mlx\n    name: mlx-medium\n    locality: local\n  large:\n    provider: ollama\n    name: glm-large\n    locality: cloud\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\n")
 
-	factory := func(_, provider, _ string) (agent.Agent, error) {
+	factory := func(_, provider, _, _ string) (agent.Agent, error) {
 		if provider == "mlx" {
 			return planOnlyAgent{&fakeCapabilityAgent{plan: validPlanJSON, review: cleanReviewJSON}}, nil
 		}

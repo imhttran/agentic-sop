@@ -156,7 +156,7 @@ func TestPromptDeclaredReportMutationEvidence(t *testing.T) {
 			}}
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
-			d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 
 			args := []string{"prompt", "--capability", "implement"}
 			if tc.declare {
@@ -206,7 +206,7 @@ func TestPromptDeclaredReportProjectsIntoTaskSpec(t *testing.T) {
 	}}, mutate: func() { writeRepoFile(t, dir, report, "# baseline\n") }}
 	d := defaultDeps()
 	d.getwd = func() (string, error) { return dir, nil }
-	d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+	d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 
 	var out, errOut bytes.Buffer
 	if code := run([]string{"prompt", "--capability", "implement", "--deliverable", report, "Write the report"}, &out, &errOut, d); code != exitOK {
@@ -272,7 +272,7 @@ func TestScheduledTaskDeclaredReportCompatibility(t *testing.T) {
 			}}
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
-			d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 			cfg, err := loadConfigOrDefault(dir)
 			if err != nil {
 				t.Fatal(err)
