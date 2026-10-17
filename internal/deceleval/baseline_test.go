@@ -1,6 +1,8 @@
 package deceleval
 
 import (
+	"bytes"
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -18,20 +20,21 @@ func loadRepoCorpus(t *testing.T) *Corpus {
 	return c
 }
 
-// TestBaselineIsDeterministic proves two runs over the same corpus are
-// byte-identical (the reproducibility requirement).
+// TestBaselineIsDeterministic proves two runs over the same corpus agree through
+// the canonical (latency-free) projection. Measured latency is excluded, so a
+// loaded machine cannot make a reproducible run look nondeterministic.
 func TestBaselineIsDeterministic(t *testing.T) {
 	c := loadRepoCorpus(t)
-	a, err := MarshalBaseline(RunBaseline(c, "x"))
+	a, err := CanonicalHash(RunBaseline(c, "x"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := MarshalBaseline(RunBaseline(c, "x"))
+	b, err := CanonicalHash(RunBaseline(c, "x"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if Hash(a) != Hash(b) {
-		t.Fatalf("baseline is not deterministic: %s != %s", Hash(a), Hash(b))
+	if a != b {
+		t.Fatalf("baseline is not deterministic: %s != %s", a, b)
 	}
 }
 
@@ -98,8 +101,47 @@ func TestSecondLabelSampleSize(t *testing.T) {
 	}
 }
 
+// TestRecordedBaselineArtifactIsIntact proves the committed artifact is exactly
+// the bytes its recorded checksum pins. Artifact integrity is checked on the raw
+// bytes, separately from the semantic comparison below, so corruption is caught
+// even when the decoded decisions happen to look plausible.
+func TestRecordedBaselineArtifactIsIntact(t *testing.T) {
+	recorded, sum := loadRecordedBaseline(t)
+	if got := Hash(recorded); got != sum {
+		t.Errorf("recorded baseline artifact is corrupt: sha256 is %s, recorded %s", got, sum)
+	}
+}
+
+// TestBaselineTamperIsDetected proves a changed recorded artifact still fails its
+// integrity check. A single flipped decision is enough to break the checksum,
+// because the check is over the artifact's exact bytes.
+func TestBaselineTamperIsDetected(t *testing.T) {
+	recorded, sum := loadRecordedBaseline(t)
+	res, err := UnmarshalBaseline(recorded)
+	if err != nil {
+		t.Fatalf("decode recorded baseline: %v", err)
+	}
+	if len(res.Records) == 0 {
+		t.Fatal("recorded baseline has no records")
+	}
+	// Flip one decision, keeping the artifact otherwise well-formed.
+	res.Records[0].Action = flippedAction(res.Records[0].Action)
+	tampered, err := MarshalBaseline(res)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Equal(tampered, recorded) {
+		t.Fatal("tampering did not change the artifact")
+	}
+	if Hash(tampered) == sum {
+		t.Error("a changed recorded artifact still matches its checksum")
+	}
+}
+
 // TestBaselineMatchesRecordedArtifact pins reproducibility against the recorded
-// artifact hash, so a corpus or mapping change is detected.
+// artifact's decisions, never its timing: the fresh run and the recorded artifact
+// are compared through the same canonical projection, so a corpus, mapping, or
+// classifier change is detected while a slower or faster machine is not.
 func TestBaselineMatchesRecordedArtifact(t *testing.T) {
 	c := loadRepoCorpus(t)
 	corpusPath, _ := corpusPaths()
@@ -107,15 +149,45 @@ func TestBaselineMatchesRecordedArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	data, err := MarshalBaseline(RunBaseline(c, corpusSHA))
+	recorded, _ := loadRecordedBaseline(t)
+	recordedRes, err := UnmarshalBaseline(recorded)
+	if err != nil {
+		t.Fatalf("decode recorded baseline: %v", err)
+	}
+	fresh, err := CanonicalHash(RunBaseline(c, corpusSHA))
 	if err != nil {
 		t.Fatal(err)
 	}
-	recorded, err := LoadFreeze(filepath.Join(filepath.Dir(corpusPath), "baseline-A.results.json.sha256"))
+	have, err := CanonicalHash(recordedRes)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fresh != have {
+		t.Errorf("baseline drift: rerun is %s, recorded %s (re-run cmd/deceleval-baseline and re-record)", fresh, have)
+	}
+}
+
+// loadRecordedBaseline reads the committed baseline artifact and its recorded
+// checksum.
+func loadRecordedBaseline(t *testing.T) (artifact []byte, sha256 string) {
+	t.Helper()
+	corpusPath, _ := corpusPaths()
+	dir := filepath.Dir(corpusPath)
+	artifact, err := os.ReadFile(filepath.Join(dir, "baseline-A.results.json"))
+	if err != nil {
+		t.Fatalf("read recorded baseline: %v", err)
+	}
+	sum, err := LoadFreeze(filepath.Join(dir, "baseline-A.results.json.sha256"))
 	if err != nil {
 		t.Fatalf("recorded baseline hash: %v", err)
 	}
-	if Hash(data) != recorded.SHA256 {
-		t.Errorf("baseline drift: rerun is %s, recorded %s (re-run cmd/deceleval-baseline and re-record)", Hash(data), recorded.SHA256)
+	return artifact, sum.SHA256
+}
+
+// flippedAction returns a governed action different from a.
+func flippedAction(a string) string {
+	if a == "NEEDS_HUMAN" {
+		return "AUTO_FIX"
 	}
+	return "NEEDS_HUMAN"
 }

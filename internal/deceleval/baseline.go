@@ -232,8 +232,135 @@ func MarshalBaseline(r BaselineResult) ([]byte, error) {
 	return append(data, '\n'), nil
 }
 
-// Hash returns the sha256 of the marshalled baseline, the reproducibility anchor.
+// UnmarshalBaseline decodes a recorded baseline artifact written by
+// MarshalBaseline. Unknown fields are rejected, so an artifact whose shape no
+// longer matches the records is an explicit error rather than a partial read that
+// silently hides drift.
+func UnmarshalBaseline(data []byte) (BaselineResult, error) {
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	dec.DisallowUnknownFields()
+	var r BaselineResult
+	if err := dec.Decode(&r); err != nil {
+		return BaselineResult{}, fmt.Errorf("deceleval: decode baseline artifact: %w", err)
+	}
+	return r, nil
+}
+
+// Hash returns the sha256 of the given bytes.
+//
+// It is a plain digest and never normalizes or reinterprets its input: callers
+// decide what is worth hashing. For a reproducibility anchor over a baseline
+// result, hash the canonical projection (CanonicalHash); for the integrity of a
+// recorded artifact, hash its exact bytes.
 func Hash(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
+}
+
+// A baseline result records two different things: what the deterministic
+// classifier DECIDED, and how long it took. Only the first is reproducible. The
+// measured latency (per record, and the median/p95 aggregates) tracks the machine
+// and its load, so it must never take part in a reproducibility comparison.
+//
+// The two concerns are kept apart rather than merged:
+//
+//   - MarshalBaseline is the full, human-facing artifact. It still reports every
+//     measured latency, so performance analysis is unaffected.
+//   - CanonicalBaselineOf / MarshalCanonical / CanonicalHash carry every
+//     decision-bearing field and no latency at all. Two runs over the same corpus
+//     agree through this projection no matter how their timing differed, so it —
+//     not the full artifact's hash — is what reproducibility and drift are
+//     measured on.
+
+// CanonicalRecord is a BaselineRecord without its measured latency. Every other
+// field is retained, including the fixture-failure marker.
+type CanonicalRecord struct {
+	ScenarioID   string `json:"scenario_id"`
+	Category     string `json:"category"`
+	Source       string `json:"source"`
+	Expected     string `json:"expected_action"`
+	Kind         string `json:"deterministic_kind"`
+	Disposition  string `json:"disposition"`
+	Confidence   string `json:"confidence"`
+	Action       string `json:"deterministic_action"`
+	EvidenceHash string `json:"evidence_sha256"`
+	FixtureError string `json:"fixture_error,omitempty"`
+}
+
+// CanonicalMetrics is Metrics without the measured latency aggregates.
+type CanonicalMetrics struct {
+	Total                  int `json:"total"`
+	Classified             int `json:"classified"`
+	FixtureFailures        int `json:"fixture_failures"`
+	Correct                int `json:"correct"`
+	Incorrect              int `json:"incorrect"`
+	UnsafeMissedEscalation int `json:"unsafe_missed_escalation"`
+	FalseEscalation        int `json:"false_escalation"`
+}
+
+// CanonicalBaseline is the latency-free projection of BaselineResult: every field
+// that governs a decision, so semantic drift stays detectable, and nothing that
+// depends on wall-clock timing. The second-label review carries no latency and is
+// reused as-is.
+type CanonicalBaseline struct {
+	CorpusSHA256 string            `json:"corpus_sha256"`
+	Records      []CanonicalRecord `json:"records"`
+	Metrics      CanonicalMetrics  `json:"metrics"`
+	SecondLabel  SecondLabelReport `json:"second_label"`
+}
+
+// CanonicalBaselineOf returns the latency-free projection of r. It copies the
+// result; the input is never modified.
+func CanonicalBaselineOf(r BaselineResult) CanonicalBaseline {
+	out := CanonicalBaseline{
+		CorpusSHA256: r.CorpusSHA256,
+		Metrics: CanonicalMetrics{
+			Total:                  r.Metrics.Total,
+			Classified:             r.Metrics.Classified,
+			FixtureFailures:        r.Metrics.FixtureFailures,
+			Correct:                r.Metrics.Correct,
+			Incorrect:              r.Metrics.Incorrect,
+			UnsafeMissedEscalation: r.Metrics.UnsafeMissedEscalation,
+			FalseEscalation:        r.Metrics.FalseEscalation,
+		},
+		SecondLabel: r.SecondLabel,
+		Records:     make([]CanonicalRecord, 0, len(r.Records)),
+	}
+	for _, rec := range r.Records {
+		out.Records = append(out.Records, CanonicalRecord{
+			ScenarioID:   rec.ScenarioID,
+			Category:     rec.Category,
+			Source:       rec.Source,
+			Expected:     rec.Expected,
+			Kind:         rec.Kind,
+			Disposition:  rec.Disposition,
+			Confidence:   rec.Confidence,
+			Action:       rec.Action,
+			EvidenceHash: rec.EvidenceHash,
+			FixtureError: rec.FixtureError,
+		})
+	}
+	return out
+}
+
+// MarshalCanonical encodes the latency-free projection deterministically (sorted
+// records), so it can be hash-compared or diffed.
+func MarshalCanonical(r BaselineResult) ([]byte, error) {
+	out := CanonicalBaselineOf(r)
+	sort.Slice(out.Records, func(i, j int) bool { return out.Records[i].ScenarioID < out.Records[j].ScenarioID })
+	data, err := json.MarshalIndent(out, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(data, '\n'), nil
+}
+
+// CanonicalHash is the reproducibility anchor: the sha256 of the latency-free
+// projection. Comparing it detects semantic drift while ignoring measured timing.
+func CanonicalHash(r BaselineResult) (string, error) {
+	data, err := MarshalCanonical(r)
+	if err != nil {
+		return "", err
+	}
+	return Hash(data), nil
 }
