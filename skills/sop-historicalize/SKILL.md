@@ -59,6 +59,11 @@ deterministic answer, not a failure to work around. Relay the blockers verbatim
 (the unresolved task ids and states, the pending approval gate, or the missing
 verification) and STOP. Make no mutation.
 
+An approval blocker on a plan whose tasks are all satisfied is a stale request:
+`sop approvals` does not list it and `sop approve` refuses it. The readiness
+reason names the operator's command, `sop approval supersede <task-id> --reason
+TEXT --by NAME`. Relay it; do not run it on the operator's behalf.
+
 ## DELEGATE
 
 When readiness is eligible, invoke the single deterministic transition:

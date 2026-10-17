@@ -178,8 +178,8 @@ func TestHistoricalizeRefusesUnresolvedApproval(t *testing.T) {
 	if len(res.Readiness.UnresolvedApprovals) == 0 {
 		t.Error("readiness must report the pending approval")
 	}
-	if !strings.Contains(res.Readiness.Reason, "approval") {
-		t.Errorf("reason = %q, want an approval blocker", res.Readiness.Reason)
+	if !strings.Contains(res.Readiness.Reason, "sop approval supersede") {
+		t.Errorf("reason = %q, want an approval blocker naming the supersede command", res.Readiness.Reason)
 	}
 }
 

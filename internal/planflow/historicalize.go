@@ -399,7 +399,10 @@ func historicalizationEligibility(state, disposition string, r *Historicalizatio
 		if explicit {
 			return true, ""
 		}
-		return false, "plan has unresolved approval requests: " + summarize(r.UnresolvedApprovals)
+		// Every task is satisfied here, so `sop approve` refuses these requests and
+		// `sop approvals` does not list them; supersede is the operator's path.
+		return false, "plan has unresolved approval requests: " + summarize(r.UnresolvedApprovals) +
+			"; their tasks are already satisfied, so clear each with `sop approval supersede <task-id> --reason TEXT --by NAME`"
 	}
 	if len(r.UnresolvedVerification) > 0 {
 		if explicit {
