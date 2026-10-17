@@ -172,6 +172,7 @@ single owner. This table is that map.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
 - [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, and inspection.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
+- [guides/HOW-TO-SETUP-WITH-CLAUDE.md](guides/HOW-TO-SETUP-WITH-CLAUDE.md) — run SOP's SMALL, MEDIUM, and LARGE model classes on Claude, through the Claude Code CLI or the Anthropic API.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, `/rag-ingest`, and `/sop-rag-integrate` RAG skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
 - [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, the preserved legacy wrappers, and the distinction between the shipped RAG skills and the proposed/implemented RAG retrieval adapter.

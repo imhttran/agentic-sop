@@ -103,7 +103,8 @@ sop run
 `sop run` discovers the planning source, prepares state and tasks, and executes
 the task graph — idempotently. Full setup: [docs/guides/GETTING-STARTED.md](docs/guides/GETTING-STARTED.md)
 and [docs/guides/PROJECT-SETUP.md](docs/guides/PROJECT-SETUP.md). Complete command
-reference: [docs/reference/CLI.md](docs/reference/CLI.md).
+reference: [docs/reference/CLI.md](docs/reference/CLI.md). To run SOP's model
+classes on Claude, see [docs/guides/HOW-TO-SETUP-WITH-CLAUDE.md](docs/guides/HOW-TO-SETUP-WITH-CLAUDE.md).
 
 For ad-hoc work, `sop prompt` runs a request through the same governed machinery:
 
