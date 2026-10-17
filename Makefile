@@ -11,8 +11,6 @@
 	model-claude model-deepseek model-status \
 	controller-build controller-https controller-keychain-token
 
-ENV_FILE := .env
-
 # `make test-fast` runs the suite with TMPDIR on RAM-backed storage where the
 # platform provides it (Linux /dev/shm), which removes the SQLite file-I/O
 # bottleneck without changing any SQLite durability setting. `make test` below is
@@ -100,12 +98,8 @@ install-ollama-agent: check
 model-claude:
 	@python3 scripts/switch-large-model.py claude
 
-.PHONY: model-deepseek
-
 model-deepseek:
 	@python3 scripts/switch-large-model.py deepseek
-	@echo "DeepSeek configuration activated"
-	@echo "unset SOP_AGENT_COMMAND ANTHROPIC_MODEL"
 
 model-status:
 	@python3 scripts/switch-large-model.py status
