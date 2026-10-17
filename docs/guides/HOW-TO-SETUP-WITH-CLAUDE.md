@@ -14,7 +14,7 @@ separate topic: see [CLAUDE-SKILLS.md](CLAUDE-SKILLS.md) and
 
 | Path | Provider | How SOP calls Claude | Needs |
 | --- | --- | --- | --- |
-| Claude Code CLI | `command` | Runs `SOP_AGENT_COMMAND`, pipes the JSON request on stdin, reads stdout | `claude` on PATH, signed in (`claude login`) or `ANTHROPIC_API_KEY` set |
+| Claude Code CLI | `command` | Runs `SOP_AGENT_COMMAND` (the `sop-agent.sh` wrapper), which prompts Claude and returns SOP's JSON outcome | `claude` and `jq` on PATH, signed in (`claude login`) or `ANTHROPIC_API_KEY` set |
 | Anthropic API | `openai_compatible` | `POST {base}/v1/chat/completions` with the class's model name | `SOP_OPENAI_COMPATIBLE_API_KEY` set to an Anthropic API key |
 
 What matters when choosing:
@@ -22,12 +22,27 @@ What matters when choosing:
 - **Per-class models.** The API path sends each class's `SOP_MODEL_<CLASS>_NAME`
   as the model, so SMALL, MEDIUM, and LARGE can each use a different Claude model.
   The CLI path ignores `*_NAME` (it is only the label SOP records); the model
-  comes from `--model` in the command.
+  comes from `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`).
 - **One CLI command.** `SOP_AGENT_COMMAND` is global. Every class that uses
   provider `command` runs the same command, so at most one class should use the
   CLI. Plan generation from a PRD also runs `SOP_AGENT_COMMAND`.
 - **Effort.** SOP has no effort setting. Only the CLI path can set it, with
-  `--effort`.
+  `SOP_CLAUDE_EFFORT`.
+
+## The CLI wrapper
+
+Point `SOP_AGENT_COMMAND` at `scripts/agents/sop-agent.sh` in your agentic-sop
+checkout, by absolute path, since SOP runs it from the managed project:
+
+```dotenv
+SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
+```
+
+Do not use a bare `claude -p`. SOP sends a JSON request on stdin and expects a
+JSON outcome back, and Claude Code in `-p` mode is denied file edits unless they
+are allowed. The wrapper builds the prompt, allows reading and editing the
+repository plus a short list of Go and read-only git commands, and refuses
+commit, push, merge, reset, and clean.
 
 ## Example: Haiku SMALL, Opus-low MEDIUM, Opus LARGE
 
@@ -47,7 +62,9 @@ SOP_MODEL_SMALL_LOCALITY=cloud
 SOP_MODEL_MEDIUM_PROVIDER=command
 SOP_MODEL_MEDIUM_NAME=claude-opus-5-5
 SOP_MODEL_MEDIUM_LOCALITY=cloud
-SOP_AGENT_COMMAND="claude -p --model claude-opus-5-5 --effort low"
+SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
+ANTHROPIC_MODEL=claude-opus-5-5
+SOP_CLAUDE_EFFORT=low
 
 # LARGE: Opus at default effort through the API.
 SOP_MODEL_LARGE_PROVIDER=openai_compatible
@@ -67,7 +84,7 @@ overrides every class's model name.
 
 | Profile | LARGE runs on |
 | --- | --- |
-| `claude` (default) | Claude Code CLI, `claude-opus-5-5` |
+| `claude` (default) | Claude Code CLI through the wrapper, `claude-opus-5-5` |
 | `claude-api` | Anthropic API, `claude-opus-5-5` |
 | `deepseek` | Ollama cloud, `deepseek-v4.1-flash:cloud` |
 

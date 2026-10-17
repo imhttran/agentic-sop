@@ -382,11 +382,17 @@ secrets and local edits outside those blocks.
 
 | Profile      | Provider            | How it connects                                                                                                                                          |
 | ------------ | ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `claude`     | `command`           | Runs the Claude Code CLI via `SOP_AGENT_COMMAND="claude -p --model claude-opus-5-5"`. Auth comes from `claude login` (or `ANTHROPIC_API_KEY`).          |
+| `claude`     | `command`           | Runs the Claude Code CLI through the wrapper: `SOP_AGENT_COMMAND="sh <agentic-sop>/scripts/agents/sop-agent.sh"`, model from `ANTHROPIC_MODEL`. Needs `claude` and `jq`; auth comes from `claude login` (or `ANTHROPIC_API_KEY`). |
 | `claude-api` | `openai_compatible` | Calls the Anthropic API's OpenAI-compatible endpoint: `SOP_OPENAI_COMPATIBLE_BASE_URL=https://api.anthropic.com`, key in `SOP_OPENAI_COMPATIBLE_API_KEY`. |
 
-- With `command`, `--model` decides the model that runs; `SOP_MODEL_LARGE_NAME` is
-  only the label recorded in the model-selection evidence.
+- With `command`, use the wrapper rather than a bare `claude -p`: the wrapper
+  builds the prompt from SOP's JSON request, allows file edits, and returns the
+  JSON outcome SOP parses. A bare `claude -p` gets the raw JSON as its prompt and
+  is denied file edits, so IMPLEMENT and FIX tasks cannot change the repository.
+  `<agentic-sop>` is the absolute path to the checkout; the switch script fills it in.
+- With `command`, `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`) decides the model that
+  runs and `SOP_CLAUDE_EFFORT` sets `--effort`; `SOP_MODEL_LARGE_NAME` is only the
+  label recorded in the model-selection evidence.
 - `SOP_AGENT_COMMAND` is global: every class or plan step that uses the `command`
   provider runs the same command.
 - With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
