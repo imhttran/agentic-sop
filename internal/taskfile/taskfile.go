@@ -25,6 +25,12 @@ type Spec struct {
 	Description  string
 	Requirements []string
 	Deliverables []string
+	// DeliverableGroups is the display-only classification of Deliverables for the
+	// generated task text, computed by the caller that owns the runtime
+	// classification (internal/cli). It is never parsed, persisted, or gated: when it
+	// is empty, Render falls back to the legacy single Deliverables list, so a
+	// hand-written task file keeps its exact rendering.
+	DeliverableGroups []DeliverableGroup
 	// RequiredEvidence names external retrieval evidence this task requires
 	// (RAG-SOP-003): "corpus:<id>" or "source:<prefix>". Empty (the default) means
 	// no required evidence and preserves the existing behavior exactly.
@@ -185,7 +191,13 @@ func (s *Spec) Render() string {
 		fmt.Fprintf(&b, "\n%s\n", desc)
 	}
 	writeList(&b, "Requirements", s.Requirements)
-	writeList(&b, "Deliverables", s.Deliverables)
+	if len(s.DeliverableGroups) > 0 {
+		for _, g := range s.DeliverableGroups {
+			writeGroup(&b, g)
+		}
+	} else {
+		writeList(&b, "Deliverables", s.Deliverables)
+	}
 	writeList(&b, "Required evidence", s.RequiredEvidence)
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
 	writeList(&b, "Acceptance checks", s.AcceptanceChecks)
@@ -293,6 +305,30 @@ func joinHeading(id, title string) string {
 }
 
 // writeList renders a named list section, skipping it when empty.
+// DeliverableGroup is one display-only section of the task text: a heading, an
+// optional clarifying note, and the declared deliverables that belong to it. The
+// caller classifies; this type only renders.
+type DeliverableGroup struct {
+	Heading string
+	Note    string
+	Items   []string
+}
+
+// writeGroup renders one deliverable group, stating the note so a descriptive
+// outcome is never presented as an artifact the agent must create.
+func writeGroup(b *strings.Builder, g DeliverableGroup) {
+	if len(g.Items) == 0 {
+		return
+	}
+	fmt.Fprintf(b, "\n## %s\n", g.Heading)
+	if g.Note != "" {
+		fmt.Fprintf(b, "%s\n", g.Note)
+	}
+	for _, item := range g.Items {
+		fmt.Fprintf(b, "- %s\n", item)
+	}
+}
+
 func writeList(b *strings.Builder, name string, items []string) {
 	if len(items) == 0 {
 		return

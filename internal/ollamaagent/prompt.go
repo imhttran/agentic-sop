@@ -241,7 +241,7 @@ func userPrompt(req agent.Request) string {
 	}
 	if (req.Capability == agent.Implement || req.Capability == agent.Fix) && len(req.AcceptanceCriteria) > 0 && len(req.ValidationCommands) > 0 {
 		fmt.Fprintf(&b, "\nAlready-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
-		b.WriteString(`If the implementation already exists, read the relevant files and run EVERY required validation command successfully. Then explicitly return {"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact supplied criterion>","paths":["<successfully read repository file>"]}]}}. Map EVERY criterion to concrete inspected files. SOP verifies tool results and unchanged repository state. Reads, narration, no-op writes, and model assertions alone cannot establish completion. Existing discovery, stale, and iteration bounds still apply.`)
+		b.WriteString(alreadySatisfiedContract)
 	}
 	return b.String()
 }
