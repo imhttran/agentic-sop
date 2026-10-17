@@ -407,6 +407,10 @@ implementation task to it.
 - With `command`, `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`) decides the model that
   runs and `SOP_CLAUDE_EFFORT` sets `--effort`; `SOP_MODEL_LARGE_NAME` is only the
   label recorded in the model-selection evidence.
+- The wrapper allows Claude to run the request's validation commands (the
+  project's `validation.build`/`test`/`lint`) as `Bash(<command>:*)`, skipping any
+  containing `,` or `)`. `SOP_CLAUDE_ALLOWED_TOOLS` adds further comma-separated
+  Claude Code tool rules; it only adds, and whatever it lists is pre-approved.
 - `SOP_AGENT_COMMAND` and `SOP_CLAUDE_EFFORT` are global: every class or plan step
   that uses the `command` provider runs the same command at the same effort, so
   only one CLI effort level is possible today.
