@@ -79,7 +79,7 @@ func retentionRun(t *testing.T, dir string, a agent.Agent, diffs ...string) (int
 	calls := 0
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string, string, string) (agent.Agent, error) {
+		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
 			return a, nil
 		},
 		readDiff: func(context.Context, string) (string, error) {
