@@ -33,11 +33,9 @@ Human approval remains explicit where policy requires it.
   (`SQLite`, `plan.json`); the orchestrator never parses human docs for its state.
 - **Bounded autonomy.** Retries and fix loops have explicit limits and end at a
   human gate when they must.
-- **Operator-owned acceptance checks.** A plan stage MAY declare deterministic
-  acceptance checks that SOP executes once — a SAFE argv, never a shell — and records
-  as an objective-level `VERIFIED` / `PARTIAL` / `HOLD` verdict with per-check
-  evidence, so a task's `PASS` is never equated with verified objective completion
-  (see [docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b).
+- **Operator-owned acceptance checks.** Deterministic checks provide objective
+  completion evidence; a task's PASS alone does not verify its objective. See
+  [Execution](docs/specs/EXECUTION.md).
 - **Local first, provider neutral.** Runs locally with local or cloud models and
   does not require a cloud service. The smallest class is local-first: it runs a
   local model and falls back to a cloud model only when the local runtime cannot
@@ -47,25 +45,9 @@ SOP is **not** an unrestricted autonomous coding agent: the orchestrator defines
 boundaries, the agent performs specific work, validation checks it, and only then
 does state change. See [docs/PRD.md](docs/PRD.md) for principles and requirements.
 
-### Governance boundaries
-
-- **Deterministic Go is the execution-governance authority.** State transitions,
-failure disposition and every governed outcome are decided by SOP's deterministic
-Go implementation; advisory providers can only *add* attention and can never lower
-risk, approve work or bypass verification.
-- **MIG-006 is compatibility, not capability.** The consolidation's MIG-006 work
-keeps the optional decision adapters compatible behind a single provider contract
-with a bounded fallback (primary provider, an optional backup on primary failure,
-and SOP's deterministic decision provider as the terminal authority). MIG-006 does
-**not** establish decision quality and does **not** authorize enablement.
-- **The scoped DISABLE recommendation stands.** The evaluation in
-[docs/reports/decision-model-evaluation-2026-10-13.md](docs/reports/decision-model-evaluation-2026-10-13.md)
-retains the existing **DISABLE** recommendation for the CLEF/Nimble advisory layer
-and the JEV shadow mapping, scoped to that corpus and those configurations.
-- **No provider work, promotion or enablement.** This consolidation and its
-documentation closure add no provider work, make no promotion, and authorize no
-enablement. Any future reconsideration requires the existing criteria in
-[docs/reference/AI-DECISION-PROMOTION-CRITERIA.md](docs/reference/AI-DECISION-PROMOTION-CRITERIA.md).
+Governance ownership is defined in [SOP Boundary](docs/architecture/SOP-BOUNDARY.md).
+The [consolidation guide](docs/guides/REPOSITORY-CONSOLIDATION.md#governance-boundaries)
+records advisory compatibility, evaluation, and enablement boundaries.
 
 ## Basic Architecture
 
@@ -131,31 +113,10 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
-The controller and the advisory decision adapter are consolidated components of
-this single `agentic-sop` repository and executable. The consolidation is committed
-as merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6` (parents core, controller and
-adapter), which is an ancestor of the repository's `main`; see
-[docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md).
-They are served by the same unified executable:
-
-```bash
-sop controller serve                     # read-only dashboard (SOP_BIN overrides the delegate)
-sop decision decide -provider nimble -file req.json -json
-sop decision shadow [...]                # shadow evaluation (advisory only)
-```
-
-The optional legacy `sop-controller` and `sop-decision-adapter` executables remain
-thin wrappers over the same implementations; install them with
-`scripts/install/install-legacy-wrappers.sh`. The controller needs no Node runtime;
-the decision adapter's Julia provider is an optional capability (the
-repository-owned `tools/julia/infer.py` helper plus external weights). The HTTPS/Caddy
-conveniences live under `scripts/controller/` and `integrations/controller/`. Details:
-[docs/guides/SOP-CONTROLLER-DASHBOARD.md](docs/guides/SOP-CONTROLLER-DASHBOARD.md)
-and [docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md).
-
-This consolidation is a repository-level change only. It makes no claim about any
-current local machine state, operator-local archive, installed binaries or CI run
-status, and it introduces no provider work, promotion or enablement.
+The unified executable also provides `sop controller serve` for the dashboard and
+`sop decision decide|shadow` for advisory decisions. Setup, optional requirements,
+and legacy wrappers are covered in the
+[consolidation guide](docs/guides/REPOSITORY-CONSOLIDATION.md).
 
 ## Agent Skills
 
@@ -199,28 +160,14 @@ Detailed state transitions and lifecycle rules live in the specifications:
 
 ## Status
 
-SOP V1 and the later routing, provider-runtime, recovery, prompt, distribution,
-interactive-approval, and agentic reliability/evaluation layers (structured run
-trace, progress signals, evaluation harness), plus native deterministic acceptance
-checks ([docs/specs/EXECUTION.md](docs/specs/EXECUTION.md) §6b), are implemented. Detailed delivery status and
-known limitations live in [PROJECT-STATUS.md](docs/reference/PROJECT-STATUS.md);
-future work lives in [BACKLOG.md](docs/plans/BACKLOG.md). The controller and the
-advisory decision adapter are consolidated into this one repository and executable
-(`sop controller serve`, `sop decision decide|shadow`), with the legacy
-`sop-controller` and `sop-decision-adapter` executables retained as thin wrappers.
-The consolidation is committed as merge
-`a8082b6154dd88fd8ac9fd18af5df5e682a751a6` and remains **HISTORICALIZED — COMPLETE**
-([docs/guides/REPOSITORY-CONSOLIDATION.md](docs/guides/REPOSITORY-CONSOLIDATION.md)).
-This wording describes committed and merged repository evidence only; it makes no
-claim about current local machine state, operator-local archive, or CI run status,
-and the governance boundaries above remain in force.
-
-The pre-performance closure and measurement plan,
-[Pre-Performance Closure and Baseline](docs/history/plans/PLAN-Pre-Performance-Closure.md),
-is **COMPLETE**: `CLOSE-001…CLOSE-011` are `LOCAL_DONE`. The published baseline is
-[PERFORMANCE-BASELINE.md](docs/reports/PERFORMANCE-BASELINE.md); representative
-workload measurements remain to be captured, and no new performance architecture is
-started by that plan.
+SOP V1 and the subsequent routing, provider, recovery, distribution, approval,
+agentic reliability, and context-efficiency layers are implemented. See
+[Project Status](docs/reference/PROJECT-STATUS.md) for delivery evidence and known
+limitations, [Backlog](docs/plans/BACKLOG.md) for future work, and the
+[performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for measured results
+and their scope. Repository consolidation is complete; its
+[evidence and compatibility boundaries](docs/guides/REPOSITORY-CONSOLIDATION.md)
+do not establish current local machine or CI status.
 
 ## Documentation
 

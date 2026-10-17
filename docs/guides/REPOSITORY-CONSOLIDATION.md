@@ -31,7 +31,19 @@ the canonical decision seam and the profile bridge are unchanged.
 - `sop controller serve` — the read-only dashboard.
 - `sop decision decide|shadow` — the advisory decision adapter.
 
-The legacy executables remain available and behave identically.
+The legacy `sop-controller` and `sop-decision-adapter` executables remain thin
+wrappers over the same implementations. Install them with
+`scripts/install/install-legacy-wrappers.sh`.
+
+```bash
+sop controller serve                     # SOP_BIN overrides the delegate executable
+sop decision decide -provider nimble -file req.json -json
+sop decision shadow [...]                # shadow evaluation (advisory only)
+```
+
+The controller needs no Node runtime. HTTPS/Caddy conveniences live under
+`scripts/controller/` and `integrations/controller/`; dashboard setup is in
+[SOP-CONTROLLER-DASHBOARD.md](SOP-CONTROLLER-DASHBOARD.md).
 
 ## Shipped RAG skills vs. the RAG retrieval adapter
 
@@ -40,7 +52,7 @@ These are **two different things** and must not be conflated:
 | | Shipped RAG **skills** | RAG **retrieval adapter** (SOP core) |
 | --- | --- | --- |
 | What | Domain skills that fix an existing read-only capability (`plan`, `design_tests`) | An optional retrieval path wired into the SOP lifecycle alongside BM25 |
-| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest` (+ mirrored agent trees) | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/rag*`, `internal/retrieval` (BM25 baseline) |
+| Where | `skills/rag-schema`, `skills/rag-test`, `skills/rag-ingest`, `skills/sop-rag-integrate` (+ mirrored agent trees) | `internal/ragclient`, `internal/cli/retrieve.go`, `internal/rag*`, `internal/retrieval` (BM25 baseline) |
 | Status | **Shipped** — installed by `./install.sh --skills …` | **Proposed/implemented, disabled by default** — opt-in only |
 | Mutates? | No; produce plans/test designs, never a verdict | Can alter retrieved context when explicitly enabled |
 | Gate | SOP routing, provider validation, lifecycle, approval | Deterministic quality gate, required-evidence gate, retrieval gate |
@@ -76,6 +88,29 @@ opt-in decision.
   **unavailability** as an expected scenario (degrade to BM25-only or fail closed).
 - **Advisory authority**: decisions can only add attention; they cannot lower risk,
   approve work or bypass verification.
+
+## Governance boundaries
+
+- **Execution authority** follows [SOP Boundary](../architecture/SOP-BOUNDARY.md#decision-responsibilities).
+  The consolidation preserves those ownership rules.
+- **MIG-006 is compatibility, not capability.** The consolidation's MIG-006 work
+keeps the optional decision adapters compatible behind a single provider contract
+with a bounded fallback (primary provider, an optional backup on primary failure,
+and SOP's deterministic decision provider as the terminal authority). MIG-006 does
+**not** establish decision quality and does **not** authorize enablement.
+- **The scoped DISABLE recommendation stands.** The evaluation in
+[docs/reports/decision-model-evaluation-2026-10-13.md](../reports/decision-model-evaluation-2026-10-13.md)
+retains the existing **DISABLE** recommendation for the CLEF/Nimble advisory layer
+and the JEV shadow mapping, scoped to that corpus and those configurations.
+- **No provider work, promotion or enablement.** This consolidation and its
+documentation closure add no provider work, make no promotion, and authorize no
+enablement. Any future reconsideration requires the existing criteria in
+[docs/reference/AI-DECISION-PROMOTION-CRITERIA.md](../reference/AI-DECISION-PROMOTION-CRITERIA.md).
+
+This consolidation is a repository-level change only. It makes no claim about
+current local machine state, operator-local archives, installed binaries, or CI
+run status. The plan remains **HISTORICALIZED — COMPLETE**; the evidence is in
+[the completion report](../reports/consolidation/completion.md).
 
 ## History
 
