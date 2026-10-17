@@ -138,8 +138,8 @@ content identity, policy identity, and sanitized native-report digest.
 
 ### Semgrep Community Edition (`sast`)
 
-- Invokes `semgrep scan --json --metrics=off --disable-version-check --config
-  <local-rules> --timeout <seconds> <targets>` directly.
+- Invokes `semgrep scan --json --metrics=off --disable-version-check
+  --no-git-ignore --config <local-rules> --timeout <seconds> <targets>` directly.
 - Parses the native JSON report, maps `ERROR` to `HIGH`, `WARNING` to `MEDIUM`,
   and `INFO` to `INFO`; an unknown provider severity stays `UNKNOWN`.
 - Accepts exit code `0` or `1` only when a valid JSON report is present.

@@ -13,13 +13,13 @@
 | ----------------------- | ------------------------------------------------------------------ |
 | Verdict                 | `INDETERMINATE`                                                    |
 | Coverage                | `PARTIAL`                                                          |
-| Commit                  | `7e755ece8d9f2fbef093281ee8bfb6bfebcdd919`                         |
-| Tree                    | `16cdbb84dcee2dbdbdb61ef83d7d86b7cecf3316`                         |
+| Commit                  | `db39cf5e2a05a046cf21b6ffff6c2b247fd19283`                         |
+| Tree                    | `264f1cadd0d5744c189c7844ca95b4996e43fc8c`                         |
 | Working tree            | `DIRTY`                                                            |
-| Content digest          | `107e87a73127fc43fea7c04c7d26146169aa3be63c6ac1260c8cd698e9e65311` |
-| Measured total duration | 6365 ms                                                            |
-| Semgrep duration        | 1740 ms                                                            |
-| Gitleaks duration       | 4530 ms                                                            |
+| Content digest          | `35c07fd6dbb840f70fbdd6dc3db16b88d7bd9472d6660d867379b1253aca1e32` |
+| Measured total duration | 7615 ms                                                            |
+| Semgrep duration        | 3025 ms                                                            |
+| Gitleaks duration       | 4497 ms                                                            |
 | Findings                | 7 (1 SAST, 6 secret)                                               |
 | Execution failures      | 0                                                                  |
 
@@ -39,12 +39,11 @@ Neither scanner downloaded rules or uploaded code. No hosted service was used.
 
 ## Coverage
 
-- **Semgrep:** `PARTIAL`. It scanned 403 files and reported 609 files skipped by
-  `.semgrepignore` patterns; it also reported that the target set was limited to
-  Git-tracked files. The adapter records this as partial coverage and fails closed
+- **Semgrep:** `PARTIAL`. It scanned 658 files and reported 933 files skipped by
+  `.semgrepignore` patterns plus 6 files larger than 1.0 MB. The adapter records this as partial coverage and fails closed
   for a required gate.
 - **Gitleaks:** `COMPLETE` for the configured workspace source. It scanned about
-  160.9 MB in 4.53 s.
+  161.23 MB in 4.50 s.
 
 ## Findings
 
@@ -86,8 +85,8 @@ the fixtures outside the scanned scope.
 
 ## Limitations
 
-- Semgrep CE skipped files under its `.semgrepignore` policy and limited the scan
-  to Git-tracked files. A required gate correctly reports `INDETERMINATE` until a
+- Semgrep CE skipped files under its `.semgrepignore` policy and skipped files
+  larger than 1.0 MB. A required gate correctly reports `INDETERMINATE` until a
   full-coverage scan policy is configured.
 - The findings demonstrate detection, normalization, coverage, and redaction.
   They are not a vulnerability assessment of the repository.

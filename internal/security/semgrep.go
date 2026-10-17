@@ -134,6 +134,7 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		"--json",
 		"--metrics=off",
 		"--disable-version-check",
+		"--no-git-ignore",
 		"--config", rules,
 		"--timeout", strconv.Itoa(timeoutSeconds),
 	)
