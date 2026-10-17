@@ -25,10 +25,10 @@ func TestChecksOrderIsBuildTestLint(t *testing.T) {
 	v := config.Validation{
 		Build: []string{"go build ./..."},
 		Test:  []string{"go test ./..."},
-		Lint:  []string{"go vet ./...", "test -z \"$(gofmt -l .)\""},
+		Lint:  []string{"go vet ./...", "gofmt -l ."},
 	}
 	checks := Checks(v)
-	want := []string{"go build ./...", "go test ./...", "go vet ./...", "test -z \"$(gofmt -l .)\""}
+	want := []string{"go build ./...", "go test ./...", "go vet ./...", "gofmt -l ."}
 	if len(checks) != len(want) {
 		t.Fatalf("checks = %v, want %v", checks, want)
 	}
