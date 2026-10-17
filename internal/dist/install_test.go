@@ -83,6 +83,7 @@ func TestInstallerRejectsBadArguments(t *testing.T) {
 		{"--bogus"},
 		{"--skills", "codex"},
 		{"--plugin", "zed"},
+		{"--agent", "codex"},
 		{"--bin-dir"},
 	} {
 		out, err := runInstaller(t, installerEnv(t, scratchHome(t), "", nil), args...)
@@ -203,6 +204,42 @@ func TestInstallerBinDirWithSpaces(t *testing.T) {
 	}
 	if info.Mode()&0o111 == 0 {
 		t.Errorf("installed sop is not executable")
+	}
+}
+
+// TestInstallerInstallsTheAgentWrapper proves --agent claude copies the Claude Code
+// wrapper beside sop as an executable sop-agent identical to the checkout's, prints
+// the SOP_AGENT_COMMAND line, and that the default install leaves it out.
+func TestInstallerInstallsTheAgentWrapper(t *testing.T) {
+	home := scratchHome(t)
+	bin := filepath.Join(home, "bin")
+	env := installerEnv(t, home, "", nil)
+	wrapper := filepath.Join(bin, "sop-agent")
+
+	out, err := runInstaller(t, env, "--bin-dir", bin)
+	if err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(wrapper); !os.IsNotExist(err) {
+		t.Fatalf("the default install must not install sop-agent (stat err=%v)", err)
+	}
+
+	out, err = runInstaller(t, env, "--bin-dir", bin, "--agent", "claude")
+	if err != nil {
+		t.Fatalf("install --agent claude: %v\n%s", err, out)
+	}
+	info, err := os.Stat(wrapper)
+	if err != nil {
+		t.Fatalf("sop-agent not installed: %v\n%s", err, out)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Errorf("installed sop-agent is not executable: %v", info.Mode())
+	}
+	if read(t, wrapper) != read(t, filepath.Join(repoRoot(t), "scripts", "agents", "sop-agent.sh")) {
+		t.Error("installed sop-agent differs from scripts/agents/sop-agent.sh")
+	}
+	if want := `SOP_AGENT_COMMAND="` + wrapper + `"`; !strings.Contains(out, want) {
+		t.Errorf("expected the .env line %s:\n%s", want, out)
 	}
 }
 

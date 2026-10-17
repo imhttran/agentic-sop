@@ -64,6 +64,18 @@ checkout, by absolute path, since SOP runs it from the managed project:
 SOP_AGENT_COMMAND="sh /path/to/agentic-sop/scripts/agents/sop-agent.sh"
 ```
 
+Or install a copy beside `sop`, so `.env` does not depend on where the checkout
+lives. From the agentic-sop checkout:
+
+```bash
+./install.sh --agent claude
+```
+
+It installs `sop-agent` into the same bin directory as `sop` and prints the
+line for `.env`, for example `SOP_AGENT_COMMAND="$HOME/go/bin/sop-agent"`.
+`./install.sh --all` includes it. Re-run the installer after pulling to update
+the copy.
+
 Do not use a bare `claude -p`. SOP sends a JSON request on stdin and expects a
 JSON outcome back, and Claude Code in `-p` mode is denied file edits unless they
 are allowed. The wrapper builds the prompt and allows Claude to:

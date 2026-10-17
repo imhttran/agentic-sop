@@ -18,7 +18,8 @@ do not use:
 ./install.sh --skills zed      # the /sop* commands in Zed
 ./install.sh --skills claude   # the same commands in Claude Code
 ./install.sh --plugin claude   # the Claude Code plugin package
-./install.sh --all             # the CLI + every present agent's skills + the plugin
+./install.sh --agent claude    # the Claude Code agent wrapper (sop-agent)
+./install.sh --all             # the CLI + every present agent's skills + the plugin + sop-agent
 ```
 
 ## Windows
@@ -57,7 +58,8 @@ Full detail, including the ownership marker and what the installer never does:
 | -------------------------------- | -------------------------------------------------------------------- |
 | `--skills <none\|zed\|claude\|all>` | Link the SOP commands for those agents (default: `none`).          |
 | `--plugin <none\|claude>`        | Prepare the Claude Code plugin package (default: `none`).            |
-| `--all`                          | `--skills all --plugin claude`.                                       |
+| `--agent <none\|claude>`         | Install the Claude Code agent wrapper as `sop-agent` beside `sop` (default: `none`). |
+| `--all`                          | `--skills all --plugin claude --agent claude`.                        |
 | `--bin-dir <path>`               | Where to install the `sop` binary.                                    |
 | `--dry-run`                      | Print what would happen and change nothing.                           |
 | `-h`, `--help`                   | Show the usage.                                                       |
