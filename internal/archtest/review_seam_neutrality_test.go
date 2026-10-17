@@ -62,13 +62,15 @@ import (
 // (TestReviewSeamNeutralityFilesExist). It includes internal/cli/run.go: run.go
 // hosts the run-level review caller and the review-scope/change-attribution call
 // sites, so it belongs to the seam. The remaining entries are the run-session
-// review cache (session.go), the change-attribution helper (mutation.go), and the
-// alternate review integration point exposed over MCP (mcp.go); each participates
+// review cache (session.go), the change-attribution helper (mutation.go), the
+// alternate review integration point exposed over MCP (mcp.go), and the bounded
+// committed-content review context (review_existing.go); each participates
 // in the seam that decides which change set is offered to review and how changed
 // files are attributed.
 var reviewSeamFiles = []string{
 	"internal/cli/run.go",
 	"internal/cli/reviewscope.go",
+	"internal/cli/review_existing.go",
 	"internal/cli/jev.go",
 	"internal/cli/review.go",
 	"internal/cli/session.go",
