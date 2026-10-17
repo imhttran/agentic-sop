@@ -486,6 +486,11 @@ func writeDecisionEvidenceArtifact(rn *runpkg.Run, doc *decisionEvidenceDoc) {
 	_ = rn.Write(decisionEvidenceArtifactName, string(append(data, '\n')))
 }
 
+// retainedReviewSummary is recorded on a report that carries findings from an
+// earlier review because REVIEW did not run for this cycle. It makes the
+// carried-forward state explicit in the run artifacts.
+const retainedReviewSummary = "REVIEW did not run for this cycle; the findings of the most recent executed review are carried forward because they remain unresolved."
+
 // runStages performs the lifecycle for one task. An ordinary task runs plan →
 // implement → (validate → review → gate → fix)*. A verify-first task runs the
 // configured deterministic validation first and invokes the implementation agent
@@ -817,6 +822,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var suite testrunner.SuiteResult
 	var report review.Report
 	var gate quality.Result
+	// retainedReviewFindings holds the findings of the most recent EXECUTED
+	// review. REVIEW is the resolution path: it runs against the current code and
+	// its result replaces this set. When REVIEW does not run for a cycle (an empty
+	// working-tree diff, a verify-first pass, or a failed validation), the retained
+	// findings are carried into the gate, so a cycle without REVIEW can never
+	// silently clear a blocking finding that REVIEW raised earlier.
+	var retainedReviewFindings []review.Finding
 	var jevEv *jevRunEvidence
 	// jevDoc holds the persisted JEV artifact for the final iteration so the
 	// report can reference it. It is written at the quality seam below, where JEV
@@ -854,6 +866,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// change came from an implementation: a verify-first pass made no change of
 		// its own, so there is nothing for this task to review.
 		report = review.Report{}
+		// reviewRan records whether REVIEW executed for THIS cycle, so a cycle that
+		// skipped it can carry the previous findings forward instead of clearing them.
+		reviewRan := false
 		if rawOutputEvidence(spec) {
 			if ierr := injectCapturedEvidence(dir, reports, rn.Dir()); ierr != nil {
 				return lifeResult{}, fmt.Errorf("captured evidence: %w", ierr)
@@ -889,6 +904,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				if cached, ok := sess.cachedReview(reviewKey); ok {
 					rec.ReviewReused()
 					report = cached
+					reviewRan = true
 				} else {
 					_ = rn.SetStage(runpkg.Reviewing)
 					ar.Emit(activity.StageReview, "reviewing changes", "")
@@ -915,8 +931,19 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 						return lifeResult{}, fmt.Errorf("review: %w", err)
 					}
 					sess.cacheReview(reviewKey, report)
+					reviewRan = true
 				}
 			}
+		}
+
+		// REVIEW is the resolution path. When it ran, its result becomes the retained
+		// set; when it did not run, the retained findings still stand and must reach
+		// the gate. A cycle without REVIEW therefore cannot clear a blocking finding.
+		if reviewRan {
+			retainedReviewFindings = report.Findings
+		} else if len(retainedReviewFindings) > 0 {
+			report.Findings = retainedReviewFindings
+			report.Summary = retainedReviewSummary
 		}
 
 		// Optional JEV analysis runs at the quality seam: after validation and
