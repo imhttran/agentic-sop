@@ -65,7 +65,7 @@ func TestScheduledTaskDecisionEvidenceEscalates(t *testing.T) {
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
 			a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: budgetExhaustedReason}}
-			d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 			if !tc.off {
 				p := crossModuleAdapter(t, "fake-external", tc.mode)
 				d.newDecisionProvider = func(config.Config) (decision.Provider, error) { return p, nil }

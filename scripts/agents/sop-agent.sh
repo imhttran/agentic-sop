@@ -16,6 +16,9 @@
 # Environment:
 #   SOP_CLAUDE_MODEL        optional --model for Claude Code
 #   SOP_CLAUDE_EFFORT       optional --effort for Claude Code (low|medium|high|...)
+#   SOP_CLAUDE_MODEL_<CLASS>, SOP_CLAUDE_EFFORT_<CLASS>
+#                           per-class overrides (CLASS = SMALL, MEDIUM, LARGE), used
+#                           when SOP sets SOP_SELECTED_CLASS to that class
 #   SOP_CLAUDE_ALLOWED_TOOLS optional extra comma-separated Claude Code tool rules
 #                           added to the allow-list, e.g. Bash(make:*). Only adds;
 #                           anything listed here (even git push) is the operator's
@@ -96,9 +99,16 @@ $instruction
 The JSON must be valid, complete, and on a single line. End your reply with exactly one line of the form (and nothing after it):
 SOP_JSON: {the json}"
 
+claude_model=${SOP_CLAUDE_MODEL:-}
+claude_effort=${SOP_CLAUDE_EFFORT:-}
+case "${SOP_SELECTED_CLASS:-}" in
+  small) claude_model=${SOP_CLAUDE_MODEL_SMALL:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_SMALL:-$claude_effort} ;;
+  medium) claude_model=${SOP_CLAUDE_MODEL_MEDIUM:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_MEDIUM:-$claude_effort} ;;
+  large) claude_model=${SOP_CLAUDE_MODEL_LARGE:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_LARGE:-$claude_effort} ;;
+esac
 model_args=''
-[ -n "${SOP_CLAUDE_MODEL:-}" ] && model_args="--model $SOP_CLAUDE_MODEL"
-[ -n "${SOP_CLAUDE_EFFORT:-}" ] && model_args="$model_args --effort $SOP_CLAUDE_EFFORT"
+[ -n "$claude_model" ] && model_args="--model $claude_model"
+[ -n "$claude_effort" ] && model_args="$model_args --effort $claude_effort"
 
 # shellcheck disable=SC2086
 errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")

@@ -26,6 +26,22 @@ const legacyEnvAgentCommand = "AGENT_SDLC_AGENT_COMMAND"
 // contract can be configured through the environment.
 type CommandAgent struct {
 	command string
+	// class is the model class routing selected, exported to the command as
+	// EnvSelectedClass so one command can vary its settings per class.
+	class string
+}
+
+// EnvSelectedClass names the variable set in the command's environment to the
+// model class routing selected (small, medium, large). It is absent when routing
+// is inactive.
+const EnvSelectedClass = "SOP_SELECTED_CLASS"
+
+// WithClass returns a copy of a that exports class to the command as
+// EnvSelectedClass. An empty class exports nothing.
+func (a *CommandAgent) WithClass(class string) *CommandAgent {
+	c := *a
+	c.class = class
+	return &c
 }
 
 // NewCommandAgent returns a CommandAgent that runs command via the shell.
@@ -64,6 +80,9 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", a.command)
 	cmd.Stdin = bytes.NewReader(payload)
+	if a.class != "" {
+		cmd.Env = append(os.Environ(), EnvSelectedClass+"="+a.class)
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

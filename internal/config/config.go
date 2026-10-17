@@ -242,6 +242,10 @@ type Agent struct {
 	// command provider, and the provider's environment variable overrides it
 	// when set. It is an operator-supplied model id, not a harness identity.
 	Model string `yaml:"model"`
+	// Class is the model class routing selected for this agent (small, medium,
+	// large), or empty when routing is inactive. It is set at runtime, never
+	// read from configuration.
+	Class string `yaml:"-"`
 }
 
 // Validation holds the deterministic verification commands, run in order.

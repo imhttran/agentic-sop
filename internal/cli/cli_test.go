@@ -41,7 +41,7 @@ func runCLIWithAgent(t *testing.T, dir string, a agent.Agent, args ...string) (c
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_, _, _ string) (agent.Agent, error) {
+		newAgent: func(_, _, _, _ string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}
@@ -427,7 +427,7 @@ func TestRunPlanUsesConfiguredProvider(t *testing.T) {
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(_, provider, model string) (agent.Agent, error) {
+		newAgent: func(_, provider, model, _ string) (agent.Agent, error) {
 			gotProvider, gotModel = provider, model
 			return &fakeAgent{content: validPlanJSON}, nil
 		},
@@ -702,7 +702,7 @@ func runInjectedCLI(t *testing.T, dir, diff string, a agent.Agent, args ...strin
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd: func() (string, error) { return dir, nil },
-		newAgent: func(string, string, string) (agent.Agent, error) {
+		newAgent: func(string, string, string, string) (agent.Agent, error) {
 			if a == nil {
 				return nil, errors.New("no agent configured")
 			}

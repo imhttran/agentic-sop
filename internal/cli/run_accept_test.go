@@ -151,7 +151,7 @@ func (a *scheduledAcceptanceAgent) Generate(_ context.Context, r agent.Request) 
 func scheduledAcceptanceDeps(dir string, a agent.Agent) deps {
 	d := defaultDeps()
 	d.getwd = func() (string, error) { return dir, nil }
-	d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+	d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 	d.commit = func(context.Context, string, string) error { return nil }
 	d.newGitHub = func(string) github.Client { return &fakeGitHub{} }
 	return d

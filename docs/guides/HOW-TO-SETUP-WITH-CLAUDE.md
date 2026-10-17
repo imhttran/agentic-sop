@@ -48,12 +48,13 @@ What matters when choosing:
   as the model, so SMALL, MEDIUM, and LARGE can each use a different Claude model.
   The CLI path ignores `*_NAME` (it is only the label SOP records); the model
   comes from `ANTHROPIC_MODEL` (or `SOP_CLAUDE_MODEL`).
-- **One CLI command.** `SOP_AGENT_COMMAND` is global. Every class that uses
-  provider `command` runs the same command and model, so CLI classes cannot
-  differ from each other. Plan generation from a PRD also runs `SOP_AGENT_COMMAND`.
-- **Effort.** SOP has no effort setting. Only the CLI path can set it, with
-  `SOP_CLAUDE_EFFORT`, and that is global too: every CLI class runs at the same
-  effort level.
+- **One CLI command.** `SOP_AGENT_COMMAND` is global: every class that uses
+  provider `command` runs the same command. Plan generation from a PRD also
+  runs it.
+- **Effort and model per CLI class.** SOP has no effort setting; the wrapper
+  sets it. `SOP_CLAUDE_EFFORT` and `SOP_CLAUDE_MODEL` apply to every CLI class.
+  `SOP_CLAUDE_EFFORT_<CLASS>` and `SOP_CLAUDE_MODEL_<CLASS>` (CLASS is `SMALL`,
+  `MEDIUM`, or `LARGE`) override them for one class.
 
 ## The CLI wrapper
 
@@ -130,10 +131,18 @@ Send read-only requests to SMALL with `--model-class small`, for example
 `sop prompt --model-class small --capability review "..."`. Keep automatic
 routing off with this setup: it can route an implementation task to SMALL.
 
-To also run MEDIUM on Claude, give it `SOP_MODEL_MEDIUM_PROVIDER=command`. It
-then runs the same command, model, and `SOP_CLAUDE_EFFORT` as LARGE. A
-low-effort MEDIUM next to a default-effort LARGE is not possible today, because
-the effort setting is global.
+To also run MEDIUM on Claude, at low effort next to a default-effort LARGE:
+
+```dotenv
+SOP_MODEL_MEDIUM_PROVIDER=command
+SOP_MODEL_MEDIUM_NAME=claude-opus-5-5
+SOP_MODEL_MEDIUM_LOCALITY=cloud
+SOP_CLAUDE_EFFORT_MEDIUM=low
+```
+
+SOP tells the wrapper which class it selected (`SOP_SELECTED_CLASS`), so the
+override applies to MEDIUM only. It needs model routing to select the class:
+`SOP_MODEL_DEFAULT_CLASS`, `--model-class`, or automatic routing.
 
 Remove the SMALL availability-fallback lines (`SOP_MODEL_SMALL_FALLBACK_*`) or
 leave them; they apply only when SMALL's primary model is local.

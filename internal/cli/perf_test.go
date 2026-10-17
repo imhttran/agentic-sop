@@ -26,7 +26,7 @@ func runBench(t *testing.T, dir string, a *benchAgent, args ...string) (int, str
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd:    func() (string, error) { return dir, nil },
-		newAgent: func(string, string, string) (agent.Agent, error) { return a, nil },
+		newAgent: func(string, string, string, string) (agent.Agent, error) { return a, nil },
 		readDiff: func(context.Context, string) (string, error) {
 			if a.implement == 0 {
 				return "", nil // nothing has been implemented yet

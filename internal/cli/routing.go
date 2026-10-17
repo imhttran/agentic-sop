@@ -236,7 +236,7 @@ func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *task
 		// in place would execute a model other than the one routing selected.
 		return a, nil, fmt.Errorf("model routing: no agent factory is available to build the %s model (%s/%s)", tr.Class, tr.Selection.Provider, tr.Selection.Model)
 	}
-	ta, err := d.newAgent(cfg.Agent.Harness, tr.Selection.Provider, tr.Selection.Model)
+	ta, err := d.newAgent(cfg.Agent.Harness, tr.Selection.Provider, tr.Selection.Model, string(tr.Selection.Class))
 	if err != nil {
 		return a, nil, fmt.Errorf("model routing: build agent for class %s: %w", tr.Class, err)
 	}

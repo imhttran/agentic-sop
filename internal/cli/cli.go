@@ -49,7 +49,7 @@ const (
 // the resume observer, and the working-tree diff reader.
 type deps struct {
 	getwd        func() (string, error)
-	newAgent     func(harness, provider, model string) (agent.Agent, error)
+	newAgent     func(harness, provider, model, class string) (agent.Agent, error)
 	newResources func(dir string) (resume.Observer, error)
 	readDiff     func(ctx context.Context, dir string) (string, error)
 	// plannerAnswer carries the applied planner answer into a resumed stage's
@@ -141,7 +141,7 @@ type deps struct {
 func defaultDeps() deps {
 	return deps{
 		getwd: os.Getwd,
-		newAgent: func(harness, provider, model string) (agent.Agent, error) {
+		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
 			// This is the composition root: it resolves the effective
 			// harness/provider pair the same way the startup summary does, then
 			// builds the matching agent. Environment keeps the highest precedence.
@@ -175,6 +175,9 @@ func defaultDeps() deps {
 			a, err := agent.FromConfig(provider, model)
 			if err != nil {
 				return nil, err
+			}
+			if c, ok := a.(*agent.CommandAgent); ok {
+				a = c.WithClass(class)
 			}
 			return agent.NewChecked(a), nil
 		},

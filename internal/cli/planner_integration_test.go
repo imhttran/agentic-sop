@@ -75,7 +75,7 @@ func (a *scriptedPlannerAgent) saw(sub string) bool {
 func plannerDeps(dir string, a agent.Agent, diff string) deps {
 	return deps{
 		getwd:     func() (string, error) { return dir, nil },
-		newAgent:  func(string, string, string) (agent.Agent, error) { return a, nil },
+		newAgent:  func(string, string, string, string) (agent.Agent, error) { return a, nil },
 		readDiff:  func(context.Context, string) (string, error) { return diff, nil },
 		commit:    func(context.Context, string, string) error { return nil },
 		newGitHub: func(string) github.Client { return &fakeGitHub{} },

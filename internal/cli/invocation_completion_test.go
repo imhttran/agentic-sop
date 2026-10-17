@@ -88,7 +88,7 @@ func TestRunInvocationCompletionEvidence(t *testing.T) {
 			}
 			d := defaultDeps()
 			d.getwd = func() (string, error) { return dir, nil }
-			d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+			d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 			var out, errOut bytes.Buffer
 			code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d)
 			if (code == exitOK) != tc.wantPass {
@@ -136,7 +136,7 @@ func TestRunInvocationMutationObservationFailsClosed(t *testing.T) {
 	}}, mutate: func() { writeFile(t, dir, "result.txt", "implemented\n") }}
 	d := defaultDeps()
 	d.getwd = func() (string, error) { return dir, nil }
-	d.newAgent = func(string, string, string) (agent.Agent, error) { return a, nil }
+	d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
 	calls := 0
 	d.snapshotRepository = func(ctx context.Context, dir string) (map[string]string, error) {
 		calls++

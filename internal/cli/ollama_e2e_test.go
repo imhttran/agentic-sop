@@ -114,7 +114,7 @@ func TestImplementEndToEndProducesValidationRuns(t *testing.T) {
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd:     func() (string, error) { return dir, nil },
-		newAgent:  func(string, string, string) (agent.Agent, error) { return a, nil },
+		newAgent:  func(string, string, string, string) (agent.Agent, error) { return a, nil },
 		readDiff:  func(context.Context, string) (string, error) { return "impl.txt diff\n", nil },
 		commit:    func(context.Context, string, string) error { return nil },
 		newGitHub: func(string) github.Client { return &fakeGitHub{} },

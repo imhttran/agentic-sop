@@ -26,6 +26,26 @@ func TestCommandAgentReturnsStdout(t *testing.T) {
 	}
 }
 
+// TestCommandAgentExportsSelectedClass proves the selected class reaches the
+// command's environment, and that without a class nothing is exported (an
+// inherited value is left as it was).
+func TestCommandAgentExportsSelectedClass(t *testing.T) {
+	t.Setenv(EnvSelectedClass, "inherited")
+	cmd := `printf '%s' "$` + EnvSelectedClass + `"`
+	for _, tc := range []struct{ class, want string }{
+		{"medium", "medium"},
+		{"", "inherited"},
+	} {
+		resp, err := NewCommandAgent(cmd).WithClass(tc.class).Generate(context.Background(), validRequest(Implement))
+		if err != nil {
+			t.Fatalf("class %q: Generate failed: %v", tc.class, err)
+		}
+		if resp.Content != tc.want {
+			t.Errorf("class %q: command saw %q, want %q", tc.class, resp.Content, tc.want)
+		}
+	}
+}
+
 func TestCommandAgentSerializesCapability(t *testing.T) {
 	req := Request{Capability: DesignTests, Task: "add feature", Input: "prd", OutputRequirements: "json"}
 	resp, err := NewCommandAgent("cat").Generate(context.Background(), req)

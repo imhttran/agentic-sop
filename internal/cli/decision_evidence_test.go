@@ -457,7 +457,7 @@ func runInjectedCLIWithDecision(t *testing.T, dir, diff string, a agent.Agent, n
 	var out, errOut bytes.Buffer
 	d := deps{
 		getwd:               func() (string, error) { return dir, nil },
-		newAgent:            func(string, string, string) (agent.Agent, error) { return a, nil },
+		newAgent:            func(string, string, string, string) (agent.Agent, error) { return a, nil },
 		readDiff:            func(context.Context, string) (string, error) { return diff, nil },
 		commit:              func(context.Context, string, string) error { return nil },
 		newGitHub:           func(string) github.Client { return &fakeGitHub{} },

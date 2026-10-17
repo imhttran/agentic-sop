@@ -43,6 +43,7 @@ func applyModelRouting(cfg *config.Config, cliClass string) (model.Result, error
 	if res.Active {
 		cfg.Agent.Provider = res.Selection.Provider
 		cfg.Agent.Model = res.Selection.Model
+		cfg.Agent.Class = string(res.Selection.Class)
 	}
 	return res, nil
 }
