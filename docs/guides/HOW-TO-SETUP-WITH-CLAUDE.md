@@ -6,6 +6,24 @@ precedence and the full variable list are in
 [CONFIGURATION.md](../reference/CONFIGURATION.md) and
 [MODEL-ROUTING.md](../specs/MODEL-ROUTING.md).
 
+## Where `.env` lives
+
+Put `.env` in the project SOP manages, and run `sop` from that project's root.
+Every `sop` command reads `.env` from the folder it is run in; it does not
+search parent folders, and it does not read the `.env` in your agentic-sop
+checkout. A variable you already exported wins over the file.
+
+```bash
+cd /path/to/your-project
+cp /path/to/agentic-sop/.env.example .env
+```
+
+Add `.env` to that project's `.gitignore` before you put an API key in it. The
+agentic-sop repository ignores its own `.env`, but your project may not.
+
+To use the same settings in every project, export the variables in your shell
+profile instead of keeping a `.env` per project.
+
 Using Claude Code as the operator's client (the `/sop*` slash commands) is a
 separate topic: see [CLAUDE-SKILLS.md](CLAUDE-SKILLS.md) and
 [CLAUDE-PLUGIN.md](CLAUDE-PLUGIN.md).
@@ -100,14 +118,16 @@ overrides every class's model name.
 | `claude-api` | Anthropic API, `claude-opus-5-5`; read-only, so only when LARGE is not the default class |
 | `deepseek` | Ollama cloud, `deepseek-v4.1-flash:cloud` |
 
-Switch the active one in `.env`:
+Switch the active one from the managed project's root. The script edits the
+`.env` in the current folder and needs one to exist, so call it by its full
+path:
 
 ```bash
-python3 scripts/switch-large-model.py claude-api
+python3 /path/to/agentic-sop/scripts/switch-large-model.py claude-api
 ```
 
 ```bash
-python3 scripts/switch-large-model.py status
+python3 /path/to/agentic-sop/scripts/switch-large-model.py status
 ```
 
 The script rewrites only its BEGIN/END blocks, so keep secrets outside them. It

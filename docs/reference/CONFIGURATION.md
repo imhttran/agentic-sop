@@ -218,10 +218,13 @@ SOP's state database.
 - Environment variables always override config-file values — for example
   `SOP_AGENT_PROVIDER` overrides `agent.provider`, and `SOP_OLLAMA_MODEL`
   overrides `agent.model`.
-- An optional `.env` file at the project root is loaded at startup. It only fills
-  variables that are not already set, so an explicitly exported variable always
-  wins over the file. `.env` is gitignored; commit `.env.example` instead. A
-  missing `.env` is not an error and it is never required in CI.
+- An optional `.env` file in the current working directory is loaded at startup
+  by every `sop` command, so run `sop` from the project root. Parent folders are
+  not searched. It only fills variables that are not already set, so an
+  explicitly exported variable always wins over the file. Keep `.env` out of
+  version control (this repository ignores it; add it to a managed project's
+  `.gitignore`) and commit `.env.example` instead. A missing `.env` is not an
+  error and it is never required in CI.
 - When using the `command` harness, `SOP_AGENT_COMMAND` is required; the run
   fails if it is not set.
 - The startup summary prints the effective provider and whether configuration or
@@ -377,7 +380,8 @@ unavailable; cloud fallback`. SMALL's built-in fallback is
 
 `.env.example` ships two Claude profiles for `large`. Switch between them (and
 `deepseek`) with `scripts/switch-large-model.py {claude|claude-api|deepseek|status}`;
-it rewrites only the `# BEGIN/END SOP LARGE MODEL:` blocks in `.env`, so keep
+it rewrites only the `# BEGIN/END SOP LARGE MODEL:` blocks in the `.env` of the
+current folder, so run it from the managed project by its full path, and keep
 secrets and local edits outside those blocks.
 
 | Profile      | Provider            | How it connects                                                                                                                                          |
@@ -667,8 +671,9 @@ Two optional policy blocks describe how SOP decides to proceed without a human.
   environment > built-in deterministic default**: a field the project set is
   never overwritten, and a project that sets `decision.enabled: false` stays
   disabled even when `SOP_DECISION_ENABLED=true`. An unparseable value fails
-  closed at load. The `.env` file is never loaded automatically by SOP; exported
-  variables (or an operator-supplied `.env`) are what apply.
+  closed at load. A `.env` in the folder `sop` is run from also applies (see
+  above), including for controller-launched runs, which run `sop` in the
+  project folder.
 - **Live inference authorization.** Running a real adapter incurs inference and is
   gated (Gate W3-4); enabling the adapter by default is a separate production-policy
   decision (Gate W3-3).
