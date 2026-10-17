@@ -4,6 +4,7 @@ package config
 import (
 	"bufio"
 	"log"
+	"net"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -162,17 +163,24 @@ func ResolveAttentionInterval(raw string) time.Duration {
 	return d
 }
 
+// isLoopback reports whether addr binds only a loopback host. An empty host
+// (":8080") binds every interface, so it is not loopback, and an address that
+// does not parse is treated as non-loopback so it is restricted.
 func isLoopback(addr string) bool {
-	host := addr
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		host = addr[:i]
+	host, _, err := net.SplitHostPort(addr)
+	if err != nil {
+		return false
 	}
-	return host == "127.0.0.1" || host == "localhost" || host == "::1" || host == ""
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 func portSuffix(addr string) string {
-	if i := strings.LastIndex(addr, ":"); i >= 0 {
-		return addr[i:]
+	if _, port, err := net.SplitHostPort(addr); err == nil {
+		return ":" + port
 	}
 	return ":8080"
 }
