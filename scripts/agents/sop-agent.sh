@@ -28,6 +28,10 @@
 #                           and skills, plus every MCP server. The project's
 #                           .claude settings and CLAUDE.md still load, and
 #                           `claude login` still works.
+#   SOP_CLAUDE_MAX_BUDGET_USD optional --max-budget-usd: Claude stops a call once its
+#                           estimated spend reaches this many US dollars
+#   SOP_CLAUDE_COST_LOG     optional file; each call appends one line with the time,
+#                           class, capability, result, cost in USD, and turns
 #
 # The request's validation_commands (the project's own validation.build/test/lint
 # from .agent-sdlc/config.yaml) are allowed automatically as Bash(<command>:*), so
@@ -115,6 +119,7 @@ claude_args=''
 [ -n "$claude_model" ] && claude_args="--model $claude_model"
 [ -n "$claude_effort" ] && claude_args="$claude_args --effort $claude_effort"
 [ "${SOP_CLAUDE_ISOLATE:-}" = 1 ] && claude_args="$claude_args --setting-sources project,local --strict-mcp-config"
+[ -n "${SOP_CLAUDE_MAX_BUDGET_USD:-}" ] && claude_args="$claude_args --max-budget-usd $SOP_CLAUDE_MAX_BUDGET_USD"
 
 # shellcheck disable=SC2086
 errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")
@@ -129,8 +134,22 @@ if [ -z "$out" ]; then
   die "claude produced no output${errtail:+: $errtail}"
 fi
 
-if [ "$(printf '%s' "$out" | jq -r '.is_error // false')" = "true" ]; then
+# Cost logging never fails the call.
+if [ -n "${SOP_CLAUDE_COST_LOG:-}" ]; then
+  { printf '%s' "$out" | jq -r --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg class "${SOP_SELECTED_CLASS:--}" --arg cap "$cap" \
+    '"\($ts) \($class) \($cap) \(.subtype // "unknown") cost=\(.total_cost_usd // "unknown") turns=\(.num_turns // "unknown")"' \
+    >>"$SOP_CLAUDE_COST_LOG"; } 2>/dev/null || true
+fi
+
+# A stopped run (budget or turn cap, interruption) reports an error_* subtype
+# and has no result text.
+subtype=$(printf '%s' "$out" | jq -r '.subtype // empty' 2>/dev/null || true)
+is_error=$(printf '%s' "$out" | jq -r '.is_error // false' 2>/dev/null || true)
+case "$subtype" in error_*) is_error=true ;; esac
+if [ "$is_error" = "true" ]; then
   reason=$(printf '%s' "$out" | jq -r '.result // empty')
+  case "$subtype" in error_*) [ -n "$reason" ] || reason="claude stopped: $subtype" ;; esac
   [ -n "$reason" ] || reason="claude reported an error${errtail:+: $errtail}"
   case "$cap" in
     PLAN|REVIEW) die "$reason" ;;

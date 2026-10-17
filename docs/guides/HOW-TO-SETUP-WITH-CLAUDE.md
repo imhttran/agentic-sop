@@ -116,6 +116,22 @@ SOP_CLAUDE_ISOLATE=1
 The managed project's `.claude` settings and CLAUDE.md still load, and
 `claude login` still works.
 
+To cap and track what Claude spends:
+
+```dotenv
+SOP_CLAUDE_MAX_BUDGET_USD=2
+SOP_CLAUDE_COST_LOG=/path/to/claude-cost.log
+```
+
+- `SOP_CLAUDE_MAX_BUDGET_USD` stops a call once its estimated spend reaches that
+  many US dollars. The task fails with `claude stopped: error_max_budget_usd`;
+  edits Claude made before the stop stay in the working tree for SOP to judge.
+- `SOP_CLAUDE_COST_LOG` appends one line per call, for example
+  `2026-10-17T18:02:11Z large IMPLEMENT success cost=0.4123 turns=14`. Keep it
+  outside the repository, so the log is not part of the change SOP checks.
+
+Both are off by default.
+
 ## Example: Haiku SMALL on the API, Opus LARGE on the CLI
 
 LARGE is the default class, so it runs IMPLEMENT and FIX and must use the CLI
