@@ -875,7 +875,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// the seam fails closed rather than reviewing the whole tree.
 			nothingOfOwn := !changeRequired || legacyNoChange || alreadySatisfied
 			if !scope.empty() || !nothingOfOwn {
-				reviewDiff, serr := scopedReviewDiff(scope, diff, changeRequired)
+				reviewDiff, serr := reviewInput(ctx, dir, scope, diff, changeRequired, !nothingOfOwn, reports...)
 				if serr != nil {
 					return lifeResult{}, fmt.Errorf("review: %w", serr)
 				}
