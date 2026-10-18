@@ -111,12 +111,21 @@ def status():
         sys.exit("Error: .env not found.")
 
     values = {}
+    active = []
+    block = None
 
     for line in ENV.read_text().splitlines():
+        if line.startswith(START):
+            block = line[len(START):].strip()
+        elif line.startswith(END):
+            block = None
         match = re.match(r"^([A-Z_]+)=(.*)$", line)
         if match:
             values[match.group(1)] = match.group(2)
+            if block and block not in active:
+                active.append(block)
 
+    print(f"Active profile: {', '.join(active) or '(none)'}")
     print("LARGE model configuration:")
     for key in (
         "SOP_MODEL_LARGE_PROVIDER",
@@ -124,6 +133,15 @@ def status():
         "SOP_MODEL_LARGE_LOCALITY",
     ):
         print(f"  {key}={values.get(key, '(unset)')}")
+
+    # Claude CLI settings only; API keys are never printed.
+    claude = ["SOP_AGENT_COMMAND", "ANTHROPIC_MODEL"]
+    claude += sorted(k for k in values if k.startswith("SOP_CLAUDE_"))
+    shown = [k for k in claude if k in values]
+    if shown:
+        print("Claude CLI settings:")
+        for key in shown:
+            print(f"  {key}={values[key]}")
 
 
 if __name__ == "__main__":
