@@ -59,6 +59,9 @@ type deps struct {
 	// plannerAnswer carries the applied planner answer into a resumed stage's
 	// implementation input. It is empty for ordinary runs.
 	plannerAnswer string
+	// plannerEarlier carries the run's earlier applied planner decisions (oldest first),
+	// so a multi-round resume sees every decision, not only the latest.
+	plannerEarlier []plannerDecision
 	// resumeFrom, when set to a supported stage, tells the lifecycle to resume at that
 	// stage without repeating earlier completed stages (planner resume).
 	resumeFrom string

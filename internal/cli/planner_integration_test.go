@@ -257,6 +257,16 @@ func TestPlannerIntegrationTwoRoundsOneRun(t *testing.T) {
 	if !a.saw("Planner decision: Markdown") || !a.saw("Planner decision: yes") {
 		t.Fatalf("both answers must reach execution: %v", a.inputs)
 	}
+	// The final round must carry the first round's decision too: the executor keeps no
+	// state between rounds, so SOP delivers the run's earlier decisions with the latest.
+	if !a.saw("Earlier planner decisions in this run (oldest first):\n- Q: which format? A: Markdown\nPlanner decision: yes") {
+		t.Fatalf("the final round must see the earlier decision: %v", a.inputs)
+	}
+	for _, in := range a.inputs {
+		if strings.Contains(in, "Planner decision: Markdown") && strings.Contains(in, "Earlier planner decisions") {
+			t.Fatalf("the first resumed round has no earlier decision: %q", in)
+		}
+	}
 	if currentRunEpoch(dir, "T001") != epoch {
 		t.Fatal("the run epoch changed across the two rounds")
 	}
