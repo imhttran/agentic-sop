@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -40,16 +41,29 @@ type SecurityConfig struct {
 	// the requested scan scope. Exclusions are recorded in the scan evidence; they
 	// are a declared scope boundary, not a coverage failure.
 	Exclude []string `yaml:"exclude"`
-	// AdvisoryDatabasePath is the local advisory database path a dependency
-	// adapter uses. It is explicit so a scan never downloads a database implicitly.
+	// AdvisoryDatabasePath is the local advisory database path a cargo-audit-style
+	// dependency adapter uses. It is explicit so a scan never downloads a database
+	// implicitly. OSV-Scanner uses OSVDatabasePath because the two database formats
+	// are not interchangeable.
 	AdvisoryDatabasePath string `yaml:"advisory_database_path"`
+	// OSVDatabasePath is the local OSV-Scanner offline database cache root. It is a
+	// separate input from AdvisoryDatabasePath: an OSV database and a cargo-audit
+	// advisory database have different layouts and must never be substituted for
+	// one another.
+	OSVDatabasePath string `yaml:"osv_database_path"`
 	// StaleAdvisoryDatabase is the policy for a stale advisory database: deny
 	// (the default) or allow. Deny makes a stale database INDETERMINATE; allow
 	// keeps the verdict path and records a PARTIAL coverage diagnostic.
 	StaleAdvisoryDatabase string `yaml:"stale_advisory_database"`
-	// Auto enables automatic dependency adapter selection. It is report-only
-	// configuration policy and never changes a verdict by itself.
+	// Auto enables automatic adapter selection. It is report-only configuration
+	// policy and never changes a verdict by itself. Automatic selection fills only
+	// unconfigured, enabled coverage; it never overrides an explicit disable.
 	Auto bool `yaml:"auto"`
+	// Categories enables or disables a whole category. A pointer distinguishes an
+	// omitted entry (inherit the global enabled state) from an explicit false
+	// (disable every adapter in the category). A category disable cannot be
+	// re-enabled by automatic selection.
+	Categories map[string]*bool `yaml:"categories"`
 	// Adapters selects the adapters by stable ID and category. It is replaceable
 	// through configuration alone; the runner never branches on a specific ID.
 	Adapters []SecurityAdapterConfig `yaml:"adapters"`
@@ -62,6 +76,22 @@ type SecurityAdapterConfig struct {
 	Category string   `yaml:"category"`
 	Protocol string   `yaml:"protocol"`
 	Command  []string `yaml:"command"`
+	// Enabled is a pointer so an omitted value inherits the category/global enable
+	// state, while an explicit false disables this adapter and blocks automatic
+	// selection from re-adding it.
+	Enabled *bool `yaml:"enabled"`
+	// Languages declares the Go/Rust coverage this adapter provides. Empty means
+	// the built-in adapter's default metadata for built-ins, and "undeclared" for
+	// an external adapter. An undeclared external adapter can never prove
+	// language-specific required coverage.
+	Languages []string `yaml:"languages"`
+	// RepositoryWide declares that the adapter inspects the repository as a whole
+	// rather than a language set. It is implicit for secrets scanners. It is
+	// mutually exclusive with a non-empty Languages list.
+	RepositoryWide *bool `yaml:"repository_wide"`
+	// Inputs names explicit dependency inputs for OSV-Scanner (go.mod or
+	// Cargo.lock). When empty, inputs are resolved from detected repository content.
+	Inputs []string `yaml:"inputs"`
 	// Rules is the local rules path for a Semgrep adapter. It is explicit so a
 	// scan never downloads rules implicitly.
 	Rules string `yaml:"rules"`
@@ -107,6 +137,9 @@ const (
 
 	SecurityProtocolBuiltin  = "builtin"
 	SecurityProtocolExternal = "external"
+
+	SecurityLanguageGo   = "go"
+	SecurityLanguageRust = "rust"
 )
 
 // Environment configuration for the add-on. Like the other optional layers, the
@@ -123,10 +156,67 @@ func (c Config) SecurityEnabled() bool {
 	return c.Security.Enabled != nil && *c.Security.Enabled
 }
 
+// SecurityGateActive reports whether the security stage must run. It is true when
+// the add-on is enabled or when an already configured required gate is active. A
+// global disable must not silently exempt an active required gate; the stage runs
+// and reports INDETERMINATE instead of NOT_APPLICABLE.
+func (c Config) SecurityGateActive() bool {
+	if c.SecurityEnabled() {
+		return true
+	}
+	return c.Security.RequiredGateActive()
+}
+
+// RequiredGateActive reports whether configuration declares a required security
+// gate. A required mode without required categories is not an active gate.
+func (s SecurityConfig) RequiredGateActive() bool {
+	return strings.TrimSpace(s.Mode) == SecurityModeRequired && len(s.RequiredCategories) > 0
+}
+
+// CategoryEnabled reports whether a category is enabled. An omitted entry
+// inherits the global enabled state (true when this method is consulted on an
+// enabled block). An explicit false disables the whole category.
+func (s SecurityConfig) CategoryEnabled(category string) bool {
+	key := strings.ToLower(strings.TrimSpace(category))
+	if value, ok := s.Categories[key]; ok && value != nil {
+		return *value
+	}
+	return true
+}
+
+// AdapterEnabled reports whether one adapter is enabled after applying the
+// category and adapter controls. A category or adapter explicit false wins; an
+// omitted value inherits the enabled default.
+func (s SecurityConfig) AdapterEnabled(adapter SecurityAdapterConfig) bool {
+	category := strings.ToLower(strings.TrimSpace(adapter.Category))
+	if category == "" {
+		category = defaultCategoryForID(strings.ToLower(strings.TrimSpace(adapter.ID)))
+	}
+	if category != "" && !s.CategoryEnabled(category) {
+		return false
+	}
+	return adapter.Enabled == nil || *adapter.Enabled
+}
+
 // defaultSecurityExcludes are always outside a source scan. Git metadata is not
 // source, and SOP's own run state is evidence rather than project content; both
 // must never be scanned or persisted as findings.
 var defaultSecurityExcludes = []string{".git", ".agent-sdlc"}
+
+// defaultCategoryForID returns the built-in category for a built-in adapter id.
+// An external adapter always declares its category explicitly.
+func defaultCategoryForID(id string) string {
+	switch id {
+	case "semgrep":
+		return SecurityCategorySAST
+	case "gitleaks":
+		return SecurityCategorySecrets
+	case "cargo-audit", "osv-scanner":
+		return SecurityCategoryDependencies
+	default:
+		return ""
+	}
+}
 
 // SecurityExcludes returns the effective, deterministic exclusion list: the
 // built-in VCS/state exclusions followed by the operator's configured patterns.
@@ -221,6 +311,13 @@ func (c *Config) applySecurityDefaults() {
 			{ID: "gitleaks", Category: SecurityCategorySecrets, Protocol: SecurityProtocolBuiltin},
 		}
 	}
+	for key, value := range c.Security.Categories {
+		normalized := strings.ToLower(strings.TrimSpace(key))
+		if normalized != key {
+			delete(c.Security.Categories, key)
+			c.Security.Categories[normalized] = value
+		}
+	}
 	for i := range c.Security.Adapters {
 		a := &c.Security.Adapters[i]
 		a.ID = strings.TrimSpace(a.ID)
@@ -230,15 +327,13 @@ func (c *Config) applySecurityDefaults() {
 			a.Protocol = SecurityProtocolBuiltin
 		}
 		if a.Category == "" {
-			switch a.ID {
-			case "semgrep":
-				a.Category = SecurityCategorySAST
-			case "gitleaks":
-				a.Category = SecurityCategorySecrets
-			case "cargo-audit":
-				a.Category = SecurityCategoryDependencies
-			}
+			a.Category = defaultCategoryForID(strings.ToLower(a.ID))
 		}
+		a.Languages = normalizeLanguages(a.Languages)
+		for i := range a.Inputs {
+			a.Inputs[i] = strings.TrimSpace(strings.ReplaceAll(a.Inputs[i], "\\", "/"))
+		}
+		sort.Strings(a.Inputs)
 		if len(a.Command) == 0 {
 			switch a.ID {
 			case "semgrep":
@@ -249,6 +344,8 @@ func (c *Config) applySecurityDefaults() {
 				// cargo-audit is a Cargo subcommand; the argv is explicit so no
 				// shell is involved.
 				a.Command = []string{"cargo", "audit"}
+			case "osv-scanner":
+				a.Command = []string{"osv-scanner"}
 			}
 		}
 	}
@@ -281,6 +378,9 @@ func validateDisabledSecurity(s SecurityConfig) error {
 	if err := validateSecurityAdvisoryDatabasePath(s.AdvisoryDatabasePath); err != nil {
 		return err
 	}
+	if err := validateSecurityAdvisoryDatabasePath(s.OSVDatabasePath); err != nil {
+		return err
+	}
 	if b := strings.TrimSpace(s.Baseline); b != "" {
 		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
@@ -289,7 +389,17 @@ func validateDisabledSecurity(s SecurityConfig) error {
 	if err := validateSecurityExcludes(s.Exclude); err != nil {
 		return err
 	}
-	return nil
+	if err := validateSecurityCategories(s.Categories); err != nil {
+		return err
+	}
+	for _, raw := range s.RequiredCategories {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
+		default:
+			return fmt.Errorf("config: unknown security.required_categories entry %q (want sast, secrets, dependencies)", raw)
+		}
+	}
+	return validateSecurityAdapterConfigs(s, false)
 }
 
 // validateSecurityStale accepts an empty value (deny), deny, or allow. Any other
@@ -301,6 +411,205 @@ func validateSecurityStale(value string) error {
 	default:
 		return fmt.Errorf("config: unknown security.stale_advisory_database %q (want deny, allow)", value)
 	}
+}
+
+// validateSecurityCategories rejects unknown category keys and empty entries so
+// a typo cannot silently leave a category enabled.
+func validateSecurityCategories(categories map[string]*bool) error {
+	for raw, value := range categories {
+		category := strings.ToLower(strings.TrimSpace(raw))
+		switch category {
+		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
+		default:
+			return fmt.Errorf("config: unknown security.categories key %q (want sast, secrets, dependencies)", raw)
+		}
+		if value == nil {
+			return fmt.Errorf("config: security.categories.%s must be true or false", raw)
+		}
+	}
+	return nil
+}
+
+// normalizeLanguages trims, lowercases, deduplicates, and sorts language names.
+func normalizeLanguages(values []string) []string {
+	out := make([]string, 0, len(values))
+	seen := map[string]bool{}
+	for _, raw := range values {
+		value := strings.ToLower(strings.TrimSpace(raw))
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// validateSecurityAdapterLanguages checks the declared language set. Unknown
+// languages are rejected so a typo cannot be mistaken for coverage.
+func validateSecurityAdapterLanguages(languages []string) error {
+	for _, raw := range languages {
+		switch strings.ToLower(strings.TrimSpace(raw)) {
+		case SecurityLanguageGo, SecurityLanguageRust:
+		default:
+			return fmt.Errorf("unknown language %q (want go, rust)", raw)
+		}
+	}
+	return nil
+}
+
+// validateSecurityInputs requires repository-relative dependency input paths.
+func validateSecurityInputs(inputs []string) error {
+	for _, raw := range inputs {
+		if strings.TrimSpace(raw) == "" {
+			return fmt.Errorf("input path must not be empty")
+		}
+		if err := validateSecurityLockfileValue(raw); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateSecurityAdapterConfigs validates adapter-level fields shared by the
+// enabled and disabled paths. enabledOnly adds command and category rules that
+// only matter when the adapter can actually run.
+func validateSecurityAdapterConfigs(s SecurityConfig, enabledOnly bool) error {
+	seen := make(map[string]bool, len(s.Adapters))
+	for i, a := range s.Adapters {
+		id := strings.TrimSpace(a.ID)
+		if id == "" {
+			return fmt.Errorf("config: security.adapters[%d].id is required", i)
+		}
+		if seen[id] {
+			return fmt.Errorf("config: duplicate security adapter id %q", id)
+		}
+		seen[id] = true
+		protocol := strings.ToLower(strings.TrimSpace(a.Protocol))
+		if protocol == "" {
+			protocol = SecurityProtocolBuiltin
+		}
+		category := strings.ToLower(strings.TrimSpace(a.Category))
+		if category == "" {
+			category = defaultCategoryForID(strings.ToLower(id))
+		}
+		switch category {
+		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
+		default:
+			return fmt.Errorf("config: security adapter %q has unknown category %q (want sast, secrets, dependencies)", id, a.Category)
+		}
+		if err := validateSecurityAdapterLanguages(a.Languages); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if a.RepositoryWide != nil && *a.RepositoryWide && len(a.Languages) > 0 {
+			return fmt.Errorf("config: security adapter %q cannot set both repository_wide and languages", id)
+		}
+		if err := validateSecurityInputs(a.Inputs); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if strings.ContainsRune(a.Database, 0) {
+			return fmt.Errorf("config: security adapter %q database contains a NUL byte", id)
+		}
+		if err := validateSecurityDatabaseValue(a.Database); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if err := validateSecurityStaleValue(a.Stale); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if strings.TrimSpace(a.Lockfile) != "" {
+			if err := validateSecurityLockfileValue(a.Lockfile); err != nil {
+				return fmt.Errorf("config: security adapter %q: %w", id, err)
+			}
+		}
+		switch protocol {
+		case SecurityProtocolBuiltin:
+			switch strings.ToLower(id) {
+			case "semgrep":
+				if category != SecurityCategorySAST {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySAST)
+				}
+				if err := rejectRepositoryWide(id, a); err != nil {
+					return err
+				}
+				if len(a.Inputs) > 0 {
+					return fmt.Errorf("config: security adapter %q does not accept inputs", id)
+				}
+			case "gitleaks":
+				if category != SecurityCategorySecrets {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySecrets)
+				}
+				if len(a.Languages) > 0 {
+					return fmt.Errorf("config: security adapter %q is repository-wide and does not accept languages", id)
+				}
+				if a.RepositoryWide != nil && !*a.RepositoryWide {
+					return fmt.Errorf("config: security adapter %q is repository-wide; repository_wide cannot be false", id)
+				}
+				if len(a.Inputs) > 0 {
+					return fmt.Errorf("config: security adapter %q does not accept inputs", id)
+				}
+			case "cargo-audit":
+				if category != SecurityCategoryDependencies {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategoryDependencies)
+				}
+				for _, language := range a.Languages {
+					if language != SecurityLanguageRust {
+						return fmt.Errorf("config: security adapter %q covers only rust, got language %q", id, language)
+					}
+				}
+				if err := rejectRepositoryWide(id, a); err != nil {
+					return err
+				}
+				if len(a.Inputs) > 0 {
+					return fmt.Errorf("config: security adapter %q accepts lockfile, not inputs", id)
+				}
+			case "osv-scanner":
+				if category != SecurityCategoryDependencies {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategoryDependencies)
+				}
+				if err := rejectRepositoryWide(id, a); err != nil {
+					return err
+				}
+				if strings.TrimSpace(a.Lockfile) != "" {
+					return fmt.Errorf("config: security adapter %q accepts inputs, not lockfile", id)
+				}
+			default:
+				return fmt.Errorf("config: unknown built-in security adapter %q (want semgrep, gitleaks, cargo-audit, osv-scanner; use protocol: external for a private adapter)", id)
+			}
+		case SecurityProtocolExternal:
+			if category == SecurityCategorySecrets {
+				if len(a.Languages) > 0 {
+					return fmt.Errorf("config: security adapter %q is a secrets scanner and is repository-wide; languages does not apply", id)
+				}
+				if a.RepositoryWide != nil && !*a.RepositoryWide {
+					return fmt.Errorf("config: security adapter %q is repository-wide; repository_wide cannot be false", id)
+				}
+			}
+			if len(a.Inputs) > 0 {
+				return fmt.Errorf("config: external security adapter %q does not accept inputs", id)
+			}
+		default:
+			return fmt.Errorf("config: security adapter %q has unknown protocol %q (want builtin, external)", id, a.Protocol)
+		}
+		if enabledOnly && s.AdapterEnabled(a) && (len(a.Command) == 0 || strings.TrimSpace(a.Command[0]) == "") {
+			return fmt.Errorf("config: security adapter %q requires a command", id)
+		}
+		if len(a.Command) > 0 {
+			for _, arg := range a.Command {
+				if strings.ContainsRune(arg, 0) {
+					return fmt.Errorf("config: security adapter %q command contains a NUL byte", id)
+				}
+			}
+		}
+	}
+	return nil
+}
+
+func rejectRepositoryWide(id string, a SecurityAdapterConfig) error {
+	if a.RepositoryWide != nil && *a.RepositoryWide {
+		return fmt.Errorf("config: security adapter %q is language-scoped; repository_wide does not apply", id)
+	}
+	return nil
 }
 
 // validateSecurityAdvisoryDatabasePath validates the global advisory database
@@ -440,6 +749,9 @@ func (c *Config) validateSecurity() error {
 	if err := validateSecurityAdvisoryDatabasePath(s.AdvisoryDatabasePath); err != nil {
 		return err
 	}
+	if err := validateSecurityAdvisoryDatabasePath(s.OSVDatabasePath); err != nil {
+		return err
+	}
 	if b := strings.TrimSpace(s.Baseline); b != "" {
 		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
@@ -448,70 +760,23 @@ func (c *Config) validateSecurity() error {
 	if err := validateSecurityExcludes(s.Exclude); err != nil {
 		return err
 	}
+	if err := validateSecurityCategories(s.Categories); err != nil {
+		return err
+	}
+	if err := validateSecurityAdapterConfigs(s, true); err != nil {
+		return err
+	}
 
-	seen := make(map[string]bool, len(s.Adapters))
 	byCategory := make(map[string]bool, len(s.Adapters))
-	for i, a := range s.Adapters {
-		id := strings.TrimSpace(a.ID)
-		if id == "" {
-			return fmt.Errorf("config: security.adapters[%d].id is required", i)
-		}
-		if seen[id] {
-			return fmt.Errorf("config: duplicate security adapter id %q", id)
-		}
-		seen[id] = true
+	enabledByCategory := make(map[string]bool, len(s.Adapters))
+	for _, a := range s.Adapters {
 		category := strings.ToLower(strings.TrimSpace(a.Category))
-		switch category {
-		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
-		default:
-			return fmt.Errorf("config: security adapter %q has unknown category %q (want sast, secrets, dependencies)", id, a.Category)
+		if category == "" {
+			category = defaultCategoryForID(strings.ToLower(strings.TrimSpace(a.ID)))
 		}
 		byCategory[category] = true
-		protocol := strings.ToLower(strings.TrimSpace(a.Protocol))
-		switch protocol {
-		case SecurityProtocolBuiltin:
-			switch id {
-			case "semgrep":
-				if category != SecurityCategorySAST {
-					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySAST)
-				}
-			case "gitleaks":
-				if category != SecurityCategorySecrets {
-					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySecrets)
-				}
-			case "cargo-audit":
-				if category != SecurityCategoryDependencies {
-					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategoryDependencies)
-				}
-			default:
-				return fmt.Errorf("config: unknown built-in security adapter %q (want semgrep, gitleaks, cargo-audit; use protocol: external for a private adapter)", id)
-			}
-		case SecurityProtocolExternal:
-			// Any stable ID is permitted; the process response is validated.
-		default:
-			return fmt.Errorf("config: security adapter %q has unknown protocol %q (want builtin, external)", id, a.Protocol)
-		}
-		if len(a.Command) == 0 || strings.TrimSpace(a.Command[0]) == "" {
-			return fmt.Errorf("config: security adapter %q requires a command", id)
-		}
-		for _, arg := range a.Command {
-			if strings.ContainsRune(arg, 0) {
-				return fmt.Errorf("config: security adapter %q command contains a NUL byte", id)
-			}
-		}
-		if strings.ContainsRune(a.Database, 0) {
-			return fmt.Errorf("config: security adapter %q database contains a NUL byte", id)
-		}
-		if err := validateSecurityDatabaseValue(a.Database); err != nil {
-			return fmt.Errorf("config: security adapter %q: %w", id, err)
-		}
-		if err := validateSecurityStaleValue(a.Stale); err != nil {
-			return fmt.Errorf("config: security adapter %q: %w", id, err)
-		}
-		if strings.TrimSpace(a.Lockfile) != "" {
-			if err := validateSecurityLockfileValue(a.Lockfile); err != nil {
-				return fmt.Errorf("config: security adapter %q: %w", id, err)
-			}
+		if s.AdapterEnabled(a) {
+			enabledByCategory[category] = true
 		}
 	}
 	for _, raw := range s.RequiredCategories {
@@ -523,6 +788,9 @@ func (c *Config) validateSecurity() error {
 		}
 		if !byCategory[category] {
 			return fmt.Errorf("config: security.required_categories names %q but no configured adapter provides it", category)
+		}
+		if !enabledByCategory[category] {
+			return fmt.Errorf("config: security.required_categories names %q but every configured adapter for it is disabled", category)
 		}
 	}
 	return nil

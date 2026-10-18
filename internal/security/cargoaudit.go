@@ -24,6 +24,7 @@ type cargoAuditAdapter struct {
 	command      []string
 	databasePath string
 	lockfile     string
+	languages    []Language
 	stalePolicy  string
 	version      string
 	configDigest string
@@ -45,6 +46,7 @@ func (a *cargoAuditAdapter) Descriptor() Descriptor {
 		ScopeModes:      []string{"workspace", "changed-files"},
 		Locality:        "local",
 		Network:         "none; --no-fetch against an explicit local advisory database; no source upload",
+		Languages:       a.languages,
 	}
 }
 
@@ -116,6 +118,13 @@ func (a *cargoAuditAdapter) stalePolicyValue() string {
 	return StaleDeny
 }
 
+func (a *cargoAuditAdapter) declaredLanguages() []Language {
+	if len(a.languages) > 0 {
+		return append([]Language(nil), a.languages...)
+	}
+	return []Language{LanguageRust}
+}
+
 // currentProvenance fingerprints the local database before execution so resume
 // can compare an unchanged database without running the scanner.
 func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
@@ -123,6 +132,7 @@ func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
 		ScannerVersion:      a.version,
 		ConfigurationDigest: a.configDigest,
 		ContentIdentity:     req.Content,
+		Languages:           a.declaredLanguages(),
 	}
 	lockfiles, err := a.resolveLockfiles(req)
 	if err != nil {
@@ -142,6 +152,9 @@ func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
 		return prov, err
 	}
 	prov.AdvisoryDatabaseIdentity = identity
+	metadata, stale := cargoDatabaseFreshness(dir, time.Now().UTC())
+	prov.AdvisoryDatabaseMetadata = metadata
+	prov.AdvisoryDatabaseStale = stale
 	return prov, nil
 }
 
@@ -498,6 +511,9 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 		exec.Provenance.AdvisoryDatabaseMetadata = strings.Join(sortedUniqueStrings(metadata), "; ")
 	}
 	exec.Provenance.AdvisoryDatabaseStale = anyStale
+	if successes > 0 {
+		exec.Languages = a.declaredLanguages()
+	}
 	if anyStale {
 		if a.stalePolicyValue() == StaleAllow {
 			exec.Coverage = CoveragePartial
@@ -867,6 +883,53 @@ func cargoDatabaseStale(lastUpdated string, now time.Time) (stale bool, known bo
 		}
 	}
 	return now.Sub(updated) > cargoAuditStaleMaxAge, true
+}
+
+// cargoDatabaseFreshness rechecks a local database without running the scanner.
+// It is used by resume so an unchanged but aged database invalidates reused
+// evidence. Scanner-reported metadata wins; otherwise the newest file
+// modification time is a conservative local freshness signal.
+func cargoDatabaseFreshness(dir string, now time.Time) (metadata string, stale bool) {
+	if meta, ok := readCargoDatabaseMeta(dir); ok {
+		metadata = cargoAuditMetadataString(meta)
+		if stale, known := cargoDatabaseStale(meta.LastUpdated, now); known {
+			return metadata, stale
+		}
+	}
+	modified := newestModTime(dir)
+	if modified.IsZero() {
+		return metadata, true
+	}
+	meta := "modified=" + modified.Format(time.RFC3339)
+	if metadata != "" {
+		metadata += "; " + meta
+	} else {
+		metadata = meta
+	}
+	return metadata, now.Sub(modified) > cargoAuditStaleMaxAge
+}
+
+// newestModTime returns the newest regular-file modification time under dir. A
+// missing or unreadable tree yields the zero time, which callers treat as stale.
+func newestModTime(dir string) time.Time {
+	var newest time.Time
+	_ = filepath.WalkDir(dir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return nil
+		}
+		if entry.IsDir() || !entry.Type().IsRegular() {
+			return nil
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return nil
+		}
+		if info.ModTime().After(newest) {
+			newest = info.ModTime()
+		}
+		return nil
+	})
+	return newest
 }
 
 func rawString(raw json.RawMessage) string {

@@ -3,19 +3,21 @@ name: sop-security-scan
 description: |-
   Run a report-only security scan for Go, Rust, or mixed repositories through
   SOP. Detects languages, manifests, Cargo workspaces and lockfiles, selects
-  Gitleaks, Semgrep, and cargo-audit by actual repository content, triages
-  findings against source and dependency evidence, and saves sanitized evidence.
+  Gitleaks, Semgrep, cargo-audit, and OSV-Scanner by actual repository content,
+  respects global/category/adapter enable controls, triages findings and coverage
+  against source and dependency evidence, and saves sanitized evidence.
   /sop-security-scan, "security scan", "scan this repo for secrets and
-  vulnerabilities", "audit Rust dependencies".
+  vulnerabilities", "audit Go and Rust dependencies".
 disable-model-invocation: true
 ---
 
 # SOP Security Scan
 
 Use this skill when the operator asks for a security scan, a secrets scan, a
-source-analysis scan, or a Rust dependency audit. It orchestrates SOP's existing
-security adapters. Scanner execution stays in the adapters: this skill never
-invokes a scanner directly, installs a tool, suppresses a finding, or fixes code.
+source-analysis scan, or a Go/Rust dependency audit. It orchestrates SOP's
+existing security adapters. Scanner execution stays in the adapters: this skill
+never invokes a scanner directly, installs a tool, suppresses a finding, or fixes
+code.
 
 SOP state and evidence are authoritative. The skill reads SOP output and source
 files, then reports what actually ran. Complete the workflow in one request and
@@ -43,7 +45,9 @@ Use `sop security inspect --json`. It is read-only and reports:
 
 - detected languages (`go`, `rust`), manifests, and lockfiles;
 - Cargo workspaces and the actual `Cargo.lock` locations;
-- configured adapters and their capability status;
+- configured and selected adapters, effective enable/disable state and reason,
+  and explicit/automatic selection mode;
+- capability and language coverage, explicit overlaps, and missing prerequisites;
 - proposed adapters for the detected content.
 
 Classify each capability as one of:
@@ -55,8 +59,14 @@ Classify each capability as one of:
   with only Go Semgrep rules, a missing lockfile, or a missing advisory database;
 - `proposed`: content suggests an adapter that is not configured yet.
 
-A missing lockfile or unsupported language is a coverage limitation, not a clean
-result. Report it explicitly.
+A missing input (for example a Rust `Cargo.toml` without `Cargo.lock`), missing
+database, unsupported language, or disabled coverage is a coverage limitation,
+not a clean result. Report it explicitly. A category-level success in one
+language never proves coverage of the other language.
+
+Respect the effective enable state. A global, category, or adapter disable is an
+intentional scope decision, not a scanner failure. Do not re-enable it, and do not
+let `--auto` undo it.
 
 ## CONFIGURE (REPORT-ONLY ONLY)
 
@@ -65,16 +75,30 @@ repository actually needs:
 
 - Gitleaks for secrets;
 - Semgrep for source analysis with local, language-specific rules;
-- cargo-audit for Rust dependency advisories.
+- OSV-Scanner for Go and Rust dependency advisories (recommended for new
+  configurations);
+- cargo-audit for Rust dependency advisories when the project already uses it.
 
 Use the existing configuration keys; do not invent adapters or change scanner
 policy. A local rules/database path is always explicit. Never let a scan download
 rules or update an advisory database. Never install a scanner unless the operator
 authorized it or an existing provisioning policy already provides it.
 
-A Rust repository needs an explicit local advisory database path for cargo-audit.
-If no database is configured, report cargo-audit as unsupported; do not fall back
+OSV and cargo-audit databases are separate inputs: `security.osv_database_path`
+is not `security.advisory_database_path`. Do not point one adapter at the other
+format.
+
+A Rust repository needs an explicit local cargo-audit advisory database path. A
+Go or Rust OSV configuration needs an explicit offline OSV cache. If a required
+database is not configured, report that adapter as unsupported; do not fall back
 to an implicit fetch or a live network database.
+
+Enable/disable controls use pointers so an omitted value is not the same as an
+explicit `false`:
+
+- `security.enabled: false` disables everything;
+- `security.categories.<category>: false` disables the whole category;
+- `security.adapters[].enabled: false` disables one adapter.
 
 Example report-only block:
 
@@ -85,6 +109,7 @@ security:
   scope: workspace
   unknown_severity: indeterminate
   advisory_database_path: .agent-sdlc/advisory-db
+  osv_database_path: .agent-sdlc/osv-db
   stale_advisory_database: deny
   adapters:
     - id: semgrep
@@ -96,10 +121,11 @@ security:
       category: secrets
       protocol: builtin
       command: [gitleaks]
-    - id: cargo-audit
+    - id: osv-scanner
       category: dependencies
       protocol: builtin
-      command: [cargo, audit]
+      command: [osv-scanner]
+      languages: [go, rust]
 ```
 
 Do not add `required_categories`, enable required mode, create a baseline, or add
@@ -109,21 +135,25 @@ owners/expiry dates merely to make a scan pass.
 
 Select by actual repository content, not by convenience:
 
-- Go content: Gitleaks and Semgrep with Go rules.
-- Rust content: Gitleaks, Semgrep with Rust rules when available, and cargo-audit
-  for dependency advisories.
+- Go content: Gitleaks, Semgrep with Go rules, and OSV dependency advisories.
+- Rust content: Gitleaks, Semgrep with Rust rules when available, and OSV and/or
+  cargo-audit dependency advisories.
 - Mixed content: the union of the above. Coverage stays independent per language
-  and category.
+  and category. cargo-audit cannot satisfy Go dependency coverage.
 
 If Rust rules are not available, Semgrep must report unsupported Rust analysis.
-Never reuse Go rules for Rust source. If cargo-audit is unavailable or has no
-database, report that; do not replace it with a clean dependency result.
+Never reuse Go rules for Rust source. If a dependency adapter is unavailable or
+has no database, report that; do not replace it with a clean dependency result.
+
+Automatic selection fills only unconfigured, enabled coverage. It never re-adds a
+disabled adapter and never runs overlapping automatic coverage twice. Explicit
+overlap is allowed but must be reported as visible evidence.
 
 ## SCAN
 
 Run one governed, report-only scan through SOP. Use auto selection only to fill
-missing built-in categories from detected content; explicit configuration stays
-authoritative.
+missing, enabled coverage from detected content; explicit configuration stays
+authoritative and an explicit disable stays disabled.
 
 ```bash
 sop security scan --auto --report-only --json
@@ -146,10 +176,12 @@ For each finding, compare it with the current source and dependency evidence:
 - source findings: read the named path and line range; state whether the rule is
   supported and whether the evidence still matches the current content;
 - dependency findings: verify the advisory ID, affected package and version,
-  lockfile, patched version, and CVSS/severity evidence;
-- execution failures, missing tools, missing lockfiles, unavailable databases,
-  stale databases, and unsupported languages are findings about coverage. They
-  must not be reported as clean;
+  input manifest/lockfile, patched version, severity evidence, and whether the
+  scanner supplied any reachability evidence. A version match is not proof of
+  reachability;
+- execution failures, missing tools, missing inputs, unavailable databases,
+  stale databases, unsupported languages, and disabled coverage are findings
+  about coverage. They must not be reported as clean;
 - distinguish advisories from tool/database failures.
 
 Do not quote a detected secret value. Refer only to the rule ID, path, line,
@@ -162,10 +194,11 @@ Do not create a baseline or invent an owner or expiry date. Do not fix code.
 Return a concise, evidence-backed report containing:
 
 - repository and detected languages/manifests;
-- Cargo workspaces and actual lockfiles, including missing ones;
-- adapters that ran, their status and coverage, and the exact scanner, rules or
-  advisory-database identity, configuration, and policy identity from the
-  evidence;
+- Cargo workspaces and actual lockfiles or Go modules, including missing ones;
+- adapters that ran, their selection mode, status and coverage, the effective
+  enable/disable state, and the exact scanner, rules or advisory-database
+  identity, configuration, and policy identity from the evidence;
+- per-category and per-language coverage, including disabled and missing units;
 - findings grouped by category with source/dependency evidence;
 - declared exclusions and scope limitations;
 - execution failures and unsupported capabilities;
@@ -179,20 +212,25 @@ Return a concise, evidence-backed report containing:
 A passing scan is evidence for the configured tools, rules/database, and scope.
 It is not proof that the repository has no vulnerabilities.
 
-## RUST REQUIREMENTS
+## GO AND RUST DEPENDENCY REQUIREMENTS
 
-- Resolve the Cargo workspace and its actual `Cargo.lock`; do not assume a member
-  owns a lockfile.
-- Never run cargo-audit without an explicit lockfile. Do not let it generate or
-  modify a lockfile.
-- Do not run a database fetch or update. Network access is explicit: cargo-audit
-  uses `--no-fetch` and a local advisory database.
-- Parse cargo-audit structured output. Separate advisories from missing database,
-  stale database, malformed output, timeout, and tool failure.
-- Preserve advisory IDs, affected packages/versions, severity when available,
-  CVSS, aliases/CVEs, patched versions, and remediation references.
-- Missing lockfiles, unavailable databases, stale databases under the deny policy,
-  and failed executions are not clean. Include the advisory database identity in
+- Resolve explicit Go `go.mod` files and the Cargo workspace's actual
+  `Cargo.lock`; do not assume a workspace member owns a lockfile.
+- Never let a scanner generate or modify a manifest or lockfile.
+- OSV-Scanner runs with `--offline`, `--all-packages`, `--no-resolve`,
+  `--no-call-analysis=all`, an explicit offline cache, and a controlled empty
+  `--config` so repository `osv-scanner.toml` cannot suppress findings. Do not run
+  a database fetch or update and do not fall back to the live OSV API.
+- cargo-audit runs with `--file`, `--json`, `--no-fetch`, and an explicit local
+  `--db`. It never runs `fix`.
+- Parse structured output. Separate advisories from missing input, missing
+  database, stale database, malformed output, timeout, and tool failure.
+- Preserve advisory IDs, affected packages/versions, input paths, severity when
+  available, CVSS, aliases/CVEs, patched versions, affected ranges, and
+  remediation references. Record `reachability: not-evaluated` when call analysis
+  is disabled.
+- Missing inputs, unavailable databases, stale databases under the deny policy,
+  and failed executions are not clean. Include the database and input identity in
   evidence and resume reasoning.
 - If Rust Semgrep rules are unavailable, report source analysis as unsupported
   instead of implying full Rust SAST coverage.

@@ -20,15 +20,20 @@ import (
 // persisted is not evidence.
 func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *taskfile.Spec, rn *runpkg.Run) (*security.Scan, error) {
 	policy := security.Policy{
-		Enabled:            true,
-		Mode:               cfg.Security.Mode,
-		Scope:              cfg.Security.Scope,
-		RequiredCategories: cfg.Security.RequiredCategories,
-		FailOn:             cfg.Security.FailOn,
-		UnknownSeverity:    cfg.Security.UnknownSeverity,
-		TimeoutSeconds:     cfg.Security.TimeoutSeconds,
-		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
-		Exclude:            cfg.SecurityExcludes(),
+		Enabled:               cfg.SecurityEnabled(),
+		Mode:                  cfg.Security.Mode,
+		Scope:                 cfg.Security.Scope,
+		RequiredCategories:    cfg.Security.RequiredCategories,
+		FailOn:                cfg.Security.FailOn,
+		UnknownSeverity:       cfg.Security.UnknownSeverity,
+		TimeoutSeconds:        cfg.Security.TimeoutSeconds,
+		MaxOutputBytes:        cfg.Security.MaxOutputBytes,
+		Exclude:               cfg.SecurityExcludes(),
+		AdvisoryDatabasePath:  cfg.Security.AdvisoryDatabasePath,
+		OSVDatabasePath:       cfg.Security.OSVDatabasePath,
+		StaleAdvisoryDatabase: cfg.Security.StaleAdvisoryDatabase,
+		Auto:                  cfg.Security.Auto,
+		RequiredGateActive:    cfg.Security.RequiredGateActive(),
 	}
 	scan := &security.Scan{
 		ProtocolVersion: security.ProtocolVersion,
@@ -55,9 +60,23 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		return indeterminate("baseline could not be loaded: " + err.Error())
 	}
 	scan.Diagnostics = append(scan.Diagnostics, baselineDiagnostics...)
-	adapters, err := security.BuildAdapters(cfg.Security.Adapters, security.BuildOptions{
-		Timeout:        time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
-		MaxOutputBytes: cfg.Security.MaxOutputBytes,
+
+	needDetection := cfg.Security.Auto || cfg.Security.Mode == config.SecurityModeRequired || len(cfg.Security.RequiredCategories) > 0
+	detection := security.Detection{}
+	if needDetection {
+		detected, derr := security.DetectRepositoryScoped(dir, cfg.SecurityExcludes())
+		if derr != nil {
+			return indeterminate("repository detection failed: " + derr.Error())
+		}
+		detection = detected
+	}
+	selection := security.ResolveSelection(cfg.Security, detection, cfg.Security.Auto)
+	adapters, err := security.BuildAdapters(selection.EnabledConfigs(), security.BuildOptions{
+		Timeout:         time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
+		MaxOutputBytes:  cfg.Security.MaxOutputBytes,
+		DatabasePath:    cfg.Security.AdvisoryDatabasePath,
+		OSVDatabasePath: cfg.Security.OSVDatabasePath,
+		StalePolicy:     cfg.Security.StaleAdvisoryDatabase,
 	})
 	if err != nil {
 		return indeterminate("adapter configuration is invalid: " + err.Error())
@@ -71,6 +90,10 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		Timeout:        time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
 		MaxOutputBytes: cfg.Security.MaxOutputBytes,
 		Baseline:       baseline,
+		Selection:      selection.AdapterSelections(),
+		Disabled:       selection.Disabled,
+		Overlaps:       selection.Overlaps,
+		Detection:      selection.Detection,
 	})
 	if err != nil {
 		return indeterminate("security configuration is invalid: " + err.Error())
@@ -80,11 +103,15 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		return indeterminate("security scan could not produce evidence: " + err.Error())
 	}
 	scan = &result
+	if needDetection {
+		scan.Detection = selection.Detection
+	}
 	if scan.Diagnostics == nil {
 		scan.Diagnostics = baselineDiagnostics
 	} else {
 		scan.Diagnostics = append(append([]string(nil), baselineDiagnostics...), scan.Diagnostics...)
 	}
+	scan.Diagnostics = append(selection.Diagnostics, scan.Diagnostics...)
 	if _, err := security.WriteArtifacts(rn.Dir(), *scan); err != nil {
 		return nil, fmt.Errorf("write security artifacts: %w", err)
 	}
@@ -113,11 +140,21 @@ func securityGateEvidence(cfg config.Config, scan *security.Scan) *quality.Secur
 		reason = fmt.Sprintf("%d blocking finding(s)", blocking)
 	}
 	return &quality.SecurityEvidence{
-		Enabled:    true,
+		Enabled:    cfg.SecurityGateActive(),
 		Required:   cfg.Security.Mode == config.SecurityModeRequired,
-		Configured: len(cfg.Security.Adapters) > 0,
+		Configured: enabledAdapterCount(scan) > 0,
 		Verdict:    string(scan.Verdict),
 		Blocking:   blocking,
 		Reason:     reason,
 	}
+}
+
+func enabledAdapterCount(scan *security.Scan) int {
+	count := 0
+	for _, adapter := range scan.Adapters {
+		if !adapter.Disabled {
+			count++
+		}
+	}
+	return count
 }

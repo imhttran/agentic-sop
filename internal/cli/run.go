@@ -1025,7 +1025,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// FAIL/INDETERMINATE through the single quality gate below. The add-on is a
 		// strict no-op when disabled.
 		securityScan = nil
-		if cfg.SecurityEnabled() {
+		if cfg.SecurityGateActive() {
 			securityScan, err = runSecurityGate(ctx, cfg, dir, spec, rn)
 			if err != nil {
 				return lifeResult{}, fmt.Errorf("security: %w", err)

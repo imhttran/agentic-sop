@@ -35,6 +35,16 @@ func isKnownCategory(c Category) bool {
 	return false
 }
 
+// isKnownLanguage reports whether a language is part of the contract. Unknown
+// language metadata is rejected so it cannot be mistaken for coverage.
+func isKnownLanguage(language Language) bool {
+	switch language {
+	case LanguageGo, LanguageRust:
+		return true
+	}
+	return false
+}
+
 // ExecutionStatus is an adapter's execution outcome. It is independent of the
 // policy verdict: a COMPLETED execution can still fail policy, and a FAILED
 // execution can never produce PASS.
@@ -92,6 +102,12 @@ type Descriptor struct {
 	ScopeModes      []string   `json:"scope_modes"`
 	Locality        string     `json:"locality"`
 	Network         string     `json:"network"`
+	// Languages declares the Go/Rust coverage this adapter provides. An empty
+	// list means language coverage is undeclared, unless RepositoryWide is set.
+	Languages []Language `json:"languages,omitempty"`
+	// RepositoryWide declares that the adapter inspects the repository as a whole
+	// rather than a language set (for example a secrets scanner).
+	RepositoryWide bool `json:"repository_wide,omitempty"`
 }
 
 // Validate rejects a descriptor that cannot satisfy the contract.
@@ -112,6 +128,14 @@ func (d Descriptor) Validate() error {
 	}
 	if len(d.ScopeModes) == 0 {
 		return fmt.Errorf("descriptor: adapter %s declares no scope modes", d.AdapterID)
+	}
+	for _, language := range d.Languages {
+		if !isKnownLanguage(language) {
+			return fmt.Errorf("descriptor: adapter %s has unknown language %q", d.AdapterID, language)
+		}
+	}
+	if d.RepositoryWide && len(d.Languages) > 0 {
+		return fmt.Errorf("descriptor: adapter %s cannot be both repository-wide and language-scoped", d.AdapterID)
 	}
 	return nil
 }
@@ -208,19 +232,33 @@ type Provenance struct {
 	// AdvisoryDatabaseStale reports that the adapter observed a stale advisory
 	// database. Policy decides what a stale database means.
 	AdvisoryDatabaseStale bool `json:"advisory_database_stale,omitempty"`
-	// LockfileIdentity records the resolved dependency lockfiles and their content
-	// digests for a dependency scan. It is a resume key: a changed lockfile must
-	// invalidate reused evidence even when the database is unchanged.
+	// LockfileIdentity records the resolved dependency input files and their
+	// content digests for a dependency scan. It is a resume key: a changed
+	// lockfile or go.mod must invalidate reused evidence even when the database is
+	// unchanged.
 	LockfileIdentity string `json:"lockfile_identity,omitempty"`
 	// Exclusions records the configured out-of-scope patterns the scan was given.
 	// They are declared scope, not coverage gaps, and are visible as evidence so a
 	// reader can tell a declared exclusion from an unexpected in-scope skip.
-	Exclusions            []string        `json:"exclusions,omitempty"`
+	Exclusions []string `json:"exclusions,omitempty"`
+	// Selection and Languages record the runtime selection mode and declared
+	// language scope. They are part of resume identity.
+	Selection             string          `json:"selection,omitempty"`
+	Languages             []Language      `json:"languages,omitempty"`
 	ConfigurationDigest   string          `json:"configuration_digest"`
 	ContentIdentity       ContentIdentity `json:"content_identity"`
 	PolicyIdentity        string          `json:"policy_identity"`
 	SanitizedReportDigest string          `json:"sanitized_report_digest,omitempty"`
 }
+
+// SelectionMode records how an adapter entered the run. Explicit selection is
+// configuration; automatic selection fills only unconfigured, enabled coverage.
+type SelectionMode string
+
+const (
+	SelectionExplicit  SelectionMode = "explicit"
+	SelectionAutomatic SelectionMode = "automatic"
+)
 
 // Execution is one adapter's complete result. It satisfies the same contract for
 // built-in and external adapters.
@@ -234,6 +272,10 @@ type Execution struct {
 	StartedAt          time.Time       `json:"started_at"`
 	EndedAt            time.Time       `json:"ended_at"`
 	Coverage           Coverage        `json:"coverage"`
+	Selection          string          `json:"selection,omitempty"`
+	Languages          []Language      `json:"languages,omitempty"`
+	RepositoryWide     bool            `json:"repository_wide,omitempty"`
+	Disabled           bool            `json:"disabled,omitempty"`
 	Skipped            []SkippedFile   `json:"skipped,omitempty"`
 	Diagnostics        []string        `json:"diagnostics,omitempty"`
 	Findings           []Finding       `json:"findings,omitempty"`
@@ -269,6 +311,14 @@ func (e Execution) Validate() error {
 	case CoverageComplete, CoveragePartial, CoverageUnknown:
 	default:
 		return fmt.Errorf("execution: adapter %s has unknown coverage %q", e.AdapterID, e.Coverage)
+	}
+	for _, language := range e.Languages {
+		if !isKnownLanguage(language) {
+			return fmt.Errorf("execution: adapter %s has unknown language %q", e.AdapterID, language)
+		}
+	}
+	if e.Disabled && e.Status != StatusSkipped {
+		return fmt.Errorf("execution: adapter %s is disabled but status is %s (want %s)", e.AdapterID, e.Status, StatusSkipped)
 	}
 	if !e.StartedAt.IsZero() && !e.EndedAt.IsZero() && e.EndedAt.Before(e.StartedAt) {
 		return fmt.Errorf("execution: adapter %s ended before it started", e.AdapterID)

@@ -1,0 +1,25 @@
+{
+  "version": "2.7.0",
+  "release_tag": "v2.7.0",
+  "asset_pattern": "osv-scanner_{target}",
+  "assets": {
+    "linux_amd64": {
+      "sha256": "160c6253e2922e9e0a6a9771c5c4c40a4b3c6090b34a3cdd5e80c96cc2e4218b"
+    },
+    "linux_arm64": {
+      "sha256": "4061ef4c021ed3c47f203b818f337e351336cc5cd67c0274fc36bd1dfc728dd7"
+    },
+    "darwin_amd64": {
+      "sha256": "e82c5df7ab0a42dff29a1cd0660711447b56b4c0483ff66ad8634df10fd81a45"
+    },
+    "darwin_arm64": {
+      "sha256": "d4926ef8da134332543be276dff157e4c170f99ad91fc48e89448a8816bdf70b"
+    },
+    "windows_amd64": {
+      "sha256": "9964ed64ec9a387391eb4cc006ad5c531154821aef29b793e02c448de4686438"
+    },
+    "windows_arm64": {
+      "sha256": "3e630381c1f1fd3c9c4d447e6ff2ef6c737083371722773db8337eead0f97962"
+    }
+  }
+}

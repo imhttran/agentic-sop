@@ -99,6 +99,13 @@ type AdapterCandidate struct {
 	Rules string `json:"rules,omitempty"`
 	// Status is the capability status for this candidate.
 	Status CapabilityStatus `json:"status"`
+	// Disabled reports that configuration disabled this adapter. A disabled
+	// adapter is visible but never counted as passed coverage.
+	Disabled bool `json:"disabled,omitempty"`
+	// DisabledReason explains the effective disable (global, category, adapter).
+	DisabledReason string `json:"disabled_reason,omitempty"`
+	// Selection records explicit or automatic selection.
+	Selection string `json:"selection,omitempty"`
 }
 
 // Detection is the deterministic result of inspecting repository content. Every
@@ -182,6 +189,8 @@ const (
 	AdapterIDGitleaks = "gitleaks"
 	// AdapterIDCargoAudit is the built-in Rust dependency adapter id.
 	AdapterIDCargoAudit = "cargo-audit"
+	// AdapterIDOSVScanner is the built-in Go/Rust dependency adapter id.
+	AdapterIDOSVScanner = "osv-scanner"
 )
 
 // languageManifests maps a manifest file name to the language it declares.
@@ -564,6 +573,13 @@ func SelectCandidates(detection Detection, configured []config.SecurityAdapterCo
 // SelectCandidatesWithDatabase is SelectCandidates with the global advisory
 // database path available to the dependency capability classifier.
 func SelectCandidatesWithDatabase(detection Detection, configured []config.SecurityAdapterConfig, databasePath string) []AdapterCandidate {
+	return SelectCandidatesWithDatabases(detection, configured, databasePath, "")
+}
+
+// SelectCandidatesWithDatabases is SelectCandidates with the separate OSV offline
+// database cache root available to the OSV capability classifier. The advisory
+// database path and the OSV cache are deliberately not interchangeable.
+func SelectCandidatesWithDatabases(detection Detection, configured []config.SecurityAdapterConfig, advisoryDatabasePath, osvDatabasePath string) []AdapterCandidate {
 	if len(detection.Languages) == 0 {
 		return nil
 	}
@@ -615,7 +631,7 @@ func SelectCandidatesWithDatabase(detection Detection, configured []config.Secur
 		raw, configured := byID[AdapterIDCargoAudit]
 		db := strings.TrimSpace(raw.Database)
 		if db == "" {
-			db = strings.TrimSpace(databasePath)
+			db = strings.TrimSpace(advisoryDatabasePath)
 		}
 		if !detection.HasPresentLockfile(LanguageRust) {
 			deps.Status = CapabilityUnsupported
@@ -631,6 +647,44 @@ func SelectCandidatesWithDatabase(detection Detection, configured []config.Secur
 			deps.Status = CapabilityProposed
 		}
 		out = append(out, deps)
+	}
+
+	// OSV-Scanner covers Go go.mod files and Rust Cargo.lock files. It is proposed
+	// separately from cargo-audit so overlapping Rust coverage is visible to the
+	// operator instead of being selected silently.
+	if detection.HasLanguage(LanguageGo) || detection.HasLanguage(LanguageRust) {
+		osv := AdapterCandidate{ID: AdapterIDOSVScanner, Category: CategoryDependencies}
+		raw, configured := byID[AdapterIDOSVScanner]
+		for _, language := range detection.Languages {
+			switch language {
+			case LanguageGo:
+				if osvInputAvailable(detection, LanguageGo) {
+					osv.Languages = append(osv.Languages, LanguageGo)
+				}
+			case LanguageRust:
+				if osvInputAvailable(detection, LanguageRust) {
+					osv.Languages = append(osv.Languages, LanguageRust)
+				}
+			}
+		}
+		db := strings.TrimSpace(raw.Database)
+		if db == "" {
+			db = strings.TrimSpace(osvDatabasePath)
+		}
+		if len(osv.Languages) == 0 {
+			osv.Status = CapabilityUnsupported
+		} else if db == "" {
+			osv.Status = CapabilityUnsupported
+		} else if !osvDatabaseAvailable(db, detection.workspaceRoot(), osv.Languages) {
+			osv.Status = CapabilityUnsupported
+		} else if configured && !executableResolvable(raw.Command) {
+			osv.Status = CapabilityUnavailable
+		} else if configured {
+			osv.Status = CapabilityAvailable
+		} else {
+			osv.Status = CapabilityProposed
+		}
+		out = append(out, osv)
 	}
 
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
@@ -654,6 +708,8 @@ func AutoAdapterConfigs(detection Detection, configured []config.SecurityAdapter
 			case AdapterIDGitleaks:
 				category = config.SecurityCategorySecrets
 			case AdapterIDCargoAudit:
+				category = config.SecurityCategoryDependencies
+			case AdapterIDOSVScanner:
 				category = config.SecurityCategoryDependencies
 			}
 		}
@@ -719,8 +775,14 @@ func ClassifyCapabilities(detection Detection, configured []config.SecurityAdapt
 // ClassifyCapabilitiesWithDatabase is ClassifyCapabilities with the global
 // advisory database path available.
 func ClassifyCapabilitiesWithDatabase(detection Detection, configured []config.SecurityAdapterConfig, databasePath string) []AdapterCandidate {
+	return ClassifyCapabilitiesWithDatabases(detection, configured, databasePath, "")
+}
+
+// ClassifyCapabilitiesWithDatabases is ClassifyCapabilities with the separate
+// cargo-audit advisory database and OSV offline cache roots available.
+func ClassifyCapabilitiesWithDatabases(detection Detection, configured []config.SecurityAdapterConfig, advisoryDatabasePath, osvDatabasePath string) []AdapterCandidate {
 	out := make([]AdapterCandidate, 0, len(configured))
-	proposed := SelectCandidatesWithDatabase(detection, configured, databasePath)
+	proposed := SelectCandidatesWithDatabases(detection, configured, advisoryDatabasePath, osvDatabasePath)
 	proposedByID := map[string]AdapterCandidate{}
 	for _, candidate := range proposed {
 		proposedByID[candidate.ID] = candidate
@@ -738,6 +800,9 @@ func ClassifyCapabilitiesWithDatabase(detection Detection, configured []config.S
 			continue
 		}
 		candidate.Category = descriptor.Categories[0]
+		if len(candidate.Languages) == 0 {
+			candidate.Languages = append([]Language(nil), descriptor.Languages...)
+		}
 		if suggestion, ok := proposedByID[id]; ok {
 			candidate.Languages = suggestion.Languages
 			candidate.Rules = suggestion.Rules
@@ -746,7 +811,9 @@ func ClassifyCapabilitiesWithDatabase(detection Detection, configured []config.S
 		case AdapterIDSemgrep:
 			candidate.Status = capabilityForSemgrep(detection, raw)
 		case AdapterIDCargoAudit:
-			candidate.Status = capabilityForCargoAudit(detection, raw, databasePath)
+			candidate.Status = capabilityForCargoAudit(detection, raw, advisoryDatabasePath)
+		case AdapterIDOSVScanner:
+			candidate.Status = capabilityForOSV(detection, raw, osvDatabasePath)
 		default:
 			if !candidateSupportedFor(id, detection) {
 				candidate.Status = CapabilityUnsupported
@@ -783,6 +850,9 @@ func capabilityForCargoAudit(detection Detection, raw config.SecurityAdapterConf
 	if !detection.HasLanguage(LanguageRust) || !detection.HasPresentLockfile(LanguageRust) {
 		return CapabilityUnsupported
 	}
+	if strings.TrimSpace(raw.Version) == "" {
+		return CapabilityUnsupported
+	}
 	database := firstNonEmpty(raw.Database, databasePath)
 	if strings.TrimSpace(database) == "" || !databaseAvailable(database, detection.workspaceRoot()) {
 		return CapabilityUnsupported
@@ -791,6 +861,79 @@ func capabilityForCargoAudit(detection Detection, raw config.SecurityAdapterConf
 		return CapabilityUnavailable
 	}
 	return CapabilityAvailable
+}
+
+func capabilityForOSV(detection Detection, raw config.SecurityAdapterConfig, databasePath string) CapabilityStatus {
+	languages := selectedOSVLanguages(detection, raw)
+	if len(languages) == 0 {
+		return CapabilityUnsupported
+	}
+	if strings.TrimSpace(raw.Version) == "" {
+		return CapabilityUnsupported
+	}
+	database := firstNonEmpty(raw.Database, databasePath)
+	if strings.TrimSpace(database) == "" || !osvDatabaseAvailable(database, detection.workspaceRoot(), languages) {
+		return CapabilityUnsupported
+	}
+	if !executableResolvable(raw.Command) {
+		return CapabilityUnavailable
+	}
+	return CapabilityAvailable
+}
+
+func selectedOSVLanguages(detection Detection, raw config.SecurityAdapterConfig) []Language {
+	declared := configuredLanguages(raw.Languages)
+	if len(declared) == 0 {
+		declared = []Language{LanguageGo, LanguageRust}
+	}
+	var out []Language
+	for _, language := range declared {
+		if osvInputAvailable(detection, language) {
+			out = append(out, language)
+		}
+	}
+	return out
+}
+
+// osvInputAvailable reports whether detect found the explicit input OSV needs for
+// a language. Go uses go.mod; Rust uses a present Cargo.lock. Missing input is not
+// clean coverage.
+func osvInputAvailable(detection Detection, language Language) bool {
+	switch language {
+	case LanguageGo:
+		for _, manifest := range detection.Manifests {
+			if manifest.Language == LanguageGo {
+				return true
+			}
+		}
+		return false
+	case LanguageRust:
+		return detection.HasPresentLockfile(LanguageRust)
+	default:
+		return false
+	}
+}
+
+// osvDatabaseAvailable reports whether every required ecosystem database exists
+// under the explicit OSV cache root. It never downloads or updates a database.
+func osvDatabaseAvailable(database, root string, languages []Language) bool {
+	path := strings.TrimSpace(database)
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, filepath.FromSlash(path))
+	}
+	base, _, ok := osvDatabaseLayout(path)
+	if !ok {
+		return false
+	}
+	for _, ecosystem := range osvEcosystems(languages) {
+		if !isRegularFile(filepath.Join(base, ecosystem, "all.zip")) {
+			return false
+		}
+	}
+	return true
 }
 
 // databaseAvailable reports whether a configured local advisory database exists
@@ -832,6 +975,10 @@ func configuredDescriptor(raw config.SecurityAdapterConfig) (Descriptor, error) 
 			if category == "" {
 				category = CategoryDependencies
 			}
+		case AdapterIDOSVScanner:
+			if category == "" {
+				category = CategoryDependencies
+			}
 		default:
 			return Descriptor{}, fmt.Errorf("security: unknown built-in adapter %q", id)
 		}
@@ -849,6 +996,13 @@ func configuredDescriptor(raw config.SecurityAdapterConfig) (Descriptor, error) 
 		Categories:      []Category{category},
 		ScopeModes:      []string{"workspace"},
 		Locality:        "local",
+		Languages:       configuredLanguages(raw.Languages),
+	}
+	if raw.RepositoryWide != nil {
+		descriptor.RepositoryWide = *raw.RepositoryWide
+	}
+	if category == CategorySecrets {
+		descriptor.RepositoryWide = true
 	}
 	if err := descriptor.Validate(); err != nil {
 		return Descriptor{}, err
@@ -864,6 +1018,8 @@ func candidateSupportedFor(id string, detection Detection) bool {
 		return len(detection.Languages) > 0
 	case AdapterIDCargoAudit:
 		return detection.HasLanguage(LanguageRust) && detection.HasPresentLockfile(LanguageRust)
+	case AdapterIDOSVScanner:
+		return osvInputAvailable(detection, LanguageGo) || osvInputAvailable(detection, LanguageRust)
 	default:
 		return true
 	}

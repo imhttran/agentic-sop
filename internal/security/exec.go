@@ -22,6 +22,14 @@ type Executor interface {
 	Run(ctx context.Context, dir string, argv []string, stdin []byte, maxOut int) (stdout, stderr []byte, exitCode int, err error)
 }
 
+// EnvExecutor is the optional extension used by adapters that must pass an
+// explicit, non-secret environment value to a scanner. It exists because OSV's
+// offline database location is an environment variable, not a CLI flag. An
+// adapter that needs it fails closed when the executor does not support it.
+type EnvExecutor interface {
+	RunEnv(ctx context.Context, dir string, argv []string, env []string, stdin []byte, maxOut int) (stdout, stderr []byte, exitCode int, err error)
+}
+
 // execRunner is the production Executor.
 type execRunner struct{}
 
@@ -38,6 +46,16 @@ const (
 // exit is returned with a nil error so the adapter can interpret its own exit
 // contract.
 func (execRunner) Run(ctx context.Context, dir string, argv []string, stdin []byte, maxOut int) ([]byte, []byte, int, error) {
+	return execRunner{}.run(ctx, dir, argv, nil, stdin, maxOut)
+}
+
+// RunEnv is Run with explicit additional environment entries. The entries are
+// controlled by a built-in adapter, never by untrusted report content.
+func (execRunner) RunEnv(ctx context.Context, dir string, argv []string, env []string, stdin []byte, maxOut int) ([]byte, []byte, int, error) {
+	return execRunner{}.run(ctx, dir, argv, env, stdin, maxOut)
+}
+
+func (execRunner) run(ctx context.Context, dir string, argv []string, extraEnv []string, stdin []byte, maxOut int) ([]byte, []byte, int, error) {
 	if len(argv) == 0 || strings.TrimSpace(argv[0]) == "" {
 		return nil, nil, -1, errors.New("security: empty command")
 	}
@@ -46,7 +64,7 @@ func (execRunner) Run(ctx context.Context, dir string, argv []string, stdin []by
 	}
 	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
 	cmd.Dir = dir
-	cmd.Env = scannerEnv()
+	cmd.Env = append(scannerEnv(), extraEnv...)
 	cmd.WaitDelay = waitDelay
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)

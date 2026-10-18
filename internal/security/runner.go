@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 )
@@ -19,6 +20,17 @@ type RunnerConfig struct {
 	Timeout        time.Duration
 	MaxOutputBytes int
 	Baseline       Baseline
+	// Selection carries the runtime selection metadata for each adapter. It is
+	// part of resume identity and evidence; the runner never branches on an ID.
+	Selection map[string]AdapterSelection
+	// Disabled records adapters configuration explicitly disabled. They are never
+	// executed and never count as passed coverage.
+	Disabled []DisabledAdapter
+	// Overlaps records visible duplicate coverage from explicit selection.
+	Overlaps []Overlap
+	// Detection is the repository inventory used for language-aware required
+	// coverage. A nil value falls back to category-level required coverage.
+	Detection *Detection
 	// Prior, when set, is a previously persisted scan used only for explicit
 	// resume. A completed adapter result is reused only when every identity still
 	// matches; any mismatch re-executes that adapter.
@@ -76,6 +88,9 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 			}
 		}
 	}
+	if cfg.Policy.RequiredGateActive && !cfg.Policy.Enabled && len(cfg.Adapters) > 0 {
+		return nil, fmt.Errorf("security: a globally disabled add-on must not execute adapters")
+	}
 	return &Runner{cfg: cfg, policyID: cfg.Policy.Identity(cfg.Baseline)}, nil
 }
 
@@ -104,6 +119,14 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 	scan.Scope = scope
 
 	if !r.cfg.Policy.Enabled {
+		if r.cfg.Policy.RequiredGateActive {
+			scan.Verdict = VerdictIndeterminate
+			scan.Coverage = CoverageUnknown
+			scan.Reasons = []string{"security add-on is globally disabled but an active required gate is configured; global disable is not a required-gate exemption"}
+			scan.EndedAt = time.Now().UTC()
+			scan.Metrics.DurationMS = scan.EndedAt.Sub(scan.StartedAt).Milliseconds()
+			return scan, nil
+		}
 		scan.Verdict = VerdictNotApplicable
 		scan.Coverage = CoverageUnknown
 		scan.Reasons = []string{"security add-on is disabled"}
@@ -134,6 +157,25 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 	}
 
 	var diagnostics []string
+
+	// Disabled adapters are evidence, not executions. They are recorded as SKIPPED
+	// with Disabled=true so a reader can distinguish an intentional disable from a
+	// passed or failed scan.
+	for _, disabled := range r.cfg.Disabled {
+		descriptor := AdapterSelection{Mode: disabled.Selection, Languages: disabled.Languages, RepositoryWide: disabled.RepositoryWide}
+		exec := newExecution(disabled.ID, disabled.Category, "", "", r.policyID, req)
+		exec.Status = StatusSkipped
+		exec.Coverage = CoverageUnknown
+		exec.Disabled = true
+		exec.Selection = string(descriptor.Mode)
+		exec.Languages = append([]Language(nil), disabled.Languages...)
+		exec.RepositoryWide = disabled.RepositoryWide
+		exec.Diagnostics = []string{"disabled: " + SanitizeText(disabled.Reason, MaxDiagnosticBytes)}
+		sanitizeExecution(&exec)
+		scan.Adapters = append(scan.Adapters, exec)
+		scan.Metrics.AdapterDurationMS[disabled.ID] = 0
+	}
+
 	for _, adapter := range r.cfg.Adapters {
 		descriptor := adapter.Descriptor()
 		adapterStart := time.Now().UTC()
@@ -157,6 +199,20 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 			exec.AdapterVersion = descriptor.AdapterVersion
 		}
 		exec.Provenance.PolicyIdentity = r.policyID
+		selection := r.cfg.Selection[descriptor.AdapterID]
+		if selection.Mode != "" {
+			exec.Selection = string(selection.Mode)
+			exec.Provenance.Selection = string(selection.Mode)
+		}
+		if len(exec.Languages) == 0 && len(selection.Languages) > 0 {
+			exec.Languages = append([]Language(nil), selection.Languages...)
+		}
+		if len(selection.Languages) > 0 {
+			exec.Provenance.Languages = append([]Language(nil), selection.Languages...)
+		}
+		if selection.RepositoryWide {
+			exec.RepositoryWide = true
+		}
 		if exec.Provenance.ContentIdentity.Commit == "" && exec.Provenance.ContentIdentity.Tree == "" && exec.Provenance.ContentIdentity.Digest == "" {
 			exec.Provenance.ContentIdentity = content
 		}
@@ -183,17 +239,19 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 			duration = exec.EndedAt.Sub(exec.StartedAt).Milliseconds()
 		}
 		scan.Metrics.AdapterDurationMS[exec.AdapterID] = duration
-		if exec.Status != StatusCompleted {
+		if !exec.Disabled && exec.Status != StatusCompleted {
 			scan.Metrics.ExecutionFailures++
 		}
 	}
 
-	evaluation := EvaluatePolicy(scan.Adapters, r.cfg.Policy)
+	evaluation := EvaluatePolicyWithDetection(scan.Adapters, r.cfg.Policy, r.cfg.Detection)
 	scan.Findings = evaluation.Findings
 	scan.Verdict = evaluation.Verdict
 	scan.Coverage = evaluation.Coverage
 	scan.Reasons = evaluation.Reasons
 	scan.Diagnostics = append(diagnostics, evaluation.Diagnostics...)
+	scan.CoverageReport = CoverageByCategory(scan.Adapters, r.cfg.Detection, r.cfg.Policy)
+	scan.Overlaps = append([]Overlap(nil), r.cfg.Overlaps...)
 	// Project what the same evidence would mean under a required gate. This is
 	// advisory readiness evidence; it cannot approve, suppress, or bypass the
 	// recorded verdict.
@@ -206,7 +264,7 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 			Reasons: []string{"required mode needs at least one required category"},
 		}
 	} else {
-		requiredEval := EvaluatePolicy(scan.Adapters, required)
+		requiredEval := EvaluatePolicyWithDetection(scan.Adapters, required, r.cfg.Detection)
 		scan.RequiredMode = &Readiness{
 			Ready:   requiredEval.Verdict == VerdictPass,
 			Verdict: requiredEval.Verdict,
@@ -242,6 +300,7 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 	}
 	current.PolicyIdentity = r.policyID
 	current.ContentIdentity = req.Content
+	current.Selection = string(r.cfg.Selection[descriptor.AdapterID].Mode)
 	if strings.TrimSpace(current.ScannerVersion) == "" {
 		return Execution{}, false
 	}
@@ -261,6 +320,16 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 			prior.Provenance.LockfileIdentity != current.LockfileIdentity ||
 			prior.Provenance.ScannerVersion != current.ScannerVersion {
 			return Execution{}, false
+		}
+		// Selection metadata is part of resume identity when it was recorded. A
+		// prior scan from before selection evidence existed remains reusable under
+		// the older identity fields above.
+		if selection, ok := r.cfg.Selection[descriptor.AdapterID]; ok && selection.Mode != "" {
+			if prior.Provenance.Selection != string(selection.Mode) ||
+				!sameLanguageSet(prior.Provenance.Languages, selection.Languages) ||
+				prior.RepositoryWide != selection.RepositoryWide {
+				return Execution{}, false
+			}
 		}
 		reused := prior
 		if reused.Provenance.SanitizedReportDigest != "" {
@@ -293,4 +362,15 @@ func adapterProvenanceProvider(adapters []Adapter, id string) (provenanceProvide
 
 func sameContent(a, b ContentIdentity) bool {
 	return reflect.DeepEqual(a, b)
+}
+
+func sameLanguageSet(a, b []Language) bool {
+	if len(a) == 0 && len(b) == 0 {
+		return true
+	}
+	as := append([]Language(nil), a...)
+	bs := append([]Language(nil), b...)
+	sort.Slice(as, func(i, j int) bool { return as[i] < as[j] })
+	sort.Slice(bs, func(i, j int) bool { return bs[i] < bs[j] })
+	return reflect.DeepEqual(as, bs)
 }

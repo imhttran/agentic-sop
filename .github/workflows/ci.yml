@@ -49,12 +49,13 @@ jobs:
       - name: documentation links
         run: bash scripts/checks/check-doc-links.sh
 
-  # Real scanner integration: installs the PINNED Semgrep CE and Gitleaks
-  # binaries in an isolated tools directory and runs the tagged checks. The
-  # script sets SOP_SECURITY_INTEGRATION_REQUIRED=1, so a missing prerequisite
-  # fails the job instead of skipping it.
+  # Real scanner integration: installs the PINNED Semgrep CE, Gitleaks,
+  # cargo-audit, and OSV-Scanner binaries in an isolated tools directory and runs
+  # the tagged checks. The script sets SOP_SECURITY_INTEGRATION_REQUIRED=1, so a
+  # missing prerequisite fails the job instead of skipping it. The OSV database is
+  # a controlled offline fixture; the job never depends on the live OSV API.
   security-integration:
-    name: real Semgrep + Gitleaks integration
+    name: real Semgrep + Gitleaks + cargo-audit + OSV integration
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

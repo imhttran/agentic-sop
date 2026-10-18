@@ -36,6 +36,7 @@ func (a *gitleaksAdapter) Descriptor() Descriptor {
 		ScopeModes:      []string{"workspace", "changed-files"},
 		Locality:        "local",
 		Network:         "none required for local detection; no verified-secret service is used",
+		RepositoryWide:  true,
 	}
 }
 
