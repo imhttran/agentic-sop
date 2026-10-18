@@ -125,6 +125,7 @@ Expected: the task completes. Record:
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | All round 3 checks pass, and no deliverable existed before round 3         | **GO** for the two-question loop with a real executor. Update SPIKE-006 §0, §8.1, and §9.                                      |
 | `choices.txt` has the wrong ordering value, or the executor re-asks it     | **Fail**: the first decision did not reach the final round. Check the binary includes #68.                                     |
+| The executor completes round 1 without asking (it chose the values itself) | **Fixture or model result, not an SOP failure.** Record it; adjust the task wording and rerun.                                 |
 | The executor asks both questions at once, or returns `needs_human`         | **Fixture or model result, not an SOP failure.** Record it; adjust the task wording and rerun.                                 |
 | A deliverable exists before round 3                                        | **Inconclusive**: the executor may have stored the first decision itself. Record it; the run does not prove decision delivery. |
 | The task fails review or validation for reasons unrelated to the decisions | Record and diagnose as an ordinary run failure.                                                                                |
@@ -134,6 +135,15 @@ Record the result as a dated section in
 fingerprint (`shasum -a 256 "$TMPDIR/sop-2q"`), the source commit, the exact questions and
 answers, and the checks above. Keep the transcript sanitized: no credentials or environment
 dumps.
+
+## Attempt log
+
+- **2026-10-18, attempt 1:** the executor completed round 1 without asking
+  (`sort=true`, `dedupe=true`, outcome PARTIAL). The planning step had turned "clarify
+  with the planner" into separate plan stages, and the implementation call chose both
+  values itself. The planner contract did reach the IMPLEMENT request. The fixture now
+  names the `needs_planner` outcome and when to use it, and adds the missing
+  `### Acceptance Mapping`.
 
 ## Cleanup
 

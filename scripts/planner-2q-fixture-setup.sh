@@ -216,9 +216,11 @@ func TestNormalized(t *testing.T) {
 }
 EOF
 
-# 3. The plan. The ambiguity is framed as an implementation detail to clarify
-#    with the planner, not an operator preference: the earlier planner-real
-#    attempt framed it as an operator decision and the model chose needs_human.
+# 3. The plan. The task names the needs_planner outcome and when to use it. A
+#    softer wording ("clarify with the planner") let the model decide both choices
+#    itself in the first live attempt, and an "operator preference" framing made
+#    the earlier planner-real attempt return needs_human. This demo tests SOP's
+#    multi-round mechanics, not whether a model notices ambiguity unprompted.
 cat > PLAN.md <<'EOF'
 # Implementation Plan
 
@@ -228,20 +230,28 @@ Planner two-question live demo
 
 ## Summary
 
-Normalize a word list. Two implementation details must be clarified with the planner.
+Normalize a word list. Two implementation choices are decided by the planner, one at a time, during implementation.
 
 ## T001 — Normalize the word list
 
 Write normalized.txt from input.txt, and record the choices used in choices.txt.
 
-Two implementation details are not specified, and must be clarified with the planner rather than guessed:
+Two implementation choices are not yours to make. The planner decides them, one at a time, through the `needs_planner` outcome (not `needs_human`):
 
-1. Ordering: sort the lines alphabetically, or preserve the input order.
-2. Duplicates: remove repeated lines (keeping the first occurrence), or keep them.
+1. Ordering: sort the lines alphabetically (`sort=true`), or preserve the input order (`sort=false`).
+2. Duplicates: remove repeated lines, keeping the first occurrence (`dedupe=true`), or keep them (`dedupe=false`).
 
-Ask the planner one question at a time: ordering first, then duplicate handling once the ordering decision is known. Do not create choices.txt or normalized.txt until both decisions are known.
+During implementation:
+
+- If your input has no planner decision about ordering, return `needs_planner` asking only the ordering question, with the two options above. Write no files.
+- If your input has the ordering decision but none about duplicates, return `needs_planner` asking only the duplicates question, with the two options above. Write no files.
+- Only when your input contains both planner decisions, write choices.txt and normalized.txt.
+
+Never choose either value yourself, and never ask both questions at once. The planner's decisions arrive in your input as `Planner decision:` lines.
 
 choices.txt has exactly two lines: `sort=true` or `sort=false`, then `dedupe=true` or `dedupe=false`.
+
+This is a single implementation stage; do not split the questions into separate stages.
 
 ### Dependencies
 
@@ -259,6 +269,10 @@ None
 ### Acceptance Checks
 
 - `go test ./...`
+
+### Acceptance Mapping
+
+- criterion 1: check 1
 EOF
 
 # 4. Validate the config, prove the acceptance test fails before the task runs,
