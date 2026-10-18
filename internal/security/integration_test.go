@@ -65,6 +65,26 @@ func toolVersion(t *testing.T, binary string, args ...string) string {
 	return ""
 }
 
+// integrationModuleRoot returns the module root so repository-relative
+// integration prerequisites resolve consistently from the package directory.
+func integrationModuleRoot(t *testing.T) string {
+	t.Helper()
+	dir, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for {
+		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
+			return dir
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			t.Fatal("module root not found")
+		}
+		dir = parent
+	}
+}
+
 func copyFixtureTree(t *testing.T, source, destination string) {
 	t.Helper()
 	if err := os.MkdirAll(destination, 0o755); err != nil {
@@ -478,30 +498,81 @@ func TestRealCLIResumeIdentity(t *testing.T) {
 }
 
 // TestRealCargoAuditPinnedDatabase runs the real cargo-audit adapter against a
-// pinned local advisory database when the operator supplies one. It is skipped
-// when the environment has no cargo-audit or database; a skipped check is never
-// reported as a clean dependency scan.
+// controlled local advisory database that contains a known advisory. It verifies
+// the pinned executable version, the structured finding, and that the scan leaves
+// the lockfile and the database byte-identical (no fetch, update, or lockfile
+// mutation). A missing prerequisite is skipped, or fails when integration checks
+// are required; it is never reported as a clean dependency result.
 func TestRealCargoAuditPinnedDatabase(t *testing.T) {
 	database := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_ADVISORY_DB"))
 	if database == "" {
+		if integrationRequired() {
+			t.Fatal("required security integration prerequisite missing: SOP_SECURITY_CARGO_ADVISORY_DB")
+		}
 		t.Skip("SOP_SECURITY_CARGO_ADVISORY_DB is not set; real cargo-audit check not run")
 	}
+	absoluteDatabase, err := filepath.Abs(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !filepath.IsAbs(database) {
+		// The test runs with the package directory as its working directory, so a
+		// repository-relative database path is resolved against the module root.
+		absoluteDatabase = filepath.Join(integrationModuleRoot(t), database)
+	}
+	database = absoluteDatabase
+
 	cargoBin := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_BIN"))
 	if cargoBin == "" {
-		var err error
-		cargoBin, err = exec.LookPath("cargo")
-		if err != nil {
-			t.Skip("cargo is not installed; real cargo-audit check not run")
+		for _, candidate := range []string{"cargo-audit", "cargo"} {
+			if path, lookErr := exec.LookPath(candidate); lookErr == nil {
+				cargoBin = path
+				break
+			}
 		}
 	}
-	version, err := exec.Command(cargoBin, "audit", "--version").Output()
-	if err != nil {
-		t.Skipf("cargo-audit is not installed; real cargo-audit check not run: %v", err)
+	if cargoBin == "" {
+		if integrationRequired() {
+			t.Fatal("required security integration prerequisite missing: cargo-audit (set SOP_SECURITY_CARGO_BIN or install it)")
+		}
+		t.Skip("cargo-audit is not installed; real cargo-audit check not run")
 	}
+
+	rawVersion, err := exec.Command(cargoBin, "audit", "--version").Output()
+	if err != nil {
+		if integrationRequired() {
+			t.Fatalf("cargo-audit version probe failed: %v", err)
+		}
+		t.Skipf("cargo-audit is not usable; real cargo-audit check not run: %v", err)
+	}
+	actualVersion := normalizeCargoAuditVersion(string(rawVersion))
+	if actualVersion == "" {
+		t.Fatalf("cargo-audit version output is unrecognized: %q", strings.TrimSpace(string(rawVersion)))
+	}
+	if pinned := normalizeCargoAuditVersion(os.Getenv("SOP_SECURITY_CARGO_AUDIT_VERSION")); pinned != "" && pinned != actualVersion {
+		t.Fatalf("cargo-audit version = %s, want the pinned %s", actualVersion, pinned)
+	}
+
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Cargo.toml"), []byte("[package]\nname = \"real\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	lockfileData, err := os.ReadFile(filepath.Join("testdata", "cargo-audit", "Cargo.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Cargo.lock"), lockfileData, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	databaseDigestBefore, err := rulesIdentity(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
 		Protocol: config.SecurityProtocolBuiltin, Command: []string{cargoBin, "audit"},
-		Version: strings.TrimSpace(string(version)),
+		Version: actualVersion,
 	}, BuildOptions{
 		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
 		DatabasePath: database, StalePolicy: StaleAllow,
@@ -509,26 +580,69 @@ func TestRealCargoAuditPinnedDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := t.TempDir()
-	if err := os.WriteFile(filepath.Join(root, "Cargo.toml"), []byte("[package]\nname = \"real\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	data, err := os.ReadFile(filepath.Join("testdata", "cargo-audit", "Cargo.lock"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "Cargo.lock"), data, 0o644); err != nil {
-		t.Fatal(err)
-	}
 	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
 	if err != nil {
 		t.Fatal(err)
 	}
+	if execResult.Status != StatusCompleted {
+		t.Fatalf("status = %s, want COMPLETED: %v", execResult.Status, execResult.Diagnostics)
+	}
+	if execResult.Coverage == CoverageUnknown {
+		t.Fatalf("coverage = UNKNOWN for a completed real scan: %v", execResult.Diagnostics)
+	}
+	if len(execResult.Findings) != 1 {
+		t.Fatalf("findings = %d, want exactly one advisory: %+v", len(execResult.Findings), execResult.Findings)
+	}
+	finding := execResult.Findings[0]
+	if finding.RuleID != "RUSTSEC-2020-0071" {
+		t.Errorf("advisory id = %q, want RUSTSEC-2020-0071", finding.RuleID)
+	}
+	if finding.Category != CategoryDependencies {
+		t.Errorf("category = %s, want dependencies", finding.Category)
+	}
+	for key, want := range map[string]string{
+		"package":          "time",
+		"version":          "0.1.44",
+		"patched_versions": ">=0.2.23",
+	} {
+		if finding.Metadata[key] != want {
+			t.Errorf("metadata[%s] = %q, want %q", key, finding.Metadata[key], want)
+		}
+	}
+	if finding.Severity != SeverityHigh {
+		t.Errorf("severity = %s, want HIGH from the advisory CVSS 7.5", finding.Severity)
+	}
+	if len(finding.CVE) == 0 || finding.CVE[0] != "CVE-2020-26235" {
+		t.Errorf("CVE = %v, want CVE-2020-26235", finding.CVE)
+	}
+	if finding.Path != "Cargo.lock" {
+		t.Errorf("path = %q, want the resolved lockfile", finding.Path)
+	}
+	if execResult.Provenance.ScannerVersion != actualVersion {
+		t.Errorf("provenance scanner version = %q, want the verified %s", execResult.Provenance.ScannerVersion, actualVersion)
+	}
 	if execResult.Provenance.AdvisoryDatabaseIdentity == "" {
 		t.Error("real cargo-audit run recorded no advisory database identity")
 	}
-	if execResult.Status != StatusCompleted && execResult.Status != StatusUnavailable {
-		t.Fatalf("status = %s, want COMPLETED (or UNAVAILABLE when the tool vanished): %v", execResult.Status, execResult.Diagnostics)
+	if !strings.HasPrefix(execResult.Provenance.LockfileIdentity, "path=Cargo.lock;digest=") {
+		t.Errorf("lockfile identity = %q, want path and digest", execResult.Provenance.LockfileIdentity)
 	}
-	t.Logf("cargo-audit status=%s coverage=%s findings=%d database=%s", execResult.Status, execResult.Coverage, len(execResult.Findings), execResult.Provenance.AdvisoryDatabaseIdentity)
+
+	lockfileAfter, err := os.ReadFile(filepath.Join(root, "Cargo.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(lockfileData, lockfileAfter) {
+		t.Error("cargo-audit modified the lockfile")
+	}
+	databaseDigestAfter, err := rulesIdentity(database)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if databaseDigestBefore != databaseDigestAfter {
+		t.Error("cargo-audit modified the local advisory database")
+	}
+	t.Logf("cargo-audit version=%s status=%s coverage=%s findings=%d database=%s lockfile=%s",
+		actualVersion, execResult.Status, execResult.Coverage, len(execResult.Findings),
+		execResult.Provenance.AdvisoryDatabaseIdentity, execResult.Provenance.LockfileIdentity)
 }

@@ -233,10 +233,14 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   exists, severity is `UNKNOWN` and the explicit unknown-severity policy applies.
 - Records the advisory database identity as a deterministic local fingerprint and
   records scanner-observed metadata (`last-commit`, `last-updated`,
-  `advisory-count`) as evidence. Resume re-executes when the identity changes.
-- Missing lockfiles, unavailable databases, a report without database identity,
-  malformed output, timeouts, and tool failures are non-clean execution results
-  and never `PASS`.
+  `advisory-count`) as evidence. The identity also covers local content changes,
+  so an edited database cannot reuse earlier evidence.
+- Records a lockfile identity: every resolved lockfile path with its content
+  digest. Resume re-executes when the advisory database identity, its staleness,
+  or the lockfile identity changes.
+- Missing lockfiles, unavailable or invalid databases, a report without database
+  identity, malformed output, timeouts, and tool failures are non-clean execution
+  results and never `PASS`. Each condition has a distinguishable diagnostic.
 - A stale database (older than 90 days) follows the explicit
   `stale_advisory_database` / adapter `stale` policy. `deny` is the default and
   forces `INDETERMINATE`; `allow` runs with `--stale` and records `PARTIAL`
@@ -246,9 +250,17 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   dependency graph was not limited to changed files and marks coverage `PARTIAL`.
 
 Supported versions are pinned by the operator with
-`security.adapters[].version`. Provenance records the configured version; the
-adapter does not claim a version it did not observe. Resume requires a pinned
-scanner version, so an unpinned scanner cannot reuse prior evidence.
+`security.adapters[].version`. Before any scan the adapter MUST execute the
+configured command with `--version`, parse the reported version, and require an
+exact match. A missing pin, an unrecognized version string, or a mismatch is a
+non-clean execution failure (a mismatch never starts the scan). Provenance
+records the observed version, and resume compares it.
+
+Provisioning is separate from scanning: `scripts/security/fetch-cargo-audit.sh`
+downloads the pinned release asset, verifies its committed SHA-256 from
+`scripts/security/cargo-audit-manifest.json`, and checks the binary's version. It
+is the only step that uses the network. A scan never downloads the tool and never
+fetches or updates an advisory database.
 
 ## 5. Execution and evidence
 

@@ -36,12 +36,20 @@ func cargoDatabaseFixture(t *testing.T) string {
 
 func cargoAdapter(t *testing.T, database string, stale string, run func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error)) Adapter {
 	t.Helper()
+	// Every scan first verifies the pinned tool version. Answer that probe with the
+	// pinned value so the test body only observes the real scan invocation.
+	wrapped := func(ctx context.Context, dir string, argv []string, stdin []byte, max int) ([]byte, []byte, int, error) {
+		if containsArg(argv, "--version") {
+			return []byte("cargo-audit 0.21.2\n"), nil, 0, nil
+		}
+		return run(ctx, dir, argv, stdin, max)
+	}
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
 		Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
 		Version: "0.21.2",
 	}, BuildOptions{
-		Executor: fakeExecutor{run: run}, Timeout: time.Second, MaxOutputBytes: 1 << 20,
+		Executor: fakeExecutor{run: wrapped}, Timeout: time.Second, MaxOutputBytes: 1 << 20,
 		DatabasePath: database, StalePolicy: stale,
 	})
 	if err != nil {
@@ -310,8 +318,12 @@ func TestCargoAuditTimeoutUsesBoundedContext(t *testing.T) {
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
 		Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+		Version: "0.21.2",
 	}, BuildOptions{
-		Executor: fakeExecutor{run: func(ctx context.Context, _ string, _ []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		Executor: fakeExecutor{run: func(ctx context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+			if containsArg(argv, "--version") {
+				return []byte("cargo-audit 0.21.2\n"), nil, 0, nil
+			}
 			<-ctx.Done()
 			return nil, nil, -1, ctx.Err()
 		}},
@@ -349,5 +361,186 @@ func TestCargoAuditRejectsLockfileSymlink(t *testing.T) {
 	}
 	if exec.Status != StatusFailed || exec.Coverage == CoverageComplete {
 		t.Fatalf("status/coverage = %s/%s, want failed and not complete", exec.Status, exec.Coverage)
+	}
+}
+
+func TestCargoAuditVersionMismatchFailsClosed(t *testing.T) {
+	root := cargoWorkspace(t, true)
+	scanCalls := 0
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+		Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+		Version: "0.22.2",
+	}, BuildOptions{
+		Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+			if containsArg(argv, "--version") {
+				return []byte("cargo-audit 0.21.2\n"), nil, 0, nil
+			}
+			scanCalls++
+			return fixture(t, "cargo-audit/report-clean.json"), nil, 0, nil
+		}},
+		Timeout: time.Second, MaxOutputBytes: 1 << 20,
+		DatabasePath: cargoDatabaseFixture(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Status != StatusFailed || execResult.Coverage == CoverageComplete {
+		t.Fatalf("status/coverage = %s/%s, want failed and not complete", execResult.Status, execResult.Coverage)
+	}
+	if scanCalls != 0 {
+		t.Errorf("cargo-audit ran %d scan invocation(s) after a version mismatch", scanCalls)
+	}
+	if !strings.Contains(strings.Join(execResult.Diagnostics, " "), "version mismatch") {
+		t.Errorf("diagnostics = %v, want a version mismatch", execResult.Diagnostics)
+	}
+}
+
+func TestCargoAuditUnpinnedVersionFailsClosed(t *testing.T) {
+	root := cargoWorkspace(t, true)
+	scanCalls := 0
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+		Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+	}, BuildOptions{
+		Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+			if containsArg(argv, "--version") {
+				return []byte("cargo-audit 0.22.2\n"), nil, 0, nil
+			}
+			scanCalls++
+			return fixture(t, "cargo-audit/report-clean.json"), nil, 0, nil
+		}},
+		Timeout: time.Second, MaxOutputBytes: 1 << 20,
+		DatabasePath: cargoDatabaseFixture(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Status != StatusFailed || execResult.Coverage == CoverageComplete {
+		t.Fatalf("status/coverage = %s/%s, want failed and not complete", execResult.Status, execResult.Coverage)
+	}
+	if scanCalls != 0 {
+		t.Errorf("cargo-audit ran %d scan invocation(s) without a pinned version", scanCalls)
+	}
+	if !strings.Contains(strings.Join(execResult.Diagnostics, " "), "not pinned") {
+		t.Errorf("diagnostics = %v, want an unpinned-version diagnostic", execResult.Diagnostics)
+	}
+}
+
+func TestCargoAuditVersionProbeUnavailable(t *testing.T) {
+	root := cargoWorkspace(t, true)
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+		Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+		Version: "0.22.2",
+	}, BuildOptions{
+		Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+			return nil, nil, -1, ErrUnavailable
+		}},
+		Timeout: time.Second, MaxOutputBytes: 1 << 20,
+		DatabasePath: cargoDatabaseFixture(t),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Status != StatusUnavailable || execResult.Coverage == CoverageComplete {
+		t.Fatalf("status/coverage = %s/%s, want unavailable and not complete", execResult.Status, execResult.Coverage)
+	}
+}
+
+func TestCargoAuditUnsupportedTarget(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	adapter := cargoAdapter(t, cargoDatabaseFixture(t), "", func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+		t.Fatal("cargo-audit must not run for a repository with no Rust content")
+		return nil, nil, 0, nil
+	})
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Status != StatusFailed || execResult.Coverage == CoverageComplete {
+		t.Fatalf("status/coverage = %s/%s, want failed and not complete", execResult.Status, execResult.Coverage)
+	}
+	if !strings.Contains(strings.Join(execResult.Diagnostics, " "), "unsupported") {
+		t.Errorf("diagnostics = %v, want an unsupported-target diagnostic", execResult.Diagnostics)
+	}
+}
+
+func TestCargoAuditLockfileIdentityRecordedAndResumed(t *testing.T) {
+	root := cargoWorkspace(t, true)
+	adapter := cargoAdapter(t, cargoDatabaseFixture(t), "", func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+		return fixture(t, "cargo-audit/report-clean.json"), nil, 0, nil
+	})
+	policy := Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}
+
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(execResult.Provenance.LockfileIdentity, "path=Cargo.lock;digest=") {
+		t.Fatalf("lockfile identity = %q, want path and digest", execResult.Provenance.LockfileIdentity)
+	}
+	if execResult.Provenance.ScannerVersion != "0.21.2" {
+		t.Errorf("scanner version = %q, want the verified executable version 0.21.2", execResult.Provenance.ScannerVersion)
+	}
+
+	req := requestFor(t, root)
+	current, err := adapter.(provenanceProvider).currentProvenance(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.LockfileIdentity != execResult.Provenance.LockfileIdentity {
+		t.Fatalf("currentProvenance lockfile identity = %q, want %q", current.LockfileIdentity, execResult.Provenance.LockfileIdentity)
+	}
+	current.PolicyIdentity = policy.Identity(Baseline{})
+	prior := Scan{
+		ProtocolVersion: ProtocolVersion,
+		RunID:           "prior",
+		Policy:          policy,
+		Adapters: []Execution{{
+			ProtocolVersion: ProtocolVersion,
+			AdapterID:       AdapterIDCargoAudit,
+			Category:        CategoryDependencies,
+			Status:          StatusCompleted,
+			Coverage:        CoverageComplete,
+			Provenance:      current,
+		}},
+	}
+	runner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "run", Adapters: []Adapter{adapter}, Policy: policy, Prior: &prior})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, reused := runner.maybeReuse(req, adapter.Descriptor()); !reused {
+		t.Fatal("matching lockfile identity was not reused")
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "Cargo.lock"), []byte("version = 3\n\n[[package]]\nname = \"changed\"\nversion = \"1.0.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	changedReq := requestFor(t, root)
+	current, err = adapter.(provenanceProvider).currentProvenance(changedReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if current.LockfileIdentity == execResult.Provenance.LockfileIdentity {
+		t.Fatal("changed lockfile content produced an unchanged lockfile identity")
+	}
+	if _, reused := runner.maybeReuse(changedReq, adapter.Descriptor()); reused {
+		t.Fatal("changed lockfile content reused stale dependency evidence")
 	}
 }

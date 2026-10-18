@@ -1,0 +1,13 @@
+{
+  "version": "0.22.2",
+  "release_tag": "cargo-audit/v0.22.2",
+  "asset_pattern": "cargo-audit-{target}-v{version}.tgz",
+  "assets": {
+    "x86_64-unknown-linux-gnu": {
+      "sha256": "ab28a1bdb54db4d5d8ad5981cf1f959410370b3d28250dbd35f6a44248620e39"
+    },
+    "aarch64-apple-darwin": {
+      "sha256": "ec7ca4263769593df4d909be85b94a6b79efa2897be5d2bb8ebd516e823175af"
+    }
+  }
+}
