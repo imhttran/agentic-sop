@@ -188,7 +188,7 @@ func RedactValues(text string, values []string) string {
 	sorted := append([]string(nil), values...)
 	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
 	for _, value := range sorted {
-		if len(strings.TrimSpace(value)) < 4 {
+		if strings.TrimSpace(value) == "" {
 			continue
 		}
 		text = strings.ReplaceAll(text, value, "[REDACTED]")

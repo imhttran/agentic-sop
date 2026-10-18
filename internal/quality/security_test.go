@@ -78,3 +78,16 @@ func TestSecurityRequiredRespectsFixBudget(t *testing.T) {
 		t.Errorf("decision = %s, want NEEDS_HUMAN at the fix-loop limit", got.Decision)
 	}
 }
+
+func TestHumanApprovalStillOutranksSecurityFailure(t *testing.T) {
+	in := passingInput()
+	in.HumanRequired = true
+	in.Security = &SecurityEvidence{Enabled: true, Required: true, Configured: true, Verdict: "FAIL"}
+	got := Evaluate(qualityPolicy(), in)
+	if got.Decision != NeedsHuman {
+		t.Fatalf("decision = %s, want NEEDS_HUMAN", got.Decision)
+	}
+	if len(got.Reasons) != 1 || got.Reasons[0] != "human approval required" {
+		t.Errorf("reasons = %v, want only the existing human-approval boundary", got.Reasons)
+	}
+}

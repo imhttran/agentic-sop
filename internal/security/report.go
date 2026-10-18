@@ -56,7 +56,7 @@ func (p Policy) Identity(baseline Baseline) string {
 	if p.Enabled {
 		enabled = "enabled"
 	}
-	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, baseline.Identity())
+	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), baseline.Identity())
 }
 
 // ArtifactRefs are the repository-relative artifact paths written for a scan.
@@ -76,6 +76,7 @@ func WriteArtifacts(runDir string, scan Scan) (ArtifactRefs, error) {
 		return ArtifactRefs{}, err
 	}
 	refs := ArtifactRefs{Native: map[string]string{}}
+	used := map[string]int{}
 	jsonPath := filepath.Join(dir, "scan.json")
 	data, err := json.MarshalIndent(scan, "", "  ")
 	if err != nil {
@@ -97,7 +98,12 @@ func WriteArtifacts(runDir string, scan Scan) (ArtifactRefs, error) {
 		if len(adapter.NativeReport) == 0 {
 			continue
 		}
-		name := safeArtifactName(adapter.AdapterID) + ".native.json"
+		base := safeArtifactName(adapter.AdapterID)
+		name := base + ".native.json"
+		if used[name] > 0 {
+			name = fmt.Sprintf("%s-%d.native.json", base, used[name]+1)
+		}
+		used[name]++
 		if err := os.WriteFile(filepath.Join(dir, name), adapter.NativeReport, 0o644); err != nil {
 			return refs, err
 		}

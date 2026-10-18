@@ -207,6 +207,10 @@ Redaction failure makes the scan result unusable.
   had partial/unknown coverage, a required category was not covered, or a
   required category used changed-file evidence.
 
+A blocking finding produces `FAIL` even when another adapter is incomplete or
+coverage is partial; the coverage state remains explicit. An incomplete scan
+with no blocking finding produces `INDETERMINATE` and never `PASS`.
+
 Report-only records the verdict as an advisory and never blocks the run.
 Required mode fails closed: only `PASS` passes. `quality.Evaluate` remains the
 single verdict authority; the security layer cannot approve, suppress, or bypass
@@ -250,7 +254,8 @@ completed adapter result is reused only when all of these still match:
 - adapter ID and pinned scanner version,
 - rules identity,
 - adapter configuration digest,
-- policy identity, including baseline content.
+- policy identity, including baseline content and the configured execution
+  bounds (timeout and output limit).
 
 Any mismatch re-executes that adapter. A prior non-completed result is never
 reused. Resume does not change retry or continuation budgets.

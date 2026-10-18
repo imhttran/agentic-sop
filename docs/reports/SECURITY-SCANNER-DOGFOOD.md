@@ -11,20 +11,21 @@
 
 | Field                   | Value                                                              |
 | ----------------------- | ------------------------------------------------------------------ |
-| Verdict                 | `INDETERMINATE`                                                    |
+| Verdict                 | `FAIL`                                                             |
 | Coverage                | `PARTIAL`                                                          |
-| Commit                  | `db39cf5e2a05a046cf21b6ffff6c2b247fd19283`                         |
-| Tree                    | `264f1cadd0d5744c189c7844ca95b4996e43fc8c`                         |
+| Commit                  | `469b61d5610988c23f569c2a3ccf322eac7af3a9`                         |
+| Tree                    | `e1723411827339f6eca371c1a8670629f6ea955b`                         |
 | Working tree            | `DIRTY`                                                            |
-| Content digest          | `35c07fd6dbb840f70fbdd6dc3db16b88d7bd9472d6660d867379b1253aca1e32` |
-| Measured total duration | 7615 ms                                                            |
-| Semgrep duration        | 3025 ms                                                            |
-| Gitleaks duration       | 4497 ms                                                            |
+| Content digest          | `ed757ed8350f7ccde7f207089c1fbbd7113c171df5ba029da98847a725cf822b` |
+| Measured total duration | 8581 ms                                                            |
+| Semgrep duration        | 3833 ms                                                            |
+| Gitleaks duration       | 4642 ms                                                            |
 | Findings                | 7 (1 SAST, 6 secret)                                               |
 | Execution failures      | 0                                                                  |
 
-The verdict is `INDETERMINATE`, not `PASS`, because Semgrep coverage was
-`PARTIAL`. Report-only recorded the result without blocking delivery.
+The verdict is `FAIL` because seven unsuppressed findings were at blocking
+severities. Coverage is `PARTIAL` because Semgrep skipped targets. Report-only
+recorded the result without blocking delivery.
 
 ## Tool and rules identity
 
@@ -43,7 +44,7 @@ Neither scanner downloaded rules or uploaded code. No hosted service was used.
   `.semgrepignore` patterns plus 6 files larger than 1.0 MB. The adapter records this as partial coverage and fails closed
   for a required gate.
 - **Gitleaks:** `COMPLETE` for the configured workspace source. It scanned about
-  161.23 MB in 4.50 s.
+  161.37 MB in 4.44 s.
 
 ## Findings
 
@@ -86,8 +87,8 @@ the fixtures outside the scanned scope.
 ## Limitations
 
 - Semgrep CE skipped files under its `.semgrepignore` policy and skipped files
-  larger than 1.0 MB. A required gate correctly reports `INDETERMINATE` until a
-  full-coverage scan policy is configured.
+  larger than 1.0 MB. A required gate reports `FAIL` when blocking findings exist
+  and `INDETERMINATE` when no blocking finding exists but coverage is incomplete.
 - The findings demonstrate detection, normalization, coverage, and redaction.
   They are not a vulnerability assessment of the repository.
 - The pinned CLIs were provisioned in an isolated tools directory on this machine.

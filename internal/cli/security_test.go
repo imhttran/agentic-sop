@@ -65,7 +65,7 @@ func TestSecurityScanDisabledIsNotApplicable(t *testing.T) {
 
 func TestSecurityScanReportOnlyRecordsFindingWithoutBlocking(t *testing.T) {
 	dir := t.TempDir()
-	response := `{"adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE","findings":[{"rule_id":"R1","severity":"HIGH","message":"fixture finding","path":"main.go","line":1,"fingerprint":"fixture:1"}]}`
+	response := `{"protocol_version":"security-scan/v1","adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE","findings":[{"rule_id":"R1","severity":"HIGH","message":"fixture finding","path":"main.go","line":1,"fingerprint":"fixture:1"}]}`
 	script := securityScript(t, dir, response)
 	writeConfig(t, dir, securityCLIConfig(script, "report-only", ""))
 	writeFile(t, dir, "main.go", "package main\n")
@@ -110,7 +110,7 @@ func TestSecurityScanReportOnlyRecordsFindingWithoutBlocking(t *testing.T) {
 
 func TestSecurityScanRequiredBlocksOnFinding(t *testing.T) {
 	dir := t.TempDir()
-	response := `{"adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE","findings":[{"rule_id":"R1","severity":"HIGH","message":"fixture finding","path":"main.go","line":1,"fingerprint":"fixture:1"}]}`
+	response := `{"protocol_version":"security-scan/v1","adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE","findings":[{"rule_id":"R1","severity":"HIGH","message":"fixture finding","path":"main.go","line":1,"fingerprint":"fixture:1"}]}`
 	script := securityScript(t, dir, response)
 	writeConfig(t, dir, securityCLIConfig(script, "required", "  required_categories:\n    - sast\n"))
 	code, _, stderr := runCLI(t, dir, "security", "scan", "--run-id", "scan-2")
@@ -147,7 +147,7 @@ func TestSecurityScanRequiredUnavailableIsIndeterminate(t *testing.T) {
 
 func TestRunSecurityGateWritesEvidence(t *testing.T) {
 	dir := t.TempDir()
-	response := `{"adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE"}`
+	response := `{"protocol_version":"security-scan/v1","adapter_id":"fixture-sast","category":"sast","status":"COMPLETED","exit_code":0,"coverage":"COMPLETE"}`
 	script := securityScript(t, dir, response)
 	writeConfig(t, dir, securityCLIConfig(script, "report-only", ""))
 	writeFile(t, dir, "main.go", "package main\n")

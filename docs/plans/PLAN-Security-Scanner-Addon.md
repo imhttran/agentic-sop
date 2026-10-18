@@ -1,6 +1,6 @@
 # PLAN — Security Scanner Add-on
 
-**Status:** ACTIVE. Requirements source:
+**Status:** IMPLEMENTED — SEC-003 and SEC-005 acceptance evidence is recorded below; PR #36 is OPEN and not merged. Requirements source:
 [`docs/specs/SOP-Security-Scanner-Addon-PRD.md`](../specs/SOP-Security-Scanner-Addon-PRD.md).
 **Rule:** the add-on is disabled unless configured. A failed, unavailable, timed-out,
 malformed, or partial scan MUST NOT produce a passing required security gate.
@@ -23,6 +23,17 @@ The implementation reuses `.agent-sdlc/config.yaml` (strict configuration),
 `internal/git` for content identity, `internal/quality` for the single verdict, and
 the existing bounded run/retry/continuation behavior. It does not add a mandatory
 service, model call, scanner engine, automatic install, or automatic fix path.
+
+## Delivery status
+
+- **SEC-003: ACCEPTED.** Pinned Semgrep CE `1.136.0` and Gitleaks `8.30.1`
+  checks pass against clean and seeded fixtures, including parsing, severity,
+  coverage, redaction, and conformance.
+- **SEC-005: ACCEPTED.** The report-only dogfood identifies the scanned content,
+  scanner/rules identities, coverage, findings, and measured durations. CI runs
+  the same pinned real-CLI checks with missing prerequisites failing closed.
+- **PR merge status: OPEN, not merged.** PR #36 is tracked separately from task
+  acceptance; acceptance does not authorize a merge.
 
 ## Capabilities
 

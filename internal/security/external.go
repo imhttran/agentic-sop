@@ -106,7 +106,11 @@ func (a *externalAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("adapter exited with code %d", exitCode))
 		return finish(exec, nil)
 	}
-	response.ProtocolVersion = ProtocolVersion
+	if response.ProtocolVersion != ProtocolVersion {
+		exec.Status = StatusFailed
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("adapter response protocol %q does not match %s", response.ProtocolVersion, ProtocolVersion))
+		return finish(exec, nil)
+	}
 	if response.AdapterID != a.id {
 		exec.Status = StatusFailed
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("adapter response id %q does not match configured id %q", response.AdapterID, a.id))
@@ -117,12 +121,18 @@ func (a *externalAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("adapter response category %q does not match configured category %q", response.Category, a.category))
 		return finish(exec, nil)
 	}
-	response.Provenance = mergeProvenance(response.Provenance, req, a.configDigest)
+	// SOP owns the content identity and the adapter configuration identity. A
+	// provider-supplied value must never override the exact content SOP observed or
+	// the configuration SOP executed.
+	response.Provenance.ContentIdentity = req.Content
+	response.Provenance.ConfigurationDigest = a.configDigest
+	response.Provenance.PolicyIdentity = ""
 	if response.Provenance.ScannerVersion == "" {
 		response.Provenance.ScannerVersion = a.version
 	}
-	response.StartedAt = nonzeroTime(response.StartedAt, exec.StartedAt)
-	response.EndedAt = nonzeroTime(response.EndedAt, time.Now().UTC())
+	// Start/end are SOP's observed bounded-execution times, not provider claims.
+	response.StartedAt = exec.StartedAt
+	response.EndedAt = time.Now().UTC()
 	if response.AdapterVersion == "" {
 		response.AdapterVersion = a.version
 	}
@@ -133,23 +143,6 @@ func (a *externalAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		return finish(exec, nil)
 	}
 	return finish(response, nil)
-}
-
-func mergeProvenance(prov Provenance, req Request, configDigest string) Provenance {
-	if prov.ContentIdentity.Commit == "" && prov.ContentIdentity.Tree == "" && prov.ContentIdentity.Digest == "" {
-		prov.ContentIdentity = req.Content
-	}
-	if prov.ConfigurationDigest == "" {
-		prov.ConfigurationDigest = configDigest
-	}
-	return prov
-}
-
-func nonzeroTime(value, fallback time.Time) time.Time {
-	if value.IsZero() {
-		return fallback
-	}
-	return value
 }
 
 func sanitizeExecution(exec *Execution) {

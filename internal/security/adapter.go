@@ -184,6 +184,14 @@ func finish(exec Execution, err error) (Execution, error) {
 	return exec, nil
 }
 
+// nonzeroTime returns value when set, otherwise fallback.
+func nonzeroTime(value, fallback time.Time) time.Time {
+	if value.IsZero() {
+		return fallback
+	}
+	return value
+}
+
 // ensureWorkspaceRoot validates the workspace boundary before any scanner runs.
 func ensureWorkspaceRoot(root string) (string, error) {
 	if strings.TrimSpace(root) == "" {

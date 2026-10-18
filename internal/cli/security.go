@@ -94,6 +94,8 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 		RequiredCategories: cfg.Security.RequiredCategories,
 		FailOn:             cfg.Security.FailOn,
 		UnknownSeverity:    cfg.Security.UnknownSeverity,
+		TimeoutSeconds:     cfg.Security.TimeoutSeconds,
+		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
 	}
 
 	runID := opts.runID

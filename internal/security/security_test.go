@@ -256,13 +256,14 @@ func argument(argv []string, name string) string {
 func TestExternalAdapterValidResponseAndReplacement(t *testing.T) {
 	root := tempWorkspace(t)
 	response := []byte(`{
+		"protocol_version":"security-scan/v1",
 		"adapter_id":"private-sast",
 		"category":"sast",
 		"status":"COMPLETED",
 		"exit_code":0,
 		"coverage":"COMPLETE",
 		"findings":[{"adapter_id":"private-sast","provider":"private-sast","category":"sast","rule_id":"R1","severity":"HIGH","message":"finding","path":"main.go","line":1,"fingerprint":"private-sast:1"}],
-		"provenance":{"scanner_version":"1.0.0","configuration_digest":"cfg"}
+		"provenance":{"scanner_version":"1.0.0","configuration_digest":"provider-cfg","content_identity":{"commit":"provider-commit","tree":"provider-tree","digest":"provider-digest","dirty":true}}
 	}`)
 	fake := fakeExecutor{run: func(_ context.Context, _ string, _ []string, stdin []byte, _ int) ([]byte, []byte, int, error) {
 		var req Request
@@ -298,6 +299,16 @@ func TestExternalAdapterValidResponseAndReplacement(t *testing.T) {
 	}
 	if len(scan.Findings) != 1 || scan.Findings[0].Provider != "private-sast" {
 		t.Errorf("findings = %+v", scan.Findings)
+	}
+	prov := scan.Adapters[0].Provenance
+	if prov.ContentIdentity.Commit == "provider-commit" || prov.ContentIdentity.Tree == "provider-tree" || prov.ContentIdentity.Digest == "provider-digest" {
+		t.Errorf("provider content identity was trusted: %+v", prov.ContentIdentity)
+	}
+	if prov.ContentIdentity.Dirty != scan.Content.Dirty {
+		t.Errorf("content identity = %+v, want SOP-observed %+v", prov.ContentIdentity, scan.Content)
+	}
+	if prov.ConfigurationDigest == "provider-cfg" {
+		t.Errorf("provider configuration digest was trusted: %+v", prov)
 	}
 }
 
@@ -350,6 +361,31 @@ func TestExternalAdapterFailureStatuses(t *testing.T) {
 	}
 }
 
+func TestExternalAdapterRejectsWrongProtocolAndMissingProtocol(t *testing.T) {
+	root := tempWorkspace(t)
+	for _, response := range []string{
+		`{"protocol_version":"security-scan/v2","adapter_id":"private-sast","category":"sast","status":"COMPLETED","coverage":"COMPLETE"}`,
+		`{"adapter_id":"private-sast","category":"sast","status":"COMPLETED","coverage":"COMPLETE"}`,
+	} {
+		adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+			ID: "private-sast", Category: "sast", Protocol: "external",
+			Command: []string{"/approved/private-sast"}, Version: "1.0.0",
+		}, BuildOptions{Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+			return []byte(response), nil, 0, nil
+		}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+		if err != nil {
+			t.Fatal(err)
+		}
+		exec, err := adapter.Scan(context.Background(), requestFor(t, root))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if exec.Status != StatusFailed {
+			t.Errorf("response %s status = %s, want FAILED", response, exec.Status)
+		}
+	}
+}
+
 func TestPolicyMatrix(t *testing.T) {
 	completedSAST := execFor(CategorySAST, StatusCompleted, CoverageComplete)
 	tests := []struct {
@@ -365,6 +401,9 @@ func TestPolicyMatrix(t *testing.T) {
 		{"required missing category", []Execution{execFor(CategorySecrets, StatusCompleted, CoverageComplete)}, requiredPolicy("sast"), VerdictIndeterminate},
 		{"wrong category does not satisfy", []Execution{execFor(CategorySecrets, StatusCompleted, CoverageComplete)}, requiredPolicy("sast"), VerdictIndeterminate},
 		{"report-only incomplete", []Execution{execFor(CategorySAST, StatusUnavailable, CoverageUnknown)}, Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}, VerdictIndeterminate},
+		{"report-only partial blocking", []Execution{withFindings(execFor(CategorySAST, StatusCompleted, CoveragePartial), Finding{Severity: SeverityHigh, Fingerprint: "x"})}, Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}, VerdictFail},
+		{"required failed secrets with blocking sast", []Execution{withFindings(execFor(CategorySAST, StatusCompleted, CoverageComplete), Finding{Severity: SeverityHigh, Fingerprint: "x"}), execFor(CategorySecrets, StatusUnavailable, CoverageUnknown)}, requiredPolicy("sast", "secrets"), VerdictFail},
+		{"required missing category with blocking finding", []Execution{withFindings(execFor(CategorySAST, StatusCompleted, CoverageComplete), Finding{Severity: SeverityHigh, Fingerprint: "x"})}, requiredPolicy("sast", "secrets"), VerdictFail},
 		{"report-only pass", []Execution{completedSAST}, Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}, VerdictPass},
 		{"required changed scope", []Execution{completedSAST}, Policy{Enabled: true, Mode: "required", Scope: "changed-files", RequiredCategories: []string{"sast"}, FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}, VerdictIndeterminate},
 		{"blocking finding", []Execution{withFindings(completedSAST, Finding{Severity: SeverityHigh, Fingerprint: "x"})}, requiredPolicy("sast"), VerdictFail},
@@ -372,6 +411,7 @@ func TestPolicyMatrix(t *testing.T) {
 		{"unknown indeterminate", []Execution{withFindings(completedSAST, Finding{Severity: SeverityUnknown, Fingerprint: "x"})}, requiredPolicy("sast"), VerdictIndeterminate},
 		{"unknown fail", []Execution{withFindings(completedSAST, Finding{Severity: SeverityUnknown, Fingerprint: "x"})}, withUnknown(requiredPolicy("sast"), "fail"), VerdictFail},
 		{"unknown ignore", []Execution{withFindings(completedSAST, Finding{Severity: SeverityUnknown, Fingerprint: "x"})}, withUnknown(requiredPolicy("sast"), "ignore"), VerdictPass},
+		{"unknown ignore with incomplete coverage", []Execution{withFindings(execFor(CategorySAST, StatusCompleted, CoveragePartial), Finding{Severity: SeverityUnknown, Fingerprint: "x"})}, withUnknown(requiredPolicy("sast"), "ignore"), VerdictIndeterminate},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -571,6 +611,7 @@ func TestExecutionValidationRejectsUnsafePath(t *testing.T) {
 func TestExternalAdapterSanitizesUnsafePath(t *testing.T) {
 	root := tempWorkspace(t)
 	response := []byte(`{
+		"protocol_version":"security-scan/v1",
 		"adapter_id":"private-sast","category":"sast","status":"COMPLETED","coverage":"COMPLETE",
 		"findings":[{"rule_id":"R1","severity":"HIGH","message":"finding","path":"../escape","fingerprint":"private-sast:1"}]
 	}`)
@@ -630,5 +671,49 @@ func TestExternalAdapterTimeoutFromContext(t *testing.T) {
 func TestErrUnavailableIsStable(t *testing.T) {
 	if !errors.Is(ErrUnavailable, ErrUnavailable) {
 		t.Fatal("sentinel is not stable")
+	}
+}
+
+func TestPolicyIdentityIncludesExecutionBounds(t *testing.T) {
+	base := requiredPolicy("sast")
+	base.TimeoutSeconds = 10
+	base.MaxOutputBytes = 1024
+	changed := base
+	changed.TimeoutSeconds = 20
+	if base.Identity(Baseline{}) == changed.Identity(Baseline{}) {
+		t.Error("policy identity did not change with the execution timeout")
+	}
+	changed = base
+	changed.MaxOutputBytes = 2048
+	if base.Identity(Baseline{}) == changed.Identity(Baseline{}) {
+		t.Error("policy identity did not change with the output bound")
+	}
+}
+
+func TestWriteArtifactsAvoidsNativeNameCollisions(t *testing.T) {
+	runDir := t.TempDir()
+	scan := Scan{
+		ProtocolVersion: ProtocolVersion, RunID: "run-1",
+		Metrics: Metrics{AdapterDurationMS: map[string]int64{}},
+		Adapters: []Execution{
+			{AdapterID: "a/b", NativeReport: []byte("{}\n")},
+			{AdapterID: "a_b", NativeReport: []byte("{}\n")},
+		},
+	}
+	refs, err := WriteArtifacts(runDir, scan)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if refs.Native["a/b"] == refs.Native["a_b"] {
+		t.Fatalf("native artifact paths collide: %v", refs.Native)
+	}
+	if len(refs.Native) != 2 {
+		t.Fatalf("native artifacts = %v, want 2", refs.Native)
+	}
+}
+
+func TestRedactValuesHandlesShortSecrets(t *testing.T) {
+	if got := RedactValues("value=ab and ab", []string{"ab"}); strings.Contains(got, "ab") {
+		t.Errorf("short secret was not redacted: %q", got)
 	}
 }

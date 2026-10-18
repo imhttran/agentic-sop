@@ -15,6 +15,10 @@ type Policy struct {
 	RequiredCategories []string `json:"required_categories,omitempty"`
 	FailOn             []string `json:"fail_on"`
 	UnknownSeverity    string   `json:"unknown_severity"`
+	// TimeoutSeconds and MaxOutputBytes are execution configuration. They are part
+	// of the policy identity so changed bounds cannot silently reuse old evidence.
+	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
+	MaxOutputBytes int `json:"max_output_bytes,omitempty"`
 }
 
 // Evaluation is the policy result. Findings remain in the report even when a
@@ -30,11 +34,13 @@ type Evaluation struct {
 // EvaluatePolicy applies the matrix:
 //
 //   - disabled: NOT_APPLICABLE;
-//   - required: every required category must have a COMPLETED, COMPLETE-coverage
-//     adapter and the scope must be a full workspace scan, otherwise
-//     INDETERMINATE;
-//   - a blocking unsuppressed finding: FAIL;
+//   - a blocking unsuppressed finding: FAIL, even when another adapter is
+//     incomplete — a real blocking finding must not be masked by coverage state;
 //   - an unknown unsuppressed severity follows the explicit unknown policy;
+//   - required mode requires every required category to have a COMPLETED,
+//     COMPLETE-coverage adapter and a full workspace scope, otherwise
+//     INDETERMINATE;
+//   - any other failed or incomplete adapter is INDETERMINATE;
 //   - otherwise: PASS.
 func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 	out := Evaluation{Verdict: VerdictIndeterminate, Coverage: CoverageUnknown}
@@ -55,32 +61,21 @@ func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 		return out
 	}
 
-	// A failed or incomplete scan is never a passing security gate, including in
-	// report-only mode: report-only controls blocking, not the honesty of the
-	// verdict.
-	incomplete := false
+	// Collect incompleteness first, but do not let it mask a blocking finding. A
+	// scan that found a real issue is FAIL even when coverage is also partial; the
+	// coverage state remains explicit in the evaluation.
+	var incompleteReasons []string
 	for _, exec := range execs {
 		if exec.Status != StatusCompleted {
-			incomplete = true
-			out.Reasons = append(out.Reasons, fmt.Sprintf("adapter %s is %s", exec.AdapterID, exec.Status))
+			incompleteReasons = append(incompleteReasons, fmt.Sprintf("adapter %s is %s", exec.AdapterID, exec.Status))
 		}
 		if exec.Coverage != CoverageComplete {
-			incomplete = true
-			out.Reasons = append(out.Reasons, fmt.Sprintf("adapter %s coverage is %s", exec.AdapterID, exec.Coverage))
+			incompleteReasons = append(incompleteReasons, fmt.Sprintf("adapter %s coverage is %s", exec.AdapterID, exec.Coverage))
 		}
 	}
-	if incomplete {
-		out.Verdict = VerdictIndeterminate
-		return out
-	}
-
 	if policy.Mode == "required" && policy.Scope != "" && policy.Scope != "workspace" {
-		out.Verdict = VerdictIndeterminate
-		out.Reasons = append(out.Reasons, "required security gate cannot pass on changed-files evidence; run a full workspace scan")
-		return out
+		incompleteReasons = append(incompleteReasons, "required security gate cannot pass on changed-files evidence; run a full workspace scan")
 	}
-
-	failedCoverage := false
 	if policy.Mode == "required" {
 		for _, category := range policy.RequiredCategories {
 			found := false
@@ -90,24 +85,17 @@ func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 				}
 				found = true
 				if exec.Status != StatusCompleted {
-					failedCoverage = true
-					out.Reasons = append(out.Reasons, fmt.Sprintf("required category %s adapter %s is %s", category, exec.AdapterID, exec.Status))
+					incompleteReasons = append(incompleteReasons, fmt.Sprintf("required category %s adapter %s is %s", category, exec.AdapterID, exec.Status))
 					continue
 				}
 				if exec.Coverage != CoverageComplete {
-					failedCoverage = true
-					out.Reasons = append(out.Reasons, fmt.Sprintf("required category %s adapter %s coverage is %s", category, exec.AdapterID, exec.Coverage))
+					incompleteReasons = append(incompleteReasons, fmt.Sprintf("required category %s adapter %s coverage is %s", category, exec.AdapterID, exec.Coverage))
 				}
 			}
 			if !found {
-				failedCoverage = true
-				out.Reasons = append(out.Reasons, fmt.Sprintf("required category %s has no configured adapter", category))
+				incompleteReasons = append(incompleteReasons, fmt.Sprintf("required category %s has no configured adapter", category))
 			}
 		}
-	}
-	if failedCoverage {
-		out.Verdict = VerdictIndeterminate
-		return out
 	}
 
 	blocking := 0
@@ -134,13 +122,18 @@ func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 		case "fail":
 			out.Verdict = VerdictFail
 			out.Reasons = append(out.Reasons, fmt.Sprintf("%d unsuppressed finding(s) have an unknown severity (policy: fail)", unknown))
+			return out
 		case "ignore":
-			out.Verdict = VerdictPass
 			out.Reasons = append(out.Reasons, fmt.Sprintf("%d unsuppressed finding(s) have an unknown severity (policy: ignore)", unknown))
 		default:
 			out.Verdict = VerdictIndeterminate
 			out.Reasons = append(out.Reasons, fmt.Sprintf("%d unsuppressed finding(s) have an unknown severity (policy: indeterminate)", unknown))
+			return out
 		}
+	}
+	if len(incompleteReasons) > 0 {
+		out.Verdict = VerdictIndeterminate
+		out.Reasons = append(out.Reasons, incompleteReasons...)
 		return out
 	}
 	out.Verdict = VerdictPass

@@ -61,6 +61,7 @@ if [ -z "$gitleaks_bin" ]; then
   if [ ! -x "$gitleaks_bin" ]; then
     require_cmd curl
     require_cmd tar
+    require_cmd "$python_bin"
     case "$(uname -s)" in
       Linux) os=linux ;;
       Darwin) os=darwin ;;
@@ -74,6 +75,13 @@ if [ -z "$gitleaks_bin" ]; then
     mkdir -p "$tools_dir"
     archive="$tools_dir/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
     curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz" -o "$archive"
+    checksums="$tools_dir/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
+    curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o "$checksums"
+    asset="gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
+    expected="$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums")"
+    [ -n "$expected" ] || die "no published checksum for $asset"
+    actual="$("$python_bin" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$archive")"
+    [ "$expected" = "$actual" ] || die "checksum mismatch for $asset: want $expected, got $actual"
     mkdir -p "$tools_dir/gitleaks-$GITLEAKS_VERSION"
     tar -xzf "$archive" -C "$tools_dir/gitleaks-$GITLEAKS_VERSION"
   fi
