@@ -98,6 +98,18 @@ Preparation does not require an agent: `sop run` compiles a `PLAN.md` and
 creates tasks even when no agent is configured, then reports the missing agent
 only when it needs to execute (or to generate a plan from a PRD).
 
+## `sop run`: new plans need a branch or worktree
+
+A new plan (no `.agent-sdlc/state.db` yet) is refused on `main` in the primary
+checkout. `sop run` prints the command to create a worktree from `main`:
+
+```bash
+git worktree add -b sop/<plan-slug> ../<repo>-<plan-slug> main
+```
+
+Run `sop run` again from that worktree. Resuming a plan with existing state, any
+other branch, and any linked worktree run in place.
+
 ## `sop run`: multiple plans and handoff
 
 Multiple plans may coexist under `docs/` (`PLAN.md`, `PLAN-Hardening.md`,

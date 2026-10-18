@@ -50,6 +50,13 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		return exitError
 	}
 
+	if d.requireIsolation {
+		if err := requirePlanIsolation(dir, planArg); err != nil {
+			fmt.Fprintf(stderr, "run: %v\n", err)
+			return exitError
+		}
+	}
+
 	// Equivalent to `sop init`: create state and the configuration template.
 	if _, err := ensureProjectInitialized(dir); err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
