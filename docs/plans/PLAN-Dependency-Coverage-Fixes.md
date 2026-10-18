@@ -1,7 +1,7 @@
 # PLAN — Dependency Coverage Obligations
 
 **Type:** Correctness plan (dependency-coverage evidence).
-**Status:** IN PROGRESS.
+**Status:** IMPLEMENTED — verification complete; PR pending.
 **Baseline:** `agentic-sop` `main` @ `fca3e31` (PR #69 merged at `805dd5e`).
 **Branch:** `fix/dependency-coverage-obligations`.
 

@@ -22,6 +22,7 @@ remain beside the Markdown records at their existing paths.
 - [SECURITY-SCANNER-DOGFOOD.md](SECURITY-SCANNER-DOGFOOD.md) — read for the earlier report-only dogfood run: scanned content identity, measured duration, tool availability, the `INDETERMINATE` verdict, and the limitation that no live scanner completed.
 - [SECURITY-SCAN-SKILL.md](SECURITY-SCAN-SKILL.md) — read for the Go/Rust security-scan skill and cargo-audit adapter evidence: detection, auto selection, Semgrep language coverage, pinned advisory-database fixtures, validation results, and remaining gaps.
 - [SECURITY-FINDINGS-ISSUE-52.md](SECURITY-FINDINGS-ISSUE-52.md) — read for the issue #52 review: per-finding dispositions, the reviewed test-helper suppression, production-scope re-scan, and remaining coverage gaps.
+- [SECURITY-DEPENDENCY-COVERAGE.md](SECURITY-DEPENDENCY-COVERAGE.md) — read for the dependency-coverage follow-up: Cargo workspace/obligation correctness, missing-input behavior, empty-analysis rejection, real-scanner evidence, and the report-only dogfood result.
 - [PHASE-9-MULTI-AGENT-ADOPTION.md](PHASE-9-MULTI-AGENT-ADOPTION.md) — read for the recorded Phase 9 — Multi-Agent Adoption Decision (ORCH-012) evidence.
 - [PLAN-compiler-reconciliation-commit-review.md](PLAN-compiler-reconciliation-commit-review.md) — read for the recorded Compiler/reconciliation hardening: pre-commit review evidence.
 - [PLAN-compiler-reconciliation-hardening.md](PLAN-compiler-reconciliation-hardening.md) — read for the recorded SOP Plan Compiler — Determinism and Reconciliation Hardening evidence.
