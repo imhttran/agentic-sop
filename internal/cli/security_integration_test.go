@@ -134,10 +134,6 @@ None
 
 - The verify-first validation passes.
 
-### Acceptance Checks
-
-- ` + "`true`" + `
-
 ### Execution
 
 - verify-first
