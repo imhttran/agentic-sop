@@ -229,6 +229,164 @@ func TestSemgrepAdapterDeclaredExcludesStayComplete(t *testing.T) {
 	}
 }
 
+func TestExcludedPathGitignoreSemantics(t *testing.T) {
+	patterns := []string{
+		"fixtures",
+		"/root-only",
+		"/internal/*/testdata",
+		"**/generated/**",
+		"docs/*.md",
+		"**/cache",
+		"*.tmp",
+	}
+	excluded := []string{
+		"a/b/fixtures/file.go",
+		"root-only/file.go",
+		"internal/a/testdata/file.go",
+		"nested/generated/x/file.go",
+		"generated/file.go",
+		"nested/cache/file",
+		"docs/readme.md",
+		"a/b/x.tmp",
+	}
+	for _, path := range excluded {
+		if !ExcludedPath(path, patterns) {
+			t.Errorf("%q should be excluded by %v", path, patterns)
+		}
+	}
+	included := []string{
+		"cmd/sop/main.go",
+		"bar/root-only/file.go",
+		"internal/a/b/testdata/file.go",
+		"internal/testdata/file.go",
+		"docs/sub/readme.md",
+		"generatedness/file.go",
+	}
+	for _, path := range included {
+		if ExcludedPath(path, patterns) {
+			t.Errorf("%q should not be excluded by %v", path, patterns)
+		}
+	}
+}
+
+func TestGitleaksAdapterStagesOnlyIncludedFiles(t *testing.T) {
+	root := tempWorkspace(t)
+	for _, rel := range []string{"keep/secret.txt", "excluded/secret.txt", "nested/keep.go"} {
+		path := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte("content\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var viewDir, source, reportPath string
+	var staged []string
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, dir string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		viewDir = dir
+		source = argument(argv, "--source")
+		reportPath = argument(argv, "--report-path")
+		staged = stagedFiles(t, dir)
+		return nil, nil, 0, os.WriteFile(reportPath, []byte("[]"), 0o644)
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := requestFor(t, root)
+	req.Scope.Excluded = []string{"excluded"}
+	exec, err := adapter.Scan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Status != StatusCompleted {
+		t.Fatalf("status = %s, want COMPLETED (%v)", exec.Status, exec.Diagnostics)
+	}
+	if viewDir == "" || viewDir == root {
+		t.Fatalf("gitleaks did not run in a staged view: dir=%q root=%q", viewDir, root)
+	}
+	if source != viewDir {
+		t.Errorf("--source = %q, want staged view %q", source, viewDir)
+	}
+	if reportPath == "" || strings.HasPrefix(reportPath, viewDir+string(filepath.Separator)) {
+		t.Errorf("--report-path = %q, want a path outside the staged view", reportPath)
+	}
+	for _, present := range []string{"keep/secret.txt", "nested/keep.go"} {
+		if !contains(staged, present) {
+			t.Errorf("staged view is missing %s: %v", present, staged)
+		}
+	}
+	if contains(staged, "excluded/secret.txt") {
+		t.Errorf("excluded file was staged: %v", staged)
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "outside the declared scope were not staged") {
+		t.Errorf("diagnostics = %v, want staged-view accounting", exec.Diagnostics)
+	}
+}
+
+func stagedFiles(t *testing.T, root string) []string {
+	t.Helper()
+	var files []string
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		files = append(files, filepath.ToSlash(rel))
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return files
+}
+
+func contains(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGitleaksAdapterSymlinkMakesCoveragePartial(t *testing.T) {
+	root := tempWorkspace(t)
+	if err := os.WriteFile(filepath.Join(root, "target.txt"), []byte("content\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("target.txt", filepath.Join(root, "link.txt")); err != nil {
+		t.Skipf("symlinks are unavailable: %v", err)
+	}
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		return nil, nil, 0, os.WriteFile(argument(argv, "--report-path"), []byte("[]"), 0o644)
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Coverage != CoveragePartial {
+		t.Fatalf("coverage = %s, want PARTIAL for an unfollowed symlink", exec.Coverage)
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "symbolic link") {
+		t.Errorf("diagnostics = %v, want symlink coverage note", exec.Diagnostics)
+	}
+}
+
 func TestSemgrepAdapterParsesFixture(t *testing.T) {
 	root := tempWorkspace(t)
 	rules := filepath.Join(root, "rules.yaml")

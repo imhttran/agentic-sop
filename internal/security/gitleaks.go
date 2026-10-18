@@ -91,6 +91,25 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 	defer os.RemoveAll(tempDir)
 	reportPath := filepath.Join(tempDir, "report.json")
+	viewDir := filepath.Join(tempDir, "view")
+	matcher := NewExcludeMatcher(req.Scope.Excluded)
+	if patterns := matcher.Patterns(); len(patterns) > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(patterns, ", "), MaxDiagnosticBytes))
+	}
+	view, verr := stageGitleaksView(req.WorkspaceRoot, viewDir, matcher)
+	if verr != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = append(exec.Diagnostics, "gitleaks exclusions could not be staged: "+SanitizeText(verr.Error(), MaxDiagnosticBytes))
+		return finish(exec, nil)
+	}
+	if view.excludedFiles > 0 || view.excludedDirs > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks scanned a staged view: %d file(s) and %d director(ies) outside the declared scope were not staged", view.excludedFiles, view.excludedDirs))
+	}
+	if view.skippedSymlinks > 0 || view.skippedOther > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks staged view skipped %d symbolic link(s) and %d other non-regular entry(ies); coverage is partial", view.skippedSymlinks, view.skippedOther))
+	}
+	roots := viewRoots(viewDir)
 
 	argv := append([]string(nil), a.command...)
 	if len(argv) == 0 {
@@ -98,7 +117,7 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 	argv = append(argv,
 		"detect",
-		"--source", req.WorkspaceRoot,
+		"--source", viewDir,
 		"--no-git",
 		"--redact",
 		"--report-format", "json",
@@ -123,7 +142,7 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 
 	runCtx, cancel := scanContext(ctx, a.timeout)
 	defer cancel()
-	stdout, stderr, exitCode, runErr := a.exec.Run(runCtx, req.WorkspaceRoot, argv, nil, a.maxOutput)
+	stdout, stderr, exitCode, runErr := a.exec.Run(runCtx, viewDir, argv, nil, a.maxOutput)
 	exec.ExitCode = exitCode
 	if runErr != nil {
 		switch {
@@ -143,10 +162,10 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		return finish(exec, nil)
 	}
 	if len(stderr) > 0 {
-		exec.Diagnostics = append(exec.Diagnostics, SanitizeText(string(stderr), MaxDiagnosticBytes))
+		exec.Diagnostics = append(exec.Diagnostics, SanitizeText(string(sanitizeViewPaths(stderr, roots)), MaxDiagnosticBytes))
 	}
 	if len(stdout) > 0 {
-		exec.Diagnostics = append(exec.Diagnostics, SanitizeText(string(stdout), MaxDiagnosticBytes))
+		exec.Diagnostics = append(exec.Diagnostics, SanitizeText(string(sanitizeViewPaths(stdout, roots)), MaxDiagnosticBytes))
 	}
 	if exitCode != 0 && exitCode != 1 {
 		exec.Status = StatusFailed
@@ -170,22 +189,27 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 
 	exec.Coverage = CoverageComplete
-	allowed := changedSet(req.Scope)
-	excludedPatterns := NormalizeExcludes(req.Scope.Excluded)
-	if len(excludedPatterns) > 0 {
-		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(excludedPatterns, ", "), MaxDiagnosticBytes))
+	if view.skippedSymlinks > 0 || view.skippedOther > 0 {
+		exec.Coverage = CoveragePartial
 	}
+	allowed := changedSet(req.Scope)
 	omitted := 0
 	excludedFindings := 0
 	for _, gf := range findings {
-		path, reason := NormalizePath(gf.File)
-		if filepath.IsAbs(gf.File) {
-			path, reason = relativeFindingPath(req.WorkspaceRoot, gf.File)
+		path, ok := viewRelativePath(gf.File, roots)
+		var reason string
+		if !ok {
+			path, reason = NormalizePath(gf.File)
+			if filepath.IsAbs(gf.File) {
+				path, reason = relativeFindingPath(req.WorkspaceRoot, gf.File)
+			}
 		}
 		if path == "" {
 			exec.Diagnostics = append(exec.Diagnostics, "gitleaks finding path rejected: "+reason)
 		}
-		if path != "" && ExcludedPath(path, excludedPatterns) {
+		if path != "" && matcher.Excluded(path) {
+			// The staged view should already omit excluded paths. Keep this guard so
+			// a scanner-side path form change cannot leak an excluded finding.
 			excludedFindings++
 			continue
 		}
@@ -234,7 +258,7 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks: %d finding(s) in declared excluded paths were omitted from the normalized report", excludedFindings))
 	}
 
-	sanitized, digest, serr := SanitizeNativeReport(raw)
+	sanitized, digest, serr := SanitizeNativeReport(sanitizeViewPaths(raw, roots))
 	if serr == nil {
 		exec.NativeReport = sanitized
 		exec.NativeReportDigest = digest
