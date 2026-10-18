@@ -124,6 +124,15 @@ func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
 		ConfigurationDigest: a.configDigest,
 		ContentIdentity:     req.Content,
 	}
+	lockfiles, err := a.resolveLockfiles(req)
+	if err != nil {
+		return prov, err
+	}
+	lockfileIdentity, err := cargoLockfileIdentity(req.WorkspaceRoot, lockfiles)
+	if err != nil {
+		return prov, err
+	}
+	prov.LockfileIdentity = lockfileIdentity
 	dir, err := a.resolveDatabasePath(req)
 	if err != nil {
 		return prov, err
@@ -202,6 +211,94 @@ func (a *cargoAuditAdapter) resolveLockfiles(req Request) ([]string, error) {
 	return present, nil
 }
 
+// cargoLockfileIdentity returns a deterministic digest of the resolved lockfiles.
+// It is recorded as provenance and used as a resume key, so a changed lockfile
+// invalidates reused evidence even when the advisory database is unchanged.
+func cargoLockfileIdentity(root string, lockfiles []string) (string, error) {
+	if len(lockfiles) == 0 {
+		return "", fmt.Errorf("no Cargo.lock resolved; dependency identity is unavailable")
+	}
+	parts := make([]string, 0, len(lockfiles))
+	for _, rel := range lockfiles {
+		digest, err := rulesIdentity(joinPath(root, rel))
+		if err != nil {
+			return "", fmt.Errorf("lockfile identity for %s is unavailable: %s", rel, SanitizeText(err.Error(), MaxDiagnosticBytes))
+		}
+		if strings.TrimSpace(digest) == "" {
+			return "", fmt.Errorf("lockfile identity for %s is empty", rel)
+		}
+		parts = append(parts, "path="+rel+";digest="+digest)
+	}
+	return strings.Join(parts, ";"), nil
+}
+
+// verifyToolVersion executes the configured command with --version and requires
+// the parsed version to equal the pinned configuration value. A missing pin, an
+// unrecognized version string, or a mismatch fails closed before any scan runs.
+func (a *cargoAuditAdapter) verifyToolVersion(ctx context.Context, workDir string) (string, error) {
+	pinned := normalizeCargoAuditVersion(a.version)
+	if pinned == "" {
+		return "", fmt.Errorf("cargo-audit version is not pinned; configure an exact version so an incompatible tool cannot produce a clean result")
+	}
+	argv := append([]string(nil), a.command...)
+	if len(argv) == 0 {
+		argv = []string{"cargo", "audit"}
+	}
+	argv = append(argv, "--version")
+	runCtx, cancel := scanContext(ctx, a.timeout)
+	defer cancel()
+	stdout, _, _, err := a.exec.Run(runCtx, workDir, argv, nil, a.maxOutput)
+	if err != nil {
+		return "", err
+	}
+	actual := normalizeCargoAuditVersion(string(stdout))
+	if actual == "" {
+		return "", fmt.Errorf("cargo-audit version output is unrecognized: %s", SanitizeText(strings.TrimSpace(string(stdout)), MaxDiagnosticBytes))
+	}
+	if actual != pinned {
+		return "", fmt.Errorf("cargo-audit version mismatch: found %s, want %s", actual, pinned)
+	}
+	return actual, nil
+}
+
+// normalizeCargoAuditVersion extracts a comparable semantic version from version
+// output such as "cargo-audit 0.22.2" or "cargo-audit-audit 0.22.2". An
+// unrecognized value yields an empty string instead of a guess.
+func normalizeCargoAuditVersion(raw string) string {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return ""
+	}
+	fields := strings.Fields(value)
+	value = strings.TrimPrefix(fields[len(fields)-1], "v")
+	if !isCargoVersion(value) {
+		return ""
+	}
+	return value
+}
+
+func isCargoVersion(value string) bool {
+	core := value
+	if i := strings.IndexAny(core, "-+"); i >= 0 {
+		core = core[:i]
+	}
+	segments := strings.Split(core, ".")
+	if len(segments) != 3 {
+		return false
+	}
+	for _, segment := range segments {
+		if segment == "" {
+			return false
+		}
+		for _, r := range segment {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
+}
+
 // Scan audits every resolved lockfile once. Each failure is reported
 // independently, and any failure makes the execution non-clean.
 func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, error) {
@@ -222,6 +319,14 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 		exec.Diagnostics = []string{SanitizeText(err.Error(), MaxDiagnosticBytes)}
 		return finish(exec, nil)
 	}
+	lockfileIdentity, err := cargoLockfileIdentity(req.WorkspaceRoot, lockfiles)
+	if err != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = []string{SanitizeText(err.Error(), MaxDiagnosticBytes)}
+		return finish(exec, nil)
+	}
+	exec.Provenance.LockfileIdentity = lockfileIdentity
 	identity, err := cargoDatabaseIdentity(databaseDir)
 	if err != nil {
 		exec.Status = StatusFailed
@@ -239,6 +344,31 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 		return finish(exec, nil)
 	}
 	defer os.RemoveAll(workDir)
+
+	// The configured version is a pin, not a label: verify the executable before
+	// any scan so an incompatible tool can never produce a clean dependency result.
+	actualVersion, versionErr := a.verifyToolVersion(ctx, workDir)
+	if versionErr != nil {
+		switch {
+		case errors.Is(versionErr, ErrUnavailable):
+			exec.Status = StatusUnavailable
+			exec.Diagnostics = append(exec.Diagnostics, "cargo-audit executable is unavailable")
+		case errors.Is(versionErr, context.DeadlineExceeded):
+			exec.Status = StatusTimedOut
+			exec.Diagnostics = append(exec.Diagnostics, "cargo-audit version check exceeded the scan deadline")
+		case errors.Is(versionErr, context.Canceled):
+			exec.Status = StatusCancelled
+			exec.Diagnostics = append(exec.Diagnostics, "cargo-audit version check was cancelled")
+		default:
+			exec.Status = StatusFailed
+			exec.Diagnostics = append(exec.Diagnostics, SanitizeText(versionErr.Error(), MaxDiagnosticBytes))
+		}
+		exec.Coverage = CoverageUnknown
+		sanitizeExecution(&exec)
+		return finish(exec, nil)
+	}
+	exec.AdapterVersion = actualVersion
+	exec.Provenance.ScannerVersion = actualVersion
 
 	var (
 		rawReports []json.RawMessage

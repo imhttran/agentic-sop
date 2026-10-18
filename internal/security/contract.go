@@ -207,7 +207,11 @@ type Provenance struct {
 	AdvisoryDatabaseMetadata string `json:"advisory_database_metadata,omitempty"`
 	// AdvisoryDatabaseStale reports that the adapter observed a stale advisory
 	// database. Policy decides what a stale database means.
-	AdvisoryDatabaseStale bool            `json:"advisory_database_stale,omitempty"`
+	AdvisoryDatabaseStale bool `json:"advisory_database_stale,omitempty"`
+	// LockfileIdentity records the resolved dependency lockfiles and their content
+	// digests for a dependency scan. It is a resume key: a changed lockfile must
+	// invalidate reused evidence even when the database is unchanged.
+	LockfileIdentity      string          `json:"lockfile_identity,omitempty"`
 	ConfigurationDigest   string          `json:"configuration_digest"`
 	ContentIdentity       ContentIdentity `json:"content_identity"`
 	PolicyIdentity        string          `json:"policy_identity"`

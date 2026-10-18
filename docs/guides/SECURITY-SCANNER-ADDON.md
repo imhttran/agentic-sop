@@ -171,8 +171,23 @@ member does not own a lockfile. The adapter always passes `--file`, `--json`,
 `--no-fetch`, and an explicit `--db`. It never generates or modifies a lockfile,
 never runs `fix`, and never uploads source.
 
+Provision the pinned executable once, separately from scanning:
+
+```bash
+scripts/security/fetch-cargo-audit.sh --dest .agent-sdlc/cargo-audit
+```
+
+The script downloads the release asset pinned by
+`scripts/security/cargo-audit-manifest.json`, verifies its SHA-256, and checks the
+binary's reported version. It is the only networked step. Point `command` at the
+provisioned binary (for example `[.agent-sdlc/cargo-audit/cargo-audit, audit]`)
+and set an exact `version`. Before any scan the adapter runs `--version` and fails
+closed when the pin is missing, the output is unrecognized, or the reported
+version differs.
+
 - `advisory_database_path` (global) or an adapter `database` path is required. A
-  missing path is `FAILED`, not a clean scan.
+  missing path is `FAILED`, not a clean scan. The database is operator-supplied
+  and local; scans never fetch or update it.
 - `stale_advisory_database` / adapter `stale` is `deny` by default. A database
   older than 90 days stays non-clean: `deny` marks it `INDETERMINATE`; `allow`
   passes `--stale`, records `PARTIAL` coverage, and still cannot satisfy a
@@ -180,9 +195,18 @@ never runs `fix`, and never uploads source.
 - The normalized finding preserves the advisory ID, affected package/version,
   CVSS/severity, aliases/CVEs, patched and unaffected versions, references, and
   the lockfile path. Advisories are separate from tool/database failures.
-- The local database identity is a deterministic fingerprint; scanner-observed
-  `last-commit`, `last-updated`, and `advisory-count` are recorded as evidence.
-  Resume re-executes when the fingerprint changes.
+- Provenance records the observed tool version, the local database identity
+  (including local content changes), and a lockfile identity of every resolved
+  path plus its content digest. Resume re-executes when any of them changes.
+- Unsupported target (no Rust content), missing or incompatible tool, missing
+  lockfile, missing or invalid database, a stale database under `deny`, malformed
+  output, a timeout, and a tool failure each produce a distinguishable non-clean
+  result. None is a clean dependency scan.
+- The real-tool integration check runs the pinned binary with `--no-fetch` against
+  the controlled advisory database at
+  `internal/security/testdata/cargo-audit/advisory-db`, which contains a known
+  `RUSTSEC-2020-0071` entry for `time 0.1.44`. It also asserts that the scan
+  leaves both the lockfile and the database byte-identical.
 
 ### Source analysis (Semgrep)
 
