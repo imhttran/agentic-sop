@@ -107,9 +107,11 @@ uninstall-skills-claude:
 # plugin verification) is unchanged. `make install-ollama-agent TEST_MODE=fast`
 # is opt-in; the default remains the ordinary suite. An invalid mode fails before
 # the gates and before the installer, so a typo never installs a binary.
-ifeq ($(filter $(TEST_MODE),ordinary fast),)
+ifneq ($(words $(TEST_MODE)),1)
 install-ollama-agent: ollama-agent-invalid-test-mode
-else ifeq ($(TEST_MODE),fast)
+else ifeq ($(filter $(TEST_MODE),ordinary fast),)
+install-ollama-agent: ollama-agent-invalid-test-mode
+else ifeq ($(strip $(TEST_MODE)),fast)
 install-ollama-agent: check-fast
 else
 install-ollama-agent: check
