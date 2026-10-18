@@ -55,7 +55,7 @@ security:
       category: sast
       protocol: builtin
       command: [semgrep]
-      rules: security/semgrep-rules # local rules path; no implicit download
+      rules: .agent-sdlc/security-rules # local rules path; no implicit download
       version: "SET_THE_PINNED_VERSION"
     - id: gitleaks
       category: secrets
@@ -76,7 +76,12 @@ values fail configuration load; they are never silently defaulted.
 
 Semgrep rules MUST be local and explicit. The adapter never passes `--config
 auto`, never downloads rules, and never uploads code. Rule downloads and hosted
-services remain separate, explicit operator actions outside this add-on.
+services remain separate, explicit operator actions outside this add-on. The
+repository provides `scripts/security/fetch-semgrep-rules.sh`, which fetches the
+rules from the exact commit in `scripts/security/semgrep-rules-manifest.json`,
+verifies the tarball, every selected file, and the deterministic directory digest,
+and writes them to an ignored local directory. The upstream rules are
+license-restricted and are never committed.
 
 ## 3. Adapter protocol v1
 
@@ -156,6 +161,9 @@ content identity, policy identity, and sanitized native-report digest.
 - A missing rules path is `FAILED` with an explicit diagnostic; no rule
   download is attempted.
 - Scanner errors or scanner-side skipped paths make coverage `PARTIAL`.
+- Every reason in Semgrep's `Scan skipped:` summary is a gap unless it is a
+  declared `--exclude` pattern. An unrecognized reason is still a gap: unknown
+  scanner behavior never yields `COMPLETE`.
 
 ### Gitleaks (`secrets`)
 
@@ -168,7 +176,10 @@ content identity, policy identity, and sanitized native-report digest.
   paths are never linked into the scan view and are never read by Gitleaks. The
   adapter still filters any unexpected finding as a guard and records staged
   exclusions in diagnostics. Symbolic links are not followed; their presence
-  makes coverage `PARTIAL`.
+  makes coverage `PARTIAL`. Scanner-side skips reported by Gitleaks (for example
+  an allowlist file skip) also make coverage `PARTIAL`. `.env` files are never
+  excluded automatically; they are secret-scan targets unless the operator
+  explicitly declares them outside the scope.
 - Every secret finding is `HIGH`; original provider meaning (`secret`) is
   retained. Messages and metadata are sanitized.
 - Raw report files live only in restricted temporary storage and are removed on
@@ -230,7 +241,11 @@ with no blocking finding produces `INDETERMINATE` and never `PASS`.
 Report-only records the verdict as an advisory and never blocks the run.
 Required mode fails closed: only `PASS` passes. `quality.Evaluate` remains the
 single verdict authority; the security layer cannot approve, suppress, or bypass
-a gate.
+a gate. A required security failure is classified as `SECURITY_SCAN_FAILURE` in
+the existing failure model, with a terminal operator-review disposition. It does
+not enter the code-fix loop and does not create an approval gate; SOP never
+automatically remediates security findings. Approval boundaries still take
+precedence over the security classification.
 
 ## 7. Baselines and suppressions
 

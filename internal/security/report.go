@@ -71,6 +71,37 @@ type ArtifactRefs struct {
 	Native       map[string]string `json:"native,omitempty"`
 }
 
+// LoadNativeReports reads the sanitized native reports referenced by a prior
+// scan, verifying each file against the recorded sanitized-report digest. A
+// missing file or a digest mismatch is omitted, which makes the runner rescan
+// that adapter rather than reuse unverifiable evidence.
+func LoadNativeReports(runDir string, scan *Scan) map[string][]byte {
+	out := make(map[string][]byte)
+	if scan == nil {
+		return out
+	}
+	for _, adapter := range scan.Adapters {
+		digest := strings.TrimSpace(adapter.Provenance.SanitizedReportDigest)
+		if digest == "" {
+			continue
+		}
+		base := safeArtifactName(adapter.AdapterID)
+		names := []string{base + ".native.json"}
+		for i := 2; i <= 9; i++ {
+			names = append(names, fmt.Sprintf("%s-%d.native.json", base, i))
+		}
+		for _, name := range names {
+			data, err := os.ReadFile(filepath.Join(runDir, "security", name))
+			if err != nil || DigestBytes(data) != digest {
+				continue
+			}
+			out[adapter.AdapterID] = data
+			break
+		}
+	}
+	return out
+}
+
 // WriteArtifacts persists the normalized report, a Markdown rendering, and each
 // sanitized native report under <runDir>/security. Raw reports are never written:
 // an adapter has already sanitized NativeReport, and a nil native report is

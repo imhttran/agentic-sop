@@ -9,9 +9,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/review"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/security"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
+	"github.com/imhttran/agentic-sop/internal/testrunner"
 )
 
 func securityScript(t *testing.T, dir string, response string) string {
@@ -169,5 +173,71 @@ func TestRunSecurityGateWritesEvidence(t *testing.T) {
 	}
 	if !stateExists(filepath.Join(rn.Dir(), "security", "scan.json")) {
 		t.Error("security evidence was not written into the run directory")
+	}
+}
+
+func TestVerificationEvidenceCarriesRequiredSecurityFailure(t *testing.T) {
+	enabled := true
+	cfg := config.Config{}
+	cfg.Security.Enabled = &enabled
+	cfg.Security.Mode = config.SecurityModeRequired
+	cfg.Security.Adapters = []config.SecurityAdapterConfig{{ID: "semgrep"}}
+	scan := &security.Scan{
+		Verdict:  security.VerdictFail,
+		Adapters: []security.Execution{{AdapterID: "semgrep", Status: security.StatusCompleted, Coverage: security.CoverageComplete}},
+		Reasons:  []string{"1 unsuppressed finding at a blocking severity"},
+	}
+	ev := verificationEvidence(cfg, testrunner.SuiteResult{}, review.Report{}, 0, &jevRunEvidence{}, failure.ApprovalNone, scan)
+	if !ev.SecurityFailed || ev.SecurityVerdict != "FAIL" {
+		t.Fatalf("security evidence = %+v, want required FAIL", ev)
+	}
+	class := failure.Classify(ev)
+	if class.Kind != failure.SecurityScanFailure || class.Disposition != failure.Block {
+		t.Fatalf("classification = %+v, want SECURITY_SCAN_FAILURE/BLOCK", class)
+	}
+	cfg.Security.Mode = config.SecurityModeReportOnly
+	ev = verificationEvidence(cfg, testrunner.SuiteResult{}, review.Report{}, 0, &jevRunEvidence{}, failure.ApprovalNone, scan)
+	if ev.SecurityFailed {
+		t.Fatalf("report-only evidence must not classify as a security failure: %+v", ev)
+	}
+}
+
+func TestLoadPriorSecurityScanLoadsVerifiedNativeReport(t *testing.T) {
+	dir := t.TempDir()
+	runID := "prior-run"
+	runDir := filepath.Join(dir, config.DirName, "runs", runID)
+	native := []byte(`{"adapter":"stub","ok":true}`)
+	scan := security.Scan{
+		ProtocolVersion: security.ProtocolVersion,
+		RunID:           runID,
+		Adapters: []security.Execution{{
+			ProtocolVersion: security.ProtocolVersion, AdapterID: "stub", Category: security.CategorySAST,
+			Status: security.StatusCompleted, Coverage: security.CoverageComplete, NativeReport: native,
+			Provenance: security.Provenance{SanitizedReportDigest: security.DigestBytes(native)},
+		}},
+	}
+	if _, err := security.WriteArtifacts(runDir, scan); err != nil {
+		t.Fatal(err)
+	}
+	got, natives, err := loadPriorSecurityScan(dir, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.RunID != runID {
+		t.Fatalf("prior scan = %+v, want run %s", got, runID)
+	}
+	if string(natives["stub"]) != string(native) {
+		t.Fatalf("native report = %q, want verified report", natives["stub"])
+	}
+	path := filepath.Join(runDir, "security", "stub.native.json")
+	if err := os.WriteFile(path, []byte(`{"tampered":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, natives, err = loadPriorSecurityScan(dir, runID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(natives) != 0 {
+		t.Fatalf("tampered native report was accepted: %v", natives)
 	}
 }

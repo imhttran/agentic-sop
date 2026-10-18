@@ -895,3 +895,20 @@ func TestHarnessNoProgressIsNotAutoContinue(t *testing.T) {
 		t.Fatalf("disposition = %s, want BLOCK (blocked for operator, not a human approval)", got.Disposition)
 	}
 }
+
+// TestSecurityScanFailureIsBlockedNotAutoFixed proves a required security scan
+// failure has an explicit kind and is an operator block: SOP never auto-remediates
+// security findings. Approval boundaries still outrank it.
+func TestSecurityScanFailureIsBlockedNotAutoFixed(t *testing.T) {
+	got := Classify(Evidence{Source: "VALIDATE", SecurityFailed: true, SecurityVerdict: "FAIL", SecurityReason: "2 blocking findings"})
+	if got.Kind != SecurityScanFailure || got.Disposition != Block || got.Confidence != High {
+		t.Fatalf("classification = %+v, want SECURITY_SCAN_FAILURE/BLOCK/HIGH", got)
+	}
+	if !strings.Contains(got.Reason, "FAIL") || !strings.Contains(got.Reason, "2 blocking findings") {
+		t.Errorf("reason = %q, want verdict and scan reason", got.Reason)
+	}
+	approval := Classify(Evidence{Source: "VALIDATE", ApprovalRequired: true, SecurityFailed: true})
+	if approval.Kind != ApprovalRequired || approval.Disposition != NeedsHuman {
+		t.Fatalf("approval precedence = %+v, want APPROVAL_REQUIRED/NEEDS_HUMAN", approval)
+	}
+}

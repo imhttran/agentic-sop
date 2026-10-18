@@ -1176,7 +1176,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var class failure.Classification
 	var decision autonomy.Decision
 	if gate.Decision != quality.Pass {
-		ev := verificationEvidence(cfg, suite, report, cycles, jevEv, approval)
+		ev := verificationEvidence(cfg, suite, report, cycles, jevEv, approval, securityScan)
 		ev.ValidationRequired = validationRequired
 		ev.ValidationConfigured = validationConfigured
 		class = failure.Classify(ev)
@@ -1299,7 +1299,7 @@ func malformedOutputResult(cfg config.Config, rn *runpkg.Run, err error) lifeRes
 // bounded budget. A JEV analysis failure is a bounded, non-human signal: it is
 // recorded so the classification preserves its reason instead of falling through
 // to an "unknown" human boundary.
-func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int, jevEv *jevRunEvidence, approval failure.ApprovalBoundary) failure.Evidence {
+func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, report review.Report, cycles int, jevEv *jevRunEvidence, approval failure.ApprovalBoundary, securityScan *security.Scan) failure.Evidence {
 	buildFailed := hasCategory(suite, testrunner.Build) && !categoryPassed(suite, testrunner.Build)
 	testFailed := hasCategory(suite, testrunner.UnitTest) && !categoryPassed(suite, testrunner.UnitTest)
 	lintFailed := hasCategory(suite, testrunner.Lint) && !categoryPassed(suite, testrunner.Lint)
@@ -1313,6 +1313,15 @@ func verificationEvidence(cfg config.Config, suite testrunner.SuiteResult, repor
 		BlockingFindings: quality.BlockingFindings(cfg.Quality.FailOn, report.Findings),
 		FixCycles:        cycles,
 		MaxFixCycles:     cfg.Quality.MaxFixCycles,
+	}
+	// A required security scan that did not pass is an explicit deterministic
+	// failure. Report-only evidence stays advisory and never reaches this path.
+	if sec := securityGateEvidence(cfg, securityScan); sec != nil && sec.Required {
+		if verdict := strings.ToUpper(strings.TrimSpace(sec.Verdict)); verdict != "PASS" {
+			ev.SecurityFailed = true
+			ev.SecurityVerdict = verdict
+			ev.SecurityReason = sec.Reason
+		}
 	}
 	// A fail-closed JEV is an analysis/provider failure, not a human decision. Its
 	// authoritative reason is carried through so the classification and the report

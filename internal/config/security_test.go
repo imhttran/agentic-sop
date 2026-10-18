@@ -131,6 +131,18 @@ func TestSecurityExcludesAreAdditiveAndDeterministic(t *testing.T) {
 	}
 }
 
+func TestSecurityExcludesDoNotImplicitlyExcludeEnv(t *testing.T) {
+	cfg, err := parseSecurityConfig(t, "security:\n  enabled: true\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, pattern := range cfg.SecurityExcludes() {
+		if pattern == ".env" || pattern == "/.env" || pattern == ".env.*" || pattern == "/.env.*" {
+			t.Fatalf("default exclusions unexpectedly hide .env files: %v", cfg.SecurityExcludes())
+		}
+	}
+}
+
 func TestSecurityDisabledBlockStillValidatesExplicitValues(t *testing.T) {
 	_, err := parseSecurityConfig(t, "security:\n  enabled: false\n  mode: nonsense\n")
 	if err == nil {

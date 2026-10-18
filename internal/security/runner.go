@@ -23,6 +23,10 @@ type RunnerConfig struct {
 	// resume. A completed adapter result is reused only when every identity still
 	// matches; any mismatch re-executes that adapter.
 	Prior *Scan
+	// PriorNativeReports holds the sanitized native reports loaded from the prior
+	// run and already verified against each execution's SanitizedReportDigest.
+	// Reuse is refused when a report is expected but unavailable or invalid.
+	PriorNativeReports map[string][]byte
 }
 
 // Runner orchestrates adapters. It performs no retries of its own; the caller's
@@ -237,6 +241,13 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 			return Execution{}, false
 		}
 		reused := prior
+		if reused.Provenance.SanitizedReportDigest != "" {
+			native, ok := r.cfg.PriorNativeReports[descriptor.AdapterID]
+			if !ok || DigestBytes(native) != reused.Provenance.SanitizedReportDigest {
+				return Execution{}, false
+			}
+			reused.NativeReport = native
+		}
 		reused.Reused = true
 		return reused, true
 	}

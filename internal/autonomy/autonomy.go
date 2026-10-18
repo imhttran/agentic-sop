@@ -183,6 +183,13 @@ func Decide(c failure.Classification, p Policy) Decision {
 		return auto(ActionTerminal, c, p, RiskLow, "required validation is not configured; the operator must configure validation and re-run — an automation/configuration block, not a human approval")
 	}
 
+	// 1d. A required security scan that did not pass is a terminal automation
+	//     state. Security findings are not auto-remediated and there is no approval
+	//     decision to record; the operator reviews the evidence and decides.
+	if c.Kind == failure.SecurityScanFailure {
+		return auto(ActionTerminal, c, p, RiskMedium, "required security scan did not pass; operator review is required and no automatic remediation is performed")
+	}
+
 	// 2. Bounded automation exhaustion. Under the high level it is a terminal
 	//    automation state — SOP tried and stopped; no human decision exists. The
 	//    conservative levels keep the human boundary, so an operator who never opted

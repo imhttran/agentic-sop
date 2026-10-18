@@ -167,6 +167,10 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	if len(stdout) > 0 {
 		exec.Diagnostics = append(exec.Diagnostics, SanitizeText(string(sanitizeViewPaths(stdout, roots)), MaxDiagnosticBytes))
 	}
+	skippedFiles, skippedFindings, unknownSkips := gitleaksSkipNotices(string(stderr))
+	if skippedFiles > 0 || skippedFindings > 0 || unknownSkips > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks reported %d scanner-side file skip(s), %d finding skip(s), and %d unrecognized skip notice(s); coverage is partial", skippedFiles, skippedFindings, unknownSkips))
+	}
 	if exitCode != 0 && exitCode != 1 {
 		exec.Status = StatusFailed
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks exited with code %d", exitCode))
@@ -189,7 +193,7 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 
 	exec.Coverage = CoverageComplete
-	if view.skippedSymlinks > 0 || view.skippedOther > 0 {
+	if view.skippedSymlinks > 0 || view.skippedOther > 0 || skippedFiles > 0 || skippedFindings > 0 || unknownSkips > 0 {
 		exec.Coverage = CoveragePartial
 	}
 	allowed := changedSet(req.Scope)
@@ -274,6 +278,27 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 	sanitizeExecution(&exec)
 	return finish(exec, nil)
+}
+
+// gitleaksSkipNotices counts scanner-side skips in Gitleaks diagnostics. A
+// Gitleaks allowlist (global or rule-level) skips content before it can appear in
+// the report; that is a coverage gap, not a clean scan. Unknown skip wording is
+// left to the generic diagnostics and never converted into COMPLETE.
+func gitleaksSkipNotices(stderr string) (files, findings, unknown int) {
+	for _, line := range strings.Split(stderr, "\n") {
+		lower := strings.ToLower(line)
+		switch {
+		case strings.Contains(lower, "skipping file:"):
+			files++
+		case strings.Contains(lower, "skipping finding:"):
+			findings++
+		case strings.Contains(lower, "skip"):
+			// Fail closed: a skip notice this build does not recognize is still a
+			// coverage gap, never a clean scan.
+			unknown++
+		}
+	}
+	return files, findings, unknown
 }
 
 // parseGitleaksReport accepts the two report shapes distributed by Gitleaks

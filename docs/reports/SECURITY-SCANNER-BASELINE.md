@@ -537,6 +537,151 @@ The test log is retained at
 `scan.json`, `scan.md`, `semgrep.native.json`, `gitleaks.native.json`,
 `coverage-detail.md`, and `focused-fixtures.log`.
 
+## Hardening verification (`338b557`, 2026-10-18)
+
+This section records the final report-only baseline after the #40 hardening work.
+Earlier point-in-time sections are preserved.
+
+### Content and result
+
+| Field              | Value                                                        |
+| ------------------ | ------------------------------------------------------------ |
+| Commit             | `338b5574aed2959069a5203840874a49fc763e1a`                   |
+| Tree               | `ee8adfd6b6880171237d8ca85b3257c8a5c3be35`                   |
+| Working tree       | `CLEAN` (`dirty: false`)                                     |
+| Run                | `security-hardening-final-20261018`                          |
+| Mode               | `report-only`                                                |
+| Verdict            | `FAIL` (report-only; non-blocking)                           |
+| Coverage           | Semgrep `PARTIAL`, Gitleaks `COMPLETE`                       |
+| Findings           | 27 (26 SAST, 1 secret); same keys and fingerprints as prior  |
+| Suppressed         | 0                                                            |
+| Execution failures | 0                                                            |
+| Total duration     | 4262 ms (Semgrep 3037 ms, Gitleaks 1037 ms)                  |
+
+Scanner, rules, configuration, and policy identities:
+
+| Field               | Value                                                              |
+| ------------------- | ------------------------------------------------------------------ |
+| Semgrep             | `1.136.0`                                                          |
+| Semgrep rules       | `5d5765f46b60a1ad57ac0f3876e888a5fbbac5407dd0b8ea27472a5189f5bb30` |
+| Semgrep config      | `bf4cf700e5a825799f90df1ad96dd019c988107fd6a83c31e5cc3b88d1e67f25` |
+| Semgrep report      | `2736be114d6fd5d0aaddfe2ca5941aa29d9ce9440c83fe03b4dbafcb9b4146a8` |
+| Gitleaks            | `8.30.1`                                                           |
+| Gitleaks config     | `c308356740a0f7c36903ef409b2eca80472fac2ecab924c4ab5ed0c260a08ae8` |
+| Gitleaks report     | `69d1cd6d8a95a2f06fabc0431003d9f0de75f7c5080e4ecacdc66f328fddc82a` |
+| Policy identity     | `36702ffd66659ec40537dd89c30ef0bcd7b86ff89ea38532939129a1a6d34ec0` |
+
+The rules identity changed from the earlier single-file digest to the deterministic
+directory digest because production rules are now fetched as the pinned directory
+tree rather than a merged file. Rule IDs and finding fingerprints are unchanged.
+
+### Findings comparison
+
+0 findings added, 0 removed. All 27 `(category, rule_id, path, line)` keys and all
+27 fingerprints are identical to the earlier 27-finding baseline.
+
+| Rule | Count |
+| --- | ---: |
+| `dangerous-exec-command` | 14 |
+| `no-direct-write-to-responsewriter` | 3 |
+| `cookie-missing-secure` | 3 |
+| `open-redirect` | 3 |
+| `use-of-unsafe-block` | 2 |
+| `string-formatted-query` | 1 |
+| `generic-api-key` | 1 |
+
+### Source-backed dispositions
+
+The 14 process-execution findings were rechecked against source and data flow.
+Structured argv was not treated as sufficient by itself:
+
+- `cmd/deceleval-recovery`: developer CLI flags; no remote input.
+- `internal/agent/command.go`: `SOP_AGENT_COMMAND` is trusted local configuration;
+  `sh -c` is the documented harness contract.
+- `internal/cli/outcome.go`: acceptance argv must pass `SplitCommand` (no shell
+  syntax), `commandpolicy.SAFE`, and dangerous-form rejection first.
+- `internal/controller/sopclient`: task IDs beginning with `-` are rejected by
+  `parseDecisionArgs`; project roots come from the configured store; argv has no
+  shell.
+- `internal/decision` and `decisionadapter`: structured configuration argv, no
+  shell; provider output is never interpolated into the command.
+- `internal/github`: `gh`/`git` argv only; branch names are produced by
+  `TaskBranchName` and checked by `validateBranchish`; base comes from config.
+- `internal/handoff/caveman`, `internal/review/ocr`, `internal/testrunner`:
+  `sh -c` over trusted local configuration/environment, not remote input.
+- `internal/ragclient`: absolute, stat-validated executable; no shell.
+- `internal/security`: adapter argv from security configuration; no shell.
+- `internal/toolharness`: model commands are tokenized, path-checked, and must
+  classify as `commandpolicy.SAFE`; unknown programs require approval.
+
+The remaining findings are false positives with the same source-backed reasons as
+the original baseline: SSE JSON writes, dynamic `Secure: isHTTPS(r)` cookies,
+fixed/validated redirect targets, Windows Job Object `unsafe` FFI, a constant SQL
+column list with bound parameters, and a test environment-variable assignment that
+is not a credential.
+
+**Confirmed vulnerabilities:** 0.
+**Accepted risks:** none newly accepted; the trusted-local-configuration boundary
+(`sh -c` for operator/project commands) is the existing design assumption.
+**Unresolved findings:** none individually.
+**Suppressions:** none applied. No suppression file was created because no
+authorized owner and expiry were provided. Any future suppression must contain one
+narrow fingerprint entry per finding, a source-backed reason, an owner, and an
+expiry; the disposition table above is the proposed evidence.
+
+### Coverage
+
+- Semgrep scanned 402 Go files.
+- Semgrep skipped 581 targets by its default `.semgrepignore`: 578 Go test files,
+  two test/fixture directories, and one minified JavaScript file. Coverage is
+  `PARTIAL`, never `COMPLETE`.
+- Gitleaks staged a filtered view, scanned 13,176,782 bytes (13.18 MB) in 405 ms
+  (adapter wall time 1037 ms), and reported `COMPLETE`. Declared exclusions were 3
+  files and 12 directories; no scanner-side skip notices were observed.
+- `.env` files are not excluded automatically. The production target was a clean
+  worktree, so no local `.env` file was present.
+- Unknown Semgrep skip reasons now produce `PARTIAL`; unknown Gitleaks skip notices
+  also produce `PARTIAL`.
+
+### Provisioning and resume
+
+- Semgrep is installed from `scripts/security/semgrep-requirements.lock`
+  (SHA-256 `71510a5067ddbecbf0413b60832d800af571b9df7ebc9cbe81e2b965618ba4b7`)
+  with `pip --require-hashes`.
+- Production rules are fetched by `scripts/security/fetch-semgrep-rules.sh` from
+  `semgrep-rules` commit `17e31e11ebac99fb7dfe1cd288f7a32151b6f3f9`; the tarball
+  SHA-256 is `9dfe6866fbecd557f507078cb79721a9eb8f4764fc2f6163648ea1320be25933`,
+  the manifest SHA-256 is
+  `406b18bc2595e7c0fe1883467c4241fbb8ab502f270502ea94ebfe4a6b2fd1ed`, and the
+  directory digest is `5d5765f4…`.
+- Resume loads the prior sanitized native report, verifies its digest, and copies
+  it into the current run. Missing or tampered reports force a rescan.
+
+### Failure classification
+
+A required security failure is now classified as
+`SECURITY_SCAN_FAILURE` with a terminal operator-review disposition. It does not
+enter the code-fix loop, does not create an approval gate, and is never
+auto-remediated. Approval boundaries still take precedence. Required-mode
+fixtures cover seeded, clean, unavailable, and partial-coverage outcomes; the
+project configuration remains report-only.
+
+### Evidence
+
+`.agent-sdlc/runs/security-hardening-final-20261018/security/`: `scan.json`,
+`scan.md`, `semgrep.native.json`, `gitleaks.native.json`, `coverage-detail.md`,
+and `focused-fixtures.log`. No known synthetic secret values are present; the
+Gitleaks `Secret`/`Match` fields are `[REDACTED]` and native paths are
+repository-relative.
+
+### Remaining gaps
+
+- Semgrep SAST still excludes test files by default; the proposed boundary is
+  documented but not changed. Required mode remains not enabled.
+- Issue #40 remains open for any operator decision on the test/generated/vendor
+  SAST boundary, a dedicated suppression owner/expiry, and any future scanner
+  version conformance checks.
+
 ## Related
 
 - [Normative contract](../specs/SECURITY-SCANNER-ADDON.md)

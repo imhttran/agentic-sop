@@ -1,0 +1,237 @@
+{
+  "commit": "17e31e11ebac99fb7dfe1cd288f7a32151b6f3f9",
+  "directories": [
+    "go/lang/security",
+    "go/template/security"
+  ],
+  "files": [
+    {
+      "path": "go/lang/security/audit/crypto/bad_imports.yaml",
+      "sha256": "d4c626d204271f4d79772645261a82cfc628d8397c89919dffdd0de7bd6a3e9f"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/insecure_ssh.yaml",
+      "sha256": "fb1a787ba8f3865141eac49ac8a311f0558275a9479f3cd84ae5102efd2d4a58"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/math_random.yaml",
+      "sha256": "897361e03410697e14c410bec02f3947a9e8dc3b8cac73aacb260e0a3e0249c7"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/missing-ssl-minversion.yaml",
+      "sha256": "65f6bb9d61851d8e9cb402b7d8566a2e350322092a9511dbc0a1f6ca0bc2be40"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/sha224-hash.yaml",
+      "sha256": "1521c278aaefd70bd6f8c7c8e2dcc4af1f919e16cdf2062354897727bafefa95"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/ssl.yaml",
+      "sha256": "b873dfa99d77b1d788082debfe3a4f8d614043269d77564908934d504eccb664"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/tls.yaml",
+      "sha256": "473804728d7b03c5011c1535ec42b1c879931b5de4b3b168d37074d5c83199e0"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/use_of_weak_crypto.yaml",
+      "sha256": "cc86af55aa9354cf08c8acadb9b09ebd6f2c3f30ce2c20f1423b1641999752e8"
+    },
+    {
+      "path": "go/lang/security/audit/crypto/use_of_weak_rsa_key.yaml",
+      "sha256": "f106708de5a938ed5ac541fec0b440d6622433bd27821fe52640fe72b2b34669"
+    },
+    {
+      "path": "go/lang/security/audit/dangerous-command-write.yaml",
+      "sha256": "367e9cbee481219dc860cfb5520354a21019afb64d774291bc4937cd14e51d51"
+    },
+    {
+      "path": "go/lang/security/audit/dangerous-exec-cmd.yaml",
+      "sha256": "30e0551e87654d5365e6f886d69f866bf526b1b018e509e1c4bfde8802c71bfb"
+    },
+    {
+      "path": "go/lang/security/audit/dangerous-exec-command.yaml",
+      "sha256": "b6a8f7e4c80d8565e01bfe9566bcf0a611008075fbdbd965933bd657c5a65fb9"
+    },
+    {
+      "path": "go/lang/security/audit/dangerous-syscall-exec.yaml",
+      "sha256": "917ad53b3f09d314f489d5efd8c3c7ca3af75f53c235c742e2fa0bbea6e069d4"
+    },
+    {
+      "path": "go/lang/security/audit/database/string-formatted-query.yaml",
+      "sha256": "d631e16ff17e9900bcdc18f3176b17e8a9cda415f9674b875b5739c5df12bb5f"
+    },
+    {
+      "path": "go/lang/security/audit/md5-used-as-password.yaml",
+      "sha256": "0429f6df72c5aca2ccf6996d1276b35924a57035be04757abc79bc9760327961"
+    },
+    {
+      "path": "go/lang/security/audit/net/bind_all.yaml",
+      "sha256": "da11467b6bb3a8886c4b42f6f14c2d636d328f0ef9eea8fdc7f486088d3f2e53"
+    },
+    {
+      "path": "go/lang/security/audit/net/cookie-missing-httponly.yaml",
+      "sha256": "21b1062cdedd555693d70998ba896220e1416b33398ead4ea2768025c2335a30"
+    },
+    {
+      "path": "go/lang/security/audit/net/cookie-missing-secure.yaml",
+      "sha256": "1b94d28f69c35ef81b92b0a8a845dbb8c26cd1174ab627d8abcd7e292a5d4d0e"
+    },
+    {
+      "path": "go/lang/security/audit/net/dynamic-httptrace-clienttrace.yaml",
+      "sha256": "9ce5ef514a958df6c6cc088f1c4b3c7500228dd19bfbd4aa026a126fb1e408bb"
+    },
+    {
+      "path": "go/lang/security/audit/net/formatted-template-string.yaml",
+      "sha256": "6565614e63f830159c3bdd858e17778389dbdf6724b7efc394d2fe9859dcbb74"
+    },
+    {
+      "path": "go/lang/security/audit/net/fs-directory-listing.yaml",
+      "sha256": "f494c53a44a82aa8b33d469602f512b39643f345c38b6aa12e7b7e823d9ae355"
+    },
+    {
+      "path": "go/lang/security/audit/net/pprof.yaml",
+      "sha256": "5c908a2b0c1ff0a730f41eb4ec815273632f22c9a4910ae9108da3c597097fd8"
+    },
+    {
+      "path": "go/lang/security/audit/net/unescaped-data-in-htmlattr.yaml",
+      "sha256": "1d7d891688fdc72975680494109f2d7e508202e61d1e29113d98e4707620f4a2"
+    },
+    {
+      "path": "go/lang/security/audit/net/unescaped-data-in-js.yaml",
+      "sha256": "f0d181e34301450f9b55bb4dfc9a46358d83bad9f645c4691e4f3d1937e23aa8"
+    },
+    {
+      "path": "go/lang/security/audit/net/unescaped-data-in-url.yaml",
+      "sha256": "446470c0994b2d5db01fdf55111f3acba7f6c0e16ca8ff9d3b4904c7031cab2b"
+    },
+    {
+      "path": "go/lang/security/audit/net/use-tls.yaml",
+      "sha256": "b808cb196205d28f146cb6892fb2b287534097b89bf7d58a55ed3004f4dee14f"
+    },
+    {
+      "path": "go/lang/security/audit/net/wip-xss-using-responsewriter-and-printf.yaml",
+      "sha256": "dec2a99394f906676e93f192f1b1e0d5840b8929677ffd8e106cec25c0ee1407"
+    },
+    {
+      "path": "go/lang/security/audit/reflect-makefunc.yaml",
+      "sha256": "123707c7409a66e06a0a96533075c66da481bb625ce8ecfc37ba22d29fc6db4f"
+    },
+    {
+      "path": "go/lang/security/audit/sqli/gosql-sqli.yaml",
+      "sha256": "349a10ac8c44a85d7684c7c70e787898874c77f2c353f74784348459c87c9822"
+    },
+    {
+      "path": "go/lang/security/audit/sqli/pg-orm-sqli.yaml",
+      "sha256": "6cd6aa898557b7040e59c08f25b6ca99b44044a2101ef54e91ae494fdd51d9d9"
+    },
+    {
+      "path": "go/lang/security/audit/sqli/pg-sqli.yaml",
+      "sha256": "7b27bcabf89f1bcede2ec5fe8fcb295251845a92e90b6b7e4bf83f19b309e7c7"
+    },
+    {
+      "path": "go/lang/security/audit/sqli/pgx-sqli.yaml",
+      "sha256": "8101fdc66fd53af2e66d53ec049eeb8007d57864ffefb28aa34fec3d51c72897"
+    },
+    {
+      "path": "go/lang/security/audit/unsafe-reflect-by-name.yaml",
+      "sha256": "48718c15ee9085eede289e5a328936dc565db68f51844111254a589eab83e290"
+    },
+    {
+      "path": "go/lang/security/audit/unsafe.yaml",
+      "sha256": "016d45988f01916f75e11c1f2dcde886b8b7fcba5c39f4ba88b18d78a86c59a0"
+    },
+    {
+      "path": "go/lang/security/audit/xss/import-text-template.yaml",
+      "sha256": "c433e1327c02d25defac5d13f5a8bfe878dffe80e7fc150d1d6bae3b82f3075d"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-direct-write-to-responsewriter.yaml",
+      "sha256": "ab01f9b4f527d78198a1d1e117cf1b0f77a15a3fb20b33e584396075bc8aa2a2"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-fprintf-to-responsewriter.yaml",
+      "sha256": "8d8e095d1d25bfcb9d44daba3d36afc17b489d43cbb55ae73fd3dc2e624b141c"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-interpolation-in-tag.yaml",
+      "sha256": "a7ab0c327052ff363646d82f6a91410c77e1eddd6c809328223604e4227e5a49"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-interpolation-js-template-string.yaml",
+      "sha256": "6b0849988358cef2961e1366f9b7b0bc22a0902b353c4791b6f5aa4cafcda2e4"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-io-writestring-to-responsewriter.yaml",
+      "sha256": "cbaaacf04c72b967f665c7daac9080301633b0d5eb72f0febc9fe9ab9274ba41"
+    },
+    {
+      "path": "go/lang/security/audit/xss/no-printf-in-responsewriter.yaml",
+      "sha256": "4fef7bed12202e7d3bf398dd08fd558514362430ac5e7356bddce074ee7fc573"
+    },
+    {
+      "path": "go/lang/security/audit/xss/template-html-does-not-escape.yaml",
+      "sha256": "76ecd1a306e5c73690ea95b8910a0e5f3f27a7a5c81e208b0284b6624e531496"
+    },
+    {
+      "path": "go/lang/security/audit/xxe/parsing-external-entities-enabled.yaml",
+      "sha256": "ef9816819a3dc9efcf4bb5d55a1c175c46a8edc91cebe9d62ffe8cd023259a79"
+    },
+    {
+      "path": "go/lang/security/bad_tmp.yaml",
+      "sha256": "a8d998c73e097b39d2424ae68df16690643c53d13ea37472c25659ef1ad35d31"
+    },
+    {
+      "path": "go/lang/security/decompression_bomb.yaml",
+      "sha256": "9c45d9ca144aca25aeba1fd41d23cee10cdc79f455fe7ce5f96dc5c3f5a6a5ef"
+    },
+    {
+      "path": "go/lang/security/deserialization/unsafe-deserialization-interface.yaml",
+      "sha256": "a3483810485a7046b401bacc90149773d2ab6a91ce7da771f63cdd44b48ac136"
+    },
+    {
+      "path": "go/lang/security/filepath-clean-misuse.yaml",
+      "sha256": "465d65cd5aee62fd226c005485f7de8ae85349fc45ef5ef397b1769e3a1ee5a7"
+    },
+    {
+      "path": "go/lang/security/injection/open-redirect.yaml",
+      "sha256": "ba7e36674682ebba3e085557280c7204f01ae55971f512aed0171bb6c0b89a2e"
+    },
+    {
+      "path": "go/lang/security/injection/raw-html-format.yaml",
+      "sha256": "6e6654e0885aa2296f2d33ce5bc895ca947af75a999204f7d3333f4ffe22a9fb"
+    },
+    {
+      "path": "go/lang/security/injection/tainted-sql-string.yaml",
+      "sha256": "20c16479184a078e4208c20cee27b364e34cd0949e85d9dfd63e0732f0934053"
+    },
+    {
+      "path": "go/lang/security/injection/tainted-url-host.yaml",
+      "sha256": "481f38df51f4ad8f2438aa47f502572cf933cc54ce28a34ae56f539c27a80774"
+    },
+    {
+      "path": "go/lang/security/reverseproxy-director.yaml",
+      "sha256": "29612864d63d06dd79122cf3637c602a843f70616f97a0940ffc21664d1f949f"
+    },
+    {
+      "path": "go/lang/security/shared-url-struct-mutation.yaml",
+      "sha256": "77f74f11a30cd26932c61f28dad51eafdc495c6cd2f1c50b328a68820025396c"
+    },
+    {
+      "path": "go/lang/security/zip.yaml",
+      "sha256": "f8778412982aafc14e97599a77c341e6931c6b995e604b0fa19db45f95045f46"
+    },
+    {
+      "path": "go/template/security/insecure-types.yaml",
+      "sha256": "c63f7e1a936999424ccafa8afa3ca6dcce213228a4d77a2c12f3cf5e671e459b"
+    },
+    {
+      "path": "go/template/security/ssti.yaml",
+      "sha256": "1594fa9e7e527ad34cabe59eb973d85ef345525dd96d5ba3b0e973ee43dd277b"
+    }
+  ],
+  "rules_dir_sha256": "5d5765f46b60a1ad57ac0f3876e888a5fbbac5407dd0b8ea27472a5189f5bb30",
+  "tarball_sha256": "9dfe6866fbecd557f507078cb79721a9eb8f4764fc2f6163648ea1320be25933",
+  "upstream": "https://github.com/semgrep/semgrep-rules",
+  "version": 1
+}

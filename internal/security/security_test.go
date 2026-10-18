@@ -232,7 +232,9 @@ func TestSemgrepCoverageGapIgnoresDeclaredExcludes(t *testing.T) {
 		{"declared exclude only", "Scan skipped:\n   ◦ Matching --exclude patterns: 4\n", false},
 		{"semgrepignore", "Scan skipped:\n   ◦ Files matching .semgrepignore patterns: 581\n", true},
 		{"size limit", "Scan skipped:\n   ◦ Files larger than 1.0 MB: 6\n", true},
-		{"git restriction", "Scan was limited to files tracked by git\n", true},
+		{"git restriction", "Scan skipped:\n   ◦ Scan was limited to files tracked by git\n", true},
+		{"unknown reason", "Scan skipped:\n   ◦ Some new scanner limit: 3\n", true},
+		{"unknown bullet reason", "• Scan skipped:\n• Some new scanner limit: 3\n• Findings: 0\n", true},
 	}
 	for _, tc := range cases {
 		if got := semgrepCoverageGap(tc.stderr); got != tc.partial {
@@ -249,6 +251,33 @@ func TestSemgrepCoverageDetailRecordsSkipCounts(t *testing.T) {
 	}
 	if strings.Contains(detail, "--exclude") {
 		t.Fatalf("detail = %q, must not report declared exclusions as a gap", detail)
+	}
+}
+
+func TestGitleaksSkipNoticesForcePartial(t *testing.T) {
+	files, findings, unknown := gitleaksSkipNotices("7:00PM INF skipping file: global allowlist\n7:00PM INF skipping finding: low entropy\n7:00PM INF new skip mode\n")
+	if files != 1 || findings != 1 || unknown != 1 {
+		t.Fatalf("skip notices = %d/%d/%d, want 1/1/1", files, findings, unknown)
+	}
+	root := tempWorkspace(t)
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		return nil, []byte("INF skipping file: global allowlist\n"), 0, os.WriteFile(argument(argv, "--report-path"), []byte("[]"), 0o644)
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Coverage != CoveragePartial {
+		t.Fatalf("coverage = %s, want PARTIAL for a scanner-side skip", exec.Coverage)
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "scanner-side file skip") {
+		t.Errorf("diagnostics = %v, want scanner skip accounting", exec.Diagnostics)
 	}
 }
 
@@ -320,7 +349,7 @@ func TestExcludedPathGitignoreSemantics(t *testing.T) {
 
 func TestGitleaksAdapterStagesOnlyIncludedFiles(t *testing.T) {
 	root := tempWorkspace(t)
-	for _, rel := range []string{"keep/secret.txt", "excluded/secret.txt", "nested/keep.go"} {
+	for _, rel := range []string{"keep/secret.txt", "excluded/secret.txt", "nested/keep.go", ".env"} {
 		path := filepath.Join(root, filepath.FromSlash(rel))
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 			t.Fatal(err)
@@ -362,7 +391,7 @@ func TestGitleaksAdapterStagesOnlyIncludedFiles(t *testing.T) {
 	if reportPath == "" || strings.HasPrefix(reportPath, viewDir+string(filepath.Separator)) {
 		t.Errorf("--report-path = %q, want a path outside the staged view", reportPath)
 	}
-	for _, present := range []string{"keep/secret.txt", "nested/keep.go"} {
+	for _, present := range []string{"keep/secret.txt", "nested/keep.go", ".env"} {
 		if !contains(staged, present) {
 			t.Errorf("staged view is missing %s: %v", present, staged)
 		}
@@ -949,6 +978,86 @@ func TestRunnerResumeUsesOnlyMatchingIdentities(t *testing.T) {
 	}
 }
 
+func TestLoadNativeReportsVerifiesDigest(t *testing.T) {
+	runDir := t.TempDir()
+	native := []byte(`{"adapter":"stub","ok":true}`)
+	scan := Scan{
+		ProtocolVersion: ProtocolVersion, RunID: "run-1",
+		Adapters: []Execution{{
+			ProtocolVersion: ProtocolVersion, AdapterID: "stub", Category: CategorySAST,
+			Status: StatusCompleted, Coverage: CoverageComplete, NativeReport: native,
+			Provenance: Provenance{SanitizedReportDigest: DigestBytes(native)},
+		}},
+	}
+	if _, err := WriteArtifacts(runDir, scan); err != nil {
+		t.Fatal(err)
+	}
+	loaded := LoadNativeReports(runDir, &scan)
+	if !bytes.Equal(loaded["stub"], native) {
+		t.Fatalf("loaded native report = %q, want verified report", loaded["stub"])
+	}
+	path := filepath.Join(runDir, "security", "stub.native.json")
+	if err := os.WriteFile(path, []byte(`{"tampered":true}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got := LoadNativeReports(runDir, &scan); len(got) != 0 {
+		t.Fatalf("tampered native report was accepted: %v", got)
+	}
+}
+
+func TestResumeUsesVerifiedNativeReport(t *testing.T) {
+	root := tempWorkspace(t)
+	policy := requiredPolicy("sast")
+	baseline := Baseline{}
+	content, err := ComputeContentIdentity(context.Background(), root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	policyID := policy.Identity(baseline)
+	native := []byte(`{"adapter":"stub","ok":true}`)
+	prior := &Scan{ProtocolVersion: ProtocolVersion, Content: content, Adapters: []Execution{{
+		ProtocolVersion: ProtocolVersion, AdapterID: "stub", Category: CategorySAST, Status: StatusCompleted, Coverage: CoverageComplete,
+		Provenance: Provenance{
+			ScannerVersion: "1.0.0", ConfigurationDigest: "cfg", RulesIdentity: "rules",
+			ContentIdentity: content, PolicyIdentity: policyID, SanitizedReportDigest: DigestBytes(native),
+		},
+	}}}
+	tests := []struct {
+		name      string
+		native    map[string][]byte
+		wantReuse bool
+		wantCalls int
+	}{
+		{"verified report", map[string][]byte{"stub": native}, true, 0},
+		{"missing report", map[string][]byte{}, false, 1},
+		{"tampered report", map[string][]byte{"stub": []byte(`{"tampered":true}`)}, false, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			adapter := &stubAdapter{category: CategorySAST, version: "1.0.0", configDigest: "cfg", rules: "rules"}
+			runner, err := NewRunner(RunnerConfig{
+				WorkspaceRoot: root, RunID: "run-1", Adapters: []Adapter{adapter},
+				Policy: policy, Timeout: time.Second, MaxOutputBytes: 1 << 20,
+				Baseline: baseline, Prior: prior, PriorNativeReports: tt.native,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			scan, err := runner.Scan(context.Background())
+			if err != nil {
+				t.Fatal(err)
+			}
+			reused := len(scan.Adapters) == 1 && scan.Adapters[0].Reused
+			if reused != tt.wantReuse || adapter.calls != tt.wantCalls {
+				t.Fatalf("reused=%t calls=%d, want reused=%t calls=%d", reused, adapter.calls, tt.wantReuse, tt.wantCalls)
+			}
+			if tt.wantReuse && !bytes.Equal(scan.Adapters[0].NativeReport, native) {
+				t.Fatalf("reused native report = %q, want verified report", scan.Adapters[0].NativeReport)
+			}
+		})
+	}
+}
+
 func TestRunnerDisabledIsNotApplicable(t *testing.T) {
 	root := tempWorkspace(t)
 	runner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "run-1", Policy: Policy{Enabled: false}})
@@ -1096,5 +1205,19 @@ func TestWriteArtifactsAvoidsNativeNameCollisions(t *testing.T) {
 func TestRedactValuesHandlesShortSecrets(t *testing.T) {
 	if got := RedactValues("value=ab and ab", []string{"ab"}); strings.Contains(got, "ab") {
 		t.Errorf("short secret was not redacted: %q", got)
+	}
+}
+
+func TestRequiredGateRejectsPartialCoverage(t *testing.T) {
+	exec := Execution{
+		ProtocolVersion: ProtocolVersion, AdapterID: "semgrep", Category: CategorySAST,
+		Status: StatusCompleted, Coverage: CoveragePartial,
+	}
+	eval := EvaluatePolicy([]Execution{exec}, Policy{
+		Enabled: true, Mode: "required", Scope: "workspace",
+		RequiredCategories: []string{"sast"}, FailOn: []string{"high"}, UnknownSeverity: "indeterminate",
+	})
+	if eval.Verdict != VerdictIndeterminate {
+		t.Fatalf("verdict = %s, want INDETERMINATE for partial/unknown-skip coverage: %v", eval.Verdict, eval.Reasons)
 	}
 }
