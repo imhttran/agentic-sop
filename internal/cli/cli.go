@@ -146,7 +146,8 @@ type deps struct {
 }
 
 func defaultDeps() deps {
-	return deps{
+	var cargoAgentTool bool
+	d := deps{
 		getwd:            os.Getwd,
 		requireIsolation: true,
 		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
