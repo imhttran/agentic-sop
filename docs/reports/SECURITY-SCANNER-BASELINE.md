@@ -418,6 +418,125 @@ scope. The declared exclusion list was unchanged.
 `scan.json`, `scan.md`, `semgrep.native.json`, `gitleaks.native.json`, and
 `coverage-detail.md`.
 
+## Merged-main verification (`03426ce`, 2026-10-17)
+
+This section records verification of the merged fix. The earlier baseline and
+post-merge addendum are preserved unchanged.
+
+### Commit and CI
+
+| Field              | Value                                                                 |
+| ------------------ | --------------------------------------------------------------------- |
+| Merge commit       | `03426ce6ef2210f1a10468d96bf0980bfe641ea2`                            |
+| Tree               | `3f7378fe2546de3236e66c6db16f169bc4b04532`                            |
+| Working tree       | `CLEAN` (`dirty: false`)                                              |
+| Merge PR           | [#44](https://github.com/imhttran/agentic-sop/pull/44)                |
+| Pre-merge CI       | PR head `012ea94`; [run 39084322396](https://github.com/imhttran/agentic-sop/actions/runs/39084322396): 6/6 success |
+| Merge-commit CI    | push run [39084599755](https://github.com/imhttran/agentic-sop/actions/runs/39084599755): 6/6 success |
+| Checks             | `fmt, vet, build, test`; `race detector`; `real Semgrep + Gitleaks integration`; `installer + plugin packaging`; `windows (install.ps1)`; `tagged JEV evidence acceptance checks` |
+
+The pre-merge run validated the PR head before merge. The merge-commit run is a
+separate push workflow on `03426ce`; both completed successfully.
+
+### Production baseline re-run
+
+| Field              | Value                                                        |
+| ------------------ | ------------------------------------------------------------ |
+| Run                | `security-verify-03426ce-20261017`                           |
+| Mode               | `report-only`                                                |
+| Verdict            | `FAIL` (report-only; non-blocking)                           |
+| Coverage           | Semgrep `PARTIAL`, Gitleaks `COMPLETE`                       |
+| Findings           | 27 (26 SAST, 1 secret)                                       |
+| Suppressed         | 0                                                            |
+| Execution failures | 0                                                            |
+| Total duration     | 3880 ms (Semgrep 2669 ms, Gitleaks 1083 ms)                  |
+
+Scanner and rules identities:
+
+| Adapter    | Version   | Rules identity                                                     | Configuration digest                                                | Sanitized report digest                                            |
+| ---------- | --------- | ------------------------------------------------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------ |
+| Semgrep CE | `1.136.0` | `d3602b6590db16b37b035ddacdbefc612a804ee9840b2cf7b705cf064b2dada7` | `ce52a03b07bd5c5b997e06331dc47eae811bc6572c44fdc5e2d5f18435aad077` | `8056b89bf737dbfba744d8df686adf76cb21ac377713b5a63494ee6ee61c8ce4` |
+| Gitleaks   | `8.30.1`  | built-in rules                                                     | `c308356740a0f7c36903ef409b2eca80472fac2ecab924c4ab5ed0c260a08ae8` | `69d1cd6d8a95a2f06fabc0431003d9f0de75f7c5080e4ecacdc66f328fddc82a` |
+
+The shared policy identity remained
+`936413f96f08eca7aa69cc70bf697ebd20a8898d1c28dfb121f01bc051ee6c47`.
+
+### Findings comparison with the prior 27-finding baseline
+
+| Rule ID                               | Prior | Verified | Delta |
+| ------------------------------------- | ----- | -------- | ----- |
+| `dangerous-exec-command`              | 14    | 14       | 0     |
+| `no-direct-write-to-responsewriter`   | 3     | 3        | 0     |
+| `cookie-missing-secure`               | 3     | 3        | 0     |
+| `open-redirect`                       | 3     | 3        | 0     |
+| `use-of-unsafe-block`                 | 2     | 2        | 0     |
+| `string-formatted-query`              | 1     | 1        | 0     |
+| `generic-api-key` (Gitleaks built-in) | 1     | 1        | 0     |
+| **Total**                             | **27**| **27**   | **0** |
+
+The comparison is by `(category, rule_id, path, line)` and also by fingerprint:
+0 added, 0 removed, and all 27 fingerprints are identical. There is no finding
+difference to explain.
+
+The only observed differences are non-finding effects of the merged fix:
+
+- Semgrep scanned 402 Go files instead of 400. The two new non-test files are
+  `internal/security/exclude.go` and `internal/security/gitleaks_view.go`; neither
+  produces a finding. The 581 `.semgrepignore` skips are unchanged.
+- Gitleaks now stages a filtered view. It scanned 13,088,692 bytes (13.09 MB) in
+  415 ms and reported that 4 files and 12 directories outside the declared scope
+  were not staged. Adapter wall time rose from 562 ms to 1083 ms because of
+  staging and the two new source files. Coverage remains `COMPLETE`.
+- Semgrep wall time rose from 2586 ms to 2669 ms for the two additional files.
+- Gitleaks native-report paths are repository-relative (`internal/question/atomic_test.go`);
+  no temporary view path is retained.
+
+The prior dispositions (27 false positives, 0 confirmed, 0 unresolved findings)
+carry forward. This verification is a repeat measurement, not a new independent
+vulnerability review.
+
+### Focused exclusion fixtures
+
+Both pinned real-CLI tests passed:
+
+- `TestRealGitleaksExclusionsArePreScan`: an excluded file containing 2000
+  synthetic tokens with a 1024-byte report bound completed with only the included
+  `keep/secret.txt` finding. The control scan without exclusions failed at the
+  1024-byte report bound, proving excluded content cannot exhaust the limit.
+- `TestRealCLIExclusionConformance`: pinned Semgrep and Gitleaks agreed on
+  anchored multi-component (`/internal/*/testdata`), wildcard subtree
+  (`**/generated/**`), and anchored (`/root-only`) exclusions over the same tree.
+
+The test log is retained at
+`security/focused-fixtures.log` inside the verification artifact directory.
+
+### Saved-evidence secret check
+
+- Six verification evidence files were checked for every known synthetic token
+  variant; none was present.
+- The Gitleaks native report's `Secret` and `Match` fields are `[REDACTED]`.
+- No temporary staged-view path appears in the retained native report.
+
+### Remaining gaps
+
+- Semgrep coverage remains `PARTIAL`: 578 Go test files plus two test/fixture
+  directories and one minified JavaScript file are skipped by the scanner default.
+- Required mode remains **not enabled and not ready**; the prerequisites in the
+  original baseline still apply.
+- Issue [#40](https://github.com/imhttran/agentic-sop/issues/40) remains open.
+  Completed there: anchored/wildcard exclusion matching, Gitleaks scan-time
+  exclusion, and cross-adapter conformance tests. Still open: gate classification,
+  provisioning integrity (Semgrep hash pinning), coverage conformance/full-scan
+  policy, and resumed-run native report handling.
+- Cross-provider deduplication, dependency scanning, hosted analysis,
+  runtime/network scanning, and asset discovery remain out of MVP scope.
+
+### Artifacts
+
+`.agent-sdlc/runs/security-verify-03426ce-20261017/security/`:
+`scan.json`, `scan.md`, `semgrep.native.json`, `gitleaks.native.json`,
+`coverage-detail.md`, and `focused-fixtures.log`.
+
 ## Related
 
 - [Normative contract](../specs/SECURITY-SCANNER-ADDON.md)
