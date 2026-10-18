@@ -2,7 +2,7 @@
 
 **Type:** Normative specification (MVP)
 **Status:** Implemented for Semgrep Community Edition, Gitleaks, cargo-audit, and OSV-Scanner.
-**Requirements source:** [SOP-Security-Scanner-Addon-PRD.md](SOP-Security-Scanner-Addon-PRD.md)
+**Requirements source:** [PRD-Security-Scanner-Addon.md](../requirements/PRD-Security-Scanner-Addon.md)
 **Plan:** [PLAN-Security-Scanner-Addon.md](../plans/PLAN-Security-Scanner-Addon.md)
 
 ## Purpose
