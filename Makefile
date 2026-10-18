@@ -4,8 +4,8 @@
 # scripts/ are support tooling, grouped by responsibility (install/, packaging/,
 # checks/, agents/).
 
-.PHONY: fmt vet test test-fast build check check-plugin install install-all install-ollama-agent \
-	plugin install-plugin \
+.PHONY: fmt vet test test-fast build check check-fast check-plugin install install-all install-ollama-agent \
+	ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
 	model-claude model-deepseek model-status \
@@ -21,6 +21,12 @@ TEST_FAST_PARALLEL ?= 2
 TEST_FAST_TIMEOUT ?= 3m
 TEST_FAST_TMPDIR ?=
 TEST_FAST_MIN_FREE_MB ?= 512
+
+# The test mode for the Ollama agent installation gate. `ordinary` keeps the
+# established disk-backed suite; `fast` runs the same suite through
+# scripts/checks/test-fast.sh. An unknown value fails the install before any
+# gate or installation step runs.
+TEST_MODE ?= ordinary
 
 fmt:
 	go fmt ./...
@@ -47,6 +53,11 @@ build:
 
 # The repository's canonical pre-commit check.
 check: fmt vet test build check-plugin
+
+# The same gates as check, with the test step using the fast runner. It is the
+# `TEST_MODE=fast` form of the Ollama agent installation gate; `check` above
+# remains the ordinary, disk-backed gate.
+check-fast: fmt vet test-fast build check-plugin
 
 # Verify the packaged Claude Code plugin still mirrors the canonical skills/ tree.
 check-plugin:
@@ -91,8 +102,23 @@ uninstall-skills-claude:
 
 # Install/update the pinned known-good sop-ollama-agent binary outside the tree
 # under edit, so the bootstrap invocation never compiles candidate source.
+#
+# TEST_MODE selects the test gate; every other gate (formatting, vet, build, and
+# plugin verification) is unchanged. `make install-ollama-agent TEST_MODE=fast`
+# is opt-in; the default remains the ordinary suite. An invalid mode fails before
+# the gates and before the installer, so a typo never installs a binary.
+ifeq ($(filter $(TEST_MODE),ordinary fast),)
+install-ollama-agent: ollama-agent-invalid-test-mode
+else ifeq ($(TEST_MODE),fast)
+install-ollama-agent: check-fast
+else
 install-ollama-agent: check
+endif
 	./scripts/install/install-sop-ollama-agent.sh
+
+ollama-agent-invalid-test-mode:
+	@echo "install-ollama-agent: invalid TEST_MODE '$(TEST_MODE)' (want ordinary or fast)" >&2
+	@exit 2
 
 
 model-claude:

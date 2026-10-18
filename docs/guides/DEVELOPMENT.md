@@ -12,8 +12,8 @@ go build ./...          # build everything (make build)
 ```
 
 The `Makefile` wraps the common tasks: `make fmt`, `make vet`, `make test`,
-`make test-fast`, `make build`, `make check`, and `make install` (which delegate to
-`./install.sh`, the documented installation entry point; see
+`make test-fast`, `make check`, `make check-fast`, `make build`, and `make install`
+(which delegate to `./install.sh`, the documented installation entry point; see
 [INSTALLATION.md](INSTALLATION.md)).
 
 ## Testing
@@ -25,6 +25,7 @@ go test -race ./...          # with race detection
 CGO_ENABLED=0 go test ./...  # verify operation without CGO
 make test-fast               # the full suite with TMPDIR on RAM-backed storage
 make check                   # format, vet, test, build, plugin package current
+make check-fast              # the same gates, with the fast test runner
 ```
 
 AI boundaries are replaced with deterministic fakes in unit tests. The tests do
@@ -68,20 +69,43 @@ For example: `make test-fast TEST_FAST_PARALLEL=4 TEST_FAST_TIMEOUT=5m`.
 
 **Platform behavior.**
 
-- **Linux:** uses `/dev/shm` when it exists, is writable, and has at least
-  `MIN_FREE_MB` free; otherwise it falls back to the system temp directory and
-  prints a notice. No `sudo` is required.
-- **macOS:** uses the normal system temporary directory (there is no `/dev/shm`).
+- **Linux:** uses `/dev/shm` when it exists, is writable, permits executing
+  files, and has at least `MIN_FREE_MB` free; otherwise it falls back to the
+  system temp directory and prints a notice. A `noexec` mount (Ubuntu's default
+  for `/dev/shm` in containers) is detected and skipped, because `go test` runs
+  its test binaries from the temporary work directory. No `sudo`, mount, or
+  elevated privilege is required.
+- **macOS:** uses the normal system temporary directory (there is no `/dev/shm`);
+  the run logs `source=system` so the disk-backed fallback is visible.
 - **Other platforms:** fall back to the normal system temporary directory.
 
 **Why the ordinary disk-backed tests remain necessary.** RAM-backed storage is a
-local convenience, not a replacement for `make test`. The disk-backed suite is
-what CI runs (`go test ./...` and `go test -race ./...` in
-`.github/workflows/ci.yml`) and what exercises the real filesystem path that
-users and production runs depend on. A tmpfs can behave differently from a real
-disk — capacity is bounded, and durability/`fsync` semantics differ — so
-`make test` (and CI) stays the authoritative gate. Keep `make test-fast` as the
-inner-loop accelerator and `make test`/`make check` as the correctness gate.
+local convenience, not a replacement for `make test`. A tmpfs can behave
+differently from a real disk — capacity is bounded, and durability/`fsync`
+semantics differ — so `make test` stays the authoritative local gate and the
+race-detector job in `.github/workflows/ci.yml` stays disk-backed
+(`go test -race ./...`). The regular Linux CI test job runs the complete
+`go test ./...` suite through the fast runner (with `-p 4 -count=1 -timeout 10m`),
+so CI still exercises every test; when `/dev/shm` is unavailable, not executable,
+or too small, the runner falls back to the disk-backed system temp directory and
+logs why. Keep `make test-fast` as the inner-loop accelerator and
+`make test`/`make check` as the disk-backed correctness gate.
+
+### The Ollama agent installation gate
+
+`make install-ollama-agent` runs the repository gates before installing the pinned
+known-good `sop-ollama-agent` binary outside the tree under edit. Its default test
+mode is the ordinary, disk-backed suite (`make check`). To run the same gates with
+the fast test runner, opt in explicitly:
+
+```bash
+make install-ollama-agent TEST_MODE=fast
+```
+
+`TEST_MODE` accepts `ordinary` (the default) or `fast`. Any other value fails before
+a gate or the installer runs, so a typo cannot install a binary. In both modes the
+formatting, vet, build, and plugin-package gates are unchanged; a failing gate
+stops the installation.
 
 ## Development principles
 
