@@ -123,24 +123,17 @@ system_temp="${TMPDIR:-/tmp}"
 # temporary work directory, so selecting a noexec directory would make the suite
 # fail with "permission denied" rather than run faster.
 ram_dir_executes() {
-  probe_dir=""
-  if ! probe_dir="$(mktemp -d "${ram_dir%/}/sop-test-exec.XXXXXX")"; then
-    return 2
-  fi
-  if ! printf '%s\n' '#!/bin/sh' 'exit 0' > "$probe_dir/probe"; then
-    rm -rf -- "$probe_dir"
-    return 2
-  fi
-  if ! chmod 700 "$probe_dir/probe"; then
-    rm -rf -- "$probe_dir"
-    return 2
-  fi
-  if "$probe_dir/probe" >/dev/null 2>&1; then
-    rm -rf -- "$probe_dir"
-    return 0
+  probe_dir="$(mktemp -d "${ram_dir%/}/sop-test-exec.XXXXXX")" || return 2
+  # The cleanup trap is installed later, so remove the probe on an interrupt here.
+  trap 'rm -rf -- "$probe_dir"; exit 130' INT TERM
+  probe_status=2
+  if printf '%s\n' '#!/bin/sh' 'exit 0' > "$probe_dir/probe" && chmod 700 "$probe_dir/probe"; then
+    probe_status=1
+    "$probe_dir/probe" >/dev/null 2>&1 && probe_status=0
   fi
   rm -rf -- "$probe_dir"
-  return 1
+  trap - INT TERM
+  return "$probe_status"
 }
 
 # --- Choose the base directory ----------------------------------------------

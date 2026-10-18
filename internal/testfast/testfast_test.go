@@ -583,25 +583,29 @@ func TestInstallOllamaAgentStopsWhenGateFails(t *testing.T) {
 }
 
 // TestInstallOllamaAgentRejectsInvalidTestMode runs the real target (which is
-// safe for an invalid mode: it only prints an error) and proves an unknown mode
-// fails before the gates and before the installer.
+// safe for an invalid mode: it only prints an error) and proves an unknown or
+// multi-word mode fails before the gates and before the installer.
 func TestInstallOllamaAgentRejectsInvalidTestMode(t *testing.T) {
 	if _, err := exec.LookPath("make"); err != nil {
 		t.Skip("make is not available")
 	}
-	cmd := exec.Command("make", "-C", repoRoot(t), "install-ollama-agent", "TEST_MODE=bogus")
-	var out, errb strings.Builder
-	cmd.Stdout = &out
-	cmd.Stderr = &errb
-	err := cmd.Run()
-	if err == nil {
-		t.Fatalf("expected a non-zero exit for an invalid TEST_MODE, output:\n%s%s", out.String(), errb.String())
-	}
-	both := out.String() + errb.String()
-	if !strings.Contains(both, "invalid TEST_MODE 'bogus'") {
-		t.Errorf("expected a clear invalid-mode error, got:\n%s", both)
-	}
-	if strings.Contains(both, "install-sop-ollama-agent.sh") {
-		t.Errorf("the installer must not run for an invalid TEST_MODE, got:\n%s", both)
+	for _, mode := range []string{"bogus", "fast ordinary", ""} {
+		t.Run(mode, func(t *testing.T) {
+			cmd := exec.Command("make", "-C", repoRoot(t), "install-ollama-agent", "TEST_MODE="+mode)
+			var out, errb strings.Builder
+			cmd.Stdout = &out
+			cmd.Stderr = &errb
+			err := cmd.Run()
+			if err == nil {
+				t.Fatalf("expected a non-zero exit for TEST_MODE=%q, output:\n%s%s", mode, out.String(), errb.String())
+			}
+			both := out.String() + errb.String()
+			if !strings.Contains(both, "invalid TEST_MODE '"+mode+"'") {
+				t.Errorf("expected a clear invalid-mode error, got:\n%s", both)
+			}
+			if strings.Contains(both, "install-sop-ollama-agent.sh") {
+				t.Errorf("the installer must not run for TEST_MODE=%q, got:\n%s", mode, both)
+			}
+		})
 	}
 }
