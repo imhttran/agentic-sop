@@ -20,5 +20,19 @@
         }
       }
     }
+  },
+  "languages": {
+    "Rust": {
+      "language_servers": ["rust-analyzer"]
+    }
+  },
+  "lsp": {
+    "rust-analyzer": {
+      "initialization_options": {
+        "rust": {
+          "analyzerTargetDir": true
+        }
+      }
+    }
   }
 }
