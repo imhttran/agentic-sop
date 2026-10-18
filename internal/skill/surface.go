@@ -41,6 +41,10 @@ var Commands = []Command{
 	// A verification companion to /sop-end-to-end: it runs and maintains a project's
 	// persistent Playwright suite and reads SOP's approval state; it fixes no capability.
 	{Name: "sop-browser-test", Capability: "", Delegation: "sop approvals --json", RunsProjectTests: true},
+	// A report-only security companion: it detects repository content, delegates
+	// scanning to SOP's configured adapters, and reports sanitized evidence. It
+	// fixes no capability and never mutates the repository or scanner policy.
+	{Name: "sop-security-scan", Capability: "", Delegation: "sop security scan"},
 
 	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
 	// existing read-only capability. They fix a read-only capability only, so they can

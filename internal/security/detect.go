@@ -1,0 +1,885 @@
+package security
+
+import (
+	"fmt"
+	"io/fs"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sort"
+	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/config"
+)
+
+// Language identifies a source language detected from repository manifests.
+type Language string
+
+const (
+	// LanguageGo is selected by a go.mod at or below the detection root.
+	LanguageGo Language = "go"
+	// LanguageRust is selected by a Cargo.toml at or below the detection root.
+	LanguageRust Language = "rust"
+)
+
+// CapabilityStatus is the availability of a configured adapter candidate. The
+// vocabulary is exactly available, unavailable, unsupported, and proposed. It is
+// computed from the adapter descriptor and configuration only; detection never
+// starts a scanner executable.
+type CapabilityStatus string
+
+const (
+	// CapabilityAvailable reports an adapter that can run for the detected content.
+	CapabilityAvailable CapabilityStatus = "available"
+	// CapabilityUnavailable reports a built-in adapter whose executable cannot be
+	// resolved by the availability probe.
+	CapabilityUnavailable CapabilityStatus = "unavailable"
+	// CapabilityUnsupported reports an adapter whose declared categories or
+	// language scope cannot cover the detected content, or an unknown built-in id.
+	CapabilityUnsupported CapabilityStatus = "unsupported"
+	// CapabilityProposed reports an adapter that the selection function proposes
+	// from detected content but that is not configured yet.
+	CapabilityProposed CapabilityStatus = "proposed"
+)
+
+// isKnownCapabilityStatus reports whether s is one of the four statuses.
+func isKnownCapabilityStatus(s CapabilityStatus) bool {
+	switch s {
+	case CapabilityAvailable, CapabilityUnavailable, CapabilityUnsupported, CapabilityProposed:
+		return true
+	}
+	return false
+}
+
+// Manifest records one detected manifest file as a repository-relative path.
+type Manifest struct {
+	// Path is the repository-relative manifest path with forward slashes.
+	Path string `json:"path"`
+	// Language is the language the manifest declares.
+	Language Language `json:"language"`
+	// Kind is the manifest flavor: "go.mod" or "cargo.toml".
+	Kind string `json:"kind"`
+}
+
+// Lockfile records one lockfile location. Present is true when the file exists;
+// Present is false when the lockfile is expected but missing. A missing lockfile
+// is reported explicitly instead of being assumed present.
+type Lockfile struct {
+	// Path is the repository-relative lockfile path with forward slashes.
+	Path string `json:"path"`
+	// Language is the language the lockfile belongs to.
+	Language Language `json:"language"`
+	// Present reports whether the file actually exists in the tree.
+	Present bool `json:"present"`
+	// Manifests names the manifest paths (sorted) the lockfile belongs to.
+	Manifests []string `json:"manifests,omitempty"`
+}
+
+// CargoWorkspace records a parsed Cargo workspace. The Members slice lists the
+// declared member patterns as Cargo declares them; Resolved lists the normalized
+// repository-relative member directories. Both are sorted and stable.
+type CargoWorkspace struct {
+	// Manifest is the workspace root Cargo.toml path.
+	Manifest string `json:"manifest"`
+	// Members lists the declared member patterns, sorted.
+	Members []string `json:"members,omitempty"`
+	// Resolved lists the resolved member directories, sorted.
+	Resolved []string `json:"resolved,omitempty"`
+}
+
+// AdapterCandidate is one adapter selected or proposed for the detected content.
+type AdapterCandidate struct {
+	// ID is the stable built-in adapter id.
+	ID string `json:"id"`
+	// Category is the adapter's category (Descriptor.Categories).
+	Category Category `json:"category"`
+	// Languages lists the languages this candidate can serve, sorted.
+	Languages []Language `json:"languages,omitempty"`
+	// Rules is the rules path the candidate requires, if any.
+	Rules string `json:"rules,omitempty"`
+	// Status is the capability status for this candidate.
+	Status CapabilityStatus `json:"status"`
+}
+
+// Detection is the deterministic result of inspecting repository content. Every
+// slice is sorted and no timestamp or map is embedded, so repeated detection of
+// the same tree produces equal values.
+type Detection struct {
+	// Root is the repository-relative detection root. It is recorded as "." so
+	// persisted evidence never carries a host absolute path.
+	Root string `json:"root"`
+	// rootAbs is the absolute root used internally for path resolution. It is
+	// never serialized.
+	rootAbs string
+	// Languages lists the detected languages, sorted.
+	Languages []Language `json:"languages,omitempty"`
+	// Manifests lists detected manifest files, sorted by path.
+	Manifests []Manifest `json:"manifests,omitempty"`
+	// Lockfiles lists every actual and expected lockfile location, sorted by path.
+	Lockfiles []Lockfile `json:"lockfiles,omitempty"`
+	// Workspaces lists parsed Cargo workspaces, sorted by manifest path.
+	Workspaces []CargoWorkspace `json:"workspaces,omitempty"`
+}
+
+// workspaceRoot returns the absolute root used for safe path resolution.
+func (d Detection) workspaceRoot() string {
+	if d.rootAbs != "" {
+		return d.rootAbs
+	}
+	return d.Root
+}
+
+// HasLanguage reports whether the detection found language.
+func (d Detection) HasLanguage(language Language) bool {
+	for _, have := range d.Languages {
+		if have == language {
+			return true
+		}
+	}
+	return false
+}
+
+// MissingLockfiles returns the expected-but-absent lockfiles, sorted by path.
+func (d Detection) MissingLockfiles() []Lockfile {
+	var out []Lockfile
+	for _, lf := range d.Lockfiles {
+		if !lf.Present {
+			out = append(out, lf)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// PresentLockfiles returns the lockfiles that actually exist, sorted by path.
+func (d Detection) PresentLockfiles() []Lockfile {
+	var out []Lockfile
+	for _, lf := range d.Lockfiles {
+		if lf.Present {
+			out = append(out, lf)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
+	return out
+}
+
+// HasPresentLockfile reports whether the detected language has an actual
+// lockfile. A Go lockfile must never satisfy a Rust dependency capability.
+func (d Detection) HasPresentLockfile(language Language) bool {
+	for _, lf := range d.Lockfiles {
+		if lf.Language == language && lf.Present {
+			return true
+		}
+	}
+	return false
+}
+
+// Built-in adapter ids that selection can propose.
+const (
+	// AdapterIDSemgrep is the built-in SAST adapter id.
+	AdapterIDSemgrep = "semgrep"
+	// AdapterIDGitleaks is the built-in secret adapter id.
+	AdapterIDGitleaks = "gitleaks"
+	// AdapterIDCargoAudit is the built-in Rust dependency adapter id.
+	AdapterIDCargoAudit = "cargo-audit"
+)
+
+// languageManifests maps a manifest file name to the language it declares.
+var languageManifests = map[string]Language{
+	"go.mod":     LanguageGo,
+	"Cargo.toml": LanguageRust,
+}
+
+// manifestLockfile names the lockfile each language expects beside its manifest.
+var manifestLockfile = map[Language]string{
+	LanguageGo:   "go.sum",
+	LanguageRust: "Cargo.lock",
+}
+
+// DetectRepository inspects the repository under root with the default VCS and
+// SOP-state exclusions.
+func DetectRepository(root string) (Detection, error) {
+	return DetectRepositoryScoped(root, nil)
+}
+
+// DetectRepositoryScoped inspects the repository under root and returns a
+// deterministic detection result. It only reads content: no scanner executable
+// runs, no network is used, and no path outside root is read. Every reported
+// path is repository-relative and sorted. Declared exclusions are applied to the
+// same content boundary the scanners use.
+func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
+	abs, err := ensureWorkspaceRoot(root)
+	if err != nil {
+		return Detection{}, err
+	}
+	result := Detection{Root: ".", rootAbs: abs}
+	matcher := NewExcludeMatcher(append([]string{".git", ".agent-sdlc"}, excludes...))
+
+	languageSet := map[Language]bool{}
+	// manifestDirs records, per language, the directories that hold a manifest.
+	// A lockfile is expected next to each such directory.
+	manifestDirs := map[Language]map[string][]string{}
+	found := map[string]bool{}
+
+	err = filepath.WalkDir(abs, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		name := entry.Name()
+		rel, relErr := filepath.Rel(abs, path)
+		if relErr != nil {
+			return relErr
+		}
+		rel = filepath.ToSlash(rel)
+		if entry.IsDir() {
+			if rel != "." && matcher.Excluded(rel) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if matcher.Excluded(rel) {
+			return nil
+		}
+		if !entry.Type().IsRegular() {
+			return nil
+		}
+		language, ok := languageManifests[name]
+		if !ok {
+			// Source files are a language signal even when the repository has no
+			// manifest (for example a source-only fixture or a GOPATH-style tree).
+			switch strings.ToLower(filepath.Ext(name)) {
+			case ".go":
+				languageSet[LanguageGo] = true
+			case ".rs":
+				languageSet[LanguageRust] = true
+			}
+			return nil
+		}
+		if !SafeRelativePath(rel) {
+			return fmt.Errorf("security: detection rejected unsafe manifest path %q", rel)
+		}
+		if found[rel] {
+			return nil
+		}
+		found[rel] = true
+		result.Manifests = append(result.Manifests, Manifest{Path: rel, Language: language, Kind: strings.ToLower(name)})
+		languageSet[language] = true
+		dir := repoDir(rel)
+		if manifestDirs[language] == nil {
+			manifestDirs[language] = map[string][]string{}
+		}
+		manifestDirs[language][dir] = append(manifestDirs[language][dir], rel)
+
+		// A Rust manifest with a [workspace] table is recorded. Its members share
+		// the workspace's single Cargo.lock; member directories do not own one.
+		if language == LanguageRust {
+			workspace, werr := parseCargoWorkspace(abs, rel)
+			if werr != nil {
+				return werr
+			}
+			if workspace.Manifest != "" {
+				result.Workspaces = append(result.Workspaces, workspace)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return Detection{}, err
+	}
+
+	// A Cargo workspace member does not own a Cargo.lock: the workspace root does.
+	// Normalize every Rust manifest directory to its nearest workspace root before
+	// computing lockfile expectations.
+	if dirs := manifestDirs[LanguageRust]; len(dirs) > 0 {
+		workspaceRoots := map[string]bool{}
+		for _, workspace := range result.Workspaces {
+			workspaceRoots[repoDir(workspace.Manifest)] = true
+		}
+		normalized := map[string][]string{}
+		for dir, manifests := range dirs {
+			rootDir := dir
+			for candidate := dir; ; candidate = repoDir(candidate) {
+				if workspaceRoots[candidate] {
+					rootDir = candidate
+					break
+				}
+				if candidate == "." {
+					break
+				}
+			}
+			normalized[rootDir] = append(normalized[rootDir], manifests...)
+		}
+		manifestDirs[LanguageRust] = normalized
+	}
+
+	// Lockfile expectations: a Go module expects go.sum, a Cargo workspace or
+	// package expects Cargo.lock. Every expectation is reported, present or not.
+	result.Lockfiles = detectLockfiles(abs, manifestDirs)
+	result.Workspaces = mergeWorkspaces(result.Workspaces)
+	result.Languages = sortedLanguages(languageSet)
+	sort.Slice(result.Manifests, func(i, j int) bool { return result.Manifests[i].Path < result.Manifests[j].Path })
+	sort.Slice(result.Lockfiles, func(i, j int) bool {
+		if result.Lockfiles[i].Path != result.Lockfiles[j].Path {
+			return result.Lockfiles[i].Path < result.Lockfiles[j].Path
+		}
+		return result.Lockfiles[i].Language < result.Lockfiles[j].Language
+	})
+	return result, nil
+}
+
+// detectLockfiles builds the sorted lockfile expectations for the detected
+// manifest directories.
+func detectLockfiles(root string, manifestDirs map[Language]map[string][]string) []Lockfile {
+	type key struct {
+		language Language
+		dir      string
+	}
+	seen := map[key]bool{}
+	var out []Lockfile
+	for language, dirs := range manifestDirs {
+		lockName, ok := manifestLockfile[language]
+		if !ok {
+			continue
+		}
+		for dir, manifests := range dirs {
+			k := key{language: language, dir: dir}
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			repoPath := lockName
+			if dir != "." && dir != "" {
+				repoPath = dir + "/" + lockName
+			}
+			if !SafeRelativePath(repoPath) {
+				continue
+			}
+			present := false
+			if info, err := os.Lstat(filepath.Join(root, filepath.FromSlash(repoPath))); err == nil && info.Mode().IsRegular() {
+				present = true
+			}
+			sortedManifests := append([]string(nil), manifests...)
+			sort.Strings(sortedManifests)
+			out = append(out, Lockfile{Path: repoPath, Language: language, Present: present, Manifests: sortedManifests})
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Path != out[j].Path {
+			return out[i].Path < out[j].Path
+		}
+		return out[i].Language < out[j].Language
+	})
+	return out
+}
+
+// mergeWorkspaces deduplicates and sorts the parsed Cargo workspaces by path.
+func mergeWorkspaces(in []CargoWorkspace) []CargoWorkspace {
+	if len(in) == 0 {
+		return nil
+	}
+	out := append([]CargoWorkspace(nil), in...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Manifest < out[j].Manifest })
+	for i := range out {
+		sort.Strings(out[i].Members)
+		sort.Strings(out[i].Resolved)
+	}
+	return out
+}
+
+// sortedLanguages returns the language set in a stable order.
+func sortedLanguages(set map[Language]bool) []Language {
+	if len(set) == 0 {
+		return nil
+	}
+	out := make([]Language, 0, len(set))
+	for language := range set {
+		out = append(out, language)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
+	return out
+}
+
+// repoDir returns the slash-separated directory of a repository-relative path.
+// A path at the repository root yields ".".
+func repoDir(rel string) string {
+	dir := filepath.ToSlash(filepath.Dir(filepath.FromSlash(rel)))
+	if dir == "" {
+		return "."
+	}
+	return dir
+}
+
+// parseCargoWorkspace reads a Cargo.toml and, when it declares [workspace],
+// returns the resolved member directories. A manifest without a workspace section
+// yields an empty value.
+func parseCargoWorkspace(root, manifestRel string) (CargoWorkspace, error) {
+	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(manifestRel)))
+	if err != nil {
+		return CargoWorkspace{}, err
+	}
+	members := cargoWorkspaceMembers(string(data))
+	if len(members) == 0 {
+		return CargoWorkspace{}, nil
+	}
+	baseDir := repoDir(manifestRel)
+	workspace := CargoWorkspace{Manifest: manifestRel, Members: append([]string(nil), members...)}
+	for _, member := range members {
+		if resolved := resolveCargoMember(baseDir, member); resolved != "" {
+			workspace.Resolved = append(workspace.Resolved, resolved)
+		}
+	}
+	sort.Strings(workspace.Members)
+	sort.Strings(workspace.Resolved)
+	return workspace, nil
+}
+
+// cargoWorkspaceMembers extracts the member entries of the [workspace] table from
+// Cargo.toml text. It is a deliberately small line parser. Only keys inside the
+// [workspace] table are considered, so [workspace.dependencies] cannot contribute
+// members.
+func cargoWorkspaceMembers(content string) []string {
+	var members []string
+	section := ""
+	inMembers := false
+	for _, rawLine := range strings.Split(content, "\n") {
+		line := strings.TrimSpace(rawLine)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		if strings.HasPrefix(line, "[") {
+			end := strings.Index(line, "]")
+			if end < 0 {
+				continue
+			}
+			section = strings.TrimSpace(line[1:end])
+			inMembers = false
+			continue
+		}
+		if section != "workspace" {
+			continue
+		}
+		if !inMembers {
+			eq := strings.Index(line, "=")
+			if eq < 0 {
+				continue
+			}
+			if strings.TrimSpace(line[:eq]) != "members" {
+				continue
+			}
+			inMembers = true
+			line = strings.TrimSpace(line[eq+1:])
+		}
+		values, closed := parseTomlStringArray(line)
+		members = append(members, values...)
+		if closed {
+			inMembers = false
+		}
+	}
+	return sortedUniqueStrings(members)
+}
+
+// parseTomlStringArray reads the quoted entries of a TOML string array on one
+// line. closed reports whether the closing bracket appears on this line.
+func parseTomlStringArray(line string) (values []string, closed bool) {
+	inString := false
+	var current strings.Builder
+	for _, r := range line {
+		if r == '"' {
+			if inString {
+				values = append(values, current.String())
+				current.Reset()
+			}
+			inString = !inString
+			continue
+		}
+		if inString {
+			current.WriteRune(r)
+			continue
+		}
+		if r == ']' {
+			return values, true
+		}
+	}
+	return values, false
+}
+
+// resolveCargoMember normalizes one declared member path relative to the
+// workspace manifest directory. It returns "" for a member that escapes the
+// repository, so an unsafe member is dropped rather than read.
+func resolveCargoMember(baseDir, member string) string {
+	member = strings.TrimSpace(strings.ReplaceAll(member, "\\", "/"))
+	if member == "" {
+		return ""
+	}
+	// A glob member ("crates/*") resolves to its literal parent directory only;
+	// detection never expands globs into arbitrary subtrees.
+	if idx := strings.IndexAny(member, "*?["); idx >= 0 {
+		member = strings.TrimSuffix(member[:idx], "/")
+	}
+	joined := member
+	if baseDir != "." && baseDir != "" {
+		joined = baseDir + "/" + member
+	}
+	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(joined)))
+	clean = strings.TrimPrefix(clean, "./")
+	if clean == "" || clean == "." {
+		return ""
+	}
+	if !SafeRelativePath(clean) {
+		return ""
+	}
+	return clean
+}
+
+// sortedUniqueStrings sorts and deduplicates values.
+func sortedUniqueStrings(values []string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+	seen := make(map[string]bool, len(values))
+	out := make([]string, 0, len(values))
+	for _, value := range values {
+		if value == "" || seen[value] {
+			continue
+		}
+		seen[value] = true
+		out = append(out, value)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	sort.Strings(out)
+	return out
+}
+
+// SelectCandidates maps a detection result to candidate built-in adapters. It is
+// content-based only and deterministic: identical detections yield identically
+// ordered candidates. A Rust-only repository never receives a Go-only Semgrep
+// ruleset, and cargo-audit is proposed only when Rust content and a lockfile
+// expectation exist.
+func SelectCandidates(detection Detection, configured []config.SecurityAdapterConfig) []AdapterCandidate {
+	return SelectCandidatesWithDatabase(detection, configured, "")
+}
+
+// SelectCandidatesWithDatabase is SelectCandidates with the global advisory
+// database path available to the dependency capability classifier.
+func SelectCandidatesWithDatabase(detection Detection, configured []config.SecurityAdapterConfig, databasePath string) []AdapterCandidate {
+	if len(detection.Languages) == 0 {
+		return nil
+	}
+	byID := configuredAdaptersByID(configured)
+	languages := append([]Language(nil), detection.Languages...)
+	var out []AdapterCandidate
+
+	// SAST: Semgrep is proposed when Go or Rust source exists. Its coverage is
+	// derived from the local rules' declared languages, never from a path guess.
+	sast := AdapterCandidate{ID: AdapterIDSemgrep, Category: CategorySAST, Languages: languages}
+	rules := ""
+	if raw, ok := byID[AdapterIDSemgrep]; ok {
+		rules = strings.TrimSpace(raw.Rules)
+	}
+	if rules == "" {
+		sast.Status = CapabilityUnsupported
+	} else if covered, err := coveredLanguages(rules, languages); err != nil || len(covered) == 0 {
+		sast.Status = CapabilityUnsupported
+	} else {
+		// Only a ruleset that actually declares a detected language is offered.
+		sast.Rules = rules
+		if raw, ok := byID[AdapterIDSemgrep]; ok && !executableResolvable(raw.Command) {
+			sast.Status = CapabilityUnavailable
+		} else if ok {
+			sast.Status = CapabilityAvailable
+		} else {
+			sast.Status = CapabilityProposed
+		}
+	}
+	out = append(out, sast)
+
+	// Secrets: Gitleaks is language-agnostic and is proposed when content exists.
+	secrets := AdapterCandidate{ID: AdapterIDGitleaks, Category: CategorySecrets, Languages: languages}
+	if raw, ok := byID[AdapterIDGitleaks]; ok {
+		if executableResolvable(raw.Command) {
+			secrets.Status = CapabilityAvailable
+		} else {
+			secrets.Status = CapabilityUnavailable
+		}
+	} else {
+		secrets.Status = CapabilityProposed
+	}
+	out = append(out, secrets)
+
+	// Dependencies: cargo-audit is relevant only for Rust content. A missing
+	// lockfile or database is reported as unsupported, never as clean coverage.
+	if detection.HasLanguage(LanguageRust) {
+		deps := AdapterCandidate{ID: AdapterIDCargoAudit, Category: CategoryDependencies, Languages: []Language{LanguageRust}}
+		raw, configured := byID[AdapterIDCargoAudit]
+		db := strings.TrimSpace(raw.Database)
+		if db == "" {
+			db = strings.TrimSpace(databasePath)
+		}
+		if !detection.HasPresentLockfile(LanguageRust) {
+			deps.Status = CapabilityUnsupported
+		} else if db == "" {
+			deps.Status = CapabilityUnsupported
+		} else if !databaseAvailable(db, detection.workspaceRoot()) {
+			deps.Status = CapabilityUnsupported
+		} else if configured && !executableResolvable(raw.Command) {
+			deps.Status = CapabilityUnavailable
+		} else if configured {
+			deps.Status = CapabilityAvailable
+		} else {
+			deps.Status = CapabilityProposed
+		}
+		out = append(out, deps)
+	}
+
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+// AutoAdapterConfigs adds the built-in adapters that detection proposes when an
+// explicit category is missing. Explicit adapters are never replaced or
+// removed; their own adapter-level guard still prevents a Go ruleset from being
+// applied to Rust source.
+func AutoAdapterConfigs(detection Detection, configured []config.SecurityAdapterConfig, databasePath string) []config.SecurityAdapterConfig {
+	out := append([]config.SecurityAdapterConfig(nil), configured...)
+	byID := configuredAdaptersByID(out)
+	categories := map[string]bool{}
+	for _, raw := range out {
+		category := strings.ToLower(strings.TrimSpace(raw.Category))
+		if category == "" {
+			switch strings.ToLower(strings.TrimSpace(raw.ID)) {
+			case AdapterIDSemgrep:
+				category = config.SecurityCategorySAST
+			case AdapterIDGitleaks:
+				category = config.SecurityCategorySecrets
+			case AdapterIDCargoAudit:
+				category = config.SecurityCategoryDependencies
+			}
+		}
+		if category != "" {
+			categories[category] = true
+		}
+	}
+	if len(detection.Languages) == 0 {
+		return out
+	}
+	if !categories[config.SecurityCategorySecrets] {
+		out = append(out, config.SecurityAdapterConfig{
+			ID: AdapterIDGitleaks, Category: config.SecurityCategorySecrets,
+			Protocol: config.SecurityProtocolBuiltin, Command: []string{"gitleaks"},
+		})
+	}
+	if !categories[config.SecurityCategorySAST] {
+		rules := ""
+		if raw, ok := byID[AdapterIDSemgrep]; ok {
+			rules = raw.Rules
+		}
+		out = append(out, config.SecurityAdapterConfig{
+			ID: AdapterIDSemgrep, Category: config.SecurityCategorySAST,
+			Protocol: config.SecurityProtocolBuiltin, Command: []string{"semgrep"}, Rules: rules,
+		})
+	}
+	if detection.HasLanguage(LanguageRust) && !categories[config.SecurityCategoryDependencies] {
+		database := databasePath
+		if raw, ok := byID[AdapterIDCargoAudit]; ok && strings.TrimSpace(raw.Database) != "" {
+			database = raw.Database
+		}
+		out = append(out, config.SecurityAdapterConfig{
+			ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+			Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+			Database: database, Stale: "",
+		})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func configuredAdaptersByID(configured []config.SecurityAdapterConfig) map[string]config.SecurityAdapterConfig {
+	byID := make(map[string]config.SecurityAdapterConfig, len(configured))
+	for _, raw := range configured {
+		id := strings.ToLower(strings.TrimSpace(raw.ID))
+		if id == "" {
+			continue
+		}
+		if _, ok := byID[id]; !ok {
+			byID[id] = raw
+		}
+	}
+	return byID
+}
+
+// ClassifyCapabilities maps each configured adapter to a capability status. It
+// uses the adapter descriptor, repository detection, and executable resolution:
+// no scanner executable runs.
+func ClassifyCapabilities(detection Detection, configured []config.SecurityAdapterConfig) []AdapterCandidate {
+	return ClassifyCapabilitiesWithDatabase(detection, configured, "")
+}
+
+// ClassifyCapabilitiesWithDatabase is ClassifyCapabilities with the global
+// advisory database path available.
+func ClassifyCapabilitiesWithDatabase(detection Detection, configured []config.SecurityAdapterConfig, databasePath string) []AdapterCandidate {
+	out := make([]AdapterCandidate, 0, len(configured))
+	proposed := SelectCandidatesWithDatabase(detection, configured, databasePath)
+	proposedByID := map[string]AdapterCandidate{}
+	for _, candidate := range proposed {
+		proposedByID[candidate.ID] = candidate
+	}
+	for _, raw := range configured {
+		id := strings.ToLower(strings.TrimSpace(raw.ID))
+		if id == "" {
+			continue
+		}
+		candidate := AdapterCandidate{ID: id, Category: Category(strings.ToLower(strings.TrimSpace(raw.Category)))}
+		descriptor, err := configuredDescriptor(raw)
+		if err != nil {
+			candidate.Status = CapabilityUnsupported
+			out = append(out, candidate)
+			continue
+		}
+		candidate.Category = descriptor.Categories[0]
+		if suggestion, ok := proposedByID[id]; ok {
+			candidate.Languages = suggestion.Languages
+			candidate.Rules = suggestion.Rules
+		}
+		switch id {
+		case AdapterIDSemgrep:
+			candidate.Status = capabilityForSemgrep(detection, raw)
+		case AdapterIDCargoAudit:
+			candidate.Status = capabilityForCargoAudit(detection, raw, databasePath)
+		default:
+			if !candidateSupportedFor(id, detection) {
+				candidate.Status = CapabilityUnsupported
+			} else if !executableResolvable(raw.Command) {
+				candidate.Status = CapabilityUnavailable
+			} else {
+				candidate.Status = CapabilityAvailable
+			}
+		}
+		out = append(out, candidate)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
+	return out
+}
+
+func capabilityForSemgrep(detection Detection, raw config.SecurityAdapterConfig) CapabilityStatus {
+	if len(detection.Languages) == 0 {
+		return CapabilityUnsupported
+	}
+	if strings.TrimSpace(raw.Rules) == "" {
+		return CapabilityUnsupported
+	}
+	covered, err := coveredLanguages(raw.Rules, detection.Languages)
+	if err != nil || len(covered) == 0 {
+		return CapabilityUnsupported
+	}
+	if !executableResolvable(raw.Command) {
+		return CapabilityUnavailable
+	}
+	return CapabilityAvailable
+}
+
+func capabilityForCargoAudit(detection Detection, raw config.SecurityAdapterConfig, databasePath string) CapabilityStatus {
+	if !detection.HasLanguage(LanguageRust) || !detection.HasPresentLockfile(LanguageRust) {
+		return CapabilityUnsupported
+	}
+	database := firstNonEmpty(raw.Database, databasePath)
+	if strings.TrimSpace(database) == "" || !databaseAvailable(database, detection.workspaceRoot()) {
+		return CapabilityUnsupported
+	}
+	if !executableResolvable(raw.Command) {
+		return CapabilityUnavailable
+	}
+	return CapabilityAvailable
+}
+
+// databaseAvailable reports whether a configured local advisory database exists
+// as a directory. It never reads or updates the database.
+func databaseAvailable(database, root string) bool {
+	path := strings.TrimSpace(database)
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(root, filepath.FromSlash(path))
+	}
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// configuredDescriptor builds the descriptor for one configured adapter without
+// starting it. An unknown built-in adapter id or category is an error, which the
+// classifier reports as UNSUPPORTED.
+func configuredDescriptor(raw config.SecurityAdapterConfig) (Descriptor, error) {
+	id := strings.ToLower(strings.TrimSpace(raw.ID))
+	category := Category(strings.ToLower(strings.TrimSpace(raw.Category)))
+	protocol := strings.ToLower(strings.TrimSpace(raw.Protocol))
+	if protocol == "" {
+		protocol = config.SecurityProtocolBuiltin
+	}
+	switch protocol {
+	case config.SecurityProtocolBuiltin:
+		switch id {
+		case AdapterIDSemgrep:
+			if category == "" {
+				category = CategorySAST
+			}
+		case AdapterIDGitleaks:
+			if category == "" {
+				category = CategorySecrets
+			}
+		case AdapterIDCargoAudit:
+			if category == "" {
+				category = CategoryDependencies
+			}
+		default:
+			return Descriptor{}, fmt.Errorf("security: unknown built-in adapter %q", id)
+		}
+	case config.SecurityProtocolExternal:
+		if category == "" {
+			return Descriptor{}, fmt.Errorf("security: adapter %q has no category", id)
+		}
+	default:
+		return Descriptor{}, fmt.Errorf("security: adapter %q has unknown protocol %q", id, raw.Protocol)
+	}
+	descriptor := Descriptor{
+		ProtocolVersion: ProtocolVersion,
+		AdapterID:       id,
+		AdapterVersion:  strings.TrimSpace(raw.Version),
+		Categories:      []Category{category},
+		ScopeModes:      []string{"workspace"},
+		Locality:        "local",
+	}
+	if err := descriptor.Validate(); err != nil {
+		return Descriptor{}, err
+	}
+	return descriptor, nil
+}
+
+// candidateSupportedFor reports whether an adapter id can cover the detected
+// content. Built-in scanner adapters need at least one detected language.
+func candidateSupportedFor(id string, detection Detection) bool {
+	switch id {
+	case AdapterIDSemgrep, AdapterIDGitleaks:
+		return len(detection.Languages) > 0
+	case AdapterIDCargoAudit:
+		return detection.HasLanguage(LanguageRust) && detection.HasPresentLockfile(LanguageRust)
+	default:
+		return true
+	}
+}
+
+// executableResolvable reports whether the adapter's executable name resolves on
+// PATH. It never runs the executable, so classification cannot execute a scanner.
+func executableResolvable(command []string) bool {
+	if len(command) == 0 || strings.TrimSpace(command[0]) == "" {
+		return false
+	}
+	name := strings.TrimSpace(command[0])
+	if isAbsPath(name) || strings.ContainsAny(name, "/\\") {
+		info, err := os.Stat(name)
+		return err == nil && !info.IsDir()
+	}
+	_, err := exec.LookPath(name)
+	return err == nil
+}

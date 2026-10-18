@@ -1,0 +1,21 @@
+{
+  "database": {
+    "advisory-count": 1,
+    "last-commit": "3333333333333333333333333333333333333333",
+    "last-updated": "2020-01-01T00:00:00Z"
+  },
+  "lockfile": {
+    "dependency-count": 1
+  },
+  "settings": {
+    "target_arch": [],
+    "target_os": [],
+    "ignore": []
+  },
+  "vulnerabilities": {
+    "found": false,
+    "count": 0,
+    "list": []
+  },
+  "warnings": {}
+}

@@ -1,0 +1,53 @@
+{
+  "database": {
+    "advisory-count": 42,
+    "last-commit": "2222222222222222222222222222222222222222",
+    "last-updated": "2026-10-01T00:00:00Z"
+  },
+  "lockfile": {
+    "dependency-count": 7
+  },
+  "settings": {
+    "target_arch": [],
+    "target_os": [],
+    "ignore": []
+  },
+  "vulnerabilities": {
+    "found": true,
+    "count": 1,
+    "list": [
+      {
+        "advisory": {
+          "id": "RUSTSEC-2020-0071",
+          "package": "time",
+          "title": "Potential segfault in localtime_r",
+          "description": "A crafted timezone can cause a segfault.",
+          "date": "2020-11-18",
+          "aliases": ["CVE-2020-26235"],
+          "related": [],
+          "cvss": "CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:N/I:N/A:H",
+          "informational": null,
+          "url": "https://rustsec.org/advisories/RUSTSEC-2020-0071",
+          "references": ["https://github.com/time-rs/time/issues/293"],
+          "withdrawn": null
+        },
+        "versions": {
+          "patched": [">=0.2.23"],
+          "unaffected": []
+        },
+        "affected": {
+          "arch": [],
+          "os": [],
+          "functions": []
+        },
+        "package": {
+          "name": "time",
+          "version": "0.1.44",
+          "source": "registry+https://github.com/rust-lang/crates.io-index",
+          "license": "MIT/Apache-2.0"
+        }
+      }
+    ]
+  },
+  "warnings": {}
+}

@@ -194,6 +194,25 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 	scan.Coverage = evaluation.Coverage
 	scan.Reasons = evaluation.Reasons
 	scan.Diagnostics = append(diagnostics, evaluation.Diagnostics...)
+	// Project what the same evidence would mean under a required gate. This is
+	// advisory readiness evidence; it cannot approve, suppress, or bypass the
+	// recorded verdict.
+	required := r.cfg.Policy
+	required.Mode = "required"
+	if len(required.RequiredCategories) == 0 {
+		scan.RequiredMode = &Readiness{
+			Ready:   false,
+			Verdict: VerdictIndeterminate,
+			Reasons: []string{"required mode needs at least one required category"},
+		}
+	} else {
+		requiredEval := EvaluatePolicy(scan.Adapters, required)
+		scan.RequiredMode = &Readiness{
+			Ready:   requiredEval.Verdict == VerdictPass,
+			Verdict: requiredEval.Verdict,
+			Reasons: requiredEval.Reasons,
+		}
+	}
 	scan.Metrics.Findings = len(scan.Findings)
 	for _, finding := range scan.Findings {
 		if finding.Suppressed {
@@ -237,6 +256,8 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 			prior.Provenance.PolicyIdentity != current.PolicyIdentity ||
 			prior.Provenance.ConfigurationDigest != current.ConfigurationDigest ||
 			prior.Provenance.RulesIdentity != current.RulesIdentity ||
+			prior.Provenance.AdvisoryDatabaseIdentity != current.AdvisoryDatabaseIdentity ||
+			prior.Provenance.AdvisoryDatabaseStale != current.AdvisoryDatabaseStale ||
 			prior.Provenance.ScannerVersion != current.ScannerVersion {
 			return Execution{}, false
 		}

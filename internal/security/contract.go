@@ -20,9 +20,20 @@ const ProtocolVersion = "security-scan/v1"
 type Category string
 
 const (
-	CategorySAST    Category = "sast"
-	CategorySecrets Category = "secrets"
+	CategorySAST         Category = "sast"
+	CategorySecrets      Category = "secrets"
+	CategoryDependencies Category = "dependencies"
 )
+
+// isKnownCategory reports whether c is a category this contract understands. A
+// category outside this set is rejected rather than silently accepted.
+func isKnownCategory(c Category) bool {
+	switch c {
+	case CategorySAST, CategorySecrets, CategoryDependencies:
+		return true
+	}
+	return false
+}
 
 // ExecutionStatus is an adapter's execution outcome. It is independent of the
 // policy verdict: a COMPLETED execution can still fail policy, and a FAILED
@@ -95,7 +106,7 @@ func (d Descriptor) Validate() error {
 		return fmt.Errorf("descriptor: adapter %s declares no categories", d.AdapterID)
 	}
 	for _, c := range d.Categories {
-		if c != CategorySAST && c != CategorySecrets {
+		if !isKnownCategory(c) {
 			return fmt.Errorf("descriptor: adapter %s has unknown category %q", d.AdapterID, c)
 		}
 	}
@@ -183,8 +194,20 @@ type SuppressionMatch struct {
 
 // Provenance records the identities needed to reason about reproducibility.
 type Provenance struct {
-	ScannerVersion        string          `json:"scanner_version"`
-	RulesIdentity         string          `json:"rules_identity,omitempty"`
+	ScannerVersion string `json:"scanner_version"`
+	RulesIdentity  string `json:"rules_identity,omitempty"`
+	// AdvisoryDatabaseIdentity records the resolved advisory database identity for
+	// a dependency scan. It is separate from the rule identity so resume validation
+	// covers a changed database. It is a deterministic local fingerprint, not a
+	// timestamp, so an unchanged database reuses evidence.
+	AdvisoryDatabaseIdentity string `json:"advisory_database_identity,omitempty"`
+	// AdvisoryDatabaseMetadata records the scanner-observed database metadata
+	// (last commit, last update, advisory count). It is evidence for freshness and
+	// provenance; it is not used as the resume key.
+	AdvisoryDatabaseMetadata string `json:"advisory_database_metadata,omitempty"`
+	// AdvisoryDatabaseStale reports that the adapter observed a stale advisory
+	// database. Policy decides what a stale database means.
+	AdvisoryDatabaseStale bool            `json:"advisory_database_stale,omitempty"`
 	ConfigurationDigest   string          `json:"configuration_digest"`
 	ContentIdentity       ContentIdentity `json:"content_identity"`
 	PolicyIdentity        string          `json:"policy_identity"`
@@ -226,7 +249,7 @@ func (e Execution) Validate() error {
 	if strings.TrimSpace(e.AdapterID) == "" {
 		return fmt.Errorf("execution: adapter id is required")
 	}
-	if e.Category != CategorySAST && e.Category != CategorySecrets {
+	if !isKnownCategory(e.Category) {
 		return fmt.Errorf("execution: adapter %s has unknown category %q", e.AdapterID, e.Category)
 	}
 	switch e.Status {

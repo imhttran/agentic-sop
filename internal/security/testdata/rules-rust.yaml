@@ -1,0 +1,6 @@
+rules:
+  - id: sop-integration-rust-unsafe
+    languages: [rust]
+    message: Unsafe block.
+    severity: WARNING
+    pattern: unsafe { ... }

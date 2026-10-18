@@ -241,3 +241,90 @@ func TestLoadPriorSecurityScanLoadsVerifiedNativeReport(t *testing.T) {
 		t.Fatalf("tampered native report was accepted: %v", natives)
 	}
 }
+
+func TestSecurityInspectReportsDetectionAndCapabilities(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"go.mod":     "module example.com/mixed\n\ngo 1.21\n",
+		"go.sum":     "",
+		"Cargo.toml": "[package]\nname = \"mixed\"\nversion = \"0.1.0\"\n",
+		"Cargo.lock": "version = 3\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeConfig(t, dir, "project:\n  name: x\nsecurity:\n  enabled: false\n  advisory_database_path: .agent-sdlc/advisory-db\n")
+	if err := os.MkdirAll(filepath.Join(dir, stateDirName, "advisory-db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := runCLI(t, dir, "security", "inspect", "--json")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var got struct {
+		Enabled   bool                        `json:"enabled"`
+		Detection security.Detection          `json:"detection"`
+		Proposed  []security.AdapterCandidate `json:"proposed"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &got); err != nil {
+		t.Fatalf("inspect JSON: %v\n%s", err, stdout)
+	}
+	if got.Enabled {
+		t.Fatal("inspect reported a disabled add-on as enabled")
+	}
+	if !got.Detection.HasLanguage(security.LanguageGo) || !got.Detection.HasLanguage(security.LanguageRust) {
+		t.Fatalf("languages = %v, want go and rust", got.Detection.Languages)
+	}
+	statuses := map[string]security.CapabilityStatus{}
+	for _, candidate := range got.Proposed {
+		statuses[candidate.ID] = candidate.Status
+	}
+	if statuses[security.AdapterIDCargoAudit] != security.CapabilityProposed {
+		t.Fatalf("cargo-audit status = %q, want proposed", statuses[security.AdapterIDCargoAudit])
+	}
+	if statuses[security.AdapterIDGitleaks] != security.CapabilityProposed {
+		t.Fatalf("gitleaks status = %q, want proposed", statuses[security.AdapterIDGitleaks])
+	}
+}
+
+func TestSecurityScanAutoFollowsRustContent(t *testing.T) {
+	dir := t.TempDir()
+	for name, content := range map[string]string{
+		"Cargo.toml": "[package]\nname = \"rust-only\"\nversion = \"0.1.0\"\n",
+		"Cargo.lock": "version = 3\n",
+	} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(content), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	writeConfig(t, dir, "project:\n  name: x\nsecurity:\n  enabled: true\n  mode: report-only\n  advisory_database_path: .agent-sdlc/advisory-db\n")
+	if err := os.MkdirAll(filepath.Join(dir, stateDirName, "advisory-db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr := runCLI(t, dir, "security", "scan", "--auto", "--json", "--run-id", "auto-rust")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var out struct {
+		Scan security.Scan `json:"scan"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("scan JSON: %v\n%s", err, stdout)
+	}
+	if out.Scan.Detection == nil || !out.Scan.Detection.HasLanguage(security.LanguageRust) {
+		t.Fatalf("detection = %+v, want rust", out.Scan.Detection)
+	}
+	var sawCargoAudit bool
+	for _, adapter := range out.Scan.Adapters {
+		if adapter.AdapterID == security.AdapterIDCargoAudit {
+			sawCargoAudit = true
+		}
+	}
+	if !sawCargoAudit {
+		t.Fatalf("adapters = %+v, want cargo-audit selected for Rust content", out.Scan.Adapters)
+	}
+	if out.Scan.RequiredMode == nil {
+		t.Fatal("scan did not report required-mode readiness")
+	}
+}

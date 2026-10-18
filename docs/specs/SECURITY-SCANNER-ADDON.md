@@ -1,7 +1,7 @@
 # Security Scanner Add-on
 
 **Type:** Normative specification (MVP)
-**Status:** Implemented for Semgrep Community Edition and Gitleaks.
+**Status:** Implemented for Semgrep Community Edition, Gitleaks, and cargo-audit.
 **Requirements source:** [SOP-Security-Scanner-Addon-PRD.md](SOP-Security-Scanner-Addon-PRD.md)
 **Plan:** [PLAN-Security-Scanner-Addon.md](../plans/PLAN-Security-Scanner-Addon.md)
 
@@ -23,16 +23,16 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
 
 The add-on reuses these existing paths:
 
-| Concern | Repository path | Behavior |
-| --- | --- | --- |
-| Configuration | `internal/config/config.go`, `internal/config/security.go` | Optional `security` block with strict unknown-key rejection. Disabled by default. |
-| CLI | `internal/cli/security.go`, `internal/cli/cli.go` | `sop security scan`; `--json`, `--report-only`, `--required`, `--scope`, `--baseline`, `--resume`, `--run-id`, `--config`. |
-| Run lifecycle | `internal/cli/run.go`, `internal/cli/security_gate.go` | Optional scan at the existing quality seam; report-only is advisory, required feeds the single quality gate. |
-| Quality gate | `internal/quality/quality.go` | `SecurityEvidence` is folded into PASS/FAIL/NEEDS_HUMAN; it cannot add a second verdict authority. |
-| Artifacts | `internal/run/run.go`, `internal/security/report.go` | Evidence under `.agent-sdlc/runs/<id>/security/`. |
-| Content identity | `internal/git` (`Head`, `Tree`, `Status`, `DiffAll`, `ChangedFiles`) | Commit/tree identity; dirty content digest. |
-| Execution controls | `internal/run`, `internal/testrunner`, recovery specs | One bounded scan per attempt; existing retry, approval, cancellation, and continuation controls apply. |
-| Existing subprocess pattern | `internal/ragclient`, `internal/decision/command` | Direct argv, JSON request/response, bounded output, no shell. |
+| Concern                     | Repository path                                                      | Behavior                                                                                                                                                     |
+| --------------------------- | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Configuration               | `internal/config/config.go`, `internal/config/security.go`           | Optional `security` block with strict unknown-key rejection. Disabled by default.                                                                            |
+| CLI                         | `internal/cli/security.go`, `internal/cli/cli.go`                    | `sop security scan`; `sop security inspect`; `--json`, `--report-only`, `--required`, `--scope`, `--baseline`, `--resume`, `--run-id`, `--config`, `--auto`. |
+| Run lifecycle               | `internal/cli/run.go`, `internal/cli/security_gate.go`               | Optional scan at the existing quality seam; report-only is advisory, required feeds the single quality gate.                                                 |
+| Quality gate                | `internal/quality/quality.go`                                        | `SecurityEvidence` is folded into PASS/FAIL/NEEDS_HUMAN; it cannot add a second verdict authority.                                                           |
+| Artifacts                   | `internal/run/run.go`, `internal/security/report.go`                 | Evidence under `.agent-sdlc/runs/<id>/security/`.                                                                                                            |
+| Content identity            | `internal/git` (`Head`, `Tree`, `Status`, `DiffAll`, `ChangedFiles`) | Commit/tree identity; dirty content digest.                                                                                                                  |
+| Execution controls          | `internal/run`, `internal/testrunner`, recovery specs                | One bounded scan per attempt; existing retry, approval, cancellation, and continuation controls apply.                                                       |
+| Existing subprocess pattern | `internal/ragclient`, `internal/decision/command`                    | Direct argv, JSON request/response, bounded output, no shell.                                                                                                |
 
 There is no second plugin framework. Adapter selection is configuration only.
 
@@ -43,13 +43,17 @@ security:
   enabled: true # disabled unless true (or SOP_SECURITY_ENABLED=true)
   mode: report-only # report-only | required
   scope: workspace # workspace | changed-files
-  required_categories: [sast] # required when mode: required
+  required_categories: [sast] # required when mode: required; sast | secrets | dependencies
   fail_on: [critical, high]
   unknown_severity: indeterminate # fail | indeterminate | ignore
   timeout_seconds: 300
   max_output_bytes: 1048576
   baseline: .agent-sdlc/security-baseline.json
   exclude: [internal/security/testdata] # declared scope; a leading "/" anchors to root
+  # Local advisory database for dependency scanning. Explicit; never fetched implicitly.
+  advisory_database_path: .agent-sdlc/advisory-db
+  stale_advisory_database: deny # deny (default) | allow
+  auto: false # true adds missing built-in categories from detected content
   adapters:
     - id: semgrep
       category: sast
@@ -61,6 +65,14 @@ security:
       category: secrets
       protocol: builtin
       command: [gitleaks]
+      version: "SET_THE_PINNED_VERSION"
+    - id: cargo-audit
+      category: dependencies
+      protocol: builtin
+      command: [cargo, audit]
+      database: .agent-sdlc/advisory-db # optional per-adapter override
+      lockfile: Cargo.lock # optional; otherwise resolved from content
+      stale: deny # optional per-adapter override
       version: "SET_THE_PINNED_VERSION"
     # A private adapter replaces a built-in through configuration alone.
     # - id: private-sast
@@ -80,8 +92,9 @@ services remain separate, explicit operator actions outside this add-on. The
 repository provides `scripts/security/fetch-semgrep-rules.sh`, which fetches the
 rules from the exact commit in `scripts/security/semgrep-rules-manifest.json`,
 verifies the tarball, every selected file, and the deterministic directory digest,
-and writes them to an ignored local directory. The upstream rules are
-license-restricted and are never committed.
+and writes them to an ignored local directory. The pinned manifest includes Go and
+Rust security rules. The upstream rules are license-restricted and are never
+committed.
 
 ## 3. Adapter protocol v1
 
@@ -90,13 +103,13 @@ processes satisfy the same contract.
 
 ### Descriptor
 
-| Field | Meaning |
-| --- | --- |
-| `protocol_version` | `security-scan/v1` |
-| `adapter_id`, `adapter_version` | Stable identity and pinned version |
-| `categories` | `sast`, `secrets` |
-| `scope_modes` | `workspace`, `changed-files` |
-| `locality`, `network` | Execution locality and data/network requirements |
+| Field                           | Meaning                                          |
+| ------------------------------- | ------------------------------------------------ |
+| `protocol_version`              | `security-scan/v1`                               |
+| `adapter_id`, `adapter_version` | Stable identity and pinned version               |
+| `categories`                    | `sast`, `secrets`, `dependencies`                |
+| `scope_modes`                   | `workspace`, `changed-files`                     |
+| `locality`, `network`           | Execution locality and data/network requirements |
 
 ### Request
 
@@ -148,8 +161,8 @@ content identity, policy identity, and sanitized native-report digest.
 ### Semgrep Community Edition (`sast`)
 
 - Invokes `semgrep scan --json --metrics=off --disable-version-check
-  --no-git-ignore --no-rewrite-rule-ids --config <local-rules> --timeout
-  <seconds> [--exclude <declared-scope-pattern> ...] <targets>` directly.
+--no-git-ignore --no-rewrite-rule-ids --config <local-rules> --timeout
+<seconds> [--exclude <declared-scope-pattern> ...] <targets>` directly.
 - `--no-rewrite-rule-ids` keeps the rule ID exactly as the local ruleset declares
   it, so a moved rules directory cannot change fingerprints or baselines.
 - `--exclude` is passed for each `scope.excluded` pattern. A declared exclusion
@@ -168,7 +181,7 @@ content identity, policy identity, and sanitized native-report digest.
 ### Gitleaks (`secrets`)
 
 - Invokes `gitleaks detect --source <root> --no-git --redact --report-format
-  json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
+json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   `security.adapters[].rules` is set, it is passed as `--config <local-config>`
   and its identity is recorded; otherwise Gitleaks uses its built-in rules.
 - Parses the top-level array or `findings` object shape.
@@ -186,6 +199,34 @@ content identity, policy identity, and sanitized native-report digest.
   completion, failure, and cancellation. Only a sanitized native report is
   persisted.
 
+### cargo-audit (`dependencies`)
+
+- Invokes the configured argv (default `cargo audit`) with `--file <Cargo.lock>`,
+  `--json`, `--no-fetch`, and `--db <local-advisory-database>`. It never runs the
+  experimental `fix` subcommand, never generates a lockfile, never fetches or
+  updates a database, and never uploads source.
+- Resolves the Cargo workspace and its actual `Cargo.lock`. A workspace member
+  does not own a lockfile; the workspace root does. A configured `lockfile`
+  override is allowed but remains repository-relative.
+- Parses the structured `vulnerabilities.list` report. Advisory IDs, affected
+  package/version, CVSS/severity, aliases/CVEs, patched and unaffected versions,
+  references, and the lockfile path are retained. A CVSS 3.x vector is mapped to
+  the normalized severity; when neither an explicit severity nor a valid vector
+  exists, severity is `UNKNOWN` and the explicit unknown-severity policy applies.
+- Records the advisory database identity as a deterministic local fingerprint and
+  records scanner-observed metadata (`last-commit`, `last-updated`,
+  `advisory-count`) as evidence. Resume re-executes when the identity changes.
+- Missing lockfiles, unavailable databases, a report without database identity,
+  malformed output, timeouts, and tool failures are non-clean execution results
+  and never `PASS`.
+- A stale database (older than 90 days) follows the explicit
+  `stale_advisory_database` / adapter `stale` policy. `deny` is the default and
+  forces `INDETERMINATE`; `allow` runs with `--stale` and records `PARTIAL`
+  coverage, which still cannot satisfy a required gate. A database whose freshness
+  cannot be established is treated as stale.
+- Dependency audit is workspace-wide. A changed-files scope records that the
+  dependency graph was not limited to changed files and marks coverage `PARTIAL`.
+
 Supported versions are pinned by the operator with
 `security.adapters[].version`. Provenance records the configured version; the
 adapter does not claim a version it did not observe. Resume requires a pinned
@@ -194,7 +235,10 @@ scanner version, so an unpinned scanner cannot reuse prior evidence.
 ## 5. Execution and evidence
 
 1. Validate configuration and requested categories.
-2. Resolve adapters and inspect descriptors.
+2. Resolve adapters and inspect descriptors. With auto selection, detect
+   languages, manifests, Cargo workspaces, and actual/missing lockfiles first;
+   auto mode only adds missing built-in categories and explicit configuration
+   remains authoritative.
 3. Confirm the workspace root and compute content identity.
 4. Execute each adapter once with a bounded deadline and output limit.
 5. Sanitize native reports before persistence or model access.
@@ -216,7 +260,8 @@ is `INDETERMINATE`.
 Artifacts:
 
 - `security/scan.json` — normalized evidence and verdict. `scope.excluded`
-  records the declared exclusions.
+  records the declared exclusions. Auto-mode scans also include `detection`;
+  every scan includes `required_mode` readiness evidence.
 - `security/scan.md` — human-readable rendering.
 - `security/<adapter>.native.json` — sanitized native report, when available.
 
@@ -231,8 +276,14 @@ Redaction failure makes the scan result unusable.
 - `FAIL`: at least one unsuppressed finding is at a `fail_on` severity (or the
   explicit unknown-severity policy says fail).
 - `INDETERMINATE`: an adapter failed, timed out, was unavailable, was cancelled,
-  had partial/unknown coverage, a required category was not covered, or a
-  required category used changed-file evidence.
+  had partial/unknown coverage, a required category was not covered, a required
+  category used changed-file evidence, or a dependency adapter observed a stale
+  advisory database (under either stale policy).
+
+A dependency adapter's unsupported language, missing lockfile, unavailable
+advisory database, or stale database is never treated as clean evidence. The
+`required_mode` field projects what the same evidence would produce under a
+required gate while the recorded verdict remains report-only.
 
 A blocking finding produces `FAIL` even when another adapter is incomplete or
 coverage is partial; the coverage state remains explicit. An incomplete scan
@@ -284,9 +335,10 @@ completed adapter result is reused only when all of these still match:
 - content identity (commit/tree/digest/dirty),
 - adapter ID and pinned scanner version,
 - rules identity,
+- advisory database identity and stale state for a dependency adapter,
 - adapter configuration digest,
-- policy identity, including baseline content and the configured execution
-  bounds (timeout and output limit).
+- policy identity, including baseline content, the configured execution bounds
+  (timeout and output limit), the advisory database path, and the stale policy.
 
 Any mismatch re-executes that adapter. A prior non-completed result is never
 reused. Resume does not change retry or continuation budgets.
@@ -321,10 +373,9 @@ reused. Resume does not change retry or continuation budgets.
 
 ## 11. MVP exclusions
 
-Dependency scanning, verified-secret services, hosted code analysis, runtime
-network scanning, asset discovery, automatic fixes, automatic scanner
-installation, cross-provider deduplication, a new vulnerability database, and a
-scanner engine are excluded.
+Verified-secret services, hosted code analysis, runtime network scanning, asset
+discovery, automatic fixes, automatic scanner installation, cross-provider
+deduplication, a new vulnerability database, and a scanner engine are excluded.
 
 ## 12. Meaningful validation commands
 
@@ -333,6 +384,7 @@ go test ./internal/security/...
 go test ./internal/config/...
 go test ./internal/quality/...
 go test ./internal/cli/...
+go test ./internal/skill/...
 go test ./internal/planner/... -run TestSecurityScannerPlanCompiles
 go build ./...
 go vet ./...

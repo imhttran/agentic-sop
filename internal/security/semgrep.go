@@ -117,6 +117,8 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 
 	// Semgrep may scan a file named on the command line even when it matches
 	// --exclude, so declared exclusions are applied to changed-file targets here.
+	// A changed-files scope with no changed files is a complete no-op; it must not
+	// be turned into a language-coverage failure.
 	matcher := NewExcludeMatcher(req.Scope.Excluded)
 	var changed []string
 	for _, file := range req.Scope.Files {
@@ -127,6 +129,24 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	if req.Scope.Mode == "changed-files" && len(changed) == 0 {
 		exec.Coverage = CoverageComplete
 		exec.Diagnostics = []string{"no changed files to scan"}
+		return finish(exec, nil)
+	}
+
+	// Coverage is language-scoped. A Go-only ruleset must never be treated as a
+	// successful Rust scan, and a ruleset with no rule for any detected language
+	// must not produce a clean result.
+	languageCoverage, langErr := evaluateSemgrepLanguageCoverage(req, rules)
+	if langErr != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = []string{"semgrep rules languages are unavailable: " + SanitizeText(langErr.Error(), MaxDiagnosticBytes)}
+		return finish(exec, nil)
+	}
+	exec.Diagnostics = append(exec.Diagnostics, sourceLanguageDiagnostic(languageCoverage.Detected))
+	if len(languageCoverage.Detected) > 0 && len(languageCoverage.Covered) == 0 {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = append(exec.Diagnostics, unsupportedSourceDiagnostic(languageCoverage.Unsupported))
 		return finish(exec, nil)
 	}
 
@@ -226,6 +246,10 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	}
 
 	exec.Coverage = CoverageComplete
+	if len(languageCoverage.Unsupported) > 0 {
+		exec.Coverage = CoveragePartial
+		exec.Diagnostics = append(exec.Diagnostics, unsupportedSourceDiagnostic(languageCoverage.Unsupported))
+	}
 	// Semgrep CE reports some coverage limits only in its human summary rather than
 	// in the JSON paths object. Treat those explicit limits as PARTIAL so a required
 	// gate never claims a full scan when files were skipped or the target set was

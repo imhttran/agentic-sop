@@ -185,3 +185,62 @@ func TestSecurityExplicitProjectValueWinsOverEnvironment(t *testing.T) {
 		t.Fatal("explicit enabled: false was overwritten by the environment")
 	}
 }
+
+func TestSecurityCargoAuditAdapterAccepted(t *testing.T) {
+	cfg, err := parseSecurityConfig(t, "security:\n  enabled: true\n  advisory_database_path: .agent-sdlc/advisory-db\n  stale_advisory_database: deny\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      protocol: builtin\n      command: [cargo, audit]\n      database: .agent-sdlc/advisory-db\n      lockfile: Cargo.lock\n      stale: allow\n      version: \"0.21.2\"\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cfg.Security.Adapters) != 1 || cfg.Security.Adapters[0].Category != SecurityCategoryDependencies {
+		t.Fatalf("adapters = %+v", cfg.Security.Adapters)
+	}
+	if cfg.Security.Adapters[0].Database != ".agent-sdlc/advisory-db" || cfg.Security.Adapters[0].Stale != "allow" {
+		t.Fatalf("adapter = %+v", cfg.Security.Adapters[0])
+	}
+}
+
+func TestSecurityCargoAuditRequiresDependenciesCategory(t *testing.T) {
+	_, err := parseSecurityConfig(t, "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n      category: sast\n")
+	if err == nil || !strings.Contains(err.Error(), "dependencies") {
+		t.Fatalf("error = %v, want category mismatch", err)
+	}
+}
+
+func TestSecurityCargoAuditDefaults(t *testing.T) {
+	cfg, err := parseSecurityConfig(t, "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapter := cfg.Security.Adapters[0]
+	if adapter.Category != SecurityCategoryDependencies {
+		t.Errorf("category = %q", adapter.Category)
+	}
+	if len(adapter.Command) != 2 || adapter.Command[0] != "cargo" || adapter.Command[1] != "audit" {
+		t.Errorf("command = %v", adapter.Command)
+	}
+}
+
+func TestSecurityAdapterPathsStaySafe(t *testing.T) {
+	for name, body := range map[string]string{
+		"lockfile escapes":  "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      command: [cargo, audit]\n      lockfile: ../Cargo.lock\n",
+		"lockfile absolute": "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      command: [cargo, audit]\n      lockfile: /Cargo.lock\n",
+		"database escapes":  "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      command: [cargo, audit]\n      database: ../advisory-db\n",
+		"stale unknown":     "security:\n  enabled: true\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      command: [cargo, audit]\n      stale: sometimes\n",
+	} {
+		if _, err := parseSecurityConfig(t, body); err == nil {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+}
+
+func TestSecurityRequiredDependenciesCategoryAccepted(t *testing.T) {
+	if _, err := parseSecurityConfig(t, "security:\n  enabled: true\n  mode: required\n  required_categories: [dependencies]\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      command: [cargo, audit]\n"); err != nil {
+		t.Fatalf("required dependencies category rejected: %v", err)
+	}
+}
+
+func TestSecurityGlobalAdvisoryDatabaseMayBeAbsolute(t *testing.T) {
+	if _, err := parseSecurityConfig(t, "security:\n  enabled: true\n  advisory_database_path: /var/lib/advisory-db\n"); err != nil {
+		t.Fatalf("absolute advisory database path rejected: %v", err)
+	}
+}

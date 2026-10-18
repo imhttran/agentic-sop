@@ -365,7 +365,7 @@ Commands:
   plan      generate PLAN.md, or sop plan activate|supersede|complete|historicalize
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)
-  security  scan with configured Semgrep/Gitleaks adapters (report-only or required)
+  security  inspect repository content or scan with configured/auto-selected adapters (report-only or required)
   review    review the current changes with the configured engine
   run       run [--max-tasks N] [PLAN.md | --task TASK.md]  (normal entry point)
   prompt    run an ad-hoc prompt through SOP (--capability CAP, --file PATH, --json, --cache)

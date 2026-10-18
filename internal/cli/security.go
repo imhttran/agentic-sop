@@ -17,13 +17,29 @@ import (
 
 // runSecurity dispatches the security add-on commands. The add-on is opt-in:
 // without an enabled configuration or SOP_SECURITY_ENABLED, `scan` reports
-// NOT_APPLICABLE and executes no scanner.
+// NOT_APPLICABLE and executes no scanner. `inspect` is read-only and works even
+// while the add-on is disabled, so an operator can see detected content and
+// proposed capabilities before enabling a scan.
 func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
-	if len(args) == 0 || args[0] != "scan" {
-		fmt.Fprintln(stderr, "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID] [--config PATH]")
+	if len(args) == 0 {
+		fmt.Fprintln(stderr, securityUsage)
 		return exitUsage
 	}
-	opts, ok := parseSecurityScanArgs(args[1:], stderr)
+	switch args[0] {
+	case "scan":
+		return runSecurityScan(args[1:], stdout, stderr, d)
+	case "inspect":
+		return runSecurityInspect(args[1:], stdout, stderr, d)
+	default:
+		fmt.Fprintln(stderr, securityUsage)
+		return exitUsage
+	}
+}
+
+const securityUsage = "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID] [--config PATH] [--auto]\n       sop security inspect [--json] [--config PATH]"
+
+func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
+	opts, ok := parseSecurityScanArgs(args, stderr)
 	if !ok {
 		return exitUsage
 	}
@@ -79,24 +95,42 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
-	adapters, err := security.BuildAdapters(cfg.Security.Adapters, security.BuildOptions{
+	auto := opts.auto || cfg.Security.Auto
+	adapterConfigs := cfg.Security.Adapters
+	var detection *security.Detection
+	if auto {
+		detected, derr := security.DetectRepositoryScoped(dir, cfg.SecurityExcludes())
+		if derr != nil {
+			fmt.Fprintf(stderr, "security: detect repository: %v\n", derr)
+			return exitError
+		}
+		detection = &detected
+		adapterConfigs = security.AutoAdapterConfigs(detected, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
+	}
+
+	adapters, err := security.BuildAdapters(adapterConfigs, security.BuildOptions{
 		Timeout:        time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
 		MaxOutputBytes: cfg.Security.MaxOutputBytes,
+		DatabasePath:   cfg.Security.AdvisoryDatabasePath,
+		StalePolicy:    cfg.Security.StaleAdvisoryDatabase,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
 	}
 	policy := security.Policy{
-		Enabled:            true,
-		Mode:               mode,
-		Scope:              scope,
-		RequiredCategories: cfg.Security.RequiredCategories,
-		FailOn:             cfg.Security.FailOn,
-		UnknownSeverity:    cfg.Security.UnknownSeverity,
-		TimeoutSeconds:     cfg.Security.TimeoutSeconds,
-		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
-		Exclude:            cfg.SecurityExcludes(),
+		Enabled:               true,
+		Mode:                  mode,
+		Scope:                 scope,
+		RequiredCategories:    cfg.Security.RequiredCategories,
+		FailOn:                cfg.Security.FailOn,
+		UnknownSeverity:       cfg.Security.UnknownSeverity,
+		TimeoutSeconds:        cfg.Security.TimeoutSeconds,
+		MaxOutputBytes:        cfg.Security.MaxOutputBytes,
+		Exclude:               cfg.SecurityExcludes(),
+		AdvisoryDatabasePath:  cfg.Security.AdvisoryDatabasePath,
+		StaleAdvisoryDatabase: cfg.Security.StaleAdvisoryDatabase,
+		Auto:                  auto,
 	}
 
 	runID := opts.runID
@@ -128,6 +162,7 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
 	}
+	scan.Detection = detection
 	scan.Diagnostics = append(baselineDiagnostics, scan.Diagnostics...)
 
 	rn, err := runpkg.Open(dir, runID)
@@ -162,6 +197,134 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 	return exitOK
 }
 
+type securityInspectOptions struct {
+	json   bool
+	config string
+}
+
+// runSecurityInspect reports detected repository content and the capability
+// status of configured and proposed adapters. It never executes a scanner, so it
+// is safe while the add-on is disabled and report-only.
+func runSecurityInspect(args []string, stdout, stderr io.Writer, d deps) int {
+	opts, ok := parseSecurityInspectArgs(args, stderr)
+	if !ok {
+		return exitUsage
+	}
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "security: %v\n", err)
+		return exitError
+	}
+	if opts.config != "" {
+		configPath := opts.config
+		if !filepath.IsAbs(configPath) {
+			configPath = filepath.Join(dir, configPath)
+		}
+		loaded, lerr := config.Load(configPath)
+		if lerr != nil {
+			fmt.Fprintf(stderr, "security: config %s: %v\n", configPath, lerr)
+			return exitError
+		}
+		cfg = *loaded
+	}
+	detection, err := security.DetectRepositoryScoped(dir, cfg.SecurityExcludes())
+	if err != nil {
+		fmt.Fprintf(stderr, "security: detect repository: %v\n", err)
+		return exitError
+	}
+	configured := security.ClassifyCapabilitiesWithDatabase(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
+	proposed := security.SelectCandidatesWithDatabase(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
+	result := struct {
+		Version    int                         `json:"version"`
+		Enabled    bool                        `json:"enabled"`
+		Mode       string                      `json:"mode,omitempty"`
+		Scope      string                      `json:"scope,omitempty"`
+		Auto       bool                        `json:"auto"`
+		Detection  security.Detection          `json:"detection"`
+		Configured []security.AdapterCandidate `json:"configured"`
+		Proposed   []security.AdapterCandidate `json:"proposed"`
+	}{
+		Version: 1, Enabled: cfg.SecurityEnabled(), Mode: cfg.Security.Mode, Scope: cfg.Security.Scope,
+		Auto: cfg.Security.Auto, Detection: detection, Configured: configured, Proposed: proposed,
+	}
+	if opts.json {
+		if err := json.NewEncoder(stdout).Encode(result); err != nil {
+			fmt.Fprintf(stderr, "security: %v\n", err)
+			return exitError
+		}
+		return exitOK
+	}
+	fmt.Fprintf(stdout, "security inspect: enabled=%t mode=%s scope=%s auto=%t\n", result.Enabled, result.Mode, result.Scope, result.Auto)
+	fmt.Fprintf(stdout, "  languages: %s\n", detectionLanguageText(detection.Languages))
+	for _, manifest := range detection.Manifests {
+		fmt.Fprintf(stdout, "  manifest: %s (%s)\n", manifest.Path, manifest.Language)
+	}
+	for _, lockfile := range detection.Lockfiles {
+		state := "present"
+		if !lockfile.Present {
+			state = "MISSING"
+		}
+		fmt.Fprintf(stdout, "  lockfile: %s (%s, %s)\n", lockfile.Path, lockfile.Language, state)
+	}
+	fmt.Fprintln(stdout, "  configured adapters:")
+	printCapabilities(stdout, configured)
+	fmt.Fprintln(stdout, "  proposed adapters:")
+	printCapabilities(stdout, proposed)
+	return exitOK
+}
+
+func parseSecurityInspectArgs(args []string, stderr io.Writer) (securityInspectOptions, bool) {
+	var opts securityInspectOptions
+	for i := 0; i < len(args); i++ {
+		switch arg := args[i]; {
+		case arg == "--json":
+			opts.json = true
+		case arg == "--config":
+			if i+1 >= len(args) {
+				fmt.Fprintln(stderr, securityUsage)
+				return opts, false
+			}
+			i++
+			opts.config = strings.TrimSpace(args[i])
+		case strings.HasPrefix(arg, "--config="):
+			opts.config = strings.TrimPrefix(arg, "--config=")
+		default:
+			fmt.Fprintln(stderr, securityUsage)
+			return opts, false
+		}
+	}
+	return opts, true
+}
+
+func detectionLanguageText(languages []security.Language) string {
+	if len(languages) == 0 {
+		return "(none)"
+	}
+	values := make([]string, 0, len(languages))
+	for _, language := range languages {
+		values = append(values, string(language))
+	}
+	return strings.Join(values, ", ")
+}
+
+func printCapabilities(w io.Writer, candidates []security.AdapterCandidate) {
+	if len(candidates) == 0 {
+		fmt.Fprintln(w, "    (none)")
+		return
+	}
+	for _, candidate := range candidates {
+		fmt.Fprintf(w, "    %s (%s): %s", candidate.ID, candidate.Category, candidate.Status)
+		if candidate.Rules != "" {
+			fmt.Fprintf(w, " rules=%s", candidate.Rules)
+		}
+		fmt.Fprintln(w)
+	}
+}
+
 type securityScanOptions struct {
 	json     bool
 	mode     string
@@ -170,15 +333,18 @@ type securityScanOptions struct {
 	resume   string
 	runID    string
 	config   string
+	auto     bool
 }
 
 func parseSecurityScanArgs(args []string, stderr io.Writer) (securityScanOptions, bool) {
 	var opts securityScanOptions
-	usage := "usage: sop security scan [--json] [--report-only|--required] [--scope workspace|changed-files] [--baseline PATH] [--resume RUN_ID] [--run-id ID] [--config PATH]"
+	usage := securityUsage
 	for i := 0; i < len(args); i++ {
 		switch arg := args[i]; {
 		case arg == "--json":
 			opts.json = true
+		case arg == "--auto":
+			opts.auto = true
 		case arg == "--report-only":
 			opts.mode = config.SecurityModeReportOnly
 		case arg == "--required":
@@ -290,6 +456,19 @@ func printSecurityScan(w io.Writer, scan security.Scan, refs security.ArtifactRe
 	fmt.Fprintf(w, "  findings: %d (suppressed %d)\n", scan.Metrics.Findings, scan.Metrics.Suppressed)
 	for _, reason := range scan.Reasons {
 		fmt.Fprintf(w, "  - %s\n", reason)
+	}
+	if scan.RequiredMode != nil {
+		fmt.Fprintf(w, "  required-mode readiness: %t (projected %s)\n", scan.RequiredMode.Ready, scan.RequiredMode.Verdict)
+	}
+	if scan.Detection != nil {
+		fmt.Fprintf(w, "  detected languages: %s\n", detectionLanguageText(scan.Detection.Languages))
+		for _, lockfile := range scan.Detection.Lockfiles {
+			state := "present"
+			if !lockfile.Present {
+				state = "MISSING"
+			}
+			fmt.Fprintf(w, "  lockfile: %s (%s, %s)\n", lockfile.Path, lockfile.Language, state)
+		}
 	}
 	fmt.Fprintf(w, "  report: .agent-sdlc/runs/%s/%s\n", scan.RunID, refs.ScanMarkdown)
 	fmt.Fprintf(w, "  evidence: .agent-sdlc/runs/%s/%s\n", scan.RunID, refs.ScanJSON)
