@@ -1,0 +1,24 @@
+SOP
+
+Project: sop-006-rust-approval
+Harness: command
+Provider: command
+Provider source: configuration
+Command: python3 /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-006-rust-approval/agent.py
+
+Source: PLAN.md
+Plan: current
+
+Tasks: 2
+Done: 0
+Not required: 0
+Ready: 0
+Blocked: 0
+
+Running: S001 Implement greet
+S001 WAITING_FOR_APPROVAL: required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check "cargo test --quiet" failed (exit 101): running 1 test
+Approve with: sop approve S001
+
+Approvals left behind:
+  S001  NEEDS_HUMAN  WAITING_FOR_HUMAN  required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check "cargo test --quiet" failed (exit 101): running 1 test
+List them with: sop approvals

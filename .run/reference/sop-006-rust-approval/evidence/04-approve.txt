@@ -1,0 +1,11 @@
+approved S001
+Approval: APPROVED
+Kind: NEEDS_HUMAN
+Target: S001
+Stage: WAITING_FOR_HUMAN
+Disposition: NEEDS_HUMAN
+Reason: required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check "cargo test --quiet" failed (exit 101): running 1 test
+Evidence: required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check "cargo test --quiet" failed (exit 101): running 1 test
+Requested: 2026-10-18T03:56:35Z
+Decided: 2026-10-18T03:56:40Z (lifecycle: NONE)
+Decided by: operator

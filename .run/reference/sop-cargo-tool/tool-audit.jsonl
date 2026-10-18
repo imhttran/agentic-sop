@@ -1,0 +1,4 @@
+{"timestamp":"2026-10-18T03:56:24.578466Z","tool":"list_files","action":"allow","outcome":"ok"}
+{"timestamp":"2026-10-18T03:56:25.06752Z","tool":"run_command","action":"deny","request":"cargo test --manifest-path ../outside/Cargo.toml","outcome":"denied","detail":"command not allowed: path escapes the repository: ../outside/Cargo.toml"}
+{"timestamp":"2026-10-18T03:56:25.545622Z","tool":"create_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:56:26.057425Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
