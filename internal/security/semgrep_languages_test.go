@@ -34,7 +34,7 @@ func semgrepAdapterWithRules(t *testing.T, rules, report string, called *bool) A
 			if called != nil {
 				*called = true
 			}
-			return []byte(report), nil, 0, nil
+			return []byte(report), []byte(semgrepCoverageSummaryNoSkip), 0, nil
 		}},
 		Timeout: time.Second, MaxOutputBytes: 1 << 20,
 	})

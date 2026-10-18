@@ -115,6 +115,33 @@ Report-only exits `0` even when the verdict is `FAIL` or `INDETERMINATE`. It
 still records the honest verdict and evidence. Required mode exits non-zero for
 anything except `PASS`.
 
+### Exclusions and coverage policy
+
+Declared `security.exclude` patterns are the only things that are out of scope.
+Everything else is inside the declared scope, and a scanner skip there is a
+coverage gap — never clean coverage. Coverage is separate from findings: `COMPLETE`
+means the declared scope was scanned, not that it has no vulnerabilities.
+
+| Category                          | Default treatment                                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Declared `security.exclude` paths | Out of scope. Recorded in `scope.excluded` and provenance `exclusions`; a matching skip is not a gap.                           |
+| Generated output, vendor trees    | In scope. Declare them explicitly if they should not be analyzed.                                                               |
+| Fixtures and test data            | In scope. Declare them explicitly if they should not be analyzed.                                                               |
+| Test files (`*_test.go`)          | Skipped by Semgrep's built-in `.semgrepignore` defaults, so coverage is `PARTIAL` unless the repository overrides that default. |
+| Files over Semgrep's size limit   | Skipped by the scanner, so coverage is `PARTIAL`.                                                                               |
+| Legacy or non-production trees    | In scope. Declare them explicitly if they are out of scanning scope.                                                            |
+
+```text
+COMPLETE     recognized summary, no in-scope skips
+PARTIAL      any in-scope skip (.semgrepignore, size limit, unknown reason)
+UNKNOWN      missing, truncated, or unrecognized summary -> verdict INDETERMINATE
+             (also: zero targets scanned while source languages were detected)
+```
+
+Diagnostics name every configured exclusion and every observed skip class with
+its count. Do not add exclusions merely to obtain `COMPLETE`: widening the scope
+exclusion is a reviewed scope decision, not a coverage fix.
+
 The command writes:
 
 ```text
@@ -162,15 +189,32 @@ If the scan cannot produce evidence, the result is `INDETERMINATE`:
 - report-only adds an advisory and leaves the normal gate unchanged;
 - required mode fails the gate.
 
-## 5. Rust dependency scanning
+## 5. Rust scanning
+
+### Dependency advisories (cargo-audit)
 
 cargo-audit resolves the Cargo workspace and its actual `Cargo.lock`; a workspace
 member does not own a lockfile. The adapter always passes `--file`, `--json`,
 `--no-fetch`, and an explicit `--db`. It never generates or modifies a lockfile,
 never runs `fix`, and never uploads source.
 
+Provision the pinned executable once, separately from scanning:
+
+```bash
+scripts/security/fetch-cargo-audit.sh --dest .agent-sdlc/cargo-audit
+```
+
+The script downloads the release asset pinned by
+`scripts/security/cargo-audit-manifest.json`, verifies its SHA-256, and checks the
+binary's reported version. It is the only networked step. Point `command` at the
+provisioned binary (for example `[.agent-sdlc/cargo-audit/cargo-audit, audit]`)
+and set an exact `version`. Before any scan the adapter runs `--version` and fails
+closed when the pin is missing, the output is unrecognized, or the reported
+version differs.
+
 - `advisory_database_path` (global) or an adapter `database` path is required. A
-  missing path is `FAILED`, not a clean scan.
+  missing path is `FAILED`, not a clean scan. The database is operator-supplied
+  and local; scans never fetch or update it.
 - `stale_advisory_database` / adapter `stale` is `deny` by default. A database
   older than 90 days stays non-clean: `deny` marks it `INDETERMINATE`; `allow`
   passes `--stale`, records `PARTIAL` coverage, and still cannot satisfy a
@@ -178,9 +222,48 @@ never runs `fix`, and never uploads source.
 - The normalized finding preserves the advisory ID, affected package/version,
   CVSS/severity, aliases/CVEs, patched and unaffected versions, references, and
   the lockfile path. Advisories are separate from tool/database failures.
-- The local database identity is a deterministic fingerprint; scanner-observed
-  `last-commit`, `last-updated`, and `advisory-count` are recorded as evidence.
-  Resume re-executes when the fingerprint changes.
+- Provenance records the observed tool version, the local database identity
+  (including local content changes), and a lockfile identity of every resolved
+  path plus its content digest. Resume re-executes when any of them changes.
+- Unsupported target (no Rust content), missing or incompatible tool, missing
+  lockfile, missing or invalid database, a stale database under `deny`, malformed
+  output, a timeout, and a tool failure each produce a distinguishable non-clean
+  result. None is a clean dependency scan.
+- The real-tool integration check runs the pinned binary with `--no-fetch` against
+  the controlled advisory database at
+  `internal/security/testdata/cargo-audit/advisory-db`, which contains a known
+  `RUSTSEC-2020-0071` entry for `time 0.1.44`. It also asserts that the scan
+  leaves both the lockfile and the database byte-identical.
+
+### Source analysis (Semgrep)
+
+Semgrep coverage is decided per detected source language from the `languages` the
+local rules declare. It is never inferred from a path name or from another
+language's rules.
+
+- The pinned production ruleset includes `go/...` and `rust/lang/security/...`, so
+  a Rust-bearing workspace is analyzed by Rust rules instead of being reported
+  `UNSUPPORTED` when the configured rules path covers it. The default provisioning
+  destination is `.agent-sdlc/security-rules`, populated by
+  `scripts/security/fetch-semgrep-rules.sh`; `security.adapters[].rules` must
+  point at that path.
+- Rust coverage is claimed only when the configured rules declare `rust`. A
+  Go-only ruleset is never applied to Rust source: the adapter refuses before
+  execution and reports `FAILED` with an explicit `UNSUPPORTED` diagnostic.
+- A ruleset that covers only part of the detected source is `COMPLETED` with
+  `PARTIAL` coverage and a diagnostic naming the unsupported languages, so a
+  mixed Go/Rust workspace keeps independent coverage per language.
+- Malformed rules, a rule pattern the pinned scanner rejects, a scanner failure,
+  or a timeout never produce `COMPLETE` coverage or a clean result.
+- `rules_identity` in the scan evidence is the digest of the configured rules
+  path, so a rules change is visible and forces a resume re-execution.
+- The repository-owned rules used to verify this behavior live in
+  `internal/security/testdata/real/rules-rust.yaml` and declare only
+  `languages: [rust]`. They are exercised by the tagged real-CLI integration
+  suite, not by the default unit-test run.
+- The Rust rules are a small set of syntactic checks, not comprehensive Rust
+  security analysis. A clean Rust result means only that these checks found
+  nothing.
 
 ## 6. Replacing or adding an adapter
 
@@ -339,6 +422,10 @@ the integration changed existing runner behavior unexpectedly.
   dependency advisories are not implemented; report them as unsupported instead
   of assuming a clean result. This overlaps the dependency-scanning note tracked
   in issue #40 without closing it.
+- Rust Semgrep coverage is limited to the selected pinned `rust/lang/security`
+  rules plus the repository-owned verification rules. It is not comprehensive
+  Rust SAST, and a `PARTIAL` result means part of the detected source was not
+  analyzed.
 - Hosted, runtime/network, and asset-discovery scans are out of MVP scope.
 - A passing scan is evidence for the configured tools and scope. It is not proof
   that the repository has no vulnerabilities.

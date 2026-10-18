@@ -1,0 +1,16 @@
+Project: sop-cargo-tool
+Harness: tool
+Provider: ollama
+Model: deepseek-v4.1-flash:cloud
+Provider source: configuration
+
+run T001: PASS
+  - all required checks passed
+fix cycles: 0/1
+performance: 18.8s total (agent 14.7s, validation 4ms, review 4.0s) | agent calls 2, validation runs 1, fix cycles 0
+report: .agent-sdlc/runs/T001/report.md
+outcome: PARTIAL
+  - required criterion criterion-1 not met: unverifiable: no deterministic check supplied
+  - required criterion objective-acceptance not met: unverifiable: no deterministic check supplied
+lifecycle: LOCAL_DONE
+human approval required before commit; completed locally without committing.

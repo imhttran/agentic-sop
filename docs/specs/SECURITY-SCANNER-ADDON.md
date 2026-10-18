@@ -178,6 +178,61 @@ content identity, policy identity, and sanitized native-report digest.
   declared `--exclude` pattern. An unrecognized reason is still a gap: unknown
   scanner behavior never yields `COMPLETE`.
 
+#### Language coverage
+
+- Coverage is decided per detected source language from the `languages` the local
+  rules declare. It MUST NOT be inferred from a path name or from another
+  language's rules.
+- A ruleset that declares no rule for any detected source language MUST fail with
+  `FAILED` coverage `UNKNOWN` and an explicit `UNSUPPORTED` diagnostic. It is
+  never a clean scan.
+- When the ruleset covers only part of the detected source, the execution MUST be
+  `COMPLETED` with coverage `PARTIAL` and a diagnostic naming the unsupported
+  languages. Go and Rust coverage remain independent.
+- Malformed rules, a rule pattern the pinned scanner rejects, a scanner failure,
+  or a timeout MUST NOT produce `COMPLETE` coverage or a clean result.
+- The pinned production ruleset (`scripts/security/semgrep-rules-manifest.json`)
+  covers Go and Rust; its directory digest is recorded as `rules_identity`. The
+  Rust scope is a small selected set of syntactic checks, not comprehensive Rust
+  security analysis.
+
+#### Exclusions and coverage evidence
+
+Coverage evidence is the scanner's own report of what it skipped. It is
+independent of the findings verdict: `COMPLETE` means the declared supported scope
+was scanned, not that it is free of vulnerabilities.
+
+- Declared `security.exclude` patterns are scope, not gaps. They are passed to the
+  scanner as `--exclude`, recorded in `scope.excluded`, and recorded in provenance
+  (`exclusions`). A skip attributed to a declared pattern is reported as declared
+  out-of-scope and does not by itself make coverage `PARTIAL`.
+- Every other skip inside the declared scope MUST make coverage `PARTIAL`. This
+  includes `.semgrepignore` matches (Semgrep defaults and repository content),
+  targets over the scanner's size limit, a target set restricted to git-tracked
+  files, and any skip reason this build does not recognize.
+- Missing, truncated, or unrecognized summary evidence MUST make coverage
+  `UNKNOWN`, which the policy verdict reports as `INDETERMINATE`. A missing or
+  unparseable summary never becomes `COMPLETE`.
+- `COMPLETE` requires a recognized, terminated coverage summary and no in-scope
+  skip. A summary that reports zero scanned targets while source languages were
+  detected is `UNKNOWN`.
+- Coverage MUST NOT be improved by widening exclusions. Adding an exclusion to
+  obtain `COMPLETE` removes content from the declared scope; that is a scope
+  decision, not a coverage fix.
+- Observed skip reasons and counts are preserved as evidence. Target details are
+  never invented beyond what the scanner reported.
+- Generated output, vendored content, fixtures, and legacy or non-production trees
+  are in scope by default. Excluding them requires an explicit `security.exclude`
+  entry and a recorded reason; otherwise their skips are coverage gaps.
+
+#### Coverage conformance
+
+The adapter depends on Semgrep's human summary (the `Scan Summary` section, the
+`Targets scanned:` count, the `Scan skipped:` reasons, and the closing `Ran ...`
+line) because the JSON report does not expose those skip classes. A conformance
+test runs the pinned scanner over no-skip, `.semgrepignore`, oversized, and
+declared-exclusion fixtures and fails when that contract changes.
+
 ### Gitleaks (`secrets`)
 
 - Invokes `gitleaks detect --source <root> --no-git --redact --report-format
@@ -215,10 +270,14 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   exists, severity is `UNKNOWN` and the explicit unknown-severity policy applies.
 - Records the advisory database identity as a deterministic local fingerprint and
   records scanner-observed metadata (`last-commit`, `last-updated`,
-  `advisory-count`) as evidence. Resume re-executes when the identity changes.
-- Missing lockfiles, unavailable databases, a report without database identity,
-  malformed output, timeouts, and tool failures are non-clean execution results
-  and never `PASS`.
+  `advisory-count`) as evidence. The identity also covers local content changes,
+  so an edited database cannot reuse earlier evidence.
+- Records a lockfile identity: every resolved lockfile path with its content
+  digest. Resume re-executes when the advisory database identity, its staleness,
+  or the lockfile identity changes.
+- Missing lockfiles, unavailable or invalid databases, a report without database
+  identity, malformed output, timeouts, and tool failures are non-clean execution
+  results and never `PASS`. Each condition has a distinguishable diagnostic.
 - A stale database (older than 90 days) follows the explicit
   `stale_advisory_database` / adapter `stale` policy. `deny` is the default and
   forces `INDETERMINATE`; `allow` runs with `--stale` and records `PARTIAL`
@@ -228,9 +287,17 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   dependency graph was not limited to changed files and marks coverage `PARTIAL`.
 
 Supported versions are pinned by the operator with
-`security.adapters[].version`. Provenance records the configured version; the
-adapter does not claim a version it did not observe. Resume requires a pinned
-scanner version, so an unpinned scanner cannot reuse prior evidence.
+`security.adapters[].version`. Before any scan the adapter MUST execute the
+configured command with `--version`, parse the reported version, and require an
+exact match. A missing pin, an unrecognized version string, or a mismatch is a
+non-clean execution failure (a mismatch never starts the scan). Provenance
+records the observed version, and resume compares it.
+
+Provisioning is separate from scanning: `scripts/security/fetch-cargo-audit.sh`
+downloads the pinned release asset, verifies its committed SHA-256 from
+`scripts/security/cargo-audit-manifest.json`, and checks the binary's version. It
+is the only step that uses the network. A scan never downloads the tool and never
+fetches or updates an advisory database.
 
 ## 5. Execution and evidence
 
@@ -392,9 +459,11 @@ bash scripts/checks/check-doc-links.sh
 bash scripts/checks/security-integration.sh
 ```
 
-The last command provisions the pinned real CLIs and runs the tagged integration
-checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`, so missing prerequisites
-fail the check instead of skipping it. CI runs the same script.
+The last command provisions the pinned real CLIs and the pinned production rules
+and runs the tagged integration checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`,
+so missing prerequisites fail the check instead of skipping it, and it exports
+`SOP_SECURITY_RULES_DIR` so the suite verifies the pinned ruleset actually covers
+Rust. CI runs the same script.
 
 Real Semgrep/Gitleaks execution requires the pinned CLIs and local rules in the
 supported integration environment. When a tool is absent, the adapter reports

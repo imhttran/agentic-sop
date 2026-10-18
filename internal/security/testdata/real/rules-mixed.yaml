@@ -1,0 +1,27 @@
+# Mixed-language ruleset for real-CLI coverage tests. One Go rule and one Rust
+# rule, each declaring its own language, so coverage of the two languages is
+# independent and never inferred from the other's rules.
+rules:
+  - id: sop-integration-command-execution
+    languages: [go]
+    message: Command execution with a synthesized argument.
+    severity: ERROR
+    metadata:
+      cwe: ["CWE-78"]
+      confidence: HIGH
+    pattern: exec.Command($ARG)
+
+  - id: sop-rust-tls-verification-disabled
+    languages: [rust]
+    message: >-
+      TLS certificate verification is disabled, so an attacker who can intercept
+      traffic can present any certificate. Remove the dangerous acceptance flag
+      and configure an explicit trust root instead.
+    severity: ERROR
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-295"]
+    pattern-either:
+      - pattern: $CLIENT.danger_accept_invalid_certs(true)
+      - pattern: $CLIENT.danger_accept_invalid_hostnames(true)

@@ -294,7 +294,7 @@ func TestSemgrepAdapterDeclaredExcludesStayComplete(t *testing.T) {
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
 		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
 	}, BuildOptions{Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
-		return []byte(`{"version":"1.99.0","results":[],"errors":[]}`), []byte("Scan skipped:\n   ◦ Matching --exclude patterns: 2\n"), 0, nil
+		return []byte(`{"version":"1.99.0","results":[],"errors":[]}`), []byte(semgrepCoverageSummaryDeclaredExclude), 0, nil
 	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
 	if err != nil {
 		t.Fatal(err)
@@ -477,7 +477,7 @@ func TestSemgrepAdapterParsesFixture(t *testing.T) {
 		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
 	}, BuildOptions{
 		Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
-			return report, nil, 1, nil
+			return report, []byte(semgrepCoverageSummaryNoSkip), 1, nil
 		}},
 		Timeout: 10 * time.Second, MaxOutputBytes: 1 << 20,
 	})

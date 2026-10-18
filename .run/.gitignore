@@ -1,0 +1,9 @@
+# Raw disposable fixtures and the locally built candidate binary stay local.
+/candidate/
+/planner-*/
+/demo-project/
+/disposable-project/
+/pd004/
+/sop-006-rust/
+/sop-006-rust-approval/
+/sop-cargo-tool/

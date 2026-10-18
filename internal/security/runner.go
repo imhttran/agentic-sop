@@ -258,6 +258,7 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 			prior.Provenance.RulesIdentity != current.RulesIdentity ||
 			prior.Provenance.AdvisoryDatabaseIdentity != current.AdvisoryDatabaseIdentity ||
 			prior.Provenance.AdvisoryDatabaseStale != current.AdvisoryDatabaseStale ||
+			prior.Provenance.LockfileIdentity != current.LockfileIdentity ||
 			prior.Provenance.ScannerVersion != current.ScannerVersion {
 			return Execution{}, false
 		}
