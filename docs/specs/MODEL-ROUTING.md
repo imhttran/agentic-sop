@@ -258,6 +258,28 @@ otherwise             -> medium
   threshold (for example "confidence < 0.70 → human/other class") MUST NOT be a
   routing rule. Confidence MAY be carried as evidence and recorded.
 
+### Default class decision (SMALL reachability)
+
+**Decision (2026-10-18):** `medium` stays the effective default. Automatic `small` is not
+made easier to reach.
+
+With the shipped defaults the router never selects `small`: routing is off, and even
+when routing is on, `small` requires typed JEV evidence, which needs `early_jev`
+enabled with at least one gate. Adaptive routing cannot lower a class below the
+router's baseline, so it does not change this. `small` is therefore reachable only by
+an explicit `--model-class small`, a configured default class, or routing plus
+early-JEV evidence on a task that qualifies on every signal.
+
+This is intended. Selecting `small` without evidence would violate the rule above, and
+no run has recorded the `small` class, so there is no evidence that it completes tasks.
+A wrong `small` selection costs a failed attempt plus escalation; a wrong `medium`
+selection costs only the price difference.
+
+The decision is revisited with the evidence from
+[PLAN-SMALL-Class-Trial.md](../plans/PLAN-SMALL-Class-Trial.md). Allowing `small` would
+be a configuration change (routing and early-JEV triage on), not a change to these
+rules.
+
 ### Reasons
 
 Every decision MUST carry one or more deterministic reasons drawn from a fixed set
