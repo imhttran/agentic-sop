@@ -298,6 +298,7 @@ is owned by the documents they link.
 - [reports/SECURITY-SCANNER-DOGFOOD.md](reports/SECURITY-SCANNER-DOGFOOD.md) — the report-only dogfood run: scanned commit/tree and dirty digest, measured duration, tool availability, the `INDETERMINATE` verdict, and the explicit limitation that no live scanner completed.
 - [reports/SECURITY-SCANNER-BASELINE.md](reports/SECURITY-SCANNER-BASELINE.md) — the first real-project report-only baseline: clean `origin/main` content identity, pinned Semgrep/Gitleaks provenance, declared exclusions, production-versus-fixture separation, source-backed dispositions for 27 findings, coverage gaps, and required-mode readiness.
 - [reports/SECURITY-SCAN-SKILL.md](reports/SECURITY-SCAN-SKILL.md) — the Go/Rust security-scan skill and cargo-audit adapter: detection, auto selection, Semgrep language coverage, pinned advisory-database fixtures, validation results, SOP execution limitations, and remaining gaps.
+- [reports/SOP-EXECUTION-RELIABILITY-REVIEW.md](reports/SOP-EXECUTION-RELIABILITY-REVIEW.md) — the SOP execution-reliability review evidence: direct reliability fixes, the bounded SOP-006 Rust demonstration, and the explicit limits on replaying earlier runs.
 
 ## Historical Documentation
 
