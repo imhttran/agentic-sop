@@ -136,11 +136,15 @@ type deps struct {
 	// once per task from the store and included as lowest-priority context; a nil
 	// slice (the default) leaves the context unchanged.
 	handoffItems []sopctx.Item
+	// requireIsolation refuses to start a new plan on main in the primary
+	// checkout (see requirePlanIsolation). Only the real CLI sets it.
+	requireIsolation bool
 }
 
 func defaultDeps() deps {
 	return deps{
-		getwd: os.Getwd,
+		getwd:            os.Getwd,
+		requireIsolation: true,
 		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
 			// This is the composition root: it resolves the effective
 			// harness/provider pair the same way the startup summary does, then

@@ -48,6 +48,16 @@ execution. Use task/run evidence when needed; task status alone is insufficient.
 State-read failures are blockers, not permission to initialize a fresh graph.
 Missing configuration/state in a new project is handled by `sop run` bootstrap.
 
+### Isolation for a new plan
+
+A new plan (one SOP has no existing state for) must not run on `main` in the
+primary checkout; `sop run` refuses it there and prints a
+`git worktree add -b sop/<plan-slug> ../<repo>-<plan-slug> main` command. Run that
+exact command, copy the plan document to the same relative path in the new
+worktree if it is not committed on `main` (leave the original), then make the
+`sop run` invocation from the worktree. Report the worktree path and branch.
+Another branch, a linked worktree, or a resumed plan runs in place.
+
 ## DELEGATE
 
 Make one execution invocation for this request, from the requested repository:
