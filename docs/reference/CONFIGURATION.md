@@ -225,7 +225,7 @@ workflow:
 | `security.timeout_seconds` | `300` | Per-adapter execution deadline. |
 | `security.max_output_bytes` | `1048576` | Per-adapter captured/report size bound. |
 | `security.baseline` | — | Repository-relative reviewed baseline/suppression file. Invalid or expired entries are reported and never silently effective. |
-| `security.exclude` | `[]` | Repository-relative paths/globs deliberately outside the scan scope. A leading `/` anchors to the repository root; `..`, drive-letter paths, and NUL are rejected. Exclusions are recorded in `scope.excluded`. Declared exclusions do not by themselves make coverage `PARTIAL`; scanner-side skips still do. `.env` files are not excluded automatically. |
+| `security.exclude` | `[]` | Repository-relative paths/globs deliberately outside the scan scope. A leading `/` anchors to the repository root; `..`, drive-letter paths, and NUL are rejected. Exclusions are recorded in `scope.excluded` and in provenance `exclusions`. Declared exclusions do not by themselves make coverage `PARTIAL`; every other scanner-side skip inside the declared scope does, and a missing or unrecognized scanner summary reports `UNKNOWN` (verdict `INDETERMINATE`). `.env` files are not excluded automatically. |
 | `security.advisory_database_path` | — | Explicit local advisory database for Rust dependency scanning. The adapter never fetches or updates it. |
 | `security.stale_advisory_database` | `deny` | `deny` or `allow`. A stale database never yields a passing required gate; `allow` runs with `--stale` and records `PARTIAL` coverage. |
 | `security.auto` | `false` | Add missing built-in categories from detected Go/Rust content. Explicit adapters stay authoritative. |

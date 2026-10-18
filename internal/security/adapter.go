@@ -187,6 +187,7 @@ func newExecution(id string, category Category, version, configDigest, policyIde
 			ConfigurationDigest: configDigest,
 			ContentIdentity:     req.Content,
 			PolicyIdentity:      policyIdentity,
+			Exclusions:          NormalizeExcludes(req.Scope.Excluded),
 		},
 	}
 }

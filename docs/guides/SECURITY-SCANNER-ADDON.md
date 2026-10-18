@@ -115,6 +115,33 @@ Report-only exits `0` even when the verdict is `FAIL` or `INDETERMINATE`. It
 still records the honest verdict and evidence. Required mode exits non-zero for
 anything except `PASS`.
 
+### Exclusions and coverage policy
+
+Declared `security.exclude` patterns are the only things that are out of scope.
+Everything else is inside the declared scope, and a scanner skip there is a
+coverage gap — never clean coverage. Coverage is separate from findings: `COMPLETE`
+means the declared scope was scanned, not that it has no vulnerabilities.
+
+| Category                          | Default treatment                                                                                                               |
+| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| Declared `security.exclude` paths | Out of scope. Recorded in `scope.excluded` and provenance `exclusions`; a matching skip is not a gap.                           |
+| Generated output, vendor trees    | In scope. Declare them explicitly if they should not be analyzed.                                                               |
+| Fixtures and test data            | In scope. Declare them explicitly if they should not be analyzed.                                                               |
+| Test files (`*_test.go`)          | Skipped by Semgrep's built-in `.semgrepignore` defaults, so coverage is `PARTIAL` unless the repository overrides that default. |
+| Files over Semgrep's size limit   | Skipped by the scanner, so coverage is `PARTIAL`.                                                                               |
+| Legacy or non-production trees    | In scope. Declare them explicitly if they are out of scanning scope.                                                            |
+
+```text
+COMPLETE     recognized summary, no in-scope skips
+PARTIAL      any in-scope skip (.semgrepignore, size limit, unknown reason)
+UNKNOWN      missing, truncated, or unrecognized summary -> verdict INDETERMINATE
+             (also: zero targets scanned while source languages were detected)
+```
+
+Diagnostics name every configured exclusion and every observed skip class with
+its count. Do not add exclusions merely to obtain `COMPLETE`: widening the scope
+exclusion is a reviewed scope decision, not a coverage fix.
+
 The command writes:
 
 ```text

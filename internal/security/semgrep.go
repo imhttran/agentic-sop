@@ -245,27 +245,25 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		exec.Provenance.ScannerVersion = report.Version
 	}
 
-	exec.Coverage = CoverageComplete
+	// Coverage evidence comes from the scanner's own summary. A skip inside the
+	// declared scope is PARTIAL, missing or unrecognized evidence is UNKNOWN
+	// (INDETERMINATE), and COMPLETE requires a recognized summary with no
+	// in-scope skips. Coverage stays independent of the findings verdict.
+	evidence := parseSemgrepCoverageSummary(string(stderr))
+	coverage, coverageDiagnostics := semgrepCoverageDecision(evidence, len(languageCoverage.Detected))
+	exec.Coverage = coverage
+	exec.Diagnostics = append(exec.Diagnostics, coverageDiagnostics...)
 	if len(languageCoverage.Unsupported) > 0 {
-		exec.Coverage = CoveragePartial
-		exec.Diagnostics = append(exec.Diagnostics, unsupportedSourceDiagnostic(languageCoverage.Unsupported))
-	}
-	// Semgrep CE reports some coverage limits only in its human summary rather than
-	// in the JSON paths object. Treat those explicit limits as PARTIAL so a required
-	// gate never claims a full scan when files were skipped or the target set was
-	// restricted to git-tracked files. A skip caused solely by a declared
-	// --exclude is part of the requested scope, not a coverage gap.
-	if semgrepCoverageGap(string(stderr)) {
-		exec.Coverage = CoveragePartial
-		reason := "semgrep reported skipped or restricted targets; coverage is partial"
-		if detail := semgrepCoverageDetail(string(stderr)); detail != "" {
-			reason += ": " + detail
+		if exec.Coverage == CoverageComplete {
+			exec.Coverage = CoveragePartial
 		}
-		exec.Diagnostics = append(exec.Diagnostics, reason)
+		exec.Diagnostics = append(exec.Diagnostics, unsupportedSourceDiagnostic(languageCoverage.Unsupported))
 	}
 	for _, e := range report.Errors {
 		exec.Diagnostics = append(exec.Diagnostics, SanitizeText("semgrep error: "+e.Type+": "+e.Message, MaxDiagnosticBytes))
-		exec.Coverage = CoveragePartial
+		if exec.Coverage == CoverageComplete {
+			exec.Coverage = CoveragePartial
+		}
 	}
 	for _, skipped := range report.Paths.Skipped {
 		path, reason := NormalizePath(skipped.Path)
@@ -273,7 +271,9 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 			path = "."
 		}
 		exec.Skipped = append(exec.Skipped, SkippedFile{Path: path, Reason: SanitizeText(reason+" "+skipped.Reason, MaxDiagnosticBytes)})
-		exec.Coverage = CoveragePartial
+		if exec.Coverage == CoverageComplete {
+			exec.Coverage = CoveragePartial
+		}
 	}
 	if req.Scope.Mode == "changed-files" {
 		// The changed-file list is complete for the files it names, but it is not a
@@ -356,46 +356,10 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 // is treated as a coverage gap, including a reason this build does not recognize.
 // A false COMPLETE is worse than a false PARTIAL, so the parser fails closed.
 func semgrepGapReasons(stderr string) []string {
-	var out []string
-	inSkip := false
-	for _, line := range strings.Split(stderr, "\n") {
-		t := strings.TrimSpace(line)
-		if !inSkip {
-			if strings.Contains(t, "Scan skipped:") {
-				inSkip = true
-			}
-			continue
-		}
-		if t == "" {
-			continue
-		}
-		// Skip reasons are bullets. A known top-level summary label ends the
-		// skip block; an unrecognized bullet is still treated as a gap.
-		trimmed := t
-		isBullet := true
-		switch {
-		case strings.HasPrefix(trimmed, "•"):
-			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "•"))
-		case strings.HasPrefix(trimmed, "◦"):
-			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "◦"))
-		case strings.HasPrefix(trimmed, "-"):
-			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
-		default:
-			isBullet = false
-		}
-		if !isBullet {
-			break
-		}
-		if trimmed == "" {
-			continue
-		}
-		if isSemgrepSummaryLabel(trimmed) {
-			break
-		}
-		if strings.HasPrefix(trimmed, "Matching --exclude patterns") {
-			continue
-		}
-		out = append(out, SanitizeText(trimmed, 256))
+	gaps := parseSemgrepCoverageSummary(stderr).gaps()
+	out := make([]string, 0, len(gaps))
+	for _, skip := range gaps {
+		out = append(out, skip.Reason)
 	}
 	return out
 }
@@ -411,7 +375,7 @@ func semgrepCoverageGap(stderr string) bool {
 func isSemgrepSummaryLabel(text string) bool {
 	for _, prefix := range []string{
 		"Findings:", "Rules run:", "Targets scanned:", "Parsed lines:",
-		"Scan skipped:", "For a detailed list", "Ran ",
+		"Scan skipped:", "For a detailed list", "Ran ", "No ignore information",
 	} {
 		if strings.HasPrefix(text, prefix) {
 			return true
@@ -420,11 +384,11 @@ func isSemgrepSummaryLabel(text string) bool {
 	return false
 }
 
-// semgrepCoverageDetail renders the gap reasons so the persisted evidence says
-// why coverage is partial even when the raw stderr diagnostic is truncated by
-// the diagnostic bound.
+// semgrepCoverageDetail renders the gap reasons with their counts so the
+// persisted evidence says why coverage is partial even when the raw stderr
+// diagnostic is truncated by the diagnostic bound.
 func semgrepCoverageDetail(stderr string) string {
-	return strings.Join(semgrepGapReasons(stderr), "; ")
+	return semgrepSkipDetail(parseSemgrepCoverageSummary(stderr).gaps())
 }
 
 func changedSet(scope Scope) map[string]bool {

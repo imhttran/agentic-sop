@@ -211,7 +211,11 @@ type Provenance struct {
 	// LockfileIdentity records the resolved dependency lockfiles and their content
 	// digests for a dependency scan. It is a resume key: a changed lockfile must
 	// invalidate reused evidence even when the database is unchanged.
-	LockfileIdentity      string          `json:"lockfile_identity,omitempty"`
+	LockfileIdentity string `json:"lockfile_identity,omitempty"`
+	// Exclusions records the configured out-of-scope patterns the scan was given.
+	// They are declared scope, not coverage gaps, and are visible as evidence so a
+	// reader can tell a declared exclusion from an unexpected in-scope skip.
+	Exclusions            []string        `json:"exclusions,omitempty"`
 	ConfigurationDigest   string          `json:"configuration_digest"`
 	ContentIdentity       ContentIdentity `json:"content_identity"`
 	PolicyIdentity        string          `json:"policy_identity"`
