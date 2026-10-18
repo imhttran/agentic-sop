@@ -33,8 +33,9 @@
 #
 # Platform behavior:
 #   linux   uses $SOP_TEST_RAM_DIR (default /dev/shm) when it exists, is
-#           writable, and has at least --min-free-mb MiB free; otherwise it
-#           falls back to the system temp directory (with a notice).
+#           writable, permits executing files, and has at least --min-free-mb MiB
+#           free; otherwise it falls back to the system temp directory (with a
+#           notice).
 #   darwin  uses the normal system temp directory (macOS has no /dev/shm).
 #   other   uses the normal system temp directory.
 # No sudo is required on any platform.
@@ -116,6 +117,32 @@ fi
 # system_temp is the ordinary, disk-backed fallback base.
 system_temp="${TMPDIR:-/tmp}"
 
+# ram_dir_executes reports whether files placed under the RAM-backed base can be
+# executed: 0 yes, 1 no (noexec), 2 could not create a probe. Ubuntu mounts
+# /dev/shm with noexec by default, and `go test` runs each test binary from its
+# temporary work directory, so selecting a noexec directory would make the suite
+# fail with "permission denied" rather than run faster.
+ram_dir_executes() {
+  probe_dir=""
+  if ! probe_dir="$(mktemp -d "${ram_dir%/}/sop-test-exec.XXXXXX")"; then
+    return 2
+  fi
+  if ! printf '%s\n' '#!/bin/sh' 'exit 0' > "$probe_dir/probe"; then
+    rm -rf -- "$probe_dir"
+    return 2
+  fi
+  if ! chmod 700 "$probe_dir/probe"; then
+    rm -rf -- "$probe_dir"
+    return 2
+  fi
+  if "$probe_dir/probe" >/dev/null 2>&1; then
+    rm -rf -- "$probe_dir"
+    return 0
+  fi
+  rm -rf -- "$probe_dir"
+  return 1
+}
+
 # --- Choose the base directory ----------------------------------------------
 source="system"
 base="$system_temp"
@@ -140,12 +167,24 @@ elif [ "$platform" = "linux" ] && [ "$no_ram" != "1" ]; then
     free_kb=""
     if free_kb="$(df -Pk "$ram_dir" 2>/dev/null | awk 'NR==2 {print $4}')" && [ -n "$free_kb" ]; then
       need_kb=$((min_free_mb * 1024))
-      if [ "$free_kb" -ge "$need_kb" ]; then
-        source="ram"
-        base="$ram_dir"
-        ram_used="yes"
-      else
+      if [ "$free_kb" -lt "$need_kb" ]; then
         notice="RAM-backed $ram_dir has ${free_kb} KiB free, below the ${min_free_mb} MiB minimum; using $system_temp"
+      else
+        exec_status=0
+        ram_dir_executes || exec_status=$?
+        case "$exec_status" in
+          0)
+            source="ram"
+            base="$ram_dir"
+            ram_used="yes"
+            ;;
+          1)
+            notice="RAM-backed $ram_dir does not permit executing files (noexec); using $system_temp"
+            ;;
+          *)
+            notice="could not verify executability on RAM-backed $ram_dir; using $system_temp"
+            ;;
+        esac
       fi
     else
       notice="could not measure free space on RAM-backed $ram_dir; using $system_temp"

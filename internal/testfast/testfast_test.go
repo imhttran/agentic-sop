@@ -449,3 +449,159 @@ func TestMakefileTargets(t *testing.T) {
 		t.Errorf("Makefile must define a test-fast target delegating to scripts/checks/test-fast.sh")
 	}
 }
+
+// repoRoot is the checkout being tested, relative to this package
+// (internal/testfast).
+func repoRoot(t *testing.T) string {
+	t.Helper()
+	root, err := filepath.Abs(filepath.Join("..", ".."))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return root
+}
+
+// makeDryRun runs `make -n` so the selected recipes are printed (and never
+// executed). It skips when make is unavailable.
+func makeDryRun(t *testing.T, testMode string) result {
+	t.Helper()
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("make is not available")
+	}
+	cmd := exec.Command("make", "-n", "-C", repoRoot(t), "install-ollama-agent", "TEST_MODE="+testMode)
+	var out, errb strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	code := 0
+	if err != nil {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
+			code = ee.ExitCode()
+		} else {
+			t.Fatalf("running make -n: %v", err)
+		}
+	}
+	return result{out.String(), errb.String(), code}
+}
+
+// TestInstallOllamaAgentTestModes proves the installation gate defaults to the
+// ordinary suite, opts into the fast runner explicitly, and keeps every
+// non-test gate in both modes. The install step must come after the gates.
+func TestInstallOllamaAgentTestModes(t *testing.T) {
+	ordinary := makeDryRun(t, "ordinary")
+	if ordinary.code != 0 {
+		t.Fatalf("ordinary: exit %d, stderr:\n%s", ordinary.code, ordinary.stderr)
+	}
+	if !strings.Contains(ordinary.stdout, "go test ./...") {
+		t.Errorf("ordinary mode must run `go test ./...`; output:\n%s", ordinary.stdout)
+	}
+	if strings.Contains(ordinary.stdout, "scripts/checks/test-fast.sh") {
+		t.Errorf("ordinary mode must not invoke the fast runner; output:\n%s", ordinary.stdout)
+	}
+
+	fast := makeDryRun(t, "fast")
+	if fast.code != 0 {
+		t.Fatalf("fast: exit %d, stderr:\n%s", fast.code, fast.stderr)
+	}
+	if !strings.Contains(fast.stdout, "scripts/checks/test-fast.sh") {
+		t.Errorf("fast mode must invoke scripts/checks/test-fast.sh; output:\n%s", fast.stdout)
+	}
+
+	gates := []string{"go fmt ./...", "go vet ./...", "go build ./...", "build-claude-plugin.sh --check"}
+	plainTest := regexp.MustCompile(`(?m)^\tgo test \./\.\.\.$`)
+	for name, out := range map[string]string{"ordinary": ordinary.stdout, "fast": fast.stdout} {
+		for _, gate := range gates {
+			if !strings.Contains(out, gate) {
+				t.Errorf("%s mode is missing the %q gate; output:\n%s", name, gate, out)
+			}
+		}
+		if name == "fast" && plainTest.MatchString(out) {
+			t.Errorf("fast mode must not run the plain test target; output:\n%s", out)
+		}
+		installAt := strings.Index(out, "install-sop-ollama-agent.sh")
+		lastGateAt := -1
+		for _, gate := range gates {
+			if i := strings.Index(out, gate); i > lastGateAt {
+				lastGateAt = i
+			}
+		}
+		if installAt < 0 || lastGateAt < 0 || installAt < lastGateAt {
+			t.Errorf("%s mode must install only after the gates; output:\n%s", name, out)
+		}
+	}
+}
+
+// TestInstallOllamaAgentStopsWhenGateFails runs the real target with a fake go
+// whose test invocation fails. In both modes the gate must stop make before the
+// installer, and the configured install path must stay absent.
+func TestInstallOllamaAgentStopsWhenGateFails(t *testing.T) {
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("make is not available")
+	}
+
+	fakeDir := t.TempDir()
+	logPath := filepath.Join(t.TempDir(), "go.log")
+	fakeGo := filepath.Join(fakeDir, "go")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$MOCK_GO_LOG\"\ncase \"$1\" in\n  test) exit 1 ;;\nesac\nexit 0\n"
+	if err := os.WriteFile(fakeGo, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, mode := range []string{"ordinary", "fast"} {
+		t.Run(mode, func(t *testing.T) {
+			dest := filepath.Join(t.TempDir(), "sop-ollama-agent")
+			args := []string{"-C", repoRoot(t), "install-ollama-agent"}
+			if mode == "fast" {
+				args = append(args, "TEST_MODE=fast")
+			}
+			cmd := exec.Command("make", args...)
+			cmd.Env = append(os.Environ(),
+				"PATH="+fakeDir+":"+os.Getenv("PATH"),
+				"MOCK_GO_LOG="+logPath,
+				"SOP_OLLAMA_AGENT_BIN="+dest,
+			)
+			var out, errb strings.Builder
+			cmd.Stdout = &out
+			cmd.Stderr = &errb
+			if err := cmd.Run(); err == nil {
+				t.Fatalf("expected make to fail when the test gate fails, output:\n%s%s", out.String(), errb.String())
+			}
+			if _, err := os.Stat(dest); !os.IsNotExist(err) {
+				t.Fatalf("the installer ran despite a failed gate (stat %s: %v)", dest, err)
+			}
+		})
+	}
+
+	logged, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("the fake go was never invoked: %v", err)
+	}
+	if !strings.Contains(string(logged), "test ./...") {
+		t.Errorf("the test gate was never reached; fake go log:\n%s", logged)
+	}
+}
+
+// TestInstallOllamaAgentRejectsInvalidTestMode runs the real target (which is
+// safe for an invalid mode: it only prints an error) and proves an unknown mode
+// fails before the gates and before the installer.
+func TestInstallOllamaAgentRejectsInvalidTestMode(t *testing.T) {
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("make is not available")
+	}
+	cmd := exec.Command("make", "-C", repoRoot(t), "install-ollama-agent", "TEST_MODE=bogus")
+	var out, errb strings.Builder
+	cmd.Stdout = &out
+	cmd.Stderr = &errb
+	err := cmd.Run()
+	if err == nil {
+		t.Fatalf("expected a non-zero exit for an invalid TEST_MODE, output:\n%s%s", out.String(), errb.String())
+	}
+	both := out.String() + errb.String()
+	if !strings.Contains(both, "invalid TEST_MODE 'bogus'") {
+		t.Errorf("expected a clear invalid-mode error, got:\n%s", both)
+	}
+	if strings.Contains(both, "install-sop-ollama-agent.sh") {
+		t.Errorf("the installer must not run for an invalid TEST_MODE, got:\n%s", both)
+	}
+}

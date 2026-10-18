@@ -134,8 +134,19 @@ make install-all         # ./install.sh --all
 make install-skills      # the skill roots, without rebuilding the CLI
 make install-plugin      # prepare the Claude plugin package
 make check               # fmt, vet, test, build, plugin package current
+make check-fast          # the same gates, with the RAM-backed fast test runner
+make install-ollama-agent # gates, then install the pinned sop-ollama-agent
 make plugin              # regenerate the plugin package from skills/
 ```
+
+The `make install-ollama-agent` gate runs the ordinary, disk-backed test suite by
+default. Use `make install-ollama-agent TEST_MODE=fast` to run the same full suite
+through `scripts/checks/test-fast.sh` instead. Any other `TEST_MODE` value is
+rejected before the gates and the installer run. On Linux the fast runner uses
+RAM-backed `/dev/shm` when it has enough free space and falls back to the system
+temp directory with a logged reason otherwise; on macOS it uses the system temp
+directory. See [DEVELOPMENT.md](DEVELOPMENT.md#fast-test-runs-make-test-fast) for
+the storage, parallelism, and timeout details.
 
 `scripts/install.sh` remains a thin wrapper around `./install.sh`, so an older workflow
 that calls it keeps working.

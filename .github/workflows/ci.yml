@@ -35,8 +35,17 @@ jobs:
         run: go vet ./...
       - name: build
         run: go build ./...
-      - name: test
-        run: go test ./...
+      # The full ordinary suite, through the fast runner. On Linux the runner keeps
+      # each test's temporary SQLite database on RAM-backed /dev/shm when it fits;
+      # the wrapper falls back to the system temp directory (and says why) when it
+      # does not. Parallelism matches the four-core runner and the timeout matches
+      # go test's default, so this is the same suite under the same limits. The
+      # race-detector job below remains the separate, disk-backed -race run.
+      - name: test (RAM-backed TMPDIR)
+        env:
+          SOP_TEST_PARALLEL: "4"
+          SOP_TEST_TIMEOUT: "10m"
+        run: ./scripts/checks/test-fast.sh
       - name: documentation links
         run: bash scripts/checks/check-doc-links.sh
 
