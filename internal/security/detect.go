@@ -99,6 +99,9 @@ type AdapterCandidate struct {
 	Rules string `json:"rules,omitempty"`
 	// Status is the capability status for this candidate.
 	Status CapabilityStatus `json:"status"`
+	// Reason explains a missing prerequisite or unsupported capability without
+	// changing the status vocabulary.
+	Reason string `json:"reason,omitempty"`
 	// Disabled reports that configuration disabled this adapter. A disabled
 	// adapter is visible but never counted as passed coverage.
 	Disabled bool `json:"disabled,omitempty"`
@@ -645,6 +648,9 @@ func SelectCandidatesWithDatabases(detection Detection, configured []config.Secu
 			deps.Status = CapabilityAvailable
 		} else {
 			deps.Status = CapabilityProposed
+			if strings.TrimSpace(raw.Version) == "" {
+				deps.Reason = "cargo-audit requires an exact version pin"
+			}
 		}
 		out = append(out, deps)
 	}
@@ -683,6 +689,9 @@ func SelectCandidatesWithDatabases(detection Detection, configured []config.Secu
 			osv.Status = CapabilityAvailable
 		} else {
 			osv.Status = CapabilityProposed
+			if strings.TrimSpace(raw.Version) == "" {
+				osv.Reason = "osv-scanner requires an exact version pin"
+			}
 		}
 		out = append(out, osv)
 	}
@@ -823,10 +832,67 @@ func ClassifyCapabilitiesWithDatabases(detection Detection, configured []config.
 				candidate.Status = CapabilityAvailable
 			}
 		}
+		if candidate.Status != CapabilityAvailable {
+			candidate.Reason = capabilityReason(id, raw, detection, advisoryDatabasePath, osvDatabasePath)
+		}
 		out = append(out, candidate)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
+}
+
+func capabilityReason(id string, raw config.SecurityAdapterConfig, detection Detection, advisoryDatabasePath, osvDatabasePath string) string {
+	switch id {
+	case AdapterIDSemgrep:
+		if len(detection.Languages) == 0 {
+			return "no Go or Rust source detected"
+		}
+		if strings.TrimSpace(raw.Rules) == "" {
+			return "local Semgrep rules are not configured"
+		}
+		if covered, err := coveredLanguages(raw.Rules, detection.Languages); err != nil || len(covered) == 0 {
+			return "local Semgrep rules do not cover the detected source languages"
+		}
+		if !executableResolvable(raw.Command) {
+			return "scanner executable is unavailable"
+		}
+	case AdapterIDCargoAudit:
+		if !detection.HasLanguage(LanguageRust) || !detection.HasPresentLockfile(LanguageRust) {
+			return "no Rust content with a Cargo.lock"
+		}
+		if strings.TrimSpace(raw.Version) == "" {
+			return "cargo-audit requires an exact version pin"
+		}
+		database := firstNonEmpty(raw.Database, advisoryDatabasePath)
+		if strings.TrimSpace(database) == "" || !databaseAvailable(database, detection.workspaceRoot()) {
+			return "cargo-audit advisory database is not configured or unavailable"
+		}
+		if !executableResolvable(raw.Command) {
+			return "scanner executable is unavailable"
+		}
+	case AdapterIDOSVScanner:
+		if len(selectedOSVLanguages(detection, raw)) == 0 {
+			return "no go.mod or Cargo.lock inputs for the selected languages"
+		}
+		if strings.TrimSpace(raw.Version) == "" {
+			return "osv-scanner requires an exact version pin"
+		}
+		database := firstNonEmpty(raw.Database, osvDatabasePath)
+		if strings.TrimSpace(database) == "" || !osvDatabaseAvailable(database, detection.workspaceRoot(), selectedOSVLanguages(detection, raw)) {
+			return "OSV offline database is not configured or unavailable"
+		}
+		if !executableResolvable(raw.Command) {
+			return "scanner executable is unavailable"
+		}
+	default:
+		if !candidateSupportedFor(id, detection) {
+			return "detected content is not supported by this adapter"
+		}
+		if !executableResolvable(raw.Command) {
+			return "scanner executable is unavailable"
+		}
+	}
+	return ""
 }
 
 func capabilityForSemgrep(detection Detection, raw config.SecurityAdapterConfig) CapabilityStatus {

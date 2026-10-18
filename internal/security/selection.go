@@ -429,26 +429,34 @@ func aggregateLanguageState(languages []LanguageCoverage) CoverageState {
 	if len(languages) == 0 {
 		return CoverageStateUnconfigured
 	}
-	state := CoverageStateCovered
+	present := map[CoverageState]bool{}
 	for _, language := range languages {
-		switch language.State {
-		case CoverageStateFailed, CoverageStateUnsupported:
-			return language.State
-		case CoverageStateDisabled:
-			if state == CoverageStateCovered {
-				state = CoverageStateDisabled
-			}
-		case CoverageStateMissing:
-			if state == CoverageStateCovered || state == CoverageStateDisabled {
-				state = CoverageStateMissing
-			}
-		case CoverageStatePartial:
-			if state == CoverageStateCovered {
-				state = CoverageStatePartial
-			}
-		}
+		present[language.State] = true
 	}
-	return state
+	// Deterministic precedence, independent of language order. A category is
+	// covered only when every applicable unit is covered; a mix of covered and
+	// unconfigured units is partial, not covered.
+	switch {
+	case present[CoverageStateFailed]:
+		return CoverageStateFailed
+	case present[CoverageStateUnsupported]:
+		return CoverageStateUnsupported
+	case present[CoverageStateMissing]:
+		return CoverageStateMissing
+	case present[CoverageStateDisabled]:
+		return CoverageStateDisabled
+	case present[CoverageStatePartial]:
+		return CoverageStatePartial
+	case present[CoverageStateUnconfigured] && present[CoverageStateCovered]:
+		return CoverageStatePartial
+	case present[CoverageStateUnconfigured]:
+		return CoverageStateUnconfigured
+	case present[CoverageStateCovered]:
+		return CoverageStateCovered
+	default:
+		// Unknown internal state is fail-closed rather than treated as covered.
+		return CoverageStateUnconfigured
+	}
 }
 
 func adapterIDsFor(adapters []SelectedAdapter, category Category, language Language, repositoryWide bool) []string {

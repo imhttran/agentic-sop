@@ -203,6 +203,146 @@ security:
 	}
 }
 
+func TestSecurityScanAllAdaptersDisabled(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+project:
+  name: x
+security:
+  enabled: true
+  mode: report-only
+  adapters:
+    - id: semgrep
+      category: sast
+      command: [semgrep]
+      enabled: false
+    - id: gitleaks
+      category: secrets
+      command: [gitleaks]
+      enabled: false
+    - id: osv-scanner
+      category: dependencies
+      command: [osv-scanner]
+      enabled: false
+`)
+	writeFile(t, dir, "go.mod", "module example.com/app\n\ngo 1.21\n")
+	writeFile(t, dir, "main.go", "package main\n")
+
+	code, stdout, stderr := runCLI(t, dir, "security", "scan", "--json", "--run-id", "all-disabled")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var out struct {
+		Scan struct {
+			Verdict        string                  `json:"verdict"`
+			Adapters       []securityExecutionView `json:"adapters"`
+			CoverageReport []securityCoverageView  `json:"coverage_by_category"`
+			Reasons        []string                `json:"reasons"`
+		} `json:"scan"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if out.Scan.Verdict != "INDETERMINATE" {
+		t.Fatalf("verdict = %s, want INDETERMINATE", out.Scan.Verdict)
+	}
+	if !containsReason(out.Scan.Reasons, "every adapter is disabled") {
+		t.Fatalf("reasons = %v, want all-disabled explanation", out.Scan.Reasons)
+	}
+	if len(out.Scan.Adapters) != 3 {
+		t.Fatalf("adapters = %+v, want three disabled records", out.Scan.Adapters)
+	}
+	for _, adapter := range out.Scan.Adapters {
+		if !adapter.Disabled || adapter.Status != "SKIPPED" {
+			t.Fatalf("adapter = %+v, want SKIPPED disabled evidence", adapter)
+		}
+	}
+	states := map[string]string{}
+	for _, category := range out.Scan.CoverageReport {
+		states[category.Category] = category.State
+	}
+	for _, category := range []string{"sast", "secrets", "dependencies"} {
+		if states[category] != "disabled" {
+			t.Fatalf("%s coverage = %q, want disabled in %+v", category, states[category], out.Scan.CoverageReport)
+		}
+	}
+
+	code, human, stderr := runCLI(t, dir, "security", "scan", "--run-id", "all-disabled-human")
+	if code != exitOK {
+		t.Fatalf("human code=%d stderr=%s", code, stderr)
+	}
+	if !strings.Contains(human, "INDETERMINATE") || !strings.Contains(human, "disabled") {
+		t.Fatalf("human output does not show disabled coverage honestly:\n%s", human)
+	}
+	if strings.Contains(human, "security: PASS") {
+		t.Fatalf("human output reported disabled coverage as PASS:\n%s", human)
+	}
+}
+
+func TestSecurityScanRequiredAllDisabledConfigRejected(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+project:
+  name: x
+security:
+  enabled: true
+  mode: required
+  required_categories: [dependencies]
+  adapters:
+    - id: osv-scanner
+      category: dependencies
+      command: [osv-scanner]
+      enabled: false
+`)
+	code, stdout, stderr := runCLI(t, dir, "security", "scan")
+	if code == exitOK {
+		t.Fatalf("required all-disabled configuration exited OK: %s", stdout)
+	}
+	if !strings.Contains(stderr, "every configured adapter for it is disabled") {
+		t.Fatalf("stderr = %q, want the disabled required-category error", stderr)
+	}
+}
+
+func TestSecurityInspectReportsPartialWhenLanguageUnconfigured(t *testing.T) {
+	dir := t.TempDir()
+	writeConfig(t, dir, `
+project:
+  name: x
+security:
+  enabled: true
+  adapters:
+    - id: semgrep
+      category: sast
+      command: [semgrep]
+      languages: [go]
+`)
+	writeFile(t, dir, "go.mod", "module example.com/app\n\ngo 1.21\n")
+	writeFile(t, dir, "main.go", "package main\n")
+	writeFile(t, dir, "Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\n")
+	writeFile(t, dir, "main.rs", "fn main() {}\n")
+
+	code, stdout, stderr := runCLI(t, dir, "security", "inspect", "--json")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var out struct {
+		Coverage []securityCoverageView `json:"coverage"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	for _, category := range out.Coverage {
+		if category.Category != "sast" {
+			continue
+		}
+		if category.State != "partial" {
+			t.Fatalf("SAST coverage = %s, want partial (%+v)", category.State, category.Languages)
+		}
+		return
+	}
+	t.Fatalf("SAST coverage was not reported: %+v", out.Coverage)
+}
+
 func containsReason(reasons []string, want string) bool {
 	for _, reason := range reasons {
 		if strings.Contains(reason, want) {

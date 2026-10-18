@@ -132,6 +132,12 @@ Precedence is deterministic:
 7. Overlapping explicit coverage is allowed, is reported in `overlaps`, and both
    adapters run. Findings remain separate.
 
+Automatic selection does not invent an OSV-Scanner version pin. An automatic OSV
+candidate without a configured pin is reported `unsupported` with the pin
+prerequisite; required-mode readiness fails closed, and the scan is not described
+as ready. Version verification is never weakened, and no scan downloads a tool or
+database.
+
 A pointer distinguishes an omitted enable value from an explicit `false`. An
 omitted value is not written back into configuration.
 

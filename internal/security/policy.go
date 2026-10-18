@@ -112,6 +112,12 @@ func EvaluatePolicyWithDetection(execs []Execution, policy Policy, detection *De
 		if len(execs) > 0 {
 			out.Verdict = VerdictIndeterminate
 			out.Reasons = append(out.Reasons, "security add-on is enabled but every adapter is disabled")
+			if policy.Mode == "required" {
+				for _, raw := range policy.RequiredCategories {
+					category := strings.ToLower(strings.TrimSpace(raw))
+					out.Reasons = append(out.Reasons, fmt.Sprintf("required category %s coverage is disabled", category))
+				}
+			}
 		} else {
 			out.Verdict = VerdictIndeterminate
 			out.Reasons = append(out.Reasons, "security add-on is enabled but no adapter produced evidence")

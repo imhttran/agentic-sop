@@ -146,6 +146,12 @@ legacy cargo-audit choice. OSV for Rust requires an explicit selection so
 overlapping automatic coverage is not run twice. Go-only Semgrep rules are never
 applied to Rust source; the adapter reports unsupported coverage.
 
+Automatic OSV selection does not invent a version pin. Without an explicitly
+configured `osv-scanner` adapter carrying `version`, inspection reports
+`unsupported` with `osv-scanner requires an exact version pin`, required-mode
+readiness is not ready, and the scan fails closed. Configure the OSV adapter
+explicitly with its `version` before relying on OSV coverage.
+
 ### Selecting scanners by capability and language
 
 Selection is deterministic and keeps three things separate:
