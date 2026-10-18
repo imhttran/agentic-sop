@@ -196,6 +196,43 @@ content identity, policy identity, and sanitized native-report digest.
   Rust scope is a small selected set of syntactic checks, not comprehensive Rust
   security analysis.
 
+#### Exclusions and coverage evidence
+
+Coverage evidence is the scanner's own report of what it skipped. It is
+independent of the findings verdict: `COMPLETE` means the declared supported scope
+was scanned, not that it is free of vulnerabilities.
+
+- Declared `security.exclude` patterns are scope, not gaps. They are passed to the
+  scanner as `--exclude`, recorded in `scope.excluded`, and recorded in provenance
+  (`exclusions`). A skip attributed to a declared pattern is reported as declared
+  out-of-scope and does not by itself make coverage `PARTIAL`.
+- Every other skip inside the declared scope MUST make coverage `PARTIAL`. This
+  includes `.semgrepignore` matches (Semgrep defaults and repository content),
+  targets over the scanner's size limit, a target set restricted to git-tracked
+  files, and any skip reason this build does not recognize.
+- Missing, truncated, or unrecognized summary evidence MUST make coverage
+  `UNKNOWN`, which the policy verdict reports as `INDETERMINATE`. A missing or
+  unparseable summary never becomes `COMPLETE`.
+- `COMPLETE` requires a recognized, terminated coverage summary and no in-scope
+  skip. A summary that reports zero scanned targets while source languages were
+  detected is `UNKNOWN`.
+- Coverage MUST NOT be improved by widening exclusions. Adding an exclusion to
+  obtain `COMPLETE` removes content from the declared scope; that is a scope
+  decision, not a coverage fix.
+- Observed skip reasons and counts are preserved as evidence. Target details are
+  never invented beyond what the scanner reported.
+- Generated output, vendored content, fixtures, and legacy or non-production trees
+  are in scope by default. Excluding them requires an explicit `security.exclude`
+  entry and a recorded reason; otherwise their skips are coverage gaps.
+
+#### Coverage conformance
+
+The adapter depends on Semgrep's human summary (the `Scan Summary` section, the
+`Targets scanned:` count, the `Scan skipped:` reasons, and the closing `Ran ...`
+line) because the JSON report does not expose those skip classes. A conformance
+test runs the pinned scanner over no-skip, `.semgrepignore`, oversized, and
+declared-exclusion fixtures and fails when that contract changes.
+
 ### Gitleaks (`secrets`)
 
 - Invokes `gitleaks detect --source <root> --no-git --redact --report-format
