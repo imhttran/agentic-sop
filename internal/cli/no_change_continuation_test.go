@@ -146,6 +146,49 @@ func TestRunTransientProviderFailureStillRetries(t *testing.T) {
 	}
 }
 
+// TestRunUnchangedFailureIsNotRetriedAgain proves the production recovery seam
+// refuses a blind repeat: the first identical transient failure requeues, but the
+// second identical failure becomes one actionable NO_PROGRESS block with a durable
+// blocker report instead of another retry.
+func TestRunUnchangedFailureIsNotRetriedAgain(t *testing.T) {
+	dir := budgetGraph(t)
+	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: "ollama returned an empty response"}}
+
+	if code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError || !strings.Contains(stdout, "RETRY (requeued)") {
+		t.Fatalf("first attempt: code=%d stdout=%s", code, stdout)
+	}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("second attempt: code=%d want %d", code, exitError)
+	}
+	if !strings.Contains(stdout, "BLOCKED (NO_PROGRESS)") || strings.Contains(stdout, "RETRY (requeued)") {
+		t.Errorf("second attempt stdout = %q, want a terminal no-progress block", stdout)
+	}
+	if !strings.Contains(stderr, "NO_PROGRESS") && !strings.Contains(stdout, "NO_PROGRESS") {
+		t.Errorf("output does not name NO_PROGRESS: stdout=%s stderr=%s", stdout, stderr)
+	}
+
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	got, err := st.Get("S001")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Status != domain.BLOCKED || got.BlockedReason != domain.NO_PROGRESS {
+		t.Errorf("task = %s/%s, want BLOCKED/NO_PROGRESS", got.Status, got.BlockedReason)
+	}
+	if _, err := os.Stat(filepath.Join(dir, stateDirName, "runs", "S001", blockerReportName)); err != nil {
+		t.Errorf("blocker report not written: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, stateDirName, "runs", "S001", recoveryJournalName)); err != nil {
+		t.Errorf("recovery journal not written: %v", err)
+	}
+}
+
 // TestRunCompletedMutatingImplementationStillPasses is requirement 8: an ordinary
 // successful implementation is unchanged by the continuation handling.
 func TestRunCompletedMutatingImplementationStillPasses(t *testing.T) {

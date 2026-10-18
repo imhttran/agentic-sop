@@ -402,6 +402,41 @@ func recordApprovalDecisionActivity(projectDir, taskID string, approved bool, no
 	rec.Emit(activity.StageApproval, action, oneLine(note))
 }
 
+// exitApprovalBlocked is an internal sentinel: a scheduled task was stopped by a
+// persisted approval decision before any work. The graph driver maps it to a
+// normal error and stops immediately, so a recovered task cannot re-run the same
+// gate until the backstop.
+const exitApprovalBlocked = -2
+
+// approvalExecutionGate blocks a scheduled task BEFORE any implementation work
+// when its persisted approval head is PENDING or DECLINED. It is read-only and
+// non-destructive: it never creates a run, resets a stage, or spends a budget, so
+// resolving the gate leaves the task exactly where the operator found it.
+//
+// An APPROVED head permits execution. A declined head does not: a decline is a
+// decision, not a missing decision, and re-running must not turn it into work.
+func approvalExecutionGate(projectDir string, task *domain.Task, stdout, stderr io.Writer) int {
+	if task == nil {
+		return exitOK
+	}
+	rec := runpkg.At(runpkg.Dir(projectDir, task.ID))
+	req, ok := rec.Approval()
+	if !ok || req.TaskID != task.ID {
+		return exitOK
+	}
+	switch req.Status {
+	case domain.ApprovalPending:
+		fmt.Fprintf(stdout, "%s WAITING_FOR_APPROVAL: %s\n", task.ID, oneLine(req.Reason))
+		fmt.Fprintf(stdout, "Approve with: sop approve %s\n", task.ID)
+		return exitApprovalBlocked
+	case domain.ApprovalDeclined:
+		fmt.Fprintf(stderr, "%s BLOCKED (approval declined): %s\n", task.ID, oneLine(req.Reason))
+		fmt.Fprintln(stderr, "A declined approval does not execute; request a new decision before retrying.")
+		return exitApprovalBlocked
+	}
+	return exitOK
+}
+
 // currentApprovalBoundary reports the CURRENT task run's structured approval
 // boundary, if any: an active (unresolved) approval request SOP recorded for the
 // task, or a persisted WAITING_FOR_HUMAN run stage from the previous invocation.

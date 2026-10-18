@@ -50,6 +50,7 @@ func runEval(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "eval: %v\n", err)
 		return exitError
 	}
+	applyCargoAgentTool(d, cfg)
 	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		fmt.Fprintf(stderr, "eval: %v\n", err)

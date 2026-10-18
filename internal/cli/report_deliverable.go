@@ -41,6 +41,21 @@ func planTaskAcceptanceChecks(dir string, task *domain.Task) []string {
 	return stage.AcceptanceChecks
 }
 
+// planTaskAcceptanceMapping recovers the plan-declared acceptance mapping (SOP-003)
+// through the same stage reconciliation, rendered as task-file mapping lines. A
+// missing/mismatched plan yields nil: a legacy task with no mapping.
+func planTaskAcceptanceMapping(dir string, task *domain.Task) []string {
+	stage, ok := planTaskStage(dir, task)
+	if !ok {
+		return nil
+	}
+	var out []string
+	for _, m := range stage.AcceptanceMapping {
+		out = append(out, m.String())
+	}
+	return out
+}
+
 // planTaskStage reads the persisted plan and returns the stage that reconciles
 // with the task by identity (ID + Objective + AcceptanceCriteria). It reports
 // ok=false when the plan is absent, invalid, or no stage matches — the single

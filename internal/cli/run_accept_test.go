@@ -12,6 +12,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/github"
+	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -22,7 +23,8 @@ import (
 // runAcceptanceArgv seam, and its verdict is recorded in outcome.json and
 // report.md. A passing SAFE check yields VERIFIED with the check's criterion
 // listed; a failing SAFE check yields PARTIAL with the failure evidence; an
-// unauthorized (non-SAFE, shell-syntax) check yields HOLD and is never executed.
+// unauthorized (non-SAFE, shell-syntax) check is a SOP-002 setup blocker and is
+// never executed.
 //
 // A stage always declares free-text acceptance criteria (Plan.Validate requires at
 // least one), and the persisted task is seeded with the newline-joined criteria so
@@ -76,7 +78,14 @@ func seededTaskCriteria() string {
 // one item.
 func planWithChecks(t *testing.T, dir, checks string) {
 	t.Helper()
+	planWithMapping(t, dir, checks, nil)
+}
+
+// planWithMapping is planWithChecks with an explicit SOP-003 acceptance mapping.
+func planWithMapping(t *testing.T, dir, checks string, mapping []planner.AcceptanceMapping) {
+	t.Helper()
 	stage := planner.Stage{
+		AcceptanceMapping:  mapping,
 		ID:                 "T001",
 		Title:              "Acceptance",
 		Objective:          "Do it.",
@@ -197,7 +206,7 @@ func scheduledAcceptanceFixture(t *testing.T) string {
 // as informational.
 func TestScheduledAcceptancePassingCheckVerified(t *testing.T) {
 	dir := scheduledAcceptanceFixture(t)
-	planWithChecks(t, dir, "go vet ./...")
+	planWithMapping(t, dir, "go vet ./...", []planner.AcceptanceMapping{{Criterion: 1, Check: 1}})
 	task := reconcilePlanTask(t, dir)
 
 	code, out := runScheduledAcceptance(t, dir, task)
@@ -214,17 +223,128 @@ func TestScheduledAcceptancePassingCheckVerified(t *testing.T) {
 	if !strings.Contains(report, "go vet ./...") {
 		t.Errorf("report.md does not list the check's criterion:\n%s", report)
 	}
-	if !strings.Contains(report, "informational") {
-		t.Errorf("report.md does not list the free-text criterion as informational:\n%s", report)
+	if !strings.Contains(report, "- Validation: passed") {
+		t.Errorf("report.md does not record validation separately:\n%s", report)
 	}
 }
 
-// TestScheduledAcceptancePassingGoTestCheckVerified proves a `go test` check that
-// runs a passing test contributes to VERIFIED.
+// TestScheduledAcceptanceLegacyPlanCompatibility proves a legacy plan (checks but no
+// acceptance mapping) whose check passes records PARTIAL with the actionable
+// compatibility result instead of a silent VERIFIED, and still completes.
+func TestScheduledAcceptanceLegacyPlanCompatibility(t *testing.T) {
+	dir := scheduledAcceptanceFixture(t)
+	planWithChecks(t, dir, "go vet ./...")
+	task := reconcilePlanTask(t, dir)
+
+	code, out := runScheduledAcceptance(t, dir, task)
+	if code != exitOK {
+		t.Fatalf("code=%d out=%s", code, out)
+	}
+	if got := outcomeArtifactStatus(t, dir, "T001"); got != "PARTIAL" {
+		t.Errorf("outcome.json status = %q, want PARTIAL", got)
+	}
+	if report := outcomeReport(t, dir, "T001"); !strings.Contains(report, "- Compatibility: legacy plan") || !strings.Contains(report, "Acceptance Mapping") {
+		t.Errorf("report.md missing the actionable compatibility result:\n%s", report)
+	}
+}
+
+// TestScheduledAcceptanceMappedFailureNeedsHuman proves a mapped stage whose
+// mapped check fails, or whose manual criterion has no accepting decision, does not
+// complete: it stops at NEEDS_HUMAN with the unmet criterion named.
+func TestScheduledAcceptanceMappedFailureNeedsHuman(t *testing.T) {
+	for name, tc := range map[string]struct {
+		checks  string
+		mapping []planner.AcceptanceMapping
+	}{
+		"failed check":      {"go vet ./nosuchpkg", []planner.AcceptanceMapping{{Criterion: 1, Check: 1}}},
+		"unaccepted manual": {"", []planner.AcceptanceMapping{{Criterion: 1, Manual: "reviewer confirms"}}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := scheduledAcceptanceFixture(t)
+			planWithMapping(t, dir, tc.checks, tc.mapping)
+			task := reconcilePlanTask(t, dir)
+
+			_, out := runScheduledAcceptance(t, dir, task)
+			if got := outcomeArtifactStatus(t, dir, "T001"); got != "PARTIAL" {
+				t.Errorf("outcome.json status = %q, want PARTIAL", got)
+			}
+			if strings.Contains(out, "T001 LOCAL_DONE") || !strings.Contains(out, "T001 NEEDS_HUMAN") || !strings.Contains(out, "required criterion criterion-1 not met") {
+				t.Errorf("task must stop at NEEDS_HUMAN naming criterion-1; out=%s", out)
+			}
+		})
+	}
+}
+
+// TestScheduledAcceptanceRecordedWaiverAllowsAdvancement proves a valid,
+// designated-approver waiver is consulted by the real scheduled lifecycle and
+// clears a mapped stage's unmet evidence without resetting state or budgets.
+func TestScheduledAcceptanceRecordedWaiverAllowsAdvancement(t *testing.T) {
+	dir := scheduledAcceptanceFixture(t)
+	writeConfig(t, dir, "version: 1\nproject:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nhuman:\n  designated_approvers:\n    - operator\n")
+	planWithMapping(t, dir, "go vet ./nosuchpkg", []planner.AcceptanceMapping{{Criterion: 1, Check: 1}})
+	task := reconcilePlanTask(t, dir)
+
+	if code, out := runScheduledAcceptance(t, dir, task); code == exitOK {
+		t.Fatalf("the failing mapped check completed: %s", out)
+	}
+	// The failure is now an explicit approval boundary. Approving is the operator
+	// decision that permits the recovery attempt; the waiver then clears the mapped
+	// evidence without editing state or resetting a budget.
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve pending request: code=%d stderr=%s", code, stderr)
+	}
+	res, err := readOutcomeArtifact(dir, "T001")
+	if err != nil || res == nil {
+		t.Fatalf("read outcome: %v %+v", err, res)
+	}
+	if _, err := recordWaiver(dir, "T001", res, "criterion-1", "", "the check is environment-unavailable", "operator"); err != nil {
+		t.Fatalf("record waiver: %v", err)
+	}
+
+	code, out := runScheduledAcceptance(t, dir, task)
+	if code != exitOK || !strings.Contains(out, "T001 LOCAL_DONE") {
+		t.Fatalf("waived stage did not advance: code=%d out=%s", code, out)
+	}
+	res, _ = readOutcomeArtifact(dir, "T001")
+	if res == nil || !res.Waived || res.Status != outcome.Partial {
+		t.Fatalf("waived outcome = %+v, want PARTIAL with Waived=true", res)
+	}
+}
+
+// TestScheduledAcceptanceRecordedManualDecisionAllowsAdvancement proves a
+// manual-evidence decision recorded through the audit is bound to the reviewed
+// criterion and attempt and is consumed by the real scheduled lifecycle.
+func TestScheduledAcceptanceRecordedManualDecisionAllowsAdvancement(t *testing.T) {
+	dir := scheduledAcceptanceFixture(t)
+	writeConfig(t, dir, "version: 1\nproject:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n  test:\n    - \"true\"\nhuman:\n  designated_approvers:\n    - operator\n")
+	planWithMapping(t, dir, "", []planner.AcceptanceMapping{{Criterion: 1, Manual: "reviewer reads docs/x.md"}})
+	task := reconcilePlanTask(t, dir)
+	task.Attempt = 1
+
+	if code, out := runScheduledAcceptance(t, dir, task); code == exitOK {
+		t.Fatalf("the unaccepted manual criterion completed: %s", out)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve pending request: code=%d stderr=%s", code, stderr)
+	}
+	res, err := readOutcomeArtifact(dir, "T001")
+	if err != nil || res == nil {
+		t.Fatalf("read outcome: %v %+v", err, res)
+	}
+	if _, err := recordAcceptanceDecision(dir, "T001", res, "criterion-1", "read docs/x.md", "operator"); err != nil {
+		t.Fatalf("record acceptance decision: %v", err)
+	}
+
+	code, out := runScheduledAcceptance(t, dir, task)
+	if code != exitOK || !strings.Contains(out, "T001 LOCAL_DONE") {
+		t.Fatalf("accepted manual decision did not advance: code=%d out=%s", code, out)
+	}
+}
+
 func TestScheduledAcceptancePassingGoTestCheckVerified(t *testing.T) {
 	dir := scheduledAcceptanceFixture(t)
 	writeFile(t, dir, "t_test.go", "package t\n\nimport \"testing\"\n\nfunc TestT(t *testing.T) {}\n")
-	planWithChecks(t, dir, "go test ./...")
+	planWithMapping(t, dir, "go test ./...", []planner.AcceptanceMapping{{Criterion: 1, Check: 1}})
 	task := reconcilePlanTask(t, dir)
 
 	_, out := runScheduledAcceptance(t, dir, task)
@@ -323,10 +443,11 @@ func TestScheduledAcceptanceFailingCheckPartial(t *testing.T) {
 	}
 }
 
-// TestScheduledAcceptanceUnauthorizedCheckHolds proves each unauthorized (non-SAFE)
-// check yields HOLD and is never executed: the marker file it would have created
-// does not exist after the run.
-func TestScheduledAcceptanceUnauthorizedCheckHolds(t *testing.T) {
+// TestScheduledAcceptanceUnauthorizedCheckBlocksAtPreflight proves each
+// unauthorized (non-SAFE) check is a SOP-002 setup blocker reported before the
+// agent runs, and is never executed: neither the agent's file nor the marker file
+// the check would have created exists after the run.
+func TestScheduledAcceptanceUnauthorizedCheckBlocksAtPreflight(t *testing.T) {
 	for _, check := range []string{
 		"go vet ./... && touch pwned",
 		"sh -c \"touch pwned\"",
@@ -338,10 +459,13 @@ func TestScheduledAcceptanceUnauthorizedCheckHolds(t *testing.T) {
 			planWithChecks(t, dir, check)
 			task := reconcilePlanTask(t, dir)
 
-			_, _ = runScheduledAcceptance(t, dir, task)
+			code, out := runScheduledAcceptance(t, dir, task)
 
-			if got := outcomeArtifactStatus(t, dir, "T001"); got != "HOLD" {
-				t.Errorf("outcome.json status = %q, want HOLD", got)
+			if code == exitOK || !strings.Contains(out, "setup blocker (command-policy)") {
+				t.Errorf("code=%d, want a command-policy setup blocker: %s", code, out)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "impl.txt")); err == nil {
+				t.Errorf("the agent ran despite the setup blocker")
 			}
 			if _, err := os.Stat(filepath.Join(dir, "pwned")); err == nil {
 				t.Fatalf("marker file pwned exists: unauthorized check %q was executed", check)

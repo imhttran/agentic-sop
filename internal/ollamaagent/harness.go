@@ -252,9 +252,10 @@ func New(cfg Config, root string) *Harness {
 		sink = toolharness.NewMultiAuditor(audit, toolharness.NewFileAuditor(path))
 	}
 	toolCfg := toolharness.Config{
-		CommandTimeout: cfg.CommandTimeout,
-		MaxOutputBytes: cfg.MaxOutputBytes,
-		Roots:          cfg.Roots,
+		CommandTimeout:        cfg.CommandTimeout,
+		MaxOutputBytes:        cfg.MaxOutputBytes,
+		Roots:                 cfg.Roots,
+		CargoAgentToolEnabled: cfg.CargoAgentToolEnabled,
 	}
 	if ev := newEvidenceSink(cfg.CommandEvidencePath); ev != nil {
 		toolCfg.EvidenceSink = ev

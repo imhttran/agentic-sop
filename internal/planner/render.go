@@ -63,6 +63,12 @@ func (p *Plan) RenderMarkdown() string {
 			b.WriteString("\n### Acceptance Checks\n\n")
 			b.WriteString(renderList(stage.AcceptanceChecks))
 		}
+		if len(stage.AcceptanceMapping) > 0 {
+			b.WriteString("\n### Acceptance Mapping\n\n")
+			for _, m := range stage.AcceptanceMapping {
+				fmt.Fprintf(&b, "- %s\n", m)
+			}
+		}
 		if stage.ExecutionMode != "" {
 			b.WriteString("\n### Execution\n\n")
 			b.WriteString(renderList([]string{string(stage.ExecutionMode)}))

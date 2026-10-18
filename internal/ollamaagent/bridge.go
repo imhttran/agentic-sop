@@ -40,11 +40,14 @@ func NewNativeAgent(cfg Config, root string, diag io.Writer) *NativeAgent {
 // then the configured model, then the built-in default — the same precedence
 // the rest of the stack documents; no model is hard-wired here. The repository
 // root is the process working directory (SOP runs in the project root).
-func NativeAgentFromEnv(configuredModel string) (*NativeAgent, error) {
+// cargoAgentToolEnabled is the project's independent cargo.agent_tool permission;
+// it is passed through to the shared tool harness unchanged.
+func NativeAgentFromEnv(configuredModel string, cargoAgentToolEnabled bool) (*NativeAgent, error) {
 	cfg, err := ConfigFromEnv()
 	if err != nil {
 		return nil, err
 	}
+	cfg.CargoAgentToolEnabled = cargoAgentToolEnabled
 	if model := strings.TrimSpace(os.Getenv(agent.EnvAgentModel)); model != "" {
 		cfg.Model = model
 	} else if strings.TrimSpace(os.Getenv(agent.EnvOllamaModel)) == "" {

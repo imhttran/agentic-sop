@@ -60,6 +60,7 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 	// The agent is only needed to normalize a PLAN that is not recognizable. If it
 	// cannot be built, reconciliation still proceeds for a well-formed plan and
 	// reports the missing agent clearly only when normalization is required.
+	applyCargoAgentTool(d, cfg)
 	a, _ := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 
 	// A listing is read-only: it reports what a reconciliation would change, so a

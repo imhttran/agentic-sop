@@ -2154,6 +2154,7 @@ func TestRunGraphNeedsHumanExhaustsRetryBudget(t *testing.T) {
 		if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
 			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
 		}
+		approveIfPending(t, dir, "S001")
 	}
 
 	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone (final)"}}
@@ -2195,6 +2196,7 @@ func TestRunGraphNeedsHumanNoProgressDoesNotSpend(t *testing.T) {
 
 	// Repeating the same outcome with nothing changed must not spend the budget.
 	for i := 0; i < 2; i++ {
+		approveIfPending(t, dir, "S001")
 		code, stdout, _ := runInjectedCLI(t, dir, "diff\n", a, "run")
 		if code != exitError {
 			t.Fatalf("run %d: code=%d, want %d", i, code, exitError)
@@ -2257,7 +2259,9 @@ func TestRunGraphCarriesPreviousOutcome(t *testing.T) {
 	}
 
 	// The retry is told why the previous attempt stopped, so the agent can address
-	// the blocker rather than repeat the request.
+	// the blocker rather than repeat the request. The pending gate is approved
+	// explicitly; it is not bypassed.
+	approveIfPending(t, dir, "S001")
 	second := &recordingAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: "the operation is destructive and cannot be undone"}}
 	if code, _, _ := runInjectedCLI(t, dir, "diff\n", second, "run"); code != exitError {
 		t.Fatalf("second run: code=%d, want %d", code, exitError)

@@ -243,6 +243,7 @@ func decodePlan(content string, pctx PlanContext) (*Plan, error) {
 	// never author its own deterministic acceptance checks.
 	for i := range plan.Stages {
 		plan.Stages[i].AcceptanceChecks = nil
+		plan.Stages[i].AcceptanceMapping = nil
 	}
 	applyPlanContext(&plan, pctx)
 	if err := plan.Validate(); err != nil {

@@ -48,10 +48,14 @@ const (
 // constructor (parameterised by the configured harness, provider, and model),
 // the resume observer, and the working-tree diff reader.
 type deps struct {
-	getwd        func() (string, error)
-	newAgent     func(harness, provider, model, class string) (agent.Agent, error)
-	newResources func(dir string) (resume.Observer, error)
-	readDiff     func(ctx context.Context, dir string) (string, error)
+	getwd    func() (string, error)
+	newAgent func(harness, provider, model, class string) (agent.Agent, error)
+	// setCargoAgentTool carries the project's cargo.agent_tool permission into the
+	// tool-harness agent factory. It is a setter because the factory is built before
+	// the project configuration is loaded; tests that inject newAgent leave it nil.
+	setCargoAgentTool func(bool)
+	newResources      func(dir string) (resume.Observer, error)
+	readDiff          func(ctx context.Context, dir string) (string, error)
 	// plannerAnswer carries the applied planner answer into a resumed stage's
 	// implementation input. It is empty for ordinary runs.
 	plannerAnswer string
@@ -142,7 +146,8 @@ type deps struct {
 }
 
 func defaultDeps() deps {
-	return deps{
+	var cargoAgentTool bool
+	d := deps{
 		getwd:            os.Getwd,
 		requireIsolation: true,
 		newAgent: func(harness, provider, model, class string) (agent.Agent, error) {
@@ -156,7 +161,7 @@ func defaultDeps() deps {
 				// the working tree, with all capabilities (including IMPLEMENT and
 				// FIX). SOP remains the workflow authority; the loop owns only
 				// tool-bounded execution.
-				a, err := ollamaagent.NativeAgentFromEnv(model)
+				a, err := ollamaagent.NativeAgentFromEnv(model, cargoAgentTool)
 				if err != nil {
 					return nil, err
 				}
@@ -212,6 +217,20 @@ func defaultDeps() deps {
 		stdin:               os.Stdin,
 		interactive:         isTerminalReader,
 		localProbe:          localRuntimeProbe,
+		setCargoAgentTool: func(v bool) {
+			cargoAgentTool = v
+		},
+	}
+	return d
+}
+
+// applyCargoAgentTool carries the project's independent cargo.agent_tool
+// permission into the tool-harness agent factory. Every production command that
+// builds an agent from configuration calls it, so the permission cannot silently
+// disappear on a path other than `sop run`.
+func applyCargoAgentTool(d deps, cfg config.Config) {
+	if d.setCargoAgentTool != nil {
+		d.setCargoAgentTool(cfg.CargoAgentToolEnabled())
 	}
 }
 

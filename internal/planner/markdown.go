@@ -167,6 +167,8 @@ func parseRenderedPlan(markdown string) (*Plan, error) {
 			cur.stage.AcceptanceCriteria = append(cur.stage.AcceptanceCriteria, item)
 		case "acceptance checks", "acceptance check":
 			cur.stage.AcceptanceChecks = append(cur.stage.AcceptanceChecks, unwrapBackticks(item))
+		case "acceptance mapping":
+			cur.stage.AcceptanceMapping = append(cur.stage.AcceptanceMapping, ParseAcceptanceMapping(item))
 		case "execution", "execution mode":
 			// The mode may be followed by a note joined onto it from an indented line
 			// ("- done" then "  (already merged)"); take the mode itself.

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -13,7 +14,10 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/commandpolicy"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
+	"github.com/imhttran/agentic-sop/internal/handoff"
 	"github.com/imhttran/agentic-sop/internal/outcome"
+	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
@@ -81,6 +85,35 @@ type outcomeArtifact struct {
 	// silent downgrade. It is set only for the waivable PARTIAL case, never for a
 	// HOLD (which is non-waivable, so there is no waiver to deny).
 	WaiverDenied bool `json:"waiver_denied,omitempty"`
+	// Validation is the quality-gate result recorded apart from the acceptance
+	// criteria (SOP-003). Set only for a stage with an acceptance mapping.
+	Validation *outcome.ValidationResult `json:"validation,omitempty"`
+	// Compatibility is the actionable message for a legacy stage that declares no
+	// acceptance mapping, so its verdict is never a silent VERIFIED.
+	Compatibility string `json:"compatibility,omitempty"`
+	// Mappings is the stage's acceptance mapping, recorded so a manual acceptance
+	// decision can be validated against it.
+	Mappings []outcome.CriterionMapping `json:"acceptance_mapping,omitempty"`
+	// Waived records that a valid designated-approver waiver covers every unmet
+	// REQUIRED criterion, so mapped acceptance evidence does not block advancement.
+	// It is independent of the operator verdict gate: SOP-003 requires mapped evidence
+	// to gate advancement even when the legacy gate is off.
+	Waived bool `json:"waived,omitempty"`
+	// logs maps each failed check's run-relative log artifact path to its redacted
+	// full output; writeOutcomeArtifact persists them beside outcome.json.
+	logs map[string]string
+}
+
+// blocksAdvancement reports whether a mapped stage's verdict lacks required
+// evidence, so the task must stop at the human boundary instead of completing.
+func (a *outcomeArtifact) blocksAdvancement() bool {
+	if a == nil {
+		return false
+	}
+	if a.Waived {
+		return false
+	}
+	return outcome.Result{Status: a.Status, Validation: a.Validation, Compatibility: a.Compatibility}.BlocksAdvancement()
 }
 
 // deriveOutcome computes the objective-level verdict from the task specification.
@@ -91,8 +124,19 @@ type outcomeArtifact struct {
 // held at PARTIAL, so a PASS is never equated with verified objective completion.
 // It returns nil only when there is no specification.
 func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcomeArtifact {
+	return deriveOutcomeWith(spec, dir, gate, false)
+}
+
+// deriveOutcomeWith is deriveOutcome with an explicit acceptance-check Cargo
+// permission. When it is OFF (the default) a Cargo acceptance check is never
+// authorized; when it is ON the Cargo classifier admits only the supported forms
+// inside dir. It is independent of the agent-tool permission.
+func deriveOutcomeWith(spec *taskfile.Spec, dir string, gate quality.Result, cargoEnabled bool) *outcomeArtifact {
 	if spec == nil {
 		return nil
+	}
+	if len(spec.AcceptanceMapping) > 0 {
+		return deriveMappedOutcome(spec, dir, gate, cargoEnabled)
 	}
 	var criteria []outcome.Criterion
 
@@ -109,28 +153,7 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 		},
 	})
 
-	// A declared deliverable may list more than one path (for example
-	// "`a/x.go`, `a/y.go` — prose"), so every path-like token becomes its own required
-	// criterion and prose-only deliverables contribute none. This is what keeps a
-	// multi-path bullet from collapsing into a single malformed token.
-	deliverableIndex := 0
-	for _, d := range spec.Deliverables {
-		for _, p := range deliverablePaths(d) {
-			deliverableIndex++
-			path := p
-			criteria = append(criteria, outcome.Criterion{
-				ID:          fmt.Sprintf("deliverable-%d", deliverableIndex),
-				Required:    true,
-				Description: d,
-				Check: func() error {
-					if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
-						return fmt.Errorf("deliverable %q not present", path)
-					}
-					return nil
-				},
-			})
-		}
-	}
+	criteria = append(criteria, deliverableCriteria(spec, dir)...)
 
 	// Operator-authorized deterministic acceptance checks: each is validated into an
 	// exact argument vector and executed directly (never through a shell),
@@ -148,7 +171,7 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 	for i, command := range spec.AcceptanceChecks {
 		cmd := command
 		id := fmt.Sprintf("check-%d", i+1)
-		argv, aerr := authorizeAcceptanceCommand(cmd)
+		argv, aerr := authorizeAcceptanceCommandWith(cmd, cargoEnabled, dir)
 		if aerr != nil {
 			err := aerr
 			criteria = append(criteria, outcome.Criterion{
@@ -171,6 +194,7 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 			Check: func() error {
 				err, executed := runAcceptanceCheck(dir, args)
 				*run = executed
+				run.failed = err != nil
 				return err
 			},
 		})
@@ -219,10 +243,148 @@ func deriveOutcome(spec *taskfile.Spec, dir string, gate quality.Result) *outcom
 	res := outcome.Verify(criteria)
 	// Verify has executed every authorized check; attach each run's argv, exit code,
 	// and bounded output to its criterion. Rejected checks never ran and have no entry.
+	logs := map[string]string{}
 	for _, e := range evidence {
-		res.PropagateEvidence(e.id, e.run.argv, e.run.exitCode, e.run.output)
+		res.PropagateEvidence(e.id, checkResultOf(e.id, *e.run, logs))
 	}
-	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
+	art := &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons, logs: logs}
+	// A legacy stage declares no acceptance mapping, so its criteria cannot be
+	// verified: record the actionable compatibility result instead of a silent
+	// VERIFIED. No required criterion becomes unmet, so the lifecycle is unchanged.
+	if len(spec.AcceptanceCriteria) > 0 {
+		ids := make([]string, len(spec.AcceptanceCriteria))
+		for i := range ids {
+			ids[i] = fmt.Sprintf("criterion-%d", i+1)
+		}
+		art.Compatibility = outcome.LegacyCompatibility(ids)
+		if art.Status == outcome.Verified {
+			art.Status = outcome.Partial
+			art.Reasons = []string{art.Compatibility}
+		}
+	}
+	return art
+}
+
+// deliverableCriteria returns one required presence criterion per declared
+// deliverable path. A declared deliverable may list more than one path (for example
+// "`a/x.go`, `a/y.go` — prose"), so every path-like token becomes its own required
+// criterion and prose-only deliverables contribute none. This is what keeps a
+// multi-path bullet from collapsing into a single malformed token.
+func deliverableCriteria(spec *taskfile.Spec, dir string) []outcome.Criterion {
+	var criteria []outcome.Criterion
+	for _, d := range spec.Deliverables {
+		for _, p := range deliverablePaths(d) {
+			path := p
+			criteria = append(criteria, outcome.Criterion{
+				ID:          fmt.Sprintf("deliverable-%d", len(criteria)+1),
+				Required:    true,
+				Description: d,
+				Check: func() error {
+					if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
+						return fmt.Errorf("deliverable %q not present", path)
+					}
+					return nil
+				},
+			})
+		}
+	}
+	return criteria
+}
+
+// deriveMappedOutcome is the SOP-003 verdict for a stage that declares an
+// acceptance mapping. The quality gate is recorded as separate validation; each
+// acceptance criterion is met only through its mapped check or an accepting manual
+// decision; every declared check still runs and must pass; an unauthorized check
+// remains a HOLD boundary.
+func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, cargoEnabled bool) *outcomeArtifact {
+	criteria := deliverableCriteria(spec, dir)
+	mappings := specCriterionMappings(spec)
+	mappedChecks := make(map[string]bool, len(mappings))
+	for _, m := range mappings {
+		if m.Kind == outcome.EvidenceCheck && m.CheckRef != "" {
+			mappedChecks[m.CheckRef] = true
+		}
+	}
+	var checks []outcome.CheckResult
+	logs := map[string]string{}
+	for i, cmd := range spec.AcceptanceChecks {
+		id := fmt.Sprintf("check-%d", i+1)
+		argv, aerr := authorizeAcceptanceCommandWith(cmd, cargoEnabled, dir)
+		if aerr != nil {
+			criteria = append(criteria, outcome.Criterion{ID: id, Required: true, Boundary: true, Description: "unauthorized acceptance check: " + cmd, Command: cmd, Check: func() error { return aerr }})
+			continue
+		}
+		err, run := runAcceptanceCheck(dir, argv)
+		run.failed = err != nil
+		cr := checkResultOf(id, run, logs)
+		cr.Command, cr.Executed, cr.Passed, cr.Evidence = cmd, true, err == nil, "met"
+		if err != nil {
+			cr.Evidence = err.Error()
+		}
+		checks = append(checks, cr)
+		// A check that is mapped to a criterion is EVIDENCE for that criterion; the
+		// criterion is the requirement. Adding the raw check as a second required
+		// criterion would make a criterion-scoped waiver insufficient (the operator
+		// would have to waive both the criterion and its evidence). An unmapped check
+		// remains a required, independently gated acceptance check.
+		if !mappedChecks[id] {
+			criteria = append(criteria, outcome.Criterion{ID: id, Required: true, Description: "acceptance check: " + cmd, Command: cmd, Check: func() error { return err }})
+		}
+	}
+	for i, c := range spec.AcceptanceCriteria {
+		criteria = append(criteria, outcome.Criterion{ID: fmt.Sprintf("criterion-%d", i+1), Required: true, Description: c})
+	}
+	decisions, derr := readAcceptanceDecisions(dir, spec.ID)
+	if derr != nil {
+		// Acceptance decisions are evidence. A corrupted or unreadable audit must not
+		// silently become "no decision": record the error on the verdict so a manual
+		// criterion cannot be treated as satisfied and the operator sees why.
+		decisions = nil
+	}
+	validation := outcome.ValidationResult{Passed: gate.Decision == quality.Pass, Reasons: gate.Reasons}
+	res := outcome.VerifyAcceptance(validation, criteria, mappings, checks, decisions)
+	if derr != nil {
+		res.Status = outcome.Partial
+		res.Reasons = append(res.Reasons, "acceptance decisions could not be read: "+derr.Error())
+	}
+	for _, c := range checks {
+		res.PropagateEvidence(c.Ref, c)
+	}
+	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons, Validation: res.Validation, Mappings: mappings, logs: logs}
+}
+
+// checkResultOf projects an executed check onto outcome evidence. A failed check
+// also gets a full-log artifact path under the run directory, registered in logs
+// with its (already redacted) complete output.
+func checkResultOf(id string, run checkRun, logs map[string]string) outcome.CheckResult {
+	c := outcome.CheckResult{Ref: id, Argv: run.argv, ExitCode: run.exitCode, Output: run.output, WorkDir: run.dir}
+	if run.failed {
+		c.LogArtifact = "checks/" + id + ".log"
+		logs[c.LogArtifact] = run.full
+	}
+	return c
+}
+
+// specCriterionMappings projects the spec's '- criterion N: check M' /
+// '- criterion N: manual: <evidence>' lines onto outcome mappings keyed by the
+// criterion-N / check-M ids deriveMappedOutcome uses.
+func specCriterionMappings(spec *taskfile.Spec) []outcome.CriterionMapping {
+	var out []outcome.CriterionMapping
+	for _, line := range spec.AcceptanceMapping {
+		m := planner.ParseAcceptanceMapping(line)
+		cm := outcome.CriterionMapping{CriterionID: fmt.Sprintf("criterion-%d", m.Criterion), Required: true, Kind: outcome.EvidenceCheck, Attempt: spec.Attempt}
+		if m.Criterion >= 1 && m.Criterion <= len(spec.AcceptanceCriteria) {
+			cm.Description = spec.AcceptanceCriteria[m.Criterion-1]
+		}
+		switch {
+		case m.Manual != "":
+			cm.Kind, cm.ManualEvidence = outcome.EvidenceManual, m.Manual
+		case m.Check != 0:
+			cm.CheckRef = fmt.Sprintf("check-%d", m.Check)
+		}
+		out = append(out, cm)
+	}
+	return out
 }
 
 // waiverForTask returns the designated-approver waiver supplied for this run, or nil
@@ -266,6 +428,12 @@ func applyLifecycleGateWithWaiver(cfg config.Config, spec *taskfile.Spec, res *o
 		return
 	}
 	r := outcome.Result{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons}
+	// A valid waiver clears advancement for a mapped stage even when the legacy
+	// verdict gate is OFF. This is the explicit, traceable acceptance decision the
+	// plan requires; it never applies to a HOLD, which is non-waivable.
+	if waiver != nil && outcome.ValidateWaiver(r, *waiver) == nil {
+		res.Waived = true
+	}
 	// Flag OFF (the default): the lifecycle is unchanged — ResolveLifecycle returns
 	// LOCAL_DONE for every verdict — so the recorded disposition is LOCAL_DONE and no
 	// waiver denial is possible. Flag ON: the pinned lifecycle table applies.
@@ -284,7 +452,7 @@ func applyLifecycleGateWithWaiver(cfg config.Config, spec *taskfile.Spec, res *o
 // lifecycle path that records an outcome verdict routes through here, so the flag-on
 // acceptance behavior is exercised in a real run rather than only in unit tests.
 func deriveGatedOutcome(cfg config.Config, spec *taskfile.Spec, dir string, gate quality.Result) *outcomeArtifact {
-	res := deriveOutcome(spec, dir, gate)
+	res := deriveOutcomeWith(spec, dir, gate, cfg.CargoAcceptanceCheckEnabled())
 	// A recorded, designated-approver waiver is the only input that can resolve a
 	// gated PARTIAL-with-unmet-required to LOCAL_DONE. It is read from the task's
 	// append-only audit; absent one, the gate fails closed (waiver == nil).
@@ -310,12 +478,31 @@ var rejectedGoFlagForms = []string{"exec", "toolexec", "vettool", "o", "overlay"
 // classification error, a non-SAFE class, or a rejected dangerous form is returned
 // before execution, so an unauthorized command never runs.
 func authorizeAcceptanceCommand(command string) ([]string, error) {
+	return authorizeAcceptanceCommandWith(command, false, "")
+}
+
+// authorizeAcceptanceCommandWith is authorizeAcceptanceCommand with an explicit
+// acceptance-check Cargo permission and repository root. When the permission is
+// OFF (the default) a Cargo command is never authorized; when it is ON the Cargo
+// classifier admits only the supported forms inside root. It is independent of
+// the agent-tool permission.
+func authorizeAcceptanceCommandWith(command string, cargoEnabled bool, root string) ([]string, error) {
 	argv, err := toolharness.SplitCommand(command)
 	if err != nil {
 		return nil, err
 	}
 	if err := rejectDangerousForm(argv); err != nil {
 		return nil, err
+	}
+	if len(argv) > 0 && filepath.Base(argv[0]) == "cargo" {
+		class, cerr := commandpolicy.CargoClassify(argv, cargoEnabled, root)
+		if cerr != nil {
+			return nil, fmt.Errorf("acceptance check %q is not authorized: %v", command, cerr)
+		}
+		if class != commandpolicy.Safe {
+			return nil, fmt.Errorf("acceptance check %q is not authorized (%s)", command, class)
+		}
+		return argv, nil
 	}
 	class, err := commandpolicy.Classify(argv)
 	if err != nil {
@@ -384,12 +571,15 @@ func flagName(arg string) string {
 }
 
 // checkRun is the structured evidence from one executed acceptance check: the exact
-// argv, the process exit code, a bounded output excerpt, and the untruncated output.
+// argv, the working directory, the process exit code, a bounded output excerpt, and
+// the untruncated output. Both outputs are secret-redacted.
 type checkRun struct {
 	argv     []string
+	dir      string
 	exitCode int
 	output   string // bounded (<=400 byte) excerpt, for recorded evidence
-	full     string // untruncated combined output, for the go test decision
+	full     string // untruncated combined output, for the go test decision and log artifact
+	failed   bool   // set by the caller once the check's verdict is known
 }
 
 // runAcceptanceCheck executes an authorized acceptance check's argument vector
@@ -439,7 +629,7 @@ func isGoTestArgv(argv []string) bool {
 // combined stdout/stderr. The untruncated combined output is also retained so the
 // `go test -json` decision can inspect the full event stream.
 func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
-	run := checkRun{argv: append([]string(nil), argv...)}
+	run := checkRun{argv: append([]string(nil), argv...), dir: dir}
 	if len(argv) == 0 {
 		return errors.New("acceptance check has an empty command"), run
 	}
@@ -449,7 +639,8 @@ func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	runErr := cmd.Run()
-	run.full = out.String()
+	// Redact before bounding, so neither the excerpt nor the log carries a secret.
+	run.full = handoff.Redact(out.String(), os.Environ())
 	run.output = boundOutput(run.full)
 	if runErr == nil {
 		run.exitCode = 0
@@ -536,12 +727,28 @@ func looksLikeDeliverablePath(p string) bool {
 	return strings.Contains(p, "/") || strings.Contains(p, ".")
 }
 
-// writeOutcomeArtifact persists the verdict beside the other run artifacts.
-func writeOutcomeArtifact(rn *runpkg.Run, res *outcomeArtifact) {
+// writeOutcomeArtifact persists the verdict beside the other run artifacts, with
+// each failed check's full-log artifact. The logs live in the run directory and
+// share its lifecycle; no separate retention rule applies. A write failure is
+// returned, never swallowed: evidence the operator was told about must exist on
+// disk, and a failed check without its log artifact is incomplete evidence.
+func writeOutcomeArtifact(rn *runpkg.Run, res *outcomeArtifact) error {
 	if res == nil {
-		return
+		return nil
 	}
-	writeRunJSON(rn, "outcome.json", res)
+	for path, content := range res.logs {
+		if err := durablefs.WriteFile(filepath.Join(rn.Dir(), filepath.FromSlash(path)), []byte(content)); err != nil {
+			return fmt.Errorf("write check evidence %s: %w", path, err)
+		}
+	}
+	data, err := json.MarshalIndent(res, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode outcome artifact: %w", err)
+	}
+	if err := durablefs.WriteFile(filepath.Join(rn.Dir(), "outcome.json"), append(data, '\n')); err != nil {
+		return fmt.Errorf("write outcome artifact: %w", err)
+	}
+	return nil
 }
 
 // writeOutcomeSummary prints the objective-level verdict beneath the gate summary,
@@ -557,6 +764,9 @@ func writeOutcomeSummary(w io.Writer, res *outcomeArtifact) {
 		return
 	}
 	fmt.Fprintf(w, "outcome: %s\n", res.Status)
+	if res.Validation != nil {
+		fmt.Fprintf(w, "  validation: %s\n", validationState(res.Validation))
+	}
 	for _, r := range res.Reasons {
 		fmt.Fprintf(w, "  - %s\n", r)
 	}
@@ -568,6 +778,17 @@ func writeOutcomeSummary(w io.Writer, res *outcomeArtifact) {
 	}
 }
 
+// validationState renders the separately recorded validation result.
+func validationState(v *outcome.ValidationResult) string {
+	if v.Passed {
+		return "passed"
+	}
+	if len(v.Reasons) == 0 {
+		return "failed"
+	}
+	return "failed: " + strings.Join(v.Reasons, "; ")
+}
+
 // writeOutcomeReport renders the verdict in the run report, including the per-check
 // execution evidence when present. A rejected boundary check is rendered as not met
 // with no execution evidence.
@@ -577,8 +798,17 @@ func writeOutcomeReport(b *strings.Builder, res *outcomeArtifact) {
 	}
 	b.WriteString("\n## Outcome\n\n")
 	fmt.Fprintf(b, "- Status: `%s`\n", res.Status)
+	if res.Validation != nil {
+		fmt.Fprintf(b, "- Validation: %s\n", validationState(res.Validation))
+	}
+	if res.Compatibility != "" {
+		fmt.Fprintf(b, "- Compatibility: %s\n", res.Compatibility)
+	}
 	if res.Lifecycle != "" {
 		fmt.Fprintf(b, "- Lifecycle: `%s`\n", res.Lifecycle)
+	}
+	if res.Waived {
+		b.WriteString("- Waived: a valid designated-approver waiver covers every unmet required criterion\n")
 	}
 	if res.WaiverDenied {
 		b.WriteString("- Waiver: denied — a required deliverable/check is unmet and no valid designated-approver waiver exists\n")
@@ -604,9 +834,15 @@ func writeOutcomeReport(b *strings.Builder, res *outcomeArtifact) {
 		// carries no argv and shows no execution evidence.
 		if len(cr.Argv) > 0 {
 			fmt.Fprintf(b, "  - argv: `%s`\n", strings.Join(cr.Argv, " "))
+			if cr.WorkDir != "" {
+				fmt.Fprintf(b, "  - workdir: `%s`\n", cr.WorkDir)
+			}
 			fmt.Fprintf(b, "  - exit: %d\n", cr.ExitCode)
 			if cr.Output != "" {
 				fmt.Fprintf(b, "  - output: %s\n", cr.Output)
+			}
+			if cr.LogArtifact != "" {
+				fmt.Fprintf(b, "  - log: `%s`\n", cr.LogArtifact)
 			}
 		}
 	}

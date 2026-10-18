@@ -27,6 +27,20 @@ agent:
   provider: ollama # ollama | llamacpp | mlx | command (required if harness: tool)
   model: deepseek-v4.1-flash:cloud # model ID (required if provider: ollama|llamacpp|mlx)
 
+# Optional Cargo authorization. Both permissions are OFF by default and are
+# independent: enabling one never enables the other. A permission only admits the
+# supported forms; internal/commandpolicy still rejects unsupported subcommands
+# and arguments, shell syntax, and --manifest-path escapes before execution.
+# cargo:
+#   agent_tool: false       # let the agent tool harness run supported Cargo commands
+#   acceptance_check: false # let plan acceptance checks run supported Cargo commands
+#
+# Migration: the deprecated spellings `agent.tool_cargo` and
+# `validation.acceptance_checks.cargo` are read only when the corresponding
+# `cargo.*` key is omitted. If both spellings are present they must agree; a
+# disagreement is a configuration error (never a silent choice). Move legacy
+# settings under `cargo:` as shown above.
+
 validation: # commands run by the verification stages
   build:
     - go build ./...
@@ -181,6 +195,8 @@ workflow:
 | `agent.harness`                             | `command`                | `tool` (local tool-calling harness) or `command` (subprocess adapter). Optional.                                                                                                                                                                                                                                                                                                                                           |
 | `agent.provider`                            | —                        | `ollama`, `llamacpp`, `mlx`, or `command`. Required when `harness: tool`.                                                                                                                                                                                                                                                                                                                                                  |
 | `agent.model`                               | —                        | Model ID. Required when `provider: ollama`, `llamacpp`, or `mlx`.                                                                                                                                                                                                                                                                                                                                                          |
+| `cargo.agent_tool`                          | `false`                  | Independently opt-in permission for the agent tool harness to run supported Cargo commands (`build`, `test`, `check`, `clippy`, `fmt --check`). Off by default. Enabling it never enables `cargo.acceptance_check`.                                                                                                                                                                                                         |
+| `cargo.acceptance_check`                    | `false`                  | Independently opt-in permission for plan acceptance checks to run the same supported Cargo commands. Off by default. It is evaluated on the acceptance path only, so an acceptance-only Cargo check is not a permission conflict.                                                                                                                                                                                         |
 | `validation.build` / `test` / `lint`        | —                        | Command lists run in the project directory, in order, stopping at the first failure. A task that changes the repository cannot pass without at least one configured command; SOP reports `VALIDATION_NOT_CONFIGURED` (a terminal configuration failure, not an approval) otherwise.                                                                                                                                        |
 | `review.engine`                             | `self`                   | `self` (agent findings) or `open-code-review` (external command via `SOP_REVIEW_COMMAND`).                                                                                                                                                                                                                                                                                                                                 |
 | `review.delegation`                         | `false`                  | Review delegation flag.                                                                                                                                                                                                                                                                                                                                                                                                    |

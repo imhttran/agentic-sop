@@ -351,12 +351,8 @@ func TestRunApprovalBoundaryUnaffectedByDecisionEvidence(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("code=%d, want a non-pass result", code)
 	}
-	if !strings.Contains(stdout, "NEEDS_HUMAN") {
-		t.Fatalf("an active approval request must stay at the gate:\n%s", stdout)
-	}
-	cls := readClassification(t, dir, "S001")
-	if cls.Kind != failure.ApprovalRequired || cls.Disposition != failure.NeedsHuman {
-		t.Fatalf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", cls)
+	if !strings.Contains(stdout, "WAITING_FOR_APPROVAL") {
+		t.Fatalf("an active approval request must block before implementation:\n%s", stdout)
 	}
 	if p.calls != 0 {
 		t.Fatalf("the provider must not be consulted when a human boundary already exists (calls=%d)", p.calls)

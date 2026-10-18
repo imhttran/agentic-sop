@@ -9,8 +9,9 @@ import (
 //
 // # Precedence
 //
-//  1. escalation disabled           -> none (the caller's behavior is unchanged)
-//  2. safety / approval / plan      -> human  (risk policy outranks escalation)
+//  1. safety / approval / plan / unclassified -> human (risk policy outranks
+//     escalation and a disabled policy)
+//  2. escalation disabled          -> none (the caller's behavior is unchanged)
 //  3. transient provider failure    -> retry_same (a larger model does not help)
 //  4. unfinished (continuation)     -> retry_same
 //  5. implementation failure        -> escalate one class, or human when the
@@ -25,11 +26,6 @@ import (
 func Decide(p Policy, ev Evidence) Decision {
 	d := Decision{FromClass: ev.Class, Attempt: ev.Attempt}
 
-	if !p.Enabled && !p.Replan {
-		d.Action, d.Reason = ActionNone, ReasonDisabled
-		return d
-	}
-
 	// 1b. A bounded replan (opt-in, independent of escalation): a recoverable
 	//     implementation failure may change strategy once, on the same class,
 	//     before a larger model or a human is considered. implementationFailure
@@ -40,15 +36,11 @@ func Decide(p Policy, ev Evidence) Decision {
 		d.Action, d.ToClass, d.Reason = ActionReplan, ev.Class, ReasonReplan
 		return d
 	}
-	// 1c. With replanning off (or its bounded replan spent) and escalation
-	//     disabled, the caller keeps its existing behavior exactly.
-	if !p.Enabled {
-		d.Action, d.Reason = ActionNone, ReasonDisabled
-		return d
-	}
 
 	// 2. Boundaries that a larger model must never bypass. This is the safety
-	//    override: risk and approval policy outrank escalation.
+	//    override: risk and approval policy outrank escalation, and they also
+	//    outrank a disabled escalation policy. A productive attempt that crosses a
+	//    boundary must not auto-continue merely because escalation is off.
 	switch ev.Kind {
 	case failure.ApprovalRequired, failure.SecurityBoundary,
 		failure.DestructiveOperation, failure.AmbiguousContract:
@@ -65,6 +57,14 @@ func Decide(p Policy, ev Evidence) Decision {
 	}
 	if ev.Disposition == failure.Replan {
 		d.Action, d.Reason = ActionHuman, ReasonPlanInvalid
+		return d
+	}
+
+	// With replanning off (or its bounded replan spent) and escalation disabled,
+	// the caller keeps its existing behavior exactly. This is checked AFTER the
+	// safety/fail-closed boundaries so a disabled policy cannot bypass them.
+	if !p.Enabled {
+		d.Action, d.Reason = ActionNone, ReasonDisabled
 		return d
 	}
 

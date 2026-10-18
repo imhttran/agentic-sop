@@ -95,6 +95,7 @@ func reviewProvider(cfg config.Config, d deps) (review.Provider, error) {
 		return provider, nil
 	}
 
+	applyCargoAgentTool(d, cfg)
 	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		return nil, err

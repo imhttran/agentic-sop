@@ -64,6 +64,11 @@ type CriterionResult struct {
 	// Output is a bounded excerpt of the executed check's combined stdout/stderr
 	// (empty when the check produced no output or ran no external command).
 	Output string
+	// WorkDir is the working directory the executed check ran in.
+	WorkDir string `json:",omitempty"`
+	// LogArtifact is the run-directory-relative path of a failed check's redacted
+	// full-output log (empty for a passing or unexecuted check).
+	LogArtifact string `json:",omitempty"`
 }
 
 // Result is the deterministic outcome verdict.
@@ -71,6 +76,12 @@ type Result struct {
 	Status   Status
 	Criteria []CriterionResult
 	Reasons  []string
+	// Validation is the quality-gate result, recorded apart from the acceptance
+	// Criteria. It is set only by VerifyAcceptance.
+	Validation *ValidationResult `json:",omitempty"`
+	// Compatibility is the actionable message for a legacy plan with no acceptance
+	// mapping. It is set only by VerifyAcceptance.
+	Compatibility string `json:",omitempty"`
 }
 
 // Verify evaluates each criterion deterministically and derives the status:
@@ -142,16 +153,18 @@ func Verify(criteria []Criterion) Result {
 
 // PropagateEvidence copies the per-check execution evidence recorded by an executor
 // onto the matching criterion result, so a criterion backed by an executed check
-// carries the exact argv, exit code, and bounded output excerpt. It is a no-op for
-// criteria that ran no external command (an empty argv).
-func (r *Result) PropagateEvidence(id string, argv []string, exitCode int, output string) {
+// carries the exact argv, exit code, bounded output excerpt, working directory, and
+// full-log artifact path.
+func (r *Result) PropagateEvidence(id string, c CheckResult) {
 	for i := range r.Criteria {
 		if r.Criteria[i].ID != id {
 			continue
 		}
-		r.Criteria[i].Argv = append([]string(nil), argv...)
-		r.Criteria[i].ExitCode = exitCode
-		r.Criteria[i].Output = output
+		r.Criteria[i].Argv = append([]string(nil), c.Argv...)
+		r.Criteria[i].ExitCode = c.ExitCode
+		r.Criteria[i].Output = c.Output
+		r.Criteria[i].WorkDir = c.WorkDir
+		r.Criteria[i].LogArtifact = c.LogArtifact
 		return
 	}
 }

@@ -60,20 +60,26 @@ func readOutcomeArtifact(projectDir, taskID string) (*outcomeArtifact, error) {
 // readWaiverRecords reads a task's append-only waiver audit in file order, or nil
 // when no audit exists. It is read-only.
 func readWaiverRecords(projectDir, taskID string) ([]outcome.WaiverRecord, error) {
-	data, err := os.ReadFile(waiverAuditPath(projectDir, taskID))
+	return readJSONL[outcome.WaiverRecord](waiverAuditPath(projectDir, taskID))
+}
+
+// readJSONL reads an append-only JSONL audit in file order, or nil when it does
+// not exist. It is read-only.
+func readJSONL[T any](path string) ([]T, error) {
+	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var recs []outcome.WaiverRecord
+	var recs []T
 	for _, line := range strings.Split(string(data), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		var rec outcome.WaiverRecord
+		var rec T
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			return nil, err
 		}
@@ -82,11 +88,15 @@ func readWaiverRecords(projectDir, taskID string) ([]outcome.WaiverRecord, error
 	return recs, nil
 }
 
-// appendWaiverRecord appends one record to the durable audit. The file is opened
+// appendWaiverRecord appends one record to the durable waiver audit.
+func appendWaiverRecord(projectDir, taskID string, rec outcome.WaiverRecord) error {
+	return appendJSONL(waiverAuditPath(projectDir, taskID), rec)
+}
+
+// appendJSONL appends one record to a durable audit. The file is opened
 // O_APPEND|O_CREATE, so an existing audit is only ever extended — never rewritten or
 // reordered — and no other evidence is touched.
-func appendWaiverRecord(projectDir, taskID string, rec outcome.WaiverRecord) error {
-	path := waiverAuditPath(projectDir, taskID)
+func appendJSONL(path string, rec any) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
@@ -145,7 +155,7 @@ func runVerify(args []string, stdout, stderr io.Writer, getwd func() (string, er
 // or a criterion that is not an unmet required criterion is rejected without writing
 // anything: a waiver is never implied and never silently applied.
 func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
-	taskID, waive, reason, by, scope := "", "", "", "", ""
+	taskID, waive, reason, by, scope, accept, evidence := "", "", "", "", "", "", ""
 	for i := 0; i < len(args); i++ {
 		a := args[i]
 		takeValue := func() (string, bool) {
@@ -188,6 +198,22 @@ func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, e
 			scope = v
 		case strings.HasPrefix(a, "--scope="):
 			scope = strings.TrimPrefix(a, "--scope=")
+		case a == "--accept":
+			v, ok := takeValue()
+			if !ok {
+				return outcomeUsage(stderr)
+			}
+			accept = v
+		case strings.HasPrefix(a, "--accept="):
+			accept = strings.TrimPrefix(a, "--accept=")
+		case a == "--evidence":
+			v, ok := takeValue()
+			if !ok {
+				return outcomeUsage(stderr)
+			}
+			evidence = v
+		case strings.HasPrefix(a, "--evidence="):
+			evidence = strings.TrimPrefix(a, "--evidence=")
 		case strings.HasPrefix(a, "-"):
 			return outcomeUsage(stderr)
 		default:
@@ -197,7 +223,7 @@ func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, e
 			taskID = a
 		}
 	}
-	if taskID == "" {
+	if taskID == "" || (accept != "" && waive != "") {
 		return outcomeUsage(stderr)
 	}
 	dir, ok := projectDir(getwd, stderr)
@@ -212,6 +238,16 @@ func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, e
 	if res == nil {
 		fmt.Fprintf(stderr, "outcome: no recorded outcome for %s; run the task first\n", taskID)
 		return exitError
+	}
+	if accept != "" {
+		d, err := recordAcceptanceDecision(dir, taskID, res, accept, evidence, by)
+		if err != nil {
+			fmt.Fprintf(stderr, "outcome: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "recorded acceptance decision: task=%s criterion=%s decision=%s approver=%s recorded_at=%s\n", d.Task, d.CriterionID, d.Decision, d.Approver, d.RecordedAt)
+		fmt.Fprintf(stdout, "  evidence: %s\n", d.Evidence)
+		return exitOK
 	}
 	if waive == "" {
 		return printRecordedOutcome(stdout, stderr, dir, taskID, res)
@@ -282,8 +318,17 @@ func unmetRequiredCriterion(res *outcomeArtifact, id string) (outcome.CriterionR
 func printRecordedOutcome(stdout, stderr io.Writer, dir, taskID string, res *outcomeArtifact) int {
 	fmt.Fprintf(stdout, "outcome %s\n", taskID)
 	fmt.Fprintf(stdout, "  status: %s\n", res.Status)
+	if res.Validation != nil {
+		fmt.Fprintf(stdout, "  validation: %s\n", validationState(res.Validation))
+	}
+	if res.Compatibility != "" {
+		fmt.Fprintf(stdout, "  compatibility: %s\n", res.Compatibility)
+	}
 	if res.Lifecycle != "" {
 		fmt.Fprintf(stdout, "  lifecycle: %s\n", res.Lifecycle)
+	}
+	if res.Waived {
+		fmt.Fprintln(stdout, "  waived: a valid designated-approver waiver covers every unmet required criterion")
 	}
 	if res.WaiverDenied {
 		fmt.Fprintln(stdout, "  waiver: denied — a required deliverable/check is unmet and no valid designated-approver waiver exists")
@@ -320,5 +365,6 @@ func criterionState(cr outcome.CriterionResult) string {
 func outcomeUsage(stderr io.Writer) int {
 	fmt.Fprintln(stderr, "usage: sop outcome <task-id>")
 	fmt.Fprintln(stderr, "       sop outcome <task-id> --waive <criterion-id> --reason R --by NAME [--scope S]")
+	fmt.Fprintln(stderr, "       sop outcome <task-id> --accept <criterion-id> --evidence E --by NAME")
 	return exitUsage
 }

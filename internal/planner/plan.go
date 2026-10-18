@@ -6,6 +6,7 @@ package planner
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/budget"
@@ -51,6 +52,10 @@ type Stage struct {
 	// in task files. Optional: a stage with no checks omits the key so a plan
 	// without checks stays byte-identical to the previous format.
 	AcceptanceChecks []string `json:"acceptance_checks,omitempty"`
+	// AcceptanceMapping is the operator-authored binding of each acceptance
+	// criterion to an acceptance check or to manual evidence (SOP-003). Optional:
+	// a stage without it is a legacy stage and the key is omitted.
+	AcceptanceMapping []AcceptanceMapping `json:"acceptance_mapping,omitempty"`
 	// Kind is optional: "" and "feature" are ordinary stages; "environment"
 	// marks a bootstrap stage feature work depends on.
 	Kind string `json:"kind,omitempty"`
@@ -77,6 +82,65 @@ type Stage struct {
 	// Validate; authorization is enforced at execution time against the operator
 	// allowlist.
 	RequiredEvidence []string `json:"required_evidence,omitempty"`
+}
+
+// AcceptanceMapping maps one acceptance criterion (1-based index into
+// AcceptanceCriteria) to exactly one of an acceptance check (1-based index into
+// AcceptanceChecks) or a manual-evidence description.
+type AcceptanceMapping struct {
+	Criterion int    `json:"criterion"`
+	Check     int    `json:"check,omitempty"`
+	Manual    string `json:"manual,omitempty"`
+}
+
+// String renders the mapping as its '### Acceptance Mapping' list item.
+func (m AcceptanceMapping) String() string {
+	if m.Manual != "" {
+		return fmt.Sprintf("criterion %d: manual: %s", m.Criterion, m.Manual)
+	}
+	return fmt.Sprintf("criterion %d: check %d", m.Criterion, m.Check)
+}
+
+// ParseAcceptanceMapping parses one '### Acceptance Mapping' list item. A malformed
+// item yields a zero Criterion, which Validate rejects, so it never silently maps.
+func ParseAcceptanceMapping(item string) AcceptanceMapping {
+	key, rest, _ := strings.Cut(strings.TrimSpace(item), ":")
+	n, err := strconv.Atoi(strings.TrimSpace(strings.TrimPrefix(strings.ToLower(strings.TrimSpace(key)), "criterion")))
+	if err != nil {
+		return AcceptanceMapping{}
+	}
+	m := AcceptanceMapping{Criterion: n}
+	rest = strings.TrimSpace(rest)
+	lower := strings.ToLower(rest)
+	switch {
+	case strings.HasPrefix(lower, "manual:"):
+		m.Manual = strings.TrimSpace(rest[len("manual:"):])
+	case strings.HasPrefix(lower, "check"):
+		if c, err := strconv.Atoi(strings.TrimSpace(rest[len("check"):])); err == nil {
+			m.Check = c
+		}
+	}
+	return m
+}
+
+// validateAcceptanceMapping rejects out-of-range references, entries that set both
+// or neither of check and manual, and duplicate criterion entries.
+func validateAcceptanceMapping(stage Stage) error {
+	seen := make(map[int]bool, len(stage.AcceptanceMapping))
+	for _, m := range stage.AcceptanceMapping {
+		switch {
+		case m.Criterion < 1 || m.Criterion > len(stage.AcceptanceCriteria):
+			return fmt.Errorf("plan: stage %s acceptance mapping %q names criterion %d out of range 1..%d", stage.ID, m, m.Criterion, len(stage.AcceptanceCriteria))
+		case seen[m.Criterion]:
+			return fmt.Errorf("plan: stage %s acceptance mapping maps criterion %d more than once", stage.ID, m.Criterion)
+		case (m.Check != 0) == (strings.TrimSpace(m.Manual) != ""):
+			return fmt.Errorf("plan: stage %s acceptance mapping for criterion %d must set exactly one of check or manual", stage.ID, m.Criterion)
+		case m.Check != 0 && (m.Check < 1 || m.Check > len(stage.AcceptanceChecks)):
+			return fmt.Errorf("plan: stage %s acceptance mapping for criterion %d names check %d out of range 1..%d", stage.ID, m.Criterion, m.Check, len(stage.AcceptanceChecks))
+		}
+		seen[m.Criterion] = true
+	}
+	return nil
 }
 
 // Validate performs deterministic structural validation of a Plan. It is the
@@ -121,6 +185,9 @@ func (p *Plan) Validate() error {
 		}
 		if !domain.KnownExecutionMode(stage.ExecutionMode) {
 			return fmt.Errorf("plan: stage %s has unknown execution_mode %q", stage.ID, stage.ExecutionMode)
+		}
+		if err := validateAcceptanceMapping(stage); err != nil {
+			return err
 		}
 		if stage.DiscoveryIterations < 0 {
 			return fmt.Errorf("plan: stage %s has negative discovery_iterations %d", stage.ID, stage.DiscoveryIterations)
