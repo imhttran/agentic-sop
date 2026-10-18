@@ -519,12 +519,25 @@ func TestInstallOllamaAgentTestModes(t *testing.T) {
 		if name == "fast" && plainTest.MatchString(out) {
 			t.Errorf("fast mode must not run the plain test target; output:\n%s", out)
 		}
-		installAt := strings.Index(out, "install-sop-ollama-agent.sh")
+		// The preflight validates the pin before any gate runs. The install
+		// command itself is the same script without --check, so match the line
+		// ending rather than the shared script name.
+		preflightAt := strings.Index(out, "install-sop-ollama-agent.sh --check")
+		installAt := strings.Index(out, "install-sop-ollama-agent.sh\n")
+		firstGateAt := -1
 		lastGateAt := -1
 		for _, gate := range gates {
-			if i := strings.Index(out, gate); i > lastGateAt {
-				lastGateAt = i
+			if i := strings.Index(out, gate); i >= 0 {
+				if firstGateAt < 0 || i < firstGateAt {
+					firstGateAt = i
+				}
+				if i > lastGateAt {
+					lastGateAt = i
+				}
 			}
+		}
+		if preflightAt < 0 || firstGateAt < 0 || preflightAt > firstGateAt {
+			t.Errorf("%s mode must validate the pin before the gates; output:\n%s", name, out)
 		}
 		if installAt < 0 || lastGateAt < 0 || installAt < lastGateAt {
 			t.Errorf("%s mode must install only after the gates; output:\n%s", name, out)
@@ -548,6 +561,17 @@ func TestInstallOllamaAgentStopsWhenGateFails(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// This test is about gate failure, not the pin. Point the preflight at the
+	// checkout's HEAD so it resolves even in the shallow checkout CI uses.
+	head, err := exec.Command("git", "-C", repoRoot(t), "rev-parse", "HEAD").Output()
+	if err != nil {
+		t.Fatalf("resolve HEAD: %v", err)
+	}
+	pinPath := filepath.Join(t.TempDir(), "sop-ollama-agent.pin")
+	if err := os.WriteFile(pinPath, []byte("revision = "+strings.TrimSpace(string(head))+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
 	for _, mode := range []string{"ordinary", "fast"} {
 		t.Run(mode, func(t *testing.T) {
 			dest := filepath.Join(t.TempDir(), "sop-ollama-agent")
@@ -560,6 +584,7 @@ func TestInstallOllamaAgentStopsWhenGateFails(t *testing.T) {
 				"PATH="+fakeDir+":"+os.Getenv("PATH"),
 				"MOCK_GO_LOG="+logPath,
 				"SOP_OLLAMA_AGENT_BIN="+dest,
+				"SOP_OLLAMA_AGENT_PIN="+pinPath,
 			)
 			var out, errb strings.Builder
 			cmd.Stdout = &out
@@ -605,6 +630,71 @@ func TestInstallOllamaAgentRejectsInvalidTestMode(t *testing.T) {
 			}
 			if strings.Contains(both, "install-sop-ollama-agent.sh") {
 				t.Errorf("the installer must not run for TEST_MODE=%q, got:\n%s", mode, both)
+			}
+		})
+	}
+}
+
+// TestInstallOllamaAgentPinPreflightFailsBeforeGates proves a missing or
+// unresolvable pin stops make before the expensive verification gates and
+// before the installer runs.
+func TestInstallOllamaAgentPinPreflightFailsBeforeGates(t *testing.T) {
+	if _, err := exec.LookPath("make"); err != nil {
+		t.Skip("make is not available")
+	}
+
+	malformed := filepath.Join(t.TempDir(), "malformed.pin")
+	if err := os.WriteFile(malformed, []byte("# no revision line\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	unresolvable := filepath.Join(t.TempDir(), "unresolvable.pin")
+	if err := os.WriteFile(unresolvable, []byte("revision = 0000000000000000000000000000000000000000\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cases := []struct {
+		name string
+		pin  string
+		want string
+	}{
+		{"missing pin file", filepath.Join(t.TempDir(), "absent.pin"), "missing pin file"},
+		{"malformed pin", malformed, "no 'revision = <rev>' line"},
+		{"unresolvable revision", unresolvable, "is not present in"},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fakeDir := t.TempDir()
+			logPath := filepath.Join(t.TempDir(), "go.log")
+			fakeGo := filepath.Join(fakeDir, "go")
+			script := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$MOCK_GO_LOG\"\nexit 0\n"
+			if err := os.WriteFile(fakeGo, []byte(script), 0o755); err != nil {
+				t.Fatal(err)
+			}
+
+			dest := filepath.Join(t.TempDir(), "sop-ollama-agent")
+			cmd := exec.Command("make", "-C", repoRoot(t), "install-ollama-agent")
+			cmd.Env = append(os.Environ(),
+				"PATH="+fakeDir+":"+os.Getenv("PATH"),
+				"MOCK_GO_LOG="+logPath,
+				"SOP_OLLAMA_AGENT_BIN="+dest,
+				"SOP_OLLAMA_AGENT_PIN="+tc.pin,
+			)
+			var out, errb strings.Builder
+			cmd.Stdout = &out
+			cmd.Stderr = &errb
+			if err := cmd.Run(); err == nil {
+				t.Fatalf("expected make to fail on %s, output:\n%s%s", tc.name, out.String(), errb.String())
+			}
+			both := out.String() + errb.String()
+			if !strings.Contains(both, tc.want) {
+				t.Errorf("expected %q in the preflight error, got:\n%s", tc.want, both)
+			}
+			if _, err := os.Stat(logPath); !os.IsNotExist(err) {
+				t.Errorf("the verification gates ran before the pin preflight")
+			}
+			if _, err := os.Stat(dest); !os.IsNotExist(err) {
+				t.Errorf("the installer ran despite a bad pin (stat %s: %v)", dest, err)
 			}
 		})
 	}

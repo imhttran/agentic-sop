@@ -31,7 +31,11 @@
 #   SOP_OLLAMA_AGENT_PIN   pin file overrides scripts/agents/sop-ollama-agent.pin
 #
 # Exits non-zero with an actionable message if the build or install cannot
-# complete. Requires Go and Git.
+# complete. Requires Git; installation additionally requires Go.
+#
+# Usage:
+#   install-sop-ollama-agent.sh           build and install the pinned revision
+#   install-sop-ollama-agent.sh --check   validate the pin only, then exit
 set -eu
 
 repo_dir=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -49,12 +53,20 @@ stage() {
     echo "$*"
 }
 
+# `--check` stops after the pin preflight. The Makefile uses it to fail before
+# the expensive verification gates when the pin is missing or does not resolve.
+check_only=0
+case "${1:-}" in
+    "") ;;
+    --check) check_only=1 ;;
+    *) fail "unknown argument: $1 (usage: $0 [--check])" ;;
+esac
+
 # --- read the pinned source revision ---
 [ -f "$pin_file" ] || fail "missing pin file $pin_file"
 revision=$(sed -n 's/^revision[[:space:]]*=[[:space:]]*//p' "$pin_file" | head -n 1 | tr -d '[:space:]')
 [ -n "$revision" ] || fail "no 'revision = <rev>' line in $pin_file"
 
-command -v go >/dev/null 2>&1 || fail "Go is required to build $binary_name but was not found on PATH"
 command -v git >/dev/null 2>&1 || fail "Git is required to resolve revision $revision but was not found on PATH"
 
 # The pinned revision must exist as a commit AND contain the agent's main
@@ -64,6 +76,13 @@ command -v git >/dev/null 2>&1 || fail "Git is required to resolve revision $rev
     || fail "pinned revision $revision is not present in $repo_dir; fetch it or update $pin_file"
 ( cd "$repo_dir" && git cat-file -e "${revision}:cmd/sop-ollama-agent/main.go" 2>/dev/null ) \
     || fail "pinned revision $revision does not contain cmd/sop-ollama-agent; update $pin_file"
+
+if [ "$check_only" -eq 1 ]; then
+    stage "Pinned revision $revision is present and contains cmd/sop-ollama-agent"
+    exit 0
+fi
+
+command -v go >/dev/null 2>&1 || fail "Go is required to build $binary_name but was not found on PATH"
 
 # --- resolve install target ---
 # explicit_bin marks the operator-owned SOP_OLLAMA_AGENT_BIN override, which is a

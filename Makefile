@@ -6,7 +6,7 @@
 
 .PHONY: fmt vet test test-fast build check check-fast check-plugin install install-all install-ollama-agent \
 	security-integration \
-	ollama-agent-invalid-test-mode plugin install-plugin \
+	ollama-agent-pin-preflight ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
 	model-claude model-deepseek model-status \
@@ -110,18 +110,26 @@ uninstall-skills-claude:
 # Install/update the pinned known-good sop-ollama-agent binary outside the tree
 # under edit, so the bootstrap invocation never compiles candidate source.
 #
-# TEST_MODE selects the test gate; every other gate (formatting, vet, build, and
-# plugin verification) is unchanged. `make install-ollama-agent TEST_MODE=fast`
-# is opt-in; the default remains the ordinary suite. An invalid mode fails before
-# the gates and before the installer, so a typo never installs a binary.
+# The pin preflight runs before the verification gates, so a missing or
+# unresolvable pinned revision fails immediately instead of after the full
+# suite. TEST_MODE selects the test gate; every other gate (formatting, vet,
+# build, and plugin verification) is unchanged. `make install-ollama-agent
+# TEST_MODE=fast` is opt-in; the default remains the ordinary suite. An invalid
+# mode fails before the gates and before the installer, so a typo never installs
+# a binary.
+ollama-agent-pin-preflight:
+	./scripts/install/install-sop-ollama-agent.sh --check
+
+# Prerequisite order keeps the cheap pin preflight ahead of the test gates in a
+# serial make. An invalid TEST_MODE stops make before either runs.
 ifneq ($(words $(TEST_MODE)),1)
-install-ollama-agent: ollama-agent-invalid-test-mode
+install-ollama-agent: ollama-agent-invalid-test-mode ollama-agent-pin-preflight
 else ifeq ($(filter $(TEST_MODE),ordinary fast),)
-install-ollama-agent: ollama-agent-invalid-test-mode
+install-ollama-agent: ollama-agent-invalid-test-mode ollama-agent-pin-preflight
 else ifeq ($(strip $(TEST_MODE)),fast)
-install-ollama-agent: check-fast
+install-ollama-agent: ollama-agent-pin-preflight check-fast
 else
-install-ollama-agent: check
+install-ollama-agent: ollama-agent-pin-preflight check
 endif
 	./scripts/install/install-sop-ollama-agent.sh
 
