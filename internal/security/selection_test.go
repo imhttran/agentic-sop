@@ -1,8 +1,10 @@
 package security
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 )
@@ -206,6 +208,88 @@ func TestSelectionExplicitOverlapIsVisible(t *testing.T) {
 	}
 }
 
+func TestAggregateLanguageState(t *testing.T) {
+	covered := LanguageCoverage{State: CoverageStateCovered}
+	unconfigured := LanguageCoverage{State: CoverageStateUnconfigured}
+	partial := LanguageCoverage{State: CoverageStatePartial}
+	disabled := LanguageCoverage{State: CoverageStateDisabled}
+	missing := LanguageCoverage{State: CoverageStateMissing}
+	unsupported := LanguageCoverage{State: CoverageStateUnsupported}
+	failed := LanguageCoverage{State: CoverageStateFailed}
+
+	for _, tc := range []struct {
+		name      string
+		languages []LanguageCoverage
+		want      CoverageState
+	}{
+		{name: "empty", want: CoverageStateUnconfigured},
+		{name: "all unconfigured", languages: []LanguageCoverage{unconfigured, unconfigured}, want: CoverageStateUnconfigured},
+		{name: "covered and unconfigured", languages: []LanguageCoverage{covered, unconfigured}, want: CoverageStatePartial},
+		{name: "unconfigured and covered", languages: []LanguageCoverage{unconfigured, covered}, want: CoverageStatePartial},
+		{name: "all covered", languages: []LanguageCoverage{covered, covered}, want: CoverageStateCovered},
+		{name: "disabled and unconfigured", languages: []LanguageCoverage{disabled, unconfigured}, want: CoverageStateDisabled},
+		{name: "partial and unconfigured", languages: []LanguageCoverage{partial, unconfigured}, want: CoverageStatePartial},
+		{name: "missing and covered", languages: []LanguageCoverage{missing, covered}, want: CoverageStateMissing},
+		{name: "failed and covered", languages: []LanguageCoverage{failed, covered}, want: CoverageStateFailed},
+		{name: "unsupported and covered", languages: []LanguageCoverage{unsupported, covered}, want: CoverageStateUnsupported},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := aggregateLanguageState(tc.languages); got != tc.want {
+				t.Fatalf("aggregateLanguageState = %s, want %s", got, tc.want)
+			}
+			reversed := append([]LanguageCoverage(nil), tc.languages...)
+			for i, j := 0, len(reversed)-1; i < j; i, j = i+1, j-1 {
+				reversed[i], reversed[j] = reversed[j], reversed[i]
+			}
+			if got := aggregateLanguageState(reversed); got != tc.want {
+				t.Fatalf("reversed aggregateLanguageState = %s, want %s", got, tc.want)
+			}
+		})
+	}
+}
+
+func TestExpectedCoverageReportsUnconfiguredAndPartial(t *testing.T) {
+	detection := mixedDetection(t)
+	cfg := config.SecurityConfig{Enabled: boolPtr(true)}
+	selection := ResolveSelection(cfg, detection, false)
+	states := map[Category]CoverageState{}
+	for _, category := range selection.Coverage {
+		states[category.Category] = category.State
+	}
+	for _, category := range []Category{CategorySAST, CategoryDependencies} {
+		if states[category] != CoverageStateUnconfigured {
+			t.Errorf("%s state = %s, want unconfigured", category, states[category])
+		}
+	}
+
+	cfg.Adapters = []config.SecurityAdapterConfig{{
+		ID: "semgrep", Category: config.SecurityCategorySAST, Command: []string{"semgrep"}, Languages: []string{"go"},
+	}}
+	selection = ResolveSelection(cfg, detection, false)
+	for _, category := range selection.Coverage {
+		if category.Category != CategorySAST {
+			continue
+		}
+		if category.State != CoverageStatePartial {
+			t.Fatalf("mixed SAST coverage = %s, want partial (%+v)", category.State, category.Languages)
+		}
+		var goCovered, rustUnconfigured bool
+		for _, language := range category.Languages {
+			switch language.Language {
+			case LanguageGo:
+				goCovered = language.State == CoverageStateCovered
+			case LanguageRust:
+				rustUnconfigured = language.State == CoverageStateUnconfigured
+			}
+		}
+		if !goCovered || !rustUnconfigured {
+			t.Fatalf("SAST languages = %+v, want Go covered and Rust unconfigured", category.Languages)
+		}
+		return
+	}
+	t.Fatal("SAST coverage was not reported")
+}
+
 func TestSelectionUndeclaredExternalCoverageCannotProveLanguages(t *testing.T) {
 	cfg := config.SecurityConfig{
 		Enabled: boolPtr(true),
@@ -252,6 +336,35 @@ func TestSelectionUndeclaredExternalCoverageBlocksAutoOverlap(t *testing.T) {
 		if adapter.Selection == SelectionAutomatic && adapter.Config.Category == config.SecurityCategoryDependencies {
 			t.Fatalf("auto selection added %s over undeclared explicit coverage", adapter.Config.ID)
 		}
+	}
+}
+
+func TestAutomaticOSVSelectionRequiresVersionPin(t *testing.T) {
+	detection := mixedDetection(t)
+	database := filepath.Join(t.TempDir(), "db")
+	writeOSVDatabase(t, database, []string{"Go"}, time.Now().UTC())
+	cfg := config.SecurityConfig{
+		Enabled: boolPtr(true), Auto: true, OSVDatabasePath: database,
+	}
+	selection := ResolveSelection(cfg, detection, true)
+	var osv *SelectedAdapter
+	for i := range selection.Adapters {
+		if selection.Adapters[i].Config.ID == AdapterIDOSVScanner {
+			osv = &selection.Adapters[i]
+		}
+	}
+	if osv == nil {
+		t.Fatalf("automatic OSV selection was not produced: %v", selectedIDs(selection))
+	}
+	if strings.TrimSpace(osv.Config.Version) != "" {
+		t.Fatalf("automatic OSV selection invented a version pin: %q", osv.Config.Version)
+	}
+	candidates := ClassifyCapabilitiesWithDatabases(detection, []config.SecurityAdapterConfig{osv.Config}, "", database)
+	if len(candidates) != 1 || candidates[0].Status != CapabilityUnsupported {
+		t.Fatalf("candidate = %+v, want unsupported without a version pin", candidates)
+	}
+	if !strings.Contains(candidates[0].Reason, "exact version pin") {
+		t.Fatalf("reason = %q, want the version-pin prerequisite", candidates[0].Reason)
 	}
 }
 

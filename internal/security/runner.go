@@ -65,8 +65,8 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 	if cfg.MaxOutputBytes <= 0 {
 		cfg.MaxOutputBytes = 1 << 20
 	}
-	seen := make(map[string]bool, len(cfg.Adapters))
-	categories := make(map[Category]bool, len(cfg.Adapters))
+	seen := make(map[string]bool, len(cfg.Adapters)+len(cfg.Disabled))
+	categories := make(map[Category]bool, len(cfg.Adapters)+len(cfg.Disabled))
 	for _, adapter := range cfg.Adapters {
 		descriptor := adapter.Descriptor()
 		if err := descriptor.Validate(); err != nil {
@@ -79,6 +79,16 @@ func NewRunner(cfg RunnerConfig) (*Runner, error) {
 		for _, category := range descriptor.Categories {
 			categories[category] = true
 		}
+	}
+	// A disabled adapter is still configured evidence. It can satisfy the
+	// required-category presence check so policy can report an explicit blocked
+	// outcome instead of treating the configuration as absent.
+	for _, disabled := range cfg.Disabled {
+		if seen[disabled.ID] {
+			return nil, fmt.Errorf("security: duplicate adapter id %q", disabled.ID)
+		}
+		seen[disabled.ID] = true
+		categories[disabled.Category] = true
 	}
 	if cfg.Policy.Enabled {
 		for _, raw := range cfg.Policy.RequiredCategories {
@@ -130,14 +140,6 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 		scan.Verdict = VerdictNotApplicable
 		scan.Coverage = CoverageUnknown
 		scan.Reasons = []string{"security add-on is disabled"}
-		scan.EndedAt = time.Now().UTC()
-		scan.Metrics.DurationMS = scan.EndedAt.Sub(scan.StartedAt).Milliseconds()
-		return scan, nil
-	}
-	if len(r.cfg.Adapters) == 0 {
-		scan.Verdict = VerdictIndeterminate
-		scan.Coverage = CoverageUnknown
-		scan.Reasons = []string{"security add-on is enabled but no adapter is configured"}
 		scan.EndedAt = time.Now().UTC()
 		scan.Metrics.DurationMS = scan.EndedAt.Sub(scan.StartedAt).Milliseconds()
 		return scan, nil
@@ -245,6 +247,12 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 	}
 
 	evaluation := EvaluatePolicyWithDetection(scan.Adapters, r.cfg.Policy, r.cfg.Detection)
+	if len(r.cfg.Adapters) == 0 && len(r.cfg.Disabled) == 0 {
+		// Distinguish an empty configuration from a configuration whose adapters
+		// are all intentionally disabled. Both are non-clean, but the reasons and
+		// coverage evidence differ.
+		evaluation.Reasons = []string{"security add-on is enabled but no adapter is configured"}
+	}
 	scan.Findings = evaluation.Findings
 	scan.Verdict = evaluation.Verdict
 	scan.Coverage = evaluation.Coverage

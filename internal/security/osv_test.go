@@ -633,8 +633,11 @@ func TestOSVCoverageReportSeparatesLanguages(t *testing.T) {
 		if states[LanguageGo] != CoverageStateCovered {
 			t.Errorf("Go state = %s", states[LanguageGo])
 		}
-		if states[LanguageRust] == CoverageStateCovered {
-			t.Errorf("Rust state = covered without a Rust adapter")
+		if states[LanguageRust] != CoverageStateUnconfigured {
+			t.Errorf("Rust state = %s, want unconfigured", states[LanguageRust])
+		}
+		if category.State != CoverageStatePartial {
+			t.Errorf("category state = %s, want partial for covered+unconfigured", category.State)
 		}
 		return
 	}

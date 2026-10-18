@@ -410,7 +410,11 @@ func inspectRequiredReadiness(cfg config.Config, selection security.Selection, s
 			continue
 		}
 		ready = false
-		reasons = append(reasons, fmt.Sprintf("adapter %s prerequisite is %s", candidate.ID, candidate.Status))
+		if candidate.Reason != "" {
+			reasons = append(reasons, fmt.Sprintf("adapter %s prerequisite is %s: %s", candidate.ID, candidate.Status, candidate.Reason))
+		} else {
+			reasons = append(reasons, fmt.Sprintf("adapter %s prerequisite is %s", candidate.ID, candidate.Status))
+		}
 	}
 	if len(reasons) == 0 {
 		reasons = []string{"all required categories and detected languages have selected, available adapters"}
@@ -468,6 +472,9 @@ func printCapabilities(w io.Writer, candidates []security.AdapterCandidate) {
 	}
 	for _, candidate := range candidates {
 		fmt.Fprintf(w, "    %s (%s): %s", candidate.ID, candidate.Category, candidate.Status)
+		if candidate.Reason != "" {
+			fmt.Fprintf(w, " [%s]", candidate.Reason)
+		}
 		if candidate.Disabled {
 			fmt.Fprintf(w, " [disabled: %s]", candidate.DisabledReason)
 		}
