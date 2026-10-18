@@ -77,6 +77,20 @@ func (a *Adapter) CurrentBranch(ctx context.Context) (string, error) {
 	return branch, nil
 }
 
+// IsLinkedWorktree reports whether dir is a linked worktree (created by
+// `git worktree add`) rather than the repository's primary checkout.
+func (a *Adapter) IsLinkedWorktree(ctx context.Context) (bool, error) {
+	out, err := run(ctx, a.dir, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+	if err != nil {
+		return false, fmt.Errorf("linked worktree: %w", err)
+	}
+	dirs := strings.Split(strings.TrimSpace(out), "\n")
+	if len(dirs) != 2 {
+		return false, fmt.Errorf("linked worktree: unexpected rev-parse output %q", out)
+	}
+	return dirs[0] != dirs[1], nil
+}
+
 // UpdateIntegrationBranch fast-forwards the local integration branch from
 // origin. It never creates a merge commit or force-updates history.
 func (a *Adapter) UpdateIntegrationBranch(ctx context.Context, branch string) error {
