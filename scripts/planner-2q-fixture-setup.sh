@@ -33,7 +33,12 @@ SOP_BINARY="${2:-${PLANNER2Q_SOP_BINARY:-sop}}"
 MODEL="${PLANNER2Q_MODEL:-deepseek-v4.1-flash:cloud}"
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-CHECKOUT_ROOT="$(cd "$SELF_DIR/.." && pwd -P)"
+# The checkout this script runs from, if any. A copy run from outside a git
+# checkout (for example from $TMPDIR) has none, and the in-checkout guard is skipped.
+CHECKOUT_ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -n "$CHECKOUT_ROOT" ]; then
+  CHECKOUT_ROOT="$(cd "$CHECKOUT_ROOT" && pwd -P)"
+fi
 
 # Resolve the fixture root physically through its nearest existing ancestor.
 _resolve() {
@@ -51,9 +56,11 @@ case "$FIXTURE_ROOT" in
   "$BASE_ROOT"/*) : ;;
   *) echo "setup: fixture root must be under $BASE_ROOT: $FIXTURE_ROOT" >&2; exit 1 ;;
 esac
-case "$FIXTURE_ROOT/" in
-  "$CHECKOUT_ROOT"/*) echo "setup: refusing a fixture root inside the checkout: $FIXTURE_ROOT" >&2; exit 1 ;;
-esac
+if [ -n "$CHECKOUT_ROOT" ]; then
+  case "$FIXTURE_ROOT/" in
+    "$CHECKOUT_ROOT"/*) echo "setup: refusing a fixture root inside the checkout: $FIXTURE_ROOT" >&2; exit 1 ;;
+  esac
+fi
 
 if [ -e "$FIXTURE_ROOT" ]; then
   if [ "${PLANNER2Q_FORCE_RECREATE:-0}" = "1" ]; then
