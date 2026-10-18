@@ -5,6 +5,7 @@
 **Plan:** [PLAN-Dependency-Coverage-Fixes.md](../plans/PLAN-Dependency-Coverage-Fixes.md)
 **Branch:** `fix/dependency-coverage-obligations`
 **Implementation commit:** `553ffb1`
+**PR:** #72 (open for review)
 **Baseline:** `main` @ `fca3e31` (PR #69 merged at `805dd5e`)
 
 ## Reported findings and reproduction
