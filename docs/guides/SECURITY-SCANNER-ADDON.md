@@ -64,10 +64,13 @@ values (`SOP_SECURITY_ENABLED=true`, `SOP_SECURITY_MODE=report-only`,
 
 `security.exclude` is a declared scope boundary, not a suppression. Excluded
 paths are removed from the adapter target set, listed in `scope.excluded`, and
-never turned into findings. Exclusions do not by themselves make coverage
-`PARTIAL`; a scanner-side skip (for example Semgrep's default `.semgrepignore`
-patterns) still does. `.git` and `.agent-sdlc` are always excluded: VCS metadata
-is not source and SOP's run state is evidence, not project content.
+never turned into findings. Semgrep receives the patterns as `--exclude`; for
+Gitleaks, SOP stages a filtered view so excluded files are never read by the
+scanner. Exclusions do not by themselves make coverage `PARTIAL`; a scanner-side
+skip (for example Semgrep's default `.semgrepignore` patterns, or a staged-view
+symbolic link that was not followed) still does. `.git` and `.agent-sdlc` are
+always excluded: VCS metadata is not source and SOP's run state is evidence, not
+project content.
 
 Run a scan:
 

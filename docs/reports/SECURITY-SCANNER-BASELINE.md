@@ -356,6 +356,68 @@ records their identities. The fixture run uses the integration rules/config from
 - A passing scan would be evidence for these tools and this scope, not proof that
   the repository has no vulnerabilities.
 
+## Post-merge addendum (2026-10-17)
+
+This addendum records a post-merge re-measurement of the baseline above. It is a
+repeat scan of the merged code, not a new independent vulnerability review. The
+source-backed dispositions in the original baseline carry forward unchanged.
+
+| Field              | Value                                                        |
+| ------------------ | ------------------------------------------------------------ |
+| Target             | `origin/main` at `1b639ccfbcc604a933a650cba3d2dbff18a2499b`  |
+| Tree               | `6b9bc0e562f23a3acdb891f54c67e0eb5210ac49`                   |
+| Working tree       | `CLEAN` (`dirty: false`)                                     |
+| Production run     | `security-baseline-postmerge-20261017`                       |
+| Verdict            | `FAIL` (report-only; non-blocking)                           |
+| Coverage           | Semgrep `PARTIAL`, Gitleaks `COMPLETE`                       |
+| Findings           | 27 (26 SAST, 1 secret); same rule/location set               |
+| Suppressed         | 0                                                            |
+| Execution failures | 0                                                            |
+| Total duration     | 3215 ms (Semgrep 2586 ms, Gitleaks 562 ms)                   |
+
+### Provenance
+
+| Adapter    | Version   | Rules identity                                                      | Configuration digest                                                | Sanitized report digest                                             |
+| ---------- | --------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Semgrep CE | `1.136.0` | `d3602b6590db16b37b035ddacdbefc612a804ee9840b2cf7b705cf064b2dada7`  | `ce52a03b07bd5c5b997e06331dc47eae811bc6572c44fdc5e2d5f18435aad077`  | `292b577cc9e531a0cb2a4240f05c906fdf475a5bdc4e27dd09f2a5c6216ae711`  |
+| Gitleaks   | `8.30.1`  | built-in rules; binary identity from the original baseline          | `c308356740a0f7c36903ef409b2eca80472fac2ecab924c4ab5ed0c260a08ae8`  | `fbad7c7333169c6cd43a77c3d4f8a6976e579bf201046a00580dff57decb4370`  |
+
+The shared policy identity remained
+`936413f96f08eca7aa69cc70bf697ebd20a8898d1c28dfb121f01bc051ee6c47`.
+
+### Findings comparison
+
+No finding was added or removed by the merge:
+
+| Rule ID                               | Original | Post-merge | Delta |
+| ------------------------------------- | -------- | ---------- | ----- |
+| `dangerous-exec-command`              | 14       | 14         | 0     |
+| `no-direct-write-to-responsewriter`   | 3        | 3          | 0     |
+| `cookie-missing-secure`               | 3        | 3          | 0     |
+| `open-redirect`                       | 3        | 3          | 0     |
+| `use-of-unsafe-block`                 | 2        | 2          | 0     |
+| `string-formatted-query`              | 1        | 1          | 0     |
+| `generic-api-key` (Gitleaks built-in) | 1        | 1          | 0     |
+| **Total**                             | **27**   | **27**     | **0** |
+
+The merged commit added the exclusion-matching code and the baseline report
+documents; no new finding class or location appeared. The prior dispositions
+(27 false positives, 0 confirmed, 0 unresolved findings) carry forward. This
+addendum does not re-adjudicate any finding independently.
+
+### Coverage and identity
+
+Semgrep again reported `PARTIAL` with 581 targets skipped by its default
+`.semgrepignore` (578 Go test files, two test/fixture directories, one minified
+JavaScript file). Gitleaks reported `COMPLETE` over the same 13.09 MB source
+scope. The declared exclusion list was unchanged.
+
+### Artifacts
+
+`.agent-sdlc/runs/security-baseline-postmerge-20261017/security/`:
+`scan.json`, `scan.md`, `semgrep.native.json`, `gitleaks.native.json`, and
+`coverage-detail.md`.
+
 ## Related
 
 - [Normative contract](../specs/SECURITY-SCANNER-ADDON.md)

@@ -164,9 +164,11 @@ content identity, policy identity, and sanitized native-report digest.
   `security.adapters[].rules` is set, it is passed as `--config <local-config>`
   and its identity is recorded; otherwise Gitleaks uses its built-in rules.
 - Parses the top-level array or `findings` object shape.
-- Gitleaks has no path-exclusion flag, so findings whose repository-relative path
-  matches `scope.excluded` are removed after parsing and counted in diagnostics.
-  The declared list remains visible in `scope.excluded`.
+- Gitleaks has no path-exclusion flag, so SOP stages a filtered view: excluded
+  paths are never linked into the scan view and are never read by Gitleaks. The
+  adapter still filters any unexpected finding as a guard and records staged
+  exclusions in diagnostics. Symbolic links are not followed; their presence
+  makes coverage `PARTIAL`.
 - Every secret finding is `HIGH`; original provider meaning (`secret`) is
   retained. Messages and metadata are sanitized.
 - Raw report files live only in restricted temporary storage and are removed on

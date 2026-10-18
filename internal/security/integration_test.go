@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -250,6 +251,169 @@ func TestRealCLIsCleanAndSeededFixtures(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Logf("seeded findings=%d duration=%dms adapter_durations=%v", len(seededScan.Findings), seededScan.Metrics.DurationMS, seededScan.Metrics.AdapterDurationMS)
+}
+
+func TestRealGitleaksExclusionsArePreScan(t *testing.T) {
+	gitleaksBin := integrationBinary(t, "SOP_SECURITY_GITLEAKS_BIN", "gitleaks")
+	gitleaksVersion := toolVersion(t, gitleaksBin, "version")
+	configPath, err := filepath.Abs(filepath.Join("testdata", "real", "gitleaks.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	writeIntegrationFile(t, root, "keep/secret.txt", "SOP_FAKE_SECRET_KEEP_0001\n")
+	var noise strings.Builder
+	for i := 0; i < 2000; i++ {
+		fmt.Fprintf(&noise, "SOP_FAKE_SECRET_NOISE_%04d\n", i)
+	}
+	writeIntegrationFile(t, root, "excluded/noise.txt", noise.String())
+
+	build := func() Adapter {
+		adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+			ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+			Command: []string{gitleaksBin}, Rules: configPath, Version: gitleaksVersion,
+		}, BuildOptions{Timeout: 2 * time.Minute, MaxOutputBytes: 1024})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return adapter
+	}
+	request := func(exclude []string) Request {
+		req := requestFor(t, root)
+		req.Scope.Excluded = exclude
+		return req
+	}
+
+	excludedRun, err := build().Scan(context.Background(), request([]string{"excluded"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if excludedRun.Status != StatusCompleted || excludedRun.Coverage != CoverageComplete {
+		t.Fatalf("excluded run = %s/%s, want COMPLETED/COMPLETE: %v", excludedRun.Status, excludedRun.Coverage, excludedRun.Diagnostics)
+	}
+	if len(excludedRun.Findings) != 1 || excludedRun.Findings[0].Path != "keep/secret.txt" {
+		t.Fatalf("excluded findings = %+v, want only keep/secret.txt", excludedRun.Findings)
+	}
+	if bytes.Contains(excludedRun.NativeReport, []byte("excluded/noise.txt")) {
+		t.Error("native report contains the excluded path")
+	}
+	if bytes.Contains(excludedRun.NativeReport, []byte("sop-gitleaks-")) {
+		t.Error("native report contains the temporary staged-view path")
+	}
+	if !strings.Contains(strings.Join(excludedRun.Diagnostics, " "), "outside the declared scope were not staged") {
+		t.Errorf("diagnostics = %v, want staged-view accounting", excludedRun.Diagnostics)
+	}
+
+	// Control: without the exclusion, the same excluded content produces a report
+	// larger than the adapter bound. This proves the staging fix is what prevents
+	// excluded content from exhausting the scan limit.
+	control, err := build().Scan(context.Background(), request(nil))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if control.Status != StatusFailed {
+		t.Fatalf("control status = %s, want FAILED at the 1024-byte report bound: %v", control.Status, control.Diagnostics)
+	}
+	if !strings.Contains(strings.Join(control.Diagnostics, " "), "exceeds the 1024-byte limit") {
+		t.Errorf("control diagnostics = %v, want report-size failure", control.Diagnostics)
+	}
+}
+
+func TestRealCLIExclusionConformance(t *testing.T) {
+	semgrepBin := integrationBinary(t, "SOP_SECURITY_SEMGREP_BIN", "semgrep")
+	gitleaksBin := integrationBinary(t, "SOP_SECURITY_GITLEAKS_BIN", "gitleaks")
+	semgrepVersion := toolVersion(t, semgrepBin, "--version")
+	gitleaksVersion := toolVersion(t, gitleaksBin, "version")
+	adapters := integrationAdapters(t, semgrepBin, gitleaksBin, semgrepVersion, gitleaksVersion)
+
+	root := t.TempDir()
+	goSource := "package fixture\n\nimport \"os/exec\"\n\nfunc Run(arg string) error { return exec.Command(arg).Run() }\n"
+	paths := []string{
+		"keep",
+		"internal/a/testdata/excluded",
+		"internal/a/b/testdata/included",
+		"nested/generated/x/excluded",
+		"generated/root-excluded",
+		"root-only/excluded",
+		"sub/root-only/included",
+	}
+	for i, path := range paths {
+		writeIntegrationFile(t, root, path+".go", goSource)
+		writeIntegrationFile(t, root, path+".txt", fmt.Sprintf("SOP_FAKE_SECRET_CONFORMANCE_%02d\n", i))
+	}
+	excludes := []string{"/internal/*/testdata", "**/generated/**", "/root-only"}
+	runner, err := NewRunner(RunnerConfig{
+		WorkspaceRoot: root, RunID: "conformance", Adapters: adapters,
+		Policy: Policy{
+			Enabled: true, Mode: "report-only", Scope: "workspace",
+			FailOn: []string{"high"}, UnknownSeverity: "indeterminate", Exclude: excludes,
+		},
+		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := runner.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	included := map[string]bool{
+		"keep":                           true,
+		"internal/a/b/testdata/included": true,
+		"sub/root-only/included":         true,
+	}
+	excluded := map[string]bool{
+		"internal/a/testdata/excluded": true,
+		"nested/generated/x/excluded":  true,
+		"generated/root-excluded":      true,
+		"root-only/excluded":           true,
+	}
+	found := make(map[string]bool)
+	for _, finding := range scan.Findings {
+		base := strings.TrimSuffix(finding.Path, filepath.Ext(finding.Path))
+		found[finding.Path] = true
+		if excluded[base] {
+			t.Errorf("finding from excluded path %s (%s)", finding.Path, finding.AdapterID)
+		}
+		if !included[base] {
+			t.Errorf("finding from unexpected path %s (%s)", finding.Path, finding.AdapterID)
+		}
+	}
+	for base := range included {
+		for _, ext := range []string{".go", ".txt"} {
+			if !found[base+ext] {
+				t.Errorf("missing expected finding %s", base+ext)
+			}
+		}
+	}
+	for _, adapter := range scan.Adapters {
+		if adapter.Status != StatusCompleted || adapter.Coverage != CoverageComplete {
+			t.Errorf("adapter %s = %s/%s: %v", adapter.AdapterID, adapter.Status, adapter.Coverage, adapter.Diagnostics)
+		}
+	}
+	for _, pattern := range excludes {
+		matched := false
+		for _, got := range scan.Scope.Excluded {
+			if got == pattern {
+				matched = true
+			}
+		}
+		if !matched {
+			t.Errorf("scope.excluded = %v, missing %q", scan.Scope.Excluded, pattern)
+		}
+	}
+}
+
+func writeIntegrationFile(t *testing.T, root, rel, content string) {
+	t.Helper()
+	path := filepath.Join(root, filepath.FromSlash(rel))
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
 }
 
 func TestRealCLIResumeIdentity(t *testing.T) {
