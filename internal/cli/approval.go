@@ -71,6 +71,7 @@ func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
 
 	svc := approvalService(st, dir)
 	items := []approvalListingItem{}
+	var stale []approvalListingItem
 	for _, task := range tasks {
 		view, err := svc.Approval(task.ID)
 		if err != nil {
@@ -78,6 +79,12 @@ func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
 			return exitError
 		}
 		if !view.Applicable {
+			// A PENDING request whose task is already satisfied cannot be decided,
+			// yet it still blocks historicalization. The text listing names it so
+			// the operator can supersede it; --json keeps listing applicable gates only.
+			if view.Present && view.Status == domain.ApprovalPending {
+				stale = append(stale, approvalListingItem{TaskID: view.TaskID, Reason: view.Reason, TaskStatus: string(view.TaskStatus)})
+			}
 			continue
 		}
 		items = append(items, approvalListingItem{
@@ -106,13 +113,19 @@ func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
 
 	if len(items) == 0 {
 		fmt.Fprintln(stdout, "no pending approvals")
-		return exitOK
+	} else {
+		for _, it := range items {
+			fmt.Fprintf(stdout, "%s  %s  %s  %s\n", it.TaskID, it.Kind, it.Stage, oneLine(it.Reason))
+		}
+		fmt.Fprintln(stdout, "\nInspect one with: sop approval <task-id>")
+		fmt.Fprintln(stdout, "Decide one with:  sop approve <task-id> | sop decline <task-id>")
 	}
-	for _, it := range items {
-		fmt.Fprintf(stdout, "%s  %s  %s  %s\n", it.TaskID, it.Kind, it.Stage, oneLine(it.Reason))
+	if len(stale) > 0 {
+		fmt.Fprintln(stdout, "\nStale (task already satisfied; clear with `sop approval supersede <task-id> --reason TEXT --by NAME`):")
+		for _, it := range stale {
+			fmt.Fprintf(stdout, "  %s  %s  %s\n", it.TaskID, it.TaskStatus, oneLine(it.Reason))
+		}
 	}
-	fmt.Fprintln(stdout, "\nInspect one with: sop approval <task-id>")
-	fmt.Fprintln(stdout, "Decide one with:  sop approve <task-id> | sop decline <task-id>")
 	return exitOK
 }
 
