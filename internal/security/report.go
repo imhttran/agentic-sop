@@ -32,8 +32,14 @@ type Scan struct {
 	// RequiredMode is the readiness projection: what the same evidence would
 	// produce under a required-mode gate. It never changes the recorded verdict.
 	RequiredMode *Readiness `json:"required_mode,omitempty"`
-	Diagnostics  []string   `json:"diagnostics,omitempty"`
-	Metrics      Metrics    `json:"metrics"`
+	// CoverageReport reports every category and detected language independently so
+	// a category-level success cannot hide missing language coverage.
+	CoverageReport []CategoryCoverage `json:"coverage_by_category,omitempty"`
+	// Overlaps records explicit overlapping coverage that was visible to the
+	// operator. Automatic selection is designed not to create overlaps.
+	Overlaps    []Overlap `json:"overlaps,omitempty"`
+	Diagnostics []string  `json:"diagnostics,omitempty"`
+	Metrics     Metrics   `json:"metrics"`
 }
 
 // Readiness is a report-only projection of required-mode readiness. It is
@@ -75,7 +81,7 @@ func (p Policy) Identity(baseline Baseline) string {
 	if p.Enabled {
 		enabled = "enabled"
 	}
-	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), strings.Join(exclude, "\x00"), p.StalePolicy(), strings.TrimSpace(p.AdvisoryDatabasePath), baseline.Identity())
+	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), strings.Join(exclude, "\x00"), p.StalePolicy(), strings.TrimSpace(p.AdvisoryDatabasePath), strings.TrimSpace(p.OSVDatabasePath), fmt.Sprintf("%t", p.RequiredGateActive), baseline.Identity())
 }
 
 // ArtifactRefs are the repository-relative artifact paths written for a scan.
@@ -192,6 +198,16 @@ func RenderMarkdown(scan Scan) string {
 		fmt.Fprintf(&b, "- `%s` (%s): `%s`, coverage `%s`, exit `%d`, duration `%dms`",
 			adapter.AdapterID, adapter.Category, adapter.Status, adapter.Coverage, adapter.ExitCode,
 			scan.Metrics.AdapterDurationMS[adapter.AdapterID])
+		if adapter.Disabled {
+			b.WriteString(", disabled")
+		} else if adapter.Selection != "" {
+			fmt.Fprintf(&b, ", selection `%s`", adapter.Selection)
+		}
+		if adapter.RepositoryWide {
+			b.WriteString(", repository-wide")
+		} else if len(adapter.Languages) > 0 {
+			fmt.Fprintf(&b, ", languages `%s`", languageListText(adapter.Languages))
+		}
 		if adapter.Reused {
 			b.WriteString(", reused")
 		}
@@ -199,6 +215,52 @@ func RenderMarkdown(scan Scan) string {
 		for _, diagnostic := range adapter.Diagnostics {
 			fmt.Fprintf(&b, "  - Diagnostic: %s\n", SanitizeText(diagnostic, MaxDiagnosticBytes))
 		}
+	}
+
+	if len(scan.CoverageReport) > 0 {
+		b.WriteString("\n## Coverage\n\n")
+		for _, coverage := range scan.CoverageReport {
+			fmt.Fprintf(&b, "- %s%s: `%s`\n", coverage.Category, requiredSuffix(coverage.Required), coverage.State)
+			for _, language := range coverage.Languages {
+				fmt.Fprintf(&b, "  - %s: `%s`", language.Language, language.State)
+				if len(language.Adapters) > 0 {
+					fmt.Fprintf(&b, " (%s)", strings.Join(language.Adapters, ", "))
+				}
+				b.WriteString("\n")
+				for _, reason := range language.Reasons {
+					fmt.Fprintf(&b, "    - %s\n", SanitizeText(reason, MaxDiagnosticBytes))
+				}
+			}
+			for _, reason := range coverage.Reasons {
+				fmt.Fprintf(&b, "  - %s\n", SanitizeText(reason, MaxDiagnosticBytes))
+			}
+		}
+	}
+
+	if len(scan.Overlaps) > 0 {
+		b.WriteString("\n## Overlapping coverage\n\n")
+		for _, overlap := range scan.Overlaps {
+			scope := string(overlap.Language)
+			if overlap.RepositoryWide {
+				scope = "repository-wide"
+			}
+			fmt.Fprintf(&b, "- %s (%s): %s\n", overlap.Category, scope, strings.Join(overlap.Adapters, ", "))
+		}
+	}
+
+	b.WriteString("\n## Scanner provenance\n\n")
+	for _, adapter := range scan.Adapters {
+		if adapter.Disabled {
+			continue
+		}
+		fmt.Fprintf(&b, "- `%s`: scanner `%s`", adapter.AdapterID, firstNonEmpty(adapter.Provenance.ScannerVersion, adapter.AdapterVersion, "unknown"))
+		if adapter.Provenance.AdvisoryDatabaseIdentity != "" {
+			fmt.Fprintf(&b, ", database `%s`", SanitizeText(adapter.Provenance.AdvisoryDatabaseIdentity, MaxDiagnosticBytes))
+		}
+		if adapter.Provenance.AdvisoryDatabaseStale {
+			b.WriteString(", database STALE")
+		}
+		b.WriteString("\n")
 	}
 
 	b.WriteString("\n## Findings\n\n")
@@ -250,6 +312,13 @@ func RenderMarkdown(scan Scan) string {
 		fmt.Fprintf(&b, "- Diagnostic: %s\n", SanitizeText(diagnostic, MaxDiagnosticBytes))
 	}
 	return b.String()
+}
+
+func requiredSuffix(required bool) string {
+	if required {
+		return " (required)"
+	}
+	return ""
 }
 
 func safeArtifactName(id string) string {

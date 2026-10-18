@@ -22,6 +22,8 @@ principles are stated in [../architecture/OVERVIEW.md](../architecture/OVERVIEW.
 - [RECOVERY.md](RECOVERY.md) — plan provenance, retry budgets, non-destructive recovery.
 - [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md) — configuration keys
   and validation.
+- [SECURITY-SCANNER-ADDON.md](SECURITY-SCANNER-ADDON.md) — the optional scanner
+  add-on, adapter contract, selection controls, and coverage policy.
 - [../guides/LESSONS.md](../guides/LESSONS.md) — trusted commands, structured arguments.
 
 ## Normative Language

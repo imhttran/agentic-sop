@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -18,6 +19,7 @@ type semgrepAdapter struct {
 	category     Category
 	command      []string
 	rules        string
+	languages    []Language
 	version      string
 	configDigest string
 	exec         Executor
@@ -34,6 +36,7 @@ func (a *semgrepAdapter) Descriptor() Descriptor {
 		ScopeModes:      []string{"workspace", "changed-files"},
 		Locality:        "local",
 		Network:         "none required; local rules only (no implicit download or upload)",
+		Languages:       a.languages,
 	}
 }
 
@@ -42,6 +45,7 @@ func (a *semgrepAdapter) currentProvenance(req Request) (Provenance, error) {
 		ScannerVersion:      a.version,
 		ConfigurationDigest: a.configDigest,
 		ContentIdentity:     req.Content,
+		Languages:           a.languages,
 	}
 	if strings.TrimSpace(a.rules) == "" {
 		return prov, nil
@@ -142,6 +146,10 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		exec.Diagnostics = []string{"semgrep rules languages are unavailable: " + SanitizeText(langErr.Error(), MaxDiagnosticBytes)}
 		return finish(exec, nil)
 	}
+	for language := range languageCoverage.Covered {
+		exec.Languages = append(exec.Languages, language)
+	}
+	sort.Slice(exec.Languages, func(i, j int) bool { return exec.Languages[i] < exec.Languages[j] })
 	exec.Diagnostics = append(exec.Diagnostics, sourceLanguageDiagnostic(languageCoverage.Detected))
 	if len(languageCoverage.Detected) > 0 && len(languageCoverage.Covered) == 0 {
 		exec.Status = StatusFailed

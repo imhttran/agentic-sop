@@ -1,7 +1,7 @@
 # Security Scanner Add-on
 
 **Type:** Normative specification (MVP)
-**Status:** Implemented for Semgrep Community Edition, Gitleaks, and cargo-audit.
+**Status:** Implemented for Semgrep Community Edition, Gitleaks, cargo-audit, and OSV-Scanner.
 **Requirements source:** [SOP-Security-Scanner-Addon-PRD.md](SOP-Security-Scanner-Addon-PRD.md)
 **Plan:** [PLAN-Security-Scanner-Addon.md](../plans/PLAN-Security-Scanner-Addon.md)
 
@@ -50,37 +50,97 @@ security:
   max_output_bytes: 1048576
   baseline: .agent-sdlc/security-baseline.json
   exclude: [internal/security/testdata] # declared scope; a leading "/" anchors to root
-  # Local advisory database for dependency scanning. Explicit; never fetched implicitly.
+  # Local advisory database for cargo-audit. Explicit; never fetched implicitly.
   advisory_database_path: .agent-sdlc/advisory-db
+  # Separate OSV-Scanner offline cache. OSV and cargo-audit database formats are
+  # not interchangeable; OSV never falls back to advisory_database_path.
+  osv_database_path: .agent-sdlc/osv-db
   stale_advisory_database: deny # deny (default) | allow
-  auto: false # true adds missing built-in categories from detected content
+  auto: false # true fills unconfigured, enabled coverage from detected content
+  # Category enable controls. Omitted entries inherit enabled: true; an explicit
+  # false disables every adapter in that category and is not undone by auto.
+  categories:
+    sast: true
+    secrets: true
+    dependencies: true
   adapters:
     - id: semgrep
       category: sast
       protocol: builtin
       command: [semgrep]
       rules: .agent-sdlc/security-rules # local rules path; no implicit download
+      languages: [go, rust] # optional; built-in default is go+rust
       version: "SET_THE_PINNED_VERSION"
     - id: gitleaks
       category: secrets
       protocol: builtin
       command: [gitleaks]
       version: "SET_THE_PINNED_VERSION"
-    - id: cargo-audit
+    # Recommended dependency stack for new configurations: OSV for Go and Rust.
+    - id: osv-scanner
       category: dependencies
       protocol: builtin
-      command: [cargo, audit]
-      database: .agent-sdlc/advisory-db # optional per-adapter override
-      lockfile: Cargo.lock # optional; otherwise resolved from content
+      command: [osv-scanner]
+      database: .agent-sdlc/osv-db # explicit offline cache; no download on scan
+      languages: [go, rust]
+      inputs: [go.mod, Cargo.lock] # optional; otherwise resolved from content
       stale: deny # optional per-adapter override
       version: "SET_THE_PINNED_VERSION"
+    # Existing Rust-only configurations keep cargo-audit; it is never replaced
+    # by OSV automatically.
+    # - id: cargo-audit
+    #   category: dependencies
+    #   protocol: builtin
+    #   command: [cargo, audit]
+    #   database: .agent-sdlc/advisory-db
+    #   lockfile: Cargo.lock
+    #   languages: [rust]
+    #   stale: deny
+    #   version: "SET_THE_PINNED_VERSION"
     # A private adapter replaces a built-in through configuration alone.
     # - id: private-sast
     #   category: sast
     #   protocol: external
     #   command: [/absolute/path/to/adapter]
+    #   languages: [go, rust]
     #   version: "1.0.0"
 ```
+
+### Selection and enable controls
+
+Selection keeps capability, language, and adapter identity separate:
+
+- A category (`sast`, `secrets`, `dependencies`) may have multiple adapters.
+- An adapter may cover one or more languages (`go`, `rust`).
+- A language-independent capability uses repository-wide scope. Secrets scanners
+  are repository-wide by default; an external adapter declares
+  `repository_wide: true` when it covers the whole repository.
+
+Precedence is deterministic:
+
+1. `security.enabled: false` prevents every adapter from running.
+2. `security.categories.<category>: false` prevents every adapter in that
+   category. It cannot be re-enabled by `auto` or by an adapter `enabled: true`.
+3. `security.adapters[].enabled: false` prevents that adapter. `true` and an
+   omitted value inherit the category/global state.
+4. Explicit configuration wins over automatic selection.
+5. `auto` fills only coverage that no explicit adapter, enabled or disabled, has
+   claimed. It never re-adds an explicitly disabled adapter.
+6. Automatic selection never creates overlapping coverage. Rust dependency
+   coverage prefers the documented legacy `cargo-audit` choice; OSV for Rust
+   requires an explicit selection.
+7. Overlapping explicit coverage is allowed, is reported in `overlaps`, and both
+   adapters run. Findings remain separate.
+
+A pointer distinguishes an omitted enable value from an explicit `false`. An
+omitted value is not written back into configuration.
+
+An adapter without language metadata (a legacy external adapter) can run and
+report findings, but it cannot prove language-specific required coverage. It is
+reported as undeclared rather than assumed to cover Go or Rust.
+
+A category-level success never hides missing language coverage: dependency and
+SAST required coverage is evaluated per detected language.
 
 `SOP_SECURITY_ENABLED`, `SOP_SECURITY_MODE`, and `SOP_SECURITY_BASELINE` fill
 values the project omitted. An explicit project value always wins. Invalid
@@ -103,13 +163,15 @@ processes satisfy the same contract.
 
 ### Descriptor
 
-| Field                           | Meaning                                          |
-| ------------------------------- | ------------------------------------------------ |
-| `protocol_version`              | `security-scan/v1`                               |
-| `adapter_id`, `adapter_version` | Stable identity and pinned version               |
-| `categories`                    | `sast`, `secrets`, `dependencies`                |
-| `scope_modes`                   | `workspace`, `changed-files`                     |
-| `locality`, `network`           | Execution locality and data/network requirements |
+| Field                           | Meaning                                               |
+| ------------------------------- | ----------------------------------------------------- |
+| `protocol_version`              | `security-scan/v1`                                    |
+| `adapter_id`, `adapter_version` | Stable identity and pinned version                    |
+| `categories`                    | `sast`, `secrets`, `dependencies`                     |
+| `scope_modes`                   | `workspace`, `changed-files`                          |
+| `languages`                     | Declared Go/Rust coverage; empty means undeclared     |
+| `repository_wide`               | The adapter covers the repository, not a language set |
+| `locality`, `network`           | Execution locality and data/network requirements      |
 
 ### Request
 
@@ -124,11 +186,13 @@ that the scanner failed to read a file.
 ### Execution
 
 The response contains `status`, `exit_code`, start/end time, `coverage`,
-skipped files/reasons, diagnostics, normalized findings, and provenance.
+`selection`, `languages`, `repository_wide`, `disabled`, skipped files/reasons,
+diagnostics, normalized findings, and provenance.
 
 Execution statuses are `COMPLETED`, `FAILED`, `TIMED_OUT`, `UNAVAILABLE`,
 `SKIPPED`, and `CANCELLED`. Coverage is `COMPLETE`, `PARTIAL`, or `UNKNOWN`,
-reported independently of execution status.
+reported independently of execution status. A disabled adapter is `SKIPPED` with
+`disabled: true`; it is never a passed scan.
 
 ### Finding
 
@@ -141,7 +205,22 @@ deduplication is deferred; every source remains represented.
 ### Provenance
 
 Provenance records scanner version, rules identity, configuration digest,
-content identity, policy identity, and sanitized native-report digest.
+content identity, policy identity, selection mode, declared languages, advisory
+database identity and metadata, stale state, lockfile/input identity, and the
+sanitized native-report digest.
+
+### Resume identity and freshness
+
+Resume compares content identity, adapter ID, pinned scanner version, rules or
+controlled-config identity, adapter configuration digest, policy identity
+(including exclusions, execution bounds, database paths, and stale policy),
+selection mode (`explicit`/`automatic`), declared language scope, resolved input
+identity, advisory database identity, and database stale state. Any mismatch
+re-executes the adapter.
+
+Database freshness is rechecked when evidence is reused. An unchanged database
+can become stale over time; the stale comparison therefore invalidates reuse.
+The OSV and cargo-audit databases have separate identities and paths.
 
 ### External process rules
 
@@ -299,6 +378,50 @@ downloads the pinned release asset, verifies its committed SHA-256 from
 is the only step that uses the network. A scan never downloads the tool and never
 fetches or updates an advisory database.
 
+### OSV-Scanner (`dependencies`)
+
+- The pinned release is OSV-Scanner v2.7.0. It invokes
+  `osv-scanner scan source --format json --offline --all-packages --no-resolve
+--no-call-analysis=all --config <controlled-empty> --lockfile <input>` once per
+  explicit input. `--offline` disables the live OSV API and database downloads;
+  `--no-call-analysis=all` prevents Go/Rust toolchain invocation and therefore
+  prevents network module resolution and build output. `--no-resolve` disables
+  transitive resolution. `--config` points at an empty restricted file so a
+  repository `osv-scanner.toml` cannot suppress SOP findings or reduce coverage.
+- Inputs are explicit Go `go.mod` files and present Rust `Cargo.lock` files.
+  Nested Go modules and Cargo workspaces are resolved from content. A configured
+  `inputs` list wins but stays repository-relative. The adapter never generates
+  or modifies a manifest or lockfile. A detected Rust ecosystem with no
+  `Cargo.lock` is a failure, never a clean result.
+- The offline database cache is explicit (`security.osv_database_path`, or the
+  adapter `database` override). OSV v2.7 reads
+  `<cache>/osv-scalibr/<ecosystem>/all.zip`; the older documented
+  `<cache>/osv-scanner/<ecosystem>/all.zip` is also accepted. The ecosystems are
+  `Go` and `crates.io`. A missing database is a non-clean execution result.
+  The OSV cache is never used as a cargo-audit database.
+- Database identity records the ecosystem, content digest, size, and modification
+  time; optional acquisition metadata records the source URL and download time.
+  A metadata digest that disagrees with the archive fails closed. Freshness uses
+  the same 90-day boundary as the dependency-advisory policy. A missing freshness
+  signal is treated as stale.
+- Each input is scanned independently so one input's failure cannot hide another
+  input's coverage. A valid report requires the `results` field, a matching
+  source path, and a consistent exit contract: `0` means no vulnerabilities, `1`
+  means vulnerabilities, `127`/`128` and other codes are failures. Empty output,
+  malformed JSON, truncation, timeouts, and scanner errors are never clean.
+- Findings preserve advisory ID and aliases, ecosystem, package, version, input
+  path, severity and its evidence (explicit severity, CVSS vector, group maximum),
+  fixed versions and affected ranges, references, and scanner provenance. OSV
+  alias groups are represented once per package and input. Different packages,
+  versions, and inputs are never merged by advisory ID alone. A version match is
+  not reachability evidence: call analysis is disabled and the finding records
+  `reachability: not-evaluated` unless the scanner supplied explicit analysis.
+- Provisioning is explicit: `scripts/security/fetch-osv-scanner.sh` verifies the
+  pinned binary SHA-256 from `scripts/security/osv-scanner-manifest.json`, and
+  `scripts/security/fetch-osv-databases.sh` downloads and integrity-checks the
+  `Go` and `crates.io` archives and records their source, digest, and acquisition
+  time. Scans never download or refresh either input.
+
 ## 5. Execution and evidence
 
 1. Validate configuration and requested categories.
@@ -328,7 +451,10 @@ Artifacts:
 
 - `security/scan.json` — normalized evidence and verdict. `scope.excluded`
   records the declared exclusions. Auto-mode scans also include `detection`;
-  every scan includes `required_mode` readiness evidence.
+  every scan includes `required_mode` readiness evidence. `coverage_by_category`
+  reports each category and detected language independently, and `overlaps`
+  records visible explicit overlapping coverage. Disabled adapters appear as
+  `SKIPPED` executions with `disabled: true` and a reason.
 - `security/scan.md` — human-readable rendering.
 - `security/<adapter>.native.json` — sanitized native report, when available.
 
@@ -337,19 +463,26 @@ Redaction failure makes the scan result unusable.
 
 ## 6. Policy verdicts and the SOP gate
 
-- `NOT_APPLICABLE`: add-on intentionally disabled.
-- `PASS`: every configured adapter completed with complete coverage and no
+- `NOT_APPLICABLE`: add-on intentionally disabled and no required gate is active.
+- `PASS`: every enabled adapter completed with complete coverage and no
   unsuppressed blocking finding.
 - `FAIL`: at least one unsuppressed finding is at a `fail_on` severity (or the
   explicit unknown-severity policy says fail).
 - `INDETERMINATE`: an adapter failed, timed out, was unavailable, was cancelled,
-  had partial/unknown coverage, a required category was not covered, a required
-  category used changed-file evidence, or a dependency adapter observed a stale
-  advisory database (under either stale policy).
+  had partial/unknown coverage, a required category or required language was not
+  covered, a required category used changed-file evidence, explicitly disabled
+  coverage was not replaced, or a dependency adapter observed a stale advisory
+  database (under either stale policy).
 
-A dependency adapter's unsupported language, missing lockfile, unavailable
-advisory database, or stale database is never treated as clean evidence. The
-`required_mode` field projects what the same evidence would produce under a
+A dependency adapter's unsupported language, missing input, unavailable database,
+stale database, or undeclared external language coverage is never treated as
+clean evidence. Required mode evaluates every detected language independently; a
+successful Go adapter cannot satisfy a missing Rust obligation, and cargo-audit
+cannot satisfy Go dependency coverage. Global `enabled: false` does not exempt an
+active required gate: the stage reports `INDETERMINATE`, and the quality gate
+fails closed. Removing a required category is a policy change, not a scan result.
+
+The `required_mode` field projects what the same evidence would produce under a
 required gate while the recorded verdict remains report-only.
 
 A blocking finding produces `FAIL` even when another adapter is incomplete or
@@ -400,15 +533,17 @@ Baseline file format (version 1):
 completed adapter result is reused only when all of these still match:
 
 - content identity (commit/tree/digest/dirty),
-- adapter ID and pinned scanner version,
-- rules identity,
-- advisory database identity and stale state for a dependency adapter,
-- adapter configuration digest,
+- adapter ID, selection mode, and declared language scope,
+- pinned scanner version,
+- rules or controlled-config identity,
+- advisory database identity and rechecked stale state for a dependency adapter,
+- resolved input/lockfile identity,
+- adapter configuration digest, including enable and language metadata,
 - policy identity, including baseline content, the configured execution bounds
-  (timeout and output limit), the advisory database path, and the stale policy.
+  (timeout and output limit), the advisory database paths, and the stale policy.
 
-Any mismatch re-executes that adapter. A prior non-completed result is never
-reused. Resume does not change retry or continuation budgets.
+Any mismatch re-executes that adapter. A prior non-completed or disabled result is
+never reused. Resume does not change retry or continuation budgets.
 
 ## 9. Security boundaries
 
@@ -440,9 +575,10 @@ reused. Resume does not change retry or continuation budgets.
 
 ## 11. MVP exclusions
 
-Verified-secret services, hosted code analysis, runtime network scanning, asset
-discovery, automatic fixes, automatic scanner installation, cross-provider
-deduplication, a new vulnerability database, and a scanner engine are excluded.
+Verified-secret services, hosted code analysis, container scanning, runtime
+network/API scanning, asset discovery, automatic fixes, automatic scanner
+installation, cross-provider deduplication, a new vulnerability database, and a
+scanner engine are excluded.
 
 ## 12. Meaningful validation commands
 
@@ -459,11 +595,14 @@ bash scripts/checks/check-doc-links.sh
 bash scripts/checks/security-integration.sh
 ```
 
-The last command provisions the pinned real CLIs and the pinned production rules
-and runs the tagged integration checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`,
-so missing prerequisites fail the check instead of skipping it, and it exports
-`SOP_SECURITY_RULES_DIR` so the suite verifies the pinned ruleset actually covers
-Rust. CI runs the same script.
+The last command provisions the pinned real CLIs and the pinned production rules,
+including the pinned OSV-Scanner binary, and runs the tagged integration checks.
+It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`, so missing prerequisites fail the
+check instead of skipping it, and it exports `SOP_SECURITY_RULES_DIR` so the suite
+verifies the pinned ruleset actually covers Rust. The OSV real-CLI tests use a
+controlled offline database fixture and assert clean and vulnerable Go/Rust
+results, unchanged inputs, missing-ecosystem behavior, and that a repository
+`osv-scanner.toml` cannot suppress SOP findings. CI runs the same script.
 
 Real Semgrep/Gitleaks execution requires the pinned CLIs and local rules in the
 supported integration environment. When a tool is absent, the adapter reports

@@ -5,6 +5,7 @@
 # checks/, agents/).
 
 .PHONY: fmt vet test test-fast build check check-fast check-plugin install install-all install-ollama-agent \
+	security-integration \
 	ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
 	uninstall-skills uninstall-skills-zed uninstall-skills-claude \
@@ -62,6 +63,12 @@ check-fast: fmt vet test-fast build check-plugin
 # Verify the packaged Claude Code plugin still mirrors the canonical skills/ tree.
 check-plugin:
 	./scripts/packaging/build-claude-plugin.sh --check
+
+# Real-CLI security integration gate: provisions pinned Semgrep, Gitleaks,
+# cargo-audit, and OSV-Scanner, then runs the tagged suite. Missing prerequisites
+# fail rather than skip. The OSV database is a controlled offline fixture.
+security-integration:
+	./scripts/checks/security-integration.sh
 
 # Install the sop CLI (and nothing else). Add `./install.sh --all` for everything.
 install:

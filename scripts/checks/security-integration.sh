@@ -92,6 +92,13 @@ if [ -z "$gitleaks_bin" ]; then
 fi
 
 actual_semgrep="$("$semgrep_bin" --version 2>/dev/null | head -n 1 | tr -d '\r[:space:]')"
+# A pip-installed Semgrep can report a newer available version from its update
+# check instead of the installed version in some environments. The package
+# metadata is authoritative for the hash-pinned venv this script provisions.
+semgrep_python="$(dirname "$semgrep_bin")/python"
+if [ -x "$semgrep_python" ]; then
+  actual_semgrep="$("$semgrep_python" -c 'import importlib.metadata; print(importlib.metadata.version("semgrep"))')"
+fi
 [ "$actual_semgrep" = "$SEMGREP_VERSION" ] || die "Semgrep version is '$actual_semgrep', want $SEMGREP_VERSION"
 actual_gitleaks="$("$gitleaks_bin" version 2>/dev/null | head -n 1 | tr -d '\r[:space:]')"
 [ "$actual_gitleaks" = "$GITLEAKS_VERSION" ] || die "Gitleaks version is '$actual_gitleaks', want $GITLEAKS_VERSION"
@@ -108,13 +115,26 @@ actual_cargo_audit="$("$cargo_audit_bin" --version 2>/dev/null | head -n 1 | tr 
 actual_cargo_audit="${actual_cargo_audit#v}"
 [ "$actual_cargo_audit" = "$cargo_audit_version" ] || die "cargo-audit version is '$actual_cargo_audit', want $cargo_audit_version"
 
+# Provision the pinned OSV-Scanner binary. The real-CLI OSV tests build a
+# controlled offline database fixture, so this step never downloads production
+# OSV data and never depends on the live OSV API.
+osv_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$root/scripts/security/osv-scanner-manifest.json")"
+osv_dir="$tools_dir/osv-scanner-$osv_version"
+osv_bin="$osv_dir/osv-scanner"
+if [ ! -x "$osv_bin" ]; then
+  "$root/scripts/security/fetch-osv-scanner.sh" --dest "$osv_dir" >/dev/null || die "OSV-Scanner provisioning failed"
+fi
+actual_osv="$("$osv_bin" --version 2>/dev/null | head -n 1 | tr -d '\r' | awk '{print $NF}')"
+actual_osv="${actual_osv#v}"
+[ "$actual_osv" = "$osv_version" ] || die "OSV-Scanner version is '$actual_osv', want $osv_version"
+
 # Verify the pinned production rules as well as the scanner binaries. The rules
 # are fetched from the exact upstream commit recorded in the manifest and checked
 # against per-file and directory digests; they are never committed.
 rules_dir="$tools_dir/semgrep-rules"
 "$root/scripts/security/fetch-semgrep-rules.sh" --dest "$rules_dir" >/dev/null || die "production rules fetch/verify failed"
 
-echo "security-integration: semgrep=$actual_semgrep gitleaks=$actual_gitleaks cargo-audit=$actual_cargo_audit"
+echo "security-integration: semgrep=$actual_semgrep gitleaks=$actual_gitleaks cargo-audit=$actual_cargo_audit osv-scanner=$actual_osv"
 
 cd "$root"
 SOP_SECURITY_SEMGREP_BIN="$semgrep_bin" \
@@ -124,4 +144,6 @@ SOP_SECURITY_RULES_DIR="$rules_dir" \
 SOP_SECURITY_CARGO_BIN="$cargo_audit_bin" \
 SOP_SECURITY_CARGO_AUDIT_VERSION="$cargo_audit_version" \
 SOP_SECURITY_CARGO_ADVISORY_DB="$root/internal/security/testdata/cargo-audit/advisory-db" \
+SOP_SECURITY_OSV_BIN="$osv_bin" \
+SOP_SECURITY_OSV_VERSION="$osv_version" \
   go test -tags=security_integration -count=1 -v ./internal/security/ ./internal/cli/

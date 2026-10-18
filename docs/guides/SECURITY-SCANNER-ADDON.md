@@ -20,13 +20,23 @@ rollback, and the MVP's measured scope. The normative contract is
   database. The add-on never fetches or updates the database. Use a pinned
   database checkout or a pinned fixture and set `security.advisory_database_path`
   (or an adapter `database` path).
+- Go and Rust dependency scanning with OSV-Scanner: the pinned binary plus an
+  explicit offline OSV cache. Provision the binary with
+  `scripts/security/fetch-osv-scanner.sh` and the required ecosystem archives
+  with `scripts/security/fetch-osv-databases.sh`. Scans never download either.
 
-The MVP wrappers target Semgrep Community Edition 1.x, Gitleaks 8.x, and
-cargo-audit 0.21+ JSON output. Pin the versions you actually run:
+OSV and cargo-audit database formats are separate inputs. Do not point an OSV
+adapter at `security.advisory_database_path` or a cargo-audit adapter at
+`security.osv_database_path`.
+
+The MVP wrappers target Semgrep Community Edition 1.x, Gitleaks 8.x,
+cargo-audit 0.21+ JSON output, and OSV-Scanner 2.7.x JSON output. Pin the versions
+you actually run:
 
 ```bash
 semgrep --version
 gitleaks version
+osv-scanner --version
 ```
 
 The add-on does not install scanners. A missing executable is reported as
@@ -50,16 +60,25 @@ security:
   exclude:
     - internal/security/testdata
     - /sop
-  # Local advisory database for Rust dependency scanning. Explicit; no fetch.
+  # Local advisory database for cargo-audit. Explicit; no fetch.
   advisory_database_path: .agent-sdlc/advisory-db
+  # Separate OSV-Scanner offline cache. Explicit; no fetch or live API fallback.
+  osv_database_path: .agent-sdlc/osv-db
   stale_advisory_database: deny
   auto: false
+  # Category controls. Omitted entries inherit enabled: true; explicit false
+  # disables the whole category and cannot be undone by auto.
+  categories:
+    sast: true
+    secrets: true
+    dependencies: true
   adapters:
     - id: semgrep
       category: sast
       protocol: builtin
       command: [semgrep]
       rules: .agent-sdlc/security-rules
+      languages: [go, rust]
       version: "1.99.0" # replace with the pinned version
     - id: gitleaks
       category: secrets
@@ -68,14 +87,27 @@ security:
       # Optional local Gitleaks config. Omit it to use Gitleaks' built-in rules.
       # rules: security/gitleaks.toml
       version: "8.30.1" # replace with the pinned version
-    - id: cargo-audit
+    # Recommended for new configurations: OSV covers Go go.mod and Rust Cargo.lock.
+    - id: osv-scanner
       category: dependencies
       protocol: builtin
-      command: [cargo, audit]
-      database: .agent-sdlc/advisory-db
-      lockfile: Cargo.lock # optional; otherwise resolved from content
+      command: [osv-scanner]
+      database: .agent-sdlc/osv-db
+      languages: [go, rust]
+      # inputs: [go.mod, Cargo.lock] # optional; otherwise resolved from content
       stale: deny
-      version: "0.21.2" # replace with the pinned version
+      version: "2.7.0" # replace with the pinned version
+    # Existing Rust-only configurations keep cargo-audit. It is never replaced by
+    # OSV automatically; select the replacement explicitly if that is intended.
+    # - id: cargo-audit
+    #   category: dependencies
+    #   protocol: builtin
+    #   command: [cargo, audit]
+    #   database: .agent-sdlc/advisory-db
+    #   lockfile: Cargo.lock
+    #   languages: [rust]
+    #   stale: deny
+    #   version: "0.22.2"
 ```
 
 An omitted `security` block is disabled. The environment may fill omitted
@@ -102,14 +134,176 @@ sop security scan --auto --report-only --json
 ```
 
 `sop security inspect --json` is read-only. It reports detected languages,
-manifests, Cargo workspaces, actual and missing lockfiles, configured adapter
-status (`available`, `unavailable`, `unsupported`, `proposed`), and proposed
-adapters. It executes no scanner.
+manifests, Cargo workspaces, actual and missing lockfiles, configured and selected
+adapters, effective enable/disable state and reason, capability/language
+coverage, explicit overlaps, missing prerequisites, required-mode readiness, and
+proposed adapters. It executes no scanner and reads no database content.
 
-`--auto` adds missing built-in categories from detected content; explicit
-adapters are never replaced. Go content proposes Gitleaks + Semgrep with Go rules;
-Rust content also proposes cargo-audit; mixed content is the union. Go-only rules
-are never applied to Rust source; the adapter reports unsupported coverage.
+`--auto` fills only unconfigured, enabled coverage from detected content. It
+never replaces or re-adds an explicitly configured adapter, and it cannot undo an
+explicit disable. Go dependencies use OSV; Rust dependencies use the documented
+legacy cargo-audit choice. OSV for Rust requires an explicit selection so
+overlapping automatic coverage is not run twice. Go-only Semgrep rules are never
+applied to Rust source; the adapter reports unsupported coverage.
+
+### Selecting scanners by capability and language
+
+Selection is deterministic and keeps three things separate:
+
+- **category** (`sast`, `secrets`, `dependencies`),
+- **language** (`go`, `rust`), and
+- **adapter identity** (`semgrep`, `gitleaks`, `cargo-audit`, `osv-scanner`, or an
+  external id).
+
+A category may contain multiple adapters. An adapter may cover multiple
+languages. Secrets scanners are repository-wide. A dependency or SAST adapter
+that declares no languages cannot prove language-specific required coverage; a
+legacy external adapter is reported as undeclared rather than assumed to cover Go
+or Rust.
+
+Enable/disable precedence:
+
+1. `security.enabled: false` prevents every scanner from running.
+2. `security.categories.<category>: false` disables every adapter in it.
+3. `security.adapters[].enabled: false` disables that adapter.
+4. An omitted `enabled` value is not the same as `false`; it inherits the
+   category/global state.
+5. Explicit selection wins over automatic selection.
+6. Automatic selection never re-adds an explicitly disabled adapter or creates
+   overlapping coverage.
+7. Explicit overlapping coverage is allowed, is shown in `overlaps`, and both
+   adapters run.
+
+### Configuration examples
+
+**1. Semgrep + Gitleaks + OSV for Go and Rust**
+
+```yaml
+security:
+  enabled: true
+  osv_database_path: .agent-sdlc/osv-db
+  adapters:
+    - {
+        id: semgrep,
+        category: sast,
+        command: [semgrep],
+        rules: .agent-sdlc/security-rules,
+        version: "1.99.0",
+      }
+    - {
+        id: gitleaks,
+        category: secrets,
+        command: [gitleaks],
+        version: "8.30.1",
+      }
+    - {
+        id: osv-scanner,
+        category: dependencies,
+        command: [osv-scanner],
+        version: "2.7.0",
+      }
+```
+
+**2. OSV for Go and cargo-audit for Rust**
+
+```yaml
+security:
+  enabled: true
+  osv_database_path: .agent-sdlc/osv-db
+  advisory_database_path: .agent-sdlc/advisory-db
+  adapters:
+    - {
+        id: osv-scanner,
+        category: dependencies,
+        command: [osv-scanner],
+        languages: [go],
+        version: "2.7.0",
+      }
+    - {
+        id: cargo-audit,
+        category: dependencies,
+        command: [cargo, audit],
+        languages: [rust],
+        database: .agent-sdlc/advisory-db,
+        version: "0.22.2",
+      }
+```
+
+Mixed Go/Rust coverage is evaluated separately. cargo-audit cannot satisfy Go
+dependency coverage.
+
+**3. One disabled adapter with an enabled replacement**
+
+```yaml
+security:
+  enabled: true
+  adapters:
+    - {
+        id: cargo-audit,
+        category: dependencies,
+        command: [cargo, audit],
+        languages: [rust],
+        enabled: false,
+        version: "0.22.2",
+      }
+    - {
+        id: osv-scanner,
+        category: dependencies,
+        command: [osv-scanner],
+        languages: [rust],
+        version: "2.7.0",
+      }
+```
+
+**4. A disabled category**
+
+```yaml
+security:
+  enabled: true
+  categories:
+    dependencies: false
+  adapters:
+    - {
+        id: osv-scanner,
+        category: dependencies,
+        command: [osv-scanner],
+        version: "2.7.0",
+      }
+```
+
+The disabled adapter is recorded as `SKIPPED` with `disabled: true`. If the
+category has detected content and no enabled replacement, coverage is reported as
+disabled and is not treated as clean.
+
+**5. Globally disabled scanning**
+
+```yaml
+security:
+  enabled: false
+```
+
+`security scan` reports `NOT_APPLICABLE` and executes nothing. If a required gate
+is also configured (`mode: required` with `required_categories`), global disable
+is not an exemption: the scan reports `INDETERMINATE` and required mode fails
+closed.
+
+**6. An external replacement adapter**
+
+```yaml
+security:
+  enabled: true
+  adapters:
+    - id: private-sast
+      category: sast
+      protocol: external
+      command: [/opt/security/private-sast]
+      languages: [go, rust]
+      version: "1.0.0"
+```
+
+An external adapter declares its languages explicitly. Without `languages` or
+`repository_wide: true`, it remains compatible but cannot prove language-specific
+required coverage.
 
 Report-only exits `0` even when the verdict is `FAIL` or `INDETERMINATE`. It
 still records the honest verdict and evidence. Required mode exits non-zero for
@@ -164,15 +358,22 @@ security:
 
 Required mode fails closed when:
 
-- a required category has no configured adapter,
+- a required category has no enabled adapter,
 - a required adapter is not `COMPLETED`,
 - coverage is not `COMPLETE`,
+- a required detected language (Go or Rust) has no `COMPLETE` coverage in that
+  category, even when another language passed,
+- a required category is explicitly disabled,
 - the scope is `changed-files` (a full-scan policy cannot pass on optimization
   evidence),
-- a dependency adapter has a missing lockfile, unavailable advisory database, or
+- a dependency adapter has a missing input, unavailable advisory database, or
   stale advisory database (either stale policy),
 - an unsuppressed finding is at a `fail_on` severity,
 - unknown severity follows an explicit `fail` or `indeterminate` policy.
+
+Global `enabled: false` does not bypass an active required gate. One successful
+adapter does not hide another failed required coverage obligation. Removing a
+required category from configuration remains an explicit policy change.
 
 A security failure enters the existing bounded fix loop and quality gate. It
 does not create a new lifecycle, retry counter, or approval surface.
@@ -189,14 +390,51 @@ If the scan cannot produce evidence, the result is `INDETERMINATE`:
 - report-only adds an advisory and leaves the normal gate unchanged;
 - required mode fails the gate.
 
-## 5. Rust scanning
+## 5. Go and Rust dependency scanning
+
+### Dependency advisories (OSV-Scanner)
+
+OSV-Scanner scans explicit Go `go.mod` files and present Rust `Cargo.lock` files.
+It resolves nested Go modules and Cargo workspaces from content, respects
+declared exclusions, and never generates or modifies a manifest or lockfile. A
+detected Rust ecosystem without a `Cargo.lock` is a failure, not a clean result.
+
+The adapter runs with `--offline`, `--all-packages`, `--no-resolve`, and
+`--no-call-analysis=all`, against an explicit local cache. It never uses the live
+OSV API and never downloads or refreshes a database. It passes a controlled empty
+`--config` so a repository `osv-scanner.toml` cannot suppress findings. Each input
+is scanned independently.
+
+A version match is not proof that vulnerable code is reachable. Call analysis is
+disabled, and findings record `reachability: not-evaluated` unless the scanner
+supplied explicit analysis.
+
+Provision the pinned binary and databases explicitly:
+
+```bash
+scripts/security/fetch-osv-scanner.sh --dest .agent-sdlc/osv-scanner
+scripts/security/fetch-osv-databases.sh --dest .agent-sdlc/osv-db
+```
+
+The database layout is:
+
+```text
+.agent-sdlc/osv-db/osv-scalibr/Go/all.zip
+.agent-sdlc/osv-db/osv-scalibr/crates.io/all.zip
+```
+
+Each archive has a sibling `.metadata.json` recording its source URL, SHA-256,
+size, and acquisition time. A scan verifies the archive digest against that
+metadata. A missing ecosystem, stale archive, malformed output, truncation,
+timeout, or scanner failure is never clean.
 
 ### Dependency advisories (cargo-audit)
 
 cargo-audit resolves the Cargo workspace and its actual `Cargo.lock`; a workspace
 member does not own a lockfile. The adapter always passes `--file`, `--json`,
 `--no-fetch`, and an explicit `--db`. It never generates or modifies a lockfile,
-never runs `fix`, and never uploads source.
+never runs `fix`, and never uploads source. It remains supported for existing
+Rust-only configurations and is never replaced by OSV automatically.
 
 Provision the pinned executable once, separately from scanning:
 
@@ -332,6 +570,9 @@ Response shape (abridged):
 Requirements:
 
 - `adapter_id` and `category` must match the configuration.
+- SOP owns `selection`, `languages`, `repository_wide`, and `disabled`. A provider
+  response cannot claim an automatic/explicit selection or a disable state; SOP
+  overwrites those fields from validated configuration and selection.
 - Paths must be repository-relative. Unsafe paths are removed and reported.
 - Fingerprints must be stable and non-secret.
 - Raw secret values must not appear in findings, messages, metadata, or
@@ -370,6 +611,15 @@ Automatic baseline creation is not part of the MVP.
 
 ## 8. Resume
 
+`--resume <run-id>` reuses a completed adapter only when content identity, adapter
+ID, selection mode, declared language scope, scanner version, rules or
+controlled-config identity, adapter configuration digest, policy identity
+(including exclusions and execution bounds), resolved input identity, advisory
+database identity, and rechecked database stale state all still match. A changed
+lockfile invalidates reused dependency evidence. An unchanged database can still
+become stale over time; freshness is rechecked on reuse. Disabled or
+non-completed scans are never reused as passed scans.
+
 ```bash
 sop security scan --resume security-20261017T120000Z
 ```
@@ -398,6 +648,17 @@ the integration changed existing runner behavior unexpectedly.
 
 ## 10. Limitations
 
+- OSV-Scanner supports Go `go.mod` and Rust `Cargo.lock` dependency advisories.
+  It does not add container, image, runtime API, or automatic remediation
+  scanning.
+- Call analysis and reachability are disabled. A dependency-version match does
+  not prove the vulnerable code is reachable.
+- OSV and cargo-audit databases are separate formats with separate paths. They
+  are never substituted for one another.
+- A legacy external adapter without language metadata remains compatible but
+  cannot prove language-specific required coverage.
+- Coverage reflects the declared scope. Adding exclusions is a reviewed scope
+  decision, not a coverage fix.
 - Changed-file scope is an optimization and never satisfies a required
   full-scan policy.
 - Declared `security.exclude` patterns are scope, not coverage. They are recorded
@@ -418,10 +679,9 @@ the integration changed existing runner behavior unexpectedly.
   severity.
 - Cross-provider deduplication is deferred. Grouped evidence retains every
   source.
-- Dependency scanning covers Rust Cargo lockfiles. Go module or other ecosystem
-  dependency advisories are not implemented; report them as unsupported instead
-  of assuming a clean result. This overlaps the dependency-scanning note tracked
-  in issue #40 without closing it.
+- Dependency scanning covers Go `go.mod` and Rust `Cargo.lock` with OSV-Scanner,
+  and Rust `Cargo.lock` with cargo-audit. Other ecosystems are unsupported and
+  are reported as such instead of being assumed clean.
 - Rust Semgrep coverage is limited to the selected pinned `rust/lang/security`
   rules plus the repository-owned verification rules. It is not comprehensive
   Rust SAST, and a `PARTIAL` result means part of the detected source was not
@@ -453,10 +713,15 @@ bash scripts/checks/security-integration.sh
 through `scripts/security/fetch-semgrep-rules.sh`, verifies their manifest and
 directory digest, and then runs the real-CLI tests.
 
-`scripts/checks/security-integration.sh` provisions pinned Semgrep CE and Gitleaks
-versions in an isolated tools directory, uses explicit local rules, and runs the
-tagged real-CLI checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`: a missing
-binary or version mismatch fails the check. The same script runs in CI.
+`scripts/checks/security-integration.sh` provisions pinned Semgrep CE, Gitleaks,
+cargo-audit, and OSV-Scanner versions in an isolated tools directory, uses
+explicit local rules, and runs the tagged real-CLI checks. It sets
+`SOP_SECURITY_INTEGRATION_REQUIRED=1`: a missing binary or version mismatch fails
+the check. The same script runs in CI. The OSV tests build a controlled offline
+database fixture, assert clean and vulnerable Go/Rust results, verify inputs are
+unchanged, assert missing-ecosystem behavior, and confirm that a repository
+`osv-scanner.toml` cannot suppress SOP findings. They never depend on the live OSV
+API.
 
 The real cargo-audit check is gated on `SOP_SECURITY_CARGO_ADVISORY_DB` (and
 optionally `SOP_SECURITY_CARGO_BIN`). Without a pinned local database it reports a

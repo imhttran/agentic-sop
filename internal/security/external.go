@@ -14,14 +14,16 @@ import (
 // is validated before SOP uses it. The process never receives lifecycle,
 // approval, or policy authority.
 type externalAdapter struct {
-	id           string
-	category     Category
-	command      []string
-	version      string
-	configDigest string
-	exec         Executor
-	timeout      time.Duration
-	maxOutput    int
+	id             string
+	category       Category
+	command        []string
+	version        string
+	languages      []Language
+	repositoryWide bool
+	configDigest   string
+	exec           Executor
+	timeout        time.Duration
+	maxOutput      int
 }
 
 func (a *externalAdapter) Descriptor() Descriptor {
@@ -33,6 +35,8 @@ func (a *externalAdapter) Descriptor() Descriptor {
 		ScopeModes:      []string{"workspace", "changed-files"},
 		Locality:        "local",
 		Network:         "declared by the adapter configuration; SOP makes no request",
+		Languages:       a.languages,
+		RepositoryWide:  a.repositoryWide,
 	}
 }
 
@@ -41,6 +45,7 @@ func (a *externalAdapter) currentProvenance(req Request) (Provenance, error) {
 		ScannerVersion:      a.version,
 		ConfigurationDigest: a.configDigest,
 		ContentIdentity:     req.Content,
+		Languages:           a.languages,
 	}, nil
 }
 
@@ -123,7 +128,12 @@ func (a *externalAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	}
 	// SOP owns the content identity and the adapter configuration identity. A
 	// provider-supplied value must never override the exact content SOP observed or
-	// the configuration SOP executed.
+	// the configuration SOP executed. Selection and disable state are SOP policy,
+	// never provider claims.
+	response.Disabled = false
+	response.Selection = ""
+	response.Languages = nil
+	response.RepositoryWide = false
 	response.Provenance.ContentIdentity = req.Content
 	response.Provenance.ConfigurationDigest = a.configDigest
 	response.Provenance.PolicyIdentity = ""

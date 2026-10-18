@@ -23,6 +23,9 @@ type BuildOptions struct {
 	// DatabasePath is the global local advisory database path. A cargo-audit
 	// adapter may override it with its own database key.
 	DatabasePath string
+	// OSVDatabasePath is the separate global OSV offline cache root. It is never
+	// used as a cargo-audit database and vice versa.
+	OSVDatabasePath string
 	// StalePolicy is the global stale-database policy. A cargo-audit adapter may
 	// override it with its own stale key.
 	StalePolicy string
@@ -73,7 +76,7 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 	case "", config.SecurityProtocolBuiltin:
 		switch id {
 		case "semgrep":
-			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, languages: descriptorLanguages(raw, id), version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "gitleaks":
 			return &gitleaksAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "cargo-audit":
@@ -83,6 +86,22 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 				command:      command,
 				databasePath: firstNonEmpty(raw.Database, opts.DatabasePath),
 				lockfile:     raw.Lockfile,
+				languages:    descriptorLanguages(raw, id),
+				stalePolicy:  firstNonEmpty(raw.Stale, opts.StalePolicy),
+				version:      raw.Version,
+				configDigest: configDigest,
+				exec:         opts.Executor,
+				timeout:      opts.Timeout,
+				maxOutput:    opts.MaxOutputBytes,
+			}, nil
+		case "osv-scanner":
+			return &osvAdapter{
+				id:           id,
+				category:     category,
+				command:      command,
+				databasePath: firstNonEmpty(raw.Database, opts.OSVDatabasePath),
+				inputs:       append([]string(nil), raw.Inputs...),
+				languages:    descriptorLanguages(raw, id),
 				stalePolicy:  firstNonEmpty(raw.Stale, opts.StalePolicy),
 				version:      raw.Version,
 				configDigest: configDigest,
@@ -94,7 +113,11 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 			return nil, fmt.Errorf("security: unknown built-in adapter %q", id)
 		}
 	case config.SecurityProtocolExternal:
-		return &externalAdapter{id: id, category: category, command: command, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+		repositoryWide := category == CategorySecrets
+		if raw.RepositoryWide != nil {
+			repositoryWide = repositoryWide || *raw.RepositoryWide
+		}
+		return &externalAdapter{id: id, category: category, command: command, version: raw.Version, languages: descriptorLanguages(raw, id), repositoryWide: repositoryWide, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 	default:
 		return nil, fmt.Errorf("security: adapter %q has unknown protocol %q", id, raw.Protocol)
 	}
@@ -112,8 +135,30 @@ func adapterConfigDigest(raw config.SecurityAdapterConfig) string {
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Database)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Lockfile)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Stale)+"\x00")
+	_, _ = io.WriteString(hash, strings.Join(raw.Inputs, "\x00")+"\x00")
+	_, _ = io.WriteString(hash, strings.Join(raw.Languages, "\x00")+"\x00")
+	_, _ = io.WriteString(hash, boolIdentity(raw.Enabled)+"\x00")
+	_, _ = io.WriteString(hash, boolIdentity(raw.RepositoryWide)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Version))
 	return hex.EncodeToString(hash.Sum(nil))
+}
+
+// descriptorLanguages returns the stable language metadata for a configured
+// built-in adapter. An external adapter's languages are validated and used as
+// declared; an undeclared external adapter stays empty.
+func descriptorLanguages(raw config.SecurityAdapterConfig, id string) []Language {
+	languages, _ := adapterLanguageMetadata(raw, strings.ToLower(strings.TrimSpace(id)), adapterCategory(raw))
+	return languages
+}
+
+func boolIdentity(value *bool) string {
+	if value == nil {
+		return "inherit"
+	}
+	if *value {
+		return "true"
+	}
+	return "false"
 }
 
 // rulesIdentity returns a deterministic digest of a rules file or directory. It

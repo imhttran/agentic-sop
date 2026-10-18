@@ -64,7 +64,7 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		}
 		cfg = *loaded
 	}
-	if !cfg.SecurityEnabled() {
+	if !cfg.SecurityEnabled() && !cfg.Security.RequiredGateActive() {
 		if opts.json {
 			_ = json.NewEncoder(stdout).Encode(map[string]any{
 				"verdict":  security.VerdictNotApplicable,
@@ -96,30 +96,32 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	auto := opts.auto || cfg.Security.Auto
-	adapterConfigs := cfg.Security.Adapters
-	var detection *security.Detection
-	if auto {
+	needDetection := auto || mode == config.SecurityModeRequired || len(cfg.Security.RequiredCategories) > 0
+	detection := security.Detection{}
+	if needDetection {
 		detected, derr := security.DetectRepositoryScoped(dir, cfg.SecurityExcludes())
 		if derr != nil {
 			fmt.Fprintf(stderr, "security: detect repository: %v\n", derr)
 			return exitError
 		}
-		detection = &detected
-		adapterConfigs = security.AutoAdapterConfigs(detected, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
+		detection = detected
 	}
+	selection := security.ResolveSelection(cfg.Security, detection, auto)
+	adapterConfigs := selection.EnabledConfigs()
 
 	adapters, err := security.BuildAdapters(adapterConfigs, security.BuildOptions{
-		Timeout:        time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
-		MaxOutputBytes: cfg.Security.MaxOutputBytes,
-		DatabasePath:   cfg.Security.AdvisoryDatabasePath,
-		StalePolicy:    cfg.Security.StaleAdvisoryDatabase,
+		Timeout:         time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
+		MaxOutputBytes:  cfg.Security.MaxOutputBytes,
+		DatabasePath:    cfg.Security.AdvisoryDatabasePath,
+		OSVDatabasePath: cfg.Security.OSVDatabasePath,
+		StalePolicy:     cfg.Security.StaleAdvisoryDatabase,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
 	}
 	policy := security.Policy{
-		Enabled:               true,
+		Enabled:               cfg.SecurityEnabled(),
 		Mode:                  mode,
 		Scope:                 scope,
 		RequiredCategories:    cfg.Security.RequiredCategories,
@@ -129,8 +131,10 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		MaxOutputBytes:        cfg.Security.MaxOutputBytes,
 		Exclude:               cfg.SecurityExcludes(),
 		AdvisoryDatabasePath:  cfg.Security.AdvisoryDatabasePath,
+		OSVDatabasePath:       cfg.Security.OSVDatabasePath,
 		StaleAdvisoryDatabase: cfg.Security.StaleAdvisoryDatabase,
 		Auto:                  auto,
+		RequiredGateActive:    cfg.Security.RequiredGateActive(),
 	}
 
 	runID := opts.runID
@@ -150,6 +154,10 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		Timeout:            time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
 		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
 		Baseline:           baseline,
+		Selection:          selection.AdapterSelections(),
+		Disabled:           selection.Disabled,
+		Overlaps:           selection.Overlaps,
+		Detection:          selection.Detection,
 		Prior:              prior,
 		PriorNativeReports: priorNative,
 	})
@@ -162,8 +170,12 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
 	}
-	scan.Detection = detection
-	scan.Diagnostics = append(baselineDiagnostics, scan.Diagnostics...)
+	scan.Detection = selection.Detection
+	if !needDetection {
+		scan.Detection = nil
+	}
+	scan.Diagnostics = append(append([]string(nil), baselineDiagnostics...), scan.Diagnostics...)
+	scan.Diagnostics = append(selection.Diagnostics, scan.Diagnostics...)
 
 	rn, err := runpkg.Open(dir, runID)
 	if err != nil {
@@ -236,20 +248,34 @@ func runSecurityInspect(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "security: detect repository: %v\n", err)
 		return exitError
 	}
-	configured := security.ClassifyCapabilitiesWithDatabase(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
-	proposed := security.SelectCandidatesWithDatabase(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath)
+	configured := security.ClassifyCapabilitiesWithDatabases(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath, cfg.Security.OSVDatabasePath)
+	proposed := security.SelectCandidatesWithDatabases(detection, cfg.Security.Adapters, cfg.Security.AdvisoryDatabasePath, cfg.Security.OSVDatabasePath)
+	selection := security.ResolveSelection(cfg.Security, detection, cfg.Security.Auto)
+	selected := security.ClassifyCapabilitiesWithDatabases(detection, selection.EnabledConfigs(), cfg.Security.AdvisoryDatabasePath, cfg.Security.OSVDatabasePath)
+	applySelectionState(configured, selection)
+	applySelectionState(selected, selection)
+	requiredReady, requiredReasons := inspectRequiredReadiness(cfg, selection, selected)
 	result := struct {
-		Version    int                         `json:"version"`
-		Enabled    bool                        `json:"enabled"`
-		Mode       string                      `json:"mode,omitempty"`
-		Scope      string                      `json:"scope,omitempty"`
-		Auto       bool                        `json:"auto"`
-		Detection  security.Detection          `json:"detection"`
-		Configured []security.AdapterCandidate `json:"configured"`
-		Proposed   []security.AdapterCandidate `json:"proposed"`
+		Version              int                         `json:"version"`
+		Enabled              bool                        `json:"enabled"`
+		Mode                 string                      `json:"mode,omitempty"`
+		Scope                string                      `json:"scope,omitempty"`
+		Auto                 bool                        `json:"auto"`
+		Detection            security.Detection          `json:"detection"`
+		Configured           []security.AdapterCandidate `json:"configured"`
+		Selected             []security.AdapterCandidate `json:"selected"`
+		Proposed             []security.AdapterCandidate `json:"proposed"`
+		Disabled             []security.DisabledAdapter  `json:"disabled,omitempty"`
+		Overlaps             []security.Overlap          `json:"overlaps,omitempty"`
+		Coverage             []security.CategoryCoverage `json:"coverage,omitempty"`
+		RequiredReady        bool                        `json:"required_ready"`
+		RequiredReasons      []string                    `json:"required_reasons,omitempty"`
+		SelectionDiagnostics []string                    `json:"selection_diagnostics,omitempty"`
 	}{
 		Version: 1, Enabled: cfg.SecurityEnabled(), Mode: cfg.Security.Mode, Scope: cfg.Security.Scope,
-		Auto: cfg.Security.Auto, Detection: detection, Configured: configured, Proposed: proposed,
+		Auto: cfg.Security.Auto, Detection: detection, Configured: configured, Selected: selected, Proposed: proposed,
+		Disabled: selection.Disabled, Overlaps: selection.Overlaps, Coverage: selection.Coverage,
+		RequiredReady: requiredReady, RequiredReasons: requiredReasons, SelectionDiagnostics: selection.Diagnostics,
 	}
 	if opts.json {
 		if err := json.NewEncoder(stdout).Encode(result); err != nil {
@@ -272,9 +298,133 @@ func runSecurityInspect(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	fmt.Fprintln(stdout, "  configured adapters:")
 	printCapabilities(stdout, configured)
+	fmt.Fprintln(stdout, "  selected adapters:")
+	printCapabilities(stdout, selected)
 	fmt.Fprintln(stdout, "  proposed adapters:")
 	printCapabilities(stdout, proposed)
+	if len(selection.Diagnostics) > 0 {
+		fmt.Fprintln(stdout, "  selection diagnostics:")
+		for _, diagnostic := range selection.Diagnostics {
+			fmt.Fprintf(stdout, "    %s\n", diagnostic)
+		}
+	}
+	if len(selection.Overlaps) > 0 {
+		fmt.Fprintln(stdout, "  overlapping coverage:")
+		for _, overlap := range selection.Overlaps {
+			scope := string(overlap.Language)
+			if overlap.RepositoryWide {
+				scope = "repository-wide"
+			}
+			fmt.Fprintf(stdout, "    %s (%s): %s\n", overlap.Category, scope, strings.Join(overlap.Adapters, ", "))
+		}
+	}
+	if len(selection.Coverage) > 0 {
+		fmt.Fprintln(stdout, "  coverage:")
+		for _, coverage := range selection.Coverage {
+			required := ""
+			if coverage.Required {
+				required = " (required)"
+			}
+			fmt.Fprintf(stdout, "    %s%s: %s\n", coverage.Category, required, coverage.State)
+			for _, language := range coverage.Languages {
+				fmt.Fprintf(stdout, "      %s: %s", language.Language, language.State)
+				if len(language.Adapters) > 0 {
+					fmt.Fprintf(stdout, " (%s)", strings.Join(language.Adapters, ", "))
+				}
+				fmt.Fprintln(stdout)
+			}
+		}
+	}
+	fmt.Fprintf(stdout, "  required-mode readiness: %t\n", requiredReady)
+	for _, reason := range requiredReasons {
+		fmt.Fprintf(stdout, "    %s\n", reason)
+	}
 	return exitOK
+}
+
+// applySelectionState overlays the effective enable/disable and selection state
+// onto capability candidates. Classification itself stays a pure content probe.
+func applySelectionState(candidates []security.AdapterCandidate, selection security.Selection) {
+	disabled := map[string]security.DisabledAdapter{}
+	for _, adapter := range selection.Disabled {
+		disabled[strings.ToLower(adapter.ID)] = adapter
+	}
+	explicit := map[string]string{}
+	for _, adapter := range selection.Adapters {
+		explicit[strings.ToLower(adapter.Config.ID)] = string(adapter.Selection)
+	}
+	for i := range candidates {
+		key := strings.ToLower(candidates[i].ID)
+		if adapter, ok := disabled[key]; ok {
+			candidates[i].Disabled = true
+			candidates[i].DisabledReason = adapter.Reason
+		}
+		if mode, ok := explicit[key]; ok {
+			candidates[i].Selection = mode
+		}
+	}
+}
+
+// inspectRequiredReadiness is a read-only projection of required-mode readiness.
+// It never approves or bypasses anything; it only names missing prerequisites.
+func inspectRequiredReadiness(cfg config.Config, selection security.Selection, selected []security.AdapterCandidate) (bool, []string) {
+	if len(cfg.Security.RequiredCategories) == 0 {
+		return false, []string{"required mode needs at least one required category"}
+	}
+	if !cfg.SecurityEnabled() {
+		return false, []string{"global security.enabled is false; a required gate cannot be satisfied"}
+	}
+	coverage := map[string]security.CategoryCoverage{}
+	for _, category := range selection.Coverage {
+		coverage[string(category.Category)] = category
+	}
+	ready := true
+	var reasons []string
+	for _, raw := range cfg.Security.RequiredCategories {
+		category := strings.ToLower(strings.TrimSpace(raw))
+		entry, ok := coverage[category]
+		if !ok {
+			if selection.Detection != nil && len(selection.Detection.Languages) == 0 && availableCategoryAdapter(selected, category) {
+				continue
+			}
+			ready = false
+			reasons = append(reasons, fmt.Sprintf("required category %s has no coverage evidence", category))
+			continue
+		}
+		if entry.State != security.CoverageStateCovered {
+			ready = false
+			reasons = append(reasons, fmt.Sprintf("required category %s coverage is %s", category, entry.State))
+		}
+		if entry.RepositoryWide && entry.State == security.CoverageStateCovered {
+			continue
+		}
+		for _, language := range entry.Languages {
+			if language.State != security.CoverageStateCovered {
+				ready = false
+				reasons = append(reasons, fmt.Sprintf("required %s coverage for %s is %s", category, language.Language, language.State))
+			}
+		}
+	}
+	for _, candidate := range selected {
+		if candidate.Status == security.CapabilityAvailable {
+			continue
+		}
+		ready = false
+		reasons = append(reasons, fmt.Sprintf("adapter %s prerequisite is %s", candidate.ID, candidate.Status))
+	}
+	if len(reasons) == 0 {
+		reasons = []string{"all required categories and detected languages have selected, available adapters"}
+	}
+	return ready, reasons
+}
+
+func availableCategoryAdapter(candidates []security.AdapterCandidate, category string) bool {
+	for _, candidate := range candidates {
+		if string(candidate.Category) == category && candidate.Status == security.CapabilityAvailable {
+			return true
+		}
+	}
+	return false
 }
 
 func parseSecurityInspectArgs(args []string, stderr io.Writer) (securityInspectOptions, bool) {
@@ -318,8 +468,21 @@ func printCapabilities(w io.Writer, candidates []security.AdapterCandidate) {
 	}
 	for _, candidate := range candidates {
 		fmt.Fprintf(w, "    %s (%s): %s", candidate.ID, candidate.Category, candidate.Status)
+		if candidate.Disabled {
+			fmt.Fprintf(w, " [disabled: %s]", candidate.DisabledReason)
+		}
+		if candidate.Selection != "" {
+			fmt.Fprintf(w, " selection=%s", candidate.Selection)
+		}
 		if candidate.Rules != "" {
 			fmt.Fprintf(w, " rules=%s", candidate.Rules)
+		}
+		if len(candidate.Languages) > 0 {
+			values := make([]string, 0, len(candidate.Languages))
+			for _, language := range candidate.Languages {
+				values = append(values, string(language))
+			}
+			fmt.Fprintf(w, " languages=%s", strings.Join(values, ","))
 		}
 		fmt.Fprintln(w)
 	}
@@ -448,8 +611,43 @@ func printSecurityScan(w io.Writer, scan security.Scan, refs security.ArtifactRe
 	}
 	for _, adapter := range scan.Adapters {
 		fmt.Fprintf(w, "  adapter %s (%s): %s, coverage %s", adapter.AdapterID, adapter.Category, adapter.Status, adapter.Coverage)
+		if adapter.Disabled {
+			fmt.Fprint(w, ", disabled")
+		} else if adapter.Selection != "" {
+			fmt.Fprintf(w, ", selection %s", adapter.Selection)
+		}
+		if adapter.RepositoryWide {
+			fmt.Fprint(w, ", repository-wide")
+		} else if len(adapter.Languages) > 0 {
+			fmt.Fprintf(w, ", languages %s", detectionLanguageText(adapter.Languages))
+		}
 		if adapter.Reused {
 			fmt.Fprint(w, ", reused")
+		}
+		fmt.Fprintln(w)
+	}
+	if len(scan.Overlaps) > 0 {
+		for _, overlap := range scan.Overlaps {
+			scope := string(overlap.Language)
+			if overlap.RepositoryWide {
+				scope = "repository-wide"
+			}
+			fmt.Fprintf(w, "  overlap: %s (%s): %s\n", overlap.Category, scope, strings.Join(overlap.Adapters, ", "))
+		}
+	}
+	for _, coverage := range scan.CoverageReport {
+		fmt.Fprintf(w, "  coverage %s: %s\n", coverage.Category, coverage.State)
+		for _, language := range coverage.Languages {
+			fmt.Fprintf(w, "    %s: %s\n", language.Language, language.State)
+		}
+	}
+	for _, adapter := range scan.Adapters {
+		if adapter.Disabled || adapter.Provenance.AdvisoryDatabaseIdentity == "" {
+			continue
+		}
+		fmt.Fprintf(w, "  database %s: %s", adapter.AdapterID, adapter.Provenance.AdvisoryDatabaseIdentity)
+		if adapter.Provenance.AdvisoryDatabaseStale {
+			fmt.Fprint(w, " (STALE)")
 		}
 		fmt.Fprintln(w)
 	}
