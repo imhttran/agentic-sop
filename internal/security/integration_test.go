@@ -646,3 +646,86 @@ func TestRealCargoAuditPinnedDatabase(t *testing.T) {
 		actualVersion, execResult.Status, execResult.Coverage, len(execResult.Findings),
 		execResult.Provenance.AdvisoryDatabaseIdentity, execResult.Provenance.LockfileIdentity)
 }
+
+func integrationCargoAuditPrerequisites(t *testing.T) (string, string, string) {
+	t.Helper()
+	database := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_ADVISORY_DB"))
+	if database == "" {
+		if integrationRequired() {
+			t.Fatal("required security integration prerequisite missing: SOP_SECURITY_CARGO_ADVISORY_DB")
+		}
+		t.Skip("SOP_SECURITY_CARGO_ADVISORY_DB is not set; real cargo-audit check not run")
+	}
+	if !filepath.IsAbs(database) {
+		database = filepath.Join(integrationModuleRoot(t), database)
+	}
+	cargoBin := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_BIN"))
+	if cargoBin == "" {
+		for _, candidate := range []string{"cargo-audit", "cargo"} {
+			if path, err := exec.LookPath(candidate); err == nil {
+				cargoBin = path
+				break
+			}
+		}
+	}
+	if cargoBin == "" {
+		if integrationRequired() {
+			t.Fatal("required security integration prerequisite missing: cargo-audit")
+		}
+		t.Skip("cargo-audit is not installed; real cargo-audit check not run")
+	}
+	rawVersion, err := exec.Command(cargoBin, "audit", "--version").Output()
+	if err != nil {
+		if integrationRequired() {
+			t.Fatalf("cargo-audit version probe failed: %v", err)
+		}
+		t.Skipf("cargo-audit is not usable: %v", err)
+	}
+	version := normalizeCargoAuditVersion(string(rawVersion))
+	if version == "" {
+		t.Fatalf("cargo-audit version output is unrecognized: %q", strings.TrimSpace(string(rawVersion)))
+	}
+	return cargoBin, database, version
+}
+
+func TestRealCargoAuditRequiresEveryRustLockfile(t *testing.T) {
+	cargoBin, database, version := integrationCargoAuditPrerequisites(t)
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "packages", "a", "Cargo.toml"), "[package]\nname = \"a\"\nversion = \"0.1.0\"\n")
+	writeFile(t, filepath.Join(root, "packages", "b", "Cargo.toml"), "[package]\nname = \"b\"\nversion = \"0.1.0\"\n")
+	lockfileData, err := os.ReadFile(filepath.Join("testdata", "cargo-audit", "Cargo.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "packages", "a", "Cargo.lock"), string(lockfileData))
+	before, _ := rulesIdentity(filepath.Join(root, "packages", "a", "Cargo.lock"))
+
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+		Protocol: config.SecurityProtocolBuiltin, Command: []string{cargoBin, "audit"},
+		Version: version,
+	}, BuildOptions{
+		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
+		DatabasePath: database, StalePolicy: StaleAllow,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	execResult, err := adapter.Scan(context.Background(), Request{ProtocolVersion: ProtocolVersion, RunID: "cargo-obligation", WorkspaceRoot: root, Scope: Scope{Mode: "workspace"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Status != StatusFailed || execResult.Coverage != CoveragePartial {
+		t.Fatalf("status/coverage = %s/%s, want FAILED/PARTIAL (%v)", execResult.Status, execResult.Coverage, execResult.Diagnostics)
+	}
+	if !diagnosticContains(execResult.Diagnostics, "missing dependency input packages/b/Cargo.lock") {
+		t.Fatalf("diagnostics = %v, want the missing package obligation", execResult.Diagnostics)
+	}
+	after, _ := rulesIdentity(filepath.Join(root, "packages", "a", "Cargo.lock"))
+	if before != after {
+		t.Fatal("cargo-audit modified the present lockfile")
+	}
+	if _, err := os.Stat(filepath.Join(root, "packages", "b", "Cargo.lock")); err == nil {
+		t.Fatal("cargo-audit generated a missing lockfile")
+	}
+}

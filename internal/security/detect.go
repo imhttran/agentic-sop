@@ -73,6 +73,24 @@ type Lockfile struct {
 	Present bool `json:"present"`
 	// Manifests names the manifest paths (sorted) the lockfile belongs to.
 	Manifests []string `json:"manifests,omitempty"`
+	// Owner is the owning workspace/package manifest for a Rust lockfile.
+	Owner string `json:"owner,omitempty"`
+	// Kind is "rust-workspace" or "rust-package" for a Rust lockfile.
+	Kind string `json:"kind,omitempty"`
+}
+
+// DependencyObligation is one in-scope dependency analysis input. A Go module's
+// input is its go.mod; a Rust workspace/package input is its Cargo.lock. Present
+// distinguishes a real input from a detected but unsupported/missing obligation.
+type DependencyObligation struct {
+	Language  Language `json:"language"`
+	Kind      string   `json:"kind"`
+	Root      string   `json:"root"`
+	Manifest  string   `json:"manifest,omitempty"`
+	Input     string   `json:"input"`
+	Present   bool     `json:"present"`
+	Workspace string   `json:"workspace,omitempty"`
+	Issues    []string `json:"issues,omitempty"`
 }
 
 // CargoWorkspace records a parsed Cargo workspace. The Members slice lists the
@@ -83,8 +101,12 @@ type CargoWorkspace struct {
 	Manifest string `json:"manifest"`
 	// Members lists the declared member patterns, sorted.
 	Members []string `json:"members,omitempty"`
+	// Excluded lists the declared exclude patterns, sorted.
+	Excluded []string `json:"excluded,omitempty"`
 	// Resolved lists the resolved member directories, sorted.
 	Resolved []string `json:"resolved,omitempty"`
+	// Issues lists unsupported or ambiguous layout facts for this workspace.
+	Issues []string `json:"issues,omitempty"`
 }
 
 // AdapterCandidate is one adapter selected or proposed for the detected content.
@@ -129,6 +151,12 @@ type Detection struct {
 	Lockfiles []Lockfile `json:"lockfiles,omitempty"`
 	// Workspaces lists parsed Cargo workspaces, sorted by manifest path.
 	Workspaces []CargoWorkspace `json:"workspaces,omitempty"`
+	// Obligations lists every in-scope Go/Rust dependency input, including
+	// detected inputs that are missing or unsupported. Sorted by input/language.
+	Obligations []DependencyObligation `json:"obligations,omitempty"`
+	// Issues lists unsupported or ambiguous dependency layouts. An issue makes
+	// dependency coverage non-clean rather than inferred complete.
+	Issues []string `json:"issues,omitempty"`
 }
 
 // workspaceRoot returns the absolute root used for safe path resolution.
@@ -184,6 +212,67 @@ func (d Detection) HasPresentLockfile(language Language) bool {
 	return false
 }
 
+// MissingObligations returns the in-scope obligations with no usable input,
+// sorted by language/input. A missing obligation is never clean coverage.
+func (d Detection) MissingObligations(languages ...Language) []DependencyObligation {
+	selected := map[Language]bool{}
+	for _, language := range languages {
+		selected[language] = true
+	}
+	var out []DependencyObligation
+	for _, obligation := range d.Obligations {
+		if len(selected) > 0 && !selected[obligation.Language] {
+			continue
+		}
+		if !obligation.Present {
+			out = append(out, obligation)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Language != out[j].Language {
+			return out[i].Language < out[j].Language
+		}
+		return out[i].Input < out[j].Input
+	})
+	return out
+}
+
+// SelectedObligations returns the in-scope obligations for a language set.
+func (d Detection) SelectedObligations(languages ...Language) []DependencyObligation {
+	selected := map[Language]bool{}
+	for _, language := range languages {
+		selected[language] = true
+	}
+	var out []DependencyObligation
+	for _, obligation := range d.Obligations {
+		if len(selected) > 0 && !selected[obligation.Language] {
+			continue
+		}
+		out = append(out, obligation)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Language != out[j].Language {
+			return out[i].Language < out[j].Language
+		}
+		return out[i].Input < out[j].Input
+	})
+	return out
+}
+
+// ObligationIdentity is a deterministic resume key over the resolved obligation
+// inventory, including missing/unsupported state.
+func (d Detection) ObligationIdentity(languages ...Language) string {
+	obligations := d.SelectedObligations(languages...)
+	parts := make([]string, 0, len(obligations))
+	for _, obligation := range obligations {
+		parts = append(parts, fmt.Sprintf("language=%s;kind=%s;root=%s;manifest=%s;input=%s;present=%t;workspace=%s;issues=%s",
+			obligation.Language, obligation.Kind, obligation.Root, obligation.Manifest, obligation.Input,
+			obligation.Present, obligation.Workspace, strings.Join(obligation.Issues, "|")))
+	}
+	sort.Strings(parts)
+	return DigestStrings(parts...)
+}
+
 // Built-in adapter ids that selection can propose.
 const (
 	// AdapterIDSemgrep is the built-in SAST adapter id.
@@ -228,10 +317,10 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 	matcher := NewExcludeMatcher(append([]string{".git", ".agent-sdlc"}, excludes...))
 
 	languageSet := map[Language]bool{}
-	// manifestDirs records, per language, the directories that hold a manifest.
-	// A lockfile is expected next to each such directory.
+	// manifestDirs records Go module directories. A go module expects go.sum.
 	manifestDirs := map[Language]map[string][]string{}
 	found := map[string]bool{}
+	var cargoRecords []cargoManifestRecord
 
 	err = filepath.WalkDir(abs, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -282,16 +371,13 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 		}
 		manifestDirs[language][dir] = append(manifestDirs[language][dir], rel)
 
-		// A Rust manifest with a [workspace] table is recorded. Its members share
-		// the workspace's single Cargo.lock; member directories do not own one.
 		if language == LanguageRust {
-			workspace, werr := parseCargoWorkspace(abs, rel)
-			if werr != nil {
-				return werr
+			data, rerr := os.ReadFile(filepath.Join(abs, filepath.FromSlash(rel)))
+			if rerr != nil {
+				return rerr
 			}
-			if workspace.Manifest != "" {
-				result.Workspaces = append(result.Workspaces, workspace)
-			}
+			manifest, perr := parseCargoManifest(data)
+			cargoRecords = append(cargoRecords, cargoManifestRecord{Path: rel, Dir: dir, Manifest: manifest, ParseErr: perr})
 		}
 		return nil
 	})
@@ -299,35 +385,41 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 		return Detection{}, err
 	}
 
-	// A Cargo workspace member does not own a Cargo.lock: the workspace root does.
-	// Normalize every Rust manifest directory to its nearest workspace root before
-	// computing lockfile expectations.
-	if dirs := manifestDirs[LanguageRust]; len(dirs) > 0 {
-		workspaceRoots := map[string]bool{}
-		for _, workspace := range result.Workspaces {
-			workspaceRoots[repoDir(workspace.Manifest)] = true
-		}
-		normalized := map[string][]string{}
-		for dir, manifests := range dirs {
-			rootDir := dir
-			for candidate := dir; ; candidate = repoDir(candidate) {
-				if workspaceRoots[candidate] {
-					rootDir = candidate
-					break
-				}
-				if candidate == "." {
-					break
-				}
-			}
-			normalized[rootDir] = append(normalized[rootDir], manifests...)
-		}
-		manifestDirs[LanguageRust] = normalized
-	}
+	// Cargo membership and obligations come from parsed Cargo.toml content, never
+	// from directory ancestry. A workspace member shares the workspace root's
+	// Cargo.lock; an excluded or undeclared package owns its own lockfile.
+	workspaces, rustLockfiles, cargoIssues := resolveCargoWorkspaces(abs, cargoRecords)
+	result.Workspaces = workspaces
+	result.Issues = append(result.Issues, cargoIssues...)
 
-	// Lockfile expectations: a Go module expects go.sum, a Cargo workspace or
-	// package expects Cargo.lock. Every expectation is reported, present or not.
-	result.Lockfiles = detectLockfiles(abs, manifestDirs)
+	// Lockfile expectations: a Go module expects go.sum, and each resolved Rust
+	// workspace/package expects Cargo.lock. Every expectation is reported, present
+	// or not.
+	result.Lockfiles = detectLockfiles(abs, map[Language]map[string][]string{LanguageGo: manifestDirs[LanguageGo]})
+	result.Lockfiles = append(result.Lockfiles, rustLockfiles...)
+	result.Obligations = dependencyObligations(result)
+	if languageSet[LanguageGo] {
+		hasGoModule := false
+		for _, obligation := range result.Obligations {
+			if obligation.Language == LanguageGo && obligation.Present {
+				hasGoModule = true
+				break
+			}
+		}
+		if !hasGoModule {
+			result.Obligations = append(result.Obligations, DependencyObligation{
+				Language: LanguageGo,
+				Kind:     "go-module",
+				Root:     ".",
+				Input:    "go.mod",
+				Present:  false,
+				Issues:   []string{"Go source detected without go.mod"},
+			})
+		}
+	}
+	result.Obligations = sortDependencyObligations(result.Obligations)
 	result.Workspaces = mergeWorkspaces(result.Workspaces)
+	result.Issues = sortedUniqueStrings(result.Issues)
 	result.Languages = sortedLanguages(languageSet)
 	sort.Slice(result.Manifests, func(i, j int) bool { return result.Manifests[i].Path < result.Manifests[j].Path })
 	sort.Slice(result.Lockfiles, func(i, j int) bool {
@@ -393,7 +485,9 @@ func mergeWorkspaces(in []CargoWorkspace) []CargoWorkspace {
 	sort.Slice(out, func(i, j int) bool { return out[i].Manifest < out[j].Manifest })
 	for i := range out {
 		sort.Strings(out[i].Members)
+		sort.Strings(out[i].Excluded)
 		sort.Strings(out[i].Resolved)
+		sort.Strings(out[i].Issues)
 	}
 	return out
 }
@@ -421,126 +515,53 @@ func repoDir(rel string) string {
 	return dir
 }
 
-// parseCargoWorkspace reads a Cargo.toml and, when it declares [workspace],
-// returns the resolved member directories. A manifest without a workspace section
-// yields an empty value.
-func parseCargoWorkspace(root, manifestRel string) (CargoWorkspace, error) {
-	data, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(manifestRel)))
-	if err != nil {
-		return CargoWorkspace{}, err
-	}
-	members := cargoWorkspaceMembers(string(data))
-	if len(members) == 0 {
-		return CargoWorkspace{}, nil
-	}
-	baseDir := repoDir(manifestRel)
-	workspace := CargoWorkspace{Manifest: manifestRel, Members: append([]string(nil), members...)}
-	for _, member := range members {
-		if resolved := resolveCargoMember(baseDir, member); resolved != "" {
-			workspace.Resolved = append(workspace.Resolved, resolved)
+// dependencyObligations derives the deterministic in-scope input inventory from
+// detected Go manifests and resolved Rust lockfile obligations.
+func dependencyObligations(detection Detection) []DependencyObligation {
+	var out []DependencyObligation
+	for _, manifest := range detection.Manifests {
+		if manifest.Language != LanguageGo {
+			continue
 		}
+		out = append(out, DependencyObligation{
+			Language: LanguageGo,
+			Kind:     "go-module",
+			Root:     repoDir(manifest.Path),
+			Manifest: manifest.Path,
+			Input:    manifest.Path,
+			Present:  true,
+		})
 	}
-	sort.Strings(workspace.Members)
-	sort.Strings(workspace.Resolved)
-	return workspace, nil
+	for _, lockfile := range detection.Lockfiles {
+		if lockfile.Language != LanguageRust {
+			continue
+		}
+		obligation := DependencyObligation{
+			Language:  LanguageRust,
+			Kind:      lockfile.Kind,
+			Root:      repoDir(lockfile.Owner),
+			Manifest:  lockfile.Owner,
+			Input:     lockfile.Path,
+			Present:   lockfile.Present,
+			Workspace: lockfile.Owner,
+		}
+		if !lockfile.Present {
+			obligation.Issues = []string{"Cargo.lock is missing for " + lockfile.Owner}
+		}
+		out = append(out, obligation)
+	}
+	return sortDependencyObligations(out)
 }
 
-// cargoWorkspaceMembers extracts the member entries of the [workspace] table from
-// Cargo.toml text. It is a deliberately small line parser. Only keys inside the
-// [workspace] table are considered, so [workspace.dependencies] cannot contribute
-// members.
-func cargoWorkspaceMembers(content string) []string {
-	var members []string
-	section := ""
-	inMembers := false
-	for _, rawLine := range strings.Split(content, "\n") {
-		line := strings.TrimSpace(rawLine)
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
+func sortDependencyObligations(values []DependencyObligation) []DependencyObligation {
+	out := append([]DependencyObligation(nil), values...)
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Language != out[j].Language {
+			return out[i].Language < out[j].Language
 		}
-		if strings.HasPrefix(line, "[") {
-			end := strings.Index(line, "]")
-			if end < 0 {
-				continue
-			}
-			section = strings.TrimSpace(line[1:end])
-			inMembers = false
-			continue
-		}
-		if section != "workspace" {
-			continue
-		}
-		if !inMembers {
-			eq := strings.Index(line, "=")
-			if eq < 0 {
-				continue
-			}
-			if strings.TrimSpace(line[:eq]) != "members" {
-				continue
-			}
-			inMembers = true
-			line = strings.TrimSpace(line[eq+1:])
-		}
-		values, closed := parseTomlStringArray(line)
-		members = append(members, values...)
-		if closed {
-			inMembers = false
-		}
-	}
-	return sortedUniqueStrings(members)
-}
-
-// parseTomlStringArray reads the quoted entries of a TOML string array on one
-// line. closed reports whether the closing bracket appears on this line.
-func parseTomlStringArray(line string) (values []string, closed bool) {
-	inString := false
-	var current strings.Builder
-	for _, r := range line {
-		if r == '"' {
-			if inString {
-				values = append(values, current.String())
-				current.Reset()
-			}
-			inString = !inString
-			continue
-		}
-		if inString {
-			current.WriteRune(r)
-			continue
-		}
-		if r == ']' {
-			return values, true
-		}
-	}
-	return values, false
-}
-
-// resolveCargoMember normalizes one declared member path relative to the
-// workspace manifest directory. It returns "" for a member that escapes the
-// repository, so an unsafe member is dropped rather than read.
-func resolveCargoMember(baseDir, member string) string {
-	member = strings.TrimSpace(strings.ReplaceAll(member, "\\", "/"))
-	if member == "" {
-		return ""
-	}
-	// A glob member ("crates/*") resolves to its literal parent directory only;
-	// detection never expands globs into arbitrary subtrees.
-	if idx := strings.IndexAny(member, "*?["); idx >= 0 {
-		member = strings.TrimSuffix(member[:idx], "/")
-	}
-	joined := member
-	if baseDir != "." && baseDir != "" {
-		joined = baseDir + "/" + member
-	}
-	clean := filepath.ToSlash(filepath.Clean(filepath.FromSlash(joined)))
-	clean = strings.TrimPrefix(clean, "./")
-	if clean == "" || clean == "." {
-		return ""
-	}
-	if !SafeRelativePath(clean) {
-		return ""
-	}
-	return clean
+		return out[i].Input < out[j].Input
+	})
+	return out
 }
 
 // sortedUniqueStrings sorts and deduplicates values.

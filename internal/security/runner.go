@@ -206,7 +206,7 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 			exec.Selection = string(selection.Mode)
 			exec.Provenance.Selection = string(selection.Mode)
 		}
-		if len(exec.Languages) == 0 && len(selection.Languages) > 0 {
+		if len(exec.Languages) == 0 && len(selection.Languages) > 0 && exec.Status == StatusCompleted && !exec.NoApplicableContent {
 			exec.Languages = append([]Language(nil), selection.Languages...)
 		}
 		if len(selection.Languages) > 0 {
@@ -326,6 +326,7 @@ func (r *Runner) maybeReuse(req Request, descriptor Descriptor) (Execution, bool
 			prior.Provenance.AdvisoryDatabaseIdentity != current.AdvisoryDatabaseIdentity ||
 			prior.Provenance.AdvisoryDatabaseStale != current.AdvisoryDatabaseStale ||
 			prior.Provenance.LockfileIdentity != current.LockfileIdentity ||
+			prior.Provenance.ObligationIdentity != current.ObligationIdentity ||
 			prior.Provenance.ScannerVersion != current.ScannerVersion {
 			return Execution{}, false
 		}

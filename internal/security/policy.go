@@ -249,7 +249,7 @@ func requiredCoverageReasons(execs []Execution, policy Policy, detection *Detect
 		if category == CategorySecrets || detection == nil || len(detection.Languages) == 0 {
 			covered := false
 			for _, exec := range inCategory {
-				if exec.Status == StatusCompleted && exec.Coverage == CoverageComplete {
+				if exec.Status == StatusCompleted && exec.Coverage == CoverageComplete && !exec.NoApplicableContent {
 					covered = true
 					break
 				}
@@ -263,7 +263,7 @@ func requiredCoverageReasons(execs []Execution, policy Policy, detection *Detect
 			covered := false
 			undeclared := false
 			for _, exec := range inCategory {
-				if exec.Status != StatusCompleted || exec.Coverage != CoverageComplete {
+				if exec.Status != StatusCompleted || exec.Coverage != CoverageComplete || exec.NoApplicableContent {
 					continue
 				}
 				if exec.RepositoryWide {
@@ -491,6 +491,15 @@ func repositoryCoverage(execs []Execution) (CoverageState, []string) {
 }
 
 func languageCoverageState(execs []Execution) (CoverageState, []string) {
+	applicable := 0
+	for _, exec := range execs {
+		if !exec.NoApplicableContent {
+			applicable++
+		}
+	}
+	if applicable == 0 {
+		return CoverageStateUnconfigured, []string{"no applicable content; scanner was not executed"}
+	}
 	var reasons []string
 	completedComplete := false
 	completedPartial := false

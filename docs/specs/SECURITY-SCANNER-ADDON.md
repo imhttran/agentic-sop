@@ -339,15 +339,50 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   completion, failure, and cancellation. Only a sanitized native report is
   persisted.
 
+### Dependency obligations (`dependencies`)
+
+Dependency analysis is defined by an explicit, deterministic inventory of
+in-scope inputs, not by the lockfiles that happen to exist:
+
+- Cargo workspace detection MUST parse `Cargo.toml` with a TOML library. A
+  `[workspace]` declaration is a workspace even when it has no `members` list.
+  Members, exclusions, globs, the root package of an ordinary workspace, explicit
+  `package.workspace` references, and in-root path dependencies are resolved from
+  content. Directory ancestry alone MUST NOT prove workspace membership.
+- An excluded or undeclared nested package is an independent package with its own
+  `Cargo.lock` obligation. A workspace member does not own a lockfile.
+- The obligation inventory records Go `go.mod` inputs and Rust workspace/package
+  `Cargo.lock` inputs, including inputs that are missing or unsupported. It is
+  recorded in execution evidence and included in resume identity.
+- Every adapters MUST account for every in-scope obligation. Present inputs are
+  scanned; missing or explicitly omitted inputs are reported by path. A scan that
+  covers only part of the inventory is `FAILED` with `PARTIAL` or `UNKNOWN`
+  coverage, never `COMPLETED`/`COMPLETE`. Findings from present inputs remain in
+  the report.
+- An explicit `inputs` or `lockfile` setting is validated against the inventory.
+  It may not name an out-of-scope input. A subset leaves the remaining obligations
+  reported unless `security.exclude` removes them from scope; a subset never
+  implies full-language coverage.
+- Unsupported or ambiguous Cargo layouts (invalid TOML, unsafe or unmatched member
+  patterns, nested workspaces, dangling `package.workspace` references) are
+  explicit issues and cannot produce clean dependency coverage.
+- Detected Go source without `go.mod` is an unsupported dependency input, not an
+  empty scan. A genuine repository with no Go or Rust dependency content is
+  reported as a completed no-op with `no_applicable_content: true`; no scanner ran
+  and selection metadata does not claim language coverage. A completed no-op does
+  not satisfy a required dependency category.
+
 ### cargo-audit (`dependencies`)
 
 - Invokes the configured argv (default `cargo audit`) with `--file <Cargo.lock>`,
   `--json`, `--no-fetch`, and `--db <local-advisory-database>`. It never runs the
   experimental `fix` subcommand, never generates a lockfile, never fetches or
   updates a database, and never uploads source.
-- Resolves the Cargo workspace and its actual `Cargo.lock`. A workspace member
-  does not own a lockfile; the workspace root does. A configured `lockfile`
-  override is allowed but remains repository-relative.
+- Resolves the Cargo workspace and its actual `Cargo.lock` through the obligation
+  inventory. A workspace member does not own a lockfile; the workspace root does.
+  Excluded and undeclared nested packages keep separate lockfile obligations. A
+  configured `lockfile` override is validated against the inventory and remains
+  repository-relative.
 - Parses the structured `vulnerabilities.list` report. Advisory IDs, affected
   package/version, CVSS/severity, aliases/CVEs, patched and unaffected versions,
   references, and the lockfile path are retained. A CVSS 3.x vector is mapped to
@@ -360,9 +395,10 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
 - Records a lockfile identity: every resolved lockfile path with its content
   digest. Resume re-executes when the advisory database identity, its staleness,
   or the lockfile identity changes.
-- Missing lockfiles, unavailable or invalid databases, a report without database
-  identity, malformed output, timeouts, and tool failures are non-clean execution
-  results and never `PASS`. Each condition has a distinguishable diagnostic.
+- Missing lockfiles, missing obligations omitted by an explicit subset,
+  unavailable or invalid databases, a report without database identity, malformed
+  output, timeouts, and tool failures are non-clean execution results and never
+  `PASS`. Each condition has a distinguishable diagnostic naming the input path.
 - A stale database (older than 90 days) follows the explicit
   `stale_advisory_database` / adapter `stale` policy. `deny` is the default and
   forces `INDETERMINATE`; `allow` runs with `--stale` and records `PARTIAL`
@@ -394,11 +430,14 @@ fetches or updates an advisory database.
   prevents network module resolution and build output. `--no-resolve` disables
   transitive resolution. `--config` points at an empty restricted file so a
   repository `osv-scanner.toml` cannot suppress SOP findings or reduce coverage.
-- Inputs are explicit Go `go.mod` files and present Rust `Cargo.lock` files.
-  Nested Go modules and Cargo workspaces are resolved from content. A configured
-  `inputs` list wins but stays repository-relative. The adapter never generates
-  or modifies a manifest or lockfile. A detected Rust ecosystem with no
-  `Cargo.lock` is a failure, never a clean result.
+- Inputs are Go `go.mod` files and present Rust `Cargo.lock` files resolved from
+  the obligation inventory. Nested Go modules, ordinary/virtual/implicit-member
+  Cargo workspaces, member globs, exclusions, and explicit workspace references
+  are resolved from content. A configured `inputs` list is validated against the
+  inventory; a subset reports the remaining obligations unless excluded. The
+  adapter never generates or modifies a manifest or lockfile. A missing
+  `Cargo.lock` or a detected Go source tree without `go.mod` is a failure, never a
+  clean result.
 - The offline database cache is explicit (`security.osv_database_path`, or the
   adapter `database` override). OSV v2.7 reads
   `<cache>/osv-scalibr/<ecosystem>/all.zip`; the older documented
@@ -543,6 +582,7 @@ completed adapter result is reused only when all of these still match:
 - pinned scanner version,
 - rules or controlled-config identity,
 - advisory database identity and rechecked stale state for a dependency adapter,
+- resolved obligation identity, including present/missing/unsupported inputs,
 - resolved input/lockfile identity,
 - adapter configuration digest, including enable and language metadata,
 - policy identity, including baseline content, the configured execution bounds

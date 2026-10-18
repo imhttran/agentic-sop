@@ -134,15 +134,19 @@ func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
 		ContentIdentity:     req.Content,
 		Languages:           a.declaredLanguages(),
 	}
-	lockfiles, err := a.resolveLockfiles(req)
+	plan, err := a.resolveInputPlan(req)
 	if err != nil {
 		return prov, err
 	}
-	lockfileIdentity, err := cargoLockfileIdentity(req.WorkspaceRoot, lockfiles)
+	lockfileIdentity, err := cargoLockfileIdentity(req.WorkspaceRoot, plan.Lockfiles)
 	if err != nil {
 		return prov, err
 	}
 	prov.LockfileIdentity = lockfileIdentity
+	prov.ObligationIdentity = plan.Detection.ObligationIdentity(LanguageRust)
+	if len(plan.Lockfiles) == 0 {
+		return prov, nil
+	}
 	dir, err := a.resolveDatabasePath(req)
 	if err != nil {
 		return prov, err
@@ -179,49 +183,88 @@ func (a *cargoAuditAdapter) resolveDatabasePath(req Request) (string, error) {
 	return dir, nil
 }
 
-// resolveLockfiles returns the repository-relative lockfiles this execution
-// audits. An explicit adapter lockfile wins; otherwise the actual Cargo.lock
-// files resolved from repository content are used. A missing lockfile is never
-// replaced by cargo's implicit generation.
-func (a *cargoAuditAdapter) resolveLockfiles(req Request) ([]string, error) {
+// cargoAuditInputPlan is the resolved Rust input inventory for one execution.
+type cargoAuditInputPlan struct {
+	Detection   Detection
+	Lockfiles   []string
+	Obligations []DependencyObligation
+	Missing     []DependencyObligation
+}
+
+// resolveInputPlan returns the explicit or detected Cargo.lock inputs plus every
+// in-scope Rust obligation. A configured lockfile is validated against the
+// inventory; an omitted obligation is a coverage gap, not an implicit subset.
+func (a *cargoAuditAdapter) resolveInputPlan(req Request) (cargoAuditInputPlan, error) {
+	detection, err := DetectRepositoryScoped(req.WorkspaceRoot, req.Scope.Excluded)
+	if err != nil {
+		return cargoAuditInputPlan{}, fmt.Errorf("resolve Cargo lockfiles: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+	}
+	if len(detection.Issues) > 0 {
+		return cargoAuditInputPlan{}, fmt.Errorf("dependency layout is unsupported or ambiguous: %s", SanitizeText(strings.Join(detection.Issues, "; "), MaxDiagnosticBytes))
+	}
+	plan := cargoAuditInputPlan{
+		Detection:   detection,
+		Obligations: detection.SelectedObligations(LanguageRust),
+	}
+	byInput := map[string]DependencyObligation{}
+	for _, obligation := range plan.Obligations {
+		byInput[obligation.Input] = obligation
+	}
+
 	if raw := strings.TrimSpace(a.lockfile); raw != "" {
 		path, reason := NormalizePath(raw)
 		if path == "" {
-			return nil, fmt.Errorf("configured lockfile rejected: %s", reason)
+			return cargoAuditInputPlan{}, fmt.Errorf("configured lockfile rejected: %s", reason)
+		}
+		obligation, ok := byInput[path]
+		if !ok {
+			return cargoAuditInputPlan{}, fmt.Errorf("configured lockfile %s is not an in-scope Cargo.lock obligation", path)
 		}
 		abs := joinPath(req.WorkspaceRoot, path)
 		info, err := os.Lstat(abs)
 		if err != nil {
-			return nil, fmt.Errorf("configured lockfile %s is unavailable: %s", path, SanitizeText(err.Error(), MaxDiagnosticBytes))
+			return cargoAuditInputPlan{}, fmt.Errorf("configured lockfile %s is unavailable: %s", path, SanitizeText(err.Error(), MaxDiagnosticBytes))
 		}
 		if info.Mode()&os.ModeSymlink != 0 {
-			return nil, fmt.Errorf("configured lockfile %s is a symbolic link; refusing to read outside the workspace", path)
+			return cargoAuditInputPlan{}, fmt.Errorf("configured lockfile %s is a symbolic link; refusing to read outside the workspace", path)
 		}
 		if !info.Mode().IsRegular() {
-			return nil, fmt.Errorf("configured lockfile %s is not a regular file", path)
+			return cargoAuditInputPlan{}, fmt.Errorf("configured lockfile %s is not a regular file", path)
 		}
-		return []string{path}, nil
+		plan.Lockfiles = []string{path}
+		for _, other := range plan.Obligations {
+			if other.Input == obligation.Input {
+				continue
+			}
+			missing := other
+			if missing.Present {
+				missing.Issues = append(missing.Issues, "lockfile is present but omitted by the explicit lockfile setting")
+			}
+			plan.Missing = append(plan.Missing, missing)
+		}
+		return plan, nil
 	}
 
-	detection, err := DetectRepositoryScoped(req.WorkspaceRoot, req.Scope.Excluded)
-	if err != nil {
-		return nil, fmt.Errorf("resolve Cargo lockfiles: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
-	}
-	if !detection.HasLanguage(LanguageRust) {
-		return nil, fmt.Errorf("no Rust content detected; dependency analysis is unsupported for this repository")
-	}
-	var present []string
-	for _, lockfile := range detection.PresentLockfiles() {
-		if lockfile.Language != LanguageRust {
+	for _, obligation := range plan.Obligations {
+		if !obligation.Present {
+			plan.Missing = append(plan.Missing, obligation)
 			continue
 		}
-		present = append(present, lockfile.Path)
+		abs := joinPath(req.WorkspaceRoot, obligation.Input)
+		info, err := os.Lstat(abs)
+		if err != nil {
+			return cargoAuditInputPlan{}, fmt.Errorf("Cargo lockfile %s is unavailable: %s", obligation.Input, SanitizeText(err.Error(), MaxDiagnosticBytes))
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return cargoAuditInputPlan{}, fmt.Errorf("Cargo lockfile %s is a symbolic link; refusing to read outside the workspace", obligation.Input)
+		}
+		if !info.Mode().IsRegular() {
+			return cargoAuditInputPlan{}, fmt.Errorf("Cargo lockfile %s is not a regular file", obligation.Input)
+		}
+		plan.Lockfiles = append(plan.Lockfiles, obligation.Input)
 	}
-	sort.Strings(present)
-	if len(present) == 0 {
-		return nil, fmt.Errorf("no Cargo.lock found; dependency scan was not performed and the result is not clean")
-	}
-	return present, nil
+	sort.Strings(plan.Lockfiles)
+	return plan, nil
 }
 
 // cargoLockfileIdentity returns a deterministic digest of the resolved lockfiles.
@@ -229,7 +272,7 @@ func (a *cargoAuditAdapter) resolveLockfiles(req Request) ([]string, error) {
 // invalidates reused evidence even when the advisory database is unchanged.
 func cargoLockfileIdentity(root string, lockfiles []string) (string, error) {
 	if len(lockfiles) == 0 {
-		return "", fmt.Errorf("no Cargo.lock resolved; dependency identity is unavailable")
+		return "", nil
 	}
 	parts := make([]string, 0, len(lockfiles))
 	for _, rel := range lockfiles {
@@ -318,11 +361,31 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 	exec := newExecution(a.id, a.category, a.version, a.configDigest, "", req)
 	exec.Provenance.ScannerVersion = a.version
 
-	lockfiles, err := a.resolveLockfiles(req)
+	plan, err := a.resolveInputPlan(req)
 	if err != nil {
 		exec.Status = StatusFailed
 		exec.Coverage = CoverageUnknown
 		exec.Diagnostics = []string{SanitizeText(err.Error(), MaxDiagnosticBytes)}
+		return finish(exec, nil)
+	}
+	exec.Obligations = plan.Obligations
+	exec.Provenance.ObligationIdentity = plan.Detection.ObligationIdentity(LanguageRust)
+	lockfiles := plan.Lockfiles
+	if len(lockfiles) == 0 {
+		if len(plan.Missing) > 0 {
+			exec.Status = StatusFailed
+			exec.Coverage = CoverageUnknown
+			for _, obligation := range plan.Missing {
+				exec.Diagnostics = append(exec.Diagnostics, missingObligationDiagnostic(obligation))
+			}
+			sanitizeExecution(&exec)
+			return finish(exec, nil)
+		}
+		exec.Status = StatusCompleted
+		exec.Coverage = CoverageComplete
+		exec.NoApplicableContent = true
+		exec.Diagnostics = []string{"no applicable Rust dependency content; scanner was not executed"}
+		sanitizeExecution(&exec)
 		return finish(exec, nil)
 	}
 	databaseDir, err := a.resolveDatabasePath(req)
@@ -514,6 +577,12 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 	if successes > 0 {
 		exec.Languages = a.declaredLanguages()
 	}
+	missingObligations := len(plan.Missing) > 0
+	if missingObligations {
+		for _, obligation := range plan.Missing {
+			exec.Diagnostics = append(exec.Diagnostics, missingObligationDiagnostic(obligation))
+		}
+	}
 	if anyStale {
 		if a.stalePolicyValue() == StaleAllow {
 			exec.Coverage = CoveragePartial
@@ -528,6 +597,12 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 		exec.Status = StatusFailed
 		exec.Coverage = CoverageUnknown
 	case failures > 0:
+		exec.Status = StatusFailed
+		exec.Coverage = CoveragePartial
+	case missingObligations && successes == 0:
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+	case missingObligations:
 		exec.Status = StatusFailed
 		exec.Coverage = CoveragePartial
 	case successes == 0:
