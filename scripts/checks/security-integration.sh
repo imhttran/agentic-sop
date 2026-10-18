@@ -108,4 +108,5 @@ cd "$root"
 SOP_SECURITY_SEMGREP_BIN="$semgrep_bin" \
 SOP_SECURITY_GITLEAKS_BIN="$gitleaks_bin" \
 SOP_SECURITY_INTEGRATION_REQUIRED=1 \
+SOP_SECURITY_RULES_DIR="$rules_dir" \
   go test -tags=security_integration -count=1 -v ./internal/security/ ./internal/cli/

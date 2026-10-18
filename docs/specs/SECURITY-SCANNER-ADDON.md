@@ -178,6 +178,24 @@ content identity, policy identity, and sanitized native-report digest.
   declared `--exclude` pattern. An unrecognized reason is still a gap: unknown
   scanner behavior never yields `COMPLETE`.
 
+#### Language coverage
+
+- Coverage is decided per detected source language from the `languages` the local
+  rules declare. It MUST NOT be inferred from a path name or from another
+  language's rules.
+- A ruleset that declares no rule for any detected source language MUST fail with
+  `FAILED` coverage `UNKNOWN` and an explicit `UNSUPPORTED` diagnostic. It is
+  never a clean scan.
+- When the ruleset covers only part of the detected source, the execution MUST be
+  `COMPLETED` with coverage `PARTIAL` and a diagnostic naming the unsupported
+  languages. Go and Rust coverage remain independent.
+- Malformed rules, a rule pattern the pinned scanner rejects, a scanner failure,
+  or a timeout MUST NOT produce `COMPLETE` coverage or a clean result.
+- The pinned production ruleset (`scripts/security/semgrep-rules-manifest.json`)
+  covers Go and Rust; its directory digest is recorded as `rules_identity`. The
+  Rust scope is a small selected set of syntactic checks, not comprehensive Rust
+  security analysis.
+
 ### Gitleaks (`secrets`)
 
 - Invokes `gitleaks detect --source <root> --no-git --redact --report-format
@@ -392,9 +410,11 @@ bash scripts/checks/check-doc-links.sh
 bash scripts/checks/security-integration.sh
 ```
 
-The last command provisions the pinned real CLIs and runs the tagged integration
-checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`, so missing prerequisites
-fail the check instead of skipping it. CI runs the same script.
+The last command provisions the pinned real CLIs and the pinned production rules
+and runs the tagged integration checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`,
+so missing prerequisites fail the check instead of skipping it, and it exports
+`SOP_SECURITY_RULES_DIR` so the suite verifies the pinned ruleset actually covers
+Rust. CI runs the same script.
 
 Real Semgrep/Gitleaks execution requires the pinned CLIs and local rules in the
 supported integration environment. When a tool is absent, the adapter reports

@@ -21,3 +21,7 @@
 # never checked in.
 *.local
 *.local.*
+
+# Rust build output generated when an editor analyzes the security fixtures;
+# never project content. Fixture Cargo.lock files stay tracked deliberately.
+target/
