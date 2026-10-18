@@ -1,6 +1,6 @@
 # PLAN — SOP Execution Reliability
 
-**Status:** ACTIVE. Converted from the operator's draft into SOP's canonical stage shape. The Rust
+**Status:** HISTORICALIZED (`COMPLETE`). Originally recorded as ACTIVE. Converted from the operator's draft into SOP's canonical stage shape. The Rust
 workflow demonstration (draft SOP-006) is deferred to a separate run; see "Deferred work".
 
 ## Project
