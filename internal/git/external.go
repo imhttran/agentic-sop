@@ -3,6 +3,7 @@ package git
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -53,6 +54,35 @@ func (a *Adapter) ChangedFiles(ctx context.Context) ([]string, error) {
 			seen[path] = true
 			files = append(files, path)
 		}
+	}
+	return files, nil
+}
+
+// SnapshotFiles returns the repository-relative paths that make up a complete
+// working-tree snapshot: every tracked file plus every untracked file that is
+// not ignored. Ignored generated output (for example a Cargo target/ directory)
+// is deliberately absent, while a file Git tracks is always included even when
+// an ignore rule matches it. Output uses NUL separators so paths containing
+// spaces or newlines are preserved exactly.
+//
+// Any error means the snapshot is unavailable. Callers must treat that as
+// "unknown", never as an empty or partial successful snapshot.
+func (a *Adapter) SnapshotFiles(ctx context.Context) ([]string, error) {
+	if err := a.ValidateRepository(ctx); err != nil {
+		return nil, fmt.Errorf("snapshot files: %w", err)
+	}
+	out, err := run(ctx, a.dir, "ls-files", "-z", "--cached", "--others", "--exclude-standard")
+	if err != nil {
+		return nil, fmt.Errorf("snapshot files: %w", err)
+	}
+	seen := make(map[string]bool)
+	var files []string
+	for _, path := range strings.Split(out, "\x00") {
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		files = append(files, path)
 	}
 	return files, nil
 }

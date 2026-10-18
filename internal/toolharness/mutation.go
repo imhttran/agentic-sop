@@ -9,6 +9,9 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/git"
 )
 
 // MutationObservation separates tool success from independently verified state
@@ -165,45 +168,81 @@ func (h *Harness) RepositoryFingerprint(ctx context.Context) (string, error) {
 	return h.mutationFingerprint(ctx, h.root)
 }
 
-// RepositoryPathFingerprints uses the same content-complete observer to identify
-// individual file mutations across an invocation. It excludes Git/SOP metadata,
-// does not follow symlinks, and ignores directory entries so creating a parent
-// directory for an excluded artifact cannot count as an implementation change.
+// ErrSnapshotUnavailable reports that a complete repository snapshot could not
+// be taken. Callers must treat this as unknown mutation evidence, never as an
+// empty snapshot that proves nothing changed.
+var ErrSnapshotUnavailable = errors.New("repository snapshot unavailable")
+
+// RepositoryPathFingerprints identifies individual file mutations across an
+// invocation using Git-aware file discovery: every tracked file plus every
+// untracked file that is not ignored. Ignored generated output is not hashed,
+// while tracked-but-ignored files remain part of the snapshot. It excludes
+// Git/SOP metadata, does not follow symlinks, and ignores directory entries so
+// creating a parent directory for an excluded artifact cannot count as an
+// implementation change.
+//
+// Discovery failure (not a Git working tree, or Git unavailable) is an error,
+// not an empty snapshot, so an incomplete observation can never look successful.
 func (h *Harness) RepositoryPathFingerprints(ctx context.Context) (map[string]string, error) {
 	ctx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
-	paths := make(map[string]string)
-	err := filepath.WalkDir(h.root, func(path string, entry fs.DirEntry, walkErr error) error {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		if path != h.root && (filepath.Base(path) == ".git" || filepath.Base(path) == stateDirRel) {
-			if entry != nil && entry.IsDir() {
-				return filepath.SkipDir
-			}
-			return nil
-		}
-		if walkErr != nil {
-			return walkErr
-		}
-		if entry.IsDir() {
-			return nil
-		}
-		rel, err := filepath.Rel(h.root, path)
-		if err != nil {
-			return err
-		}
-		fingerprint, err := h.mutationFingerprint(ctx, path)
-		if err != nil {
-			return err
-		}
-		paths[filepath.ToSlash(rel)] = fingerprint
-		return nil
-	})
+	files, err := git.New(h.root).SnapshotFiles(ctx)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%w: %w", ErrSnapshotUnavailable, err)
+	}
+	paths := make(map[string]string, len(files))
+	for _, listed := range files {
+		rel, abs, err := h.snapshotPath(listed)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %w", ErrSnapshotUnavailable, err)
+		}
+		if snapshotExcluded(rel) {
+			continue
+		}
+		fingerprint, err := h.mutationFingerprint(ctx, abs)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %s: %w", ErrSnapshotUnavailable, rel, err)
+		}
+		paths[rel] = fingerprint
 	}
 	return paths, nil
+}
+
+// snapshotPath validates one Git-listed path and returns its repository-relative
+// slash form and absolute path. Git does not normally emit paths outside the
+// work tree, but containment is still verified so a corrupt or hostile listing
+// cannot widen the observation boundary. The parent is resolved (not the leaf),
+// so a symlinked directory cannot smuggle the read outside the repository while
+// a symlink file itself is still observed as a link rather than dereferenced.
+func (h *Harness) snapshotPath(listed string) (string, string, error) {
+	if listed == "" || strings.ContainsRune(listed, 0) {
+		return "", "", errors.New("snapshot path is empty or contains a NUL byte")
+	}
+	if filepath.IsAbs(listed) {
+		return "", "", fmt.Errorf("snapshot path is absolute: %q", listed)
+	}
+	clean := filepath.Clean(filepath.FromSlash(listed))
+	if clean == "." || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", "", fmt.Errorf("snapshot path escapes the repository: %q", listed)
+	}
+	abs := filepath.Join(h.root, clean)
+	if !pathWithin(abs, h.root) {
+		return "", "", fmt.Errorf("snapshot path escapes the repository: %q", listed)
+	}
+	parent, err := evalExisting(filepath.Dir(abs))
+	if err != nil {
+		return "", "", fmt.Errorf("resolve snapshot path %q: %w", listed, err)
+	}
+	if !pathWithin(parent, h.root) {
+		return "", "", fmt.Errorf("snapshot path escapes the repository: %q", listed)
+	}
+	return filepath.ToSlash(clean), abs, nil
+}
+
+// snapshotExcluded reports whether rel is Git metadata or SOP's runtime state.
+func snapshotExcluded(rel string) bool {
+	return rel == ".git" || strings.HasPrefix(rel, ".git/") ||
+		rel == stateDirRel || strings.HasPrefix(rel, stateDirRel+"/")
 }
 
 // RunCommandChecked preserves the command result while exposing its real exit
