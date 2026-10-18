@@ -3,7 +3,7 @@
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-browser-test`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-publish`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -100,6 +100,7 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
 | `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
+| `/sop-next-action` | _next safe action_ | **yes**  | report the next safe action (read-only by default); `execute` delegates to `sop run` |
 | `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
 | `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
 
