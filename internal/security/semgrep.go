@@ -115,7 +115,16 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	}
 	exec.Provenance.RulesIdentity = identity
 
-	if req.Scope.Mode == "changed-files" && len(req.Scope.Files) == 0 {
+	// Semgrep may scan a file named on the command line even when it matches
+	// --exclude, so declared exclusions are applied to changed-file targets here.
+	matcher := NewExcludeMatcher(req.Scope.Excluded)
+	var changed []string
+	for _, file := range req.Scope.Files {
+		if !matcher.Excluded(file) {
+			changed = append(changed, file)
+		}
+	}
+	if req.Scope.Mode == "changed-files" && len(changed) == 0 {
 		exec.Coverage = CoverageComplete
 		exec.Diagnostics = []string{"no changed files to scan"}
 		return finish(exec, nil)
@@ -155,8 +164,11 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	// is requested, only the named files are targets.
 	targets := []string{"."}
 	if req.Scope.Mode == "changed-files" {
-		targets = append([]string(nil), req.Scope.Files...)
+		targets = changed
 	}
+	// "--" ends option parsing, so a changed file named like "--output=x" is a
+	// target, never a Semgrep option.
+	argv = append(argv, "--")
 	argv = append(argv, targets...)
 
 	runCtx, cancel := scanContext(ctx, a.timeout)
@@ -249,11 +261,18 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	}
 
 	allowed := changedSet(req.Scope)
+	excludedFindings := 0
 	for _, result := range report.Results {
 		path, reason := NormalizePath(result.Path)
 		if path == "" {
 			exec.Diagnostics = append(exec.Diagnostics, "semgrep finding path rejected: "+reason)
 			path = ""
+		}
+		if path != "" && matcher.Excluded(path) {
+			// --exclude and the target filter should already omit these; keep the
+			// guard so an excluded finding never reaches the report.
+			excludedFindings++
+			continue
 		}
 		if allowed != nil && path != "" && !allowed[path] {
 			continue
@@ -289,6 +308,10 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 			finding.Confidence = SanitizeText(confidence, 64)
 		}
 		exec.Findings = append(exec.Findings, finding)
+	}
+
+	if excludedFindings > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("semgrep: %d finding(s) in declared excluded paths were omitted from the normalized report", excludedFindings))
 	}
 
 	sanitized, digest, serr := SanitizeNativeReport(stdout)

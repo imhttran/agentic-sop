@@ -120,6 +120,55 @@ func TestSemgrepAdapterPassesConfiguredExcludes(t *testing.T) {
 	}
 }
 
+func TestSemgrepAdapterChangedFilesTargetsAreSafe(t *testing.T) {
+	root := tempWorkspace(t)
+	rules := filepath.Join(root, "rules.yaml")
+	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var argv []string
+	report := `{"version":"1.99.0","errors":[],"results":[
+		{"check_id":"r","path":"fixtures/bad.py","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}},
+		{"check_id":"r","path":"--output=x.py","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}}
+	]}`
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "semgrep", Category: "sast", Protocol: "builtin",
+		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, got []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		argv = append([]string(nil), got...)
+		return []byte(report), nil, 0, nil
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := requestFor(t, root)
+	req.Scope = Scope{Mode: "changed-files", Files: []string{"--output=x.py", "fixtures/bad.py"}, Excluded: []string{"fixtures"}}
+	exec, err := adapter.Scan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := len(argv); n < 2 || argv[n-2] != "--" || argv[n-1] != "--output=x.py" {
+		t.Errorf("argv tail = %v, want [-- --output=x.py] (option terminator, excluded target dropped)", argv)
+	}
+	if len(exec.Findings) != 1 || exec.Findings[0].Path != "--output=x.py" {
+		t.Errorf("findings = %+v, want only the non-excluded file", exec.Findings)
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "declared excluded paths") {
+		t.Errorf("diagnostics = %v, want exclusion accounting", exec.Diagnostics)
+	}
+
+	// Every changed file excluded: semgrep must not run, since no target means ".".
+	argv = nil
+	req.Scope.Files = []string{"fixtures/bad.py"}
+	exec, err = adapter.Scan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if argv != nil || !strings.Contains(strings.Join(exec.Diagnostics, " "), "no changed files to scan") {
+		t.Errorf("argv = %v, diagnostics = %v; want no semgrep run", argv, exec.Diagnostics)
+	}
+}
+
 func containsArg(argv []string, want string) bool {
 	for _, arg := range argv {
 		if arg == want {
