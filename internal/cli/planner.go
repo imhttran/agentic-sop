@@ -8,6 +8,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -520,14 +521,76 @@ func plannerViewFor(svc *question.Service, dir string, task *domain.Task, qs []*
 // withPlannerAnswer appends an applied planner answer to the implementation input so
 // the resumed stage's executor sees the decision.
 func withPlannerAnswer(base, answer string) string {
+	return withPlannerDecisions(base, nil, answer)
+}
+
+// plannerDecision is one earlier applied planner decision in the current run: the
+// question it answered and the applied answer.
+type plannerDecision struct {
+	Question string
+	Answer   string
+}
+
+// withPlannerDecisions appends the run's earlier applied planner decisions (oldest
+// first) and then the latest one, so a resumed stage sees every decision made in this
+// run, not only the one that resumed it. The latest decision keeps its "Planner
+// decision:" line last. With no latest answer the input is unchanged.
+func withPlannerDecisions(base string, earlier []plannerDecision, answer string) string {
 	a := strings.TrimSpace(answer)
 	if a == "" {
 		return base
 	}
-	if strings.TrimSpace(base) == "" {
-		return "Planner decision: " + a
+	var lines []string
+	if strings.TrimSpace(base) != "" {
+		lines = append(lines, base)
 	}
-	return base + "\nPlanner decision: " + a
+	if len(earlier) > 0 {
+		lines = append(lines, "Earlier planner decisions in this run (oldest first):")
+		for _, e := range earlier {
+			lines = append(lines, "- Q: "+collapseSpace(e.Question)+" A: "+collapseSpace(e.Answer))
+		}
+	}
+	lines = append(lines, "Planner decision: "+a)
+	return strings.Join(lines, "\n")
+}
+
+// collapseSpace joins a body's words with single spaces so a multi-line question or
+// answer stays on one history line without losing any of its text.
+func collapseSpace(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// earlierPlannerDecisions returns the applied decisions for the task's questions that
+// precede current in the SAME run epoch and plan revision, oldest first. A question from
+// another epoch or plan revision is never carried forward, so a reset or replanned run
+// starts without stale decisions.
+func earlierPlannerDecisions(svc *question.Service, qs []*question.Question, current *question.Question) []plannerDecision {
+	var prior []*question.Question
+	for _, q := range qs {
+		if q.ID == current.ID || q.State != question.StateApplied {
+			continue
+		}
+		if q.Identity != current.Identity || q.RunEpoch != current.RunEpoch || q.PlanRevision != current.PlanRevision {
+			continue
+		}
+		if !q.CreatedAt.Before(current.CreatedAt) {
+			continue
+		}
+		prior = append(prior, q)
+	}
+	sort.SliceStable(prior, func(i, j int) bool {
+		if !prior[i].CreatedAt.Equal(prior[j].CreatedAt) {
+			return prior[i].CreatedAt.Before(prior[j].CreatedAt)
+		}
+		return prior[i].ID < prior[j].ID
+	})
+	out := make([]plannerDecision, 0, len(prior))
+	for _, q := range prior {
+		if a := appliedAnswer(svc, q.ID); a != "" {
+			out = append(out, plannerDecision{Question: q.Body, Answer: a})
+		}
+	}
+	return out
 }
 
 // appliedAnswer returns the latest recorded answer body for a question.
@@ -721,6 +784,14 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
 		return exitError
 	}
+	// Load the run's earlier decisions before any checkpoint or marker is written, so a
+	// read failure stops the resume without leaving an uncertain continuation.
+	qs, err := questionsForTask(svc, task.ID)
+	if err != nil {
+		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
+		return exitError
+	}
+	earlier := earlierPlannerDecisions(svc, qs, q)
 	cont, cerr := svc.Continuation(q.ID, q.RunEpoch)
 	if cerr != nil || cont == nil {
 		fmt.Fprintf(stdout, "%s planner: no continuation owed\n", task.ID)
@@ -840,6 +911,7 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 	spec.AcceptanceMapping = planTaskAcceptanceMapping(dir, task)
 	_ = rn.Write("task.md", spec.Render())
 	d.plannerAnswer = appliedAnswer(svc, q.ID)
+	d.plannerEarlier = earlier
 	d.resumeFrom = stage
 	ctx = taskActivityContext(ctx, rn.Dir(), stdout, task.ID, task.Title)
 	res, lerr := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, failure.ApprovalNone, earlyGateResult{}, stdout)

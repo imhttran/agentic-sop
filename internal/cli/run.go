@@ -723,7 +723,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			Task:               spec.Render(),
 			Context:            ctxSummary,
 			Attempt:            attemptBlock,
-			Observations:       withPlannerAnswer(d.taskInputs[spec.ID], d.plannerAnswer),
+			Observations:       withPlannerDecisions(d.taskInputs[spec.ID], d.plannerEarlier, d.plannerAnswer),
 			OutputRequirements: "Implement the plan in the working tree and summarize the changes.",
 		})
 		input := compiled.Evidence()
@@ -923,7 +923,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				// planner, not decided unilaterally. It is appended AFTER task-input selection (so a
 				// caller override still leads) and is a strict no-op when no answer is present, keeping
 				// a non-planner run's input byte-identical.
-				reviewTask := withPlannerAnswer(d.taskInput(spec.ID, spec.Render()), d.plannerAnswer)
+				reviewTask := withPlannerDecisions(d.taskInput(spec.ID, spec.Render()), d.plannerEarlier, d.plannerAnswer)
 				reviewKey := reviewIdentity(cfg.Review.Engine, reviewTask, reviewDiff)
 				if cached, ok := sess.cachedReview(reviewKey); ok {
 					rec.ReviewReused()
@@ -1094,11 +1094,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// review site: task-input selection/overrides are applied to the base fix context first,
 		// and the applied planner decision is appended LAST so it is never displaced by an
 		// override. It is a strict no-op when no planner answer is present.
-		fixInput := withPlannerAnswer(
+		fixInput := withPlannerDecisions(
 			d.taskInput(spec.ID, fixContext(
 				plan.RenderMarkdown(), report, suite, diff,
 				jevEv, cfg.Quality.JEVFailOn())),
-			d.plannerAnswer)
+			d.plannerEarlier, d.plannerAnswer)
 		// Record this fix attempt's input size (RBV-013). A fix does not build a canonical
 		// context, so only the prompt size is recorded; the context size keeps its
 		// largest value from the implementation attempt. Metadata only.
