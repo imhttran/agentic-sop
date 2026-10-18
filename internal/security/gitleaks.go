@@ -171,7 +171,12 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 
 	exec.Coverage = CoverageComplete
 	allowed := changedSet(req.Scope)
+	excludedPatterns := NormalizeExcludes(req.Scope.Excluded)
+	if len(excludedPatterns) > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(excludedPatterns, ", "), MaxDiagnosticBytes))
+	}
 	omitted := 0
+	excludedFindings := 0
 	for _, gf := range findings {
 		path, reason := NormalizePath(gf.File)
 		if filepath.IsAbs(gf.File) {
@@ -179,6 +184,10 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 		}
 		if path == "" {
 			exec.Diagnostics = append(exec.Diagnostics, "gitleaks finding path rejected: "+reason)
+		}
+		if path != "" && ExcludedPath(path, excludedPatterns) {
+			excludedFindings++
+			continue
 		}
 		if allowed != nil && path != "" && !allowed[path] {
 			omitted++
@@ -220,6 +229,9 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	if req.Scope.Mode == "changed-files" {
 		exec.Coverage = CoveragePartial
 		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("changed-files scope: gitleaks scanned the workspace and %d finding(s) outside the changed set were omitted", omitted))
+	}
+	if excludedFindings > 0 {
+		exec.Diagnostics = append(exec.Diagnostics, fmt.Sprintf("gitleaks: %d finding(s) in declared excluded paths were omitted from the normalized report", excludedFindings))
 	}
 
 	sanitized, digest, serr := SanitizeNativeReport(raw)

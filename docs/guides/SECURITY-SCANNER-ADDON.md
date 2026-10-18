@@ -37,6 +37,11 @@ security:
   unknown_severity: indeterminate
   timeout_seconds: 300
   max_output_bytes: 1048576
+  # Declared scope boundary. Recorded in scan.json under scope.excluded.
+  # A leading "/" anchors a pattern to the repository root.
+  exclude:
+    - internal/security/testdata
+    - /sop
   adapters:
     - id: semgrep
       category: sast
@@ -56,6 +61,13 @@ security:
 An omitted `security` block is disabled. The environment may fill omitted
 values (`SOP_SECURITY_ENABLED=true`, `SOP_SECURITY_MODE=report-only`,
 `SOP_SECURITY_BASELINE=...`), but an explicit project value wins.
+
+`security.exclude` is a declared scope boundary, not a suppression. Excluded
+paths are removed from the adapter target set, listed in `scope.excluded`, and
+never turned into findings. Exclusions do not by themselves make coverage
+`PARTIAL`; a scanner-side skip (for example Semgrep's default `.semgrepignore`
+patterns) still does. `.git` and `.agent-sdlc` are always excluded: VCS metadata
+is not source and SOP's run state is evidence, not project content.
 
 Run a scan:
 
@@ -240,6 +252,16 @@ the integration changed existing runner behavior unexpectedly.
 
 - Changed-file scope is an optimization and never satisfies a required
   full-scan policy.
+- Declared `security.exclude` patterns are scope, not coverage. They are recorded
+  in the evidence and must be reviewed like a baseline, but they do not hide a
+  scanner-side skip.
+- Semgrep CE applies its default `.semgrepignore` patterns even with
+  `--no-git-ignore`; `*_test.go` files are skipped by default. A production
+  baseline therefore covers non-test source unless the project overrides that
+  default with a `.semgrepignore` negation.
+- Semgrep rule IDs are recorded without a local path prefix
+  (`--no-rewrite-rule-ids`), so fingerprints and baselines stay stable when the
+  rules directory moves.
 - Unknown provider severities follow an explicit policy; they never become low
   severity.
 - Cross-provider deduplication is deferred. Grouped evidence retains every

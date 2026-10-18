@@ -95,6 +95,42 @@ func TestSecurityBaselineMustStayInWorkspace(t *testing.T) {
 	}
 }
 
+func TestSecurityExcludesMustStayInWorkspace(t *testing.T) {
+	for _, path := range []string{"C:/abs", "../outside", "internal/../outside"} {
+		_, err := parseSecurityConfig(t, "security:\n  enabled: true\n  exclude:\n    - "+path+"\n")
+		if err == nil {
+			t.Errorf("exclude %q was accepted", path)
+		}
+	}
+}
+
+func TestSecurityExcludeLeadingSlashAnchorsToRoot(t *testing.T) {
+	cfg, err := parseSecurityConfig(t, "security:\n  enabled: true\n  exclude:\n    - /sop\n")
+	if err != nil {
+		t.Fatalf("root-anchored exclusion was rejected: %v", err)
+	}
+	if got := cfg.SecurityExcludes(); got[len(got)-1] != "/sop" {
+		t.Fatalf("excludes = %v, want root-anchored /sop", got)
+	}
+}
+
+func TestSecurityExcludesAreAdditiveAndDeterministic(t *testing.T) {
+	cfg, err := parseSecurityConfig(t, "security:\n  enabled: true\n  exclude:\n    - internal/security/testdata\n    - .git\n    - internal/security/testdata\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.SecurityExcludes()
+	want := []string{".git", ".agent-sdlc", "internal/security/testdata"}
+	if len(got) != len(want) {
+		t.Fatalf("excludes = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("excludes = %v, want %v", got, want)
+		}
+	}
+}
+
 func TestSecurityDisabledBlockStillValidatesExplicitValues(t *testing.T) {
 	_, err := parseSecurityConfig(t, "security:\n  enabled: false\n  mode: nonsense\n")
 	if err == nil {

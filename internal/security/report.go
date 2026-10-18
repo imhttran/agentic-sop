@@ -50,13 +50,18 @@ func (p Policy) Identity(baseline Baseline) string {
 	for i := range failOn {
 		failOn[i] = strings.ToUpper(strings.TrimSpace(failOn[i]))
 	}
+	exclude := append([]string(nil), p.Exclude...)
+	for i := range exclude {
+		exclude[i] = strings.TrimSpace(exclude[i])
+	}
 	sort.Strings(cats)
 	sort.Strings(failOn)
+	sort.Strings(exclude)
 	enabled := "disabled"
 	if p.Enabled {
 		enabled = "enabled"
 	}
-	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), baseline.Identity())
+	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), strings.Join(exclude, "\x00"), baseline.Identity())
 }
 
 // ArtifactRefs are the repository-relative artifact paths written for a scan.

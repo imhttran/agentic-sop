@@ -142,6 +142,9 @@ workflow:
 #   timeout_seconds: 300
 #   max_output_bytes: 1048576
 #   baseline: .agent-sdlc/security-baseline.json
+#   exclude:
+#     - internal/security/testdata # declared scope boundary, recorded in evidence
+#     - /sop # a leading "/" anchors to the repository root
 #   adapters:
 #     - id: semgrep
 #       category: sast
@@ -195,6 +198,7 @@ workflow:
 | `security.timeout_seconds` | `300` | Per-adapter execution deadline. |
 | `security.max_output_bytes` | `1048576` | Per-adapter captured/report size bound. |
 | `security.baseline` | — | Repository-relative reviewed baseline/suppression file. Invalid or expired entries are reported and never silently effective. |
+| `security.exclude` | `[]` | Repository-relative paths/globs deliberately outside the scan scope. A leading `/` anchors to the repository root; `..`, drive-letter paths, and NUL are rejected. Exclusions are recorded in `scope.excluded`. Declared exclusions do not by themselves make coverage `PARTIAL`; scanner-side skips still do. |
 | `security.adapters` | built-in Semgrep + Gitleaks | Adapter list selected by stable ID and category. `protocol: builtin` wraps a pinned scanner CLI; `protocol: external` speaks `security-scan/v1`. `rules` is the local Semgrep rules path or optional Gitleaks config path. |
 | `decision.provider`                         | `deterministic`          | Optional decision layer: `deterministic` (baseline rules, the default), `command` (SEAM-002 external process; requires `decision.command`), or `adapter` (batched adapter connector; requires `decision.adapter_command`).                                                                                                                                                                                                 |
 | `decision.command`                          | —                        | SEAM-002 external process argv: the executable followed by its arguments, in order. Required when `decision.provider: command`.                                                                                                                                                                                                                                                                                            |
