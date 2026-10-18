@@ -180,7 +180,7 @@ func TestAtomicSubmissionAcrossProcessesExactlyOneAccepted(t *testing.T) {
 			"QUESTION_SUBMIT_HELPER=1",
 			"QUESTION_STORE_PATH="+path,
 			"QUESTION_ID="+q.ID,
-			"QUESTION_KEY="+key,
+			"QUESTION_KEY="+key, //gitleaks:allow: synthetic idempotency key, not a credential
 			"QUESTION_BODY="+body,
 		)
 		out, err := cmd.CombinedOutput()
