@@ -1,0 +1,16 @@
+[
+  {
+    "Description": "Synthetic test credential",
+    "File": "testdata/fixtures/secret.txt",
+    "StartLine": 1,
+    "EndLine": 1,
+    "StartColumn": 1,
+    "EndColumn": 37,
+    "Match": "SOP_FAKE_SECRET_DO_NOT_USE_1234567890",
+    "Secret": "SOP_FAKE_SECRET_DO_NOT_USE_1234567890",
+    "Entropy": 4.2,
+    "Tags": ["test", "synthetic"],
+    "RuleID": "sop-synthetic-secret",
+    "Fingerprint": "gitleaks-fixture-fingerprint-1"
+  }
+]

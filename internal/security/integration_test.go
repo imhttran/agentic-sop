@@ -1,0 +1,307 @@
+//go:build security_integration
+
+package security
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/imhttran/agentic-sop/internal/config"
+)
+
+const (
+	integrationSemgrepVersion  = "1.136.0"
+	integrationGitleaksVersion = "8.30.1"
+)
+
+func integrationBinary(t *testing.T, envName, name string) string {
+	t.Helper()
+	if path := strings.TrimSpace(os.Getenv(envName)); path != "" {
+		if info, err := os.Stat(path); err != nil || info.IsDir() {
+			t.Fatalf("%s=%q is not an executable file", envName, path)
+		}
+		return path
+	}
+	path, err := exec.LookPath(name)
+	if err == nil {
+		return path
+	}
+	if integrationRequired() {
+		t.Fatalf("required security integration prerequisite missing: %s (set %s or install it)", name, envName)
+	}
+	t.Skipf("%s is not installed; set %s or SOP_SECURITY_INTEGRATION_REQUIRED=1", name, envName)
+	return ""
+}
+
+func integrationRequired() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("SOP_SECURITY_INTEGRATION_REQUIRED"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
+func toolVersion(t *testing.T, binary string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command(binary, args...).Output()
+	if err != nil {
+		t.Fatalf("%s %s: %v", binary, strings.Join(args, " "), err)
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		line = strings.TrimSpace(line)
+		if line != "" && !strings.HasPrefix(line, "A new version") {
+			return line
+		}
+	}
+	return ""
+}
+
+func copyFixtureTree(t *testing.T, source, destination string) {
+	t.Helper()
+	if err := os.MkdirAll(destination, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	err := filepath.WalkDir(source, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, err := filepath.Rel(source, path)
+		if err != nil {
+			return err
+		}
+		if rel == "." {
+			return nil
+		}
+		target := filepath.Join(destination, rel)
+		if entry.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func integrationAdapters(t *testing.T, semgrepBin, gitleaksBin, semgrepVersion, gitleaksVersion string) []Adapter {
+	t.Helper()
+	rules, err := filepath.Abs(filepath.Join("testdata", "real", "rules.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	gitleaksConfig, err := filepath.Abs(filepath.Join("testdata", "real", "gitleaks.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	adapters, err := BuildAdapters([]config.SecurityAdapterConfig{
+		{ID: "semgrep", Category: "sast", Protocol: "builtin", Command: []string{semgrepBin}, Rules: rules, Version: semgrepVersion},
+		{ID: "gitleaks", Category: "secrets", Protocol: "builtin", Command: []string{gitleaksBin}, Rules: gitleaksConfig, Version: gitleaksVersion},
+	}, BuildOptions{Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return adapters
+}
+
+func TestRealCLIsCleanAndSeededFixtures(t *testing.T) {
+	semgrepBin := integrationBinary(t, "SOP_SECURITY_SEMGREP_BIN", "semgrep")
+	gitleaksBin := integrationBinary(t, "SOP_SECURITY_GITLEAKS_BIN", "gitleaks")
+	semgrepVersion := toolVersion(t, semgrepBin, "--version")
+	gitleaksVersion := toolVersion(t, gitleaksBin, "version")
+	t.Logf("semgrep=%s gitleaks=%s", semgrepVersion, gitleaksVersion)
+	adapters := integrationAdapters(t, semgrepBin, gitleaksBin, semgrepVersion, gitleaksVersion)
+
+	cleanRoot := t.TempDir()
+	copyFixtureTree(t, filepath.Join("testdata", "real", "clean"), cleanRoot)
+	clean, err := NewRunner(RunnerConfig{
+		WorkspaceRoot: cleanRoot, RunID: "clean", Adapters: adapters,
+		Policy:  Policy{Enabled: true, Mode: "required", Scope: "workspace", RequiredCategories: []string{"sast", "secrets"}, FailOn: []string{"critical", "high"}, UnknownSeverity: "indeterminate"},
+		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cleanScan, err := clean.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cleanScan.Verdict != VerdictPass || cleanScan.Coverage != CoverageComplete {
+		t.Fatalf("clean scan = %s/%s, want PASS/COMPLETE: %v", cleanScan.Verdict, cleanScan.Coverage, cleanScan.Reasons)
+	}
+	if len(cleanScan.Findings) != 0 {
+		t.Fatalf("clean fixture produced %d unexpected finding(s): %+v", len(cleanScan.Findings), cleanScan.Findings)
+	}
+	for _, adapter := range cleanScan.Adapters {
+		if adapter.Status != StatusCompleted || adapter.Coverage != CoverageComplete {
+			t.Errorf("clean adapter %s = %s/%s: %v", adapter.AdapterID, adapter.Status, adapter.Coverage, adapter.Diagnostics)
+		}
+	}
+
+	seededRoot := t.TempDir()
+	copyFixtureTree(t, filepath.Join("testdata", "real", "seeded"), seededRoot)
+	seeded, err := NewRunner(RunnerConfig{
+		WorkspaceRoot: seededRoot, RunID: "seeded", Adapters: adapters,
+		Policy:  Policy{Enabled: true, Mode: "required", Scope: "workspace", RequiredCategories: []string{"sast", "secrets"}, FailOn: []string{"critical", "high"}, UnknownSeverity: "indeterminate"},
+		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	seededScan, err := seeded.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if seededScan.Verdict != VerdictFail {
+		t.Fatalf("seeded scan = %s, want FAIL: %v", seededScan.Verdict, seededScan.Reasons)
+	}
+	if seededScan.Coverage != CoverageComplete {
+		t.Errorf("seeded coverage = %s, want COMPLETE", seededScan.Coverage)
+	}
+	var sast, secret bool
+	secretValue := "SOP_FAKE_SECRET_DO_NOT_USE_1234567890"
+	var serialized bytes.Buffer
+	encoder := json.NewEncoder(&serialized)
+	if err := encoder.Encode(seededScan); err != nil {
+		t.Fatal(err)
+	}
+	if bytes.Contains(serialized.Bytes(), []byte(secretValue)) {
+		t.Fatal("normalized scan JSON contains the synthetic secret")
+	}
+	for _, finding := range seededScan.Findings {
+		switch finding.Category {
+		case CategorySAST:
+			sast = true
+			if finding.Severity != SeverityHigh || finding.OriginalSeverity != "ERROR" {
+				t.Errorf("semgrep finding severity = %s/%s, want HIGH/ERROR", finding.Severity, finding.OriginalSeverity)
+			}
+			if finding.Path != "insecure.go" {
+				t.Errorf("semgrep path = %q, want insecure.go", finding.Path)
+			}
+			if strings.Contains(finding.Fingerprint, "requires login") {
+				t.Errorf("semgrep fingerprint = %q, want a stable non-placeholder fingerprint", finding.Fingerprint)
+			}
+		case CategorySecrets:
+			secret = true
+			if finding.Severity != SeverityHigh {
+				t.Errorf("gitleaks severity = %s, want HIGH", finding.Severity)
+			}
+			if finding.Path != "secret.txt" {
+				t.Errorf("gitleaks path = %q, want secret.txt", finding.Path)
+			}
+			if strings.Contains(finding.Message, secretValue) {
+				t.Error("normalized finding contains the synthetic secret")
+			}
+		}
+	}
+	if !sast {
+		t.Error("Semgrep did not produce a SAST finding")
+	}
+	if !secret {
+		t.Error("Gitleaks did not produce a secret finding")
+	}
+	for _, adapter := range seededScan.Adapters {
+		if adapter.Provenance.RulesIdentity == "" {
+			t.Errorf("adapter %s has no rules identity", adapter.AdapterID)
+		}
+		if adapter.Provenance.SanitizedReportDigest == "" {
+			t.Errorf("adapter %s has no sanitized report digest", adapter.AdapterID)
+		}
+	}
+	for _, adapter := range seededScan.Adapters {
+		for _, diagnostic := range adapter.Diagnostics {
+			if strings.Contains(diagnostic, secretValue) {
+				t.Errorf("adapter %s diagnostic contains the synthetic secret", adapter.AdapterID)
+			}
+		}
+		if bytes.Contains(adapter.NativeReport, []byte(secretValue)) {
+			t.Errorf("adapter %s native report contains the synthetic secret", adapter.AdapterID)
+		}
+	}
+	runDir := t.TempDir()
+	if _, err := WriteArtifacts(runDir, seededScan); err != nil {
+		t.Fatal(err)
+	}
+	err = filepath.WalkDir(runDir, func(path string, entry os.DirEntry, walkErr error) error {
+		if walkErr != nil || entry.IsDir() {
+			return walkErr
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if bytes.Contains(data, []byte(secretValue)) {
+			t.Errorf("persisted artifact %s contains the synthetic secret", path)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("seeded findings=%d duration=%dms adapter_durations=%v", len(seededScan.Findings), seededScan.Metrics.DurationMS, seededScan.Metrics.AdapterDurationMS)
+}
+
+func TestRealCLIResumeIdentity(t *testing.T) {
+	semgrepBin := integrationBinary(t, "SOP_SECURITY_SEMGREP_BIN", "semgrep")
+	gitleaksBin := integrationBinary(t, "SOP_SECURITY_GITLEAKS_BIN", "gitleaks")
+	semgrepVersion := toolVersion(t, semgrepBin, "--version")
+	gitleaksVersion := toolVersion(t, gitleaksBin, "version")
+	adapters := integrationAdapters(t, semgrepBin, gitleaksBin, semgrepVersion, gitleaksVersion)
+	root := t.TempDir()
+	copyFixtureTree(t, filepath.Join("testdata", "real", "seeded"), root)
+	policy := Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"critical", "high"}, UnknownSeverity: "indeterminate"}
+
+	firstRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := firstRunner.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(first.Findings) == 0 {
+		t.Fatal("first scan produced no findings")
+	}
+
+	secondRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := secondRunner.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, adapter := range second.Adapters {
+		if !adapter.Reused {
+			t.Errorf("matching resume did not reuse adapter %s: %+v", adapter.AdapterID, adapter.Provenance)
+		}
+	}
+
+	if err := os.WriteFile(filepath.Join(root, "insecure.go"), []byte("package seeded\n\n// changed input\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	thirdRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first})
+	if err != nil {
+		t.Fatal(err)
+	}
+	third, err := thirdRunner.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, adapter := range third.Adapters {
+		if adapter.Reused {
+			t.Errorf("stale evidence was reused for adapter %s after a content change", adapter.AdapterID)
+		}
+	}
+}

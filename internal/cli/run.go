@@ -30,6 +30,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/runtrace"
+	"github.com/imhttran/agentic-sop/internal/security"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
 	"github.com/imhttran/agentic-sop/internal/validate"
@@ -319,6 +320,10 @@ type lifeResult struct {
 	// implementation attempt. It is diagnostic evidence: the trace records its
 	// summary, and nothing reads it back to drive a decision.
 	ctx sopctx.Context
+	// security is the optional security add-on evidence for this attempt. It is nil
+	// when the add-on is disabled. It is recorded in the report and passed to the
+	// existing quality gate; it never adds a second lifecycle.
+	security *security.Scan
 }
 
 // executeLifecycle runs the lifecycle for spec, writing artifacts (including the
@@ -412,9 +417,13 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// the persisted artifact. It is separate from the validation and review
 		// sections, which remain authoritative.
 		JEV: jevReportSection(res.jevDoc, res.jevPath),
-		// ModelSelection is the non-secret model-routing evidence: the selected
-		// class, provider, model, locality, layer, whether a fallback was used, and
-		// why. It is omitted when model routing is inactive.
+		// Security is the optional scanner evidence: verdict, coverage, content
+		// identity, per-adapter executions, normalized findings, and provenance. It is
+		// omitted when the add-on is disabled.
+		Security: res.security,
+		// ModelSelection is the non-secret model-routing evidence: the selected class,
+		// provider, model, locality, layer, whether a fallback was used, and why. It is
+		// omitted when model routing is inactive.
 		ModelSelection: res.modelSelection,
 		Routing:        routingDocFor(res.routing),
 		Classification: classificationDoc(res.classification),
@@ -822,6 +831,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var suite testrunner.SuiteResult
 	var report review.Report
 	var gate quality.Result
+	// securityScan is the latest security stage evidence. It is nil when the add-on
+	// is disabled, and the report/gate read only the final attempt's evidence.
+	var securityScan *security.Scan
 	// retainedReviewFindings holds the findings of the most recent EXECUTED
 	// review. REVIEW is the resolution path: it runs against the current code and
 	// its result replaces this set. When REVIEW does not run for a cycle (an empty
@@ -996,6 +1008,18 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		postgresConfigured := validate.PostgresConfigured(cfg.Validation)
 		postgresPassed := hasCategory(suite, testrunner.PostgresIntegration) && categoryPassed(suite, testrunner.PostgresIntegration)
 
+		// Optional security add-on: run configured adapters at the existing quality
+		// seam. Report-only records evidence as an advisory; required mode blocks on
+		// FAIL/INDETERMINATE through the single quality gate below. The add-on is a
+		// strict no-op when disabled.
+		securityScan = nil
+		if cfg.SecurityEnabled() {
+			securityScan, err = runSecurityGate(ctx, cfg, dir, spec, rn)
+			if err != nil {
+				return lifeResult{}, fmt.Errorf("security: %w", err)
+			}
+		}
+
 		gate = quality.Evaluate(cfg.Quality, quality.Input{
 			BuildPassed:  categoryPassed(suite, testrunner.Build),
 			TestPassed:   categoryPassed(suite, testrunner.UnitTest),
@@ -1010,6 +1034,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			PostgresRequired:     postgresRequired,
 			PostgresConfigured:   postgresConfigured,
 			PostgresPassed:       postgresPassed,
+			Security:             securityGateEvidence(cfg, securityScan),
 		})
 		ar.Emit(activity.StageQuality, string(gate.Decision), "")
 
@@ -1207,6 +1232,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		classification: class,
 		decision:       decision,
 		ctx:            ctxSummary,
+		security:       securityScan,
 	}, nil
 }
 
@@ -1640,6 +1666,12 @@ func loadConfigOrDefault(dir string) (config.Config, error) {
 		if _, err := applyModelRouting(&cfg, ""); err != nil {
 			return config.Config{}, err
 		}
+		// A configless project still honors the documented security environment,
+		// including its enabled-block defaults. With no environment value this is a
+		// strict no-op and the add-on stays disabled.
+		if err := config.ResolveSecurityEnv(&cfg); err != nil {
+			return config.Config{}, err
+		}
 		return cfg, nil
 	}
 	return config.Config{}, err
@@ -1889,6 +1921,10 @@ type runReportDoc struct {
 	// from Validation and Findings, which remain authoritative, and is omitted
 	// when JEV did not run.
 	JEV *jevReportDoc `json:"jev,omitempty"`
+	// Security is the optional security scanner evidence, omitted when the add-on is
+	// disabled. It is diagnostic evidence for the configured tools and scope, not a
+	// proof that the repository has no vulnerabilities.
+	Security *security.Scan `json:"security,omitempty"`
 	// Performance is the task's timing/count record: diagnostic metadata only,
 	// never an input to a decision.
 	Performance perf.Task `json:"performance"`
@@ -1974,6 +2010,27 @@ func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) stri
 	if section := renderJEVSection(res.jevDoc, res.jevPath); section != "" {
 		b.WriteString("\n")
 		b.WriteString(section)
+	}
+
+	// Security is optional evidence from the configured scanner adapters. It is
+	// rendered only when the add-on ran; a disabled add-on leaves the report
+	// unchanged.
+	if res.security != nil {
+		b.WriteString("\n## Security\n\n")
+		fmt.Fprintf(&b, "- Verdict: `%s`\n", res.security.Verdict)
+		fmt.Fprintf(&b, "- Coverage: `%s`\n", res.security.Coverage)
+		fmt.Fprintf(&b, "- Mode: `%s`\n", res.security.Policy.Mode)
+		if res.security.Content.Commit != "" {
+			fmt.Fprintf(&b, "- Commit: `%s`\n", res.security.Content.Commit)
+		}
+		if res.security.Content.Dirty {
+			fmt.Fprintf(&b, "- Content digest: `%s` (dirty)\n", res.security.Content.Digest)
+		}
+		for _, adapter := range res.security.Adapters {
+			fmt.Fprintf(&b, "- Adapter `%s` (%s): `%s`, coverage `%s`\n", adapter.AdapterID, adapter.Category, adapter.Status, adapter.Coverage)
+		}
+		fmt.Fprintf(&b, "- Findings: %d (suppressed %d)\n", res.security.Metrics.Findings, res.security.Metrics.Suppressed)
+		fmt.Fprintf(&b, "- Evidence: `.agent-sdlc/runs/%s/security/scan.json`\n", res.security.RunID)
 	}
 
 	b.WriteString("\n## Gate\n\n")

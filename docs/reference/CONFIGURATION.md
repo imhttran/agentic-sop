@@ -129,6 +129,32 @@ workflow:
 #     endpoint: http://127.0.0.1:8080
 #   mlx:
 #     endpoint: http://127.0.0.1:8000
+
+# Optional security scanner add-on. OFF by default. Semgrep CE and Gitleaks are
+# external CLIs; SOP never installs them or downloads rules implicitly.
+# security:
+#   enabled: false # report-only is the MVP default when enabled
+#   mode: report-only # report-only | required
+#   scope: workspace # workspace | changed-files
+#   required_categories: [sast, secrets] # required when mode: required
+#   fail_on: [critical, high]
+#   unknown_severity: indeterminate # fail | indeterminate | ignore
+#   timeout_seconds: 300
+#   max_output_bytes: 1048576
+#   baseline: .agent-sdlc/security-baseline.json
+#   adapters:
+#     - id: semgrep
+#       category: sast
+#       protocol: builtin
+#       command: [semgrep]
+#       rules: security/semgrep-rules
+#       version: "1.99.0"
+#     - id: gitleaks
+#       category: secrets
+#       protocol: builtin
+#       command: [gitleaks]
+#       rules: security/gitleaks.toml # optional local config; built-in rules otherwise
+#       version: "8.30.1"
 ```
 
 ## Field reference
@@ -160,6 +186,16 @@ workflow:
 | `lifecycle.verdict_gate`                    | `false`                  | Opt-in: when on, a `PARTIAL` outcome caused by an unmet **required** deliverable or executable check does not yield `LOCAL_DONE` unless a valid designated-approver waiver exists. Off by default, so the local lifecycle is byte-identical unless enabled. See [`LIFECYCLE-VERDICT-GATE.md`](LIFECYCLE-VERDICT-GATE.md).                                                                                                  |
 | `workflow.mode`                             | `local`                  | `local` (advance to `LOCAL_DONE`) or `pull-request` (remote lifecycle).                                                                                                                                                                                                                                                                                                                                                    |
 | `output.responses`                          | `concise`                | Default shape of the human-facing `sop status` and `sop report` summaries: `concise` (the short summary, which still retains failed checks, unresolved questions, required evidence, the outcome verdict, approval requests, and any waiver) or `detailed` (per-finding detail and the full outcome verdict). The `--detailed` flag overrides it for one invocation, and machine-readable (JSON) output is never affected. |
+| `security.enabled` | `false` | Enable the optional security scanner add-on. `SOP_SECURITY_ENABLED` may fill an omitted value; an explicit project value wins. See [../specs/SECURITY-SCANNER-ADDON.md](../specs/SECURITY-SCANNER-ADDON.md). |
+| `security.mode` | `report-only` | `report-only` records the verdict without blocking; `required` fails the quality gate on `FAIL` or `INDETERMINATE`. |
+| `security.scope` | `workspace` | `workspace` or `changed-files`. Changed-file scope is optimization evidence and cannot satisfy a required full-scan policy. |
+| `security.required_categories` | `[]` | Categories a required gate must cover: `sast`, `secrets`. Required when `mode: required`. |
+| `security.fail_on` | `critical`, `high` | Unsuppressed normalized severities that produce `FAIL`. |
+| `security.unknown_severity` | `indeterminate` | Explicit policy for an unmapped provider severity: `fail`, `indeterminate`, or `ignore`. It never becomes low severity. |
+| `security.timeout_seconds` | `300` | Per-adapter execution deadline. |
+| `security.max_output_bytes` | `1048576` | Per-adapter captured/report size bound. |
+| `security.baseline` | — | Repository-relative reviewed baseline/suppression file. Invalid or expired entries are reported and never silently effective. |
+| `security.adapters` | built-in Semgrep + Gitleaks | Adapter list selected by stable ID and category. `protocol: builtin` wraps a pinned scanner CLI; `protocol: external` speaks `security-scan/v1`. `rules` is the local Semgrep rules path or optional Gitleaks config path. |
 | `decision.provider`                         | `deterministic`          | Optional decision layer: `deterministic` (baseline rules, the default), `command` (SEAM-002 external process; requires `decision.command`), or `adapter` (batched adapter connector; requires `decision.adapter_command`).                                                                                                                                                                                                 |
 | `decision.command`                          | —                        | SEAM-002 external process argv: the executable followed by its arguments, in order. Required when `decision.provider: command`.                                                                                                                                                                                                                                                                                            |
 | `decision.adapter_command`                  | —                        | Batched adapter executable argv: the executable followed by its fixed arguments. Required when `decision.provider: adapter`. Separate from `decision.command`.                                                                                                                                                                                                                                                             |
