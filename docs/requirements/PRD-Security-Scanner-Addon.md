@@ -1,6 +1,10 @@
 # SOP Security Scanner Add-on
 
-Status: Proposed • Version: 0.1 • Date: 2026-10-17
+Status: Implemented • Version: 0.1 • Date: 2026-10-17
+
+**Normative behavior:** [SECURITY-SCANNER-ADDON.md](../specs/SECURITY-SCANNER-ADDON.md).
+This PRD is retained as the requirements source; where it and the specification
+differ, the specification owns current behavior.
 
 ## 1. Problem and outcome
 
@@ -169,4 +173,6 @@ Provider features and plans can change. Recheck exact versions and terms during 
 - ZAP Automation Framework: https://www.zaproxy.org/docs/automate/automation-framework/
 - Nuclei templates: https://github.com/projectdiscovery/nuclei-templates
 
-This document defines proposed behavior. Repository integration paths and existing capabilities have not been inspected for this PRD.
+This document records the original security scanner requirements. Current
+behavior is defined by [SECURITY-SCANNER-ADDON.md](../specs/SECURITY-SCANNER-ADDON.md);
+repository integration details were reconciled during implementation.

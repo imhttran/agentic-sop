@@ -1,7 +1,7 @@
 # PLAN — Security Scanner Add-on
 
 **Status:** IMPLEMENTED — SEC-003 and SEC-005 acceptance evidence is recorded below; PR #36 is OPEN and not merged. Requirements source:
-[`docs/specs/SOP-Security-Scanner-Addon-PRD.md`](../specs/SOP-Security-Scanner-Addon-PRD.md).
+[`docs/requirements/PRD-Security-Scanner-Addon.md`](../requirements/PRD-Security-Scanner-Addon.md).
 **Rule:** the add-on is disabled unless configured. A failed, unavailable, timed-out,
 malformed, or partial scan MUST NOT produce a passing required security gate.
 

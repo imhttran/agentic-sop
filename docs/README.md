@@ -54,6 +54,7 @@ decision is recorded in [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md)
 - [requirements/PRD-JEV.md](requirements/PRD-JEV.md) — the JEV workstream's product requirements (problem, vision, decision layer).
 - [requirements/PRD-Phase-3-OpenJEV.md](requirements/PRD-Phase-3-OpenJEV.md) — Phase 3 product requirements: the early JEV task-triage and pre-execution checkpoints. **Implemented** (see [plans/PLAN-Phase-3-OpenJEV.md](history/plans/PLAN-Phase-3-OpenJEV.md) and [specs/OPENJEV.md](specs/OPENJEV.md) §18); items the PRD records as future work remain **proposed** and are listed in [specs/OPENJEV.md](specs/OPENJEV.md) §17.
 - [requirements/PRD-Phase-4-Provider-Runtime.md](requirements/PRD-Phase-4-Provider-Runtime.md) — Phase 4 product requirements: the provider/runtime abstraction, capability discovery, and opt-in model-availability validation. **Implemented**; rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
+- [requirements/PRD-Security-Scanner-Addon.md](requirements/PRD-Security-Scanner-Addon.md) — the security scanner add-on's original requirements (replaceable adapters, offline scanner data, report-only/required policy). **Implemented**; normative behavior is [specs/SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md).
 
 ## Architecture
 
@@ -245,7 +246,8 @@ operator-local lifecycle state. They stay in `plans/` rather than moving to `his
 | [plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md](plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md)                   | PROPOSED                  | SOP lifecycle-consistency hardening                                   |
 | [plans/PLAN-SOP-RUN-ACCEPT-001.md](plans/PLAN-SOP-RUN-ACCEPT-001.md)                                                     | declared ACTIVE           | native deterministic acceptance checks for `sop run`                  |
 | [plans/PLAN-SOP-Validation-Evidence-Reuse.md](plans/PLAN-SOP-Validation-Evidence-Reuse.md)                               | IMPLEMENTED               | SOP validation evidence reuse                                         |
-| [plans/PLAN-Security-Scanner-Addon.md](plans/PLAN-Security-Scanner-Addon.md)                                             | IMPLEMENTED               | the Semgrep CE and Gitleaks security scanner add-on (SEC-001–SEC-005) |
+| [plans/PLAN-Security-Scanner-Addon.md](plans/PLAN-Security-Scanner-Addon.md)                                             | IMPLEMENTED               | the Semgrep CE and Gitleaks security scanner add-on (SEC-001–SEC-005); the path is kept because `internal/planner/security_plan_test.go` compiles this plan |
+| [plans/PLAN-Security-Scan-Skill.md](plans/PLAN-Security-Scan-Skill.md)                                                   | IMPLEMENTED (archived)    | the Go/Rust security-scan skill and cargo-audit adapter; the path is kept because `.agent-sdlc/archive/plan-security-scan-skill/` records it |
 
 ### Planner spike and retained execution records
 
@@ -342,6 +344,7 @@ To keep SOP working, a few paths are intentionally not under the categories abov
 
 - [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
 - Historical plans already under [history/plans/](history/plans/README.md) stay at their existing paths. Completed plans still referenced at `plans/` are not moved by documentation cleanup; lifecycle transitions belong to SOP.
+- [plans/PLAN-Security-Scanner-Addon.md](plans/PLAN-Security-Scanner-Addon.md) is retained because `internal/planner/security_plan_test.go` uses it as a compiled plan fixture. [plans/PLAN-Security-Scan-Skill.md](plans/PLAN-Security-Scan-Skill.md) is retained because `.agent-sdlc/archive/plan-security-scan-skill/` records its source path; both are documented in the plan table above rather than moved.
 - [plans/PLAN-Repository-Consolidation.md](plans/PLAN-Repository-Consolidation.md) is retained (HISTORICALIZED — COMPLETE) because the SOP archive `.agent-sdlc/archive/plan-repository-consolidation/` records its source path; the reports under [reports/consolidation/](reports/consolidation/completion.md) are its evidence.
 - [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
 
