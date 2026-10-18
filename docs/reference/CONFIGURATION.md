@@ -456,16 +456,17 @@ implementation task to it.
   once its estimated spend reaches that many US dollars, and the wrapper reports
   `claude stopped: error_max_budget_usd` (IMPLEMENT/FIX return `failed`;
   PLAN/REVIEW exit non-zero). Edits made before the stop stay in the working
-  tree. `SOP_CLAUDE_COST_LOG` names a file the wrapper appends one line to per
+  tree. `SOP_CLAUDE_MAX_BUDGET_USD_<CLASS>` overrides it for the class SOP
+  selected. `SOP_CLAUDE_COST_LOG` names a file the wrapper appends one line to per
   call: time, class, capability, result subtype, `cost=` (USD), and `turns=`.
   Both are unset by default. SOP discards the command's stderr on success, so
   the log file is the only place per-call cost appears.
 - `SOP_AGENT_COMMAND` is global: every class or plan step that uses the
   `command` provider runs the same command. SOP sets `SOP_SELECTED_CLASS`
   (`small`, `medium`, `large`) in the command's environment when model routing
-  selected the class, and the wrapper reads `SOP_CLAUDE_MODEL_<CLASS>` and
-  `SOP_CLAUDE_EFFORT_<CLASS>` before the global `SOP_CLAUDE_MODEL` and
-  `SOP_CLAUDE_EFFORT`. `sop plan` sets no class, so it uses the globals.
+  selected the class, and the wrapper reads `SOP_CLAUDE_MODEL_<CLASS>`,
+  `SOP_CLAUDE_EFFORT_<CLASS>`, and `SOP_CLAUDE_MAX_BUDGET_USD_<CLASS>` before the
+  global `SOP_CLAUDE_MODEL`, `SOP_CLAUDE_EFFORT`, and `SOP_CLAUDE_MAX_BUDGET_USD`. `sop plan` sets no class, so it uses the globals.
 - With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
   sends the key as a Bearer token. The key is never written to run artifacts.
 

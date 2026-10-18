@@ -29,7 +29,8 @@
 #                           .claude settings and CLAUDE.md still load, and
 #                           `claude login` still works.
 #   SOP_CLAUDE_MAX_BUDGET_USD optional --max-budget-usd: Claude stops a call once its
-#                           estimated spend reaches this many US dollars
+#                           estimated spend reaches this many US dollars;
+#                           SOP_CLAUDE_MAX_BUDGET_USD_<CLASS> overrides it for one class
 #   SOP_CLAUDE_COST_LOG     optional file; each call appends one line with the time,
 #                           class, capability, result, cost in USD, and turns
 #
@@ -110,16 +111,17 @@ SOP_JSON: {the json}"
 
 claude_model=${SOP_CLAUDE_MODEL:-}
 claude_effort=${SOP_CLAUDE_EFFORT:-}
+claude_budget=${SOP_CLAUDE_MAX_BUDGET_USD:-}
 case "${SOP_SELECTED_CLASS:-}" in
-  small) claude_model=${SOP_CLAUDE_MODEL_SMALL:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_SMALL:-$claude_effort} ;;
-  medium) claude_model=${SOP_CLAUDE_MODEL_MEDIUM:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_MEDIUM:-$claude_effort} ;;
-  large) claude_model=${SOP_CLAUDE_MODEL_LARGE:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_LARGE:-$claude_effort} ;;
+  small) claude_model=${SOP_CLAUDE_MODEL_SMALL:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_SMALL:-$claude_effort}; claude_budget=${SOP_CLAUDE_MAX_BUDGET_USD_SMALL:-$claude_budget} ;;
+  medium) claude_model=${SOP_CLAUDE_MODEL_MEDIUM:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_MEDIUM:-$claude_effort}; claude_budget=${SOP_CLAUDE_MAX_BUDGET_USD_MEDIUM:-$claude_budget} ;;
+  large) claude_model=${SOP_CLAUDE_MODEL_LARGE:-$claude_model}; claude_effort=${SOP_CLAUDE_EFFORT_LARGE:-$claude_effort}; claude_budget=${SOP_CLAUDE_MAX_BUDGET_USD_LARGE:-$claude_budget} ;;
 esac
 claude_args=''
 [ -n "$claude_model" ] && claude_args="--model $claude_model"
 [ -n "$claude_effort" ] && claude_args="$claude_args --effort $claude_effort"
 [ "${SOP_CLAUDE_ISOLATE:-}" = 1 ] && claude_args="$claude_args --setting-sources project,local --strict-mcp-config"
-[ -n "${SOP_CLAUDE_MAX_BUDGET_USD:-}" ] && claude_args="$claude_args --max-budget-usd $SOP_CLAUDE_MAX_BUDGET_USD"
+[ -n "$claude_budget" ] && claude_args="$claude_args --max-budget-usd $claude_budget"
 
 # shellcheck disable=SC2086
 errlog=$(mktemp "${TMPDIR:-/tmp}/sop-agent.XXXXXX")
