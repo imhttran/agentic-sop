@@ -19,6 +19,9 @@ type Policy struct {
 	// of the policy identity so changed bounds cannot silently reuse old evidence.
 	TimeoutSeconds int `json:"timeout_seconds,omitempty"`
 	MaxOutputBytes int `json:"max_output_bytes,omitempty"`
+	// Exclude is the effective declared scope boundary. It is part of the policy
+	// identity so a changed exclusion list cannot reuse prior evidence.
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 // Evaluation is the policy result. Findings remain in the report even when a

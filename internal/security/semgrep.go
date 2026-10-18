@@ -135,9 +135,22 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		"--metrics=off",
 		"--disable-version-check",
 		"--no-git-ignore",
+		// Keep the rule ID the ruleset declares. Without this, Semgrep prefixes
+		// IDs with the local rules path, so fingerprints and baselines would
+		// change when the rules live in a different directory.
+		"--no-rewrite-rule-ids",
 		"--config", rules,
 		"--timeout", strconv.Itoa(timeoutSeconds),
 	)
+	// Declared exclusions are part of the requested scope. Semgrep is told about
+	// them so it does not spend time reading excluded trees; the same list is
+	// recorded in scan.json under scope.excluded.
+	if excludes := NormalizeExcludes(req.Scope.Excluded); len(excludes) > 0 {
+		for _, pattern := range excludes {
+			argv = append(argv, "--exclude", pattern)
+		}
+		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(excludes, ", "), MaxDiagnosticBytes))
+	}
 	// A changed-files scope is an optimization and is recorded as such. When it
 	// is requested, only the named files are targets.
 	targets := []string{"."}
@@ -204,11 +217,15 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	// Semgrep CE reports some coverage limits only in its human summary rather than
 	// in the JSON paths object. Treat those explicit limits as PARTIAL so a required
 	// gate never claims a full scan when files were skipped or the target set was
-	// restricted to git-tracked files.
-	stderrText := string(stderr)
-	if strings.Contains(stderrText, "Scan skipped") || strings.Contains(stderrText, "semgrepignore") || strings.Contains(stderrText, "Scan was limited to files tracked by git") {
+	// restricted to git-tracked files. A skip caused solely by a declared
+	// --exclude is part of the requested scope, not a coverage gap.
+	if semgrepCoverageGap(string(stderr)) {
 		exec.Coverage = CoveragePartial
-		exec.Diagnostics = append(exec.Diagnostics, "semgrep reported skipped or restricted targets; coverage is partial")
+		reason := "semgrep reported skipped or restricted targets; coverage is partial"
+		if detail := semgrepCoverageDetail(string(stderr)); detail != "" {
+			reason += ": " + detail
+		}
+		exec.Diagnostics = append(exec.Diagnostics, reason)
 	}
 	for _, e := range report.Errors {
 		exec.Diagnostics = append(exec.Diagnostics, SanitizeText("semgrep error: "+e.Type+": "+e.Message, MaxDiagnosticBytes))
@@ -285,6 +302,45 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	}
 	sanitizeExecution(&exec)
 	return finish(exec, nil)
+}
+
+// semgrepCoverageGap reports whether Semgrep's human summary names a
+// scanner-side limitation. The generic "Scan skipped" heading is deliberately
+// not a marker: it is also emitted for declared --exclude patterns.
+func semgrepCoverageGap(stderr string) bool {
+	for _, marker := range []string{
+		"semgrepignore",
+		"Files larger than",
+		"Scan was limited to files tracked by git",
+		"Partially analyzed",
+		"couldn't be accessed",
+	} {
+		if strings.Contains(stderr, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// semgrepCoverageDetail extracts the human-summary skip reasons and counts so
+// the persisted evidence says why coverage is partial even when the raw stderr
+// diagnostic is truncated by the diagnostic bound.
+func semgrepCoverageDetail(stderr string) string {
+	var parts []string
+	for _, line := range strings.Split(stderr, "\n") {
+		t := strings.TrimSpace(line)
+		t = strings.TrimPrefix(t, "• ")
+		t = strings.TrimPrefix(t, "◦ ")
+		switch {
+		case strings.Contains(t, ".semgrepignore"),
+			strings.Contains(t, "Files larger than"),
+			strings.Contains(t, "Scan was limited to files tracked by git"),
+			strings.Contains(t, "Partially analyzed"),
+			strings.Contains(t, "couldn't be accessed"):
+			parts = append(parts, SanitizeText(t, 256))
+		}
+	}
+	return strings.Join(parts, "; ")
 }
 
 func changedSet(scope Scope) map[string]bool {

@@ -28,6 +28,7 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		UnknownSeverity:    cfg.Security.UnknownSeverity,
 		TimeoutSeconds:     cfg.Security.TimeoutSeconds,
 		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
+		Exclude:            cfg.SecurityExcludes(),
 	}
 	scan := &security.Scan{
 		ProtocolVersion: security.ProtocolVersion,

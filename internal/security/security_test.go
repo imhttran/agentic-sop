@@ -55,6 +55,180 @@ func requestFor(t *testing.T, root string) Request {
 	}
 }
 
+func TestExcludedPathMatchesDeclaredScope(t *testing.T) {
+	patterns := NormalizeExcludes([]string{
+		"./internal/security/testdata/",
+		"internal/legacy/*.go",
+		"generated/**",
+		"exact.txt",
+		"internal/security/testdata",
+		"/sop",
+		"/sop-*",
+	})
+	for _, path := range []string{
+		"internal/security/testdata/fixtures/secret.txt",
+		"internal/legacy/old.go",
+		"generated/deep/nested/file.go",
+		"exact.txt",
+		"sop",
+		"sop-agent",
+	} {
+		if !ExcludedPath(path, patterns) {
+			t.Errorf("%q was not excluded by %v", path, patterns)
+		}
+	}
+	for _, path := range []string{"internal/legacy/nested/old.go", "internal/security/real.go", "notexact.txt", "cmd/sop-controller/main.go", "cmd/sop/main.go"} {
+		if ExcludedPath(path, patterns) {
+			t.Errorf("%q was unexpectedly excluded by %v", path, patterns)
+		}
+	}
+}
+
+func TestSemgrepAdapterPassesConfiguredExcludes(t *testing.T) {
+	root := tempWorkspace(t)
+	rules := filepath.Join(root, "rules.yaml")
+	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	var argv []string
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "semgrep", Category: "sast", Protocol: "builtin",
+		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, got []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		argv = append([]string(nil), got...)
+		return []byte(`{"version":"1.99.0","results":[],"errors":[]}`), nil, 0, nil
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := requestFor(t, root)
+	req.Scope.Excluded = []string{"internal/security/testdata", ".git"}
+	if _, err := adapter.Scan(context.Background(), req); err != nil {
+		t.Fatal(err)
+	}
+	var excludes []string
+	for i := 0; i+1 < len(argv); i++ {
+		if argv[i] == "--exclude" {
+			excludes = append(excludes, argv[i+1])
+		}
+	}
+	if len(excludes) != 2 || excludes[0] != ".git" || excludes[1] != "internal/security/testdata" {
+		t.Errorf("excludes = %v, argv = %v", excludes, argv)
+	}
+	if !containsArg(argv, "--no-rewrite-rule-ids") {
+		t.Errorf("argv = %v, want --no-rewrite-rule-ids for stable rule IDs", argv)
+	}
+}
+
+func containsArg(argv []string, want string) bool {
+	for _, arg := range argv {
+		if arg == want {
+			return true
+		}
+	}
+	return false
+}
+
+func TestGitleaksAdapterOmitsFindingsInExcludedPaths(t *testing.T) {
+	root := tempWorkspace(t)
+	report := []byte(`[
+		{"Description":"synthetic fixture","File":"internal/security/testdata/secret.txt","StartLine":1,"RuleID":"fixture-rule","Secret":"REDACTED","Match":"REDACTED","Fingerprint":"fixture"},
+		{"Description":"real finding","File":"keep.go","StartLine":2,"RuleID":"real-rule","Secret":"REDACTED","Match":"REDACTED","Fingerprint":"real"}
+	]`)
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, _ string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		path := argument(argv, "--report-path")
+		if path == "" {
+			t.Fatal("gitleaks invocation has no --report-path")
+		}
+		if err := os.WriteFile(path, report, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return nil, nil, 0, nil
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := requestFor(t, root)
+	req.Scope.Excluded = []string{"internal/security/testdata"}
+	exec, err := adapter.Scan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(exec.Findings) != 1 || exec.Findings[0].Path != "keep.go" {
+		t.Fatalf("findings = %+v, want only keep.go", exec.Findings)
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "declared excluded paths") {
+		t.Errorf("diagnostics = %v, want exclusion accounting", exec.Diagnostics)
+	}
+}
+
+func TestPolicyIdentityIncludesExcludes(t *testing.T) {
+	base := Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate", TimeoutSeconds: 300, MaxOutputBytes: 1 << 20}
+	withExclude := base
+	withExclude.Exclude = []string{"internal/security/testdata"}
+	if base.Identity(Baseline{}) == withExclude.Identity(Baseline{}) {
+		t.Fatal("policy identity did not change when exclusions changed")
+	}
+}
+
+func TestSemgrepCoverageGapIgnoresDeclaredExcludes(t *testing.T) {
+	cases := []struct {
+		name    string
+		stderr  string
+		partial bool
+	}{
+		{"declared exclude only", "Scan skipped:\n   ◦ Matching --exclude patterns: 4\n", false},
+		{"semgrepignore", "Scan skipped:\n   ◦ Files matching .semgrepignore patterns: 581\n", true},
+		{"size limit", "Scan skipped:\n   ◦ Files larger than 1.0 MB: 6\n", true},
+		{"git restriction", "Scan was limited to files tracked by git\n", true},
+	}
+	for _, tc := range cases {
+		if got := semgrepCoverageGap(tc.stderr); got != tc.partial {
+			t.Errorf("%s: semgrepCoverageGap = %v, want %v", tc.name, got, tc.partial)
+		}
+	}
+}
+
+func TestSemgrepCoverageDetailRecordsSkipCounts(t *testing.T) {
+	stderr := "Scan skipped:\n   ◦ Matching --exclude patterns: 4\n   ◦ Files matching .semgrepignore patterns: 581\n   ◦ Files larger than 1.0 MB: 6\n"
+	detail := semgrepCoverageDetail(stderr)
+	if !strings.Contains(detail, ".semgrepignore patterns: 581") || !strings.Contains(detail, "Files larger than 1.0 MB: 6") {
+		t.Fatalf("detail = %q, want both scanner-side limits", detail)
+	}
+	if strings.Contains(detail, "--exclude") {
+		t.Fatalf("detail = %q, must not report declared exclusions as a gap", detail)
+	}
+}
+
+func TestSemgrepAdapterDeclaredExcludesStayComplete(t *testing.T) {
+	root := tempWorkspace(t)
+	rules := filepath.Join(root, "rules.yaml")
+	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "semgrep", Category: "sast", Protocol: "builtin",
+		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+		return []byte(`{"version":"1.99.0","results":[],"errors":[]}`), []byte("Scan skipped:\n   ◦ Matching --exclude patterns: 2\n"), 0, nil
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := requestFor(t, root)
+	req.Scope.Excluded = []string{"internal/security/testdata"}
+	exec, err := adapter.Scan(context.Background(), req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Coverage != CoverageComplete {
+		t.Fatalf("coverage = %s, want COMPLETE for declared exclusions (%v)", exec.Coverage, exec.Diagnostics)
+	}
+}
+
 func TestSemgrepAdapterParsesFixture(t *testing.T) {
 	root := tempWorkspace(t)
 	rules := filepath.Join(root, "rules.yaml")

@@ -49,6 +49,7 @@ security:
   timeout_seconds: 300
   max_output_bytes: 1048576
   baseline: .agent-sdlc/security-baseline.json
+  exclude: [internal/security/testdata] # declared scope; a leading "/" anchors to root
   adapters:
     - id: semgrep
       category: sast
@@ -94,10 +95,13 @@ processes satisfy the same contract.
 
 ### Request
 
-The versioned request is sent either through the adapter interface (built-in) or
+The request is sent either through the adapter interface (built-in) or
 as JSON on stdin (external). It contains `run_id`, optional `task_id` and
 `attempt_id`, `workspace_root`, content identity, scope, scanner configuration,
-deadline, and output location.
+deadline, and output location. `scope` contains the mode, the changed-file list
+when applicable, and `excluded`: the repository-relative paths or globs the
+operator declared outside the scan. Exclusions are scope evidence, not a claim
+that the scanner failed to read a file.
 
 ### Execution
 
@@ -139,13 +143,19 @@ content identity, policy identity, and sanitized native-report digest.
 ### Semgrep Community Edition (`sast`)
 
 - Invokes `semgrep scan --json --metrics=off --disable-version-check
-  --no-git-ignore --config <local-rules> --timeout <seconds> <targets>` directly.
+  --no-git-ignore --no-rewrite-rule-ids --config <local-rules> --timeout
+  <seconds> [--exclude <declared-scope-pattern> ...] <targets>` directly.
+- `--no-rewrite-rule-ids` keeps the rule ID exactly as the local ruleset declares
+  it, so a moved rules directory cannot change fingerprints or baselines.
+- `--exclude` is passed for each `scope.excluded` pattern. A declared exclusion
+  is scope, not a coverage gap; Semgrep's own `.semgrepignore`, size, git-target,
+  parse, or access limitations still make coverage `PARTIAL`.
 - Parses the native JSON report, maps `ERROR` to `HIGH`, `WARNING` to `MEDIUM`,
   and `INFO` to `INFO`; an unknown provider severity stays `UNKNOWN`.
 - Accepts exit code `0` or `1` only when a valid JSON report is present.
 - A missing rules path is `FAILED` with an explicit diagnostic; no rule
   download is attempted.
-- Scanner errors or skipped paths make coverage `PARTIAL`.
+- Scanner errors or scanner-side skipped paths make coverage `PARTIAL`.
 
 ### Gitleaks (`secrets`)
 
@@ -154,6 +164,9 @@ content identity, policy identity, and sanitized native-report digest.
   `security.adapters[].rules` is set, it is passed as `--config <local-config>`
   and its identity is recorded; otherwise Gitleaks uses its built-in rules.
 - Parses the top-level array or `findings` object shape.
+- Gitleaks has no path-exclusion flag, so findings whose repository-relative path
+  matches `scope.excluded` are removed after parsing and counted in diagnostics.
+  The declared list remains visible in `scope.excluded`.
 - Every secret finding is `HIGH`; original provider meaning (`secret`) is
   retained. Messages and metadata are sanitized.
 - Raw report files live only in restricted temporary storage and are removed on
@@ -189,7 +202,8 @@ is `INDETERMINATE`.
 
 Artifacts:
 
-- `security/scan.json` — normalized evidence and verdict.
+- `security/scan.json` — normalized evidence and verdict. `scope.excluded`
+  records the declared exclusions.
 - `security/scan.md` — human-readable rendering.
 - `security/<adapter>.native.json` — sanitized native report, when available.
 

@@ -117,10 +117,14 @@ type ContentIdentity struct {
 
 // Scope describes the requested scan scope. Workspace is the MVP default. A
 // changed-files scope is recorded with its file list so exclusions and
-// limitations are explicit.
+// limitations are explicit. Excluded lists repository-relative paths or glob
+// patterns that are deliberately outside the requested scope; the list is
+// evidence of the declared boundary, not an account of files the scanner failed
+// to read.
 type Scope struct {
-	Mode  string   `json:"mode"`
-	Files []string `json:"files,omitempty"`
+	Mode     string   `json:"mode"`
+	Files    []string `json:"files,omitempty"`
+	Excluded []string `json:"excluded,omitempty"`
 }
 
 // Request is the versioned request sent to an adapter.

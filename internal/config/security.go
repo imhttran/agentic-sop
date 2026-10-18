@@ -35,6 +35,10 @@ type SecurityConfig struct {
 	// Baseline is the repository-relative reviewed baseline/suppression file. An
 	// absent file means no suppressions.
 	Baseline string `yaml:"baseline"`
+	// Exclude declares repository-relative paths or path prefixes that are outside
+	// the requested scan scope. Exclusions are recorded in the scan evidence; they
+	// are a declared scope boundary, not a coverage failure.
+	Exclude []string `yaml:"exclude"`
 	// Adapters selects the adapters by stable ID and category. It is replaceable
 	// through configuration alone; the runner never branches on a specific ID.
 	Adapters []SecurityAdapterConfig `yaml:"adapters"`
@@ -88,6 +92,31 @@ const (
 // SecurityEnabled reports whether the add-on is explicitly enabled.
 func (c Config) SecurityEnabled() bool {
 	return c.Security.Enabled != nil && *c.Security.Enabled
+}
+
+// defaultSecurityExcludes are always outside a source scan. Git metadata is not
+// source, and SOP's own run state is evidence rather than project content; both
+// must never be scanned or persisted as findings.
+var defaultSecurityExcludes = []string{".git", ".agent-sdlc"}
+
+// SecurityExcludes returns the effective, deterministic exclusion list: the
+// built-in VCS/state exclusions followed by the operator's configured patterns.
+// Duplicates are removed; the configured order is preserved.
+func (c Config) SecurityExcludes() []string {
+	out := append([]string(nil), defaultSecurityExcludes...)
+	seen := make(map[string]bool, len(out)+len(c.Security.Exclude))
+	for _, pattern := range out {
+		seen[pattern] = true
+	}
+	for _, raw := range c.Security.Exclude {
+		pattern := strings.TrimSpace(raw)
+		if pattern == "" || seen[pattern] {
+			continue
+		}
+		seen[pattern] = true
+		out = append(out, pattern)
+	}
+	return out
 }
 
 // ResolveSecurityEnv fills and validates the security block for a Config that was
@@ -211,6 +240,35 @@ func validateDisabledSecurity(s SecurityConfig) error {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
 		}
 	}
+	if err := validateSecurityExcludes(s.Exclude); err != nil {
+		return err
+	}
+	return nil
+}
+
+// validateSecurityExcludes rejects an exclusion that could escape the workspace
+// or be interpreted as an absolute path. A leading "/" anchors the pattern to
+// the repository root (gitignore semantics); it is not a host filesystem path.
+// Glob metacharacters are permitted so an operator can declare a fixture tree;
+// `..` is rejected regardless of position.
+func validateSecurityExcludes(exclude []string) error {
+	for _, raw := range exclude {
+		pattern := strings.TrimSpace(strings.ReplaceAll(raw, "\\", "/"))
+		if pattern == "" {
+			return fmt.Errorf("config: security.exclude contains an empty pattern")
+		}
+		if strings.ContainsRune(pattern, 0) {
+			return fmt.Errorf("config: security.exclude %q contains a NUL byte", raw)
+		}
+		if len(pattern) >= 2 && pattern[1] == ':' {
+			return fmt.Errorf("config: security.exclude must be repository-relative, got %q", raw)
+		}
+		for _, segment := range strings.Split(strings.TrimPrefix(pattern, "/"), "/") {
+			if segment == ".." {
+				return fmt.Errorf("config: security.exclude must not contain '..', got %q", raw)
+			}
+		}
+	}
 	return nil
 }
 
@@ -262,6 +320,9 @@ func (c *Config) validateSecurity() error {
 		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
 		}
+	}
+	if err := validateSecurityExcludes(s.Exclude); err != nil {
+		return err
 	}
 
 	seen := make(map[string]bool, len(s.Adapters))

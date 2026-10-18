@@ -95,6 +95,7 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 	if err != nil {
 		return scan, err
 	}
+	scope.Excluded = NormalizeExcludes(r.cfg.Policy.Exclude)
 	scan.Content = content
 	scan.Scope = scope
 

@@ -18,6 +18,7 @@ remain beside the Markdown records at their existing paths.
 - [EVIDENCE-REUSE-VER-003-recovery.md](EVIDENCE-REUSE-VER-003-recovery.md) — read for the recorded VER-003 targeted recovery — provenance record evidence.
 - [JEV-WAVE2-ADAPTER-COMPAT.md](JEV-WAVE2-ADAPTER-COMPAT.md) — read for the recorded JEV-206 — Adapter Compatibility Report (Julia-1 / Nimble) evidence.
 - [PERFORMANCE-BASELINE.md](PERFORMANCE-BASELINE.md) — read for the recorded PERFORMANCE-BASELINE — Pre-Performance Baseline (CLOSE-010) evidence.
+- [SECURITY-SCANNER-BASELINE.md](SECURITY-SCANNER-BASELINE.md) — read for the real-project report-only security scanner baseline: production/fixture separation, source-backed dispositions, coverage gaps, and required-mode readiness.
 - [PHASE-9-MULTI-AGENT-ADOPTION.md](PHASE-9-MULTI-AGENT-ADOPTION.md) — read for the recorded Phase 9 — Multi-Agent Adoption Decision (ORCH-012) evidence.
 - [PLAN-compiler-reconciliation-commit-review.md](PLAN-compiler-reconciliation-commit-review.md) — read for the recorded Compiler/reconciliation hardening: pre-commit review evidence.
 - [PLAN-compiler-reconciliation-hardening.md](PLAN-compiler-reconciliation-hardening.md) — read for the recorded SOP Plan Compiler — Determinism and Reconciliation Hardening evidence.
