@@ -408,3 +408,17 @@ func TestNoProgressIsNotAutoContinue(t *testing.T) {
 		}
 	}
 }
+
+// TestSecurityScanFailureIsTerminalAtEveryLevel proves a required security scan
+// failure is an operator-review block at every autonomy level and never an
+// automatic fix or a human approval gate.
+func TestSecurityScanFailureIsTerminalAtEveryLevel(t *testing.T) {
+	c := failure.Classification{Kind: failure.SecurityScanFailure, Disposition: failure.Block, Confidence: failure.High,
+		Reason: "required security scan did not pass"}
+	for _, level := range []Level{Low, Balanced, High} {
+		d := Decide(c, PolicyFor(level))
+		if d.Action != ActionTerminal || d.RequiresHuman {
+			t.Fatalf("%s: security failure = %+v, want TERMINAL without human approval", level, d)
+		}
+	}
+}

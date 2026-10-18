@@ -304,43 +304,80 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 	return finish(exec, nil)
 }
 
-// semgrepCoverageGap reports whether Semgrep's human summary names a
-// scanner-side limitation. The generic "Scan skipped" heading is deliberately
-// not a marker: it is also emitted for declared --exclude patterns.
+// semgrepGapReasons extracts scanner-side skip reasons from Semgrep's human
+// summary. Declared --exclude patterns are scope, not a gap; every other reason
+// is treated as a coverage gap, including a reason this build does not recognize.
+// A false COMPLETE is worse than a false PARTIAL, so the parser fails closed.
+func semgrepGapReasons(stderr string) []string {
+	var out []string
+	inSkip := false
+	for _, line := range strings.Split(stderr, "\n") {
+		t := strings.TrimSpace(line)
+		if !inSkip {
+			if strings.Contains(t, "Scan skipped:") {
+				inSkip = true
+			}
+			continue
+		}
+		if t == "" {
+			continue
+		}
+		// Skip reasons are bullets. A known top-level summary label ends the
+		// skip block; an unrecognized bullet is still treated as a gap.
+		trimmed := t
+		isBullet := true
+		switch {
+		case strings.HasPrefix(trimmed, "•"):
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "•"))
+		case strings.HasPrefix(trimmed, "◦"):
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "◦"))
+		case strings.HasPrefix(trimmed, "-"):
+			trimmed = strings.TrimSpace(strings.TrimPrefix(trimmed, "-"))
+		default:
+			isBullet = false
+		}
+		if !isBullet {
+			break
+		}
+		if trimmed == "" {
+			continue
+		}
+		if isSemgrepSummaryLabel(trimmed) {
+			break
+		}
+		if strings.HasPrefix(trimmed, "Matching --exclude patterns") {
+			continue
+		}
+		out = append(out, SanitizeText(trimmed, 256))
+	}
+	return out
+}
+
+// semgrepCoverageGap reports whether Semgrep's human summary names any
+// scanner-side limitation.
 func semgrepCoverageGap(stderr string) bool {
-	for _, marker := range []string{
-		"semgrepignore",
-		"Files larger than",
-		"Scan was limited to files tracked by git",
-		"Partially analyzed",
-		"couldn't be accessed",
+	return len(semgrepGapReasons(stderr)) > 0
+}
+
+// isSemgrepSummaryLabel reports whether a bullet starts a new summary section
+// rather than naming a skip reason.
+func isSemgrepSummaryLabel(text string) bool {
+	for _, prefix := range []string{
+		"Findings:", "Rules run:", "Targets scanned:", "Parsed lines:",
+		"Scan skipped:", "For a detailed list", "Ran ",
 	} {
-		if strings.Contains(stderr, marker) {
+		if strings.HasPrefix(text, prefix) {
 			return true
 		}
 	}
 	return false
 }
 
-// semgrepCoverageDetail extracts the human-summary skip reasons and counts so
-// the persisted evidence says why coverage is partial even when the raw stderr
-// diagnostic is truncated by the diagnostic bound.
+// semgrepCoverageDetail renders the gap reasons so the persisted evidence says
+// why coverage is partial even when the raw stderr diagnostic is truncated by
+// the diagnostic bound.
 func semgrepCoverageDetail(stderr string) string {
-	var parts []string
-	for _, line := range strings.Split(stderr, "\n") {
-		t := strings.TrimSpace(line)
-		t = strings.TrimPrefix(t, "• ")
-		t = strings.TrimPrefix(t, "◦ ")
-		switch {
-		case strings.Contains(t, ".semgrepignore"),
-			strings.Contains(t, "Files larger than"),
-			strings.Contains(t, "Scan was limited to files tracked by git"),
-			strings.Contains(t, "Partially analyzed"),
-			strings.Contains(t, "couldn't be accessed"):
-			parts = append(parts, SanitizeText(t, 256))
-		}
-	}
-	return strings.Join(parts, "; ")
+	return strings.Join(semgrepGapReasons(stderr), "; ")
 }
 
 func changedSet(scope Scope) map[string]bool {

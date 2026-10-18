@@ -103,20 +103,21 @@ func runSecurity(args []string, stdout, stderr io.Writer, d deps) int {
 	if runID == "" {
 		runID = "security-" + time.Now().UTC().Format("20060102T150405Z")
 	}
-	prior, err := loadPriorSecurityScan(dir, opts.resume)
+	prior, priorNative, err := loadPriorSecurityScan(dir, opts.resume)
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
 		return exitError
 	}
 	runner, err := security.NewRunner(security.RunnerConfig{
-		WorkspaceRoot:  dir,
-		RunID:          runID,
-		Adapters:       adapters,
-		Policy:         policy,
-		Timeout:        time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
-		MaxOutputBytes: cfg.Security.MaxOutputBytes,
-		Baseline:       baseline,
-		Prior:          prior,
+		WorkspaceRoot:      dir,
+		RunID:              runID,
+		Adapters:           adapters,
+		Policy:             policy,
+		Timeout:            time.Duration(cfg.Security.TimeoutSeconds) * time.Second,
+		MaxOutputBytes:     cfg.Security.MaxOutputBytes,
+		Baseline:           baseline,
+		Prior:              prior,
+		PriorNativeReports: priorNative,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
@@ -243,26 +244,29 @@ func parseSecurityScanArgs(args []string, stderr io.Writer) (securityScanOptions
 	return opts, true
 }
 
-// loadPriorSecurityScan loads a previously persisted scan for explicit resume.
-// A missing or malformed artifact is an error rather than a silent full rerun, so
-// an operator can see why resume could not be used.
-func loadPriorSecurityScan(dir, runID string) (*security.Scan, error) {
+// loadPriorSecurityScan loads a previously persisted scan for explicit resume
+// and the sanitized native reports it references. A missing or malformed scan is
+// an error rather than a silent full rerun, so an operator can see why resume
+// could not be used. Native reports are verified by digest; an unusable report is
+// omitted, which makes the runner rescan that adapter.
+func loadPriorSecurityScan(dir, runID string) (*security.Scan, map[string][]byte, error) {
 	if strings.TrimSpace(runID) == "" {
-		return nil, nil
+		return nil, nil, nil
 	}
-	path := filepath.Join(dir, config.DirName, "runs", runID, "security", "scan.json")
+	runDir := filepath.Join(dir, config.DirName, "runs", runID)
+	path := filepath.Join(runDir, "security", "scan.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return nil, fmt.Errorf("resume: read %s: %w", path, err)
+		return nil, nil, fmt.Errorf("resume: read %s: %w", path, err)
 	}
 	var scan security.Scan
 	if err := json.Unmarshal(data, &scan); err != nil {
-		return nil, fmt.Errorf("resume: parse %s: %w", path, err)
+		return nil, nil, fmt.Errorf("resume: parse %s: %w", path, err)
 	}
 	if scan.ProtocolVersion != security.ProtocolVersion {
-		return nil, fmt.Errorf("resume: %s speaks protocol %q, want %s", path, scan.ProtocolVersion, security.ProtocolVersion)
+		return nil, nil, fmt.Errorf("resume: %s speaks protocol %q, want %s", path, scan.ProtocolVersion, security.ProtocolVersion)
 	}
-	return &scan, nil
+	return &scan, security.LoadNativeReports(runDir, &scan), nil
 }
 
 func printSecurityScan(w io.Writer, scan security.Scan, refs security.ArtifactRefs) {

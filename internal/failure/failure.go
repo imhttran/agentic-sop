@@ -101,6 +101,12 @@ const (
 	LintFailure         Kind = "LINT_FAILURE"
 	Regression          Kind = "REGRESSION"
 	BlockingFindings    Kind = "BLOCKING_FINDINGS"
+	// SecurityScanFailure: a REQUIRED security scan did not produce a pass
+	// (blocking findings, incomplete/unknown coverage, a missing adapter, or a
+	// scanner failure). It is a deterministic verification result. SOP does not
+	// remediate security findings automatically; the run stops for operator review
+	// rather than entering the code-fix loop or creating an approval gate.
+	SecurityScanFailure Kind = "SECURITY_SCAN_FAILURE"
 	// ValidationNotConfigured: a task that requires deterministic validation before
 	// it may pass produced a repository change, but the project has no validation
 	// commands configured. It is a workflow/configuration failure, distinct from an
@@ -210,6 +216,13 @@ type Evidence struct {
 	LintFailed       bool
 	TestsMissing     bool
 	BlockingFindings int
+	// SecurityFailed reports that a required security scan did not pass. It is
+	// structured evidence from the scanner layer, never model prose.
+	SecurityFailed bool
+	// SecurityVerdict and SecurityReason preserve the scan's verdict and bounded
+	// reason for the classification and report.
+	SecurityVerdict string
+	SecurityReason  string
 	// Detail is the bounded diagnostic for a deterministic verification failure
 	// (for example the compiler error line from a failing `go build`). It is
 	// optional provenance: when set it is appended to the classification reason so
@@ -380,6 +393,20 @@ func Classify(ev Evidence) Classification {
 	//    undefined symbol is a compiler error even when the agent's summary is empty
 	//    or says something else; it is never UNKNOWN. The bounded fix budget still
 	//    applies: once it is spent this returns the distinct AutoFixExhausted signal.
+	//
+	//    A required security failure is checked first: it is deterministic scanner
+	//    evidence, and SOP never auto-remediates security findings. It is an
+	//    operator-review block, not an approval and not a code-fix cycle.
+	if ev.SecurityFailed {
+		reason := strings.TrimSpace(ev.SecurityReason)
+		if reason == "" {
+			reason = "required security scan did not pass"
+		}
+		if verdict := strings.TrimSpace(ev.SecurityVerdict); verdict != "" {
+			reason = fmt.Sprintf("required security scan verdict %s: %s", strings.ToUpper(verdict), reason)
+		}
+		return Classification{Kind: SecurityScanFailure, Disposition: Block, Confidence: High, Reason: reason}
+	}
 	if c, ok := fromVerification(ev); ok {
 		return c
 	}

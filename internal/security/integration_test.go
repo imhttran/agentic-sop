@@ -437,8 +437,12 @@ func TestRealCLIResumeIdentity(t *testing.T) {
 	if len(first.Findings) == 0 {
 		t.Fatal("first scan produced no findings")
 	}
+	priorNative := map[string][]byte{}
+	for _, adapter := range first.Adapters {
+		priorNative[adapter.AdapterID] = adapter.NativeReport
+	}
 
-	secondRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first})
+	secondRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first, PriorNativeReports: priorNative})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -450,12 +454,15 @@ func TestRealCLIResumeIdentity(t *testing.T) {
 		if !adapter.Reused {
 			t.Errorf("matching resume did not reuse adapter %s: %+v", adapter.AdapterID, adapter.Provenance)
 		}
+		if len(adapter.NativeReport) == 0 || DigestBytes(adapter.NativeReport) != adapter.Provenance.SanitizedReportDigest {
+			t.Errorf("reused adapter %s has no verified native report", adapter.AdapterID)
+		}
 	}
 
 	if err := os.WriteFile(filepath.Join(root, "insecure.go"), []byte("package seeded\n\n// changed input\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	thirdRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first})
+	thirdRunner, err := NewRunner(RunnerConfig{WorkspaceRoot: root, RunID: "resume", Adapters: adapters, Policy: policy, Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20, Prior: &first, PriorNativeReports: priorNative})
 	if err != nil {
 		t.Fatal(err)
 	}

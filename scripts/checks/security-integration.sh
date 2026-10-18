@@ -51,7 +51,11 @@ if [ -z "$semgrep_bin" ]; then
     venv="$tools_dir/semgrep-$SEMGREP_VERSION-venv"
     rm -rf "$venv"
     "$python_bin" -m venv "$venv"
-    "$venv/bin/pip" install --disable-pip-version-check --quiet "semgrep==$SEMGREP_VERSION"
+    # The lockfile pins Semgrep and every transitive dependency with SHA-256
+    # hashes; pip refuses to install a file that does not match its manifest.
+    lockfile="$root/scripts/security/semgrep-requirements.lock"
+    [ -f "$lockfile" ] || die "missing Semgrep lockfile: $lockfile"
+    "$venv/bin/pip" install --disable-pip-version-check --quiet --require-hashes -r "$lockfile"
   fi
 fi
 
@@ -91,6 +95,12 @@ actual_semgrep="$("$semgrep_bin" --version 2>/dev/null | head -n 1 | tr -d '\r[:
 [ "$actual_semgrep" = "$SEMGREP_VERSION" ] || die "Semgrep version is '$actual_semgrep', want $SEMGREP_VERSION"
 actual_gitleaks="$("$gitleaks_bin" version 2>/dev/null | head -n 1 | tr -d '\r[:space:]')"
 [ "$actual_gitleaks" = "$GITLEAKS_VERSION" ] || die "Gitleaks version is '$actual_gitleaks', want $GITLEAKS_VERSION"
+
+# Verify the pinned production rules as well as the scanner binaries. The rules
+# are fetched from the exact upstream commit recorded in the manifest and checked
+# against per-file and directory digests; they are never committed.
+rules_dir="$tools_dir/semgrep-rules"
+"$root/scripts/security/fetch-semgrep-rules.sh" --dest "$rules_dir" >/dev/null || die "production rules fetch/verify failed"
 
 echo "security-integration: semgrep=$actual_semgrep gitleaks=$actual_gitleaks"
 

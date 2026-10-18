@@ -9,7 +9,10 @@ rollback, and the MVP's measured scope. The normative contract is
 - Go and Git (SOP's normal requirements).
 - One or more scanner executables on `PATH`, or absolute paths in the adapter
   command.
-- Local Semgrep rules. The add-on never downloads rules.
+- Local Semgrep rules. The add-on never downloads rules implicitly. Use
+  `scripts/security/fetch-semgrep-rules.sh` to fetch the pinned upstream rules
+  into `.agent-sdlc/security-rules` and verify the manifest and directory digest.
+  The rules are license-restricted and are not committed.
 - Optional local Gitleaks configuration. Without one, Gitleaks uses its built-in
   rules.
 
@@ -47,7 +50,7 @@ security:
       category: sast
       protocol: builtin
       command: [semgrep]
-      rules: security/semgrep-rules
+      rules: .agent-sdlc/security-rules
       version: "1.99.0" # replace with the pinned version
     - id: gitleaks
       category: secrets
@@ -235,7 +238,10 @@ sop security scan --resume security-20261017T120000Z
 A completed adapter is reused only when content, adapter/scanner, rules,
 configuration, and policy identities still match. Any change reruns that
 adapter. A prior `FAILED`, `TIMED_OUT`, `UNAVAILABLE`, `SKIPPED`, or `CANCELLED`
-result is never reused.
+result is never reused. The prior run's sanitized native reports are loaded and
+verified against their recorded digests. A missing or mismatched report is not
+reused: the adapter is rescanned, and the current run writes the verified report
+beside its own evidence.
 
 ## 8. Rollback
 
@@ -261,7 +267,11 @@ the integration changed existing runner behavior unexpectedly.
 - Semgrep CE applies its default `.semgrepignore` patterns even with
   `--no-git-ignore`; `*_test.go` files are skipped by default. A production
   baseline therefore covers non-test source unless the project overrides that
-  default with a `.semgrepignore` negation.
+  default with a `.semgrepignore` negation. Test files remain covered by Gitleaks
+  for secrets.
+- A required security failure is classified as `SECURITY_SCAN_FAILURE` and stops
+  the run for operator review. It does not enter the code-fix loop, does not
+  create an approval gate, and is never auto-remediated.
 - Semgrep rule IDs are recorded without a local path prefix
   (`--no-rewrite-rule-ids`), so fingerprints and baselines stay stable when the
   rules directory moves.
@@ -290,6 +300,11 @@ go vet ./...
 bash scripts/checks/check-doc-links.sh
 bash scripts/checks/security-integration.sh
 ```
+
+`security-integration.sh` installs Semgrep from the hash-pinned
+`scripts/security/semgrep-requirements.lock`, fetches the pinned production rules
+through `scripts/security/fetch-semgrep-rules.sh`, verifies their manifest and
+directory digest, and then runs the real-CLI tests.
 
 `scripts/checks/security-integration.sh` provisions pinned Semgrep CE and Gitleaks
 versions in an isolated tools directory, uses explicit local rules, and runs the
