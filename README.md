@@ -181,6 +181,7 @@ Start at **[docs/README.md](docs/README.md)** for the complete categorized index
 | Execution and lifecycle       | [Execution](docs/specs/EXECUTION.md), [task lifecycle](docs/specs/TASK-LIFECYCLE.md)         |
 | Providers and harnesses       | [Agent provider](docs/specs/AGENT-PROVIDER.md), [model routing](docs/specs/MODEL-ROUTING.md) |
 | CLI and configuration         | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md)          |
+| Security                      | [Security](docs/specs/SECURITY.md), [scanner add-on](docs/guides/SECURITY-SCANNER-ADDON.md)  |
 | Usage and development         | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
 | Decision-model findings       | [Decision-model findings](docs/reference/DECISION-MODEL-FINDINGS.md)                         |
 | Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation)            |

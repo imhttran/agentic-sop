@@ -91,6 +91,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
 - [specs/SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md) — the implemented opt-in security scanner add-on: `security-scan/v1` adapter contract, configurable category/adapter selection, Semgrep CE, Gitleaks, cargo-audit, and OSV-Scanner wrappers, execution/coverage states, policy verdicts, baselines, resume, redaction, and the single quality-gate seam.
+- [specs/SOP-Security-Scanner-Addon-PRD.md](specs/SOP-Security-Scanner-Addon-PRD.md) — the requirements source for the security scanner add-on.
 - [specs/RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md) — **proposed** versioned, retrieval-only request/response contract (schema `rag-retrieval/v1`): source metadata, size ceilings, error taxonomy, and fallback/required-evidence rules.
 - [specs/RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md) — **proposed** threat model for RAG retrieval (injection, cross-project leakage, scope, resource, malformed-response) and its fail-closed rules.
 - [specs/RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md) — **proposed** `SOP_RAG_*` configuration and feature-flag design: opt-in, disabled by default, bytes-based budgets, per-project corpus allowlisting.
@@ -185,10 +186,15 @@ single owner. This table is that map.
 ## Plans
 
 Implementation and verification plans. A completed plan stays here rather than moving
-to `history/` when SOP or the repository still references its path: the archive under
-`.agent-sdlc/archive/` records these sources, and the example commands in
+to `history/` when SOP or the repository still references its path: SOP's lifecycle
+archive records these sources, and the example commands in
 `scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
+
+`.agent-sdlc/archive/<plan-id>/` paths in this index and in plan headers name SOP's
+lifecycle archive in the operator's checkout. It is local SOP state, not committed to
+this repository, so those paths do not resolve on GitHub. The plan document and its
+linked reports are the committed record.
 
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases), including the decision-model evaluation follow-ups (DME-FU-001–005) and their promotion criteria [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md).
 - [plans/PLAN-RAG-SOP-Integration.md](plans/PLAN-RAG-SOP-Integration.md) — the RAG integration plan (RAG-SOP-001–004): architecture, adapter implementation, required PostgreSQL integration validation, comparative evaluation, and the operator rollout decision. The evaluation criteria are fixed in [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) and the recorded outcome is [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
@@ -295,6 +301,7 @@ is owned by the documents they link.
 - [reports/consolidation/closure-evidence.md](reports/consolidation/closure-evidence.md) — the repository-consolidation closure evidence report: the operator-authorized relative link check (`broken links: 0`) and `git diff --check` results, the `go build/test/vet` validation gates, provenance separating local, committed and merged evidence, the external-completion reasons for C5/C7, and the unverified boundaries (archived state, migration CI, legacy retirement, provider limits).
 - [reports/SECURITY-SCANNER-DOGFOOD.md](reports/SECURITY-SCANNER-DOGFOOD.md) — the report-only dogfood run: scanned commit/tree and dirty digest, measured duration, tool availability, the `INDETERMINATE` verdict, and the explicit limitation that no live scanner completed.
 - [reports/SECURITY-SCANNER-BASELINE.md](reports/SECURITY-SCANNER-BASELINE.md) — the first real-project report-only baseline: clean `origin/main` content identity, pinned Semgrep/Gitleaks provenance, declared exclusions, production-versus-fixture separation, source-backed dispositions for 27 findings, coverage gaps, and required-mode readiness.
+- [reports/SECURITY-FINDINGS-ISSUE-52.md](reports/SECURITY-FINDINGS-ISSUE-52.md) — the issue #52 security findings review: per-finding dispositions and the reviewed suppressions.
 - [reports/SECURITY-SCAN-SKILL.md](reports/SECURITY-SCAN-SKILL.md) — the Go/Rust security-scan skill and cargo-audit adapter: detection, auto selection, Semgrep language coverage, pinned advisory-database fixtures, validation results, SOP execution limitations, and remaining gaps.
 
 ## Historical Documentation

@@ -13,7 +13,7 @@
 > verdict is **HOLD** and is retained unchanged in [READINESS.md](READINESS.md).
 >
 > **Lifecycle record.** SOP's archive for the plan is preserved outside the removed
-> worktree at `.agent-sdlc/archive/plan-sop-developer-preview/` (gitignored). The
+> worktree at `.agent-sdlc/archive/plan-sop-developer-preview/` (local SOP state; not committed). The
 > superseded plan remains at
 > [`docs/plans/PLAN-SOP-Developer-Preview.md`](../../plans/PLAN-SOP-Developer-Preview.md).
 
