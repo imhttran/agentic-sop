@@ -40,6 +40,18 @@ func tempWorkspace(t *testing.T) string {
 	return dir
 }
 
+// goRules writes a minimal local rules file that declares Go coverage. A
+// Semgrep scan may only claim Go coverage when the rules actually declare it.
+func goRules(t *testing.T, root string) string {
+	t.Helper()
+	path := filepath.Join(root, "rules.yaml")
+	body := "rules:\n  - id: test-go-rule\n    languages: [go]\n    message: test\n    severity: WARNING\n    pattern: $X\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func requestFor(t *testing.T, root string) Request {
 	t.Helper()
 	content, err := ComputeContentIdentity(context.Background(), root)
@@ -86,10 +98,7 @@ func TestExcludedPathMatchesDeclaredScope(t *testing.T) {
 
 func TestSemgrepAdapterPassesConfiguredExcludes(t *testing.T) {
 	root := tempWorkspace(t)
-	rules := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	rules := goRules(t, root)
 	var argv []string
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
@@ -122,14 +131,11 @@ func TestSemgrepAdapterPassesConfiguredExcludes(t *testing.T) {
 
 func TestSemgrepAdapterChangedFilesTargetsAreSafe(t *testing.T) {
 	root := tempWorkspace(t)
-	rules := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	rules := goRules(t, root)
 	var argv []string
 	report := `{"version":"1.99.0","errors":[],"results":[
-		{"check_id":"r","path":"fixtures/bad.py","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}},
-		{"check_id":"r","path":"--output=x.py","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}}
+		{"check_id":"r","path":"fixtures/bad.go","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}},
+		{"check_id":"r","path":"--output=x.go","start":{"line":1,"col":1},"end":{"line":1,"col":2},"extra":{"severity":"ERROR","message":"m"}}
 	]}`
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
@@ -142,15 +148,15 @@ func TestSemgrepAdapterChangedFilesTargetsAreSafe(t *testing.T) {
 		t.Fatal(err)
 	}
 	req := requestFor(t, root)
-	req.Scope = Scope{Mode: "changed-files", Files: []string{"--output=x.py", "fixtures/bad.py"}, Excluded: []string{"fixtures"}}
+	req.Scope = Scope{Mode: "changed-files", Files: []string{"--output=x.go", "fixtures/bad.go"}, Excluded: []string{"fixtures"}}
 	exec, err := adapter.Scan(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := len(argv); n < 2 || argv[n-2] != "--" || argv[n-1] != "--output=x.py" {
-		t.Errorf("argv tail = %v, want [-- --output=x.py] (option terminator, excluded target dropped)", argv)
+	if n := len(argv); n < 2 || argv[n-2] != "--" || argv[n-1] != "--output=x.go" {
+		t.Errorf("argv tail = %v, want [-- --output=x.go] (option terminator, excluded target dropped)", argv)
 	}
-	if len(exec.Findings) != 1 || exec.Findings[0].Path != "--output=x.py" {
+	if len(exec.Findings) != 1 || exec.Findings[0].Path != "--output=x.go" {
 		t.Errorf("findings = %+v, want only the non-excluded file", exec.Findings)
 	}
 	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "declared excluded paths") {
@@ -159,7 +165,7 @@ func TestSemgrepAdapterChangedFilesTargetsAreSafe(t *testing.T) {
 
 	// Every changed file excluded: semgrep must not run, since no target means ".".
 	argv = nil
-	req.Scope.Files = []string{"fixtures/bad.py"}
+	req.Scope.Files = []string{"fixtures/bad.go"}
 	exec, err = adapter.Scan(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
@@ -283,10 +289,7 @@ func TestGitleaksSkipNoticesForcePartial(t *testing.T) {
 
 func TestSemgrepAdapterDeclaredExcludesStayComplete(t *testing.T) {
 	root := tempWorkspace(t)
-	rules := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	rules := goRules(t, root)
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
 		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
@@ -467,10 +470,7 @@ func TestGitleaksAdapterSymlinkMakesCoveragePartial(t *testing.T) {
 
 func TestSemgrepAdapterParsesFixture(t *testing.T) {
 	root := tempWorkspace(t)
-	rules := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	rules := goRules(t, root)
 	report := fixture(t, "semgrep-report.json")
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
@@ -514,10 +514,7 @@ func TestSemgrepAdapterParsesFixture(t *testing.T) {
 
 func TestSemgrepAdapterCleanFixture(t *testing.T) {
 	root := tempWorkspace(t)
-	rules := filepath.Join(root, "rules.yaml")
-	if err := os.WriteFile(rules, []byte("rules: []\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
+	rules := goRules(t, root)
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
 		ID: "semgrep", Category: "sast", Protocol: "builtin",
 		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",

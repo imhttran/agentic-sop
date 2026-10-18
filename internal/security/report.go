@@ -20,14 +20,28 @@ type Scan struct {
 	EndedAt         time.Time       `json:"ended_at"`
 	Content         ContentIdentity `json:"content"`
 	Scope           Scope           `json:"scope"`
-	Policy          Policy          `json:"policy"`
-	Adapters        []Execution     `json:"adapters"`
-	Findings        []Finding       `json:"findings"`
-	Verdict         Verdict         `json:"verdict"`
-	Coverage        Coverage        `json:"coverage"`
-	Reasons         []string        `json:"reasons"`
-	Diagnostics     []string        `json:"diagnostics,omitempty"`
-	Metrics         Metrics         `json:"metrics"`
+	// Detection is the repository-content inventory used for auto selection. It is
+	// omitted for a normal configured scan so existing evidence is unchanged.
+	Detection *Detection  `json:"detection,omitempty"`
+	Policy    Policy      `json:"policy"`
+	Adapters  []Execution `json:"adapters"`
+	Findings  []Finding   `json:"findings"`
+	Verdict   Verdict     `json:"verdict"`
+	Coverage  Coverage    `json:"coverage"`
+	Reasons   []string    `json:"reasons"`
+	// RequiredMode is the readiness projection: what the same evidence would
+	// produce under a required-mode gate. It never changes the recorded verdict.
+	RequiredMode *Readiness `json:"required_mode,omitempty"`
+	Diagnostics  []string   `json:"diagnostics,omitempty"`
+	Metrics      Metrics    `json:"metrics"`
+}
+
+// Readiness is a report-only projection of required-mode readiness. It is
+// advisory evidence, not a second verdict authority.
+type Readiness struct {
+	Ready   bool     `json:"ready"`
+	Verdict Verdict  `json:"verdict"`
+	Reasons []string `json:"reasons,omitempty"`
 }
 
 // Metrics records measured duration and counts. It is diagnostic evidence; it
@@ -61,7 +75,7 @@ func (p Policy) Identity(baseline Baseline) string {
 	if p.Enabled {
 		enabled = "enabled"
 	}
-	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), strings.Join(exclude, "\x00"), baseline.Identity())
+	return DigestStrings(enabled, p.Mode, p.Scope, strings.Join(cats, ","), strings.Join(failOn, ","), p.UnknownSeverity, fmt.Sprintf("%d", p.TimeoutSeconds), fmt.Sprintf("%d", p.MaxOutputBytes), strings.Join(exclude, "\x00"), p.StalePolicy(), strings.TrimSpace(p.AdvisoryDatabasePath), baseline.Identity())
 }
 
 // ArtifactRefs are the repository-relative artifact paths written for a scan.
@@ -211,6 +225,26 @@ func RenderMarkdown(scan Scan) string {
 	b.WriteString("\n## Verdict\n\n")
 	for _, reason := range scan.Reasons {
 		fmt.Fprintf(&b, "- %s\n", SanitizeText(reason, MaxDiagnosticBytes))
+	}
+	if scan.RequiredMode != nil {
+		fmt.Fprintf(&b, "\n## Required-mode readiness\n\n- Ready: `%t`\n- Projected verdict: `%s`\n", scan.RequiredMode.Ready, scan.RequiredMode.Verdict)
+		for _, reason := range scan.RequiredMode.Reasons {
+			fmt.Fprintf(&b, "- %s\n", SanitizeText(reason, MaxDiagnosticBytes))
+		}
+	}
+	if scan.Detection != nil {
+		b.WriteString("\n## Detection\n\n")
+		fmt.Fprintf(&b, "- Languages: `%s`\n", languageListText(scan.Detection.Languages))
+		for _, manifest := range scan.Detection.Manifests {
+			fmt.Fprintf(&b, "- Manifest: `%s` (%s)\n", manifest.Path, manifest.Language)
+		}
+		for _, lockfile := range scan.Detection.Lockfiles {
+			state := "present"
+			if !lockfile.Present {
+				state = "MISSING"
+			}
+			fmt.Fprintf(&b, "- Lockfile: `%s` (%s, %s)\n", lockfile.Path, lockfile.Language, state)
+		}
 	}
 	for _, diagnostic := range scan.Diagnostics {
 		fmt.Fprintf(&b, "- Diagnostic: %s\n", SanitizeText(diagnostic, MaxDiagnosticBytes))

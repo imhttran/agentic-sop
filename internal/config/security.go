@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -39,6 +40,16 @@ type SecurityConfig struct {
 	// the requested scan scope. Exclusions are recorded in the scan evidence; they
 	// are a declared scope boundary, not a coverage failure.
 	Exclude []string `yaml:"exclude"`
+	// AdvisoryDatabasePath is the local advisory database path a dependency
+	// adapter uses. It is explicit so a scan never downloads a database implicitly.
+	AdvisoryDatabasePath string `yaml:"advisory_database_path"`
+	// StaleAdvisoryDatabase is the policy for a stale advisory database: deny
+	// (the default) or allow. Deny makes a stale database INDETERMINATE; allow
+	// keeps the verdict path and records a PARTIAL coverage diagnostic.
+	StaleAdvisoryDatabase string `yaml:"stale_advisory_database"`
+	// Auto enables automatic dependency adapter selection. It is report-only
+	// configuration policy and never changes a verdict by itself.
+	Auto bool `yaml:"auto"`
 	// Adapters selects the adapters by stable ID and category. It is replaceable
 	// through configuration alone; the runner never branches on a specific ID.
 	Adapters []SecurityAdapterConfig `yaml:"adapters"`
@@ -54,6 +65,17 @@ type SecurityAdapterConfig struct {
 	// Rules is the local rules path for a Semgrep adapter. It is explicit so a
 	// scan never downloads rules implicitly.
 	Rules string `yaml:"rules"`
+	// Database is the local advisory database path for a dependency adapter. It is
+	// explicit so a scan never downloads or updates a database implicitly.
+	Database string `yaml:"database"`
+	// Lockfile optionally names one lockfile for a dependency adapter. When it is
+	// empty the adapter resolves the repository's actual lockfiles from content.
+	// It is always passed to the scanner explicitly; the adapter never generates
+	// or modifies a lockfile.
+	Lockfile string `yaml:"lockfile"`
+	// Stale is this adapter's stale-database policy: deny (the default) or allow.
+	// When empty the global security.stale_advisory_database value applies.
+	Stale string `yaml:"stale"`
 	// Version is the expected/pinned scanner version recorded as provenance. It is
 	// descriptive unless an adapter chooses to enforce it.
 	Version string `yaml:"version"`
@@ -61,8 +83,15 @@ type SecurityAdapterConfig struct {
 
 // Security categories.
 const (
-	SecurityCategorySAST    = "sast"
-	SecurityCategorySecrets = "secrets"
+	SecurityCategorySAST         = "sast"
+	SecurityCategorySecrets      = "secrets"
+	SecurityCategoryDependencies = "dependencies"
+)
+
+// Stale advisory database policies. The empty value means deny.
+const (
+	SecurityStaleDeny  = "deny"
+	SecurityStaleAllow = "allow"
 )
 
 // Security policies.
@@ -175,6 +204,11 @@ func (c *Config) applySecurityDefaults() {
 	if strings.TrimSpace(c.Security.UnknownSeverity) == "" {
 		c.Security.UnknownSeverity = SecurityUnknownIndeterminate
 	}
+	// A stale advisory database defaults to deny, so an omitted value is
+	// fail-closed and never silently accepts stale evidence.
+	if strings.TrimSpace(c.Security.StaleAdvisoryDatabase) == "" {
+		c.Security.StaleAdvisoryDatabase = SecurityStaleDeny
+	}
 	if c.Security.TimeoutSeconds == 0 {
 		c.Security.TimeoutSeconds = 300
 	}
@@ -201,6 +235,8 @@ func (c *Config) applySecurityDefaults() {
 				a.Category = SecurityCategorySAST
 			case "gitleaks":
 				a.Category = SecurityCategorySecrets
+			case "cargo-audit":
+				a.Category = SecurityCategoryDependencies
 			}
 		}
 		if len(a.Command) == 0 {
@@ -209,6 +245,10 @@ func (c *Config) applySecurityDefaults() {
 				a.Command = []string{"semgrep"}
 			case "gitleaks":
 				a.Command = []string{"gitleaks"}
+			case "cargo-audit":
+				// cargo-audit is a Cargo subcommand; the argv is explicit so no
+				// shell is involved.
+				a.Command = []string{"cargo", "audit"}
 			}
 		}
 	}
@@ -235,6 +275,12 @@ func validateDisabledSecurity(s SecurityConfig) error {
 	default:
 		return fmt.Errorf("config: unknown security.unknown_severity %q (want fail, indeterminate, ignore)", unknown)
 	}
+	if err := validateSecurityStale(s.StaleAdvisoryDatabase); err != nil {
+		return err
+	}
+	if err := validateSecurityAdvisoryDatabasePath(s.AdvisoryDatabasePath); err != nil {
+		return err
+	}
 	if b := strings.TrimSpace(s.Baseline); b != "" {
 		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
@@ -244,6 +290,78 @@ func validateDisabledSecurity(s SecurityConfig) error {
 		return err
 	}
 	return nil
+}
+
+// validateSecurityStale accepts an empty value (deny), deny, or allow. Any other
+// value is a focused load-time error so a later enable cannot carry a bad policy.
+func validateSecurityStale(value string) error {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", SecurityStaleDeny, SecurityStaleAllow:
+		return nil
+	default:
+		return fmt.Errorf("config: unknown security.stale_advisory_database %q (want deny, allow)", value)
+	}
+}
+
+// validateSecurityAdvisoryDatabasePath validates the global advisory database
+// path. An absolute path is allowed because a shared local database commonly
+// lives outside the repository; a relative path stays repository-relative.
+func validateSecurityAdvisoryDatabasePath(value string) error {
+	return validateSecurityDatabaseValue(value)
+}
+
+// validateSecurityDatabaseValue validates an explicit local advisory database
+// path. An absolute path is allowed because a shared local database commonly
+// lives outside the repository; a relative path stays repository-relative and
+// may not escape it.
+func validateSecurityDatabaseValue(value string) error {
+	p := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if p == "" {
+		return nil
+	}
+	if strings.ContainsRune(p, 0) {
+		return fmt.Errorf("database contains a NUL byte")
+	}
+	if filepath.IsAbs(p) {
+		return nil
+	}
+	for _, segment := range strings.Split(p, "/") {
+		if segment == ".." {
+			return fmt.Errorf("database must stay in the repository or be absolute, got %q", value)
+		}
+	}
+	return nil
+}
+
+// validateSecurityLockfileValue requires a repository-relative lockfile path. A
+// dependency adapter must never read a lockfile outside the workspace.
+func validateSecurityLockfileValue(value string) error {
+	p := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if p == "" {
+		return nil
+	}
+	if strings.ContainsRune(p, 0) {
+		return fmt.Errorf("lockfile contains a NUL byte")
+	}
+	if strings.HasPrefix(p, "/") || (len(p) >= 2 && p[1] == ':') {
+		return fmt.Errorf("lockfile must be repository-relative, got %q", value)
+	}
+	for _, segment := range strings.Split(strings.TrimPrefix(p, "/"), "/") {
+		if segment == ".." {
+			return fmt.Errorf("lockfile must not contain '..', got %q", value)
+		}
+	}
+	return nil
+}
+
+// validateSecurityStaleValue validates a per-adapter stale-database policy.
+func validateSecurityStaleValue(value string) error {
+	switch strings.ToLower(strings.TrimSpace(value)) {
+	case "", SecurityStaleDeny, SecurityStaleAllow:
+		return nil
+	default:
+		return fmt.Errorf("unknown stale policy %q (want deny, allow)", value)
+	}
 }
 
 // validateSecurityExcludes rejects an exclusion that could escape the workspace
@@ -316,6 +434,12 @@ func (c *Config) validateSecurity() error {
 	default:
 		return fmt.Errorf("config: unknown security.unknown_severity %q (want fail, indeterminate, ignore)", s.UnknownSeverity)
 	}
+	if err := validateSecurityStale(s.StaleAdvisoryDatabase); err != nil {
+		return err
+	}
+	if err := validateSecurityAdvisoryDatabasePath(s.AdvisoryDatabasePath); err != nil {
+		return err
+	}
 	if b := strings.TrimSpace(s.Baseline); b != "" {
 		if strings.HasPrefix(b, "/") || strings.HasPrefix(b, "\\") || strings.Contains(b, "..") {
 			return fmt.Errorf("config: security.baseline must be a repository-relative path without '..', got %q", b)
@@ -338,9 +462,9 @@ func (c *Config) validateSecurity() error {
 		seen[id] = true
 		category := strings.ToLower(strings.TrimSpace(a.Category))
 		switch category {
-		case SecurityCategorySAST, SecurityCategorySecrets:
+		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
 		default:
-			return fmt.Errorf("config: security adapter %q has unknown category %q (want sast, secrets)", id, a.Category)
+			return fmt.Errorf("config: security adapter %q has unknown category %q (want sast, secrets, dependencies)", id, a.Category)
 		}
 		byCategory[category] = true
 		protocol := strings.ToLower(strings.TrimSpace(a.Protocol))
@@ -355,8 +479,12 @@ func (c *Config) validateSecurity() error {
 				if category != SecurityCategorySecrets {
 					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategorySecrets)
 				}
+			case "cargo-audit":
+				if category != SecurityCategoryDependencies {
+					return fmt.Errorf("config: security adapter %q must use category %q", id, SecurityCategoryDependencies)
+				}
 			default:
-				return fmt.Errorf("config: unknown built-in security adapter %q (want semgrep, gitleaks; use protocol: external for a private adapter)", id)
+				return fmt.Errorf("config: unknown built-in security adapter %q (want semgrep, gitleaks, cargo-audit; use protocol: external for a private adapter)", id)
 			}
 		case SecurityProtocolExternal:
 			// Any stable ID is permitted; the process response is validated.
@@ -371,13 +499,27 @@ func (c *Config) validateSecurity() error {
 				return fmt.Errorf("config: security adapter %q command contains a NUL byte", id)
 			}
 		}
+		if strings.ContainsRune(a.Database, 0) {
+			return fmt.Errorf("config: security adapter %q database contains a NUL byte", id)
+		}
+		if err := validateSecurityDatabaseValue(a.Database); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if err := validateSecurityStaleValue(a.Stale); err != nil {
+			return fmt.Errorf("config: security adapter %q: %w", id, err)
+		}
+		if strings.TrimSpace(a.Lockfile) != "" {
+			if err := validateSecurityLockfileValue(a.Lockfile); err != nil {
+				return fmt.Errorf("config: security adapter %q: %w", id, err)
+			}
+		}
 	}
 	for _, raw := range s.RequiredCategories {
 		category := strings.ToLower(strings.TrimSpace(raw))
 		switch category {
-		case SecurityCategorySAST, SecurityCategorySecrets:
+		case SecurityCategorySAST, SecurityCategorySecrets, SecurityCategoryDependencies:
 		default:
-			return fmt.Errorf("config: unknown security.required_categories entry %q (want sast, secrets)", raw)
+			return fmt.Errorf("config: unknown security.required_categories entry %q (want sast, secrets, dependencies)", raw)
 		}
 		if !byCategory[category] {
 			return fmt.Errorf("config: security.required_categories names %q but no configured adapter provides it", category)

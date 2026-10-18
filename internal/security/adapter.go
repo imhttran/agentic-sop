@@ -20,6 +20,12 @@ type BuildOptions struct {
 	Executor       Executor
 	Timeout        time.Duration
 	MaxOutputBytes int
+	// DatabasePath is the global local advisory database path. A cargo-audit
+	// adapter may override it with its own database key.
+	DatabasePath string
+	// StalePolicy is the global stale-database policy. A cargo-audit adapter may
+	// override it with its own stale key.
+	StalePolicy string
 }
 
 // BuildAdapters turns the validated configuration into adapters. Selection is
@@ -70,6 +76,20 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "gitleaks":
 			return &gitleaksAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+		case "cargo-audit":
+			return &cargoAuditAdapter{
+				id:           id,
+				category:     category,
+				command:      command,
+				databasePath: firstNonEmpty(raw.Database, opts.DatabasePath),
+				lockfile:     raw.Lockfile,
+				stalePolicy:  firstNonEmpty(raw.Stale, opts.StalePolicy),
+				version:      raw.Version,
+				configDigest: configDigest,
+				exec:         opts.Executor,
+				timeout:      opts.Timeout,
+				maxOutput:    opts.MaxOutputBytes,
+			}, nil
 		default:
 			return nil, fmt.Errorf("security: unknown built-in adapter %q", id)
 		}
@@ -89,6 +109,9 @@ func adapterConfigDigest(raw config.SecurityAdapterConfig) string {
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Protocol)+"\x00")
 	_, _ = io.WriteString(hash, strings.Join(raw.Command, "\x00")+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Rules)+"\x00")
+	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Database)+"\x00")
+	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Lockfile)+"\x00")
+	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Stale)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Version))
 	return hex.EncodeToString(hash.Sum(nil))
 }

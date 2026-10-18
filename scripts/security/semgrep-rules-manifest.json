@@ -2,7 +2,8 @@
   "commit": "17e31e11ebac99fb7dfe1cd288f7a32151b6f3f9",
   "directories": [
     "go/lang/security",
-    "go/template/security"
+    "go/template/security",
+    "rust/lang/security"
   ],
   "files": [
     {
@@ -228,9 +229,49 @@
     {
       "path": "go/template/security/ssti.yaml",
       "sha256": "1594fa9e7e527ad34cabe59eb973d85ef345525dd96d5ba3b0e973ee43dd277b"
+    },
+    {
+      "path": "rust/lang/security/args-os.yml",
+      "sha256": "24a9fb8d86f4a749a921f7a9b687fcdbef168d4a18e52c5471bcf5db232bfdf5"
+    },
+    {
+      "path": "rust/lang/security/args.yml",
+      "sha256": "c84ef972cc47e8739ca4052d65136a44715561190a5dfcd67a0c7498c816cb6e"
+    },
+    {
+      "path": "rust/lang/security/current-exe.yml",
+      "sha256": "3eac3039fadf1817f0dac73df173cbe579ac8edf20312ff10db24cf8f5aaa9e0"
+    },
+    {
+      "path": "rust/lang/security/insecure-hashes.yml",
+      "sha256": "5d77d4459a9d29e4b1b2303f2bdbc5282c7e30eda287e288428792659296dd24"
+    },
+    {
+      "path": "rust/lang/security/reqwest-accept-invalid.yml",
+      "sha256": "dfd5bb583ee0d69342d684b9472b01dd4f39a951df645b4278b44827740a3c6a"
+    },
+    {
+      "path": "rust/lang/security/reqwest-set-sensitive.yml",
+      "sha256": "9b967da495a349b99644b1c3b8665b52803c8837e691afc89f73a11798739bb9"
+    },
+    {
+      "path": "rust/lang/security/rustls-dangerous.yml",
+      "sha256": "dc3187a08d4cbf9200b043c30cd46ad5cd2ce8782d43b372773dd37c4362b8f8"
+    },
+    {
+      "path": "rust/lang/security/ssl-verify-none.yml",
+      "sha256": "2933371073e51986b8c6a45d1761926c3411f66ee37a2ddf36fd090f2eeb61c8"
+    },
+    {
+      "path": "rust/lang/security/temp-dir.yml",
+      "sha256": "a06af8b8e02a1ff20bb62d56d80ad43e6c71390f1f589226db3d14a6731bed10"
+    },
+    {
+      "path": "rust/lang/security/unsafe-usage.yml",
+      "sha256": "9a0841f3fcdefa8f9b904add92e011eb3709b4a9df791ec00ed138b068cee37d"
     }
   ],
-  "rules_dir_sha256": "5d5765f46b60a1ad57ac0f3876e888a5fbbac5407dd0b8ea27472a5189f5bb30",
+  "rules_dir_sha256": "d90ff1b1729b740b1754f6b6ba8d1c9da8525136aa4a2345797f43e770fc5958",
   "tarball_sha256": "9dfe6866fbecd557f507078cb79721a9eb8f4764fc2f6163648ea1320be25933",
   "upstream": "https://github.com/semgrep/semgrep-rules",
   "version": 1

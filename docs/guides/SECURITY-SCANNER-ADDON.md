@@ -12,12 +12,17 @@ rollback, and the MVP's measured scope. The normative contract is
 - Local Semgrep rules. The add-on never downloads rules implicitly. Use
   `scripts/security/fetch-semgrep-rules.sh` to fetch the pinned upstream rules
   into `.agent-sdlc/security-rules` and verify the manifest and directory digest.
-  The rules are license-restricted and are not committed.
+  The pinned manifest includes Go and Rust security rules. The rules are
+  license-restricted and are not committed.
 - Optional local Gitleaks configuration. Without one, Gitleaks uses its built-in
   rules.
+- Rust dependency scanning: `cargo audit` and an explicit local advisory
+  database. The add-on never fetches or updates the database. Use a pinned
+  database checkout or a pinned fixture and set `security.advisory_database_path`
+  (or an adapter `database` path).
 
-The MVP wrappers target Semgrep Community Edition 1.x and Gitleaks 8.x JSON
-output. Pin the versions you actually run:
+The MVP wrappers target Semgrep Community Edition 1.x, Gitleaks 8.x, and
+cargo-audit 0.21+ JSON output. Pin the versions you actually run:
 
 ```bash
 semgrep --version
@@ -45,6 +50,10 @@ security:
   exclude:
     - internal/security/testdata
     - /sop
+  # Local advisory database for Rust dependency scanning. Explicit; no fetch.
+  advisory_database_path: .agent-sdlc/advisory-db
+  stale_advisory_database: deny
+  auto: false
   adapters:
     - id: semgrep
       category: sast
@@ -59,6 +68,14 @@ security:
       # Optional local Gitleaks config. Omit it to use Gitleaks' built-in rules.
       # rules: security/gitleaks.toml
       version: "8.30.1" # replace with the pinned version
+    - id: cargo-audit
+      category: dependencies
+      protocol: builtin
+      command: [cargo, audit]
+      database: .agent-sdlc/advisory-db
+      lockfile: Cargo.lock # optional; otherwise resolved from content
+      stale: deny
+      version: "0.21.2" # replace with the pinned version
 ```
 
 An omitted `security` block is disabled. The environment may fill omitted
@@ -78,9 +95,21 @@ project content.
 Run a scan:
 
 ```bash
+sop security inspect --json
 sop security scan
 sop security scan --json
+sop security scan --auto --report-only --json
 ```
+
+`sop security inspect --json` is read-only. It reports detected languages,
+manifests, Cargo workspaces, actual and missing lockfiles, configured adapter
+status (`available`, `unavailable`, `unsupported`, `proposed`), and proposed
+adapters. It executes no scanner.
+
+`--auto` adds missing built-in categories from detected content; explicit
+adapters are never replaced. Go content proposes Gitleaks + Semgrep with Go rules;
+Rust content also proposes cargo-audit; mixed content is the union. Go-only rules
+are never applied to Rust source; the adapter reports unsupported coverage.
 
 Report-only exits `0` even when the verdict is `FAIL` or `INDETERMINATE`. It
 still records the honest verdict and evidence. Required mode exits non-zero for
@@ -113,6 +142,8 @@ Required mode fails closed when:
 - coverage is not `COMPLETE`,
 - the scope is `changed-files` (a full-scan policy cannot pass on optimization
   evidence),
+- a dependency adapter has a missing lockfile, unavailable advisory database, or
+  stale advisory database (either stale policy),
 - an unsuppressed finding is at a `fail_on` severity,
 - unknown severity follows an explicit `fail` or `indeterminate` policy.
 
@@ -131,7 +162,27 @@ If the scan cannot produce evidence, the result is `INDETERMINATE`:
 - report-only adds an advisory and leaves the normal gate unchanged;
 - required mode fails the gate.
 
-## 5. Replacing or adding an adapter
+## 5. Rust dependency scanning
+
+cargo-audit resolves the Cargo workspace and its actual `Cargo.lock`; a workspace
+member does not own a lockfile. The adapter always passes `--file`, `--json`,
+`--no-fetch`, and an explicit `--db`. It never generates or modifies a lockfile,
+never runs `fix`, and never uploads source.
+
+- `advisory_database_path` (global) or an adapter `database` path is required. A
+  missing path is `FAILED`, not a clean scan.
+- `stale_advisory_database` / adapter `stale` is `deny` by default. A database
+  older than 90 days stays non-clean: `deny` marks it `INDETERMINATE`; `allow`
+  passes `--stale`, records `PARTIAL` coverage, and still cannot satisfy a
+  required gate. A missing freshness timestamp is treated as stale.
+- The normalized finding preserves the advisory ID, affected package/version,
+  CVSS/severity, aliases/CVEs, patched and unaffected versions, references, and
+  the lockfile path. Advisories are separate from tool/database failures.
+- The local database identity is a deterministic fingerprint; scanner-observed
+  `last-commit`, `last-updated`, and `advisory-count` are recorded as evidence.
+  Resume re-executes when the fingerprint changes.
+
+## 6. Replacing or adding an adapter
 
 Any adapter can be replaced through configuration alone. A private adapter
 implements `security-scan/v1` as a local executable: one JSON request on stdin,
@@ -156,8 +207,13 @@ Request shape (abridged):
   "protocol_version": "security-scan/v1",
   "run_id": "T001",
   "workspace_root": "/work/repo",
-  "content": {"commit": "...", "tree": "...", "digest": "...", "dirty": false},
-  "scope": {"mode": "workspace"},
+  "content": {
+    "commit": "...",
+    "tree": "...",
+    "digest": "...",
+    "dirty": false
+  },
+  "scope": { "mode": "workspace" },
   "deadline_ms": 300000
 }
 ```
@@ -204,7 +260,7 @@ The conformance behavior is covered by
 `internal/security/security_test.go` and
 `internal/cli/security_test.go`.
 
-## 6. Baselines and suppressions
+## 7. Baselines and suppressions
 
 Create a reviewed file, for example `.agent-sdlc/security-baseline.json`:
 
@@ -229,21 +285,21 @@ visible with `"suppressed": true`. Expired entries are visible with
 `"expired": true` and do not suppress. Invalid entries are ignored and reported.
 Automatic baseline creation is not part of the MVP.
 
-## 7. Resume
+## 8. Resume
 
 ```bash
 sop security scan --resume security-20261017T120000Z
 ```
 
 A completed adapter is reused only when content, adapter/scanner, rules,
-configuration, and policy identities still match. Any change reruns that
-adapter. A prior `FAILED`, `TIMED_OUT`, `UNAVAILABLE`, `SKIPPED`, or `CANCELLED`
-result is never reused. The prior run's sanitized native reports are loaded and
-verified against their recorded digests. A missing or mismatched report is not
-reused: the adapter is rescanned, and the current run writes the verified report
-beside its own evidence.
+advisory database identity and stale state, configuration, and policy identities
+still match. Any change reruns that adapter. A prior `FAILED`, `TIMED_OUT`,
+`UNAVAILABLE`, `SKIPPED`, or `CANCELLED` result is never reused. The prior run's
+sanitized native reports are loaded and verified against their recorded digests.
+A missing or mismatched report is not reused: the adapter is rescanned, and the
+current run writes the verified report beside its own evidence.
 
-## 8. Rollback
+## 9. Rollback
 
 Disable the add-on through configuration:
 
@@ -257,7 +313,7 @@ budgets, and continuation counters are unchanged. Prior sanitized evidence stays
 under `.agent-sdlc/runs/<id>/security/`. Revert implementation commits only if
 the integration changed existing runner behavior unexpectedly.
 
-## 9. Limitations
+## 10. Limitations
 
 - Changed-file scope is an optimization and never satisfies a required
   full-scan policy.
@@ -279,21 +335,25 @@ the integration changed existing runner behavior unexpectedly.
   severity.
 - Cross-provider deduplication is deferred. Grouped evidence retains every
   source.
-- Dependency, hosted, runtime/network, and asset-discovery scans are out of MVP
-  scope.
+- Dependency scanning covers Rust Cargo lockfiles. Go module or other ecosystem
+  dependency advisories are not implemented; report them as unsupported instead
+  of assuming a clean result. This overlaps the dependency-scanning note tracked
+  in issue #40 without closing it.
+- Hosted, runtime/network, and asset-discovery scans are out of MVP scope.
 - A passing scan is evidence for the configured tools and scope. It is not proof
   that the repository has no vulnerabilities.
 - The MVP does not claim sandbox isolation.
 - Real scanner validation requires the pinned CLIs and local rules. Absent tools
   are reported explicitly rather than treated as clean.
 
-## 10. Validation
+## 11. Validation
 
 ```bash
 go test ./internal/security/...
 go test ./internal/config/...
 go test ./internal/quality/...
 go test ./internal/cli/...
+go test ./internal/skill/...
 go test ./internal/planner/... -run TestSecurityScannerPlanCompiles
 go build ./...
 go vet ./...
@@ -310,3 +370,7 @@ directory digest, and then runs the real-CLI tests.
 versions in an isolated tools directory, uses explicit local rules, and runs the
 tagged real-CLI checks. It sets `SOP_SECURITY_INTEGRATION_REQUIRED=1`: a missing
 binary or version mismatch fails the check. The same script runs in CI.
+
+The real cargo-audit check is gated on `SOP_SECURITY_CARGO_ADVISORY_DB` (and
+optionally `SOP_SECURITY_CARGO_BIN`). Without a pinned local database it reports a
+skip and never a clean dependency result.

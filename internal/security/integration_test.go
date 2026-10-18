@@ -476,3 +476,59 @@ func TestRealCLIResumeIdentity(t *testing.T) {
 		}
 	}
 }
+
+// TestRealCargoAuditPinnedDatabase runs the real cargo-audit adapter against a
+// pinned local advisory database when the operator supplies one. It is skipped
+// when the environment has no cargo-audit or database; a skipped check is never
+// reported as a clean dependency scan.
+func TestRealCargoAuditPinnedDatabase(t *testing.T) {
+	database := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_ADVISORY_DB"))
+	if database == "" {
+		t.Skip("SOP_SECURITY_CARGO_ADVISORY_DB is not set; real cargo-audit check not run")
+	}
+	cargoBin := strings.TrimSpace(os.Getenv("SOP_SECURITY_CARGO_BIN"))
+	if cargoBin == "" {
+		var err error
+		cargoBin, err = exec.LookPath("cargo")
+		if err != nil {
+			t.Skip("cargo is not installed; real cargo-audit check not run")
+		}
+	}
+	version, err := exec.Command(cargoBin, "audit", "--version").Output()
+	if err != nil {
+		t.Skipf("cargo-audit is not installed; real cargo-audit check not run: %v", err)
+	}
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+		Protocol: config.SecurityProtocolBuiltin, Command: []string{cargoBin, "audit"},
+		Version: strings.TrimSpace(string(version)),
+	}, BuildOptions{
+		Timeout: 2 * time.Minute, MaxOutputBytes: 4 << 20,
+		DatabasePath: database, StalePolicy: StaleAllow,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "Cargo.toml"), []byte("[package]\nname = \"real\"\nversion = \"0.1.0\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join("testdata", "cargo-audit", "Cargo.lock"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "Cargo.lock"), data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	execResult, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if execResult.Provenance.AdvisoryDatabaseIdentity == "" {
+		t.Error("real cargo-audit run recorded no advisory database identity")
+	}
+	if execResult.Status != StatusCompleted && execResult.Status != StatusUnavailable {
+		t.Fatalf("status = %s, want COMPLETED (or UNAVAILABLE when the tool vanished): %v", execResult.Status, execResult.Diagnostics)
+	}
+	t.Logf("cargo-audit status=%s coverage=%s findings=%d database=%s", execResult.Status, execResult.Coverage, len(execResult.Findings), execResult.Provenance.AdvisoryDatabaseIdentity)
+}

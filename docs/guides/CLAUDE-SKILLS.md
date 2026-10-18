@@ -3,7 +3,7 @@
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -102,6 +102,7 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
 | `/sop-next-action` | _next safe action_ | **yes**  | report the next safe action (read-only by default); `execute` delegates to `sop run` |
 | `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
+| `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
 | `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
@@ -160,6 +161,14 @@ smoke, mobile-layout, and approval suites — and verifies SOP's state for state
 flows. With `--audit` it reports coverage gaps for a UI change; with `--update` it brings
 the tests in step with changed UI behavior. It fixes no capability and never replaces
 SOP's validation, review, or approval authority.
+
+`/sop-security-scan` runs a **report-only** security scan through SOP for Go, Rust, or
+mixed repositories. It detects languages, manifests, Cargo workspaces, and actual
+lockfiles; selects Gitleaks, Semgrep, and cargo-audit from repository content; triages
+findings against source and dependency evidence; and reports sanitized evidence. Scanner
+execution stays in SOP's adapters. The skill never installs tools, suppresses findings,
+invents owners/expiry dates, enables required mode, or launches fixes. Its contract is
+[the tracked skill](../../skills/sop-security-scan/SKILL.md).
 
 For capability aliases, everything after the command name is prompt data. They place it in SOP's
 `$ARGUMENTS` position and pass it to `sop prompt` as a single argument — it is never

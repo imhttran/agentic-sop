@@ -55,6 +55,10 @@ Thin aliases in the same install expose one capability each:
 /sop-browser-test [--mobile] [--approvals] [--audit] [--update]
                           run, audit coverage of, and maintain a project's
                           persistent Playwright tests (mobile, approvals, gaps)
+/sop-security-scan <request>
+                          run a report-only Go/Rust/mixed security scan through
+                          SOP: detect content, select adapters, triage findings,
+                          and report sanitized evidence (`sop security scan`)
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)

@@ -22,6 +22,35 @@ type Policy struct {
 	// Exclude is the effective declared scope boundary. It is part of the policy
 	// identity so a changed exclusion list cannot reuse prior evidence.
 	Exclude []string `json:"exclude,omitempty"`
+	// AdvisoryDatabasePath is the local advisory database path a dependency
+	// adapter uses. It is part of the policy identity so a changed database
+	// cannot reuse prior evidence.
+	AdvisoryDatabasePath string `json:"advisory_database_path,omitempty"`
+	// StaleAdvisoryDatabase is the policy for a dependency scan whose advisory
+	// database is stale. The zero value is deny: a stale database never yields
+	// PASS. Set it to SecurityStaleAllow ("allow") to accept stale evidence with
+	// an explicit PARTIAL coverage diagnostic. It is part of the policy identity.
+	StaleAdvisoryDatabase string `json:"stale_advisory_database,omitempty"`
+	// Auto enables automatic dependency adapter selection. It is configuration
+	// policy only and does not affect the verdict.
+	Auto bool `json:"auto,omitempty"`
+}
+
+// Stale advisory database policy values. The empty value means deny.
+const (
+	StaleDeny  = "deny"
+	StaleAllow = "allow"
+)
+
+// StalePolicy resolves the stale advisory database policy. An empty value and
+// any unrecognized value resolve to deny, so a stale database is fail-closed.
+func (p Policy) StalePolicy() string {
+	switch strings.ToLower(strings.TrimSpace(p.StaleAdvisoryDatabase)) {
+	case StaleAllow:
+		return StaleAllow
+	default:
+		return StaleDeny
+	}
 }
 
 // Evaluation is the policy result. Findings remain in the report even when a
@@ -78,6 +107,33 @@ func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 	}
 	if policy.Mode == "required" && policy.Scope != "" && policy.Scope != "workspace" {
 		incompleteReasons = append(incompleteReasons, "required security gate cannot pass on changed-files evidence; run a full workspace scan")
+	}
+	// A stale advisory database is fail-closed. With the default deny policy it
+	// forces INDETERMINATE, never PASS. An explicit allow records PARTIAL coverage
+	// and its diagnostic, but still cannot satisfy a required gate.
+	var staleReasons []string
+	staleDenied := false
+	for _, exec := range execs {
+		if !exec.Provenance.AdvisoryDatabaseStale {
+			continue
+		}
+		reason := fmt.Sprintf("adapter %s advisory database is stale", exec.AdapterID)
+		if policy.StalePolicy() == StaleAllow {
+			staleReasons = append(staleReasons, "PARTIAL coverage: "+reason+" (policy: allow)")
+			// Allowing the tool to run against a stale database records explicit
+			// PARTIAL coverage; it is not a gate bypass. Required mode still cannot
+			// pass on incomplete advisory evidence.
+			incompleteReasons = append(incompleteReasons, reason+" (policy: allow; coverage is PARTIAL)")
+		} else {
+			staleDenied = true
+			incompleteReasons = append(incompleteReasons, reason+" (policy: deny)")
+		}
+	}
+	if len(staleReasons) > 0 {
+		out.Coverage = CoveragePartial
+		// Record the explicit stale-allow diagnostic regardless of the final
+		// verdict, so an incomplete or failing scan still explains its coverage.
+		out.Reasons = append(out.Reasons, staleReasons...)
 	}
 	if policy.Mode == "required" {
 		for _, category := range policy.RequiredCategories {
@@ -137,6 +193,12 @@ func EvaluatePolicy(execs []Execution, policy Policy) Evaluation {
 	if len(incompleteReasons) > 0 {
 		out.Verdict = VerdictIndeterminate
 		out.Reasons = append(out.Reasons, incompleteReasons...)
+		return out
+	}
+	if staleDenied {
+		// Defensive: a denied stale database is already an incomplete reason, so
+		// this cannot be reached. Keep the verdict fail-closed anyway.
+		out.Verdict = VerdictIndeterminate
 		return out
 	}
 	out.Verdict = VerdictPass
