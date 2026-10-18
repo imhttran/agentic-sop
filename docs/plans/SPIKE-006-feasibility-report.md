@@ -6,13 +6,29 @@ Baseline: SPIKE-005 commit `65955a82eaad10d7ac72812f0654dbbc863205aa` (SPIKE-004
 the preserved live demo and the operator's ChatGPT transcript; the demo was **not**
 rerun for this report.
 
+> **Reconciled 2026-10-18.** This report was extended in layers (§12–§14 after the
+> first draft), and the earlier sections were not revised to match. This pass makes the
+> disposition, the acceptance table, §3, §8.1, §9, and §13 consistent with §14 and with
+> the later live run in
+> [`planner-live-test-findings.md`](planner-live-test-findings.md). No live evidence was
+> rerun or edited. §15 lists every change.
+
 ## 0. Disposition
 
-**GO — scoped to the demonstrated operator-assisted planner workflow.** The intended
-external client (ChatGPT, via the Secure MCP Tunnel) completed the live **two-question**
-interactive loop in one task/run epoch (executor question -> ChatGPT answer -> SOP
-application -> executor continuation -> `LOCAL_DONE`), and the deterministic
-durability/authority checks pass (§3, §12, §13, §14).
+**PARTIAL overall; GO for single-question use with a real executor.** Under the plan's
+rule, an unverified real executor makes the outcome PARTIAL. The evidence splits:
+
+- **Two-question loop: PARTIAL.** The intended external client (ChatGPT, via the
+  Secure MCP Tunnel) completed the live **two-question** loop in one task/run epoch
+  (`planner-2q`, §14), but the executor was a controlled script. The script also kept
+  the first decision in its own scratch state, because SOP delivered only the latest
+  decision (§9.2).
+- **Single-question loop with a real executor: GO.** The later `planner-chatgpt` run
+  ([`planner-live-test-findings.md`](planner-live-test-findings.md)) used a model-driven
+  executor (`ollama` / `deepseek-v4.1-flash:cloud`): it raised one question, ChatGPT
+  answered over the tunnel, SOP applied it, and the run resumed in the same epoch to
+  `LOCAL_DONE` with a `VERIFIED` acceptance check.
+- The deterministic durability/authority checks pass (§2, §12, §13).
 
 Scope and explicit non-claims:
 
@@ -20,10 +36,8 @@ Scope and explicit non-claims:
   to read a planner question and submit a bounded answer; SOP applies it and the executor
   resumes. Durability, fencing, stale/duplicate/authority, timeout, and crash-gap recovery
   are covered by deterministic tests.
-- **Not in scope (unverified):** a **real model executor** (the demo executor is a
-  controlled script), and **unattended** operation. Per the plan, a result with an
-  unverified real executor is otherwise PARTIAL; that clause is why the GO is scoped.
-  Interactive success is not unattended success.
+- **Not in scope (unverified):** a **real model executor across two questions**, and
+  **unattended** operation. Interactive success is not unattended success.
 - **Open:** the HTTP 409 MCP initialization error (§6) and the timeout-test failure
   (§13) remain unresolved.
 
@@ -47,22 +61,26 @@ Scope and explicit non-claims:
 
 ## 2. Acceptance criteria → evidence
 
-| Criterion (plan)                                                                                        | Evidence                                                                                                                                                                                                      | Status                    |
-| ------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------- |
-| Real-client transcript plus machine evidence, limitations, and a GO/PARTIAL/NO-GO outcome               | `SPIKE-002-connection-discovery.md` §9–§10.2; `SPIKE-004-live-evidence.md`; durable demo records (§4)                                                                                                         | **met** (PARTIAL outcome) |
-| Report identifies real vs simulated components, transport limits, session requirement                   | §7; §8                                                                                                                                                                                                        | **met**                   |
-| A Zed-agent-only result is reported as PARTIAL, not the external-client gate                            | Result is **not** Zed-only: the external client (ChatGPT) is verified                                                                                                                                         | **met**                   |
-| Checklist: a real client lists SOP tools and reads correct repo status                                  | `SPIKE-002` §9 (`sop_status` → "no tasks")                                                                                                                                                                    | **met (live)**            |
-| Checklist: two distinct questions reach that planner and their answers resume the same task through SOP | Two questions reached the live client (different projects), but only **one** was applied+resumed; the two-round resume-in-one-task is proven only deterministically (`TestPlannerIntegrationTwoRoundsOneRun`) | **gap** (see §9)          |
-| Checklist: restart while waiting retains the question, blocks retry                                     | `TestPlannerRestartWhileWaitingReparks`                                                                                                                                                                       | **met (deterministic)**   |
-| Checklist: restart after application resumes at most once; duplicate delivery no extra effect           | `TestContinuationCreatedAtomicallyWithApplication`, `TestPlannerResumeCountsOneCompletion`, `TestApplyIdempotentNoDoubleDispatch`                                                                             | **met (deterministic)**   |
-| Checklist: changed repo/plan revision rejects a stale answer without executing                          | `TestCLIPlannerStaleBindingSkipped`, `TestCLIAnswer*Stale`, `TestSubmitAnswer*Stale`, `TestDecideGuards`                                                                                                      | **met (deterministic)**   |
-| Checklist: a human-only authorization cannot be satisfied by the planner                                | `TestPlannerAnswerCannotSatisfyHumanGate`, `TestPlannerIntegrationHumanGateBlocks`                                                                                                                            | **met (deterministic)**   |
-| Checklist: timeout/disconnect/exhausted rounds pause with evidence                                      | `TestPlannerTimeoutParksWithoutRetry`, `TestPlannerRestartWhileWaitingReparks`, `TestPlannerExhaustedRoundsParkAtHumanBoundary`, `TestDecidePauseOnTimeout`                                                   | **met (deterministic)**   |
-| Checklist: failure counters unchanged; disabled mode preserves behavior                                 | `TestPlannerClarificationPreservesFailureBudget`, `TestPlannerDisabledIgnoresExistingQuestion`                                                                                                                | **met (deterministic)**   |
-| Checklist: targeted tests pass; missing/failed reported truthfully                                      | `go test ./...` green; gaps below reported                                                                                                                                                                    | **met**                   |
+| Criterion (plan)                                                                                        | Evidence                                                                                                                                                                                | Status                            |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
+| Real-client transcript plus machine evidence, limitations, and a GO/PARTIAL/NO-GO outcome               | `SPIKE-002-connection-discovery.md` §9–§10.2; `SPIKE-004-live-evidence.md`; durable demo records (§4)                                                                                   | **met** (PARTIAL overall; §0)     |
+| Report identifies real vs simulated components, transport limits, session requirement                   | §7; §8                                                                                                                                                                                  | **met**                           |
+| A Zed-agent-only result is reported as PARTIAL, not the external-client gate                            | Result is **not** Zed-only: the external client (ChatGPT) is verified                                                                                                                   | **met**                           |
+| Checklist: a real client lists SOP tools and reads correct repo status                                  | `SPIKE-002` §9 (`sop_status` → "no tasks")                                                                                                                                              | **met (live)**                    |
+| Checklist: two distinct questions reach that planner and their answers resume the same task through SOP | Live in `planner-2q` (§14): `q-1` then `q-5` in one run epoch, both answered by ChatGPT and applied, task `LOCAL_DONE`; executor scripted. Also `TestPlannerIntegrationTwoRoundsOneRun` | **met (live, scripted executor)** |
+| Checklist: restart while waiting retains the question, blocks retry                                     | `TestPlannerRestartWhileWaitingReparks`                                                                                                                                                 | **met (deterministic)**           |
+| Checklist: restart after application resumes at most once; duplicate delivery no extra effect           | `TestContinuationCreatedAtomicallyWithApplication`, `TestPlannerResumeCountsOneCompletion`, `TestApplyIdempotentNoDoubleDispatch`                                                       | **met (deterministic)**           |
+| Checklist: changed repo/plan revision rejects a stale answer without executing                          | `TestCLIPlannerStaleBindingSkipped`, `TestCLIAnswer*Stale`, `TestSubmitAnswer*Stale`, `TestDecideGuards`                                                                                | **met (deterministic)**           |
+| Checklist: a human-only authorization cannot be satisfied by the planner                                | `TestPlannerAnswerCannotSatisfyHumanGate`, `TestPlannerIntegrationHumanGateBlocks`                                                                                                      | **met (deterministic)**           |
+| Checklist: timeout/disconnect/exhausted rounds pause with evidence                                      | `TestPlannerTimeoutParksWithoutRetry`, `TestPlannerRestartWhileWaitingReparks`, `TestPlannerExhaustedRoundsParkAtHumanBoundary`, `TestDecidePauseOnTimeout`                             | **met (deterministic)**           |
+| Checklist: failure counters unchanged; disabled mode preserves behavior                                 | `TestPlannerClarificationPreservesFailureBudget`, `TestPlannerDisabledIgnoresExistingQuestion`                                                                                          | **met (deterministic)**           |
+| Checklist: targeted tests pass; missing/failed reported truthfully                                      | `go test ./...` green; gaps below reported                                                                                                                                              | **met**                           |
 
-## 3. The live sequence (executor question → ChatGPT answer → application → continuation)
+## 3. The first live sequence: one question (`planner-live`)
+
+This section records the first, one-question demo. The two-question demo
+(`planner-2q`) is in §14 and `SPIKE-006-live-transcript.md`; the real-executor run
+(`planner-chatgpt`) is in [`planner-live-test-findings.md`](planner-live-test-findings.md).
 
 Machine evidence (durable, `.run/planner-live/.agent-sdlc/`):
 
@@ -151,11 +169,13 @@ assigned.** Details in `SPIKE-005-verification-report.md` §6.
 
 ### 8.1 Operator-assisted ChatGPT planner loop
 
-**Supported (PARTIAL).** An operator can, in a ChatGPT session, list/read the planner
-question and submit an answer; SOP applies it and the executor resumes, preserving the
-run epoch and skipping PLAN. Remaining work: demonstrate the full **two-round**
-interactive loop live (two distinct questions in one task), and record the client
-transcript as a durable artifact.
+**Supported for one question with a real executor; PARTIAL for two.** An operator can,
+in a ChatGPT session, list/read the planner question and submit an answer; SOP applies
+it and the executor resumes, preserving the run epoch and skipping PLAN. The
+single-question loop ran live with a model-driven executor (`planner-chatgpt`). The
+two-question loop ran live only with a scripted executor (`planner-2q`). Remaining work:
+run the two-question loop live with a model-driven executor, after the decision-history
+fix in §9.2 is merged.
 
 ### 8.2 Unattended multi-round planner loop
 
@@ -184,11 +204,17 @@ as supported on the strength of the planner loop.
    `planner-2q` live demo raised `q-1` then `q-5` and ChatGPT answered both, resuming the
    same task/run epoch to `LOCAL_DONE` (§3). (The earlier one-question demo and the
    recorded-only `q-docformat-chatgpt` remain as they were.)
-2. **Live decision-history delivery to the executor — not proven.** SOP delivered only the
-   _latest_ decision to the resumed stage; the controlled executor supplied the earlier
-   decision from its own scratch state. Full decision-history delivery is unverified.
-3. **Real executor:** the executor is a controlled script; no model-driven executor was
-   run. The plan explicitly allows reporting this integration as unverified.
+2. **Decision-history delivery to the executor — fixed in code, not yet live.** In both
+   demos SOP delivered only the _latest_ decision to the resumed stage; the controlled
+   executor supplied the earlier decision from its own scratch state.
+   [imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68) passes the
+   run's earlier applied decisions (same task, run epoch, and plan revision), oldest
+   first, ahead of the latest one. It is covered by `TestPlannerIntegrationTwoRoundsOneRun`
+   and `TestEarlierPlannerDecisionsScope`; it has not been exercised live.
+3. **Real executor — single question only.** The SPIKE-006 demos used a controlled
+   script. The later `planner-chatgpt` run used a model-driven executor for one question
+   ([`planner-live-test-findings.md`](planner-live-test-findings.md)). A real executor
+   across two questions is unverified.
 4. **Client transcript as a durable artifact:** the live evidence references the
    operator's ChatGPT tool-call transcript; a machine-captured copy is not stored in the
    repository. `SPIKE-006-live-transcript.md` records the operator-attested exchange with
@@ -281,7 +307,8 @@ executor** — that is not independently verified here.
 ## 13. Supersede handoff — crash-recovery review
 
 Review of the supersede handoff (the §12 correction) for crash recovery. Both live demos
-and their original evidence are preserved; the code remains uncommitted.
+and their original evidence are preserved. (The code was later committed in `fb956e3` and
+merged to `main` with PR #7.)
 
 ### Supersession requires a real successor (not the stage alone)
 
@@ -358,3 +385,21 @@ executor** unless independently verified.
 - HTTP 409 `mcp_initialization_required` (§6) — unresolved.
 - `TestCrossModuleTimeoutAndCancellation` failed once under full-suite load and passed on
   rerun; the failure is **unresolved** (no cause assigned) (§13).
+
+## 15. Reconciliation changes (2026-10-18)
+
+Editorial only; no live evidence was rerun or edited.
+
+- §0: disposition changed from a scoped GO to **PARTIAL overall, GO for single-question
+  use with a real executor**, applying the plan's rule that an unverified real executor
+  is PARTIAL and citing the later `planner-chatgpt` run.
+- §2: the acceptance-table rows for the outcome and the two-question checklist item now
+  match §14.
+- §3: retitled as the first, one-question demo, with pointers to the later runs.
+- §8.1: remaining work updated (the two-question loop ran live with a scripted executor).
+- §9.2: decision-history delivery is fixed in PR #68, not yet exercised live.
+- §9.3: the later real-executor run is recorded.
+- §13: "the code remains uncommitted" is no longer true; the commit and merge are noted.
+
+Still open: the HTTP 409 MCP initialization error (§6) and the one-time
+`TestCrossModuleTimeoutAndCancellation` failure (§13).
