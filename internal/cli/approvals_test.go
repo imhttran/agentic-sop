@@ -54,7 +54,8 @@ func TestApprovalsEmpty(t *testing.T) {
 
 // TestApprovalsListsOnlyApplicableGates proves the enumeration is driven by SOP's
 // own record: a task with no request is not listed, and a request whose task has
-// since completed (a stale gate) is not offered as applicable either.
+// since completed (a stale gate) is not offered as applicable; it is named
+// separately with the supersede command.
 func TestApprovalsListsOnlyApplicableGates(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
@@ -75,8 +76,12 @@ func TestApprovalsListsOnlyApplicableGates(t *testing.T) {
 	if strings.Contains(stdout, "S002") {
 		t.Error("a task with no approval request must not be listed")
 	}
-	if strings.Contains(stdout, "S003") {
+	applicable, staleSection, _ := strings.Cut(stdout, "Stale (")
+	if strings.Contains(applicable, "S003") {
 		t.Errorf("a stale gate (task already completed) must not be listed as applicable:\n%s", stdout)
+	}
+	if !strings.Contains(staleSection, "S003") || !strings.Contains(staleSection, "sop approval supersede") {
+		t.Errorf("a stale gate must be named with the supersede command:\n%s", stdout)
 	}
 
 	// Read-only: the gate is still pending and the task still BLOCKED.
@@ -128,6 +133,23 @@ func TestApprovalsJSON(t *testing.T) {
 	}
 	if got.Reason == "" {
 		t.Error("reason is empty; the listing must carry SOP's own reason")
+	}
+}
+
+// TestApprovalsJSONOmitsStaleGates proves --json is unchanged by the stale
+// section: a request whose task is already satisfied is not in the listing.
+func TestApprovalsJSONOmitsStaleGates(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "S003", Title: "already done", Status: domain.LOCAL_DONE, MaxAttempts: 3})
+	seedGate(t, dir, "S003")
+
+	code, stdout, stderr := runCLI(t, dir, "approvals", "--json")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	if strings.Contains(stdout, "S003") || strings.Contains(stdout, "Stale") {
+		t.Errorf("--json must list applicable gates only:\n%s", stdout)
 	}
 }
 
