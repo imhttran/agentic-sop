@@ -68,6 +68,11 @@ func Classify(argv []string) (Class, error) {
 		return classifyGit(argv[1:]), nil
 	case "go":
 		return classifyGo(argv[1:]), nil
+	case "cargo":
+		// Cargo classification requires an explicit permission and a repository
+		// root; the permission-aware entry point is CargoClassify. Without that
+		// permission a Cargo command is never SAFE.
+		return RequiresApproval, nil
 	default:
 		return RequiresApproval, nil
 	}

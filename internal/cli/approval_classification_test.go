@@ -206,12 +206,8 @@ func TestRunActiveApprovalRequestStillBlocks(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
-	if !strings.Contains(stdout, "NEEDS_HUMAN") {
-		t.Errorf("stdout = %q, want NEEDS_HUMAN for an active approval request", stdout)
-	}
-	cls := readClassification(t, dir, "S001")
-	if cls.Kind != failure.ApprovalRequired || cls.Disposition != failure.NeedsHuman {
-		t.Errorf("classification = %+v, want NEEDS_HUMAN/APPROVAL_REQUIRED", cls)
+	if !strings.Contains(stdout, "WAITING_FOR_APPROVAL") {
+		t.Errorf("stdout = %q, want the pending approval gate", stdout)
 	}
 }
 

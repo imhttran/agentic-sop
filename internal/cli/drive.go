@@ -20,6 +20,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
+	"github.com/imhttran/agentic-sop/internal/recovery"
 	"github.com/imhttran/agentic-sop/internal/resume"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/scheduler"
@@ -85,6 +86,10 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 	}
 	// Carry the resolved evidence down to each task run so it is recorded.
 	d.routing = routing
+	// The tool-harness agent is built before this point in tests that inject a
+	// factory; the production factory receives the project's independent Cargo
+	// permission here so agent-tool authorization is wired, not only unit-tested.
+	applyCargoAgentTool(d, cfg)
 	if cfg.Workflow.Mode != "local" {
 		fmt.Fprintf(stderr, "run: workflow.mode %q is not supported by the local run; set workflow.mode: local\n", cfg.Workflow.Mode)
 		return exitError
@@ -479,6 +484,11 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
 			addTaskMetrics(run, dir, res.Task.ID)
 			if code != exitOK {
+				if code == exitSetupBlocker || code == exitApprovalBlocked {
+					// A setup or approval gate leaves the task runnable by design and
+					// cannot be resolved by immediately trying it again: stop now.
+					return exitError
+				}
 				if sch.RecoveredAlready(id) {
 					// The task was auto-recovered earlier in this invocation and is
 					// BLOCKED again: re-select so the scheduler reports the failed
@@ -696,6 +706,29 @@ func parkRunAtHumanBoundary(rn *runpkg.Run, taskID string, stderr io.Writer) {
 // persisted state.
 func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, saver taskSaver, task *domain.Task, sess *runSession, stdout, stderr io.Writer) int {
 	spec := specFromTask(task)
+	spec.Deliverables = planTaskDeliverables(dir, task)
+	spec.DeliverableGroups = deliverableGroups(spec)
+	// Plan-declared acceptance checks are recovered through the same plan-stage
+	// reconciliation as the deliverables and projected into the spec, so the
+	// existing deriveOutcome/authorizeAcceptanceCommand/runAcceptanceArgv seam
+	// evaluates them. A missing/mismatched plan yields nil, and a task with no
+	// declared checks behaves exactly as before.
+	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
+	spec.AcceptanceMapping = planTaskAcceptanceMapping(dir, task)
+	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
+	// SOP-002 preflight: a setup blocker stops here, before the required-evidence
+	// retrieval and before any model call, so it changes neither the task's attempt
+	// count nor its continuation budget. It runs first because a policy/prerequisite
+	// mismatch must not trigger retrieval or any other task work.
+	if code := runPreflight(dir, PreflightDeclarationsFromConfig(cfg, spec.AcceptanceChecks), stdout, stderr); code != exitOK {
+		return exitSetupBlocker
+	}
+	// Approval-safe recovery: a persisted PENDING or DECLINED decision blocks
+	// execution before retrieval, a run reset, or any model work. An APPROVED
+	// decision proceeds; approving never edits state.db or resets a budget.
+	if code := approvalExecutionGate(dir, task, stdout, stderr); code != exitOK {
+		return code
+	}
 	// Required evidence (RAG-SOP-003 4B-2A2b): ONE attempt-scoped retrieval, validated
 	// before the task consumes any evidence or runs its agent. A task with no declared
 	// required evidence is a no-op, so existing behavior is unchanged.
@@ -707,15 +740,6 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// deps copy (never a global). implementContext reads it in Phase 4B-2A3.
 	d.ragAttempt = attempt
 	d.attemptNumber = task.Attempt
-	spec.Deliverables = planTaskDeliverables(dir, task)
-	spec.DeliverableGroups = deliverableGroups(spec)
-	// Plan-declared acceptance checks are recovered through the same plan-stage
-	// reconciliation as the deliverables and projected into the spec, so the
-	// existing deriveOutcome/authorizeAcceptanceCommand/runAcceptanceArgv seam
-	// evaluates them. A missing/mismatched plan yields nil, and a task with no
-	// declared checks behaves exactly as before.
-	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
-	fmt.Fprintf(stdout, "Running: %s %s\n", task.ID, task.Title)
 	// Planner gate: a task parked at WAITING_FOR_PLANNER is resumed, not restarted.
 	// It runs BEFORE the destructive run setup so a parked run is neither reset nor
 	// advanced into a new attempt.
@@ -769,7 +793,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
 		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
 		parked = true
-		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
+		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman, Reason: tri.Reason}, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
 
 	// Between-task context compression (RBV-011): include the handoff capsules of the
@@ -819,10 +843,10 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			parked = true
 		}
 		if cls.Retryable() {
-			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), cls.Disposition, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
+			return recoverTask(saver, task, rn, "ERR|"+err.Error()+"|"+string(cls.Disposition), string(cls.Disposition), cls.Disposition, cls, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
 		}
 		if policyForcesHuman(cls, res.decision) {
-			return recoverTask(saver, task, rn, "ERR|NEEDS_HUMAN|"+err.Error(), "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
+			return recoverTask(saver, task, rn, "ERR|NEEDS_HUMAN|"+err.Error(), "NEEDS_HUMAN", failure.NeedsHuman, cls, cfg.AutonomyPolicy(), err.Error(), stdout, stderr)
 		}
 		_ = rn.SetStage(runpkg.Failed)
 		_ = blockTask(saver, task, domain.RETRIES_EXHAUSTED)
@@ -861,14 +885,14 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			// A human boundary is not terminal: return the task to PLANNED so a
 			// later run retries it. A repeat that changed nothing does not spend
 			// the budget; a progressing attempt does, bounded by max_attempts.
-			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, res.classification, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
 		}
 		// A retryable disposition (CONTINUE/RETRY) means required work remains and
 		// no human decision is required: RETRY reuses the bounded retry budget,
 		// while CONTINUE consumes the separate bounded continuation budget.
 		if res.classification.Retryable() {
 			disposition := res.classification.Disposition
-			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+string(disposition), string(disposition), disposition, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
+			return recoverTask(saver, task, rn, outcomeSignature(res.gate)+"|"+string(disposition), string(disposition), disposition, res.classification, cfg.AutonomyPolicy(), firstReason(res.gate), stdout, stderr)
 		}
 		if err := blockTask(saver, task, domain.REVIEW_UNRESOLVED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
@@ -878,6 +902,20 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		_ = rn.RecordAttempt(outcomeSignature(res.gate))
 		fmt.Fprintf(stdout, "%s BLOCKED\n", task.ID)
 		return exitError
+	}
+
+	// SOP-003: a mapped stage whose required acceptance evidence is unmapped, failed,
+	// unexecuted, or unaccepted stops at the human boundary, so no dependent task
+	// starts. The boundary is recorded as an explicit approval request and the run is
+	// parked at WAITING_FOR_HUMAN BEFORE the task is requeued; a second run therefore
+	// sees PENDING and refuses to execute until the request is approved. A DECLINED
+	// request is terminal for automatic execution.
+	if res.outcome.blocksAdvancement() {
+		reason := "required acceptance evidence is missing or failed: " + strings.Join(res.outcome.Reasons, "; ")
+		parkRunAtHumanBoundary(rn, task.ID, stderr)
+		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
+		parked = true
+		return recoverTask(saver, task, rn, string(res.outcome.Status)+"|ACCEPTANCE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman}, cfg.AutonomyPolicy(), reason, stdout, stderr)
 	}
 
 	if err := completeTask(saver, task); err != nil {
@@ -903,12 +941,48 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 // A CONTINUE disposition is routed to the separate continuation budget
 // (continueTask) so resuming productive-but-unfinished work never consumes the
 // retry budget, which is reserved for repeating a failed attempt.
-func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, label string, disp failure.Disposition, policy autonomy.Policy, reason string, stdout, stderr io.Writer) int {
+func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, label string, disp failure.Disposition, cls failure.Classification, policy autonomy.Policy, reason string, stdout, stderr io.Writer) int {
+	prev, hadPrev := rn.ReadAttempt()
+	prevSignature := ""
+	if hadPrev {
+		prevSignature = prev
+	}
+
+	// SOP-004 production wiring: classify the failed attempt and refuse a blind
+	// retry of an unchanged or discovery-only failure. The pure recovery package owns
+	// the decision; this seam records its reason/change and applies the terminal
+	// no-progress outcome. A classification without a kind (a pure human boundary)
+	// keeps the existing path unchanged. A CONTINUE is owned by the separate
+	// continuation budget (including repeated discovery-only continuations), so it is
+	// not converted into a terminal failure here.
+	if cls.Kind != "" && disp != failure.Continue {
+		if cls.Disposition == "" {
+			cls.Disposition = disp
+		}
+		maxContinuations := policy.MaxContinuations
+		if maxContinuations <= 0 {
+			maxContinuations = autonomy.DefaultMaxContinuations
+		}
+		budgets := recovery.Budgets{Continuations: recovery.Budget{Used: rn.ReadContinuations(), Max: maxContinuations}}
+		base := recovery.Evidence{Kind: cls.Kind, Disposition: cls.Disposition, Attempt: task.Attempt}
+		dec, rec := recovery.Recover(recovery.Policy{}, recoveryEvidence(rn, cls, signature), prevSignature, base, budgets.Continuations)
+		if recoverRefusesRetry(dec) {
+			if err := applyNoProgressBlock(saver, task, rn, rec, budgets, stdout); err != nil {
+				fmt.Fprintf(stderr, "run: %v\n", err)
+			}
+			return exitError
+		}
+		if dec.Action != recovery.ActionNone {
+			if err := recordRecovery(rn, rec); err != nil {
+				fmt.Fprintf(stderr, "run: %v\n", err)
+			}
+		}
+	}
+
 	if disp == failure.Continue {
 		return continueTask(saver, task, rn, signature, reason, policy, stdout, stderr)
 	}
 
-	prev, hadPrev := rn.ReadAttempt()
 	_ = rn.RecordAttempt(signature)
 
 	if hadPrev && prev == signature {
@@ -986,6 +1060,7 @@ func specFromTask(task *domain.Task) *taskfile.Spec {
 		Title:               task.Title,
 		Description:         task.Objective,
 		AcceptanceCriteria:  criteria,
+		Attempt:             task.Attempt,
 		ExecutionMode:       task.ExecutionMode,
 		DiscoveryIterations: task.DiscoveryIterations,
 	}

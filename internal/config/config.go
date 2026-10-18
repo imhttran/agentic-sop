@@ -177,6 +177,11 @@ type Config struct {
 	// the concise default, so existing behavior is unchanged; the `--detailed` flag
 	// always overrides it for one invocation.
 	Output Output `yaml:"output"`
+	// Cargo is the optional, disabled-by-default Cargo permission block (SOP-001).
+	// It carries two independent permissions: one for the agent tool harness and
+	// one for plan acceptance checks. An omitted block keeps every Cargo command
+	// refused, so existing behavior is unchanged; see cargo.go.
+	Cargo Cargo `yaml:"cargo"`
 }
 
 // Output is the optional response-output policy. Responses selects the default
@@ -246,6 +251,11 @@ type Agent struct {
 	// command provider, and the provider's environment variable overrides it
 	// when set. It is an operator-supplied model id, not a harness identity.
 	Model string `yaml:"model"`
+	// ToolCargo is the deprecated spelling of cargo.agent_tool. It is accepted
+	// only for migration: when both are present they must agree, and a conflict is
+	// rejected rather than silently choosing one. New configuration belongs under
+	// the cargo block.
+	ToolCargo *bool `yaml:"tool_cargo,omitempty"`
 	// Class is the model class routing selected for this agent (small, medium,
 	// large), or empty when routing is inactive. It is set at runtime, never
 	// read from configuration.
@@ -257,6 +267,9 @@ type Validation struct {
 	Build []string `yaml:"build"`
 	Test  []string `yaml:"test"`
 	Lint  []string `yaml:"lint"`
+	// AcceptanceChecks is the deprecated spelling of cargo.acceptance_check. It
+	// is accepted only for migration; see applyLegacyCargo.
+	AcceptanceChecks LegacyAcceptanceChecks `yaml:"acceptance_checks,omitempty"`
 	// Integration holds the PostgreSQL/pgvector integration validation commands.
 	// They form the postgres-integration validation category required for
 	// migration and database-sensitive changes (RAG-SOP-004 task 1). Unit-only
@@ -265,6 +278,13 @@ type Validation struct {
 	// accepted as proof. The category is kept strictly separate from retrieval
 	// quality. Empty by default, so a project without a database is unaffected.
 	Integration []string `yaml:"integration"`
+}
+
+// LegacyAcceptanceChecks is the deprecated validation.acceptance_checks block.
+// Only the Cargo permission is recognized; any other nested key is still rejected
+// by strict decoding.
+type LegacyAcceptanceChecks struct {
+	Cargo *bool `yaml:"cargo,omitempty"`
 }
 
 // ContextEfficiency configures the opt-in Phase 8 context-efficiency facilities on the
@@ -705,6 +725,9 @@ func Parse(data []byte) (*Config, error) {
 	if err := c.applySecurityEnv(); err != nil {
 		return nil, err
 	}
+	if err := c.applyLegacyCargo(); err != nil {
+		return nil, err
+	}
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
@@ -876,6 +899,9 @@ func (c *Config) Validate() error {
 	}
 	if err := c.Models.Validate(); err != nil {
 		return fmt.Errorf("config: %w", err)
+	}
+	if err := c.validateCargo(); err != nil {
+		return err
 	}
 	return nil
 }

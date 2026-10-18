@@ -25,13 +25,25 @@ func lintStageDoc(deliverables, checks []string) *Plan {
 	}
 }
 
+// checkWarnings keeps only the missing-acceptance-checks warnings, so these tests
+// stay independent of the acceptance-mapping warning.
+func checkWarnings(ws []Warning) []Warning {
+	var out []Warning
+	for _, w := range ws {
+		if strings.Contains(w.Message, "no acceptance checks") {
+			out = append(out, w)
+		}
+	}
+	return out
+}
+
 // TestLintWarnsDeliverablesWithoutChecks proves the core rule: a stage with
 // deliverables and zero checks yields exactly one warning naming the stage, and
 // the plan still validates — the warning is never a hard failure.
 func TestLintWarnsDeliverablesWithoutChecks(t *testing.T) {
 	plan := lintStageDoc([]string{"a binary"}, nil)
 
-	warnings := plan.Lint()
+	warnings := checkWarnings(plan.Lint())
 	if len(warnings) != 1 {
 		t.Fatalf("warnings = %d (%v), want 1", len(warnings), warnings)
 	}
@@ -51,12 +63,12 @@ func TestLintWarnsDeliverablesWithoutChecks(t *testing.T) {
 // even without checks.
 func TestLintNoWarningWhenChecksOrNoDeliverables(t *testing.T) {
 	withChecks := lintStageDoc([]string{"a binary"}, []string{"go test ./..."})
-	if got := withChecks.Lint(); len(got) != 0 {
+	if got := checkWarnings(withChecks.Lint()); len(got) != 0 {
 		t.Errorf("with checks: warnings = %v, want none", got)
 	}
 
 	noDeliverables := lintStageDoc(nil, nil)
-	if got := noDeliverables.Lint(); len(got) != 0 {
+	if got := checkWarnings(noDeliverables.Lint()); len(got) != 0 {
 		t.Errorf("no deliverables: warnings = %v, want none", got)
 	}
 }
@@ -70,7 +82,7 @@ func TestLintWarnsPerOffendingStage(t *testing.T) {
 		{ID: "S003", Title: "c", Objective: "o", AcceptanceCriteria: []string{"x"}, Deliverables: []string{"d"}},
 	}}
 
-	warnings := plan.Lint()
+	warnings := checkWarnings(plan.Lint())
 	ids := make([]string, len(warnings))
 	for i, w := range warnings {
 		ids[i] = w.StageID
@@ -97,7 +109,7 @@ func TestLintRAG025FixtureLoadsAndIsFlagged(t *testing.T) {
 		t.Fatalf("Validate() = %v, want nil (the fixture must stay loadable)", err)
 	}
 
-	warnings := LintWarnings(plan)
+	warnings := checkWarnings(LintWarnings(plan))
 	if len(warnings) != len(plan.Stages) {
 		t.Fatalf("warnings = %d, want one per stage (%d): %v", len(warnings), len(plan.Stages), warnings)
 	}

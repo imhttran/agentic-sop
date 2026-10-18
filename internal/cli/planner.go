@@ -837,6 +837,7 @@ func plannerResume(ctx context.Context, dir string, cfg config.Config, a agent.A
 	spec.Deliverables = planTaskDeliverables(dir, task)
 	spec.DeliverableGroups = deliverableGroups(spec)
 	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
+	spec.AcceptanceMapping = planTaskAcceptanceMapping(dir, task)
 	_ = rn.Write("task.md", spec.Render())
 	d.plannerAnswer = appliedAnswer(svc, q.ID)
 	d.resumeFrom = stage

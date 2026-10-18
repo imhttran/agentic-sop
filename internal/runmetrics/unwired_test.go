@@ -12,13 +12,15 @@ import (
 const importPath = "github.com/imhttran/agentic-sop/internal/runmetrics"
 
 // allowedImporters is the closed set of files outside internal/runmetrics that may
-// reference runmetrics. It names exactly the approved, read-only `sop report
-// --decisions` entry point and its test. Every other file must not import or
-// reference runmetrics, so no production execution path (run, execute, routing,
-// approval) can reach the aggregator.
+// reference runmetrics. It names the approved read-only `sop report --decisions`
+// entry point, and the SOP-005 lifecycle accounting writer (counts + candidate
+// binary provenance), plus their tests. Every other file must not import or
+// reference runmetrics, so no other execution path can reach the aggregator.
 var allowedImporters = map[string]bool{
 	"internal/cli/report_decisions.go":      true,
 	"internal/cli/report_decisions_test.go": true,
+	"internal/cli/lifecycle_counts.go":      true,
+	"internal/cli/lifecycle_counts_test.go": true,
 }
 
 // TestNoProductionImportOfRunmetrics asserts that runmetrics is imported only by
@@ -72,9 +74,11 @@ func TestNoProductionImportOfRunmetrics(t *testing.T) {
 }
 
 // TestNoCLIModification asserts that the only files under internal/cli that
-// reference runmetrics are the approved read-only report entry point and its test.
-// Every other CLI file — in particular the run/execute/routing/approval path — must
-// not reference it, so the aggregator cannot become a production dependency.
+// reference runmetrics are the approved read-only report entry point and the
+// SOP-005 lifecycle accounting writer (and their tests). Every other CLI file —
+// in particular the run/execute/routing/approval path — must not reference it, so
+// the aggregator cannot become a production dependency beyond those two approved
+// entry points.
 func TestNoCLIModification(t *testing.T) {
 	root := repoRoot(t)
 	cliDir := filepath.Join(root, "internal", "cli")

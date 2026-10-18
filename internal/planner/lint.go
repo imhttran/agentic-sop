@@ -30,28 +30,48 @@ func (w Warning) String() string {
 // can flag it without rejecting the plan. Decision: a missing check is a warning,
 // never a hard failure.
 //
-// Today the only warning is a stage that declares deliverables but no acceptance
+// One warning is a stage that declares deliverables but no acceptance
 // checks: the free-text AcceptanceCriteria describe the criterion, but without an
 // AcceptanceChecks command whose exit status 0 proves it, the deliverable cannot be
-// machine-checked. The warning names each offending stage.
+// machine-checked. A stage whose criteria lack an acceptance mapping (SOP-003) is
+// also flagged, since an unmapped criterion can never be VERIFIED. Each warning
+// names the offending stage.
 func (p *Plan) Lint() []Warning {
 	if p == nil {
 		return nil
 	}
 	var warnings []Warning
 	for _, stage := range p.Stages {
-		if len(stage.Deliverables) == 0 {
-			continue
+		if len(stage.Deliverables) > 0 && len(stage.AcceptanceChecks) == 0 {
+			warnings = append(warnings, Warning{
+				StageID: stage.ID,
+				Message: "declares deliverables but no acceptance checks; add an '### Acceptance Checks' section with a command whose exit status 0 proves each deliverable",
+			})
 		}
-		if len(stage.AcceptanceChecks) > 0 {
-			continue
+		if unmapped := unmappedCriteria(stage); len(unmapped) > 0 {
+			warnings = append(warnings, Warning{
+				StageID: stage.ID,
+				Message: fmt.Sprintf("acceptance criteria %v have no acceptance mapping and cannot be verified; add an '### Acceptance Mapping' section ('- criterion N: check M' or '- criterion N: manual: <evidence>')", unmapped),
+			})
 		}
-		warnings = append(warnings, Warning{
-			StageID: stage.ID,
-			Message: "declares deliverables but no acceptance checks; add an '### Acceptance Checks' section with a command whose exit status 0 proves each deliverable",
-		})
 	}
 	return warnings
+}
+
+// unmappedCriteria returns the 1-based indexes of the stage's criteria that no
+// acceptance mapping entry covers.
+func unmappedCriteria(stage Stage) []int {
+	mapped := make(map[int]bool, len(stage.AcceptanceMapping))
+	for _, m := range stage.AcceptanceMapping {
+		mapped[m.Criterion] = true
+	}
+	var out []int
+	for i := range stage.AcceptanceCriteria {
+		if !mapped[i+1] {
+			out = append(out, i+1)
+		}
+	}
+	return out
 }
 
 // LintWarnings returns the non-fatal authoring warnings for a loaded plan. It is

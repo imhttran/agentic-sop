@@ -210,6 +210,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 	// Carry the resolved evidence down to the lifecycle so the run records it.
 	d.routing = routing
+	applyCargoAgentTool(d, cfg)
 
 	stack := resolveExecutionStack(cfg)
 	printExecutionStack(stdout, dir, cfg, stack, routing)
@@ -338,6 +339,10 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		writeModelSelectionArtifact(rn, d.routing.Selection)
 	}
 	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+	// Record lifecycle accounting before any early return, so a failed attempt is
+	// counted too. Counts are absolute totals and the report id makes a repeat
+	// idempotent; a write failure is surfaced rather than silently losing evidence.
+	countsErr := recordLifecycleCounts(dir, rn, spec.ID, res)
 	// A per-task routing decision (Phase 3.5) supersedes the run-level selection:
 	// the task's own resolved class/provider/model is recorded, and a routing
 	// artifact records the class, reasons, and typed signals. Both are diagnostic.
@@ -388,9 +393,16 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 		// on any classification the lifecycle attached before it stopped.
 		return res, err
 	}
+	if countsErr != nil {
+		return res, countsErr
+	}
 
-	_ = rn.Write("report.md", buildRunReport(spec, cfg, res))
-	writeOutcomeArtifact(rn, res.outcome)
+	if err := rn.Write("report.md", buildRunReport(spec, cfg, res)); err != nil {
+		return res, fmt.Errorf("write run report: %w", err)
+	}
+	if err := writeOutcomeArtifact(rn, res.outcome); err != nil {
+		return res, err
+	}
 	completion := ""
 	var mutations *int
 	if res.satisfaction != nil {

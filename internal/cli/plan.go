@@ -345,6 +345,7 @@ func lifecycleAgent(dir string, d deps) agent.Agent {
 	if err != nil {
 		return nil
 	}
+	applyCargoAgentTool(d, cfg)
 	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		return nil

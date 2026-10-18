@@ -25,6 +25,10 @@ type Spec struct {
 	Description  string
 	Requirements []string
 	Deliverables []string
+	// Attempt is the task attempt this specification was built for. It is
+	// diagnostic/evidence binding (SOP-003 manual decisions), not parsed from the
+	// task file or rendered into it.
+	Attempt int
 	// DeliverableGroups is the display-only classification of Deliverables for the
 	// generated task text, computed by the caller that owns the runtime
 	// classification (internal/cli). It is never parsed, persisted, or gated: when it
@@ -41,8 +45,12 @@ type Spec struct {
 	// verifiable half of acceptance (unlike the free-text AcceptanceCriteria) and are
 	// executed independently of any model completion claim.
 	AcceptanceChecks []string
-	Constraints      []string
-	Dependencies     []string
+	// AcceptanceMapping lists the operator-authored criterion-to-evidence lines
+	// ("criterion N: check M" or "criterion N: manual: <evidence>", SOP-003). Empty
+	// means a legacy task with no mapping.
+	AcceptanceMapping []string
+	Constraints       []string
+	Dependencies      []string
 	// ExecutionMode is the optional execution mode ("" is the implement
 	// default). An unrecognized value is ignored rather than failing, so an
 	// unrelated "Execution" section cannot break a task file.
@@ -137,6 +145,8 @@ func Parse(data []byte) (*Spec, error) {
 			spec.AcceptanceCriteria = append(spec.AcceptanceCriteria, listItems(sec.lines)...)
 		case "acceptance checks", "acceptance check":
 			spec.AcceptanceChecks = append(spec.AcceptanceChecks, listItems(sec.lines)...)
+		case "acceptance mapping":
+			spec.AcceptanceMapping = append(spec.AcceptanceMapping, listItems(sec.lines)...)
 		case "constraints", "constraint", "rules", "rule":
 			spec.Constraints = append(spec.Constraints, listItems(sec.lines)...)
 		case "dependencies", "dependency", "depends on":
@@ -201,6 +211,7 @@ func (s *Spec) Render() string {
 	writeList(&b, "Required evidence", s.RequiredEvidence)
 	writeList(&b, "Acceptance criteria", s.AcceptanceCriteria)
 	writeList(&b, "Acceptance checks", s.AcceptanceChecks)
+	writeList(&b, "Acceptance mapping", s.AcceptanceMapping)
 	writeList(&b, "Constraints", s.Constraints)
 	writeList(&b, "Dependencies", s.Dependencies)
 	if s.ExecutionMode != "" {

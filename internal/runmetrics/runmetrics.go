@@ -17,10 +17,11 @@
 // Absence is never folded in as a zero-valued measurement.
 //
 // The package is a pure internal library: it makes no model call, no network
-// call, and no provider- or model-specific decision. It is wired to no CLI
-// command and no production runtime path, and it adds no go.mod requirement. It
-// is diagnostic only: nothing it emits drives a gate, a budget, or a routing
-// decision, and token usage is never an input to any of them.
+// call, and no provider- or model-specific decision. Its aggregation surface is
+// wired only to the read-only `sop report --decisions` command; the SOP-005
+// counts/provenance producer writes run-local evidence from the lifecycle. It adds
+// no go.mod requirement. It is diagnostic only: nothing it emits drives a gate, a
+// budget, or a routing decision, and token usage is never an input to any of them.
 package runmetrics
 
 import (

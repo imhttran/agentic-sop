@@ -89,6 +89,10 @@ type Config struct {
 	// disjoint from the primary root is ignored, so an accidental overlap cannot
 	// widen the primary boundary.
 	Roots []Root
+	// CargoAgentToolEnabled, when true, lets a supported Cargo command (build,
+	// test, check, clippy, fmt --check) run through internal/commandpolicy.
+	// It is off by default and independent of the acceptance-check permission.
+	CargoAgentToolEnabled bool
 	// EvidenceSink, when set, receives each executed command's captured evidence
 	// (command, cwd, exit code, and the exact output the harness captured, already
 	// bounded and truncation-marked). It is how a caller that opts a task into raw
@@ -683,6 +687,21 @@ func (h *Harness) checkCommandIn(root authorizedRoot, argv []string) error {
 	}
 
 	if filepath.Base(argv[0]) == "gofmt" {
+		return nil
+	}
+	if filepath.Base(argv[0]) == "cargo" {
+		// Cargo runs only when the agent-tool permission is on, and only when the
+		// Cargo classifier admits the exact form. The manifest-path boundary is the
+		// PRIMARY repository root, not the selected authorized root: an authorized
+		// sub-root or external root may be the command's working directory, but it
+		// must not widen where --manifest-path may point.
+		class, err := commandpolicy.CargoClassify(argv, h.cfg.CargoAgentToolEnabled, h.root)
+		if err != nil {
+			return fmt.Errorf("%w: %v", errCommandNotAllowed, err)
+		}
+		if class != commandpolicy.Safe {
+			return fmt.Errorf("%w: %q is %s", errCommandNotAllowed, strings.Join(argv, " "), class)
+		}
 		return nil
 	}
 	class, err := commandpolicy.Classify(argv)

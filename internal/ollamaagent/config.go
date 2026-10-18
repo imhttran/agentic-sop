@@ -101,6 +101,10 @@ type Config struct {
 	Roots []toolharness.Root
 	// CommandEvidencePath, when set, receives captured command evidence as JSONL.
 	CommandEvidencePath string
+	// CargoAgentToolEnabled carries the project's cargo.agent_tool permission into
+	// the shared tool harness. It is off unless the project explicitly enables it;
+	// the harness still classifies every Cargo command before execution.
+	CargoAgentToolEnabled bool
 }
 
 // EffectiveBudget returns the budget this harness enforces. A Config that was

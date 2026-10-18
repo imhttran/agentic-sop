@@ -383,6 +383,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 	if d.newAgent == nil {
 		return failPrompt(rn, stderr, errors.New("prompt: no agent factory is available"))
 	}
+	applyCargoAgentTool(d, cfg)
 	a, err := d.newAgent(cfg.Agent.Harness, sel.Provider, sel.Model, string(sel.Class))
 	if err != nil {
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: build agent: %w", err))
@@ -469,6 +470,7 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	if d.newAgent == nil {
 		return failPrompt(rn, stderr, errors.New("prompt: no agent factory is available"))
 	}
+	applyCargoAgentTool(d, cfg)
 	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
 	if err != nil {
 		return failPrompt(rn, stderr, err)
