@@ -1,0 +1,38 @@
+version: 1
+
+project:
+  name: "sop-cargo-tool"
+  integration_branch: main
+
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+
+validation:
+  build:
+    - "true"
+
+review:
+  engine: self
+  delegation: false
+
+quality:
+  require_tests: true
+  max_fix_cycles: 1
+  fail_on:
+    - critical
+    - high
+
+human:
+  approval_before_commit: true
+
+autonomy:
+  level: balanced
+
+workflow:
+  mode: local
+
+cargo:
+  agent_tool: false
+  acceptance_check: false

@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-18T03:57:49.30754Z","tool":"list_files","action":"allow","request":"path=.","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:49.627036Z","tool":"read_file","action":"allow","request":"path=TASK.md","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:49.917206Z","tool":"list_files","action":"allow","request":"path=evidence","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:50.183456Z","tool":"read_file","action":"allow","request":"path=evidence/escape-run.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:50.592294Z","tool":"read_file","action":"allow","request":"path=evidence/escape-tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/evidence/escape-tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:50.947013Z","tool":"read_file","action":"allow","request":"path=evidence/escape.jsonl","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:51.359877Z","tool":"read_file","action":"allow","request":"path=tool-audit.jsonl","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:51.690919Z","tool":"read_file","action":"allow","request":"path=evidence/escape-tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/evidence/escape-tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:58.018767Z","tool":"list_files","action":"allow","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:58.437356Z","tool":"read_file","action":"allow","request":"path=tool-audit.jsonl","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:58.764212Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:59.299066Z","tool":"run_command","action":"deny","request":"cargo test --manifest-path ../outside/Cargo.toml","outcome":"denied","detail":"command not allowed: path escapes the repository: ../outside/Cargo.toml"}
+{"timestamp":"2026-10-18T03:57:59.829623Z","tool":"create_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:58:00.277638Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:58:00.631712Z","tool":"run_command","action":"deny","request":"true","outcome":"denied","detail":"command not allowed: \"true\" is REQUIRES_APPROVAL"}
+{"timestamp":"2026-10-18T03:58:01.020207Z","tool":"git_status","action":"allow","outcome":"ok"}

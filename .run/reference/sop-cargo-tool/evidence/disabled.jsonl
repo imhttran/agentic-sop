@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-18T03:57:18.532987Z","tool":"list_files","action":"allow","request":"path=.","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:18.889189Z","tool":"list_files","action":"allow","request":"path=src","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:19.204174Z","tool":"read_file","action":"allow","request":"path=Cargo.toml","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:19.467527Z","tool":"read_file","action":"allow","request":"path=src/lib.rs","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:19.909965Z","tool":"read_file","action":"allow","request":"path=TASK.md","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:20.214096Z","tool":"read_file","action":"allow","request":"path=tool-audit.jsonl","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:20.595267Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:20.928208Z","tool":"git_status","action":"allow","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:27.347803Z","tool":"list_files","action":"allow","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:27.692522Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:28.11311Z","tool":"run_command","action":"deny","request":"cargo test --quiet","outcome":"denied","detail":"command not allowed: \"cargo test --quiet\" is REQUIRES_APPROVAL"}
+{"timestamp":"2026-10-18T03:57:28.424271Z","tool":"run_command","action":"deny","request":"cargo test --quiet","outcome":"denied","detail":"command not allowed: \"cargo test --quiet\" is REQUIRES_APPROVAL"}
+{"timestamp":"2026-10-18T03:57:28.828335Z","tool":"create_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:29.213745Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:29.491717Z","tool":"run_command","action":"deny","request":"true","outcome":"denied","detail":"command not allowed: \"true\" is REQUIRES_APPROVAL"}
+{"timestamp":"2026-10-18T03:57:29.883505Z","tool":"git_status","action":"allow","outcome":"ok"}

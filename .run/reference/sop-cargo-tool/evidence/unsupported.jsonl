@@ -1,0 +1,16 @@
+{"timestamp":"2026-10-18T03:57:34.578593Z","tool":"list_files","action":"allow","request":"path=.","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:35.467072Z","tool":"read_file","action":"allow","request":"path=TASK.md","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:35.790124Z","tool":"read_file","action":"allow","request":"path=Cargo.toml","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:36.08776Z","tool":"list_files","action":"allow","request":"path=src","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:36.404635Z","tool":"read_file","action":"allow","request":"path=src/lib.rs","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:36.713508Z","tool":"list_files","action":"allow","request":"path=evidence","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:37.025676Z","tool":"read_file","action":"allow","request":"path=evidence/unsupported-run.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:37.356311Z","tool":"read_file","action":"allow","request":"path=evidence/TASK.unsupported.md","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:44.800975Z","tool":"list_files","action":"allow","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:45.086283Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"error","detail":"read_file: stat /Users/imhttran/agentic-workspace/agentic-sop/.run/sop-cargo-tool/tool-ran.txt: no such file or directory"}
+{"timestamp":"2026-10-18T03:57:45.418506Z","tool":"list_files","action":"allow","request":"path=evidence","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:45.71426Z","tool":"read_file","action":"allow","request":"path=evidence/unsupported-run.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:46.030523Z","tool":"read_file","action":"allow","request":"path=evidence/unsupported.jsonl","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:46.446379Z","tool":"run_command","action":"deny","request":"cargo publish","outcome":"denied","detail":"command not allowed: commandpolicy: unsupported cargo subcommand \"publish\""}
+{"timestamp":"2026-10-18T03:57:46.956842Z","tool":"write_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}
+{"timestamp":"2026-10-18T03:57:47.261038Z","tool":"read_file","action":"allow","request":"path=tool-ran.txt","outcome":"ok"}

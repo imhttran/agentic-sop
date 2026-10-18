@@ -1,0 +1,91 @@
+{
+  "status": "VERIFIED",
+  "criteria": [
+    {
+      "ID": "deliverable-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "`Cargo.toml`",
+      "Command": "",
+      "Evidence": "met",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    },
+    {
+      "ID": "deliverable-2",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "`src/lib.rs`",
+      "Command": "",
+      "Evidence": "met",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    },
+    {
+      "ID": "criterion-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "greet returns hello",
+      "Command": "cargo test --quiet",
+      "Evidence": "met",
+      "Argv": [
+        "cargo",
+        "test",
+        "--quiet"
+      ],
+      "ExitCode": 0,
+      "Output": "running 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "WorkDir": "/Users/imhttran/agentic-workspace/agentic-sop/.run/sop-006-rust"
+    },
+    {
+      "ID": "criterion-2",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "the Rust test suite executes and passes",
+      "Command": "cargo test --quiet",
+      "Evidence": "met",
+      "Argv": [
+        "cargo",
+        "test",
+        "--quiet"
+      ],
+      "ExitCode": 0,
+      "Output": "running 1 test\n.\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s",
+      "WorkDir": "/Users/imhttran/agentic-workspace/agentic-sop/.run/sop-006-rust"
+    }
+  ],
+  "reasons": [
+    "every required criterion was independently met"
+  ],
+  "lifecycle": "LOCAL_DONE",
+  "validation": {
+    "passed": true,
+    "reasons": [
+      "all required checks passed"
+    ]
+  },
+  "acceptance_mapping": [
+    {
+      "criterion_id": "criterion-1",
+      "description": "greet returns hello",
+      "required": true,
+      "kind": "check",
+      "check_ref": "check-1",
+      "attempt": 1
+    },
+    {
+      "criterion_id": "criterion-2",
+      "description": "the Rust test suite executes and passes",
+      "required": true,
+      "kind": "check",
+      "check_ref": "check-1",
+      "attempt": 1
+    }
+  ]
+}

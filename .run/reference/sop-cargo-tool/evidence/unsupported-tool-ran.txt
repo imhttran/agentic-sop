@@ -1,0 +1,1 @@
+commandpolicy: unsupported cargo subcommand "publish"

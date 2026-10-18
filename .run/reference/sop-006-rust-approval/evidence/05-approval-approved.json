@@ -1,0 +1,21 @@
+{
+  "id": "S001-1792295795993213000",
+  "task_id": "S001",
+  "kind": "NEEDS_HUMAN",
+  "target": "S001",
+  "reason": "required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check \"cargo test --quiet\" failed (exit 101): running 1 test",
+  "evidence": "required acceptance evidence is missing or failed: required criterion criterion-1 not met: mapped check check-1 failed: acceptance check \"cargo test --quiet\" failed (exit 101): running 1 test",
+  "stage": "WAITING_FOR_HUMAN",
+  "disposition": "NEEDS_HUMAN",
+  "requested_at": "2026-10-18T03:56:35.993214Z",
+  "requested_by": "sop",
+  "status": "APPROVED",
+  "decision": {
+    "request_id": "S001-1792295795993213000",
+    "task_id": "S001",
+    "approved": true,
+    "decided_at": "2026-10-18T03:56:40.143012Z",
+    "decided_by": "operator",
+    "lifecycle_action": "NONE"
+  }
+}

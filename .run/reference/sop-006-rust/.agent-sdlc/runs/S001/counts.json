@@ -1,0 +1,21 @@
+{
+  "counts": {
+    "approvals": 0,
+    "attempts": 2,
+    "continuations": 0,
+    "direct_interventions": 0,
+    "invocations": 2,
+    "model_calls": 9
+  },
+  "reports": [
+    "S001:20261018T034008.855842000Z:20261018T034008.983762000Z",
+    "S001:20261018T034011.838841000Z:20261018T034011.973634000Z"
+  ],
+  "binary": {
+    "path": "/Users/imhttran/agentic-workspace/agentic-sop/.run/candidate/sop",
+    "sha256": "e2cd0917e0bf65d3d8c2ce2d0bd807a78d1c461808de44df66ce19116d66739b",
+    "module": "github.com/imhttran/agentic-sop",
+    "revision": "e99cde03aff969b458e6d23579d6b3bb3a6fbe56",
+    "modified": "true"
+  }
+}
