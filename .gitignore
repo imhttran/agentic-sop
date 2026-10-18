@@ -21,6 +21,3 @@
 # never checked in.
 *.local
 *.local.*
-
-# Local disposable fixtures and evidence; never project content.
-/.run/
