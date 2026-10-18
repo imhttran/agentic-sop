@@ -1,0 +1,53 @@
+# Repository-owned Rust Semgrep rules for real-CLI verification.
+#
+# Scope is deliberately small: each rule is a precise syntactic signal for a
+# concrete, reviewable weakness. This is NOT comprehensive Rust security
+# coverage, and a clean result only means these checks found nothing.
+#
+# Every rule declares `languages: [rust]`, so a Go-only ruleset can never be
+# applied to Rust source and these rules can never be applied to Go source.
+rules:
+  - id: sop-rust-tls-verification-disabled
+    languages: [rust]
+    message: >-
+      TLS certificate verification is disabled, so an attacker who can intercept
+      traffic can present any certificate. Remove the dangerous acceptance flag
+      and configure an explicit trust root instead.
+    severity: ERROR
+    metadata:
+      category: security
+      confidence: HIGH
+      cwe: ["CWE-295"]
+    pattern-either:
+      - pattern: $CLIENT.danger_accept_invalid_certs(true)
+      - pattern: $CLIENT.danger_accept_invalid_hostnames(true)
+
+  - id: sop-rust-command-injection-env
+    languages: [rust]
+    message: >-
+      A process environment value flows into Command::new, so a caller-controlled
+      environment variable can select an arbitrary executable. Use a fixed
+      executable and pass untrusted values as arguments instead.
+    severity: ERROR
+    metadata:
+      category: security
+      confidence: MEDIUM
+      cwe: ["CWE-78"]
+    mode: taint
+    pattern-sources:
+      - pattern: std::env::var(...)
+      - pattern: std::env::var_os(...)
+    pattern-sinks:
+      - pattern: Command::new(...)
+
+  - id: sop-rust-unsafe-block
+    languages: [rust]
+    message: >-
+      An unsafe block bypasses Rust's memory-safety guarantees. Review every
+      invariant it relies on, especially at pointer, FFI, and transmute
+      boundaries.
+    severity: WARNING
+    metadata:
+      category: security
+      confidence: LOW
+    pattern: unsafe { ... }

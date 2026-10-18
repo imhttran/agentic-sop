@@ -162,7 +162,9 @@ If the scan cannot produce evidence, the result is `INDETERMINATE`:
 - report-only adds an advisory and leaves the normal gate unchanged;
 - required mode fails the gate.
 
-## 5. Rust dependency scanning
+## 5. Rust scanning
+
+### Dependency advisories (cargo-audit)
 
 cargo-audit resolves the Cargo workspace and its actual `Cargo.lock`; a workspace
 member does not own a lockfile. The adapter always passes `--file`, `--json`,
@@ -181,6 +183,36 @@ never runs `fix`, and never uploads source.
 - The local database identity is a deterministic fingerprint; scanner-observed
   `last-commit`, `last-updated`, and `advisory-count` are recorded as evidence.
   Resume re-executes when the fingerprint changes.
+
+### Source analysis (Semgrep)
+
+Semgrep coverage is decided per detected source language from the `languages` the
+local rules declare. It is never inferred from a path name or from another
+language's rules.
+
+- The pinned production ruleset includes `go/...` and `rust/lang/security/...`, so
+  a Rust-bearing workspace is analyzed by Rust rules instead of being reported
+  `UNSUPPORTED` when the configured rules path covers it. The default provisioning
+  destination is `.agent-sdlc/security-rules`, populated by
+  `scripts/security/fetch-semgrep-rules.sh`; `security.adapters[].rules` must
+  point at that path.
+- Rust coverage is claimed only when the configured rules declare `rust`. A
+  Go-only ruleset is never applied to Rust source: the adapter refuses before
+  execution and reports `FAILED` with an explicit `UNSUPPORTED` diagnostic.
+- A ruleset that covers only part of the detected source is `COMPLETED` with
+  `PARTIAL` coverage and a diagnostic naming the unsupported languages, so a
+  mixed Go/Rust workspace keeps independent coverage per language.
+- Malformed rules, a rule pattern the pinned scanner rejects, a scanner failure,
+  or a timeout never produce `COMPLETE` coverage or a clean result.
+- `rules_identity` in the scan evidence is the digest of the configured rules
+  path, so a rules change is visible and forces a resume re-execution.
+- The repository-owned rules used to verify this behavior live in
+  `internal/security/testdata/real/rules-rust.yaml` and declare only
+  `languages: [rust]`. They are exercised by the tagged real-CLI integration
+  suite, not by the default unit-test run.
+- The Rust rules are a small set of syntactic checks, not comprehensive Rust
+  security analysis. A clean Rust result means only that these checks found
+  nothing.
 
 ## 6. Replacing or adding an adapter
 
@@ -339,6 +371,10 @@ the integration changed existing runner behavior unexpectedly.
   dependency advisories are not implemented; report them as unsupported instead
   of assuming a clean result. This overlaps the dependency-scanning note tracked
   in issue #40 without closing it.
+- Rust Semgrep coverage is limited to the selected pinned `rust/lang/security`
+  rules plus the repository-owned verification rules. It is not comprehensive
+  Rust SAST, and a `PARTIAL` result means part of the detected source was not
+  analyzed.
 - Hosted, runtime/network, and asset-discovery scans are out of MVP scope.
 - A passing scan is evidence for the configured tools and scope. It is not proof
   that the repository has no vulnerabilities.
