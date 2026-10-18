@@ -28,6 +28,7 @@ remain beside the Markdown records at their existing paths.
 - [RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md](RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md) — read for the recorded RAG-SOP-004 Phase 2 — Real PostgreSQL/pgvector Retrieval Verification evidence.
 - [RAG-SOP-004-POC-EVALUATION.md](RAG-SOP-004-POC-EVALUATION.md) — read for the recorded RAG-SOP-004 POC Evaluation — PostgreSQL keyword vs hybrid (real embeddings) evidence.
 - [SOP-RUN-ACCEPT-001-ACC-008-manual-intervention.md](SOP-RUN-ACCEPT-001-ACC-008-manual-intervention.md) — read for the recorded SOP-RUN-ACCEPT-001 — ACC-008 controlled manual intervention evidence.
+- [SOP-EXECUTION-RELIABILITY-REVIEW.md](SOP-EXECUTION-RELIABILITY-REVIEW.md) — read for the SOP execution-reliability review evidence: direct reliability fixes, the bounded SOP-006 Rust demonstration, and the explicit non-claims about replaying earlier runs.
 - [decision-model-evaluation-2026-10-13.md](decision-model-evaluation-2026-10-13.md) — read for the recorded Decision-Model Evaluation — 2026-10-13 evidence.
 
 ## Autonomy

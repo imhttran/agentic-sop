@@ -1,6 +1,6 @@
 # PLAN — Security Scanner Add-on
 
-**Status:** IMPLEMENTED — SEC-003 and SEC-005 acceptance evidence is recorded below; PR #36 is OPEN and not merged. Requirements source:
+**Status:** IMPLEMENTED — SEC-003 and SEC-005 acceptance evidence is recorded below; PR #36 merged on 2026-10-18. Requirements source:
 [`docs/requirements/PRD-Security-Scanner-Addon.md`](../requirements/PRD-Security-Scanner-Addon.md).
 **Rule:** the add-on is disabled unless configured. A failed, unavailable, timed-out,
 malformed, or partial scan MUST NOT produce a passing required security gate.
@@ -32,8 +32,8 @@ service, model call, scanner engine, automatic install, or automatic fix path.
 - **SEC-005: ACCEPTED.** The report-only dogfood identifies the scanned content,
   scanner/rules identities, coverage, findings, and measured durations. CI runs
   the same pinned real-CLI checks with missing prerequisites failing closed.
-- **PR merge status: OPEN, not merged.** PR #36 is tracked separately from task
-  acceptance; acceptance does not authorize a merge.
+- **PR merge status: MERGED (2026-10-18).** PR #36 was merged separately from task
+  acceptance; task acceptance did not authorize the merge.
 
 ## Capabilities
 
@@ -318,7 +318,8 @@ prepare a PR without merging it.
   scanner is described as clean.
 - Repository-required checks pass: formatting, vet, build, test, documentation
   links, and the pinned real-CLI integration script.
-- The PR contains only intended changes and is not merged.
+- The PR contained only intended changes and was merged separately from task
+  acceptance.
 - Rollback is documented as disabling the add-on through configuration and leaving
   non-security verification unchanged.
 
