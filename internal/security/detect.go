@@ -325,6 +325,9 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 	// directory without Cargo.toml can be reported: Cargo fails to load the
 	// workspace in that case rather than ignoring the match.
 	var cargoDirs []string
+	// cargoFiles keeps in-scope files so a members glob that matches a
+	// non-package file is visible even when another match is a valid package.
+	var cargoFiles []string
 
 	err = filepath.WalkDir(abs, func(path string, entry fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
@@ -351,6 +354,7 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 		if !entry.Type().IsRegular() {
 			return nil
 		}
+		cargoFiles = append(cargoFiles, rel)
 		language, ok := languageManifests[name]
 		if !ok {
 			// Source files are a language signal even when the repository has no
@@ -395,7 +399,7 @@ func DetectRepositoryScoped(root string, excludes []string) (Detection, error) {
 	// Cargo membership and obligations come from parsed Cargo.toml content, never
 	// from directory ancestry. A workspace member shares the workspace root's
 	// Cargo.lock; an excluded or undeclared package owns its own lockfile.
-	workspaces, rustLockfiles, cargoIssues := resolveCargoWorkspaces(abs, cargoRecords, cargoDirs)
+	workspaces, rustLockfiles, cargoIssues := resolveCargoWorkspaces(abs, cargoRecords, cargoDirs, cargoFiles)
 	result.Workspaces = workspaces
 	result.Issues = append(result.Issues, cargoIssues...)
 
