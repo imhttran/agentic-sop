@@ -74,10 +74,12 @@ export PWD="$FIXTURE"
 exec "/var/folders/<...>/T/sop-2q" mcp --planner
 ```
 
-- **Use the `$TMPDIR` spelling (`/var/...`) and export `PWD`.** SOP binds a question to the
-  repository path without resolving symlinks. On macOS `/var` is a symlink to
-  `/private/var`, and a process started without `PWD` sees `/private/var/...`, so SOP
-  refuses the answer as `STALE` ("repository changed").
+- **With a binary older than the repository-identity fix, use the `$TMPDIR` spelling
+  (`/var/...`) and export `PWD`.** Older binaries bind a question to the repository path
+  without resolving symlinks. On macOS `/var` is a symlink to `/private/var`, and a process
+  started without `PWD` sees `/private/var/...`, so SOP refuses the answer as `STALE`
+  ("repository changed"). Current binaries resolve symlinks on both sides; the workaround
+  is harmless with them.
 - **Restart the tunnel client after every fixture recreate.** The running planner server
   keeps its working directory; after a recreate it no longer serves the new fixture.
 - Test the wrapper locally before restarting the tunnel: pipe an MCP `initialize` and a

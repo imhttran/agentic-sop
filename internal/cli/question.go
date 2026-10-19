@@ -66,11 +66,11 @@ func projectIdentity(dir string) string {
 // It is deliberately not a working-tree content hash, so ordinary implementation
 // edits and commits never invalidate a bound question. It returns "" when no
 // repository is found, in which case the repository check is skipped.
+//
+// The path is symlink-resolved, so one repository has one identity however a process
+// reached it (on macOS, /var/... and /private/var/... are the same directory).
 func repoFingerprint(dir string) string {
-	d, err := filepath.Abs(dir)
-	if err != nil {
-		d = dir
-	}
+	d := canonicalPath(dir)
 	for {
 		if found, _ := exists(filepath.Join(d, ".git")); found {
 			return d
@@ -81,6 +81,26 @@ func repoFingerprint(dir string) string {
 		}
 		d = parent
 	}
+}
+
+// canonicalPath returns dir as an absolute, symlink-resolved path. A path that cannot
+// be resolved (for example, it no longer exists) is returned absolute and cleaned.
+func canonicalPath(dir string) string {
+	d, err := filepath.Abs(dir)
+	if err != nil {
+		d = filepath.Clean(dir)
+	}
+	if r, err := filepath.EvalSymlinks(d); err == nil {
+		return r
+	}
+	return d
+}
+
+// sameRepository reports whether a bound repository identity and the current one name
+// the same repository. The bound value is resolved too, so a question recorded before
+// identities were symlink-resolved still matches its repository.
+func sameRepository(bound, current string) bool {
+	return bound == current || canonicalPath(bound) == current
 }
 
 // bindingRunStale reports whether the question's bound run is no longer eligible:
@@ -148,7 +168,7 @@ func questionBindingCheck(dir string) question.BindingCheck {
 			return reason, nil
 		}
 		if fp := strings.TrimSpace(q.RepoFingerprint); fp != "" {
-			if cur := repoFingerprint(dir); cur != "" && cur != fp {
+			if cur := repoFingerprint(dir); cur != "" && !sameRepository(fp, cur) {
 				return fmt.Sprintf("repository changed: bound %q, current %q", fp, cur), nil
 			}
 		}

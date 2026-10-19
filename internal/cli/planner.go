@@ -504,6 +504,13 @@ func plannerView(dir string, svc *question.Service, task *domain.Task) (question
 
 // plannerViewFor builds a reconcile view from already-loaded questions.
 func plannerViewFor(svc *question.Service, dir string, task *domain.Task, qs []*question.Question, q *question.Question) question.ReconcileView {
+	repo := repoFingerprint(dir)
+	// The reconcile policy compares identities as strings. When the bound identity names
+	// this repository by another spelling (recorded before identities were resolved),
+	// present it in the bound spelling so the policy does not read it as a change.
+	if q != nil && repo != "" && sameRepository(q.RepoFingerprint, repo) {
+		repo = q.RepoFingerprint
+	}
 	return question.ReconcileView{
 		TaskID:                 task.ID,
 		TaskTerminal:           task.IsSatisfied(),
@@ -513,7 +520,7 @@ func plannerViewFor(svc *question.Service, dir string, task *domain.Task, qs []*
 		Continuation:           continuationFor(svc, q),
 		CurrentPlanRevision:    currentPlanRevision(dir),
 		CurrentRunEpoch:        currentRunEpoch(dir, task.ID),
-		CurrentRepoFingerprint: repoFingerprint(dir),
+		CurrentRepoFingerprint: repo,
 		Now:                    time.Now().UTC(),
 	}
 }
