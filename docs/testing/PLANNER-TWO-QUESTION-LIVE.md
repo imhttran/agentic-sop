@@ -470,7 +470,26 @@ supporting evidence, not proof. Change `scripts/planner-tunnel-point.sh` only if
 evidence shows a wrapper or startup problem there; use
 `scripts/planner-tunnel-candidate.sh` for the candidate lifecycle.
 
+## Export the evidence
+
+Export a sanitized bundle **before** cleanup. The fixture and logs live in `$TMPDIR`; the
+original 2026-10-18 run was lost when they were deleted after the results were written up
+(issue #91).
+
+```bash
+scripts/planner-evidence-export.sh --logs "$TMPDIR/planner-2q-logs" \
+  --binary "$TMPDIR/sop-2q" "$TMPDIR/planner-2q-live"
+```
+
+The script copies a fixed list of files (questions, answers, outcomes, continuations, the
+run's outcome, state, report, gate, review, validation and trace, the task, and the final
+deliverables) into `docs/reports/evidence/artifacts/planner-2q-live/`. It replaces machine
+paths with `<FIXTURE>`, `<CHECKOUT>`, `<TMPDIR>`, and `<HOME>`, writes a SHA-256 manifest and
+a README, and never changes the fixture. It refuses to write anything if a file still looks
+like it contains a credential or a local path, and reports only `file:line`. Review the
+bundle, then commit it on a branch.
+
 ## Cleanup
 
-The fixture is disposable. Remove `$TMPDIR/planner-2q-live` once its evidence is recorded,
-and point the tunnel wrapper back at its previous working directory.
+The fixture is disposable. Remove `$TMPDIR/planner-2q-live` only after its evidence is
+exported, and point the tunnel wrapper back at its previous working directory.
