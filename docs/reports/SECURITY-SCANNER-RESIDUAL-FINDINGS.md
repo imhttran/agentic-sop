@@ -4,17 +4,19 @@
 **Date:** 2026-10-19
 **Plan:** [PLAN-Security-Scanner-Residual-Findings.md](../plans/PLAN-Security-Scanner-Residual-Findings.md)
 **Branch:** `fix/security-residual-findings`
+**Implementation commit:** `458de839fbab02bce2d5c7ab51946f5c598a173a`
+**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (open for review)
 **Baseline:** `main` @ `d4d8b8df` (includes PR #72 @ `a56b7239` and PR #73 @ `d4d8b8df`)
 
 ## Reported findings and reproduction
 
 All three findings reproduced on the baseline before the fix:
 
-| Finding | Reproduction evidence |
-| --- | --- |
-| Absolute or repository-escaping `package.workspace` references were silently skipped after normalization failed, so the package could look independent. | `workspace = "/tmp/outside"` produced no detection issue. |
-| A `members` glob matching a non-package file was invisible when another match was a valid package. | `members = ["crates/*"]` with `crates/app` and `crates/README.txt` produced no issue mentioning the file. |
-| cargo-audit freshness tests compared fixed fixture timestamps with `time.Now()`. | The advisory-db fixture was fresh at 2026-10-18 and stale at +120 days, so results depended on the execution date. |
+| Finding                                                                                                                                                 | Reproduction evidence                                                                                              |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Absolute or repository-escaping `package.workspace` references were silently skipped after normalization failed, so the package could look independent. | `workspace = "/tmp/outside"` produced no detection issue.                                                          |
+| A `members` glob matching a non-package file was invisible when another match was a valid package.                                                      | `members = ["crates/*"]` with `crates/app` and `crates/README.txt` produced no issue mentioning the file.          |
+| cargo-audit freshness tests compared fixed fixture timestamps with `time.Now()`.                                                                        | The advisory-db fixture was fresh at 2026-10-18 and stale at +120 days, so results depended on the execution date. |
 
 Pinned Cargo 1.98.0 behavior was verified in isolated fixtures before changing
 discovery semantics:
@@ -50,13 +52,14 @@ valid package.workspace = "../.." in a workspace member -> resolves
 
 ## Verification
 
-| Check | Result |
-| --- | --- |
-| `go test ./...` | PASS |
-| `go build ./...` | PASS |
-| `go vet ./...` | PASS |
-| `bash scripts/checks/check-doc-links.sh` | `broken links: 0` |
+| Check                                         | Result                                                                                |
+| --------------------------------------------- | ------------------------------------------------------------------------------------- |
+| `go test ./...`                               | PASS                                                                                  |
+| `go build ./...`                              | PASS                                                                                  |
+| `go vet ./...`                                | PASS                                                                                  |
+| `bash scripts/checks/check-doc-links.sh`      | `broken links: 0`                                                                     |
 | `bash scripts/checks/security-integration.sh` | PASS (pinned Semgrep 1.136.0, Gitleaks 8.30.1, cargo-audit 0.22.2, OSV-Scanner 2.7.0) |
+| PR #74 CI                                     | PASS — 12/12 checks on `458de83`                                                      |
 
 Focused regression coverage includes absolute and escaping workspace references,
 valid nested-root references, member-glob file matches alongside valid members,

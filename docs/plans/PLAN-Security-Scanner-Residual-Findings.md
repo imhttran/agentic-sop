@@ -1,9 +1,10 @@
 # PLAN — Security Scanner Residual Findings
 
 **Type:** Correctness plan (dependency-layout detection and freshness evidence).
-**Status:** IN PROGRESS — implementation and verification underway.
+**Status:** IMPLEMENTED — verification complete; PR #74 open for review.
 **Baseline:** `agentic-sop` `main` @ `d4d8b8df` (includes PR #72 @ `a56b7239` and PR #73 @ `d4d8b8df`).
 **Branch:** `fix/security-residual-findings`.
+**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (open for review; not merged).
 
 ## Project
 
@@ -181,3 +182,13 @@ final diff review, and delivery.
 ### Dependencies
 
 - SEC-RES-003
+
+## Delivery
+
+- Implementation commit: `458de839fbab02bce2d5c7ab51946f5c598a173a`.
+- PR #74 opened against `main`; all 12 CI checks passed on the head
+  (`fmt, vet, build, test`, race detector, Windows installer, installer/plugin
+  packaging, tagged JEV acceptance, real scanner integration, CodeQL).
+- Project security configuration remains report-only; required mode is exercised
+  only in isolated fixtures. No merge, auto-merge, or branch/worktree deletion
+  occurred.
