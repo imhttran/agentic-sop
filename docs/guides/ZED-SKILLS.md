@@ -97,6 +97,10 @@ scripts/install/install-skills.sh zed --uninstall
 verified baseline and starts the candidate. It never replaces the production binary or
 merges; local tests are not independent validation.
 
+It writes a portable `validation-handoff.json`. See
+[MCP-LIVE-VALIDATION-PROVIDERS.md](MCP-LIVE-VALIDATION-PROVIDERS.md) for ChatGPT, Claude,
+and DeepSeek-compatible harness setup.
+
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
 `/sop end-to-end` project-execution requests use `/sop-end-to-end` instead.

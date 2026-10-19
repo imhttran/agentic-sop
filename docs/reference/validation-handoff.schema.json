@@ -1,0 +1,301 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/imhttran/agentic-sop/docs/reference/validation-handoff.schema.json",
+  "title": "MCP live-validation handoff",
+  "description": "Portable, provider-independent handoff for an MCP candidate validation workflow. It records identity, evidence, approval state, and the next permitted action. It must not contain credentials or tokens.",
+  "type": "object",
+  "required": [
+    "schema",
+    "schema_version",
+    "workflow_id",
+    "generated_at",
+    "repository",
+    "environment",
+    "candidate",
+    "baseline",
+    "process",
+    "logs",
+    "local_verification",
+    "request",
+    "results_template",
+    "independent_validation",
+    "approval",
+    "workflow",
+    "rollback",
+    "safety"
+  ],
+  "properties": {
+    "schema": {
+      "type": "string",
+      "enum": ["mcp-live-validation/validation-handoff/v1"]
+    },
+    "schema_version": {"type": "integer", "minimum": 1},
+    "workflow_id": {"type": "string", "minLength": 1},
+    "issue": {"type": "string"},
+    "generated_at": {"type": "string", "minLength": 1},
+    "repository": {
+      "type": "object",
+      "required": ["root", "branch", "commit", "working_tree"],
+      "properties": {
+        "root": {"type": "string"},
+        "branch": {"type": "string"},
+        "commit": {"type": "string", "minLength": 1},
+        "working_tree": {"type": "string"}
+      }
+    },
+    "environment": {
+      "type": "object",
+      "required": ["agent", "platform", "capabilities"],
+      "properties": {
+        "agent": {"type": "string"},
+        "platform": {"type": "string"},
+        "capabilities": {
+          "type": "array",
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["path", "version", "sha256", "source", "source_revision", "patch", "patch_sha256", "profile"],
+      "properties": {
+        "path": {"type": "string"},
+        "version": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "source": {"type": "string"},
+        "source_revision": {"type": "string"},
+        "patch": {"type": "string"},
+        "patch_sha256": {"type": "string"},
+        "profile": {"type": "string"}
+      }
+    },
+    "baseline": {
+      "type": "object",
+      "required": ["path", "version", "sha256"],
+      "properties": {
+        "path": {"type": "string"},
+        "version": {"type": "string"},
+        "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+      }
+    },
+    "process": {
+      "type": "object",
+      "required": ["state", "pid", "command", "command_sha256", "launch_configuration"],
+      "properties": {
+        "state": {"type": "string"},
+        "pid": {"type": "string"},
+        "command": {"type": "string"},
+        "command_sha256": {"type": "string"},
+        "launch_configuration": {
+          "type": "object",
+          "required": ["profile"],
+          "properties": {"profile": {"type": "string"}}
+        }
+      }
+    },
+    "logs": {
+      "type": "object",
+      "required": ["candidate", "baseline"],
+      "properties": {
+        "candidate": {"type": "string"},
+        "baseline": {"type": "string"}
+      }
+    },
+    "local_verification": {
+      "type": "object",
+      "required": ["status", "results"],
+      "properties": {
+        "status": {"type": "string", "enum": ["PASS", "FAIL", "NOT_RUN"]},
+        "results": {"type": "string"}
+      }
+    },
+    "request": {
+      "type": "object",
+      "required": ["rounds", "concurrent", "retries", "state_changes", "record_initialization_errors", "total_calls", "required_calls", "acceptance"],
+      "properties": {
+        "rounds": {"type": "integer", "minimum": 1},
+        "concurrent": {"type": "boolean"},
+        "retries": {"type": "integer", "minimum": 0},
+        "state_changes": {"type": "boolean"},
+        "record_initialization_errors": {"type": "boolean"},
+        "total_calls": {"type": "integer", "minimum": 1},
+        "required_calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["tool", "arguments"],
+            "properties": {
+              "tool": {"type": "string", "minLength": 1},
+              "arguments": {"type": "object"}
+            }
+          }
+        },
+        "acceptance": {
+          "type": "object",
+          "required": ["pass", "fail", "caveat"],
+          "properties": {
+            "pass": {"type": "string"},
+            "fail": {"type": "string"},
+            "caveat": {"type": "string"}
+          }
+        }
+      }
+    },
+    "results_template": {
+      "type": "object",
+      "required": ["schema", "workflow_id", "validator", "validator_capabilities", "candidate_sha256", "source_revision", "started_at", "finished_at", "rounds", "concurrent", "retries", "state_changes", "summary", "calls", "initialization_errors", "status"],
+      "properties": {
+        "schema": {"type": "string", "enum": ["mcp-live-validation/validation-results/v1"]},
+        "workflow_id": {"type": "string"},
+        "validator": {"type": "string"},
+        "validator_capabilities": {"type": "array", "items": {"type": "string"}},
+        "candidate_sha256": {"type": "string"},
+        "source_revision": {"type": "string"},
+        "started_at": {"type": "string"},
+        "finished_at": {"type": "string"},
+        "rounds": {"type": "integer", "minimum": 1},
+        "concurrent": {"type": "boolean"},
+        "retries": {"type": "integer", "minimum": 0},
+        "state_changes": {"type": "boolean"},
+        "summary": {
+          "type": "object",
+          "required": ["total", "passed", "failed"],
+          "properties": {
+            "total": {"type": "integer", "minimum": 0},
+            "passed": {"type": "integer", "minimum": 0},
+            "failed": {"type": "integer", "minimum": 0}
+          }
+        },
+        "calls": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["round", "tool", "status"],
+            "properties": {
+              "round": {"type": "integer", "minimum": 1},
+              "tool": {"type": "string", "minLength": 1},
+              "arguments": {"type": "object"},
+              "status": {"type": "string", "enum": ["PASS", "FAIL", "ERROR"]},
+              "elapsed_ms": {"type": "number", "minimum": 0},
+              "error": {"type": "string"}
+            }
+          }
+        },
+        "initialization_errors": {
+          "type": "array",
+          "items": {"type": "object"}
+        },
+        "status": {"type": "string", "enum": ["PENDING", "PASS", "FAIL"]}
+      }
+    },
+    "independent_validation": {
+      "type": "object",
+      "required": ["validator", "status", "candidate_sha256", "source_revision", "results", "local_tests_are_not_validation"],
+      "properties": {
+        "validator": {"type": "string"},
+        "status": {"type": "string", "enum": ["PENDING", "PASS", "FAIL"]},
+        "candidate_sha256": {"type": "string"},
+        "source_revision": {"type": "string"},
+        "results": {
+          "type": "object",
+          "required": ["schema", "workflow_id", "validator", "validator_capabilities", "candidate_sha256", "source_revision", "started_at", "finished_at", "rounds", "concurrent", "retries", "state_changes", "summary", "calls", "initialization_errors", "status"],
+          "properties": {
+            "schema": {"type": "string", "enum": ["mcp-live-validation/validation-results/v1"]},
+            "workflow_id": {"type": "string"},
+            "validator": {"type": "string"},
+            "validator_capabilities": {"type": "array", "items": {"type": "string"}},
+            "candidate_sha256": {"type": "string"},
+            "source_revision": {"type": "string"},
+            "started_at": {"type": "string"},
+            "finished_at": {"type": "string"},
+            "rounds": {"type": "integer", "minimum": 1},
+            "concurrent": {"type": "boolean"},
+            "retries": {"type": "integer", "minimum": 0},
+            "state_changes": {"type": "boolean"},
+            "summary": {
+              "type": "object",
+              "required": ["total", "passed", "failed"],
+              "properties": {
+                "total": {"type": "integer", "minimum": 0},
+                "passed": {"type": "integer", "minimum": 0},
+                "failed": {"type": "integer", "minimum": 0}
+              }
+            },
+            "calls": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "required": ["round", "tool", "status"],
+                "properties": {
+                  "round": {"type": "integer", "minimum": 1},
+                  "tool": {"type": "string", "minLength": 1},
+                  "arguments": {"type": "object"},
+                  "status": {"type": "string", "enum": ["PASS", "FAIL", "ERROR"]},
+                  "elapsed_ms": {"type": "number", "minimum": 0},
+                  "error": {"type": "string"}
+                }
+              }
+            },
+            "initialization_errors": {
+              "type": "array",
+              "items": {"type": "object"}
+            },
+            "status": {"type": "string", "enum": ["PENDING", "PASS", "FAIL"]}
+          }
+        },
+        "local_tests_are_not_validation": {"type": "boolean"}
+      }
+    },
+    "approval": {
+      "type": "object",
+      "required": ["deployment", "merge"],
+      "properties": {
+        "deployment": {
+          "type": "object",
+          "required": ["required", "status", "reference"],
+          "properties": {
+            "required": {"type": "boolean"},
+            "status": {"type": "string", "enum": ["PENDING", "APPROVED", "DENIED"]},
+            "reference": {"type": "string"}
+          }
+        },
+        "merge": {
+          "type": "object",
+          "required": ["required", "status"],
+          "properties": {
+            "required": {"type": "boolean"},
+            "status": {"type": "string", "enum": ["PENDING", "APPROVED", "DENIED", "NOT_REQUIRED"]}
+          }
+        }
+      }
+    },
+    "workflow": {
+      "type": "object",
+      "required": ["status", "next_permitted_action"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["PREPARED", "DEPLOYMENT_PENDING_APPROVAL", "AWAITING_INDEPENDENT_VALIDATION", "VALIDATION_PASSED", "VALIDATION_FAILED", "ROLLED_BACK", "BLOCKED"]
+        },
+        "next_permitted_action": {
+          "type": "string",
+          "enum": ["REQUEST_DEPLOYMENT_APPROVAL", "START_CANDIDATE", "RUN_INDEPENDENT_VALIDATION", "DIAGNOSE_AND_PREPARE_CORRECTED_CANDIDATE", "PREPARE_PR", "STOP_AND_REPORT"]
+        }
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "required": ["command"],
+      "properties": {"command": {"type": "string", "minLength": 1}}
+    },
+    "safety": {
+      "type": "object",
+      "required": ["production_binary_replaced", "merged", "credentials_redacted"],
+      "properties": {
+        "production_binary_replaced": {"type": "boolean"},
+        "merged": {"type": "boolean"},
+        "credentials_redacted": {"type": "boolean"}
+      }
+    }
+  }
+}

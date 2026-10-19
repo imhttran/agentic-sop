@@ -50,12 +50,16 @@
 #   --profile NAME        tunnel profile; inferred from a running baseline when possible
 #   --log-file PATH       candidate debug log (default: .run/tunnel/logs/candidate-<ts>.jsonl)
 #   --pid-file PATH       candidate process pid file (default: .run/tunnel/candidate/tunnel.pid)
+#   --workflow-id ID      stable workflow ID recorded in the manifest and handoff
+#                         (default: generated once at provision time)
 #   --replace             move an existing output aside before writing it
 #   --retries N           network attempts for clone/fetch (default: 2)
 #
 # start/stop options:
 #   --startup-timeout N   seconds to wait for a confirmed start (default: 10)
 #   --stop-timeout N      seconds to wait after SIGTERM (default: 10)
+#   --handoff FILE        start only: require a schema-valid handoff whose
+#                         next_permitted_action is START_CANDIDATE
 #
 # rollback options:
 #   --start               after stopping the candidate and restoring the wrapper,
@@ -63,11 +67,24 @@
 #
 # handoff options:
 #   --tests FILE          file containing the local test commands/results
-#   --results FILE        file containing the ChatGPT live test results
-#   --validation-status S PENDING (default), PASS, or FAIL. PASS/FAIL requires
-#                         --results; local tests alone are never independent validation.
+#   --results FILE        optional human-readable independent-validation notes
+#   --results-json FILE   machine-readable validation results (required for PASS/FAIL);
+#                         its candidate SHA-256 and source revision must match the candidate
+#   --request FILE        JSON object describing the required live MCP tests (default:
+#                         10 concurrent rounds of sop_status + sop_question_get)
+#   --validation-status S PENDING (default), PASS, or FAIL; PASS/FAIL requires
+#                         --results-json. Local tests alone are never independent validation.
 #   --issue TEXT          issue reference or short title recorded in the artifact
-#   --format FORMAT       markdown (default) or json
+#   --workflow-id ID      stable workflow ID (default: the provisioned manifest value)
+#   --agent NAME          environment.agent recorded in the artifact
+#   --capabilities LIST   comma-separated writer capabilities (default:
+#                         filesystem,process_execution)
+#   --local-status S      PASS, FAIL, or NOT_RUN (default); PASS/FAIL requires --tests
+#   --deployment-approval S PENDING (default), APPROVED, or DENIED
+#   --approval-reference TEXT  operator approval reference
+#   --merge-status S      PENDING (default), APPROVED, DENIED, or NOT_REQUIRED;
+#                         the helper never merges
+#   --format FORMAT       markdown (default) or json; json is schema-validated before writing
 #   --output FILE         write the report to FILE instead of stdout
 #   --replace             replace an existing --output file
 #
@@ -79,8 +96,10 @@
 #   - Building/provisioning never starts or restarts a tunnel.
 #   - Every state-changing command has a --dry-run form.
 #
-# The generated handoff report is NOT a validation result. ChatGPT must report
-# its own live MCP results before the candidate is called verified.
+# The generated handoff is NOT a validation result. An independent MCP validator
+# must report its own live results before the candidate is called verified. The
+# JSON artifact is portable across coding agents and validators; it is validated
+# against docs/reference/validation-handoff.schema.json before it is written.
 # End of usage.
 
 set -euo pipefail
@@ -442,6 +461,7 @@ CANDIDATE_LOG=""
 CANDIDATE_TUNNEL_PID=""
 REPLACE=0
 RETRIES=2
+WORKFLOW_ID=""
 
 parse_provision_options() {
   while [ $# -gt 0 ]; do
@@ -456,6 +476,7 @@ parse_provision_options() {
       --profile) [ $# -ge 2 ] || usage; PROFILE="$2"; shift ;;
       --log-file) [ $# -ge 2 ] || usage; CANDIDATE_LOG="$2"; shift ;;
       --pid-file) [ $# -ge 2 ] || usage; CANDIDATE_TUNNEL_PID="$2"; shift ;;
+      --workflow-id) [ $# -ge 2 ] || usage; WORKFLOW_ID="$2"; shift ;;
       --replace) REPLACE=1 ;;
       --retries) [ $# -ge 2 ] || usage; RETRIES="$2"; shift ;;
       --dry-run) DRY_RUN=1 ;;
@@ -782,6 +803,7 @@ provision_manifest() {
   {
     printf 'format=1\n'
     printf 'state=prepared\n'
+    printf 'workflow_id=%s\n' "$WORKFLOW_ID"
     printf 'created_at=%s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     printf 'sop_branch=%s\n' "$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
     printf 'sop_commit=%s\n' "$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
@@ -843,6 +865,9 @@ cmd_provision() {
   fi
   if [ -z "$CANDIDATE_TUNNEL_PID" ]; then
     CANDIDATE_TUNNEL_PID="$CANDIDATE_DIR/tunnel.pid"
+  fi
+  if [ -z "$WORKFLOW_ID" ]; then
+    WORKFLOW_ID="mcp-live-$(date -u +%Y%m%dT%H%M%SZ)-$$"
   fi
   # Relative paths are resolved against the checkout, matching
   # planner-tunnel-point.sh. URLs and absolute paths are left alone.
@@ -909,12 +934,14 @@ cmd_provision() {
 
 STARTUP_TIMEOUT=10
 STOP_TIMEOUT=10
+LIFECYCLE_HANDOFF=""
 
 parse_lifecycle_options() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --startup-timeout) [ $# -ge 2 ] || usage; STARTUP_TIMEOUT="$2"; shift ;;
       --stop-timeout) [ $# -ge 2 ] || usage; STOP_TIMEOUT="$2"; shift ;;
+      --handoff) [ $# -ge 2 ] || usage; LIFECYCLE_HANDOFF="$2"; shift ;;
       --dry-run) DRY_RUN=1 ;;
       --process-match) [ $# -ge 2 ] || usage; PROCESS_MATCH="$2"; shift ;;
       --checkout) [ $# -ge 2 ] || usage; CHECKOUT="$2"; shift ;;
@@ -1047,6 +1074,25 @@ cmd_start() {
   # verify_manifest_files re-reads the wrapper from the manifest; the local
   # variables above are for the launch.
   [ -x "$candidate" ] || die "candidate is not executable: $candidate"
+
+  if [ -n "$LIFECYCLE_HANDOFF" ]; then
+    [ -f "$LIFECYCLE_HANDOFF" ] || die "handoff not found: $LIFECYCLE_HANDOFF"
+    command -v python3 >/dev/null 2>&1 || die "python3 is required for --handoff"
+    local self_dir validator schema handoff_action
+    self_dir="$(cd "$(dirname "$0")" && pwd -P)"
+    validator="$self_dir/validation-handoff.py"
+    schema="$self_dir/../docs/reference/validation-handoff.schema.json"
+    [ -f "$validator" ] || die "handoff validator not found: $validator"
+    if ! python3 "$validator" --handoff "$LIFECYCLE_HANDOFF" --checkout "$ROOT" --schema "$schema" --quiet; then
+      python3 "$validator" --handoff "$LIFECYCLE_HANDOFF" --checkout "$ROOT" --schema "$schema" >&2 || true
+      die "handoff validation failed; refusing to start the candidate"
+    fi
+    handoff_action="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow"]["next_permitted_action"])' "$LIFECYCLE_HANDOFF")" ||
+      die "could not read the handoff next_permitted_action"
+    [ "$handoff_action" = "START_CANDIDATE" ] ||
+      die "handoff next_permitted_action is '$handoff_action', not START_CANDIDATE; refusing to start"
+    note "handoff authorizes START_CANDIDATE"
+  fi
 
   local procs count
   procs="$(list_tunnel_processes)"
@@ -1491,27 +1537,173 @@ cmd_rollback() {
 
 HANDOFF_TESTS=""
 HANDOFF_RESULTS=""
+HANDOFF_RESULTS_JSON=""
+HANDOFF_REQUEST=""
 HANDOFF_OUTPUT=""
 HANDOFF_REPLACE=0
 HANDOFF_FORMAT="markdown"
 HANDOFF_STATUS="PENDING"
+HANDOFF_STATUS_SET=0
 HANDOFF_ISSUE=""
+HANDOFF_WORKFLOW_ID=""
+HANDOFF_AGENT="unspecified"
+HANDOFF_CAPABILITIES="filesystem,process_execution"
+HANDOFF_LOCAL_STATUS="NOT_RUN"
+HANDOFF_DEPLOYMENT_APPROVAL="PENDING"
+HANDOFF_APPROVAL_REFERENCE=""
+HANDOFF_MERGE_STATUS="PENDING"
+
+sha256_stdin() {
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 | awk '{print $1}'
+  elif command -v sha256sum >/dev/null 2>&1; then
+    sha256sum | awk '{print $1}'
+  else
+    die "no shasum or sha256sum on PATH"
+  fi
+}
+
+caps_json() {
+  local caps="$1" out="" cap old_ifs="$IFS"
+  IFS=','
+  for cap in $caps; do
+    cap="$(printf '%s' "$cap" | sed 's/^ *//; s/ *$//')"
+    [ -n "$cap" ] || continue
+    [ -z "$out" ] || out="$out,"
+    out="$out\"$(json_escape "$cap")\""
+  done
+  IFS="$old_ifs"
+  printf '[%s]' "$out"
+}
+
+default_request_json() {
+  cat <<'EOF'
+{
+  "rounds": 10,
+  "concurrent": true,
+  "retries": 0,
+  "state_changes": false,
+  "record_initialization_errors": true,
+  "total_calls": 20,
+  "required_calls": [
+    {"tool": "sop_status", "arguments": {}},
+    {"tool": "sop_question_get", "arguments": {"question_id": "q-1"}}
+  ],
+  "acceptance": {
+    "pass": "all 20 calls succeed with no retries and no state change",
+    "fail": "any call fails; record the exact error and matching debug-log lines",
+    "caveat": "a clean run is supporting evidence, not proof an intermittent defect cannot recur"
+  }
+}
+EOF
+}
+
+default_results_template() {
+  cat <<EOF
+{
+  "schema": "mcp-live-validation/validation-results/v1",
+  "workflow_id": "$(json_escape "$HANDOFF_WORKFLOW_ID")",
+  "validator": "",
+  "validator_capabilities": [],
+  "candidate_sha256": "$(json_escape "$candidate_sha")",
+  "source_revision": "$(json_escape "$source_revision")",
+  "started_at": "",
+  "finished_at": "",
+  "rounds": $REQUEST_ROUNDS,
+  "concurrent": $REQUEST_CONCURRENT,
+  "retries": $REQUEST_RETRIES,
+  "state_changes": $REQUEST_STATE_CHANGES,
+  "summary": {"total": $REQUEST_TOTAL, "passed": 0, "failed": 0},
+  "calls": [],
+  "initialization_errors": [],
+  "status": "PENDING"
+}
+EOF
+}
+
+derive_workflow() {
+  local state="$1" validation="$2" deployment="$3"
+  if [ "$validation" = "PASS" ]; then
+    WF_STATUS="VALIDATION_PASSED"
+    WF_NEXT="PREPARE_PR"
+    return 0
+  fi
+  if [ "$validation" = "FAIL" ]; then
+    WF_STATUS="VALIDATION_FAILED"
+    WF_NEXT="DIAGNOSE_AND_PREPARE_CORRECTED_CANDIDATE"
+    return 0
+  fi
+  case "$state" in
+    prepared)
+      if [ "$deployment" = "APPROVED" ]; then
+        WF_STATUS="PREPARED"
+        WF_NEXT="START_CANDIDATE"
+      else
+        WF_STATUS="DEPLOYMENT_PENDING_APPROVAL"
+        WF_NEXT="REQUEST_DEPLOYMENT_APPROVAL"
+      fi
+      ;;
+    candidate-running)
+      WF_STATUS="AWAITING_INDEPENDENT_VALIDATION"
+      WF_NEXT="RUN_INDEPENDENT_VALIDATION"
+      ;;
+    stopped|rolled-back)
+      WF_STATUS="ROLLED_BACK"
+      WF_NEXT="STOP_AND_REPORT"
+      ;;
+    failed)
+      WF_STATUS="BLOCKED"
+      WF_NEXT="STOP_AND_REPORT"
+      ;;
+    *)
+      WF_STATUS="BLOCKED"
+      WF_NEXT="STOP_AND_REPORT"
+      ;;
+  esac
+}
 
 cmd_handoff() {
   while [ $# -gt 0 ]; do
     case "$1" in
       --tests) [ $# -ge 2 ] || usage; HANDOFF_TESTS="$2"; shift ;;
       --results) [ $# -ge 2 ] || usage; HANDOFF_RESULTS="$2"; shift ;;
+      --results-json) [ $# -ge 2 ] || usage; HANDOFF_RESULTS_JSON="$2"; shift ;;
+      --request) [ $# -ge 2 ] || usage; HANDOFF_REQUEST="$2"; shift ;;
       --output) [ $# -ge 2 ] || usage; HANDOFF_OUTPUT="$2"; shift ;;
       --format) [ $# -ge 2 ] || usage; HANDOFF_FORMAT="$2"; shift ;;
       --validation-status)
         [ $# -ge 2 ] || usage
         case "$2" in
-          PENDING|PASS|FAIL) HANDOFF_STATUS="$2" ;;
+          PENDING|PASS|FAIL) HANDOFF_STATUS="$2"; HANDOFF_STATUS_SET=1 ;;
           *) die "--validation-status must be PENDING, PASS, or FAIL" ;;
         esac
         shift ;;
       --issue) [ $# -ge 2 ] || usage; HANDOFF_ISSUE="$2"; shift ;;
+      --workflow-id) [ $# -ge 2 ] || usage; HANDOFF_WORKFLOW_ID="$2"; shift ;;
+      --agent) [ $# -ge 2 ] || usage; HANDOFF_AGENT="$2"; shift ;;
+      --capabilities) [ $# -ge 2 ] || usage; HANDOFF_CAPABILITIES="$2"; shift ;;
+      --local-status)
+        [ $# -ge 2 ] || usage
+        case "$2" in
+          PASS|FAIL|NOT_RUN) HANDOFF_LOCAL_STATUS="$2" ;;
+          *) die "--local-status must be PASS, FAIL, or NOT_RUN" ;;
+        esac
+        shift ;;
+      --deployment-approval)
+        [ $# -ge 2 ] || usage
+        case "$2" in
+          PENDING|APPROVED|DENIED) HANDOFF_DEPLOYMENT_APPROVAL="$2" ;;
+          *) die "--deployment-approval must be PENDING, APPROVED, or DENIED" ;;
+        esac
+        shift ;;
+      --approval-reference) [ $# -ge 2 ] || usage; HANDOFF_APPROVAL_REFERENCE="$2"; shift ;;
+      --merge-status)
+        [ $# -ge 2 ] || usage
+        case "$2" in
+          PENDING|APPROVED|DENIED|NOT_REQUIRED) HANDOFF_MERGE_STATUS="$2" ;;
+          *) die "--merge-status must be PENDING, APPROVED, DENIED, or NOT_REQUIRED" ;;
+        esac
+        shift ;;
       --replace) HANDOFF_REPLACE=1 ;;
       --dry-run) DRY_RUN=1 ;;
       --process-match) [ $# -ge 2 ] || usage; PROCESS_MATCH="$2"; shift ;;
@@ -1529,13 +1721,24 @@ cmd_handoff() {
   resolve_root
   manifest_required
 
-  if [ "$HANDOFF_STATUS" != "PENDING" ] && [ -z "$HANDOFF_RESULTS" ]; then
-    die "--validation-status $HANDOFF_STATUS requires --results FILE with the independent evidence"
+  local self_dir validator schema
+  self_dir="$(cd "$(dirname "$0")" && pwd -P)"
+  validator="$self_dir/validation-handoff.py"
+  schema="$self_dir/../docs/reference/validation-handoff.schema.json"
+
+  if [ -z "$HANDOFF_WORKFLOW_ID" ]; then
+    HANDOFF_WORKFLOW_ID="$(mget workflow_id || true)"
+  fi
+  if [ -z "$HANDOFF_WORKFLOW_ID" ]; then
+    HANDOFF_WORKFLOW_ID="mcp-live-$(date -u +%Y%m%dT%H%M%SZ)-$$"
+    if [ "$DRY_RUN" != 1 ]; then
+      set_manifest_value workflow_id "$HANDOFF_WORKFLOW_ID"
+    fi
   fi
 
   local branch commit dirty candidate candidate_sha candidate_version baseline
   local baseline_version baseline_sha baseline_log
-  local source source_revision patch patch_sha profile log state pid cmd cmd_safe rollback
+  local source source_revision patch patch_sha profile log state pid cmd cmd_safe command_sha rollback platform
   branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
   dirty="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
@@ -1559,13 +1762,18 @@ cmd_handoff() {
   pid="$(mget process_pid || true)"
   cmd="$(mget process_command || true)"
   cmd_safe="$(redact_command "$cmd")"
+  command_sha=""
+  if [ -n "$cmd" ]; then
+    command_sha="$(printf '%s' "$cmd" | sha256_stdin)"
+  fi
+  platform="$(uname -s 2>/dev/null || printf 'unknown')"
   rollback="$ROOT/scripts/planner-tunnel-candidate.sh rollback --checkout $ROOT --start"
   case "$PROCESS_MATCH" in
     tunnel-client) : ;;
     *) rollback="$rollback --process-match $PROCESS_MATCH" ;;
   esac
 
-  local test_text result_text tree_state
+  local test_text result_text tree_state caps
   if [ "$dirty" = 0 ]; then
     tree_state="clean"
   else
@@ -1575,33 +1783,115 @@ cmd_handoff() {
     [ -f "$HANDOFF_TESTS" ] || die "tests file not found: $HANDOFF_TESTS"
     test_text="$(cat "$HANDOFF_TESTS")"
   else
-    test_text="[agent: paste the local test commands and results here]"
+    test_text="[agent: record the local test commands and results here]"
+  fi
+  if [ "$HANDOFF_LOCAL_STATUS" != "NOT_RUN" ] && [ -z "$HANDOFF_TESTS" ]; then
+    die "--local-status $HANDOFF_LOCAL_STATUS requires --tests FILE with the local evidence"
   fi
   if [ -n "$HANDOFF_RESULTS" ]; then
     [ -f "$HANDOFF_RESULTS" ] || die "results file not found: $HANDOFF_RESULTS"
     result_text="$(cat "$HANDOFF_RESULTS")"
   else
-    result_text="[ChatGPT: paste the live MCP results here. Do not mark the candidate verified until this section contains actual results.]"
+    result_text="[independent validator: record the actual MCP results here; missing validation is not success]"
   fi
+  caps="$(caps_json "$HANDOFF_CAPABILITIES")"
+
+  local request_json_text results_template_json_text results_json_text validator_name
+  local request_meta request_rounds request_total request_concurrent request_retries request_state_changes
+  if [ -n "$HANDOFF_REQUEST" ]; then
+    [ -f "$HANDOFF_REQUEST" ] || die "request file not found: $HANDOFF_REQUEST"
+    command -v python3 >/dev/null 2>&1 || die "python3 is required for --request"
+    request_json_text="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1]));
+assert isinstance(d, dict), "request must be a JSON object"
+print(json.dumps(d, indent=2, sort_keys=True))' "$HANDOFF_REQUEST")" ||
+      die "invalid request JSON: $HANDOFF_REQUEST"
+    request_meta="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1]));
+print(d.get("rounds", 10)); print(d.get("total_calls", 20));
+print("true" if d.get("concurrent", True) else "false");
+print(d.get("retries", 0));
+print("true" if d.get("state_changes", False) else "false")' "$HANDOFF_REQUEST")" ||
+      die "invalid request JSON: $HANDOFF_REQUEST"
+    request_rounds="$(printf '%s\n' "$request_meta" | sed -n '1p')"
+    request_total="$(printf '%s\n' "$request_meta" | sed -n '2p')"
+    request_concurrent="$(printf '%s\n' "$request_meta" | sed -n '3p')"
+    request_retries="$(printf '%s\n' "$request_meta" | sed -n '4p')"
+    request_state_changes="$(printf '%s\n' "$request_meta" | sed -n '5p')"
+  else
+    request_json_text="$(default_request_json)"
+    request_rounds=10
+    request_total=20
+    request_concurrent=true
+    request_retries=0
+    request_state_changes=false
+  fi
+  REQUEST_ROUNDS="$request_rounds"
+  REQUEST_TOTAL="$request_total"
+  REQUEST_CONCURRENT="$request_concurrent"
+  REQUEST_RETRIES="$request_retries"
+  REQUEST_STATE_CHANGES="$request_state_changes"
+
+  results_template_json_text="$(default_results_template)"
+  results_json_text="$results_template_json_text"
+  validator_name="unspecified"
+  if [ -n "$HANDOFF_RESULTS_JSON" ]; then
+    [ -f "$HANDOFF_RESULTS_JSON" ] || die "results JSON not found: $HANDOFF_RESULTS_JSON"
+    command -v python3 >/dev/null 2>&1 || die "python3 is required for --results-json"
+    results_json_text="$(python3 -c 'import json,sys; d=json.load(open(sys.argv[1]));
+assert isinstance(d, dict), "results must be a JSON object"
+print(json.dumps(d, indent=2, sort_keys=True))' "$HANDOFF_RESULTS_JSON")" ||
+      die "invalid results JSON: $HANDOFF_RESULTS_JSON"
+    result_status="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("status", ""))' "$HANDOFF_RESULTS_JSON")" ||
+      die "invalid results JSON: $HANDOFF_RESULTS_JSON"
+    case "$result_status" in
+      PENDING|PASS|FAIL) : ;;
+      *) die "results JSON status must be PENDING, PASS, or FAIL: $result_status" ;;
+    esac
+    if [ "$HANDOFF_STATUS_SET" = 1 ] && [ "$HANDOFF_STATUS" != "$result_status" ]; then
+      die "--validation-status $HANDOFF_STATUS does not match results JSON status $result_status"
+    fi
+    HANDOFF_STATUS="$result_status"
+    validator_name="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("validator", ""))' "$HANDOFF_RESULTS_JSON")" ||
+      die "invalid results JSON: $HANDOFF_RESULTS_JSON"
+    [ -n "$validator_name" ] || validator_name="unspecified"
+  fi
+  if [ "$HANDOFF_STATUS" != "PENDING" ] && [ -z "$HANDOFF_RESULTS_JSON" ]; then
+    die "--validation-status $HANDOFF_STATUS requires --results-json FILE with the independent results; local tests are not independent validation"
+  fi
+  if [ "$HANDOFF_STATUS" = "PASS" ] || [ "$HANDOFF_STATUS" = "FAIL" ]; then
+    case "$validator_name" in
+      ""|unspecified) die "results JSON must name the independent validator" ;;
+    esac
+  fi
+
+  derive_workflow "$state" "$HANDOFF_STATUS" "$HANDOFF_DEPLOYMENT_APPROVAL"
 
   emit_handoff() {
     cat <<EOF
-# Planner MCP candidate handoff
+# MCP candidate validation handoff
 
-> This is a handoff, not a validation result. ChatGPT must report its own live
-> MCP results before the candidate is called verified. A clean 20/20 run is
-> supporting evidence, not proof that an intermittent defect cannot recur.
+> This is a handoff, not a validation result. An independent MCP validator must
+> report its own live results before the candidate is called verified. A clean
+> run is supporting evidence, not proof that an intermittent defect cannot recur.
 
-## Validation status
+## Workflow
 
-- Status: \`$HANDOFF_STATUS\`
+- ID: \`$HANDOFF_WORKFLOW_ID\`
+- Status: \`$WF_STATUS\`
+- Next permitted action: \`$WF_NEXT\`
 - Issue: \`${HANDOFF_ISSUE:-not recorded}\`
+- Validation status: \`$HANDOFF_STATUS\`
 
 ## Repository
 
 - Branch: \`$branch\`
 - Commit: \`$commit\`
 - Working tree: $tree_state
+
+## Environment
+
+- Agent: \`$HANDOFF_AGENT\`
+- Platform: \`$platform\`
+- Capabilities: $caps
 
 ## Candidate executable
 
@@ -1618,16 +1908,46 @@ cmd_handoff() {
 - Manifest state: \`${state:-unknown}\`
 - PID: \`${pid:-not running}\`
 - Command: \`${cmd_safe:-n/a}\`
+- Command SHA-256: \`${command_sha:-n/a}\`
 - Candidate debug log: \`$log\`
 - Baseline log: ${baseline_log:-not recorded}
 
-## Local tests (not a live ChatGPT test)
+## Local verification (not independent validation)
+
+- Status: \`$HANDOFF_LOCAL_STATUS\`
 
 $test_text
 
-## ChatGPT live MCP results
+## Independent validation
+
+- Status: \`$HANDOFF_STATUS\`
+- Validator: \`$validator_name\`
+- Candidate SHA-256: \`$candidate_sha\`
+- Source revision: \`$source_revision\`
 
 $result_text
+
+## Approval
+
+- Deployment required: yes
+- Deployment status: \`$HANDOFF_DEPLOYMENT_APPROVAL\`
+- Approval reference: \`${HANDOFF_APPROVAL_REFERENCE:-not recorded}\`
+- Merge required: yes
+- Merge status: \`$HANDOFF_MERGE_STATUS\` (the agent never merges automatically)
+
+## Requested live MCP tests
+
+See the JSON artifact for the authoritative \`request\` object and the
+\`results_template\` the validator fills. The default issue #90-style request is:
+
+- 10 rounds of concurrent \`sop_status\` and \`sop_question_get\`
+- 20 calls total
+- no retries and no state changes
+- record every initialization error, including HTTP \`409\` and
+  \`mcp_initialization_required\`
+
+For a different MCP surface, replace the required calls in the JSON artifact
+while keeping the no-retry, no-state-change, and initialization-error rules.
 
 ## Rollback
 
@@ -1639,23 +1959,9 @@ The rollback command stops only the verified candidate PID, restores the wrapper
 backup, and starts the recorded baseline. Do not edit or delete the candidate
 binary before rollback evidence is collected.
 
-## Exact read-only MCP test request
-
-Run 10 rounds. In each round, call these two tools concurrently and wait for
-both responses before starting the next round:
-
-- \`sop_status({})\`
-- \`sop_question_get({"question_id":"q-1"})\`
-
-That is 20 calls total. Do not retry a failed call, answer a question, or change
-SOP state. Record every call's wall-clock time and either success or the exact
-error fields: HTTP status, JSON-RPC code, error type, and origin. Record every
-initialization failure, including HTTP \`409\` and
-\`mcp_initialization_required\`.
-
 ## Acceptance
 
-- Pass: all 20 calls succeed with no retries and no state change.
+- Pass: every requested call succeeds with no retries and no state change.
 - Fail: any call fails; record the exact error and the matching debug-log lines.
 - A pass is supporting evidence. The defect remains intermittent until repeated
   live runs and a confirmed root cause support a stronger claim.
@@ -1665,7 +1971,9 @@ EOF
   emit_handoff_json() {
     cat <<EOF
 {
-  "schema": "mcp-live-validation/handoff/v1",
+  "schema": "mcp-live-validation/validation-handoff/v1",
+  "schema_version": 1,
+  "workflow_id": "$(json_escape "$HANDOFF_WORKFLOW_ID")",
   "issue": "$(json_escape "$HANDOFF_ISSUE")",
   "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "repository": {
@@ -1673,6 +1981,11 @@ EOF
     "branch": "$(json_escape "$branch")",
     "commit": "$(json_escape "$commit")",
     "working_tree": "$(json_escape "$tree_state")"
+  },
+  "environment": {
+    "agent": "$(json_escape "$HANDOFF_AGENT")",
+    "platform": "$(json_escape "$platform")",
+    "capabilities": $caps
   },
   "candidate": {
     "path": "$(json_escape "$candidate")",
@@ -1693,35 +2006,41 @@ EOF
     "state": "$(json_escape "$state")",
     "pid": "$(json_escape "$pid")",
     "command": "$(json_escape "$cmd_safe")",
+    "command_sha256": "$(json_escape "$command_sha")",
     "launch_configuration": {"profile": "$(json_escape "$profile")"}
   },
   "logs": {
     "candidate": "$(json_escape "$log")",
     "baseline": "$(json_escape "$baseline_log")"
   },
-  "local_tests": "$(json_escape "$test_text")",
+  "local_verification": {
+    "status": "$(json_escape "$HANDOFF_LOCAL_STATUS")",
+    "results": "$(json_escape "$test_text")"
+  },
+  "request": $request_json_text,
+  "results_template": $results_template_json_text,
   "independent_validation": {
-    "validator": "ChatGPT",
+    "validator": "$(json_escape "$validator_name")",
     "status": "$(json_escape "$HANDOFF_STATUS")",
-    "results": "$(json_escape "$result_text")",
+    "candidate_sha256": "$(json_escape "$candidate_sha")",
+    "source_revision": "$(json_escape "$source_revision")",
+    "results": $results_json_text,
     "local_tests_are_not_validation": true
   },
-  "request": {
-    "rounds": 10,
-    "concurrent": true,
-    "retries": 0,
-    "state_changes": false,
-    "record_initialization_errors": true,
-    "required_calls": [
-      {"tool": "sop_status", "arguments": {}},
-      {"tool": "sop_question_get", "arguments": {"question_id": "q-1"}}
-    ],
-    "total_calls": 20,
-    "acceptance": {
-      "pass": "all 20 calls succeed with no retries and no state change",
-      "fail": "any call fails; record the exact error and matching debug-log lines",
-      "caveat": "a clean run is supporting evidence, not proof an intermittent defect cannot recur"
+  "approval": {
+    "deployment": {
+      "required": true,
+      "status": "$(json_escape "$HANDOFF_DEPLOYMENT_APPROVAL")",
+      "reference": "$(json_escape "$HANDOFF_APPROVAL_REFERENCE")"
+    },
+    "merge": {
+      "required": true,
+      "status": "$(json_escape "$HANDOFF_MERGE_STATUS")"
     }
+  },
+  "workflow": {
+    "status": "$(json_escape "$WF_STATUS")",
+    "next_permitted_action": "$(json_escape "$WF_NEXT")"
   },
   "rollback": {"command": "$(json_escape "$rollback")"},
   "safety": {
@@ -1740,21 +2059,37 @@ EOF
     esac
   }
 
+  local tmp
+  tmp="$(mktemp "${TMPDIR:-/tmp}/validation-handoff.XXXXXX")"
+  emit_selected_handoff > "$tmp"
+
+  if [ "$HANDOFF_FORMAT" = "json" ]; then
+    command -v python3 >/dev/null 2>&1 || { rm -f "$tmp"; die "python3 is required for --format json"; }
+    [ -f "$validator" ] || { rm -f "$tmp"; die "handoff validator not found: $validator"; }
+    if ! python3 "$validator" --handoff "$tmp" --checkout "$ROOT" --schema "$schema" --max-age-hours 24 --quiet; then
+      python3 "$validator" --handoff "$tmp" --checkout "$ROOT" --schema "$schema" --max-age-hours 24 >&2 || true
+      rm -f "$tmp"
+      die "generated JSON handoff failed validation; the artifact was not written"
+    fi
+  fi
+
   if [ -n "$HANDOFF_OUTPUT" ]; then
     if [ -e "$HANDOFF_OUTPUT" ] && [ "$HANDOFF_REPLACE" != 1 ]; then
+      rm -f "$tmp"
       die "output exists: $HANDOFF_OUTPUT (pass --replace)"
     fi
     if [ "$DRY_RUN" = 1 ]; then
       note "dry-run: would write handoff to $HANDOFF_OUTPUT"
-      emit_selected_handoff
+      cat "$tmp"
+      rm -f "$tmp"
       return 0
     fi
     mkdir -p "$(dirname "$HANDOFF_OUTPUT")"
-    emit_selected_handoff > "$HANDOFF_OUTPUT.tmp.$$"
-    mv -f "$HANDOFF_OUTPUT.tmp.$$" "$HANDOFF_OUTPUT"
+    mv -f "$tmp" "$HANDOFF_OUTPUT"
     note "handoff written to $HANDOFF_OUTPUT"
   else
-    emit_selected_handoff
+    cat "$tmp"
+    rm -f "$tmp"
   fi
 }
 
