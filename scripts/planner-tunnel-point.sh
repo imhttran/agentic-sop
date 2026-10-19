@@ -27,12 +27,24 @@
 #   "$TMPDIR/sop-main/scripts/planner-tunnel-point.sh" --build \
 #     --checkout ~/agentic-workspace/agentic-sop .run/planner-chatgpt
 #
-# An existing wrapper is copied to .run/tunnel/sop-mcp-planner.sh.bak-<timestamp>
-# before it is replaced.
+# The new wrapper is written to a temporary file and checked first; the live
+# wrapper is replaced only if the check passes. An existing wrapper is copied to
+# .run/tunnel/sop-mcp-planner.sh.bak-<timestamp> before it is replaced.
 
 set -euo pipefail
 
 usage() { sed -n '/^# Usage:/,/^#   Relative/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+
+# Quote a value as a single-quoted shell literal, safe for any path.
+shquote() { local q="'\\''"; printf "'%s'" "${1//\'/$q}"; }
+
+TREE=""
+CANDIDATE=""
+cleanup() {
+  [ -z "$CANDIDATE" ] || rm -f "$CANDIDATE"
+  [ -z "$TREE" ] || git -C "$ROOT" worktree remove --force "$TREE" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
 
 BUILD=0
 BINARY=""
@@ -80,50 +92,54 @@ if [ "$BUILD" = 1 ]; then
   TREE="$(mktemp -d "${TMPDIR:-/tmp}/sop-main.XXXXXX")"
   rmdir "$TREE"
   git worktree add -q --detach "$TREE" origin/main
-  trap 'git -C "$ROOT" worktree remove --force "$TREE" >/dev/null 2>&1 || true' EXIT
   mkdir -p "$(dirname "$BINARY")"
   echo "point: building sop from origin/main ($(git rev-parse --short origin/main)) -> $BINARY"
   (cd "$TREE" && go build -o "$BINARY" ./cmd/sop)
 fi
 [ -x "$BINARY" ] || { echo "point: sop binary not found or not executable: $BINARY (use --build)" >&2; exit 1; }
 
-# 2. Back up the current wrapper, then write the new one with absolute paths: the
+# 2. Write the new wrapper to a temporary file with absolute, quoted paths: the
 #    tunnel does not see this shell's environment. PWD is exported so the server
 #    reports the same path spelling as the shell that ran sop run (needed only by
 #    binaries older than the repository-identity fix; harmless otherwise).
 mkdir -p "$(dirname "$WRAPPER")"
-if [ -f "$WRAPPER" ]; then
-  BACKUP="$WRAPPER.bak-$(date +%Y%m%d-%H%M%S)"
-  cp "$WRAPPER" "$BACKUP"
-  echo "point: previous wrapper saved to $BACKUP"
-fi
-cat > "$WRAPPER" <<EOF
+CANDIDATE="$(mktemp "$WRAPPER.new.XXXXXX")"
+cat > "$CANDIDATE" <<EOF
 #!/bin/sh
-# Planner MCP for $PROJECT
+# Planner MCP wrapper.
 # Written by scripts/planner-tunnel-point.sh on $(date '+%Y-%m-%d %H:%M:%S').
-PROJECT="$PROJECT"
+PROJECT=$(shquote "$PROJECT")
 cd "\$PROJECT" || exit 1
 export PWD="\$PROJECT"
-exec "$BINARY" mcp --planner
+exec $(shquote "$BINARY") mcp --planner
 EOF
-chmod +x "$WRAPPER"
-echo "point: wrapper now serves $PROJECT"
+chmod +x "$CANDIDATE"
 
-# 3. Check the wrapper locally with a read-only call.
+# 3. Check the new wrapper locally with a read-only call before installing it.
 REPLY="$(printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"planner-tunnel-point","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sop_question_list","arguments":{}}}' \
-  | "$WRAPPER" 2>&1 | tail -1)"
+  | "$CANDIDATE" 2>&1 | tail -1)"
 case "$REPLY" in
   *'"id":2'*'"isError":false'*)
     TEXT="$(printf '%s' "$REPLY" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')"
     echo "point: local check ok; sop_question_list -> ${TEXT:-$REPLY}" ;;
   *)
-    echo "point: local check FAILED; the wrapper replied:" >&2
+    echo "point: local check FAILED; the live wrapper was left unchanged. The new wrapper replied:" >&2
     echo "$REPLY" >&2
     exit 1 ;;
 esac
+
+# 4. Back up the current wrapper, then atomically install the checked one.
+if [ -f "$WRAPPER" ]; then
+  BACKUP="$WRAPPER.bak-$(date +%Y%m%d-%H%M%S)"
+  cp "$WRAPPER" "$BACKUP"
+  echo "point: previous wrapper saved to $BACKUP"
+fi
+mv -f "$CANDIDATE" "$WRAPPER"
+CANDIDATE=""
+echo "point: wrapper now serves $PROJECT"
 
 cat <<'EOF'
 
