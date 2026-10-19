@@ -119,42 +119,16 @@ func TestCargoValidWorkspaceReferenceOutsideNestedRootIsPreserved(t *testing.T) 
 	}
 }
 
-// A member glob that matches a file must stay visible even when another match is
-// a valid package directory; nested content below a matched directory is not a
-// distinct member position and must not produce noise.
-func TestCargoMemberGlobMatchingFileIsReportedAlongsideValidMember(t *testing.T) {
+// Cargo ignores ordinary files that match a members glob and reports only a
+// matched directory that has no Cargo.toml. Discovery follows that behavior so a
+// repository Cargo accepts is not rejected for an unrelated file.
+func TestCargoMemberGlobIgnoresFilesAndReportsNonPackageDirectories(t *testing.T) {
 	root := t.TempDir()
 	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\n")
 	cargoTestPackage(t, root, "crates/app", "app")
 	cargoTestFile(t, root, "crates/app/src/main.rs", "fn main() {}\n")
 	cargoTestFile(t, root, "crates/README.txt", "not a package\n")
-	cargoTestLock(t, root, ".")
-
-	detection, err := DetectRepository(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !issueMentions(detection.Issues, "crates/README.txt", "not a package directory") {
-		t.Fatalf("issues = %v, want the matching file reported", detection.Issues)
-	}
-	if issueMentions(detection.Issues, "main.rs") {
-		t.Fatalf("issues = %v, want no noise about content below a matched directory", detection.Issues)
-	}
-	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"crates/app"}) {
-		t.Fatalf("workspaces = %+v, want the valid package member preserved", detection.Workspaces)
-	}
-	if gap := dependencyInventoryGap(detection, []Language{LanguageRust}, nil, ""); gap == "" {
-		t.Fatal("readiness projection reported no gap for an ambiguous member glob")
-	}
-}
-
-// Exclude removes glob-expanded members, so a file under an excluded path is not
-// an in-scope member match.
-func TestCargoMemberGlobMatchingExcludedFileIsNotReported(t *testing.T) {
-	root := t.TempDir()
-	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates\"]\n")
-	cargoTestPackage(t, root, "crates/app", "app")
-	cargoTestFile(t, root, "crates/README.txt", "not a package\n")
+	cargoTestFile(t, root, "crates/notes/readme.md", "not a package\n")
 	cargoTestLock(t, root, ".")
 
 	detection, err := DetectRepository(root)
@@ -162,7 +136,16 @@ func TestCargoMemberGlobMatchingExcludedFileIsNotReported(t *testing.T) {
 		t.Fatal(err)
 	}
 	if issueMentions(detection.Issues, "README.txt") {
-		t.Fatalf("issues = %v, want no report for an excluded glob match", detection.Issues)
+		t.Fatalf("issues = %v, want ordinary files to be ignored like Cargo", detection.Issues)
+	}
+	if !issueMentions(detection.Issues, "crates/notes without Cargo.toml") {
+		t.Fatalf("issues = %v, want the matched directory without Cargo.toml reported", detection.Issues)
+	}
+	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"crates/app"}) {
+		t.Fatalf("workspaces = %+v, want the valid package member preserved", detection.Workspaces)
+	}
+	if gap := dependencyInventoryGap(detection, []Language{LanguageRust}, nil, ""); gap == "" {
+		t.Fatal("readiness projection reported no gap for a non-package member directory")
 	}
 }
 

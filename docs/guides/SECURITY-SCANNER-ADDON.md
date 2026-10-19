@@ -410,10 +410,9 @@ Dependency scanning is driven by an explicit inventory of in-scope inputs:
   does not make a nested package a workspace member. An absolute or
   repository-escaping `package.workspace` reference is reported as an unsupported
   layout instead of being treated as an independent package.
-- A `members` glob that matches a file where a package directory is expected is
-  reported even when another match is a valid package. Content below an
-  already-matched directory is not a separate member position, and `exclude`
-  still removes glob-expanded members.
+- A `members` glob that matches an ordinary file is ignored, matching Cargo; a
+  matched directory without `Cargo.toml` is still reported explicitly. `exclude`
+  continues to remove glob-expanded members.
 - Excluded and undeclared nested packages are independent packages with their own
   `Cargo.lock` obligations. A workspace member does not own a lockfile.
 - Every in-scope obligation must be accounted for. Present inputs are scanned;
