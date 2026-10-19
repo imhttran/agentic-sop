@@ -10,29 +10,39 @@
 # command to do that.
 #
 # Usage:
-#   scripts/planner-tunnel-point.sh [--build] [--binary PATH] PROJECT_DIR
+#   scripts/planner-tunnel-point.sh [--build] [--binary PATH] [--checkout PATH] PROJECT_DIR
 #
-#   PROJECT_DIR   the SOP project the planner should serve (must contain .agent-sdlc)
-#   --build       build sop from origin/main into the binary path first
-#   --binary PATH the sop binary the wrapper runs (default: .run/spike/sop-planner)
+#   PROJECT_DIR     the SOP project the planner should serve (must contain .agent-sdlc)
+#   --build         build sop from origin/main into the binary path first
+#   --binary PATH   the sop binary the wrapper runs (default: .run/spike/sop-planner)
+#   --checkout PATH the agentic-sop checkout whose .run/tunnel and .run/spike to use
+#                   (default: the checkout this script runs from). Use it to run the
+#                   script from another worktree, for example a clean main, without
+#                   switching branches in the checkout the tunnel profile points at.
 #
-# Example (back to the old ChatGPT demo, with a fresh binary from main):
+#   Relative PROJECT_DIR and --binary paths are resolved against the checkout.
+#
+# Examples (back to the old ChatGPT demo, with a fresh binary from main):
 #   scripts/planner-tunnel-point.sh --build .run/planner-chatgpt
+#   "$TMPDIR/sop-main/scripts/planner-tunnel-point.sh" --build \
+#     --checkout ~/agentic-workspace/agentic-sop .run/planner-chatgpt
 #
 # An existing wrapper is copied to .run/tunnel/sop-mcp-planner.sh.bak-<timestamp>
 # before it is replaced.
 
 set -euo pipefail
 
-usage() { sed -n '12,18p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
+usage() { sed -n '/^# Usage:/,/^#   Relative/p' "$0" | sed 's/^# \{0,1\}//' >&2; exit 2; }
 
 BUILD=0
 BINARY=""
+CHECKOUT=""
 PROJECT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) BUILD=1 ;;
     --binary) [ $# -ge 2 ] || usage; BINARY="$2"; shift ;;
+    --checkout) [ $# -ge 2 ] || usage; CHECKOUT="$2"; shift ;;
     -h|--help) usage ;;
     -*) echo "point: unknown option $1" >&2; usage ;;
     *) [ -z "$PROJECT" ] || usage; PROJECT="$1" ;;
@@ -41,10 +51,17 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$PROJECT" ] || usage
 
-SELF_DIR="$(cd "$(dirname "$0")" && pwd -P)"
-ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null)" || {
-  echo "point: run this script from inside the agentic-sop checkout" >&2; exit 1; }
+if [ -n "$CHECKOUT" ]; then
+  [ -d "$CHECKOUT" ] || { echo "point: --checkout directory not found: $CHECKOUT" >&2; exit 1; }
+  ROOT="$(git -C "$CHECKOUT" rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "point: --checkout is not a git checkout: $CHECKOUT" >&2; exit 1; }
+else
+  SELF_DIR="$(cd "$(dirname "$0")" && pwd -P)"
+  ROOT="$(git -C "$SELF_DIR" rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "point: run this script from inside the agentic-sop checkout, or pass --checkout" >&2; exit 1; }
+fi
 cd "$ROOT"
+echo "point: checkout = $ROOT"
 
 WRAPPER="$ROOT/.run/tunnel/sop-mcp-planner.sh"
 BINARY="${BINARY:-$ROOT/.run/spike/sop-planner}"
