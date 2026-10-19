@@ -10,6 +10,11 @@ consolidated repository has been used and accepted.
 - Their source is now consolidated into `agentic-sop` (one module, one unified
   `sop` executable, legacy wrappers retained) — see
   `docs/guides/REPOSITORY-CONSOLIDATION.md`.
+- **Both legacy remotes are now archived (read-only) on GitHub**, as observed on
+  2026-10-19. Archival happened before the deprecation notices below, so a notice
+  can only be added by unarchiving, committing the notice, and archiving again.
+  No readiness gate has been verified for either repository; see
+  [Readiness checklist](#readiness-checklist).
 
 ## Recommended (later, operator-approved)
 
@@ -29,6 +34,48 @@ consolidated repository has been used and accepted.
    consolidated repository only after the usage period.
 5. **Archival.** Archive (never delete) the legacy repositories only after all of the
    above, and only with explicit approval.
+
+## Readiness checklist
+
+Status as of 2026-10-19. A legacy repository is **verified ready** only when every
+row is confirmed with evidence. Nothing below has been verified from `agentic-sop`;
+the legacy repositories are outside this repository's scope. "Unverified" means not
+checked, not failed.
+
+| Item | `sop-controller` | `sop-decision-adapters` |
+| --- | --- | --- |
+| Remote archived | yes (observed) | yes (observed) |
+| README deprecation/redirect notice | missing | missing |
+| Local dependency check (nothing still builds or imports the legacy repo) | unverified | unverified |
+| Consolidated-command equivalence (`sop controller serve` / `sop decision` replace the legacy executables) | unverified | unverified |
+| Rollback backup confirmed (full history plus uncommitted deltas) | unverified | unverified |
+| Unique-work disposition (legacy-only commits or deltas resolved) | unverified | unresolved |
+
+The gate criteria and the "RD-01" disposition item referenced in the status report
+are not defined in this repository. Record their source here once it is known.
+
+## Draft deprecation notices
+
+Paste at the top of each legacy README. Requires unarchiving first (see Current
+status). Not applied.
+
+`sop-controller`:
+
+```markdown
+> **Deprecated.** This repository has been consolidated into
+> [`imhttran/agentic-sop`](https://github.com/imhttran/agentic-sop). Use
+> `sop controller serve` from the unified `sop` executable. File issues and find
+> releases there. This repository is retained read-only as a rollback source.
+```
+
+`sop-decision-adapters`:
+
+```markdown
+> **Deprecated.** This repository has been consolidated into
+> [`imhttran/agentic-sop`](https://github.com/imhttran/agentic-sop). Use
+> `sop decision` from the unified `sop` executable. File issues and find releases
+> there. This repository is retained read-only as a rollback source.
+```
 
 ## Do not
 
