@@ -15,14 +15,19 @@ rerun for this report.
 
 ## 0. Disposition
 
-**PARTIAL overall; GO for single-question use with a real executor.** Under the plan's
-rule, an unverified real executor makes the outcome PARTIAL. The evidence splits:
+**GO for the operator-assisted planner loop, one or two questions, with a real executor —
+with [imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68) applied.**
+Until #68 merges, `main` delivers only the latest decision, and the two-question result
+does not hold for a binary built from `main`. The evidence:
 
-- **Two-question loop: PARTIAL.** The intended external client (ChatGPT, via the
-  Secure MCP Tunnel) completed the live **two-question** loop in one task/run epoch
-  (`planner-2q`, §14), but the executor was a controlled script. The script also kept
-  the first decision in its own scratch state, because SOP delivered only the latest
-  decision (§9.2).
+- **Two-question loop with a real executor: GO** (`planner-2q-live`, 2026-10-18,
+  [`planner-live-test-findings.md`](planner-live-test-findings.md)). A model-driven
+  executor raised two questions in one task and run epoch; ChatGPT answered both over the
+  tunnel; the final round wrote both decisions with no deliverable existing before it, and
+  completed `VERIFIED` / `LOCAL_DONE`. The binary included #68 (§9.2).
+- **Two-question loop with a scripted executor** (`planner-2q`, §14): superseded by the
+  run above. Its script kept the first decision in its own scratch state, because SOP then
+  delivered only the latest decision.
 - **Single-question loop with a real executor: GO.** The later `planner-chatgpt` run
   ([`planner-live-test-findings.md`](planner-live-test-findings.md)) used a model-driven
   executor (`ollama` / `deepseek-v4.1-flash:cloud`): it raised one question, ChatGPT
@@ -36,8 +41,8 @@ Scope and explicit non-claims:
   to read a planner question and submit a bounded answer; SOP applies it and the executor
   resumes. Durability, fencing, stale/duplicate/authority, timeout, and crash-gap recovery
   are covered by deterministic tests.
-- **Not in scope (unverified):** a **real model executor across two questions**, and
-  **unattended** operation. Interactive success is not unattended success.
+- **Not in scope (unverified):** **unattended** operation. Interactive success is not
+  unattended success.
 - **Open:** the HTTP 409 MCP initialization error (§6) and the timeout-test failure
   (§13) remain unresolved.
 
@@ -169,13 +174,13 @@ assigned.** Details in `SPIKE-005-verification-report.md` §6.
 
 ### 8.1 Operator-assisted ChatGPT planner loop
 
-**Supported for one question with a real executor; PARTIAL for two.** An operator can,
-in a ChatGPT session, list/read the planner question and submit an answer; SOP applies
-it and the executor resumes, preserving the run epoch and skipping PLAN. The
-single-question loop ran live with a model-driven executor (`planner-chatgpt`). The
-two-question loop ran live only with a scripted executor (`planner-2q`). Remaining work:
-run the two-question loop live with a model-driven executor, after the decision-history
-fix in §9.2 is merged.
+**Supported for one and two questions with a real executor** (two questions require #68).
+An operator can, in a ChatGPT session, list/read the planner question and submit an
+answer; SOP applies it and the executor resumes, preserving the run epoch and skipping
+PLAN. Both loops ran live with a model-driven executor (`planner-chatgpt`,
+`planner-2q-live`). Remaining work: merge #68; fix repository identity so a `/var` versus
+`/private/var` path spelling on macOS does not refuse answers as stale (see
+[`planner-live-test-findings.md`](planner-live-test-findings.md)).
 
 ### 8.2 Unattended multi-round planner loop
 
@@ -210,11 +215,13 @@ as supported on the strength of the planner loop.
    [imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68) passes the
    run's earlier applied decisions (same task, run epoch, and plan revision), oldest
    first, ahead of the latest one. It is covered by `TestPlannerIntegrationTwoRoundsOneRun`
-   and `TestEarlierPlannerDecisionsScope`; it has not been exercised live.
+   and `TestEarlierPlannerDecisionsScope`, and was exercised live in `planner-2q-live`
+   (2026-10-18): no deliverable existed after round 2, and the final round wrote the
+   round-1 decision. **Closed once #68 merges.**
 3. **Real executor — single question only.** The SPIKE-006 demos used a controlled
    script. The later `planner-chatgpt` run used a model-driven executor for one question
-   ([`planner-live-test-findings.md`](planner-live-test-findings.md)). A real executor
-   across two questions is unverified.
+   ([`planner-live-test-findings.md`](planner-live-test-findings.md)), and the
+   `planner-2q-live` run used it for two questions. **Closed.**
 4. **Client transcript as a durable artifact:** the live evidence references the
    operator's ChatGPT tool-call transcript; a machine-captured copy is not stored in the
    repository. `SPIKE-006-live-transcript.md` records the operator-attested exchange with
@@ -400,6 +407,10 @@ Editorial only; no live evidence was rerun or edited.
 - §9.2: decision-history delivery is fixed in PR #68, not yet exercised live.
 - §9.3: the later real-executor run is recorded.
 - §13: "the code remains uncommitted" is no longer true; the commit and merge are noted.
+
+Follow-up (2026-10-18, after the `planner-2q-live` run): §0 changed to **GO for one or
+two questions with a real executor, with #68 applied**; §8.1, §9.2, and §9.3 updated to
+match.
 
 Still open: the HTTP 409 MCP initialization error (§6) and the one-time
 `TestCrossModuleTimeoutAndCancellation` failure (§13).

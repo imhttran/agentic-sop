@@ -265,7 +265,7 @@ recorded outcomes are preserved; they do not identify the currently active plan.
 - [plans/SPIKE-004-implementation-proposal.md](plans/SPIKE-004-implementation-proposal.md) — read for the proposed durable executor-question continuation design.
 - [plans/SPIKE-004-live-evidence.md](plans/SPIKE-004-live-evidence.md) — read for the recorded live ChatGPT continuation round trip.
 - [plans/SPIKE-005-verification-report.md](plans/SPIKE-005-verification-report.md) — read for the restart, timeout, stale-state, duplicate, and authority verification evidence.
-- [plans/SPIKE-006-feasibility-report.md](plans/SPIKE-006-feasibility-report.md) — read for the operator-assisted planner feasibility verdict (PARTIAL overall; GO for single-question use with a real executor) and limitations.
+- [plans/SPIKE-006-feasibility-report.md](plans/SPIKE-006-feasibility-report.md) — read for the operator-assisted planner feasibility verdict (GO for one or two questions with a real executor, with #68 applied) and limitations.
 - [plans/SPIKE-006-live-transcript.md](plans/SPIKE-006-live-transcript.md) — read for the sanitized live two-question demonstration transcript.
 - [plans/planner-live-test-findings.md](plans/planner-live-test-findings.md) — read for the preserved live planner runs and their source-grounded findings.
 - [plans/closure-2026-10-16.md](plans/closure-2026-10-16.md) — read for the dated repository consolidation closure reconciliation and its verification limits.
