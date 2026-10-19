@@ -273,7 +273,7 @@ recorded outcomes are preserved; they do not identify the currently active plan.
 ## Testing
 
 - [testing/SOP-END-TO-END.md](testing/SOP-END-TO-END.md) — end-to-end skill assessment, authoritative delegation contract, twelve deterministic scenarios, and host-assistant evaluation limits.
-- [testing/PLANNER-TWO-QUESTION-LIVE.md](testing/PLANNER-TWO-QUESTION-LIVE.md) — the operator runbook for the live two-question planner demo with a model-driven executor, using `scripts/planner-2q-fixture-setup.sh`; **NOT YET RUN**.
+- [testing/PLANNER-TWO-QUESTION-LIVE.md](testing/PLANNER-TWO-QUESTION-LIVE.md) — the operator runbook for the live two-question planner demo with a model-driven executor, using `scripts/planner-2q-fixture-setup.sh`; **run 2026-10-18: GO**.
 - [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
 
 ## Reports

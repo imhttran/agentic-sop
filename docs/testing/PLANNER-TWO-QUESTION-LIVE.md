@@ -1,6 +1,7 @@
 # Planner two-question live demo with a real executor
 
-**Type:** Operator runbook (proposed; not yet run).
+**Type:** Operator runbook. **Run 2026-10-18: GO** (attempt 3; see the attempt log and
+[`planner-live-test-findings.md`](../plans/planner-live-test-findings.md)).
 **Closes:** the evidence gap in
 [SPIKE-006 §9](../plans/SPIKE-006-feasibility-report.md): a model-driven executor across
 two planner questions in one task and run epoch, with SOP delivering the first decision to
@@ -61,10 +62,28 @@ The script creates a disposable project under `$TMPDIR` (never inside this check
 It refuses an existing root unless `PLANNER2Q_FORCE_RECREATE=1`, and it checks that the
 acceptance test fails before the task runs.
 
-Point the tunnel's MCP command at the new binary and fixture: the wrapper must run
-`"$TMPDIR/sop-2q" mcp --planner` with its working directory set to the fixture root. Keep
-all logs **outside** the fixture root; a log inside it enters the task's change set (this
-broke the earlier `planner-clarify` attempt).
+Point the tunnel's MCP command at the new binary and fixture. The tunnel profile runs
+`.run/tunnel/sop-mcp-planner.sh`; write it with absolute paths, because the tunnel does not
+see your shell's `$TMPDIR`:
+
+```sh
+#!/bin/sh
+FIXTURE="/var/folders/<...>/T/planner-2q-live"   # the same spelling as $TMPDIR
+cd "$FIXTURE" || exit 1
+export PWD="$FIXTURE"
+exec "/var/folders/<...>/T/sop-2q" mcp --planner
+```
+
+- **Use the `$TMPDIR` spelling (`/var/...`) and export `PWD`.** SOP binds a question to the
+  repository path without resolving symlinks. On macOS `/var` is a symlink to
+  `/private/var`, and a process started without `PWD` sees `/private/var/...`, so SOP
+  refuses the answer as `STALE` ("repository changed").
+- **Restart the tunnel client after every fixture recreate.** The running planner server
+  keeps its working directory; after a recreate it no longer serves the new fixture.
+- Test the wrapper locally before restarting the tunnel: pipe an MCP `initialize` and a
+  `tools/call` for `sop_question_list` into it, and expect the pending `q-1`.
+- Keep all logs **outside** the fixture root; a log inside it enters the task's change set
+  (this broke the earlier `planner-clarify` attempt).
 
 ## Run
 
@@ -144,6 +163,20 @@ dumps.
   values itself. The planner contract did reach the IMPLEMENT request. The fixture now
   names the `needs_planner` outcome and when to use it, and adds the missing
   `### Acceptance Mapping`.
+- **2026-10-18, attempt 2: inconclusive.** The fixture was built from the earlier script
+  (no `needs_planner` wording). Round 1 asked about ordering; the resumed executor then
+  chose `dedupe=true` itself and wrote both files. Review flagged it, the fix cycle changed
+  nothing, and the gate failed. SOP did not complete a task that guessed a planner decision.
+  The first answer submissions were refused as `STALE` because the tunnel wrapper used the
+  `/private/var` spelling (see Setup).
+- **2026-10-18, attempt 3: GO.** Real executor `deepseek-v4.1-flash:cloud`; binary built
+  from `59e67ec` (#68). Round 1 raised `q-1` (ordering); ChatGPT answered `sort=true`.
+  Round 2 resumed the same run epoch, raised `q-5` (duplicates), and superseded the first
+  continuation; neither deliverable existed. ChatGPT answered `dedupe=false`. Round 3 wrote
+  `choices.txt` = `sort=true` / `dedupe=false` and `normalized.txt` = `apple, apple,
+banana, banana, cherry`; outcome `VERIFIED`, `LOCAL_DONE`, final gate `PASS`;
+  continuations `q-1` `SUPERSEDED`, `q-5` `COMPLETED`. Full record in
+  [`planner-live-test-findings.md`](../plans/planner-live-test-findings.md).
 
 ## Cleanup
 

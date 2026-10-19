@@ -1,10 +1,74 @@
 # Planner live-test findings: `needs_human` → `CONTINUE`, and a later successful ChatGPT loop
 
-Status: two live runs recorded. The first (`planner-real`) exercised the `needs_human` →
-`CONTINUE` policy and is preserved unchanged below. The second (`planner-chatgpt`) is a
-successful operator-assisted ChatGPT planner loop, recorded first. A planner-context correction
-and its regression tests were added; the product-code diff and proposed commit file list are at
-the end.
+Status: three live runs recorded. The newest, `planner-2q-live`, is a two-question loop with a
+real executor and is recorded first. The `planner-chatgpt` single-question run follows, and the
+earlier `planner-real` attempt (the `needs_human` → `CONTINUE` policy) is preserved unchanged
+below. A planner-context correction and its regression tests were added; the product-code diff
+and proposed commit file list are at the end.
+
+## Live result: `planner-2q-live` — two questions, real executor (2026-10-18)
+
+A real model-driven executor raised **two** planner questions in **one** task and run epoch.
+ChatGPT answered each over the planner-only MCP tunnel, SOP applied each answer, and the final
+round completed with both decisions. This closes the gap left by the scripted-executor
+`planner-2q` demo (SPIKE-006 §9.2, §9.3). Runbook:
+[`../testing/PLANNER-TWO-QUESTION-LIVE.md`](../testing/PLANNER-TWO-QUESTION-LIVE.md) (attempt 3).
+
+### Setup
+
+- Binary `sop-2q` built from `59e67ec` (`claude/planner-decision-history`,
+  [imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68)), which passes the
+  run's earlier applied decisions to a resumed stage.
+- Fixture from `scripts/planner-2q-fixture-setup.sh` at `4f9b60b`: one task `T001`, planner
+  enabled (`round_limit: 3`, no deadline), `ollama` / `deepseek-v4.1-flash:cloud`, native
+  `tool` harness, acceptance check `go test ./...` mapped to the one criterion.
+- Transport: Secure MCP Tunnel, profile `sop-status-spike`, wrapper
+  `.run/tunnel/sop-mcp-planner.sh` running `sop-2q mcp --planner` in the fixture.
+
+### Timeline (captured)
+
+| Round | SOP / executor                                                                                                                                        | ChatGPT                                                             |
+| ----- | ----------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| 1     | `T001 PAUSED: WAITING_FOR_PLANNER`; `q-1` "Which ordering should normalized.txt use?" (options `sort=true`, `sort=false`); no deliverables            | `a-2` = `sort=true`, key `planner-2q-live-r2-q1-001`, `ACCEPTED`    |
+| 2     | `q-1` `APPLIED`; "resumed from IMPLEMENTING; yielded to a new planner question, continuation superseded"; `q-5` about duplicates; **no deliverables** | `a-6` = `dedupe=false`, key `planner-2q-live-r2-q5-001`, `ACCEPTED` |
+| 3     | "resumed from IMPLEMENTING and completed"; `1 completed this run`; final gate `PASS`                                                                  | —                                                                   |
+
+### Final machine states (captured)
+
+- `T001` `LOCAL_DONE`; outcome `status: "VERIFIED"`, `lifecycle: "LOCAL_DONE"`.
+- `choices.txt` = `sort=true` / `dedupe=false`; `normalized.txt` = `apple`, `apple`, `banana`,
+  `banana`, `cherry` (sorted, duplicates kept), matching both answers.
+- Continuations: `q-1` `SUPERSEDED`, `q-5` `COMPLETED`; none `CLAIMED` or `PENDING`.
+- Final executor summary (`implementation.md`): "Wrote choices.txt with the planner decisions
+  (sort=true, dedupe=false) …".
+
+### What this proves, and what it does not
+
+- **Decision history reaches the final round.** Each round is a fresh model call, and no
+  deliverable existed after round 2, so the executor kept the round-1 decision nowhere. The
+  final round still wrote `sort=true` and attributed it to the planner. The only path for it
+  is SOP's resumed input, which #68 adds.
+- `sort=true` is also the value the model chose when it guessed in earlier attempts, so
+  `choices.txt` alone is weaker evidence for that line; the empty working tree after round 2
+  and the executor's attribution carry it. `dedupe=false` is the opposite of the model's
+  earlier guess.
+- The run trace does not record prompt text, so "the executor was shown both decisions" is
+  inferred from the code path and the executor's summary, not from a captured prompt.
+- Still operator-assisted: a human relayed each question to ChatGPT. Unattended operation
+  remains unproven.
+
+### Issues found during the run
+
+- **Repository identity is not symlink-normalized.** `repoFingerprint`
+  (`internal/cli/question.go`) compares absolute paths without resolving symlinks. With the
+  question bound to `/var/folders/...` (the `$TMPDIR` spelling) and the planner server
+  started in `/private/var/folders/...`, three answer submissions were refused as `STALE`
+  ("repository changed"). It failed closed; the workaround is the `/var` spelling with `PWD`
+  exported in the wrapper. A fix should resolve symlinks on both sides.
+- **The planner server must be restarted after a fixture recreate**, or it keeps serving
+  the deleted directory.
+- **Report and gate disagree on failed attempt 2:** `report.md` listed "No findings" while
+  `gate.json` failed on "1 unresolved finding(s) at a failing severity". Not yet diagnosed.
 
 ## Live result: `planner-chatgpt` — successful operator-assisted ChatGPT loop
 
