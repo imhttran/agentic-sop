@@ -183,6 +183,50 @@ banana, banana, cherry`; outcome `VERIFIED`, `LOCAL_DONE`, final gate `PASS`;
   continuations `q-1` `SUPERSEDED`, `q-5` `COMPLETED`. Full record in
   [`planner-live-test-findings.md`](../plans/planner-live-test-findings.md).
 
+## Concurrent-read diagnostic (HTTP 409 `mcp_initialization_required`)
+
+Tracks [#90](https://github.com/imhttran/agentic-sop/issues/90). The failure is reproduced
+and its root cause is **unconfirmed**. Do not mask it with sequential calls or automatic
+retries.
+
+### Procedure
+
+Against any fixture with a question `q-1` (the planner server may be pointed at one with
+`scripts/planner-tunnel-point.sh`):
+
+1. Run five rounds. In each, call `sop_question_get({"question_id":"q-1"})` and
+   `sop_status({})` concurrently from ChatGPT, and wait for both before the next round.
+2. Do not retry a failed call and do not modify SOP state.
+3. During the run, capture the `tunnel-client` logs and record its version and source
+   revision.
+
+**Pass:** all ten calls succeed with no retries.
+
+### Result, 2026-10-19 (fails)
+
+| Round | `sop_question_get` | `sop_status` |
+| ----- | ------------------ | ------------ |
+| 1     | success            | success      |
+| 2     | HTTP 409           | success      |
+| 3-5   | success            | success      |
+
+Nine of ten calls succeeded. The failure was `MCP server is not initialized; send
+initialize and notifications/initialized before operational requests`: connector error
+`CONFLICT`, HTTP `409`, JSON-RPC `-32002`, type `mcp_initialization_required`, origin
+`tunnel-client`. No session-termination errors occurred. The tunnel-client logs and version
+were not collected.
+
+### What is established on the SOP side
+
+- That message and `-32002` do not exist in the SOP source. `sop mcp --planner`
+  (`internal/mcp/mcp.go`) keeps no session state and answers `tools/call` without a prior
+  `initialize`.
+- `TestMCPPlannerServerHasNoInitializationGate` runs parallel read sessions, with and
+  without `initialize`, under `-race`; all succeed and the question is untouched.
+- So the error is raised by `tunnel-client`. Why it does so for one concurrent call is not
+  established. Change `scripts/planner-tunnel-point.sh` only if the logs show a startup or
+  lifecycle problem there.
+
 ## Cleanup
 
 The fixture is disposable. Remove `$TMPDIR/planner-2q-live` once its evidence is recorded,
