@@ -506,6 +506,109 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 11b. Machine-readable handoff and validation status.
+# ---------------------------------------------------------------------------
+
+HANDOFF_JSON="$TMP/handoff.json"
+if ! run_candidate handoff --format json --issue TEST-1 --output "$HANDOFF_JSON" >"$TMP/out" 2>&1; then
+  fail "json handoff failed: $(cat "$TMP/out")"
+else
+  assert_file "$HANDOFF_JSON"
+  JSON="$(cat "$HANDOFF_JSON")"
+  for needle in \
+    '"schema": "mcp-live-validation/handoff/v1"' \
+    '"issue": "TEST-1"' \
+    '"status": "PENDING"' \
+    '"rounds": 10' \
+    '"total_calls": 20' \
+    '"retries": 0' \
+    '"state_changes": false' \
+    '"tool": "sop_status"' \
+    '"tool": "sop_question_get"' \
+    '"local_tests_are_not_validation": true' \
+    '"production_binary_replaced": false' \
+    '"merged": false' \
+    '"credentials_redacted": true'; do
+    assert_contains "$JSON" "$needle"
+  done
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s' "$JSON" | python3 -m json.tool >/dev/null || fail "json handoff is not valid JSON"
+  elif command -v jq >/dev/null 2>&1; then
+    printf '%s' "$JSON" | jq empty >/dev/null || fail "json handoff is not valid JSON"
+  fi
+  pass "json handoff is machine-readable and records the validation contract"
+fi
+
+if run_candidate handoff --format json --validation-status PASS >"$TMP/out" 2>&1; then
+  fail "PASS without --results should be refused"
+else
+  assert_contains "$(cat "$TMP/out")" "requires --results"
+  pass "handoff refuses a PASS status without independent evidence"
+fi
+
+printf 'round 1..10: 20/20 success; no initialization errors\n' > "$TMP/results-pass.txt"
+if ! run_candidate handoff --format json --validation-status PASS --results "$TMP/results-pass.txt" --output "$TMP/handoff-pass.json" >"$TMP/out" 2>&1; then
+  fail "handoff PASS failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$TMP/handoff-pass.json")" '"status": "PASS"'
+  pass "handoff records an independent PASS result"
+fi
+
+printf 'round 4: timeout; candidate log shows a connection reset\n' > "$TMP/results-fail.txt"
+if ! run_candidate handoff --format json --validation-status FAIL --results "$TMP/results-fail.txt" --output "$TMP/handoff-fail.json" >"$TMP/out" 2>&1; then
+  fail "handoff FAIL failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$TMP/handoff-fail.json")" '"status": "FAIL"'
+  assert_contains "$(cat "$TMP/handoff-fail.json")" "connection reset"
+  pass "handoff records a FAIL result and its evidence"
+fi
+
+# Redaction: an evidence artifact must not carry a credential value.
+cp "$MANIFEST" "$TMP/manifest.redact"
+sed -i.bak 's/^process_command=.*/process_command=tunnel-client run --profile test --token supersecret-value/' "$MANIFEST"
+if ! run_candidate handoff --format json --output "$TMP/handoff-redact.json" >"$TMP/out" 2>&1; then
+  fail "redacted handoff failed: $(cat "$TMP/out")"
+else
+  assert_not_contains "$(cat "$TMP/handoff-redact.json")" "supersecret-value"
+  assert_contains "$(cat "$TMP/handoff-redact.json")" "[REDACTED]"
+  pass "handoff redacts credential-like command values"
+fi
+mv "$TMP/manifest.redact" "$MANIFEST"
+rm -f "$MANIFEST.bak"
+
+# ---------------------------------------------------------------------------
+# 11c. Scenario B: failed validation, then a corrected candidate without
+#      losing the original candidate or evidence.
+# ---------------------------------------------------------------------------
+
+ORIGINAL_SHA="$(sha "$CANDIDATE")"
+ORIGINAL_FAIL="$(cat "$TMP/handoff-fail.json")"
+printf '\n// corrected candidate patch\n' >> "$SRC/pkg/version/version.go"
+git -C "$SRC" add -A
+git -C "$SRC" -c user.name=test -c user.email=test@localhost commit -q -m "test: corrected candidate patch"
+PATCH2_DIR="$TMP/patches2"
+mkdir -p "$PATCH2_DIR"
+git -C "$SRC" format-patch -1 -q -o "$PATCH2_DIR"
+PATCH2="$(find "$PATCH2_DIR" -name '*.patch' -type f | head -n 1)"
+[ -n "$PATCH2" ] || fail "fixture: could not create the corrected patch"
+git -C "$SRC" reset -q --hard "$BASELINE_REV"
+CANDIDATE2="$BIN/planner-tunnel-test-candidate-fixed"
+BUILD2="$SOP_ROOT/.run/tunnel/build/tunnel-client-fixed"
+if ! run_candidate provision --source "$SRC" --revision "$BASELINE_REV" \
+  --patch "$PATCH2" --baseline "$BASELINE" --profile test-profile \
+  --output "$CANDIDATE2" --build-dir "$BUILD2" \
+  --log-file "$TMP/logs/candidate-fixed.jsonl" --pid-file "$TMP/candidate-fixed.pid" >"$TMP/out" 2>&1; then
+  fail "corrected provision failed: $(cat "$TMP/out")"
+else
+  assert_exec "$CANDIDATE2"
+  [ "$(sha "$CANDIDATE")" = "$ORIGINAL_SHA" ] || fail "corrected provision changed the original candidate"
+  assert_eq "$(cat "$TMP/handoff-fail.json")" "$ORIGINAL_FAIL"
+  [ "$(mg candidate_path)" = "$CANDIDATE2" ] || fail "new manifest does not point at the corrected candidate"
+  [ -n "$(find "$SOP_ROOT/.run/tunnel/candidate" -name 'manifest.bak-*' -type f | head -n 1)" ] || fail "no manifest backup preserved"
+  pass "failed validation keeps the original evidence and a corrected candidate is prepared"
+fi
+
+# ---------------------------------------------------------------------------
 # 12. No broad process killers in the helpers.
 # ---------------------------------------------------------------------------
 

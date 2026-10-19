@@ -64,6 +64,10 @@
 # handoff options:
 #   --tests FILE          file containing the local test commands/results
 #   --results FILE        file containing the ChatGPT live test results
+#   --validation-status S PENDING (default), PASS, or FAIL. PASS/FAIL requires
+#                         --results; local tests alone are never independent validation.
+#   --issue TEXT          issue reference or short title recorded in the artifact
+#   --format FORMAT       markdown (default) or json
 #   --output FILE         write the report to FILE instead of stdout
 #   --replace             replace an existing --output file
 #
@@ -125,6 +129,24 @@ count_nonempty() {
   else
     printf '0\n'
   fi
+}
+
+json_escape() {
+  local s="$1"
+  s="${s//\\/\\\\}"
+  s="${s//\"/\\\"}"
+  s="${s//$'\n'/\\n}"
+  s="${s//$'\r'/\\r}"
+  s="${s//$'\t'/\\t}"
+  printf '%s' "$s"
+}
+
+# redact_command removes common credential values before an evidence artifact is
+# written. It is a safety net, not a substitute for reviewing the artifact.
+redact_command() {
+  printf '%s' "$1" | sed -E \
+    -e 's/(--(token|api-key|secret|password|client-secret|access-token|authorization|header)([= ]))[^ ]+/\1[REDACTED]/g' \
+    -e 's/([A-Za-z_][A-Za-z0-9_]*(TOKEN|KEY|SECRET|PASSWORD)[A-Za-z0-9_]*=)[^ ]+/\1[REDACTED]/g'
 }
 
 # ---------------------------------------------------------------------------
@@ -1471,6 +1493,9 @@ HANDOFF_TESTS=""
 HANDOFF_RESULTS=""
 HANDOFF_OUTPUT=""
 HANDOFF_REPLACE=0
+HANDOFF_FORMAT="markdown"
+HANDOFF_STATUS="PENDING"
+HANDOFF_ISSUE=""
 
 cmd_handoff() {
   while [ $# -gt 0 ]; do
@@ -1478,6 +1503,15 @@ cmd_handoff() {
       --tests) [ $# -ge 2 ] || usage; HANDOFF_TESTS="$2"; shift ;;
       --results) [ $# -ge 2 ] || usage; HANDOFF_RESULTS="$2"; shift ;;
       --output) [ $# -ge 2 ] || usage; HANDOFF_OUTPUT="$2"; shift ;;
+      --format) [ $# -ge 2 ] || usage; HANDOFF_FORMAT="$2"; shift ;;
+      --validation-status)
+        [ $# -ge 2 ] || usage
+        case "$2" in
+          PENDING|PASS|FAIL) HANDOFF_STATUS="$2" ;;
+          *) die "--validation-status must be PENDING, PASS, or FAIL" ;;
+        esac
+        shift ;;
+      --issue) [ $# -ge 2 ] || usage; HANDOFF_ISSUE="$2"; shift ;;
       --replace) HANDOFF_REPLACE=1 ;;
       --dry-run) DRY_RUN=1 ;;
       --process-match) [ $# -ge 2 ] || usage; PROCESS_MATCH="$2"; shift ;;
@@ -1487,12 +1521,21 @@ cmd_handoff() {
     esac
     shift
   done
+  case "$HANDOFF_FORMAT" in
+    markdown|json) : ;;
+    *) die "--format must be markdown or json" ;;
+  esac
   require_base_tools
   resolve_root
   manifest_required
 
+  if [ "$HANDOFF_STATUS" != "PENDING" ] && [ -z "$HANDOFF_RESULTS" ]; then
+    die "--validation-status $HANDOFF_STATUS requires --results FILE with the independent evidence"
+  fi
+
   local branch commit dirty candidate candidate_sha candidate_version baseline
-  local source source_revision patch patch_sha profile log state pid cmd rollback
+  local baseline_version baseline_sha baseline_log
+  local source source_revision patch patch_sha profile log state pid cmd cmd_safe rollback
   branch="$(git -C "$ROOT" rev-parse --abbrev-ref HEAD 2>/dev/null || true)"
   commit="$(git -C "$ROOT" rev-parse HEAD 2>/dev/null || true)"
   dirty="$(git -C "$ROOT" status --porcelain 2>/dev/null | wc -l | tr -d ' ')"
@@ -1500,6 +1543,12 @@ cmd_handoff() {
   candidate_sha="$(manifest_value candidate_sha256)"
   candidate_version="$(manifest_value candidate_version)"
   baseline="$(manifest_value baseline_path)"
+  baseline_version="$(mget baseline_version || true)"
+  baseline_sha="$(mget baseline_sha256 || true)"
+  baseline_log="$(mget_all baseline_launch_arg | sed -n 's/^--log\.file=//p' | head -n 1)"
+  if [ -z "$baseline_log" ]; then
+    baseline_log="$(mget_all baseline_launch_arg | awk 'p{print; exit} /^--log.file$/{p=1}')"
+  fi
   source="$(manifest_value source_url)"
   source_revision="$(manifest_value candidate_revision)"
   patch="$(mget patch || true)"
@@ -1509,6 +1558,7 @@ cmd_handoff() {
   state="$(mget state || true)"
   pid="$(mget process_pid || true)"
   cmd="$(mget process_command || true)"
+  cmd_safe="$(redact_command "$cmd")"
   rollback="$ROOT/scripts/planner-tunnel-candidate.sh rollback --checkout $ROOT --start"
   case "$PROCESS_MATCH" in
     tunnel-client) : ;;
@@ -1542,6 +1592,11 @@ cmd_handoff() {
 > MCP results before the candidate is called verified. A clean 20/20 run is
 > supporting evidence, not proof that an intermittent defect cannot recur.
 
+## Validation status
+
+- Status: \`$HANDOFF_STATUS\`
+- Issue: \`${HANDOFF_ISSUE:-not recorded}\`
+
 ## Repository
 
 - Branch: \`$branch\`
@@ -1562,8 +1617,9 @@ cmd_handoff() {
 
 - Manifest state: \`${state:-unknown}\`
 - PID: \`${pid:-not running}\`
-- Command: \`${cmd:-n/a}\`
-- Debug log: \`$log\`
+- Command: \`${cmd_safe:-n/a}\`
+- Candidate debug log: \`$log\`
+- Baseline log: ${baseline_log:-not recorded}
 
 ## Local tests (not a live ChatGPT test)
 
@@ -1606,21 +1662,99 @@ initialization failure, including HTTP \`409\` and
 EOF
   }
 
+  emit_handoff_json() {
+    cat <<EOF
+{
+  "schema": "mcp-live-validation/handoff/v1",
+  "issue": "$(json_escape "$HANDOFF_ISSUE")",
+  "generated_at": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "repository": {
+    "root": "$(json_escape "$ROOT")",
+    "branch": "$(json_escape "$branch")",
+    "commit": "$(json_escape "$commit")",
+    "working_tree": "$(json_escape "$tree_state")"
+  },
+  "candidate": {
+    "path": "$(json_escape "$candidate")",
+    "version": "$(json_escape "$candidate_version")",
+    "sha256": "$(json_escape "$candidate_sha")",
+    "source": "$(json_escape "$source")",
+    "source_revision": "$(json_escape "$source_revision")",
+    "patch": "$(json_escape "$patch")",
+    "patch_sha256": "$(json_escape "$patch_sha")",
+    "profile": "$(json_escape "$profile")"
+  },
+  "baseline": {
+    "path": "$(json_escape "$baseline")",
+    "version": "$(json_escape "$baseline_version")",
+    "sha256": "$(json_escape "$baseline_sha")"
+  },
+  "process": {
+    "state": "$(json_escape "$state")",
+    "pid": "$(json_escape "$pid")",
+    "command": "$(json_escape "$cmd_safe")",
+    "launch_configuration": {"profile": "$(json_escape "$profile")"}
+  },
+  "logs": {
+    "candidate": "$(json_escape "$log")",
+    "baseline": "$(json_escape "$baseline_log")"
+  },
+  "local_tests": "$(json_escape "$test_text")",
+  "independent_validation": {
+    "validator": "ChatGPT",
+    "status": "$(json_escape "$HANDOFF_STATUS")",
+    "results": "$(json_escape "$result_text")",
+    "local_tests_are_not_validation": true
+  },
+  "request": {
+    "rounds": 10,
+    "concurrent": true,
+    "retries": 0,
+    "state_changes": false,
+    "record_initialization_errors": true,
+    "required_calls": [
+      {"tool": "sop_status", "arguments": {}},
+      {"tool": "sop_question_get", "arguments": {"question_id": "q-1"}}
+    ],
+    "total_calls": 20,
+    "acceptance": {
+      "pass": "all 20 calls succeed with no retries and no state change",
+      "fail": "any call fails; record the exact error and matching debug-log lines",
+      "caveat": "a clean run is supporting evidence, not proof an intermittent defect cannot recur"
+    }
+  },
+  "rollback": {"command": "$(json_escape "$rollback")"},
+  "safety": {
+    "production_binary_replaced": false,
+    "merged": false,
+    "credentials_redacted": true
+  }
+}
+EOF
+  }
+
+  emit_selected_handoff() {
+    case "$HANDOFF_FORMAT" in
+      json) emit_handoff_json ;;
+      *) emit_handoff ;;
+    esac
+  }
+
   if [ -n "$HANDOFF_OUTPUT" ]; then
     if [ -e "$HANDOFF_OUTPUT" ] && [ "$HANDOFF_REPLACE" != 1 ]; then
       die "output exists: $HANDOFF_OUTPUT (pass --replace)"
     fi
     if [ "$DRY_RUN" = 1 ]; then
       note "dry-run: would write handoff to $HANDOFF_OUTPUT"
-      emit_handoff
+      emit_selected_handoff
       return 0
     fi
     mkdir -p "$(dirname "$HANDOFF_OUTPUT")"
-    emit_handoff > "$HANDOFF_OUTPUT.tmp.$$"
+    emit_selected_handoff > "$HANDOFF_OUTPUT.tmp.$$"
     mv -f "$HANDOFF_OUTPUT.tmp.$$" "$HANDOFF_OUTPUT"
     note "handoff written to $HANDOFF_OUTPUT"
   else
-    emit_handoff
+    emit_selected_handoff
   fi
 }
 

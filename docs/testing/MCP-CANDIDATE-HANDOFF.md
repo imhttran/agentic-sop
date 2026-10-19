@@ -2,12 +2,13 @@
 
 This is the handoff contract for a planner MCP candidate. It exists because the
 agent can build and locally test a candidate, but it cannot claim a live
-ChatGPT-to-MCP integration result. The two layers are different:
+ChatGPT-to-MCP integration result. The reusable end-to-end workflow is packaged
+as the [`mcp-live-validation` skill](../guides/MCP-LIVE-VALIDATION.md). The two layers are different:
 
-| Layer | What it proves | Who runs it |
-| --- | --- | --- |
-| Local unit/integration tests | The source builds, the wrapper answers an MCP `tools/call` locally, and the candidate's recorded identity matches its files | The agent |
-| Live ChatGPT-to-MCP test | The real ChatGPT client, Secure MCP Tunnel, `tunnel-client` candidate, and `sop mcp --planner` work together under concurrent load | ChatGPT |
+| Layer                        | What it proves                                                                                                                     | Who runs it |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ----------- |
+| Local unit/integration tests | The source builds, the wrapper answers an MCP `tools/call` locally, and the candidate's recorded identity matches its files        | The agent   |
+| Live ChatGPT-to-MCP test     | The real ChatGPT client, Secure MCP Tunnel, `tunnel-client` candidate, and `sop mcp --planner` work together under concurrent load | ChatGPT     |
 
 A clean local run is never a substitute for the live layer. A clean live 20/20
 run is supporting evidence, not proof that an intermittent defect can never
@@ -19,15 +20,40 @@ The agent produces this before asking ChatGPT to run the live test. The
 `scripts/planner-tunnel-candidate.sh handoff` command prints the recorded facts
 and placeholders for the two result sections.
 
+### Machine-readable form
+
+Use `--format json` for the stable artifact. The schema is
+`mcp-live-validation/handoff/v1` and records the repository, candidate and
+baseline identities, active process, logs, local tests, rollback, the required
+independent calls, and `independent_validation.status` (`PENDING`, `PASS`, or
+`FAIL`). `PASS` and `FAIL` require `--results FILE` with the independent
+validator's actual report; the helper refuses a status without evidence.
+
+```sh
+scripts/planner-tunnel-candidate.sh handoff \
+  --format json \
+  --issue <issue-reference> \
+  --tests <local-test-evidence> \
+  --output <checkout>/.run/tunnel/candidate/handoff.json
+```
+
+Do not put credentials, tokens, or sensitive environment values in either form.
+The helper redacts common credential-like command values, but review the artifact
+before sharing it.
+
+### Markdown form
+
 ```markdown
 # Planner MCP candidate handoff
 
 ## Repository
+
 - Branch:
 - Commit:
 - Working tree:
 
 ## Candidate executable
+
 - Path:
 - Version:
 - SHA-256:
@@ -37,24 +63,30 @@ and placeholders for the two result sections.
 - Baseline (unchanged):
 
 ## Active process
+
 - Manifest state:
 - PID:
 - Command:
 - Debug log:
 
 ## Local tests (not a live ChatGPT test)
+
 <commands and results>
 
 ## ChatGPT live MCP results
+
 <ChatGPT pastes its actual results here>
 
 ## Rollback
+
 <exact command>
 
 ## Exact read-only MCP test request
+
 <the request below>
 
 ## Acceptance
+
 <the criteria below>
 ```
 

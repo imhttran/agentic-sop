@@ -23,6 +23,12 @@ type Command struct {
 	// it runs and maintains a project's persistent browser suite. Every other command
 	// stays a thin SOP CLI client, so the shell-example invariant is waived only here.
 	RunsProjectTests bool
+	// UsesRepositoryScripts marks a command that drives this repository's
+	// deterministic helper scripts (for example the MCP candidate lifecycle) rather
+	// than the SOP CLI. It still participates in the canonical surface, installer,
+	// fail-closed, and contract checks; only the SOP-only shell-example invariant is
+	// waived, because its commands are the helper scripts, Git, Go, and local checks.
+	UsesRepositoryScripts bool
 }
 
 // Commands is the canonical SOP command surface. Every supported agent installs
@@ -41,6 +47,12 @@ var Commands = []Command{
 	// A verification companion to /sop-end-to-end: it runs and maintains a project's
 	// persistent Playwright suite and reads SOP's approval state; it fixes no capability.
 	{Name: "sop-browser-test", Capability: "", Delegation: "sop approvals --json", RunsProjectTests: true},
+	// A repository-level MCP candidate workflow: it prepares, verifies, deploys, and
+	// rolls back an MCP fix through the deterministic candidate helper, then hands the
+	// live test to an independent validator. It fixes no capability and never treats
+	// local tests as independent validation. Its shell examples are repository
+	// helpers, Git, Go, and local checks, not SOP CLI calls.
+	{Name: "mcp-live-validation", Capability: "", Delegation: "sop status", UsesRepositoryScripts: true},
 	// A report-only security companion: it detects repository content, delegates
 	// scanning to SOP's configured adapters, and reports sanitized evidence. It
 	// fixes no capability and never mutates the repository or scanner policy.

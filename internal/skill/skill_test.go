@@ -94,16 +94,16 @@ func TestSkillBashBlocksInvokeSOPOnly(t *testing.T) {
 	// A provider binary invoked as a command anywhere in the skill (not just in a
 	// `sop ...` line) is a boundary violation.
 	providerCommandRE := regexp.MustCompile(`(?m)^\s*(` + strings.Join(ProviderBinaries, "|") + `)\s`)
-	// A command that runs the target project's own test suite (see Command.RunsProjectTests)
-	// shows the project's runner commands, not `sop` calls, in its shell examples; every
-	// other command stays a thin SOP CLI client.
-	runners := runsProjectTests()
+	// A command whose shell examples are exempt from the SOP-only invariant: the
+	// project's own test runner (see Command.RunsProjectTests) or this repository's
+	// deterministic helper scripts (see Command.UsesRepositoryScripts).
+	exempt := shellExamplesExempt()
 	for _, file := range skillFiles(t) {
 		body := read(t, file)
 		if m := providerCommandRE.FindString(body); m != "" {
 			t.Errorf("%s: skill appears to invoke a provider directly: %q", file, strings.TrimSpace(m))
 		}
-		if runsProjectSuite(file, runners) {
+		if runsProjectSuite(file, exempt) {
 			continue
 		}
 		for _, line := range bashCommandLines(body) {
@@ -114,23 +114,23 @@ func TestSkillBashBlocksInvokeSOPOnly(t *testing.T) {
 	}
 }
 
-// runsProjectTests is the set of commands whose shell examples are the target project's
-// own test-runner commands rather than the SOP CLI.
-func runsProjectTests() map[string]bool {
+// shellExamplesExempt is the set of commands whose shell examples are not a pure
+// SOP CLI client: a project test runner or this repository's deterministic helpers.
+func shellExamplesExempt() map[string]bool {
 	out := map[string]bool{}
 	for _, c := range Commands {
-		if c.RunsProjectTests {
+		if c.RunsProjectTests || c.UsesRepositoryScripts {
 			out[c.Name] = true
 		}
 	}
 	return out
 }
 
-// runsProjectSuite reports whether file belongs to a command that runs the project's own
-// test suite.
-func runsProjectSuite(file string, runners map[string]bool) bool {
+// runsProjectSuite reports whether file belongs to a command whose shell examples are
+// exempt from the SOP-only invariant.
+func runsProjectSuite(file string, exempt map[string]bool) bool {
 	slash := filepath.ToSlash(file)
-	for name := range runners {
+	for name := range exempt {
 		if strings.Contains(slash, "/"+name+"/") {
 			return true
 		}
