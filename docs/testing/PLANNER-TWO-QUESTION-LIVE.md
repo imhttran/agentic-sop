@@ -55,8 +55,9 @@ candidate and promoting a verified build).
 2. **Implement and test locally.** Run the relevant Go tests and shell checks.
    Local tests prove the source and wrapper; they do not prove the live ChatGPT
    integration.
-3. **Provision the candidate.** The helper reuses a matching source checkout or
-   build directory when available; otherwise it fetches the pinned source,
+3. **Provision the candidate.** The helper reuses a matching build directory
+   when available; otherwise it clones the pinned source (from a local
+   `--source` checkout or the upstream URL),
    verifies and applies the pinned patch, builds into an isolated directory, and
    records the candidate path, version, SHA-256, source revision, patch SHA-256,
    baseline identity, profile, and launch arguments. It does not start or stop
@@ -125,16 +126,20 @@ labelled a local check. Do not cite it as a ChatGPT integration result.
 
 ### Download and provisioning guardrails
 
-- Existing source checkouts, build directories, and Go caches are reused when
-  the pinned revision and patch match; an existing directory is never overwritten.
-- Clone/fetch retries are bounded. A failure reports the source and revision and
-  points to the likely cause (network/credentials or revision resolution).
+- An existing `--build-dir` is reused when it is a clean checkout at the pinned
+  revision, or at the patched candidate built from it. One with local changes or
+  at any other commit is refused, never overwritten. A local `--source` checkout
+  is cloned from, never modified. Go's module and build caches are used as usual.
+- Clone/fetch retries are bounded. A clone failure names the source and suggests
+  checking network/credentials; a fetch failure names the revision and source; a
+  checkout failure names the revision.
 - A patch is checked against the pinned revision before application. A failed
   `git am` is aborted, restoring the source checkout.
 - The candidate binary is built to a temporary path and moved into place only
-  after the build succeeds; an existing candidate is reused only when its
-  manifest checksum, source revision, and patch checksum match. Otherwise
-  `--replace` is required.
+  after the build succeeds. An existing candidate is reused only when its SHA-256
+  matches the candidate checksum recorded in the manifest, the recorded source
+  revision and patch checksum match, and its version names the expected commit.
+  Otherwise `--replace` is required.
 - The installed baseline binary is recorded, never replaced. No candidate is
   installed as the production `sop` or `tunnel-client` binary.
 - The isolated regression suite exercises the full lifecycle without a live
