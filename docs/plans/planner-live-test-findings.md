@@ -64,7 +64,9 @@ round completed with both decisions. This closes the gap left by the scripted-ex
   question bound to `/var/folders/...` (the `$TMPDIR` spelling) and the planner server
   started in `/private/var/folders/...`, three answer submissions were refused as `STALE`
   ("repository changed"). It failed closed; the workaround is the `/var` spelling with `PWD`
-  exported in the wrapper. A fix should resolve symlinks on both sides.
+  exported in the wrapper. **Fixed afterwards:** `repoFingerprint` now resolves symlinks, and
+  the binding checks resolve the stored identity too, so a question recorded under either
+  spelling still matches its repository.
 - **The planner server must be restarted after a fixture recreate**, or it keeps serving
   the deleted directory.
 - **Report and gate disagree on failed attempt 2:** `report.md` listed "No findings" while
