@@ -5,7 +5,7 @@
 **Plan:** [PLAN-Security-Scanner-Residual-Findings.md](../plans/PLAN-Security-Scanner-Residual-Findings.md)
 **Branch:** `fix/security-residual-findings`
 **Implementation commit:** `458de839fbab02bce2d5c7ab51946f5c598a173a`
-**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (open for review)
+**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) merged at `cca30c9`. The correction on this branch is **not** included and requires a follow-up PR.
 **Baseline:** `main` @ `d4d8b8df` (includes PR #72 @ `a56b7239` and PR #73 @ `d4d8b8df`)
 
 ## Reported findings and reproduction
@@ -59,20 +59,29 @@ directory without `Cargo.toml`. Discovery now follows that behavior.
 
 ## Verification
 
-| Check                                         | Result                                                                                |
-| --------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `go test ./...`                               | PASS                                                                                  |
-| `go build ./...`                              | PASS                                                                                  |
-| `go vet ./...`                                | PASS                                                                                  |
-| `bash scripts/checks/check-doc-links.sh`      | `broken links: 0`                                                                     |
-| `bash scripts/checks/security-integration.sh` | PASS (pinned Semgrep 1.136.0, Gitleaks 8.30.1, cargo-audit 0.22.2, OSV-Scanner 2.7.0) |
-| PR #74 CI                                     | PASS — 12/12 checks on `458de83`                                                      |
+| Check                                         | Result                                                                                                 |
+| --------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
+| `go test ./...`                               | PASS                                                                                                   |
+| `go build ./...`                              | PASS                                                                                                   |
+| `go vet ./...`                                | PASS                                                                                                   |
+| `bash scripts/checks/check-doc-links.sh`      | `broken links: 0`                                                                                      |
+| `bash scripts/checks/security-integration.sh` | PASS (pinned Semgrep 1.136.0, Gitleaks 8.30.1, cargo-audit 0.22.2, OSV-Scanner 2.7.0)                  |
+| PR #74 CI                                     | PASS — 12/12 checks on the merged head `cca30c9`                                                       |
+| Correction CI                                 | NOT RUN — PR #74 was already merged and closed; no checks are created for the correction on the branch |
 
-Focused regression coverage includes absolute and escaping workspace references,
-valid nested-root references, ignored member-glob file matches, non-package
-member directories, exclusions, no-Cargo discovery, readiness and required-mode
-rejection, fresh/stale/unknown freshness, the 90-day boundary, and resume
-invalidation after database aging.
+The correction was verified locally after the edits: focused security tests, the
+full `go test ./...` suite, build, vet, doc links, and the real-scanner
+integration gate all passed. CI was not run for the correction because PR #74 was
+merged and closed before the correction commit could be attached. A follow-up PR
+is required to run CI on the corrected head.
+
+## Delivery status
+
+PR #74 was merged at `cca30c9` (merge commit `89a93111`) before the correction
+was pushed. The correction on `fix/security-residual-findings` is not in `main`
+and has no pull request. The smallest resume action is a follow-up PR from this
+branch (rebased onto current `main`) for the correction only. No merge,
+auto-merge, or branch deletion was performed by this work.
 
 ## Correction after PR review
 

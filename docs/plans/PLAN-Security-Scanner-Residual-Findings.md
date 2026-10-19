@@ -1,10 +1,11 @@
 # PLAN — Security Scanner Residual Findings
 
 **Type:** Correctness plan (dependency-layout detection and freshness evidence).
-**Status:** IMPLEMENTED — verification complete; PR #74 open for review.
+**Status:** IMPLEMENTED — original PR #74 merged; the post-review correction is
+on `fix/security-residual-findings` and needs a follow-up PR.
 **Baseline:** `agentic-sop` `main` @ `d4d8b8df` (includes PR #72 @ `a56b7239` and PR #73 @ `d4d8b8df`).
 **Branch:** `fix/security-residual-findings`.
-**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (open for review; not merged).
+**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (merged at `cca30c9`). The correction on this branch is **not** part of #74 and requires a follow-up PR.
 
 ## Project
 
@@ -195,11 +196,14 @@ final diff review, and delivery.
 
 - Implementation commit: `458de839fbab02bce2d5c7ab51946f5c598a173a`.
 - Correction after PR review: member-glob file matches are ignored to match pinned
-  Cargo; the original finding is recorded as invalidated. The correction is on
-  the same branch and PR.
+  Cargo; the original finding is recorded as invalidated. The unsafe workspace
+  reference fix and production freshness policy are unchanged.
+- PR #74 was merged at `cca30c9` before the correction could be attached. The
+  correction commit remains on `fix/security-residual-findings` and is not in
+  `main`; a follow-up PR is required.
 - PR #74 opened against `main`; all 12 CI checks passed on the head
   (`fmt, vet, build, test`, race detector, Windows installer, installer/plugin
   packaging, tagged JEV acceptance, real scanner integration, CodeQL).
 - Project security configuration remains report-only; required mode is exercised
   only in isolated fixtures. No merge, auto-merge, or branch/worktree deletion
-  occurred.
+  was performed by this work; PR #74 was merged by the repository owner.
