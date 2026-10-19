@@ -341,11 +341,22 @@ func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, c
 		// criterion cannot be treated as satisfied and the operator sees why.
 		decisions = nil
 	}
+	// A supported recovery preserves an accepted decision across an approved attempt
+	// advance. An unreadable recovery audit fails closed: an earlier decision is not
+	// silently accepted without the recorded transition that authorizes it.
+	recoveries, rerr := readAcceptanceRecoveries(dir, spec.ID)
+	if rerr != nil {
+		recoveries = nil
+	}
 	validation := outcome.ValidationResult{Passed: gate.Decision == quality.Pass, Reasons: gate.Reasons}
-	res := outcome.VerifyAcceptance(validation, criteria, mappings, checks, decisions)
+	res := outcome.VerifyAcceptanceWithRecoveries(validation, criteria, mappings, checks, decisions, recoveries)
 	if derr != nil {
 		res.Status = outcome.Partial
 		res.Reasons = append(res.Reasons, "acceptance decisions could not be read: "+derr.Error())
+	}
+	if rerr != nil {
+		res.Status = outcome.Partial
+		res.Reasons = append(res.Reasons, acceptanceRecoveryReadReason(rerr))
 	}
 	for _, c := range checks {
 		res.PropagateEvidence(c.Ref, c)

@@ -81,6 +81,33 @@ type AcceptanceDecision struct {
 	Attempt int `json:"attempt,omitempty"`
 }
 
+// AcceptanceRecovery is an explicit, append-only record that a human-authorized
+// recovery advanced the task from the attempt a decision was reviewed for to a
+// later attempt. It never rewrites the original decision: the decision keeps its
+// own attempt provenance, and the recovery records the transition that makes it
+// applicable again. A recovery is bound to the exact criterion, manual-evidence
+// description, and decision evidence it preserves, so it can never authorize a
+// changed criterion, changed evidence, or a different decision.
+type AcceptanceRecovery struct {
+	Task                 string `json:"task"`
+	CriterionID          string `json:"criterion_id"`
+	CriterionDescription string `json:"criterion_description,omitempty"`
+	ManualEvidence       string `json:"manual_evidence,omitempty"`
+	// Evidence is the accepted decision's recorded evidence text. A recovery is
+	// bound to it, so a later decision with different evidence is not covered.
+	Evidence string `json:"evidence,omitempty"`
+	// FromAttempt is the attempt the preserved decision was reviewed for.
+	FromAttempt int `json:"from_attempt"`
+	// ToAttempt is the later attempt the recovery authorizes it for.
+	ToAttempt int `json:"to_attempt"`
+	// By names the human identity whose explicit decision authorized the recovery.
+	By string `json:"by,omitempty"`
+	// Source records which supported decision path created the recovery ("accept"
+	// or "approve"). It is audit provenance only and never affects matching.
+	Source     string `json:"source,omitempty"`
+	RecordedAt string `json:"recorded_at"`
+}
+
 // ValidationResult is the quality-gate verdict, recorded apart from acceptance.
 type ValidationResult struct {
 	Passed  bool     `json:"passed"`
@@ -101,6 +128,16 @@ type ValidationResult struct {
 // With no mappings at all (a legacy plan) the result is PARTIAL — never VERIFIED —
 // with a Compatibility message naming the unmapped criteria and how to map them.
 func VerifyAcceptance(validation ValidationResult, criteria []Criterion, mappings []CriterionMapping, checks []CheckResult, decisions []AcceptanceDecision) Result {
+	return VerifyAcceptanceWithRecoveries(validation, criteria, mappings, checks, decisions, nil)
+}
+
+// VerifyAcceptanceWithRecoveries is VerifyAcceptance with the task's recorded
+// acceptance recoveries. A manual decision recorded for an earlier attempt is
+// honored only when a recorded recovery links that decision's attempt to the
+// current mapping's attempt AND the decision's criterion text, manual-evidence
+// description, and evidence still match the current mapping exactly. With no
+// recoveries the behavior is identical to VerifyAcceptance.
+func VerifyAcceptanceWithRecoveries(validation ValidationResult, criteria []Criterion, mappings []CriterionMapping, checks []CheckResult, decisions []AcceptanceDecision, recoveries []AcceptanceRecovery) Result {
 	byCriterion := make(map[string]CriterionMapping, len(mappings))
 	for _, m := range mappings {
 		byCriterion[m.CriterionID] = m
@@ -125,7 +162,7 @@ func VerifyAcceptance(validation ValidationResult, criteria []Criterion, mapping
 			}
 			continue
 		}
-		resolved[i].Check = mappingCheck(m, byRef, decisions)
+		resolved[i].Check = mappingCheck(m, byRef, decisions, recoveries)
 		if m.Kind == EvidenceCheck {
 			resolved[i].Command = byRef[m.CheckRef].Command
 		}
@@ -170,7 +207,7 @@ func LegacyCompatibility(unmapped []string) string {
 }
 
 // mappingCheck returns the deterministic predicate a mapping resolves to.
-func mappingCheck(m CriterionMapping, checks map[string]CheckResult, decisions []AcceptanceDecision) func() error {
+func mappingCheck(m CriterionMapping, checks map[string]CheckResult, decisions []AcceptanceDecision, recoveries []AcceptanceRecovery) func() error {
 	switch m.Kind {
 	case EvidenceCheck:
 		return func() error {
@@ -191,7 +228,7 @@ func mappingCheck(m CriterionMapping, checks map[string]CheckResult, decisions [
 			if strings.TrimSpace(m.ManualEvidence) == "" {
 				return fmt.Errorf("incompletely mapped: manual mapping names no evidence")
 			}
-			d, ok := latestBoundDecision(m, decisions)
+			d, ok := latestBoundDecision(m, decisions, recoveries)
 			switch {
 			case !ok:
 				return fmt.Errorf("manual evidence %q has no recorded acceptance decision bound to this criterion and attempt", m.ManualEvidence)
@@ -219,15 +256,17 @@ func latestDecision(criterionID string, decisions []AcceptanceDecision) (Accepta
 
 // latestBoundDecision returns the most recent decision that is bound to this exact
 // mapping. A decision for an earlier description, manual-evidence text, or attempt
-// is ignored (it cannot satisfy the current criterion). A decision recorded
-// without binding fields is legacy and is not treated as traceable.
-func latestBoundDecision(m CriterionMapping, decisions []AcceptanceDecision) (AcceptanceDecision, bool) {
+// is ignored (it cannot satisfy the current criterion) unless a recorded recovery
+// links that decision's attempt to the current attempt without changing its
+// criterion or evidence. A decision recorded without binding fields is legacy and
+// is not treated as traceable.
+func latestBoundDecision(m CriterionMapping, decisions []AcceptanceDecision, recoveries []AcceptanceRecovery) (AcceptanceDecision, bool) {
 	for i := len(decisions) - 1; i >= 0; i-- {
 		d := decisions[i]
 		if d.CriterionID != m.CriterionID {
 			continue
 		}
-		if !decisionBoundTo(d, m) {
+		if !decisionBoundToAttempt(d, m, recoveries) {
 			continue
 		}
 		return d, true
@@ -239,16 +278,78 @@ func latestBoundDecision(m CriterionMapping, decisions []AcceptanceDecision) (Ac
 // evidence, and attempt of m. The attempt is compared only when the mapping
 // carries one, so a legacy mapping without attempt information stays usable.
 func decisionBoundTo(d AcceptanceDecision, m CriterionMapping) bool {
-	if strings.TrimSpace(d.CriterionDescription) == "" ||
-		strings.TrimSpace(d.ManualEvidence) == "" ||
-		d.CriterionDescription != m.Description ||
-		d.ManualEvidence != m.ManualEvidence {
+	if !decisionContentMatches(d, m) {
 		return false
 	}
 	if m.Attempt != 0 && d.Attempt != m.Attempt {
 		return false
 	}
 	return true
+}
+
+// decisionBoundToAttempt is decisionBoundTo plus the supported recovery path: a
+// decision for an earlier attempt is accepted only through a recorded recovery
+// that is itself bound to the decision's exact criterion and evidence.
+func decisionBoundToAttempt(d AcceptanceDecision, m CriterionMapping, recoveries []AcceptanceRecovery) bool {
+	if !decisionContentMatches(d, m) {
+		return false
+	}
+	if m.Attempt == 0 || d.Attempt == m.Attempt {
+		return true
+	}
+	return recoveryReaches(d, m, recoveries)
+}
+
+// decisionContentMatches reports whether d and m name the same criterion text
+// and manual-evidence description.
+func decisionContentMatches(d AcceptanceDecision, m CriterionMapping) bool {
+	return strings.TrimSpace(d.CriterionDescription) != "" &&
+		strings.TrimSpace(d.ManualEvidence) != "" &&
+		d.CriterionDescription == m.Description &&
+		d.ManualEvidence == m.ManualEvidence
+}
+
+// recoveryReaches reports whether recorded recoveries connect the decision's
+// attempt to the mapping's attempt. A recovery edge is usable only when it is
+// bound to the exact decision it preserves (criterion, manual evidence, and
+// operator evidence), so a recovery for one decision can never authorize a
+// different decision, changed criterion, or changed evidence.
+func recoveryReaches(d AcceptanceDecision, m CriterionMapping, recoveries []AcceptanceRecovery) bool {
+	if d.Attempt == m.Attempt {
+		return true
+	}
+	seen := map[int]bool{d.Attempt: true}
+	queue := []int{d.Attempt}
+	for len(queue) > 0 {
+		from := queue[0]
+		queue = queue[1:]
+		for _, r := range recoveries {
+			if r.FromAttempt != from || seen[r.ToAttempt] {
+				continue
+			}
+			if !recoveryBoundToDecision(r, d, m) {
+				continue
+			}
+			if r.ToAttempt == m.Attempt {
+				return true
+			}
+			seen[r.ToAttempt] = true
+			queue = append(queue, r.ToAttempt)
+		}
+	}
+	return false
+}
+
+// recoveryBoundToDecision reports whether r exactly preserves d for m.
+func recoveryBoundToDecision(r AcceptanceRecovery, d AcceptanceDecision, m CriterionMapping) bool {
+	return r.CriterionID == d.CriterionID &&
+		r.CriterionID == m.CriterionID &&
+		r.CriterionDescription == d.CriterionDescription &&
+		r.CriterionDescription == m.Description &&
+		r.ManualEvidence == d.ManualEvidence &&
+		r.ManualEvidence == m.ManualEvidence &&
+		r.Evidence == d.Evidence &&
+		r.ToAttempt > r.FromAttempt
 }
 
 // BlocksAdvancement reports whether a mapped-plan verdict must stop downstream work:

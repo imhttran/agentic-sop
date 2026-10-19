@@ -93,6 +93,38 @@ no recorded waiver the gate fails closed to `NEEDS_HUMAN` and reports the denial
 When the gate is **off** (the default), the lifecycle is unchanged; the waiver is
 recorded and surfaced as evidence only.
 
+## Manual acceptance across an approved recovery (SOP-003)
+
+A manual `sop outcome <task-id> --accept ...` decision is bound to the attempt
+whose outcome the operator reviewed. A supported recovery may advance that
+attempt before the next run (for example the operator accepts the reviewed
+outcome, approves the `NEEDS_HUMAN` gate, and the task is requeued). The next
+verification would otherwise reject a still-valid decision on a stale attempt
+binding.
+
+SOP records an append-only recovery binding in
+`.agent-sdlc/runs/<task-id>/acceptance_recoveries.jsonl` when the designated
+approver records the acceptance or approves the gate. A recovery names the
+criterion, its text, the manual-evidence description, the decision's evidence,
+and the exact `from_attempt`/`to_attempt` transition. It never rewrites the
+original decision or its attempt provenance.
+
+The next verdict honors the earlier decision only when both hold:
+
+- a recorded recovery connects the decision's attempt to the current attempt;
+  and
+- the decision's criterion text, manual-evidence description, and recorded
+  evidence still match the current acceptance mapping exactly.
+
+A changed criterion, changed manual-evidence description, changed decision
+evidence, or a missing recovery leaves the decision unbound, so the criterion
+stays unmet and the lifecycle stops at the human boundary. Pending and declined
+approval gates are unchanged: they still block execution before verification.
+
+A recovery write is idempotent; repeating `sop approve` appends no duplicate.
+The recovery audit is evidence only: it never changes a task's status, attempt
+counter, or budget.
+
 ## Relationship to `sop retry`
 
 `sop retry` is unchanged: it still requeues a **BLOCKED** task, and only a

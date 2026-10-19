@@ -247,6 +247,14 @@ func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, e
 		}
 		fmt.Fprintf(stdout, "recorded acceptance decision: task=%s criterion=%s decision=%s approver=%s recorded_at=%s\n", d.Task, d.CriterionID, d.Decision, d.Approver, d.RecordedAt)
 		fmt.Fprintf(stdout, "  evidence: %s\n", d.Evidence)
+		// If the approval happened first, the attempt counter may already be ahead
+		// of the outcome the operator reviewed. Record the same explicit recovery
+		// binding so the accepted decision survives the next verification. The
+		// decision is already durable, so a recovery-write failure is surfaced but
+		// does not discard it; `sop approve` can record the recovery again.
+		if err := recordAcceptanceRecoveryForDecision(dir, taskID, d, res, by); err != nil {
+			fmt.Fprintf(stderr, "outcome: acceptance decision recorded, but acceptance recovery was not recorded: %v\n", err)
+		}
 		return exitOK
 	}
 	if waive == "" {
