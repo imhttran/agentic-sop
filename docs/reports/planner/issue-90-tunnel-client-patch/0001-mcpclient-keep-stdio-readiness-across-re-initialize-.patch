@@ -1,11 +1,11 @@
-From 0372c1fcd05384cee44500cd658c7b43022eb17b Mon Sep 17 00:00:00 2001
+From 560e70c3b9e2c394f7f72fee060d77fc64a9c06b Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 19 Oct 2026 19:44:59 +0000
 Subject: [PATCH] mcpclient: keep stdio readiness across re-initialize and late
- Close of finished connections
+ Close of stale connections
 
 The stdio initialization guard keeps one readiness flag for the shared child,
-used by every session. Two paths revoked it while another session was using
+used by every session. Three paths revoked it while another session was using
 the child, so its calls were rejected with 409 / -32002:
 
 - An accepted initialize always cleared readiness until a notifications/initialized
@@ -16,25 +16,50 @@ the child, so its calls were rejected with 409 / -32002:
 - Close() on a connection whose request had already finished (for example after
   its response POST failed) reset readiness and closed the shared pipes under a
   sibling request. Such a late Close is now a no-op for the guard-enabled stdio
-  transport. A Close with the slot held, abandoned requests and fatal I/O still
-  reset readiness and close.
+  transport.
+- Close() of an abandoned connection (read or write failure) reset readiness that
+  by then described a replacement child that a sibling had re-handshaken. The
+  reset now applies only if no reset has happened since the connection started
+  (a per-transport child epoch). The destructive close of the pipes is kept.
+
+A Close with the slot held, in-flight requests and fatal I/O still reset readiness
+and close.
 
 Tests: replace the test that pinned the window, and add cross-session,
-rejected-reinitialize, late-Close, closed-child, in-flight-close and
-abandoned-read cases.
+rejected-reinitialize, late-Close (finished, abandoned, concurrent), closed-child,
+in-flight-close and abandoned-read cases.
 
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Esu3pgtRnyfjdYLZKJmxT3
 ---
- .../serialized_forwarding_transport.go        |  65 ++++++++-
- pkg/mcpclient/stdio_initialization_test.go    | 136 +++++++++++++++++-
- 2 files changed, 193 insertions(+), 8 deletions(-)
+ .../serialized_forwarding_transport.go        | 117 ++++++++++-
+ pkg/mcpclient/stdio_initialization_test.go    | 191 +++++++++++++++++-
+ 2 files changed, 298 insertions(+), 10 deletions(-)
 
 diff --git a/pkg/mcpclient/serialized_forwarding_transport.go b/pkg/mcpclient/serialized_forwarding_transport.go
-index 31d1e81..509e127 100644
+index 31d1e81..74b33b0 100644
 --- a/pkg/mcpclient/serialized_forwarding_transport.go
 +++ b/pkg/mcpclient/serialized_forwarding_transport.go
-@@ -299,6 +299,11 @@ type serializedForwardingConnection struct {
+@@ -128,6 +128,10 @@ type serializedForwardingTransport struct {
+ 	requireInitialization bool
+ 	initializeSucceeded   bool
+ 	initializationReady   bool
++	// childEpoch advances whenever readiness is reset because the child was lost or
++	// closed. A connection remembers the epoch it started in so that a late Close of
++	// an older connection cannot reset readiness that now describes a replacement.
++	childEpoch uint64
+ }
+ 
+ const maxRetiredResponseIDs = 1024
+@@ -167,6 +171,7 @@ func (t *serializedForwardingTransport) Connect(
+ 		transport:             t,
+ 		lockHeld:              true,
+ 		observationGeneration: t.observation.generation(),
++		childEpoch:            t.currentChildEpoch(),
+ 	}, nil
+ }
+ 
+@@ -299,6 +304,14 @@ type serializedForwardingConnection struct {
  	observationToken      protocolObservationToken
  	observationWriteDone  chan struct{}
  	observationWriteReady bool
@@ -43,10 +68,13 @@ index 31d1e81..509e127 100644
 +	// response was consumed, or nothing reached the child. A later Close of such a
 +	// connection has nothing in flight to abort and must not touch the shared child.
 +	lifecycleDone bool
++
++	// childEpoch is the transport's epoch when this connection took the slot.
++	childEpoch uint64
  }
  
  func (c *serializedForwardingConnection) Write(
-@@ -322,7 +327,7 @@ func (c *serializedForwardingConnection) Write(
+@@ -322,7 +335,7 @@ func (c *serializedForwardingConnection) Write(
  			// handshake. Leave deadline retirement to the processor as usual.
  			c.completeObservedWrite(msg, false, false)
  			if !c.shouldAwaitDeadlineRetirement(ctx, err) {
@@ -55,7 +83,7 @@ index 31d1e81..509e127 100644
  			}
  			return ForwardingWriteResult{}, err
  		}
-@@ -335,7 +340,7 @@ func (c *serializedForwardingConnection) Write(
+@@ -335,7 +348,7 @@ func (c *serializedForwardingConnection) Write(
  		// No bytes reached the child, so there is no response to read or retire.
  		// Preserve the pipes even if the command deadline races this local reply.
  		c.markDeadlineRetirableWithoutResponse(true)
@@ -64,7 +92,7 @@ index 31d1e81..509e127 100644
  		payload, err := json.Marshal(map[string]any{
  			"jsonrpc": "2.0", "id": callerID.Raw(),
  			"error": map[string]any{
-@@ -355,7 +360,7 @@ func (c *serializedForwardingConnection) Write(
+@@ -355,7 +368,7 @@ func (c *serializedForwardingConnection) Write(
  	if c.shouldSuppressInitializedNotification(msg) {
  		c.markWriteCompleted(true)
  		c.markDeadlineRetirableWithoutResponse(true)
@@ -73,7 +101,7 @@ index 31d1e81..509e127 100644
  		return ForwardingWriteResult{}, nil
  	}
  
-@@ -365,8 +370,9 @@ func (c *serializedForwardingConnection) Write(
+@@ -365,8 +378,9 @@ func (c *serializedForwardingConnection) Write(
  		if method == "initialize" {
  			// Publish the new handshake before a concurrent reader can observe
  			// its response, but preserve readiness if cancellation prevented writing.
@@ -84,7 +112,7 @@ index 31d1e81..509e127 100644
  		} else if !expectResponse && method == initializedNotificationMethod {
  			c.transport.markInitializationReady()
  		}
-@@ -383,7 +389,11 @@ func (c *serializedForwardingConnection) Write(
+@@ -383,7 +397,11 @@ func (c *serializedForwardingConnection) Write(
  		// response-deadline path. Keep the slot until it retires or closes.
  	} else if !expectResponse {
  		c.markDeadlineRetirableWithoutResponse(err == nil)
@@ -97,10 +125,42 @@ index 31d1e81..509e127 100644
  	} else if err != nil || result.PreservedError != nil || result.StatusCode >= http.StatusBadRequest {
  		c.release()
  	}
-@@ -669,6 +679,22 @@ func (t *serializedForwardingTransport) resetInitialization() {
- 	t.initializedMu.Unlock()
- }
- 
+@@ -666,6 +684,51 @@ func (t *serializedForwardingTransport) resetInitialization() {
+ 	t.initializedMu.Lock()
+ 	t.initializeSucceeded = false
+ 	t.initializationReady = false
++	t.childEpoch++
++	t.initializedMu.Unlock()
++}
++
++// currentChildEpoch returns the epoch a new connection starts in.
++func (t *serializedForwardingTransport) currentChildEpoch() uint64 {
++	if t == nil {
++		return 0
++	}
++	t.initializedMu.Lock()
++	defer t.initializedMu.Unlock()
++	return t.childEpoch
++}
++
++// resetInitializationFromEpoch resets readiness only if no reset has happened since
++// the connection that is closing started. Otherwise the child it used is already gone
++// and the readiness flags describe a replacement that must not be revoked.
++func (t *serializedForwardingTransport) resetInitializationFromEpoch(epoch uint64) {
++	if t == nil || !t.requireInitialization {
++		return
++	}
++	t.initializedMu.Lock()
++	defer t.initializedMu.Unlock()
++	if t.childEpoch != epoch {
++		return
++	}
++	t.initializeSucceeded = false
++	t.initializationReady = false
++	t.initializedNotification = false
++	t.childEpoch++
++}
++
 +// beginInitialize records an accepted initialize. A child that is already ready
 +// stays ready: its handshake completed and it was not closed, so another session's
 +// re-initialize must not revoke readiness for requests already using it (a
@@ -114,13 +174,10 @@ index 31d1e81..509e127 100644
 +	if !t.initializationReady {
 +		t.initializeSucceeded = false
 +	}
-+	t.initializedMu.Unlock()
-+}
-+
- func (t *serializedForwardingTransport) initializedNotificationSent() bool {
- 	if t == nil {
- 		return false
-@@ -704,6 +730,14 @@ func (c *serializedForwardingConnection) Close() error {
+ 	t.initializedMu.Unlock()
+ }
+ 
+@@ -704,9 +767,24 @@ func (c *serializedForwardingConnection) Close() error {
  	if c.isRetired() {
  		return nil
  	}
@@ -133,9 +190,32 @@ index 31d1e81..509e127 100644
 +		return nil
 +	}
  	if c.transport != nil {
- 		c.transport.resetInitializedNotification()
- 		c.transport.resetInitialization()
-@@ -782,6 +816,7 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+-		c.transport.resetInitializedNotification()
+-		c.transport.resetInitialization()
++		c.stateMu.Lock()
++		epoch := c.childEpoch
++		c.stateMu.Unlock()
++		if c.transport.requireInitialization {
++			c.transport.resetInitializationFromEpoch(epoch)
++		} else {
++			c.transport.resetInitializedNotification()
++			c.transport.resetInitialization()
++		}
+ 		c.transport.observation.childClosed(c.observationGeneration, "stdio_connection_closed")
+ 	}
+ 	defer c.release()
+@@ -756,6 +834,10 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+ 		if err := c.acquireLifecycle(ctx); err != nil {
+ 			return jsonrpc.ID{}, err
+ 		}
++		epoch := c.transport.currentChildEpoch()
++		c.stateMu.Lock()
++		c.childEpoch = epoch
++		c.stateMu.Unlock()
+ 	}
+ 
+ 	expectedID := callerID
+@@ -782,6 +864,7 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
  	c.requestMethod = method
  	c.deadlineRetirable = false
  	c.retired = false
@@ -143,7 +223,7 @@ index 31d1e81..509e127 100644
  	if c.transport != nil && (c.transport.observation != nil || c.transport.requireInitialization) {
  		c.observationWriteDone = make(chan struct{})
  		c.observationWriteReady = false
-@@ -830,6 +865,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+@@ -830,6 +913,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
  		return false
  	}
  	if !c.awaitingResponse {
@@ -151,7 +231,7 @@ index 31d1e81..509e127 100644
  		return true
  	}
  
-@@ -844,6 +880,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+@@ -844,6 +928,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
  	}
  
  	c.awaitingResponse = false
@@ -159,7 +239,7 @@ index 31d1e81..509e127 100644
  	return true
  }
  
-@@ -856,6 +893,24 @@ func (c *serializedForwardingConnection) release() {
+@@ -856,6 +941,24 @@ func (c *serializedForwardingConnection) release() {
  	}
  }
  
@@ -185,10 +265,18 @@ index 31d1e81..509e127 100644
  	c.stateMu.Lock()
  	lockHeld := c.lockHeld
 diff --git a/pkg/mcpclient/stdio_initialization_test.go b/pkg/mcpclient/stdio_initialization_test.go
-index 906c96d..d93798a 100644
+index 906c96d..66ba167 100644
 --- a/pkg/mcpclient/stdio_initialization_test.go
 +++ b/pkg/mcpclient/stdio_initialization_test.go
-@@ -282,18 +282,148 @@ func TestStdioInitializationReadyClearsOnCloseOrFatalIO(t *testing.T) {
+@@ -7,6 +7,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
++	"sync"
+ 	"testing"
+ 
+ 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+@@ -282,18 +283,148 @@ func TestStdioInitializationReadyClearsOnCloseOrFatalIO(t *testing.T) {
  	}
  }
  
@@ -340,6 +428,64 @@ index 906c96d..d93798a 100644
  func TestStdioInitializationCanceledUnwrittenInitializePreservesReadyChild(t *testing.T) {
  	t.Parallel()
  	transport, base := initializationTransport(false)
+@@ -477,3 +608,57 @@ func initializationReady(t *testing.T, transport ForwardingTransport, base *stub
+ 		initializationNotify(t, transport, initializedNotificationMethod)
+ 	}
+ }
++
++// A request abandoned by a read failure leaves the slot with a connection whose Close
++// is still destructive (it purges the shared pipes). If a sibling has meanwhile
++// re-handshaken the replaced child, that late Close must not revoke the sibling's
++// readiness: the readiness it would reset describes a different child.
++func TestStdioInitializationLateCloseOfAbandonedConnectionKeepsReplacementReady(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++
++	abandoned, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = abandoned.Write(context.Background(), nil, &jsonrpc.Request{ID: initializationID(t, "abandoned"), Method: "tools/call"})
++	require.NoError(t, err)
++	base.enqueueRead(nil, io.EOF)
++	_, err = abandoned.Read(context.Background())
++	require.ErrorIs(t, err, io.EOF) // child lost: readiness reset, slot released
++
++	// A sibling completes the full handshake on the replacement child.
++	initializationReady(t, transport, base, false)
++
++	require.NoError(t, abandoned.Close()) // the dispatcher's late Close of the old connection
++
++	request := &jsonrpc.Request{ID: initializationID(t, "tool"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++}
++
++// Late Closes of finished connections racing with the next requests must neither
++// race (-race) nor revoke readiness.
++func TestStdioInitializationConcurrentLateClosesKeepReadiness(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++	var wg sync.WaitGroup
++	for i := 0; i < 50; i++ {
++		id := initializationID(t, fmt.Sprintf("call-%d", i))
++		conn, err := transport.Connect(context.Background())
++		require.NoError(t, err)
++		_, err = conn.Write(context.Background(), nil, &jsonrpc.Request{ID: id, Method: "tools/call"})
++		require.NoError(t, err)
++		base.enqueueRead(&jsonrpc.Response{ID: id}, nil)
++		_, err = conn.Read(context.Background())
++		require.NoError(t, err)
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			_ = conn.Close()
++		}()
++	}
++	wg.Wait()
++	require.Zero(t, base.closeCalls.Load())
++	request := &jsonrpc.Request{ID: initializationID(t, "final"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++}
 -- 
 2.43.0
 
