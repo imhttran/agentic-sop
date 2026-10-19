@@ -183,49 +183,121 @@ banana, banana, cherry`; outcome `VERIFIED`, `LOCAL_DONE`, final gate `PASS`;
   continuations `q-1` `SUPERSEDED`, `q-5` `COMPLETED`. Full record in
   [`planner-live-test-findings.md`](../plans/planner-live-test-findings.md).
 
-## Concurrent-read diagnostic (HTTP 409 `mcp_initialization_required`)
+## Troubleshooting: HTTP 409 `mcp_initialization_required`
 
-Tracks [#90](https://github.com/imhttran/agentic-sop/issues/90). The failure is reproduced
-and its root cause is **unconfirmed**. Do not mask it with sequential calls or automatic
-retries.
+Tracks [#90](https://github.com/imhttran/agentic-sop/issues/90). The detailed evidence
+(findings, filtered debug log) is attached there; do not copy raw logs into the repository.
+**Status: intermittent, root cause unknown.** Observed and hypothesized facts are kept
+apart below.
 
-### Procedure
+### Symptom
 
-Against any fixture with a question `q-1` (the planner server may be pointed at one with
-`scripts/planner-tunnel-point.sh`):
+During concurrent read-only calls through the ChatGPT Secure MCP Tunnel, one call fails and
+its sibling succeeds:
+
+- message: `MCP server is not initialized; send initialize and notifications/initialized
+  before operational requests`
+- connector error `CONFLICT`, HTTP `409`, JSON-RPC code `-32002`, error type
+  `mcp_initialization_required`, origin `tunnel-client`.
+
+A sequential retry succeeded, but retrying hides the failure; do not use it in the tests
+below.
+
+### Observed (from issue #90)
+
+| Run | Calls | Result |
+| --- | ----- | ------ |
+| Five rounds of `sop_question_get(q-1)` + `sop_status()` concurrently | 10 | **9 succeeded, 1 failed** (HTTP 409, round 2). Also reproduced with a single tunnel-client process |
+| The same test repeated, debug logging on | 10 | **10 succeeded**, no retries |
+
+- Environment: tunnel-client `0.0.16`, revision `5f99daabd4aa4a77049e6d81d54a0d8c18335397`;
+  SOP planner binary at clean revision `dc5fcbe00a281bf4de9bfd8e3bb51c9bf8f62c73`;
+  ChatGPT Secure MCP Tunnel, then local tunnel-client, then `sop mcp --planner` over stdio.
+- The debug log in the issue's filtered-log comment is from the **10/10** run, not the failing
+  one: its ten `tools/call` responses (plus one earlier `tools/call`) all returned HTTP
+  `200` with no JSON-RPC error, and the requests overlapped in time. The 10/10 run was made
+  without any change, so one clean run does not show the problem is gone.
+- Initialization trace of one successful session in that log: `server/discover` answered
+  with JSON-RPC `-32601`, then `initialize` succeeded, then a notification was forwarded to
+  the MCP server (the write returned no error), then `tools/call` succeeded. The
+  `server/discover` error did not stop the tool call. The log does not record the
+  notification's method, so it is **not** established that it was
+  `notifications/initialized`.
+- SOP side: the 409 message and `-32002` do not exist in the SOP source, and
+  `TestMCPPlannerServerHasNoInitializationGate` shows `sop mcp --planner` answers
+  `tools/call` with or without a prior `initialize`. The error is raised by tunnel-client.
+
+### Hypotheses (not confirmed)
+
+Initialization-state handling, session reuse across concurrent calls, or a tunnel-client
+lifecycle issue. In the 10/10 log, the ten calls each carry their own per-call request
+identifier suffix and no `initialize` precedes them; whether that matters is untested.
+
+### Run the concurrent read-only check
+
+Use a fixture with a pending `q-1`. Do not change SOP state, answer a question, or retry a
+failed call.
 
 1. Run five rounds. In each, call `sop_question_get({"question_id":"q-1"})` and
    `sop_status({})` concurrently from ChatGPT, and wait for both before the next round.
-2. Do not retry a failed call and do not modify SOP state.
-3. During the run, capture the `tunnel-client` logs and record its version and source
-   revision.
+2. Record, per call, success or the exact error fields above, and the wall-clock time.
+3. **Pass:** all ten calls succeed with no retries.
 
-**Pass:** all ten calls succeed with no retries.
+### Capture a debug log
 
-### Result, 2026-10-19 (fails)
+Restart the tunnel for the capture. This command is for a **controlled restart**, not for
+starting a second tunnel next to a running one: stop the existing `tunnel-client` first
+(Ctrl-C in its tab), then:
 
-| Round | `sop_question_get` | `sop_status` |
-| ----- | ------------------ | ------------ |
-| 1     | success            | success      |
-| 2     | HTTP 409           | success      |
-| 3-5   | success            | success      |
+```sh
+mkdir -p "$PWD/.run/tunnel/logs"
+tunnel-client run \
+  --profile sop-status-spike \
+  --log.level debug \
+  --log.format json \
+  --log.file "$PWD/.run/tunnel/logs/issue-90-debug.jsonl"
+```
 
-Nine of ten calls succeeded. The failure was `MCP server is not initialized; send
-initialize and notifications/initialized before operational requests`: connector error
-`CONFLICT`, HTTP `409`, JSON-RPC `-32002`, type `mcp_initialization_required`, origin
-`tunnel-client`. No session-termination errors occurred. The tunnel-client logs and version
-were not collected.
+Run it from the agentic-sop checkout. `.run/tunnel/` is git-ignored, so the log stays local.
+Do not enable raw HTTP or payload capture options (for example `--log.http-raw-unsafe`):
+they can record credentials and tool payloads. Keep any log outside the fixture root.
 
-### What is established on the SOP side
+### Read the log
 
-- That message and `-32002` do not exist in the SOP source. `sop mcp --planner`
-  (`internal/mcp/mcp.go`) keeps no session state and answers `tools/call` without a prior
-  `initialize`.
-- `TestMCPPlannerServerHasNoInitializationGate` runs parallel read sessions, with and
-  without `initialize`, under `-race`; all succeed and the question is untouched.
-- So the error is raised by `tunnel-client`. Why it does so for one concurrent call is not
-  established. Change `scripts/planner-tunnel-point.sh` only if the logs show a startup or
-  lifecycle problem there.
+Each line is JSON. Reduce it to the correlation fields:
+
+```sh
+jq -c 'select(.component=="controlplane" or .component=="dispatcher")
+  | {time,msg,request_id,cmd_request_id,rpc_method,rpc_request_id,has_error,rpc_error_code,status_code}
+  | with_entries(select(.value != null))' .run/tunnel/logs/issue-90-debug.jsonl
+```
+
+- `request_id` ties one command through `control-plane command received`, `dispatcher
+  received response from MCP server`, `dispatcher delivered response to control plane`, and
+  `dispatcher forwarded command to MCP server`. Use it with `time` to see overlap and order.
+- `cmd_request_id` appears to group commands from one client session (inferred from the
+  log, not documented); compare it across a failing call and its siblings, and note which
+  call is the first to reach the MCP server.
+- `rpc_method` shows `initialize` and `tools/call`; a notification is logged without a
+  method, so it cannot be identified from these fields.
+- **HTTP success is not JSON-RPC success.** `status_code` is the HTTP result delivered to the
+  control plane; `has_error` and `rpc_error_code` are the JSON-RPC result. In the 10/10 log
+  `server/discover` has `status_code` 200 and `rpc_error_code` -32601: the transport worked
+  and the application reported an error. The reproduced failure is the reverse case: HTTP
+  409 with JSON-RPC `-32002`.
+
+### Preserve evidence safely
+
+Logs contain local usernames and paths, tunnel and client identifiers, and request IDs.
+Before sharing, reduce with the filter above, replace local paths and identifiers, and attach
+the result to the issue, not the repository. Do not include tool arguments or results.
+
+### Keep #90 open until
+
+A failing round has a debug log showing why initialization was refused, a change addresses
+that cause, and the five-round test then passes (all ten calls, no retries) **repeatedly**,
+because a clean run already happened without a fix. Change `scripts/planner-tunnel-point.sh`
+only if the evidence shows a startup or lifecycle problem there.
 
 ## Cleanup
 
