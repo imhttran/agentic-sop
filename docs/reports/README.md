@@ -200,6 +200,7 @@ remain beside the Markdown records at their existing paths.
 ## Planner
 
 - [planner/SOP-PLANNER-CAP-001-capability-context.md](planner/SOP-PLANNER-CAP-001-capability-context.md) — read for the recorded SOP-PLANNER-CAP-001 — Per-task planner capability context evidence.
+- [planner/issue-90-tunnel-client-patch/README.md](planner/issue-90-tunnel-client-patch/README.md) — the proposed tunnel-client patch for issue #90, the observed baseline/candidate live results, and the agent-led candidate workflow; the failure remains intermittent and #90 stays open.
 
 ## Pre performance closure
 

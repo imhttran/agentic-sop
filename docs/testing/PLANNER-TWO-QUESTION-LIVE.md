@@ -43,6 +43,103 @@ decision-history fix
 
   Do not use the installed `sop` unless it was built with #68.
 
+## Agent-led candidate workflow (preferred)
+
+The operator should not copy commands, apply patches, build binaries, or restart
+the tunnel by hand. The agent owns preparation, deployment, and evidence
+collection; the operator approves the two boundaries that matter (starting the
+candidate and promoting a verified build).
+
+1. **Isolate.** Create a branch or worktree for the fix. Do not edit the active
+   SOP working tree or the live tunnel state.
+2. **Implement and test locally.** Run the relevant Go tests and shell checks.
+   Local tests prove the source and wrapper; they do not prove the live ChatGPT
+   integration.
+3. **Provision the candidate.** The helper discovers an existing checkout or
+   cache first, otherwise fetches the pinned source, verifies and applies the
+   pinned patch, builds into an isolated directory, and records the candidate
+   path, version, SHA-256, source revision, patch SHA-256, baseline identity,
+   profile, and launch arguments. It does not start or stop anything.
+
+   ```sh
+   scripts/planner-tunnel-candidate.sh provision \
+     --profile sop-status-spike \
+     --log-file "$PWD/.run/tunnel/logs/candidate-$(date +%Y%m%d-%H%M%S).jsonl"
+   ```
+
+   Defaults: `openai/tunnel-client` at
+   `5f99daabd4aa4a77049e6d81d54a0d8c18335397`, with the issue #90 patch from
+   [`docs/reports/planner/issue-90-tunnel-client-patch/`](../reports/planner/issue-90-tunnel-client-patch/README.md).
+   Pass `--source PATH` to reuse a local checkout without modifying it, or
+   `--build-dir PATH` / `--output PATH` to keep artifacts elsewhere. Relative
+   paths are resolved against the checkout.
+
+4. **Preflight.** Verify the exact candidate binary, checksum, version, wrapper,
+   baseline, and process set before changing process state.
+
+   ```sh
+   scripts/planner-tunnel-candidate.sh preflight
+   ```
+
+5. **Preserve rollback.** Provision records the baseline binary, profile, launch
+   arguments, wrapper checksum, and a wrapper backup. Nothing replaces the
+   installed binary. The rollback command is printed by the helper and repeated
+   in the handoff report.
+6. **Stop only the verified baseline.** `stop` signals only the PID whose exact
+   command line and binary identity match the manifest. It refuses when more
+   than one tunnel process matches or when the process identity changed.
+
+   ```sh
+   scripts/planner-tunnel-candidate.sh stop
+   ```
+
+7. **After approval, start the candidate.** The helper launches it with the
+   preserved profile and equivalent launch arguments, confirms startup, and
+   records PID, version, checksum, and log path. It refuses to start a second
+   tunnel. Building a candidate never restarts the tunnel by itself.
+
+   ```sh
+   scripts/planner-tunnel-candidate.sh start
+   ```
+
+8. **ChatGPT runs the live read-only test.** Use the exact request in
+   [`MCP-CANDIDATE-HANDOFF.md`](MCP-CANDIDATE-HANDOFF.md): 10 rounds of
+   concurrent `sop_status` and `sop_question_get`, 20 calls total, no retries,
+   no state changes. The agent cannot run this layer.
+9. **Collect evidence and prepare the PR.** `status` shows the recorded
+   identity and running process; `handoff` prints the report with the debug-log
+   path and rollback command. Promote the build only after ChatGPT reports its
+   actual results and the operator approves. A clean 20/20 is supporting
+   evidence, not proof the intermittent defect is gone.
+
+### Local tests vs live validation
+
+| Check                                                     | Where                                  | What it establishes                                                                                |
+| --------------------------------------------------------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `go test`, the local wrapper MCP check, `preflight`       | Agent, local machine                   | The source builds, the binary identity matches, and the wrapper answers a read-only local MCP call |
+| 10 concurrent rounds of `sop_status` + `sop_question_get` | ChatGPT, through the Secure MCP Tunnel | The real client/tunnel/server path works under the documented concurrent load                      |
+
+The local wrapper check in `scripts/planner-tunnel-point.sh` is deliberately
+labelled a local check. Do not cite it as a ChatGPT integration result.
+
+### Download and provisioning guardrails
+
+- Existing source checkouts, build directories, and Go caches are reused when
+  the pinned revision and patch match; an existing directory is never overwritten.
+- Clone/fetch retries are bounded. A failure reports the source, revision, and
+  whether the failure was network, credential, or revision resolution.
+- A patch is checked against the pinned revision before application. A failed
+  `git am` is aborted, restoring the source checkout.
+- The candidate binary is built to a temporary path and moved into place only
+  after the build succeeds; an existing candidate is reused only when its
+  version contains the expected source revision, otherwise `--replace` is
+  required.
+- The installed baseline binary is recorded, never replaced. No candidate is
+  installed as the production `sop` or `tunnel-client` binary.
+- The isolated regression suite exercises the full lifecycle without a live
+  tunnel (`make test-planner-tunnel`). It uses mock processes and a temporary
+  git checkout; it never reads or writes the live `.run/tunnel` state.
+
 ## Setup
 
 ```bash
@@ -65,7 +162,10 @@ acceptance test fails before the task runs.
 Point the tunnel's MCP command at the new binary and fixture. The quickest way is
 `scripts/planner-tunnel-point.sh --binary "$TMPDIR/sop-2q" "$TMPDIR/planner-2q-live"`: it
 backs up and rewrites the wrapper, then checks it locally (`--build` builds a fresh binary
-from `origin/main` instead). To write it by hand: the tunnel profile runs
+from `origin/main` instead). Add `--dry-run` to validate the project, binary, and wrapper
+without writing anything. The wrapper script only changes what the tunnel will serve; it
+does not restart the tunnel. Use `scripts/planner-tunnel-candidate.sh` for the verified
+stop/start/rollback lifecycle. To write the wrapper by hand: the tunnel profile runs
 `.run/tunnel/sop-mcp-planner.sh`; write it with absolute paths, because the tunnel does not
 see your shell's `$TMPDIR`:
 
@@ -84,9 +184,12 @@ exec "/var/folders/<...>/T/sop-2q" mcp --planner
   ("repository changed"). Current binaries resolve symlinks on both sides; the workaround
   is harmless with them.
 - **Restart the tunnel client after every fixture recreate.** The running planner server
-  keeps its working directory; after a recreate it no longer serves the new fixture.
+  keeps its working directory; after a recreate it no longer serves the new fixture. Use the
+  candidate helper's verified `stop`/`start` rather than a broad process kill; do not start a
+  second tunnel next to the running one.
 - Test the wrapper locally before restarting the tunnel: pipe an MCP `initialize` and a
-  `tools/call` for `sop_question_list` into it, and expect the pending `q-1`.
+  `tools/call` for `sop_question_list` into it, and expect the pending `q-1`. This is a
+  local check, not a ChatGPT-to-MCP validation.
 - Keep all logs **outside** the fixture root; a log inside it enters the task's change set
   (this broke the earlier `planner-clarify` attempt).
 
@@ -196,7 +299,7 @@ During concurrent read-only calls through the ChatGPT Secure MCP Tunnel, one cal
 its sibling succeeds:
 
 - message: `MCP server is not initialized; send initialize and notifications/initialized
-  before operational requests`
+before operational requests`
 - connector error `CONFLICT`, HTTP `409`, JSON-RPC code `-32002`, error type
   `mcp_initialization_required`, origin `tunnel-client`.
 
@@ -205,10 +308,10 @@ below.
 
 ### Observed (from issue #90)
 
-| Run | Calls | Result |
-| --- | ----- | ------ |
-| Five rounds of `sop_question_get(q-1)` + `sop_status()` concurrently | 10 | **9 succeeded, 1 failed** (HTTP 409, round 2). Also reproduced with a single tunnel-client process |
-| The same test repeated, debug logging on | 10 | **10 succeeded**, no retries |
+| Run                                                                  | Calls | Result                                                                                             |
+| -------------------------------------------------------------------- | ----- | -------------------------------------------------------------------------------------------------- |
+| Five rounds of `sop_question_get(q-1)` + `sop_status()` concurrently | 10    | **9 succeeded, 1 failed** (HTTP 409, round 2). Also reproduced with a single tunnel-client process |
+| The same test repeated, debug logging on                             | 10    | **10 succeeded**, no retries                                                                       |
 
 - Environment: tunnel-client `0.0.16`, revision `5f99daabd4aa4a77049e6d81d54a0d8c18335397`;
   SOP planner binary at clean revision `dc5fcbe00a281bf4de9bfd8e3bb51c9bf8f62c73`;
@@ -227,6 +330,40 @@ below.
   `TestMCPPlannerServerHasNoInitializationGate` shows `sop mcp --planner` answers
   `tools/call` with or without a prior `initialize`. The error is raised by tunnel-client.
 
+### Observed candidate run (2026-10-19)
+
+A patched tunnel-client candidate was built from the pinned revision plus the proposed
+patch, run from an isolated path, and tested through the same ChatGPT Secure MCP Tunnel.
+The installed baseline was not replaced.
+
+| Run                                                             | Calls | Result                                                                            |
+| --------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------- |
+| Baseline, 20-call acceptance run                                | 20    | **18/20**; two calls returned HTTP `409`, `-32002`, `mcp_initialization_required` |
+| Candidate, 20-call acceptance run                               | 20    | **20/20**, no retries, no state changes                                           |
+| Candidate, second 20-call round preserved in the same debug log | 20    | **20/20**, no retries                                                             |
+
+- Candidate identity (local, not committed):
+  `~/.local/.../diagnostics/candidates/tunnel-client-issue90`,
+  version `0.0.16+5f99daabd4aa4a77049e6d81d54a0d8c18335397.issue90-c9349dc`,
+  SHA-256 `58c88e509c5aab426fc3f996a0f4adae9bd41728240dd6131424ed2ad9ed7b38`.
+- Baseline identity: `~/.local/bin/tunnel-client`, version
+  `0.0.16+5f99daabd4aa4a77049e6d81d54a0d8c18335397`,
+  SHA-256 `6f1e8d5494d6c4d6c45cd4f6e07b5291459c0b23f4b8cd8266c7a64be3d9a2a0`.
+- The candidate debug log contains 40 `tools/call` and 40 `initialize` entries across
+  two 20-call rounds, and no structured entry with HTTP `409`, JSON-RPC `-32002`,
+  `mcp_initialization_required`, or a dispatcher error. A raw substring search is not
+  sufficient: digits inside timestamps and limits can match `409` or `-32002`, so use the
+  structured filter below.
+- **Not conclusive.** The defect is intermittent and the root cause is not confirmed by a
+  failing candidate round. A clean candidate run is supporting evidence; it does not prove
+  the defect can never recur. Do not close #90 on this result alone.
+
+### Hypothesis status after the candidate run
+
+The patch addresses readiness loss across re-initialization and late `Close()` calls in
+the stdio transport. The candidate result is consistent with that hypothesis, but the
+baseline also had clean runs without a fix, so this is not proof of causality.
+
 ### Hypotheses (not confirmed)
 
 Initialization-state handling, session reuse across concurrent calls, or a tunnel-client
@@ -235,19 +372,35 @@ identifier suffix and no `initialize` precedes them; whether that matters is unt
 
 ### Run the concurrent read-only check
 
-Use a fixture with a pending `q-1`. Do not change SOP state, answer a question, or retry a
-failed call.
+This is the **default live acceptance test** in
+[`MCP-CANDIDATE-HANDOFF.md`](MCP-CANDIDATE-HANDOFF.md). Use a fixture with a pending
+`q-1`. Do not change SOP state, answer a question, or retry a failed call.
 
-1. Run five rounds. In each, call `sop_question_get({"question_id":"q-1"})` and
+1. Run **10 rounds**. In each, call `sop_question_get({"question_id":"q-1"})` and
    `sop_status({})` concurrently from ChatGPT, and wait for both before the next round.
 2. Record, per call, success or the exact error fields above, and the wall-clock time.
-3. **Pass:** all ten calls succeed with no retries.
+3. Record every initialization failure, including HTTP `409` and
+   `mcp_initialization_required`.
+4. **Pass:** all **20** calls succeed with no retries and no state change.
+
+The earlier five-round/ten-call procedure was the diagnostic run recorded in issue #90;
+the ten-round/20-call form is the acceptance test. A clean 20/20 is supporting evidence,
+not proof that an intermittent defect cannot recur.
 
 ### Capture a debug log
 
-Restart the tunnel for the capture. This command is for a **controlled restart**, not for
-starting a second tunnel next to a running one: stop the existing `tunnel-client` first
-(Ctrl-C in its tab), then:
+The candidate helper records the log path and starts the candidate with it. Provision with
+`--log-file PATH`, then use the verified lifecycle:
+
+```sh
+scripts/planner-tunnel-candidate.sh preflight
+scripts/planner-tunnel-candidate.sh stop       # only the verified baseline PID
+scripts/planner-tunnel-candidate.sh start      # candidate, recorded log path
+```
+
+For a manual fallback, this command is for a **controlled restart**, not for starting a
+second tunnel next to a running one. Stop the existing `tunnel-client` through the helper
+first, then:
 
 ```sh
 mkdir -p "$PWD/.run/tunnel/logs"
@@ -272,8 +425,17 @@ jq -c 'select(.component=="controlplane" or .component=="dispatcher")
   | with_entries(select(.value != null))' .run/tunnel/logs/issue-90-debug.jsonl
 ```
 
+To find failures, filter structurally rather than with a raw substring search (the digits
+`409` and `-32002` also occur inside timestamps and limits):
+
+```sh
+jq -c 'select(.status_code >= 400 or .rpc_error_code != null)
+  | {time,msg,request_id,rpc_method,status_code,rpc_error_code}' \
+  .run/tunnel/logs/issue-90-debug.jsonl
+```
+
 - `request_id` ties one command through `control-plane command received`, `dispatcher
-  received response from MCP server`, `dispatcher delivered response to control plane`, and
+received response from MCP server`, `dispatcher delivered response to control plane`, and
   `dispatcher forwarded command to MCP server`. Use it with `time` to see overlap and order.
 - `cmd_request_id` appears to group commands from one client session (inferred from the
   log, not documented); compare it across a failing call and its siblings, and note which
@@ -281,10 +443,10 @@ jq -c 'select(.component=="controlplane" or .component=="dispatcher")
 - `rpc_method` shows `initialize` and `tools/call`; a notification is logged without a
   method, so it cannot be identified from these fields.
 - **HTTP success is not JSON-RPC success.** `status_code` is the HTTP result delivered to the
-  control plane; `has_error` and `rpc_error_code` are the JSON-RPC result. In the 10/10 log
-  `server/discover` has `status_code` 200 and `rpc_error_code` -32601: the transport worked
-  and the application reported an error. The reproduced failure is the reverse case: HTTP
-  409 with JSON-RPC `-32002`.
+  control plane; `has_error` and `rpc_error_code` are the JSON-RPC result. In the historical
+  10/10 log `server/discover` has `status_code` 200 and `rpc_error_code` -32601: the transport
+  worked and the application reported an error. The reproduced failure is the reverse case:
+  HTTP 409 with JSON-RPC `-32002`.
 
 ### Preserve evidence safely
 
@@ -295,9 +457,11 @@ the result to the issue, not the repository. Do not include tool arguments or re
 ### Keep #90 open until
 
 A failing round has a debug log showing why initialization was refused, a change addresses
-that cause, and the five-round test then passes (all ten calls, no retries) **repeatedly**,
-because a clean run already happened without a fix. Change `scripts/planner-tunnel-point.sh`
-only if the evidence shows a startup or lifecycle problem there.
+that cause, and the 20-call test then passes (all 20 calls, no retries) **repeatedly**,
+across more than one candidate process and more than one ChatGPT session. A clean 20/20 is
+supporting evidence, not proof. Change `scripts/planner-tunnel-point.sh` only if the
+evidence shows a wrapper or startup problem there; use
+`scripts/planner-tunnel-candidate.sh` for the candidate lifecycle.
 
 ## Cleanup
 
