@@ -372,12 +372,11 @@ in-scope inputs, not by the lockfiles that happen to exist:
   reported unless `security.exclude` removes them from scope; a subset never
   implies full-language coverage.
 - Unsupported or ambiguous Cargo layouts (invalid TOML, unsafe or unmatched member
-  patterns, a members glob matching a directory without `Cargo.toml` or a file
-  where a package directory is expected, nested workspaces, absolute or
-  repository-escaping or dangling `package.workspace` references) are explicit
-  issues and cannot produce clean dependency coverage. A valid glob match does
-  not hide an invalid one; content below an already-matched directory is not a
-  separate member position.
+  patterns, a members glob matching a directory without `Cargo.toml`, nested
+  workspaces, absolute or repository-escaping or dangling `package.workspace`
+  references) are explicit issues and cannot produce clean dependency coverage.
+  A members glob that matches an ordinary file is ignored, matching Cargo, and is
+  not by itself a layout issue.
 - Detected Go source without `go.mod` is an unsupported dependency input, not an
   empty scan. A genuine repository with no Go or Rust dependency content is
   reported as a completed no-op with `no_applicable_content: true`; no scanner ran
