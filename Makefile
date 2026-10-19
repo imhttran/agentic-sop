@@ -4,7 +4,7 @@
 # scripts/ are support tooling, grouped by responsibility (install/, packaging/,
 # checks/, agents/).
 
-.PHONY: fmt vet test test-fast test-planner-tunnel build check check-fast check-plugin install install-all install-ollama-agent \
+.PHONY: fmt vet test test-fast test-planner-tunnel test-mcp-portability build check check-fast check-plugin install install-all install-ollama-agent \
 	security-integration \
 	ollama-agent-pin-preflight ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
@@ -42,6 +42,11 @@ test:
 # Isolated mock processes and a temporary git checkout; never touches a live tunnel.
 test-planner-tunnel:
 	./scripts/checks/test-planner-tunnel-candidate.sh
+
+# Simulated cross-agent compatibility tests for the portable validation handoff.
+# Exercises Claude -> ChatGPT -> second-agent transitions and invalid-artifact rejection.
+test-mcp-portability:
+	./scripts/checks/test-validation-handoff-portability.sh
 
 # Fast suite: same tests, with TMPDIR on RAM-backed storage when available. The
 # wrapper creates and cleans up a private per-invocation directory, falls back to

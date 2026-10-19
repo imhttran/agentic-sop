@@ -146,6 +146,7 @@ single owner. This table is that map.
 ## Reference
 
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
+- [reference/validation-handoff.schema.json](reference/validation-handoff.schema.json) — the versioned, portable MCP validation-handoff contract used across coding agents and independent validators.
 - [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, the model-routing classes/precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
 - [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, severity
@@ -178,7 +179,8 @@ single owner. This table is that map.
 - [guides/HOW-TO-SETUP-WITH-CLAUDE.md](guides/HOW-TO-SETUP-WITH-CLAUDE.md) — run SOP's SMALL, MEDIUM, and LARGE model classes on Claude, through the Claude Code CLI or the Anthropic API.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, `/rag-ingest`, and `/sop-rag-integrate` RAG skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
-- [guides/MCP-LIVE-VALIDATION.md](guides/MCP-LIVE-VALIDATION.md) — the `/mcp-live-validation` skill: discover, provision, verify identity, deploy through an approval gate, hand off to independent ChatGPT validation, preserve evidence, roll back, and prepare a PR without merging.
+- [guides/MCP-LIVE-VALIDATION.md](guides/MCP-LIVE-VALIDATION.md) — the `/mcp-live-validation` skill: discover, provision, verify identity, deploy through an approval gate, hand off to independent MCP validation, preserve evidence, roll back, and prepare a PR without merging.
+- [guides/MCP-LIVE-VALIDATION-PROVIDERS.md](guides/MCP-LIVE-VALIDATION-PROVIDERS.md) — provider setup for ChatGPT, Claude, and a tool-enabled coding harness, the capability matrix, and the simulated-vs-live limits of the cross-agent tests.
 - [guides/SECURITY-SCANNER-ADDON.md](guides/SECURITY-SCANNER-ADDON.md) — configure report-only or required scanning, extend the `security-scan/v1` adapter contract, manage reviewed baselines, resume evidence, and roll back the add-on.
 - [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, the preserved legacy wrappers, and the distinction between the shipped RAG skills and the proposed/implemented RAG retrieval adapter.
 - [guides/LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md) — recommendations for the later, operator-approved transition of the legacy `sop-controller` and `sop-decision-adapters` repositories; **no** retirement is performed.

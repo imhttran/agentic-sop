@@ -201,6 +201,7 @@ remain beside the Markdown records at their existing paths.
 
 - [planner/SOP-PLANNER-CAP-001-capability-context.md](planner/SOP-PLANNER-CAP-001-capability-context.md) — read for the recorded SOP-PLANNER-CAP-001 — Per-task planner capability context evidence.
 - [planner/issue-90-tunnel-client-patch/README.md](planner/issue-90-tunnel-client-patch/README.md) — the proposed tunnel-client patch for issue #90, the observed baseline/candidate live results, and the agent-led candidate workflow; the failure remains intermittent and #90 stays open.
+- [mcp-live-validation-portability.md](mcp-live-validation-portability.md) — the portable validation-handoff evidence: a real candidate artifact, an actual Claude artifact review, the simulated Claude/ChatGPT/second-agent scenarios, and the missing live MCP validator capability.
 
 ## Pre performance closure
 

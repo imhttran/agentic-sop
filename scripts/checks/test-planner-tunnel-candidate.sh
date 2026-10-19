@@ -63,6 +63,51 @@ sha() {
   else sha256sum "$1" | awk '{print $1}'; fi
 }
 
+write_validation_results() {
+  local path="$1" status="$2" candidate_sha="$3" source_rev="$4" workflow_id="$5" validator="$6"
+  command -v python3 >/dev/null 2>&1 || { fail "python3 is required for the JSON handoff tests"; return 1; }
+  python3 - "$path" "$status" "$candidate_sha" "$source_rev" "$workflow_id" "$validator" <<'PY'
+import datetime, json, sys
+path, status, candidate_sha, source_rev, workflow_id, validator = sys.argv[1:]
+calls = []
+failed = 0
+for round_no in range(1, 11):
+    for tool in ("sop_status", "sop_question_get"):
+        call_status = "PASS"
+        if status == "FAIL" and failed == 0 and round_no == 4 and tool == "sop_question_get":
+            call_status = "FAIL"
+            failed += 1
+        calls.append({
+            "round": round_no,
+            "tool": tool,
+            "arguments": {} if tool == "sop_status" else {"question_id": "q-1"},
+            "status": call_status,
+            "elapsed_ms": 12,
+        })
+now = datetime.datetime.now(datetime.timezone.utc).isoformat().replace("+00:00", "Z")
+results = {
+    "schema": "mcp-live-validation/validation-results/v1",
+    "workflow_id": workflow_id,
+    "validator": validator,
+    "validator_capabilities": ["mcp_tools"],
+    "candidate_sha256": candidate_sha,
+    "source_revision": source_rev,
+    "started_at": now,
+    "finished_at": now,
+    "rounds": 10,
+    "concurrent": True,
+    "retries": 0,
+    "state_changes": False,
+    "summary": {"total": len(calls), "passed": len(calls) - failed, "failed": failed},
+    "calls": calls,
+    "initialization_errors": [] if status == "PASS" else [{"round": 4, "error_type": "test-failure"}],
+    "status": status,
+}
+with open(path, "w", encoding="utf-8") as fh:
+    json.dump(results, fh, indent=2)
+PY
+}
+
 wait_for_file() {
   local f="$1" i=0
   while [ ! -s "$f" ] && [ "$i" -lt 100 ]; do sleep 0.1; i=$((i + 1)); done
@@ -348,17 +393,40 @@ else
   pass "start dry-run does not start the candidate"
 fi
 
-if ! run_candidate start >"$TMP/out" 2>&1; then
-  fail "start failed: $(cat "$TMP/out")"
-  cat "$TMP/out" >&2
-  exit 1
+# The deployment gate requires a validated handoff that authorizes START_CANDIDATE.
+sed -i.bak 's/^state=.*/state=prepared/' "$MANIFEST"
+rm -f "$MANIFEST.bak"
+printf 'go test ./...: pass\n' > "$TMP/gate-tests.txt"
+if ! run_candidate handoff --format json --local-status PASS --tests "$TMP/gate-tests.txt" \
+  --deployment-approval PENDING --output "$TMP/gate-unapproved.json" >"$TMP/out" 2>&1; then
+  fail "unapproved gate handoff failed: $(cat "$TMP/out")"
+else
+  if run_candidate start --handoff "$TMP/gate-unapproved.json" >"$TMP/out" 2>&1; then
+    fail "start should refuse a handoff that does not authorize START_CANDIDATE"
+  else
+    assert_contains "$(cat "$TMP/out")" "not START_CANDIDATE"
+    assert_eq "$(mg process_pid)" ""
+    pass "start refuses an unapproved handoff without launching a process"
+  fi
 fi
-CAND_PID="$(mg process_pid)"
-assert_alive "$CAND_PID"
-assert_contains "$(mg process_command)" "$CANDIDATE"
-assert_eq "$(mg state)" "candidate-running"
-assert_file "$TMP/logs/candidate.jsonl"
-pass "start launches the candidate and records PID, command, and log"
+
+if ! run_candidate handoff --format json --local-status PASS --tests "$TMP/gate-tests.txt" \
+  --deployment-approval APPROVED --approval-reference "test approval" \
+  --output "$TMP/gate-approved.json" >"$TMP/out" 2>&1; then
+  fail "approved gate handoff failed: $(cat "$TMP/out")"
+else
+  if ! run_candidate start --handoff "$TMP/gate-approved.json" >"$TMP/out" 2>&1; then
+    fail "start with an approved handoff failed: $(cat "$TMP/out")"
+    cat "$TMP/out" >&2
+    exit 1
+  fi
+  CAND_PID="$(mg process_pid)"
+  assert_alive "$CAND_PID"
+  assert_contains "$(mg process_command)" "$CANDIDATE"
+  assert_eq "$(mg state)" "candidate-running"
+  assert_file "$TMP/logs/candidate.jsonl"
+  pass "start launches the candidate when the handoff authorizes START_CANDIDATE"
+fi
 
 if ! run_candidate status >"$TMP/out" 2>&1; then
   fail "status failed: $(cat "$TMP/out")"
@@ -484,9 +552,9 @@ if ! run_candidate handoff >"$TMP/handoff.md" 2>"$TMP/err"; then
 else
   HANDOFF="$(cat "$TMP/handoff.md")"
   for needle in \
-    "Repository" "Candidate executable" "Active process" "Local tests" \
-    "ChatGPT live MCP results" "Rollback" "Exact read-only MCP test request" \
-    "sop_status({})" "sop_question_get({\"question_id\":\"q-1\"})" \
+    "Repository" "Candidate executable" "Active process" "Local verification" \
+    "Independent validation" "Rollback" "Requested live MCP tests" \
+    "sop_status" "sop_question_get" \
     "20 calls total" "mcp_initialization_required" "not a validation result"; do
     assert_contains "$HANDOFF" "$needle"
   done
@@ -516,9 +584,16 @@ else
   assert_file "$HANDOFF_JSON"
   JSON="$(cat "$HANDOFF_JSON")"
   for needle in \
-    '"schema": "mcp-live-validation/handoff/v1"' \
+    '"schema": "mcp-live-validation/validation-handoff/v1"' \
+    '"schema_version": 1' \
+    '"workflow_id"' \
     '"issue": "TEST-1"' \
     '"status": "PENDING"' \
+    '"next_permitted_action"' \
+    '"environment"' \
+    '"local_verification"' \
+    '"results_template"' \
+    '"approval"' \
     '"rounds": 10' \
     '"total_calls": 20' \
     '"retries": 0' \
@@ -533,33 +608,51 @@ else
   done
   if command -v python3 >/dev/null 2>&1; then
     printf '%s' "$JSON" | python3 -m json.tool >/dev/null || fail "json handoff is not valid JSON"
+    WORKFLOW_ID="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["workflow_id"])' "$HANDOFF_JSON")"
   elif command -v jq >/dev/null 2>&1; then
     printf '%s' "$JSON" | jq empty >/dev/null || fail "json handoff is not valid JSON"
+    WORKFLOW_ID="$(jq -r .workflow_id "$HANDOFF_JSON")"
+  else
+    WORKFLOW_ID=""
   fi
-  pass "json handoff is machine-readable and records the validation contract"
+  [ -n "$WORKFLOW_ID" ] || fail "json handoff did not record a workflow_id"
+  assert_contains "$JSON" "\"next_permitted_action\": \"STOP_AND_REPORT\""
+  pass "json handoff is machine-readable and records the portable contract"
 fi
 
 if run_candidate handoff --format json --validation-status PASS >"$TMP/out" 2>&1; then
-  fail "PASS without --results should be refused"
+  fail "PASS without --results-json should be refused"
 else
-  assert_contains "$(cat "$TMP/out")" "requires --results"
+  assert_contains "$(cat "$TMP/out")" "requires --results-json"
   pass "handoff refuses a PASS status without independent evidence"
 fi
 
-printf 'round 1..10: 20/20 success; no initialization errors\n' > "$TMP/results-pass.txt"
-if ! run_candidate handoff --format json --validation-status PASS --results "$TMP/results-pass.txt" --output "$TMP/handoff-pass.json" >"$TMP/out" 2>&1; then
+CANDIDATE_SHA="$(sha "$CANDIDATE")"
+CANDIDATE_REV="$(mg candidate_revision)"
+printf 'go test ./...: pass\nmake test-planner-tunnel: pass\n' > "$TMP/local-tests.txt"
+write_validation_results "$TMP/results-pass.json" PASS "$CANDIDATE_SHA" "$CANDIDATE_REV" "$WORKFLOW_ID" chatgpt
+if ! run_candidate handoff --format json --validation-status PASS \
+  --results-json "$TMP/results-pass.json" --local-status PASS \
+  --tests "$TMP/local-tests.txt" --deployment-approval APPROVED \
+  --output "$TMP/handoff-pass.json" >"$TMP/out" 2>&1; then
   fail "handoff PASS failed: $(cat "$TMP/out")"
 else
   assert_contains "$(cat "$TMP/handoff-pass.json")" '"status": "PASS"'
-  pass "handoff records an independent PASS result"
+  assert_contains "$(cat "$TMP/handoff-pass.json")" '"next_permitted_action": "PREPARE_PR"'
+  assert_contains "$(cat "$TMP/handoff-pass.json")" '"validator": "chatgpt"'
+  pass "handoff records an independent PASS result and prepares the PR action"
 fi
 
-printf 'round 4: timeout; candidate log shows a connection reset\n' > "$TMP/results-fail.txt"
-if ! run_candidate handoff --format json --validation-status FAIL --results "$TMP/results-fail.txt" --output "$TMP/handoff-fail.json" >"$TMP/out" 2>&1; then
+write_validation_results "$TMP/results-fail.json" FAIL "$CANDIDATE_SHA" "$CANDIDATE_REV" "$WORKFLOW_ID" chatgpt
+if ! run_candidate handoff --format json --validation-status FAIL \
+  --results-json "$TMP/results-fail.json" --local-status PASS \
+  --tests "$TMP/local-tests.txt" --deployment-approval APPROVED \
+  --output "$TMP/handoff-fail.json" >"$TMP/out" 2>&1; then
   fail "handoff FAIL failed: $(cat "$TMP/out")"
 else
   assert_contains "$(cat "$TMP/handoff-fail.json")" '"status": "FAIL"'
-  assert_contains "$(cat "$TMP/handoff-fail.json")" "connection reset"
+  assert_contains "$(cat "$TMP/handoff-fail.json")" '"next_permitted_action": "DIAGNOSE_AND_PREPARE_CORRECTED_CANDIDATE"'
+  assert_contains "$(cat "$TMP/handoff-fail.json")" "test-failure"
   pass "handoff records a FAIL result and its evidence"
 fi
 
