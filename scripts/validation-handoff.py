@@ -45,6 +45,15 @@ SECRET_KEY_RE = re.compile(
     re.IGNORECASE,
 )
 HEX64_RE = re.compile(r"^[0-9a-f]{64}$")
+# Credential-shaped values. Key names are checked separately; these catch a secret
+# pasted into a free-text field such as local_verification.results.
+SECRET_VALUE_RE = re.compile(
+    r"((?<![A-Za-z0-9])sk-[A-Za-z0-9_-]{20,}"
+    r"|(?<![A-Za-z0-9])gh[pousr]_[A-Za-z0-9]{20,}|github_pat_[A-Za-z0-9_]{20,}"
+    r"|(?<![A-Za-z0-9])AKIA[0-9A-Z]{16}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY"
+    r"|[Bb]earer\s+[A-Za-z0-9._~+/-]{20,})"
+)
 
 
 class ValidationError(Exception):
@@ -141,6 +150,10 @@ def validate_schema(
 
 
 def walk_secret_keys(value: Any, path: str, errors: list[str]) -> None:
+    """Reject credential-like keys and credential-shaped string values.
+
+    A matched value is never echoed: the error names only its path.
+    """
     if isinstance(value, dict):
         for key, child in value.items():
             if SECRET_KEY_RE.search(str(key)):
@@ -151,6 +164,10 @@ def walk_secret_keys(value: Any, path: str, errors: list[str]) -> None:
     elif isinstance(value, list):
         for index, child in enumerate(value):
             walk_secret_keys(child, f"{path}[{index}]", errors)
+    elif isinstance(value, str) and SECRET_VALUE_RE.search(value):
+        errors.append(
+            f"{path}: value looks like a credential; redact it before sharing the handoff"
+        )
 
 
 def parse_time(value: str) -> dt.datetime:
@@ -429,6 +446,13 @@ def validate_semantics(
         return
 
     deployment = approval["deployment"]
+    if deployment.get("status") == "APPROVED" and not str(
+        deployment.get("reference", "")
+    ).strip():
+        errors.append(
+            "$.approval.deployment.reference must name the approval (for example a "
+            "comment link or ticket) when the status is APPROVED"
+        )
     validation_status = handoff["independent_validation"]["status"]
     local_status = local.get("status")
 
@@ -609,8 +633,11 @@ def main() -> int:
     parser.add_argument(
         "--handoff", required=True, help="validation-handoff.json to validate"
     )
-    parser.add_argument("--checkout", help="agentic-sop checkout to cross-check")
-    parser.add_argument(
+    # One mode is required: a validation that silently skips the checkout checks
+    # must never print a bare OK.
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--checkout", help="agentic-sop checkout to cross-check")
+    mode.add_argument(
         "--artifact-only",
         action="store_true",
         help="validate the artifact without filesystem/process checks",
@@ -663,14 +690,14 @@ def main() -> int:
         except (KeyError, TypeError) as exc:
             errors.append(f"malformed handoff: {exc}")
 
-    if not args.artifact_only and args.checkout:
+    if args.checkout:
         try:
             validate_checkout(
                 handoff, Path(args.checkout).resolve(), errors, warnings, checks
             )
         except (KeyError, TypeError) as exc:
             errors.append(f"malformed handoff: {exc}")
-    elif args.artifact_only:
+    else:
         warnings.append(
             "artifact-only: repository, manifest, candidate file, baseline, and process were not verified"
         )
@@ -695,7 +722,7 @@ def main() -> int:
         "validation_status": handoff.get("independent_validation", {}).get("status", "")
         if isinstance(handoff, dict)
         else "",
-        "artifact_only": args.artifact_only or not args.checkout,
+        "artifact_only": args.artifact_only,
         "checks": checks,
         "errors": errors,
         "warnings": warnings,

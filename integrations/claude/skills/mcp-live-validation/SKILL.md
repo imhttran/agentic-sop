@@ -208,8 +208,9 @@ starting the candidate. This is the only deployment approval in the workflow.
 Present the candidate identity, baseline identity, profile, log path, rollback
 command, and local test results. Do not ask the operator to copy commands; the
 agent runs them after approval. Record the approval in the handoff with
-`--deployment-approval APPROVED` and an approval reference only after it is
-actually given.
+`--deployment-approval APPROVED` and `--approval-reference` naming where it was
+given (a comment link or ticket) only after it is actually given. The helper and
+the validator reject `APPROVED` without a reference.
 
 ## DEPLOY
 
@@ -252,6 +253,7 @@ scripts/planner-tunnel-candidate.sh handoff \
   --local-status PASS \
   --tests <local-test-evidence> \
   --deployment-approval <PENDING-or-APPROVED> \
+  --approval-reference <link-or-ticket; required with APPROVED> \
   --output <checkout>/.run/tunnel/candidate/validation-handoff.json
 
 scripts/planner-tunnel-candidate.sh handoff \
@@ -351,6 +353,7 @@ scripts/planner-tunnel-candidate.sh handoff \
   --local-status PASS \
   --tests <local-test-evidence> \
   --deployment-approval APPROVED \
+  --approval-reference <link-or-ticket> \
   --output <checkout>/.run/tunnel/candidate/validation-handoff.json \
   --replace
 ```

@@ -634,6 +634,7 @@ write_validation_results "$TMP/results-pass.json" PASS "$CANDIDATE_SHA" "$CANDID
 if ! run_candidate handoff --format json --validation-status PASS \
   --results-json "$TMP/results-pass.json" --local-status PASS \
   --tests "$TMP/local-tests.txt" --deployment-approval APPROVED \
+  --approval-reference "operator approval (test fixture)" \
   --output "$TMP/handoff-pass.json" >"$TMP/out" 2>&1; then
   fail "handoff PASS failed: $(cat "$TMP/out")"
 else
@@ -647,6 +648,7 @@ write_validation_results "$TMP/results-fail.json" FAIL "$CANDIDATE_SHA" "$CANDID
 if ! run_candidate handoff --format json --validation-status FAIL \
   --results-json "$TMP/results-fail.json" --local-status PASS \
   --tests "$TMP/local-tests.txt" --deployment-approval APPROVED \
+  --approval-reference "operator approval (test fixture)" \
   --output "$TMP/handoff-fail.json" >"$TMP/out" 2>&1; then
   fail "handoff FAIL failed: $(cat "$TMP/out")"
 else

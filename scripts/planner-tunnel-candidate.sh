@@ -1717,6 +1717,10 @@ cmd_handoff() {
     markdown|json) : ;;
     *) die "--format must be markdown or json" ;;
   esac
+  # An approval must point back to the human decision that granted it.
+  if [ "$HANDOFF_DEPLOYMENT_APPROVAL" = APPROVED ] && [ -z "${HANDOFF_APPROVAL_REFERENCE//[[:space:]]/}" ]; then
+    die "--deployment-approval APPROVED requires --approval-reference (for example a comment link or ticket)"
+  fi
   require_base_tools
   resolve_root
   manifest_required

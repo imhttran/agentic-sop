@@ -54,6 +54,7 @@ scripts/planner-tunnel-candidate.sh handoff \
   --local-status PASS \
   --tests <local-test-evidence> \
   --deployment-approval <PENDING-or-APPROVED> \
+  --approval-reference <link-or-ticket; required with APPROVED> \
   --output <checkout>/.run/tunnel/candidate/validation-handoff.json
 ```
 
