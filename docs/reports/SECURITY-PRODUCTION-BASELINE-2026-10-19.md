@@ -4,7 +4,7 @@
 **Date:** 2026-10-19
 **Tested revision:** `1dbaa3a307fe970c0d13a928141b456d78aa6105` (`origin/main`)
 **Includes:** PR #79 merge `225b76799201b436a6c0b9cbfc3b97bb08d114dd` and correction head `920bf37b58782fe79a0306f39683c6cd82d4c057`
-**Related:** [#40](https://github.com/imhttran/agentic-sop/issues/40), [PR #79](https://github.com/imhttran/agentic-sop/pull/79), [PLAN-Security-Production-Baseline.md](../plans/PLAN-Security-Production-Baseline.md)
+**Related:** [#40](https://github.com/imhttran/agentic-sop/issues/40), [PR #79](https://github.com/imhttran/agentic-sop/pull/79), [PLAN-Security-Production-Baseline.md](../history/plans/PLAN-Security-Production-Baseline.md)
 **Mode:** report-only (`required` disabled)
 **Raw artifacts:** `.agent-sdlc/runs/prod-baseline-1dbaa3a3/security/` (local, gitignored)
 

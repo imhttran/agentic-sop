@@ -18,5 +18,6 @@ directory.
 - [PLAN-Phase-3.5-Model-Routing.md](PLAN-Phase-3.5-Model-Routing.md) — read for the original PLAN --- Phase 3.5: JEV-Guided Model Routing & Stabilization scope, tasks, and recorded disposition.
 - [PLAN-Pre-JEV-Stabilization.md](PLAN-Pre-JEV-Stabilization.md) — read for the original Pre-JEV Stabilization Plan scope, tasks, and recorded disposition.
 - [PLAN-Pre-Performance-Closure.md](PLAN-Pre-Performance-Closure.md) — read for the original Pre-Performance Closure and Baseline scope, tasks, and recorded disposition.
+- [PLAN-Security-Production-Baseline.md](PLAN-Security-Production-Baseline.md) — read for the original PLAN — Production Dependency Vulnerability Baseline scope, tasks, and recorded disposition.
 - [PLAN-SOP-EXECUTION-RELIABILITY.md](PLAN-SOP-EXECUTION-RELIABILITY.md) — read for the original PLAN — SOP Execution Reliability scope, tasks, and recorded disposition.
 - [POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md](POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md) — read for the original POST8-001 — Phase 8 Live-Path Integration Governance & Acceptance scope, tasks, and recorded disposition.
