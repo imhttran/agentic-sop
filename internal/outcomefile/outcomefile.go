@@ -480,6 +480,12 @@ func outcomeStatus(s string) (Status, bool) {
 // a success. Re-ingesting the same artifacts produces the same record ID and content
 // hash, so the write is idempotent.
 func IngestRun(runsDir, taskID string) (OutcomeRecord, error) {
+	return IngestRunFor(runsDir, taskID, "")
+}
+
+// IngestRunFor is IngestRun with an explicit repository identity. Advisory retrieval is
+// repository-scoped, so a record without one can never be returned.
+func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 	if strings.TrimSpace(taskID) == "" {
 		return OutcomeRecord{}, fmt.Errorf("%w: empty task id", ErrIncompleteRecord)
 	}
@@ -517,6 +523,7 @@ func IngestRun(runsDir, taskID string) (OutcomeRecord, error) {
 		Corpus:           retrievalboundary.CorpusOutcome,
 		RunID:            runID,
 		TaskID:           taskID,
+		Repository:       strings.TrimSpace(repository),
 		Attempt:          attempt,
 		SourceRevision:   rev,
 		Environment:      strings.TrimSpace(fmt.Sprintf("provider=%s model=%s locality=%s", rep.ModelSelection.Provider, rep.ModelSelection.Model, rep.ModelSelection.Locality)),

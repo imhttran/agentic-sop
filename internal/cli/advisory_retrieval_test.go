@@ -149,14 +149,21 @@ func TestAdvisoryDropsOutOfScopeAndApprovalRecords(t *testing.T) {
 	}
 }
 
-func TestAdvisoryPartialOutcomeIsNotARemedy(t *testing.T) {
+func TestAdvisoryPartialOutcomeIsAWarningNotARemedy(t *testing.T) {
 	cfg := advisoryCfg(t, true)
 	f := &fakeAdvisoryRetriever{res: retrievalboundary.Result{Evidence: []retrievalboundary.Evidence{
 		outcomeEvidence("r1", "partial work", "partial"),
 	}}}
 	items, _ := advisoryKnowledgeForAttempt(context.Background(), cfg, specFixture(), f, "agentic-sop", "")
-	if len(items) != 0 {
-		t.Fatalf("a partial outcome was presented as a candidate remedy: %+v", items)
+	if len(items) != 1 {
+		t.Fatalf("partial outcome should be retrievable as a labelled warning: %+v", items)
+	}
+	reason := items[0].Reason
+	if !strings.Contains(reason, "status=partial") || !strings.Contains(reason, "warning") {
+		t.Fatalf("reason = %q, want the preserved partial label and a warning", reason)
+	}
+	if strings.Contains(reason, "candidate remedy") {
+		t.Fatalf("a partial outcome was presented as a remedy: %q", reason)
 	}
 }
 

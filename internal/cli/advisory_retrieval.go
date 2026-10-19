@@ -130,6 +130,12 @@ func openAdvisoryRetriever(cfg config.AdvisoryRetrievalConfig) (AdvisoryRetrieve
 	return lr, func() { _ = ix.Close() }, nil
 }
 
+// AdvisoryKnowledgeForAttempt is the public seam used by cmd/sop-memory. It runs the same
+// planning/recovery advisory path as the lifecycle, with the production local retriever.
+func AdvisoryKnowledgeForAttempt(ctx context.Context, cfg config.Config, spec *taskfile.Spec, repository, failureCtx string) ([]sopctx.Item, AdvisoryResult) {
+	return advisoryKnowledgeForAttempt(ctx, cfg, spec, nil, repository, failureCtx)
+}
+
 // advisoryKnowledgeForAttempt runs the one bounded advisory retrieval for an attempt and
 // returns the knowledge items to add to the canonical context. The phase is recovery when
 // the attempt carries a recorded failure, planning otherwise. Disabled or failed retrieval
@@ -372,10 +378,14 @@ func advisoryKindFor(ev retrievalboundary.Evidence) (AdvisoryItemKind, bool) {
 	case retrievalboundary.CorpusFailure:
 		return AdvisoryKindWarning, true
 	case retrievalboundary.CorpusOutcome:
-		// Only a verified successful outcome is a candidate remedy; a partial or failed
-		// outcome is never presented as a correction.
-		if strings.EqualFold(strings.TrimSpace(ev.Status), "success") {
+		// A verified success is a candidate remedy. Failed, partial, and blocked outcomes
+		// remain retrievable as warnings, with their status label preserved, so an
+		// incomplete or failed run is never presented as a correction.
+		switch strings.ToLower(strings.TrimSpace(ev.Status)) {
+		case "success":
 			return AdvisoryKindCandidateRemedy, true
+		case "partial", "failed", "blocked":
+			return AdvisoryKindWarning, true
 		}
 		return "", false
 	default:
@@ -485,10 +495,16 @@ func advisoryContextItem(ev retrievalboundary.Evidence, kind AdvisoryItemKind, c
 	if text == "" {
 		text = advisorySourceRef(ev)
 	}
+	reason := advisoryReason(kind, compat)
+	if status := strings.TrimSpace(ev.Status); status != "" {
+		// Preserve the record's label (success/partial/failed/blocked) in the retrieved
+		// context. The body also carries the record's recorded limitations.
+		reason = "status=" + status + "; " + reason
+	}
 	return sopctx.Item{
 		Source:   sopctx.SourceKnowledgeRAG,
 		Identity: advisorySourceRef(ev),
-		Reason:   advisoryReason(kind, compat),
+		Reason:   reason,
 		Priority: sopctx.PriorityKnowledgeRAG,
 		Text:     text,
 	}

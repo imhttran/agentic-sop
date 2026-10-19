@@ -447,6 +447,12 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// evidence already produced above; it is best-effort observation and never
 	// changes the run outcome.
 	writeRunTrace(rn, res, cfg, runtrace.CollectorFromContext(ctx))
+	// Decision-memory capture. It runs after verification and after the report artifacts
+	// exist, is idempotent, and is strictly best-effort: a capture failure is reported on
+	// the console and never changes the task verdict or the run outcome.
+	if err := captureOutcome(dir, cfg, spec.ID); err != nil {
+		fmt.Fprintf(stdout, "decision memory: capture skipped: %v\n", err)
+	}
 	return res, nil
 }
 

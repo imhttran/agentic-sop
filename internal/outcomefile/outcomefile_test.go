@@ -228,6 +228,21 @@ func TestRedactionAndProvenance(t *testing.T) {
 	}
 }
 
+func TestIngestRunForCarriesRepository(t *testing.T) {
+	runsDir := t.TempDir()
+	writeRun(t, runsDir, "RDM-002", "PARTIAL", "PASS", "reason")
+	rec, err := IngestRunFor(runsDir, "RDM-002", "agentic-sop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rec.Repository != "agentic-sop" {
+		t.Fatalf("repository = %q, want the scoped identity", rec.Repository)
+	}
+	if ok, reason := rec.Eligible(); !ok {
+		t.Fatalf("record not eligible: %q", reason)
+	}
+}
+
 func TestIngestedRecordIsImmediatelyEligible(t *testing.T) {
 	runsDir := t.TempDir()
 	writeRun(t, runsDir, "RDM-002", "PARTIAL", "PASS", "reason")
