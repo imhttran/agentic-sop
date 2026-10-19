@@ -8,8 +8,9 @@ tunnel, and #90 stays open until a controlled live reproduction confirms the cau
 - Baseline: `openai/tunnel-client` @ `5f99daabd4aa4a77049e6d81d54a0d8c18335397`
   (the installed revision).
 - Patch: [`0001-mcpclient-keep-stdio-readiness-across-re-initialize-.patch`](0001-mcpclient-keep-stdio-readiness-across-re-initialize-.patch)
-  (commit `560e70c3`, 2 files, +298 / -10). Revised after review; the first version was
-  `0372c1fc`.
+  (commit `c9349dc0`, 2 files, +309 / -10). Revised after review; earlier versions were
+  `0372c1fc` and `560e70c3`. The last revision only adds a comment documenting the
+  `childEpoch` safety invariant; no runtime behavior changed.
 
 ## What it changes
 The stdio initialization guard keeps one readiness flag for the shared child, so three

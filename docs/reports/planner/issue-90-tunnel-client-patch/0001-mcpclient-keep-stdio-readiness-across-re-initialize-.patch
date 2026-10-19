@@ -1,4 +1,4 @@
-From 560e70c3b9e2c394f7f72fee060d77fc64a9c06b Mon Sep 17 00:00:00 2001
+From c9349dc08b5f917c0d59dd0f16c4303e88e9f864 Mon Sep 17 00:00:00 2001
 From: Claude <noreply@anthropic.com>
 Date: Mon, 19 Oct 2026 19:44:59 +0000
 Subject: [PATCH] mcpclient: keep stdio readiness across re-initialize and late
@@ -32,12 +32,12 @@ in-flight-close and abandoned-read cases.
 Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01Esu3pgtRnyfjdYLZKJmxT3
 ---
- .../serialized_forwarding_transport.go        | 117 ++++++++++-
+ .../serialized_forwarding_transport.go        | 128 +++++++++++-
  pkg/mcpclient/stdio_initialization_test.go    | 191 +++++++++++++++++-
- 2 files changed, 298 insertions(+), 10 deletions(-)
+ 2 files changed, 309 insertions(+), 10 deletions(-)
 
 diff --git a/pkg/mcpclient/serialized_forwarding_transport.go b/pkg/mcpclient/serialized_forwarding_transport.go
-index 31d1e81..74b33b0 100644
+index 31d1e81..98bc593 100644
 --- a/pkg/mcpclient/serialized_forwarding_transport.go
 +++ b/pkg/mcpclient/serialized_forwarding_transport.go
 @@ -128,6 +128,10 @@ type serializedForwardingTransport struct {
@@ -125,7 +125,7 @@ index 31d1e81..74b33b0 100644
  	} else if err != nil || result.PreservedError != nil || result.StatusCode >= http.StatusBadRequest {
  		c.release()
  	}
-@@ -666,6 +684,51 @@ func (t *serializedForwardingTransport) resetInitialization() {
+@@ -666,6 +684,62 @@ func (t *serializedForwardingTransport) resetInitialization() {
  	t.initializedMu.Lock()
  	t.initializeSucceeded = false
  	t.initializationReady = false
@@ -146,6 +146,17 @@ index 31d1e81..74b33b0 100644
 +// resetInitializationFromEpoch resets readiness only if no reset has happened since
 +// the connection that is closing started. Otherwise the child it used is already gone
 +// and the readiness flags describe a replacement that must not be revoked.
++//
++// Safety invariant: skipping the reset is only correct because a reset that advances
++// the epoch while the lifecycle slot is released comes from an I/O failure, and the
++// forwarding layer has already closed the shared connection in that case
++// (shouldCloseAfterForwardingError), so the stale connection's own Close reaches an
++// already-detached connection and cannot affect a replacement child. An in-flight
++// cancellation keeps the slot (shouldAwaitDeadlineRetirement) and so reaches Close as
++// the slot holder with a matching epoch, which still resets. A reset that is not paired
++// with closing the shared connection (a rejected initialized-notification write that is
++// not an I/O error) would break this invariant; stdio responses carry no HTTP status,
++// so that case is not reachable today.
 +func (t *serializedForwardingTransport) resetInitializationFromEpoch(epoch uint64) {
 +	if t == nil || !t.requireInitialization {
 +		return
@@ -177,7 +188,7 @@ index 31d1e81..74b33b0 100644
  	t.initializedMu.Unlock()
  }
  
-@@ -704,9 +767,24 @@ func (c *serializedForwardingConnection) Close() error {
+@@ -704,9 +778,24 @@ func (c *serializedForwardingConnection) Close() error {
  	if c.isRetired() {
  		return nil
  	}
@@ -204,7 +215,7 @@ index 31d1e81..74b33b0 100644
  		c.transport.observation.childClosed(c.observationGeneration, "stdio_connection_closed")
  	}
  	defer c.release()
-@@ -756,6 +834,10 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+@@ -756,6 +845,10 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
  		if err := c.acquireLifecycle(ctx); err != nil {
  			return jsonrpc.ID{}, err
  		}
@@ -215,7 +226,7 @@ index 31d1e81..74b33b0 100644
  	}
  
  	expectedID := callerID
-@@ -782,6 +864,7 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+@@ -782,6 +875,7 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
  	c.requestMethod = method
  	c.deadlineRetirable = false
  	c.retired = false
@@ -223,7 +234,7 @@ index 31d1e81..74b33b0 100644
  	if c.transport != nil && (c.transport.observation != nil || c.transport.requireInitialization) {
  		c.observationWriteDone = make(chan struct{})
  		c.observationWriteReady = false
-@@ -830,6 +913,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+@@ -830,6 +924,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
  		return false
  	}
  	if !c.awaitingResponse {
@@ -231,7 +242,7 @@ index 31d1e81..74b33b0 100644
  		return true
  	}
  
-@@ -844,6 +928,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+@@ -844,6 +939,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
  	}
  
  	c.awaitingResponse = false
@@ -239,7 +250,7 @@ index 31d1e81..74b33b0 100644
  	return true
  }
  
-@@ -856,6 +941,24 @@ func (c *serializedForwardingConnection) release() {
+@@ -856,6 +952,24 @@ func (c *serializedForwardingConnection) release() {
  	}
  }
  
