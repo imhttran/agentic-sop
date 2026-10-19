@@ -31,10 +31,36 @@ func TestReplayFixtureRequiresProvenance(t *testing.T) {
 
 // requireIsolation skips a replay test on hosts without an OS-level isolation tool.
 // Production never falls back to unsandboxed replay; it reports the blocker instead.
+// Set SOP_REPLAY_ISOLATION_REQUIRED=1 to turn the skip into a failure where isolation
+// must be present.
 func requireIsolation(t *testing.T) {
 	t.Helper()
-	if iso := DetectIsolation(); !iso.Available {
-		t.Skipf("no OS-level isolation available: %s", iso.Reason)
+	iso := DetectIsolation()
+	if iso.Available {
+		return
+	}
+	if v := strings.TrimSpace(os.Getenv("SOP_REPLAY_ISOLATION_REQUIRED")); v == "1" || strings.EqualFold(v, "true") {
+		t.Fatalf("required replay isolation is unavailable: %s", iso.Reason)
+	}
+	t.Skipf("no OS-level isolation available: %s; set SOP_REPLAY_ISOLATION_REQUIRED=1 to require it", iso.Reason)
+}
+
+// TestIsolatedReplayFailsClosedWithoutIsolation runs on every host: with no isolation
+// tool on PATH, IsolatedReplay refuses and the verification command never runs
+// unsandboxed.
+func TestIsolatedReplayFailsClosedWithoutIsolation(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	if iso := DetectIsolation(); iso.Available {
+		t.Fatalf("isolation detected with an empty PATH: %+v", iso)
+	}
+	marker := filepath.Join(t.TempDir(), "ran.txt")
+	f := isolationFixture("/bin/sh", "-c", "echo ran > "+marker)
+	code, _, err := IsolatedReplay(context.Background(), t.TempDir(), f, 10*time.Second)
+	if err == nil || code != -1 || !strings.Contains(err.Error(), "replay isolation unavailable") {
+		t.Fatalf("code=%d err=%v, want a refusal for unavailable isolation", code, err)
+	}
+	if _, statErr := os.Stat(marker); statErr == nil {
+		t.Fatal("the verification command ran without isolation")
 	}
 }
 
