@@ -15,10 +15,10 @@ rerun for this report.
 
 ## 0. Disposition
 
-**GO for the operator-assisted planner loop, one or two questions, with a real executor —
-with [imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68) applied.**
-Until #68 merges, `main` delivers only the latest decision, and the two-question result
-does not hold for a binary built from `main`. The evidence:
+**GO for the operator-assisted planner loop, one or two questions, with a real executor.**
+The two-question result depends on decision-history delivery,
+[imhttran/agentic-sop#68](https://github.com/imhttran/agentic-sop/pull/68), now merged; a
+binary built before it delivers only the latest decision. The evidence:
 
 - **Two-question loop with a real executor: GO** (`planner-2q-live`, 2026-10-18,
   [`planner-live-test-findings.md`](planner-live-test-findings.md)). A model-driven
@@ -174,11 +174,11 @@ assigned.** Details in `SPIKE-005-verification-report.md` §6.
 
 ### 8.1 Operator-assisted ChatGPT planner loop
 
-**Supported for one and two questions with a real executor** (two questions require #68).
+**Supported for one and two questions with a real executor** (two questions need #68, merged).
 An operator can, in a ChatGPT session, list/read the planner question and submit an
 answer; SOP applies it and the executor resumes, preserving the run epoch and skipping
 PLAN. Both loops ran live with a model-driven executor (`planner-chatgpt`,
-`planner-2q-live`). Remaining work: merge #68; fix repository identity so a `/var` versus
+`planner-2q-live`). Remaining work: fix repository identity so a `/var` versus
 `/private/var` path spelling on macOS does not refuse answers as stale (see
 [`planner-live-test-findings.md`](planner-live-test-findings.md)).
 
@@ -217,7 +217,7 @@ as supported on the strength of the planner loop.
    first, ahead of the latest one. It is covered by `TestPlannerIntegrationTwoRoundsOneRun`
    and `TestEarlierPlannerDecisionsScope`, and was exercised live in `planner-2q-live`
    (2026-10-18): no deliverable existed after round 2, and the final round wrote the
-   round-1 decision. **Closed once #68 merges.**
+   round-1 decision. **Closed** (#68 merged).
 3. **Real executor — single question only.** The SPIKE-006 demos used a controlled
    script. The later `planner-chatgpt` run used a model-driven executor for one question
    ([`planner-live-test-findings.md`](planner-live-test-findings.md)), and the
@@ -409,8 +409,8 @@ Editorial only; no live evidence was rerun or edited.
 - §13: "the code remains uncommitted" is no longer true; the commit and merge are noted.
 
 Follow-up (2026-10-18, after the `planner-2q-live` run): §0 changed to **GO for one or
-two questions with a real executor, with #68 applied**; §8.1, §9.2, and §9.3 updated to
-match.
+two questions with a real executor**, now that #68 is merged; §8.1, §9.2, and §9.3
+updated to match.
 
 Still open: the HTTP 409 MCP initialization error (§6) and the one-time
 `TestCrossModuleTimeoutAndCancellation` failure (§13).
