@@ -182,6 +182,84 @@ func TestManualEvidenceRequiresDecision(t *testing.T) {
 	}
 }
 
+func TestAcceptanceRecoveryPreservesReviewedDecision(t *testing.T) {
+	crit := acceptance("criterion-1")
+	mapping := CriterionMapping{CriterionID: "criterion-1", Required: true, Kind: EvidenceManual, Description: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 2}
+	accept := AcceptanceDecision{Task: "T1", CriterionID: "criterion-1", Evidence: "read docs/x.md", Decision: DecisionAccept, Approver: "tom", RecordedAt: "2026-10-17T00:00:00Z", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 1}
+	recovery := AcceptanceRecovery{Task: "T1", CriterionID: "criterion-1", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Evidence: "read docs/x.md", FromAttempt: 1, ToAttempt: 2}
+
+	// Without the recorded recovery the earlier decision stays bound to attempt 1.
+	if res := VerifyAcceptanceWithRecoveries(passed, crit, []CriterionMapping{mapping}, nil, []AcceptanceDecision{accept}, nil); res.Status == Verified {
+		t.Fatalf("a stale decision verified without a recovery: %v", res.Reasons)
+	}
+	res := VerifyAcceptanceWithRecoveries(passed, crit, []CriterionMapping{mapping}, nil, []AcceptanceDecision{accept}, []AcceptanceRecovery{recovery})
+	if res.Status != Verified {
+		t.Fatalf("a recovered decision did not verify: status=%s reasons=%v", res.Status, res.Reasons)
+	}
+
+	// A task's first executed attempt carries attempt 0 in its reviewed outcome, so
+	// the same recovery path must bridge 0 -> 1 without treating the decision as
+	// legacy/unbound.
+	first := mapping
+	first.Attempt = 1
+	firstDecision := accept
+	firstDecision.Attempt = 0
+	firstRecovery := recovery
+	firstRecovery.FromAttempt, firstRecovery.ToAttempt = 0, 1
+	if res := VerifyAcceptanceWithRecoveries(passed, crit, []CriterionMapping{first}, nil, []AcceptanceDecision{firstDecision}, []AcceptanceRecovery{firstRecovery}); res.Status != Verified {
+		t.Fatalf("a first-attempt recovery did not verify: status=%s reasons=%v", res.Status, res.Reasons)
+	}
+
+	// A recovery chain is usable too, so a decision survives more than one
+	// supported attempt advance without rewriting its provenance.
+	chain := []AcceptanceRecovery{
+		recovery,
+		{Task: "T1", CriterionID: "criterion-1", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Evidence: "read docs/x.md", FromAttempt: 2, ToAttempt: 3},
+	}
+	later := mapping
+	later.Attempt = 3
+	if res := VerifyAcceptanceWithRecoveries(passed, crit, []CriterionMapping{later}, nil, []AcceptanceDecision{accept}, chain); res.Status != Verified {
+		t.Fatalf("a chained recovery did not verify: status=%s reasons=%v", res.Status, res.Reasons)
+	}
+}
+
+func TestAcceptanceRecoveryInvalidatesChangedCriterionOrEvidence(t *testing.T) {
+	crit := acceptance("criterion-1")
+	base := CriterionMapping{CriterionID: "criterion-1", Required: true, Kind: EvidenceManual, Description: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 2}
+	accept := AcceptanceDecision{Task: "T1", CriterionID: "criterion-1", Evidence: "read docs/x.md", Decision: DecisionAccept, Approver: "tom", RecordedAt: "2026-10-17T00:00:00Z", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 1}
+	recovery := AcceptanceRecovery{Task: "T1", CriterionID: "criterion-1", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Evidence: "read docs/x.md", FromAttempt: 1, ToAttempt: 2}
+
+	cases := map[string]struct {
+		mapping  CriterionMapping
+		decision AcceptanceDecision
+		recovery AcceptanceRecovery
+	}{
+		"changed criterion": {
+			mapping:  func() CriterionMapping { m := base; m.Description = "a different criterion"; return m }(),
+			decision: accept, recovery: recovery,
+		},
+		"changed manual evidence": {
+			mapping:  func() CriterionMapping { m := base; m.ManualEvidence = "different evidence"; return m }(),
+			decision: accept, recovery: recovery,
+		},
+		"changed decision evidence": {
+			mapping:  base,
+			decision: func() AcceptanceDecision { d := accept; d.Evidence = "some other review"; return d }(),
+			recovery: recovery,
+		},
+		"recovery bound to other evidence": {
+			mapping: base, decision: accept,
+			recovery: func() AcceptanceRecovery { r := recovery; r.Evidence = "some other review"; return r }(),
+		},
+	}
+	for name, tc := range cases {
+		res := VerifyAcceptanceWithRecoveries(passed, crit, []CriterionMapping{tc.mapping}, nil, []AcceptanceDecision{tc.decision}, []AcceptanceRecovery{tc.recovery})
+		if res.Status == Verified {
+			t.Errorf("%s: changed criterion/evidence verified through a stale recovery", name)
+		}
+	}
+}
+
 func TestHistoricalOutcomesUnchanged(t *testing.T) {
 	res := Verify([]Criterion{{ID: "a", Required: true, Check: ok}})
 	got, err := json.Marshal(res)

@@ -211,6 +211,14 @@ func runApprove(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 	recordApprovalDecisionActivity(dir, opts.id, true, opts.note)
+	// Approving a reviewed manual-acceptance gate is the supported recovery path:
+	// record the attempt transition that preserves the accepted decision without
+	// rewriting the decision or its original attempt. A failure is surfaced because
+	// otherwise the next verification would fail closed on a stale binding.
+	if err := recordAcceptanceRecoveriesOnApproval(dir, st, opts.id, firstNonBlank(opts.by, res.View.DecidedBy)); err != nil {
+		fmt.Fprintf(stderr, "approve: acceptance recovery: %v\n", err)
+		return exitError
+	}
 	if res.Idempotent {
 		fmt.Fprintf(stdout, "already approved: %s\n", opts.id)
 	} else {
@@ -566,6 +574,10 @@ func runInteractiveDecision(approve bool, opts decisionOptions, stdout, stderr i
 	}
 	recordApprovalDecisionActivity(dir, id, approve, opts.note)
 	if approve {
+		if err := recordAcceptanceRecoveriesOnApproval(dir, st, id, firstNonBlank(opts.by, res.View.DecidedBy)); err != nil {
+			fmt.Fprintf(stderr, "approve: acceptance recovery: %v\n", err)
+			return exitError
+		}
 		if res.Idempotent {
 			fmt.Fprintf(stdout, "already approved: %s\n", id)
 		} else {
