@@ -62,7 +62,10 @@ The script creates a disposable project under `$TMPDIR` (never inside this check
 It refuses an existing root unless `PLANNER2Q_FORCE_RECREATE=1`, and it checks that the
 acceptance test fails before the task runs.
 
-Point the tunnel's MCP command at the new binary and fixture. The tunnel profile runs
+Point the tunnel's MCP command at the new binary and fixture. The quickest way is
+`scripts/planner-tunnel-point.sh --binary "$TMPDIR/sop-2q" "$TMPDIR/planner-2q-live"`: it
+backs up and rewrites the wrapper, then checks it locally (`--build` builds a fresh binary
+from `origin/main` instead). To write it by hand: the tunnel profile runs
 `.run/tunnel/sop-mcp-planner.sh`; write it with absolute paths, because the tunnel does not
 see your shell's `$TMPDIR`:
 

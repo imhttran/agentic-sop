@@ -7,3 +7,7 @@
 /sop-006-rust/
 /sop-006-rust-approval/
 /sop-cargo-tool/
+# The planner tunnel wrapper (and its backups) and the dedicated planner binaries
+# are machine-specific; scripts/planner-tunnel-point.sh writes them.
+/tunnel/
+/spike/
