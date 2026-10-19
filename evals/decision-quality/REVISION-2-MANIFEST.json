@@ -1,0 +1,145 @@
+{
+  "revision": 2,
+  "parent_revision": 1,
+  "experiment_unchanged": {
+    "cases": 30,
+    "repeats_per_case": 3,
+    "arms": [
+      "A",
+      "B"
+    ]
+  },
+  "defect": "executable_cases_without_replay_sources",
+  "affected_cases": [
+    {
+      "case_id": "dq-rec-001",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-002",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-003",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-004",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-005",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-006",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-007",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-008",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-009",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-rec-010",
+      "class": "recovery",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-neg-003",
+      "class": "negative",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    },
+    {
+      "case_id": "dq-neg-007",
+      "class": "negative",
+      "missing": [
+        "starting_revision",
+        "task_input",
+        "verification_command",
+        "provenance"
+      ]
+    }
+  ],
+  "revision_1_inputs": {
+    "PROTOCOL.md": "58bb71201837bc804f98a21ac18820b663efb0629e81aeda9654bcf4c61c002a",
+    "RUBRIC.md": "fbcbed10f0774f21c07b4c10b2d01372d339319a5c5fc9fe3b0a8cf5542365f0",
+    "RUBRIC.json": "14d8813d100ca2a84af587776fb6a2a107dad85daefaab77713d02210f17db4b",
+    "corpus-heldout.json": "517cb093ba2e7d4c3becffce8bd2a609340f992e972867c4c505981f62f0f1e3",
+    "corpus-tuning.json": "1bcb2f8f1757ad6ae1896148c8956f8a4061e0e6c66b244d0de12042dd08702d"
+  },
+  "note": "No replay fixtures were invented. The case text is a generic summary and does not identify a repository revision or artifact.",
+  "usable_for_evaluation": false,
+  "status": "unusable_evaluation_revision"
+}

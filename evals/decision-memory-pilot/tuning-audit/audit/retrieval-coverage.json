@@ -1,0 +1,435 @@
+{
+  "cases": [
+    {
+      "case_id": "DM-C6",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 5,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-C7",
+      "retrieved": [
+        "ev-532a5e70563c"
+      ],
+      "included": [
+        "ev-532a5e70563c"
+      ],
+      "evidence_items": 2,
+      "tokens": 34
+    },
+    {
+      "case_id": "DM-CONV-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CONV-004",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 5,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-CONV-005",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-14dde4cf79c0",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-14dde4cf79c0",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 5,
+      "tokens": 53
+    },
+    {
+      "case_id": "DM-CONV-006",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CTX-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-EV-003",
+      "retrieved": [
+        "ev-f4631198f695"
+      ],
+      "included": [
+        "ev-f4631198f695"
+      ],
+      "evidence_items": 5,
+      "tokens": 35
+    },
+    {
+      "case_id": "DM-LC-003",
+      "retrieved": [
+        "ev-c512a052190f",
+        "ev-480b24db83fa",
+        "ev-3dedd9db0cf8"
+      ],
+      "included": [
+        "ev-c512a052190f",
+        "ev-480b24db83fa",
+        "ev-3dedd9db0cf8"
+      ],
+      "evidence_items": 4,
+      "tokens": 54
+    },
+    {
+      "case_id": "DM-LC-004",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-42c9dabc0ee8",
+        "ev-f7f8a1d78ad7",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-42c9dabc0ee8",
+        "ev-f7f8a1d78ad7",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 6,
+      "tokens": 68
+    },
+    {
+      "case_id": "DM-LC-007",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 6,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-ORCH-002",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-14dde4cf79c0"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-14dde4cf79c0"
+      ],
+      "evidence_items": 5,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-ORCH-005",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-ORCH-007",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 5,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-ORCH-009",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-ORCH-010",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-P3-006",
+      "retrieved": [
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 3,
+      "tokens": 11
+    },
+    {
+      "case_id": "DM-P3-009",
+      "retrieved": [
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 3,
+      "tokens": 11
+    },
+    {
+      "case_id": "DM-P3-011",
+      "retrieved": [
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 3,
+      "tokens": 11
+    },
+    {
+      "case_id": "DM-P3-014",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-P3-017",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-P35-004",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 3,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-P35-006",
+      "retrieved": [
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 3,
+      "tokens": 11
+    },
+    {
+      "case_id": "DM-P35-007",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 3,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-PREVIEW-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-PREVIEW-002",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-RDM-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-RDM-002",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-7716ffbe4ad0"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-7716ffbe4ad0"
+      ],
+      "evidence_items": 5,
+      "tokens": 31
+    },
+    {
+      "case_id": "DM-RDM-002B",
+      "retrieved": [
+        "ev-7716ffbe4ad0"
+      ],
+      "included": [
+        "ev-7716ffbe4ad0"
+      ],
+      "evidence_items": 5,
+      "tokens": 20
+    },
+    {
+      "case_id": "DM-RDM-003",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-7716ffbe4ad0"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-7716ffbe4ad0"
+      ],
+      "evidence_items": 5,
+      "tokens": 31
+    },
+    {
+      "case_id": "DM-RDM-004",
+      "retrieved": [
+        "ev-29c93e98656a"
+      ],
+      "included": [
+        "ev-29c93e98656a"
+      ],
+      "evidence_items": 5,
+      "tokens": 26
+    },
+    {
+      "case_id": "DM-RM-003",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 6,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-S5",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-S8",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-a16f489fc007",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-a16f489fc007",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 5,
+      "tokens": 48
+    },
+    {
+      "case_id": "DM-SEC-RES-003",
+      "retrieved": [
+        "ev-96738ad50808",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-96738ad50808",
+        "ev-ca4d111f00ef",
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 5,
+      "tokens": 73
+    },
+    {
+      "case_id": "DM-SOP-001",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa"
+      ],
+      "evidence_items": 5,
+      "tokens": 22
+    },
+    {
+      "case_id": "DM-SOP-002",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-14dde4cf79c0",
+        "ev-ca4d111f00ef",
+        "ev-480b24db83fa"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-14dde4cf79c0",
+        "ev-ca4d111f00ef",
+        "ev-480b24db83fa"
+      ],
+      "evidence_items": 5,
+      "tokens": 53
+    },
+    {
+      "case_id": "DM-SPIKE-003",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    }
+  ],
+  "corpus_cases": 38,
+  "with_evidence": 24,
+  "without_evidence": 14
+}

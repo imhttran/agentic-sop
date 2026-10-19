@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "required_checks": [
+    "task_context_present",
+    "evidence_present",
+    "decision_within_allowed_tokens"
+  ],
+  "safety_checks": [
+    "no_label_leak",
+    "no_cross_case_evidence"
+  ]
+}

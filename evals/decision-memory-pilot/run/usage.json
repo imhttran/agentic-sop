@@ -1,0 +1,18 @@
+{
+  "binding": {
+    "corpus": "657958beecaeba317852e446ade210db1b2d4ecadf10b8c87fedbd3daed95ddf",
+    "protocol": "8623b69ef767ddb877df3da0b60aa6ce0a68470a33ae5ea9088670278b1bd455",
+    "rubric": "8411df4ced6d071beb03fce1f6484f87a2276b18ab1a7d9158e362fda1b6f740",
+    "harness": "rdm004-harness-v1",
+    "model": "deepseek-v4.1-flash:cloud",
+    "sampling": "temperature=0.00 top_p=0.00 seed=0"
+  },
+  "decisions": 144,
+  "requests": 144,
+  "retries": 0,
+  "tokens": 64444,
+  "active_elapsed_ms": 60059,
+  "in_flight": false,
+  "uncertain_requests": 0,
+  "updated_at": "2026-10-19T20:36:48.876846Z"
+}

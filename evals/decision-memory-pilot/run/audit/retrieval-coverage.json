@@ -1,0 +1,241 @@
+{
+  "cases": [
+    {
+      "case_id": "DM-AS-CLEF-002",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-AS-CLEF-004",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-AS-CLEF-005",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-AS-CLEF-008",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-C5",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CLOSE-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 3,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CLOSE-003",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-CLOSE-004",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-CLOSE-006",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-480b24db83fa",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-CLOSE-007",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 3,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CLOSE-009",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 3,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-CLOSE-010",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 3,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CPR-001",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-CPR-003",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 5,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-ETOE-002",
+      "retrieved": [
+        "ev-fecf27421b4c",
+        "ev-42c9dabc0ee8"
+      ],
+      "included": [
+        "ev-fecf27421b4c",
+        "ev-42c9dabc0ee8"
+      ],
+      "evidence_items": 6,
+      "tokens": 24
+    },
+    {
+      "case_id": "DM-ETOE-004",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 6,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-ETOE-005",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 6,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-MIG-001",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 5,
+      "tokens": 32
+    },
+    {
+      "case_id": "DM-MIG-003",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-MIG-003B",
+      "retrieved": [
+        "ev-480b24db83fa",
+        "ev-14dde4cf79c0",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "included": [
+        "ev-480b24db83fa",
+        "ev-14dde4cf79c0",
+        "ev-fecf27421b4c",
+        "ev-ca4d111f00ef"
+      ],
+      "evidence_items": 5,
+      "tokens": 53
+    },
+    {
+      "case_id": "DM-MIG-003C",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-MIG-004",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-MIG-006",
+      "retrieved": null,
+      "included": null,
+      "evidence_items": 2,
+      "tokens": 0
+    },
+    {
+      "case_id": "DM-RSH-002",
+      "retrieved": [
+        "ev-ca4d111f00ef",
+        "ev-fce108c07649",
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c"
+      ],
+      "included": [
+        "ev-ca4d111f00ef",
+        "ev-fce108c07649",
+        "ev-480b24db83fa",
+        "ev-fecf27421b4c"
+      ],
+      "evidence_items": 5,
+      "tokens": 53
+    }
+  ],
+  "corpus_cases": 24,
+  "with_evidence": 8,
+  "without_evidence": 16
+}

@@ -1,0 +1,943 @@
+{
+  "version": 1,
+  "description": "Source-backed planning decisions (held-out split).",
+  "split": "heldout",
+  "cases": [
+    {
+      "id": "DM-AS-CLEF-002",
+      "class": "negative",
+      "task_context": "# AS-CLEF-002 — Trace the Live Decision Path\n\nDetermine what actually happens during a governed SOP decision by tracing at least one representative path from SOP operation -\u003e decision request -\u003e decision capability/provider boundary -\u003e decision result -\u003e policy interpretation -\u003e Continue/Block/Approval/routing, documenting request type, result type, capability/interface used, construction/injection point, default implementation if any, fallback behavior, error behavior, confidence/probability handling, human-approval boundary, and whether the path is currently active, optional, shadow-only, or inert, and explicitly answering questions 1-12 with concrete citations.\n\n## Deliverables\n- docs/reports/clef-readiness/AS-CLEF-002-decision-path-trace.md — the call-path report and answers to questions 1-12.\n\n## Acceptance criteria\n- At least one representative governed decision path is traced covering SOP operation, decision request, capability/provider boundary, decision result, policy interpretation, and Continue/Block/Approval/routing.\n- All documented aspects are covered: request type, result type, capability/interface used, construction/injection point, default implementation, fallback behavior, error behavior, confidence/probability handling, human-approval boundary, and whether the path is live/optional/shadow-only/inert.\n- Questions 1-12 are each explicitly answered with concrete packages, files, symbols, configuration, or call sites cited.\n- The AS-CLEF-001 baseline is reused and only targeted reads/searches needed to close specific unanswered questions are performed.\n- Absence of Jev, Nimble, SystemOne, Clef, Laya, or Julia from the live path, or absence of specialized decision-provider wiring, is recorded as a valid finding; discovery targets that cannot be established are recorded as UNKNOWN with the exact searches/files inspected and the missing evidence.\n- BLOCKED is used only if a specific unresolved fact prevents the architecture from being determined, naming",
+      "decision_point": "2026-10-06T23:49:18.612829Z",
+      "evidence_cutoff": "2026-10-06T23:49:18.612829Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-93d5d85ab49e",
+          "text": "execution: repository_mutations=1 iterations=33",
+          "content_hash": "93d5d85ab49e7dbdacc5f588472f7e8a05abfe4d2494100bdb60defe992b0cb6",
+          "produced_before": "2026-10-06T23:49:18.612829Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-06T23:49:18.612829Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T23:49:18.612829Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T23:49:18.612829Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T23:49:18.612829Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run AS-CLEF-002"
+      }
+    },
+    {
+      "id": "DM-AS-CLEF-004",
+      "class": "negative",
+      "task_context": "# AS-CLEF-004 — Harden the Generic Contract if Required\n\nMake only the smallest provider-neutral correction required by AS-CLEF-003, running only if AS-CLEF-003 identifies a real abstraction gap; permitted changes are extracting a generic capability interface, removing provider-name checks from policy code, generalizing request/result structures, clarifying unsupported-capability behavior, isolating provider construction behind an existing boundary, and strengthening dependency direction; forbidden changes are provider-specific policy behavior such as if provider == \"clef\" { // SOP policy } or equivalent model-specific policy behavior.\n\n## Deliverables\n- Minimal provider-neutral code correction(s) removing any identified abstraction gap (only if AS-CLEF-003 finds a real gap; otherwise the task is marked NOT_REQUIRED with no code change)\n\n## Acceptance criteria\n- The task runs only if AS-CLEF-003 identifies a real abstraction gap; otherwise it is marked NOT_REQUIRED and no production change is made.\n- Only permitted smallest provider-neutral corrections are made; provider-specific policy behavior (e.g., if provider == \"clef\") is not introduced.\n- Existing behavior remains unchanged unless the existing behavior itself violates a documented invariant (compatibility requirement).\n- Tests prove old behavior remains valid and the provider-specific leak is removed.\n- The generic contract does not encode a particular provider's wire protocol and provider construction is isolated behind an existing boundary where changed.",
+      "decision_point": "2026-10-06T23:50:36.710741Z",
+      "evidence_cutoff": "2026-10-06T23:50:36.710741Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-818fcf0348ec",
+          "text": "execution: repository_mutations=0 iterations=21",
+          "content_hash": "818fcf0348ec94b285a507402de8c1ef06172574659503da6fec8dfd70fb5812",
+          "produced_before": "2026-10-06T23:50:36.710741Z"
+        },
+        {
+          "record_id": "ev-765830ae3e68",
+          "text": "recent operations: failed | go vet ./... | reading | go test ./internal/archtest/ -v | grep -rn \"clef\" internal/",
+          "content_hash": "765830ae3e680b3f2d1ba3e5281ae748095d2115f7db1c77a9ae8f86b2455c4b",
+          "produced_before": "2026-10-06T23:50:36.710741Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run AS-CLEF-004"
+      }
+    },
+    {
+      "id": "DM-AS-CLEF-005",
+      "class": "negative",
+      "task_context": "# AS-CLEF-005 — Verify Failure and Approval Semantics\n\nProve that an external decision provider cannot bypass SOP governance by verifying behavior for provider unavailable, timeout, malformed result, empty result, unsupported decision type, invalid probability/confidence, low-confidence result, unknown/indeterminate result, and provider internal error, ensuring the decision boundary never converts unknown into approval, silently downgrades risk, bypasses required human approval, authorizes execution merely because a provider is confident, mutates task state outside the governed lifecycle, or turns provider failure into an implicit success.\n\n## Deliverables\n- Focused tests for each relevant governance boundary (provider unavailable, timeout, malformed/empty result, unsupported decision type, invalid probability/confidence, low-confidence, unknown/indeterminate, provider internal error)\n\n## Acceptance criteria\n- Behavior is verified for provider unavailable, timeout, malformed result, empty result, unsupported decision type, invalid probability/confidence, low-confidence result, unknown/indeterminate result, and provider internal error.\n- Tests demonstrate the decision boundary never converts unknown into approval, never silently downgrades risk, never bypasses required human approval, never authorizes execution merely because a provider is confident, never mutates task state outside the governed lifecycle, and never turns provider failure into an implicit success.\n- Focused tests exist for each relevant governance boundary and pass.\n- The verification consumes the AS-CLEF-004 result state (including NOT_REQUIRED) without depending on changes that were not required.",
+      "decision_point": "2026-10-07T00:12:44.648271Z",
+      "evidence_cutoff": "2026-10-07T00:12:44.648271Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-e5e9c61c08df",
+          "text": "execution: repository_mutations=3 iterations=43",
+          "content_hash": "e5e9c61c08df355b4c407bb28e64f78cb201164a93194df478c724de449289be",
+          "produced_before": "2026-10-07T00:12:44.648271Z"
+        },
+        {
+          "record_id": "ev-2521ea488d32",
+          "text": "recent operations: PASS | PASS | inspecting | reading | reading",
+          "content_hash": "2521ea488d32e104aa0724cff68a3dce383fec874bc9fb6a06f5afc2a27cd967",
+          "produced_before": "2026-10-07T00:12:44.648271Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-07T00:12:44.648271Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-07T00:12:44.648271Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-07T00:12:44.648271Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run AS-CLEF-005"
+      }
+    },
+    {
+      "id": "DM-AS-CLEF-008",
+      "class": "planning",
+      "task_context": "# AS-CLEF-008 — Define the Adapter-Side Contract\n\nProduce the exact contract that sop-decision-adapters must satisfy without implementing the adapter here, documenting request fields, result fields, decision types/capabilities, probability/confidence semantics, diagnostics/evidence semantics, timeout/cancellation expectations, error categories, unsupported-capability behavior, versioning/compatibility expectations, what SOP policy consumes, and what SOP policy deliberately ignores, as the handoff to the separate Clef adapter plan.\n\n## Deliverables\n- docs/reports/clef-readiness/AS-CLEF-008-adapter-contract.md — the contract/handoff document.\n\n## Acceptance criteria\n- The contract documents request fields, result fields, decision types/capabilities, probability/confidence semantics, diagnostics/evidence semantics, timeout/cancellation expectations, error categories, unsupported-capability behavior, versioning/compatibility expectations, what SOP policy consumes, and what SOP policy deliberately ignores.\n- The document is provider-neutral and does not encode a particular provider's wire protocol.\n- The contract/handoff document is committed to the appropriate agentic-sop documentation location as evidence.\n- No Clef adapter is implemented in agentic-sop and sop-decision-adapters is not modified.",
+      "decision_point": "2026-10-07T03:04:48.08849Z",
+      "evidence_cutoff": "2026-10-07T03:04:48.08849Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-c14ed07ac8c0",
+          "text": "execution: repository_mutations=1 iterations=17",
+          "content_hash": "c14ed07ac8c0409e65be6e36c03809f2ed9a43b06058fce2e19335839e514bde",
+          "produced_before": "2026-10-07T03:04:48.08849Z"
+        },
+        {
+          "record_id": "ev-5df979082207",
+          "text": "recent operations: CONTINUE | searching | go build ./... | searching | inspecting",
+          "content_hash": "5df97908220700d6cddba25980b2b27776106333b73875392c561ad7a8c29b38",
+          "produced_before": "2026-10-07T03:04:48.08849Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run AS-CLEF-008"
+      }
+    },
+    {
+      "id": "DM-C5",
+      "class": "planning",
+      "task_context": "# C5 — Reconcile and update the SOP Project Review prompt attribution\n\nConfirm and, where needed, update the existing SOP Project Review prompt so it uses agentic-sop as the active repository and reports the controller and adapters as components, while legacy repositories are described as rollback sources whose verified new changes can still be flagged. Ensure the prompt instructs reports to distinguish local, committed and merged evidence and not to infer current local SOP state from historical documents. Keep the review schedule and enabled state unchanged.\n\n## Deliverables\n- Reviewed and reconciled SOP Project Review prompt repository/component attribution\n- Prompt guidance requiring local/committed/merged evidence distinction and no inference of current local SOP state from historical documents\n- Recorded confirmation that schedule and enabled state are unchanged\n\n## Acceptance criteria\n- The prompt names agentic-sop as the active repository and treats controller/adapters as components and legacy repositories as rollback sources\n- The prompt requires evidence-provenance distinction and prohibits inferring current local SOP state from historical documents\n- No schedule or enabled-state change is made",
+      "decision_point": "2026-10-16T14:55:18.978755Z",
+      "evidence_cutoff": "2026-10-16T14:55:18.978755Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-f4635f49625c",
+          "text": "execution: repository_mutations=0 iterations=17",
+          "content_hash": "f4635f49625ca17c921b7839330204776088b2b71ad1afd179c302d26cccb0a9",
+          "produced_before": "2026-10-16T14:55:18.978755Z"
+        },
+        {
+          "record_id": "ev-d225d2042c4e",
+          "text": "recent operations: CONTINUE | searching | reading | reading | searching",
+          "content_hash": "d225d2042c4eb472bd0ffcab344f1f8a2269c7bc159a78be88d487d50d28a5c4",
+          "produced_before": "2026-10-16T14:55:18.978755Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run C5"
+      }
+    },
+    {
+      "id": "DM-CLOSE-001",
+      "class": "planning",
+      "task_context": "# CLOSE-001 — Capture Current Repository Baseline\n\nCapture the exact, reproducible baseline (source, configuration and binary) that every later verification and measurement in this plan depends on, for both repositories, as an IMPLEMENT task whose lifecycle requires exactly one intentional repository mutation. CLOSE-001 creates or updates ONLY docs/reports/pre-performance-closure/CLOSE-001-baseline.md in agentic-sop; that Markdown report is the sole permitted intentional repository mutation and contains all recorded evidence. All other repository contents — application/source code, tests, runtime configuration, SOP configuration, Git branches, existing user changes, sibling repository contents and installed binaries — MUST NOT be mutated by CLOSE-001. sop-controller remains strictly read-only during CLOSE-001, and that whole sibling checkout MUST NOT be mutated. Existing user changes, including report contents, must be preserved: CLOSE-001 does not reset, clean, amend or overwrite unrelated work.\nBefore writing the report, CLOSE-001 records the initial repository state of both repositories; it then distinguishes those pre-existing changes from the authorized report delta, and after writing verifies that existing changes were preserved and that no other repository contents changed.\nThe report records secrets-redacted evidence, with no secrets recorded, under four separate headings/sections — agentic-sop, sop-controller, Toolchain/runtime and Model configuration. agentic-sop records: repository path/name; branch; HEAD SHA; divergence from local main where applicable (marked unavailable with reason if absent); verbatim sanitized git status --short; tracked dirty state; untracked inventory; and whether an uncommitted patch exists. sop-controller records the same fields — repository path/name; branch; HEAD SHA; verbatim sanitized git status --short; tracked dirty state; untracked inventory; whether an uncommitted patch exists — with the entire sibling strictly read-only.",
+      "decision_point": "2026-10-04T17:31:44.894591Z",
+      "evidence_cutoff": "2026-10-04T17:31:44.894591Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-04T17:31:44.894591Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-04T17:31:44.894591Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-04T17:31:44.894591Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run CLOSE-001"
+      }
+    },
+    {
+      "id": "DM-CLOSE-003",
+      "class": "planning",
+      "task_context": "# CLOSE-003 — SOP Deterministic Baseline\n\nEstablish the agentic-sop deterministic baseline with exact evidence and an all-green bar. Run gofmt -l . (empty output REQUIRED; exit zero alone is insufficient), go vet ./..., go test ./..., go test -race ./..., go build ./...; run the meaningful existing CI checks (bash scripts/checks/check-doc-links.sh, scripts/packaging/build-claude-plugin.sh --check, existing distribution/skill tests, and dry-run installer checks where applicable); verify — do not redesign — the landed synthesis/discovery/mutation/ALREADY_SATISFIED tests. For the twelve previously observed CLI/JEV no-change expectation failures reproduced on untouched d0af5a4, perform bounded closure remediation after determining stale test vs real defect, and never weaken lifecycle safety to make tests green. Capture the exact command, cwd, toolchain, revision, stdout, stderr, exit code and status. All command/cwd/output/exit evidence and any bounded closure remediation to the tests are recorded in docs/reports/pre-performance-closure/CLOSE-003-sop-deterministic-baseline.md. Deterministic validation: the same commands must be re-run after any remedy and produce the recorded all-green result; gofmt -l . must be empty, both plain and race suites must be green, build and vet must be green, meaningful applicable CI checks must pass, and any deterministic failure blocks readiness and must not be waived. The known prior 12 CLI/JEV failures remain blocking until current complete gates are green.\n\n## Deliverables\n- docs/reports/pre-performance-closure/CLOSE-003-sop-deterministic-baseline.md — every command with cwd, revision, toolchain, raw output, exit code and status.\n- A resolution (test-contract staleness vs. behavior defect) for the observed prior 12 CLI/JEV no-change expectation failures reproduced on untouched d0af5a4, with evidence and any bounded closure remediation.\n\n## Acceptance criteria\n- gofmt -l . produces empty output (not merely exit zero).\n- ALL five Go chec",
+      "decision_point": "2026-10-05T17:44:11.154847Z",
+      "evidence_cutoff": "2026-10-05T17:44:11.154847Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-05T17:44:11.154847Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-05T17:44:11.154847Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-05T17:44:11.154847Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run CLOSE-003"
+      }
+    },
+    {
+      "id": "DM-CLOSE-004",
+      "class": "negative",
+      "task_context": "# CLOSE-004 — Controller Deterministic Baseline\n\nEstablish the sop-controller deterministic baseline with exact evidence and the same all-green bar. Run gofmt -l ., go vet ./..., go test ./..., go test -race ./..., go build ./..., together with repository CI/documentation checks where available and the boundary/human-approval/observability/performance tests; confirm SOP owns state transitions and scheduling and the controller delegates and reads. All command/cwd/output/exit evidence is recorded in docs/reports/pre-performance-closure/CLOSE-004-controller-deterministic-baseline.md. Deterministic validation: all listed checks must PASS and the exact command/cwd/toolchain/revision/output/exit evidence must be captured; if a check cannot pass it is recorded as a blocking failure rather than waived.\n\n## Deliverables\n- docs/reports/pre-performance-closure/CLOSE-004-controller-deterministic-baseline.md — every command with cwd, revision, toolchain, raw output, exit code and status.\n\n## Acceptance criteria\n- gofmt -l . produces empty output and all four other Go commands (go vet ./..., go test ./..., go test -race ./..., go build ./...) PASS; formatting is empty and both plain and race suites are green.\n- Repository CI/documentation checks where available PASS and are recorded.\n- Boundary/human-approval/observability/performance tests PASS and are recorded.\n- Controller delegation and read-only access is confirmed against evidence: SOP owns state transitions and scheduling and the controller does not implement a second workflow engine.\n- Every command/cwd/revision/toolchain/raw-output/exit-code/status is recorded in docs/reports/pre-performance-closure/CLOSE-004-controller-deterministic-baseline.md, which the stage creates or updates within the controller baseline bar.\n- Any non-passing check is reported as blocking with exact evidence; merely recording a failure is not completion and a nonpassing gate blocks performance implementation.",
+      "decision_point": "2026-10-06T00:44:01.688068Z",
+      "evidence_cutoff": "2026-10-06T00:44:01.688068Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T00:44:01.688068Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T00:44:01.688068Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T00:44:01.688068Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run CLOSE-004"
+      }
+    },
+    {
+      "id": "DM-CLOSE-006",
+      "class": "planning",
+      "task_context": "# CLOSE-006 — Named-Plan Dogfood/Human Decision\n\nExercise the current authoritative named plan end to end from the controller checkout, using the plan identified in CLOSE-002, and observe real human gates — including an explicit controller HUMAN flow. Prefer the recorded docs/PLAN-SOP-Controller.md if it remains authoritative, and use sop run docs/plans/PLAN-Wrap-Up.md only when evidence/provenance makes it appropriate; preserve existing task IDs, history and runtime state; exercise named resolution, identity/fingerprint, bootstrap, DAG dependencies, implementation or verified already-satisfied completion, validation, review, bounded remediation, human gates, approval list, approve/decline, reconcile and truthful reporting. Explicitly test the controller HUMAN flow using the existing script scripts/c2-009-dogfood.sh in a disposable project with a real SOP binary, producing readiness/scenarios/transcript artifacts and recording the actual controller HTTP action and delegation observations; a historical C2-009 NOT READY result is not fresh verification. The run transcript, observed gates, human-decision outcomes, controller HTTP action/delegation observations and any NEEDS_HUMAN/FAIL verdict are recorded in docs/reports/pre-performance-closure/CLOSE-006-named-plan-dogfood.md; the disposable controlled fixture projects (including the c2-009 dogfood disposable project) keep their own readiness/scenarios/transcript artifacts. Do not execute fabricated mutations or assign PASS/task states manually. For destructive/manual/denial scenarios use disposable controlled projects with a real SOP binary and preserve the actual controller project's authoritative state. Preserve operator-configured provider/model/classes/routing/fallback and choose no class manually; existing human policies remain operative and exact real required approvals cannot be automated away. Separate generation time from human wait. Real controller named-plan execution and the controller HTTP human flow rema",
+      "decision_point": "2026-10-06T00:50:55.060348Z",
+      "evidence_cutoff": "2026-10-06T00:50:55.060348Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T00:50:55.060348Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T00:50:55.060348Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T00:50:55.060348Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run CLOSE-006"
+      }
+    },
+    {
+      "id": "DM-CLOSE-007",
+      "class": "planning",
+      "task_context": "# CLOSE-007 — Resume/Idempotency\n\nProve resume and idempotency for the named plan. Re-run the identical named plan after a successful execution and verify the same identity, no recreated DAG, no completed task rerun, no phantom work and preserved history/approval state; snapshot before/after via read-only SOP outputs, checksums and artifacts without mutating SQLite directly; verify controlled incomplete-state resume with existing tests or a disposable real-SOP fixture, without manufacturing live task statuses. The before/after snapshots, artifact checksums and resume/idempotency verdict are recorded in docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md. Deterministic validation: the before/after read-only snapshots and checksums must be captured and shown identical where idempotency is claimed, and the resume proof must come from real SOP behavior or existing tests, not a hand-edited state database.\n\n## Deliverables\n- docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md — before/after read-only snapshots, artifact checksums and the resume/idempotency verdict with evidence.\n\n## Acceptance criteria\n- Re-running the identical named plan yields the same identity with no recreated DAG, no completed task rerun and no phantom work.\n- History and approval state are preserved across the re-run.\n- Before/after snapshots are captured through read-only SOP outputs and artifact checksums are recorded in docs/reports/pre-performance-closure/CLOSE-007-resume-idempotency.md, which the stage creates or updates.\n- Controlled incomplete-state resume is verified via existing tests or a disposable real-SOP fixture; no live task status is manufactured and SQLite is not mutated directly.",
+      "decision_point": "2026-10-06T00:53:42.489873Z",
+      "evidence_cutoff": "2026-10-06T00:53:42.489873Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T00:53:42.489873Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T00:53:42.489873Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T00:53:42.489873Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "AUTO_FIX",
+        "rationale": "recorded SOP disposition AUTO_FIX for run CLOSE-007"
+      }
+    },
+    {
+      "id": "DM-CLOSE-009",
+      "class": "planning",
+      "task_context": "# CLOSE-009 — Performance Baseline\n\nCapture a representative, reproducible pre-performance baseline across real existing SOP workflows, with THREE real-provider repetitions per workload. Use pinned task-sized fixtures A, B, C and D defined below and run them as real governed SOP workflows against the real configured providers. Workload A: isolated task-sized Go fixture (adapt existing SOP/controller disposable dogfood scaffolding, not a new performance subsystem): module example.com/sop-baseline/a; production sum.go package sum with exported Add(a,b int) int initially returning 0; existing immutable sum_test.go table accepts Add(1,2)=3, Add(-2,5)=3, Add(0,0)=0. Task A001 implements addition by changing ONLY sum.go. Full SOP named-plan IMPLEMENT/FIX lifecycle via PLAN-Workload-A.md; configured deterministic checks gofmt -l . empty, go vet ./..., go test ./..., go build ./..., review and actual applicable approval gates. Do not reclassify a successful no-op as implementation. This is a real-provider governed task-sized integration fixture, not actual controller performance data. Workload B: isolated fixture module example.com/sop-baseline/b: internal/sum/sum.go Add(a,b int) int placeholder returning 0; internal/caller/caller.go Total(a,b int) int placeholder returning 0. Immutable tests for sum.Add use A cases; caller.Total uses Total(4,5)=9 and Total(-4,2)=-2. Task B001 requires implementing internal/sum Add and internal/caller Total forwarding to sum.Add, changing at least those TWO production files. Use PLAN-Workload-B.md and the same full governed deterministic/validation/review/approval workflow. Freeze initial failing tests with both placeholders. No new production architecture. Workload C: PLAN synthesis from the exact frozen INITIAL B tree and the exact B task request using sop prompt --capability plan --file workload-C.md --json. Freeze workload-C.md to require a valid implementation DAG, explicit dependencies, deliverables and criterion mappings for the two-",
+      "decision_point": "2026-10-06T00:59:39.666588Z",
+      "evidence_cutoff": "2026-10-06T00:59:39.666588Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T00:59:39.666588Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T00:59:39.666588Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T00:59:39.666588Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "AUTO_FIX",
+        "rationale": "recorded SOP disposition AUTO_FIX for run CLOSE-009"
+      }
+    },
+    {
+      "id": "DM-CLOSE-010",
+      "class": "negative",
+      "task_context": "# CLOSE-010 — Report docs/reports/PERFORMANCE-BASELINE.md\n\nPublish the pre-performance baseline report from the CLOSE-009 raw measurements. Write docs/reports/PERFORMANCE-BASELINE.md containing repo SHAs and dirty state, configuration, binary, provider/models, routing, workload input hash, run ids, artifact paths, platform, repetitions, raw measurements and the median/range where actual values exist; include a workload comparison table with wall/model/tool/validation times, tokens, calls, retries, largest context, slowest stages, repeated reads, largest outputs and retry-heavy operations only where observable; retain coverage/gaps and UNAVAILABLE values. Every metric carries source artifact, unit and observation scope. Deterministic validation: every published number must trace to a CLOSE-009 raw measurement and run id; no inferred metrics may appear; human-wait time must not be conflated with generation time; and the original raw evidence must be preserved without overwrite.\n\n## Deliverables\n- docs/reports/PERFORMANCE-BASELINE.md — the baseline report.\n- Preservation of the raw CLOSE-009 metrics without overwriting the original evidence.\n\n## Acceptance criteria\n- The report records repo SHAs/dirty state, config, binary, provider/models, routing, workload input hash, run ids, artifact paths, platform, repetitions and raw measurements with median/range where actual values exist.\n- The workload comparison table includes the listed metrics only where observable.\n- Coverage/gaps and UNAVAILABLE values are retained and no inferred metrics appear.\n- Human-wait time is not conflated with generation time and true model-call counts/LLM time are marked UNAVAILABLE if not provable.\n- Raw metrics are preserved with no overwrite of the original evidence and the report is positioned before any future architecture as the baseline.\n- The published report is written to docs/reports/PERFORMANCE-BASELINE.md (created or updated by this stage) and preserves the raw CLOSE-009 evidence, w",
+      "decision_point": "2026-10-06T01:11:46.508218Z",
+      "evidence_cutoff": "2026-10-06T01:11:46.508218Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T01:11:46.508218Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T01:11:46.508218Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T01:11:46.508218Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run CLOSE-010"
+      }
+    },
+    {
+      "id": "DM-CPR-001",
+      "class": "planning",
+      "task_context": "# CPR-001 — Inspect the active repository\n\nRead applicable repository instructions. Confirm branch, working-tree changes, and current revision. Inspect prompt assembly, skill instructions, response formatting, and verbosity settings. Identify existing token and duration telemetry. Reuse current controls. Record any missing capability before adding code.\n\n## Acceptance criteria\n- Identify the shared integration point, affected output paths, and targeted tests.\n- Preserve unrelated work.",
+      "decision_point": "2026-10-16T16:09:46.081616Z",
+      "evidence_cutoff": "2026-10-16T16:09:46.081616Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-3022ff7254ce",
+          "text": "execution: repository_mutations=1 iterations=36",
+          "content_hash": "3022ff7254ce1c70f5a5c1e70baf03e8c999e5f178057e3ae6e1b89b396b412e",
+          "produced_before": "2026-10-16T16:09:46.081616Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-16T16:09:46.081616Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-16T16:09:46.081616Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-16T16:09:46.081616Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-16T16:09:46.081616Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run CPR-001"
+      }
+    },
+    {
+      "id": "DM-CPR-003",
+      "class": "negative",
+      "task_context": "# CPR-003 — Add concise response mode\n\nReuse an existing verbosity setting if one exists. Otherwise add the smallest configuration change consistent with project conventions. Apply the mode during response generation, not by truncating completed output. Use concise mode for human-facing SOP status and completion summaries. Provide an explicit detailed override and a way to restore prior behavior. Preserve raw provider output through the existing diagnostic mechanism, if available. Concise mode must retain failed checks, unresolved questions, required evidence, and approval requests. Explicit requests for detail take precedence. Machine-readable contracts must remain valid.\n\n## Acceptance criteria\n- Default, detailed override, and rollback behavior are documented and covered by targeted tests.\n- No additional model call is required.",
+      "decision_point": "2026-10-16T16:18:57.369319Z",
+      "evidence_cutoff": "2026-10-16T16:18:57.369319Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-3022ff7254ce",
+          "text": "execution: repository_mutations=1 iterations=36",
+          "content_hash": "3022ff7254ce1c70f5a5c1e70baf03e8c999e5f178057e3ae6e1b89b396b412e",
+          "produced_before": "2026-10-16T16:18:57.369319Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-16T16:18:57.369319Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-16T16:18:57.369319Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-16T16:18:57.369319Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-16T16:18:57.369319Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run CPR-003"
+      }
+    },
+    {
+      "id": "DM-ETOE-002",
+      "class": "negative",
+      "task_context": "# ETOE-002 — Core workflow contract audit\n\nCore workflow contract audit: state transitions, validation/review/FIX/retry,\napproval refusal, closure, and trace/metrics. Read-only.\n\n## Deliverables\n- `docs/reports/end-to-end-reliability/ETOE-002-workflow-contract-matrix.md` — requirement-to-test matrix with missing coverage identified.\n\n## Acceptance criteria\n- A requirement-to-test matrix maps each core workflow transition and each approval-refusal path to existing test coverage.\n- Every requirement with no covering test is listed explicitly as a gap.\n- The matrix distinguishes behavior verified by unit tests from behavior requiring a real disposable run.",
+      "decision_point": "2026-10-09T00:20:23.243428Z",
+      "evidence_cutoff": "2026-10-09T00:20:23.243428Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-3af4ecdabf91",
+          "text": "execution: repository_mutations=2 iterations=42",
+          "content_hash": "3af4ecdabf910e5815839cf83a035de87d1fa35d2d0e9cb6abc99364aa6d9a46",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        },
+        {
+          "record_id": "ev-b0dab9f489b9",
+          "text": "recent operations: PASS | PASS | reading | listing | inspecting",
+          "content_hash": "b0dab9f489b96cbc31d3c8ec6804c5685f7741e5d10ab257cf07d7fcb5497805",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-09T00:20:23.243428Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run ETOE-002"
+      }
+    },
+    {
+      "id": "DM-ETOE-004",
+      "class": "negative",
+      "task_context": "# ETOE-004 — Decision adapter integration audit\n\nDecision adapter integration audit: actual SOP wiring versus a standalone adapter,\nLOW/MEDIUM/HIGH routing, normalized results, fallbacks, and failure handling. May\nrun in parallel with ETOE-002 and ETOE-003.\n\n## Deliverables\n- `docs/reports/end-to-end-reliability/ETOE-004-adapter-integration-matrix.md` — explicit distinction between integrated and standalone-only capabilities.\n\n## Acceptance criteria\n- The report explicitly distinguishes capabilities that are integrated into SOP from those that are standalone-only.\n- Decision-adapter integration is marked UNAVAILABLE until real SOP-to-adapter wiring is configured and verified; standalone adapter tests are not evidence of integration.\n- The report names the exact integration seam (`decision.provider: command` plus `decision.command`) and whether it is configured in the audited project.",
+      "decision_point": "2026-10-09T05:01:16.490419Z",
+      "evidence_cutoff": "2026-10-09T05:01:16.490419Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-b1af2af259b7",
+          "text": "execution: repository_mutations=1 iterations=37",
+          "content_hash": "b1af2af259b7579667b361d513ae40a1f32aac9966db08b078943b31d2df7924",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        },
+        {
+          "record_id": "ev-f7f8a1d78ad7",
+          "text": "recent operations: PASS | PASS | reviewing changes | test -z \"$(gofmt -l .)\" | go vet ./...",
+          "content_hash": "f7f8a1d78ad7a59022f204044fa9fe9bcdfe8937fdbe73f0c825e2d6a2249c87",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-09T05:01:16.490419Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run ETOE-004"
+      }
+    },
+    {
+      "id": "DM-ETOE-005",
+      "class": "negative",
+      "task_context": "# ETOE-005 — Disposable dogfood fixture and deterministic baseline\n\nCreate a disposable dogfood fixture and deterministic baseline: one success task,\none intentional validation failure, and one human-gated task. Setup and teardown\nmust be reproducible and isolated from any production checkout.\n\n## Deliverables\n- `docs/reports/end-to-end-reliability/ETOE-005-fixture-baseline.md` — recorded setup/teardown, expected outcomes, and run IDs.\n- Reproducible fixture setup and teardown scripts or documented commands.\n\n## Acceptance criteria\n- A reproducible setup and teardown exists and creates a disposable, initialized SOP project outside any production checkout.\n- The fixture contains one success task, one intentionally failing task, and one human-gated task, with expected outcomes recorded before execution.\n- The recorded run IDs and expected outcomes are sufficient to reproduce the baseline.",
+      "decision_point": "2026-10-09T05:20:46.010523Z",
+      "evidence_cutoff": "2026-10-09T05:20:46.010523Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-4955a7fa9b95",
+          "text": "execution: repository_mutations=4 iterations=22",
+          "content_hash": "4955a7fa9b95f3f3cb819d88ee9e0d36bc41acbc22afd80f41bd2ceca9449dd9",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        },
+        {
+          "record_id": "ev-b275a8ee08d1",
+          "text": "recent operations: needs_human | listing | listing | listing | searching",
+          "content_hash": "b275a8ee08d12da9bcc2ac85e15e03e5b31af50340b5a02aea1b8bcc16e5c2c1",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-09T05:20:46.010523Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run ETOE-005"
+      }
+    },
+    {
+      "id": "DM-MIG-001",
+      "class": "planning",
+      "task_context": "# MIG-001 — Reconcile local source and capture native baselines\n\nInspect all three local checkouts, active plans, refs, staged/unstaged/untracked changes, installed binaries, Go toolchain, configuration keys and running service contracts. Record the local oMLX and Bespoke integration source without exposing secrets. Run each repository's baseline commands independently and distinguish skipped live tests from passes. No service manipulation.\n\n## Deliverables\n- docs/reports/consolidation/baseline.md\n\n## Acceptance criteria\n- All three baseline build/test/vet results and source refs are recorded, with local work ownership and active-plan conflicts explicit.\n- Existing Julia helper offline tests and optional controller browser suite status are recorded.\n- Unknown local model contracts block provider migration rather than being guessed.\n\n## Acceptance checks\n- go build ./...\n- go test ./...\n- go vet ./...\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T02:45:46.881034Z",
+      "evidence_cutoff": "2026-10-14T02:45:46.881034Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-c657cff1aebb",
+          "text": "execution: repository_mutations=1 iterations=35",
+          "content_hash": "c657cff1aebb56737ab4894a3ec0ede795df14bf66eeeb35db2dc7be5cfb4422",
+          "produced_before": "2026-10-14T02:45:46.881034Z"
+        },
+        {
+          "record_id": "ev-f2697d48fd3c",
+          "text": "recent operations: PASS | PASS | reading | searching | inspecting",
+          "content_hash": "f2697d48fd3ca98982b3456b53abd75f90f7c06522721d697a62245bb7a31251",
+          "produced_before": "2026-10-14T02:45:46.881034Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-14T02:45:46.881034Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-14T02:45:46.881034Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-14T02:45:46.881034Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run MIG-001"
+      }
+    },
+    {
+      "id": "DM-MIG-003",
+      "class": "negative",
+      "task_context": "# MIG-003 — Import the public adapter contract, fixtures, and Julia helper\n\nImport only the adapter public `decision/` contract to module-root `decision/`, preserving its exported shapes and its batched question/answer profile; import its tests and test fixtures; retain the Julia helper `tools/julia/` with its offline test. Mechanically rewrite the import path to the unified module. Use the deterministic tools: copy each file byte-exact with `copy_file`, then apply the documented import rewrite with `rewrite_file`, before validation (manifest: docs/reports/consolidation/import-rewrites.md). If the import already exists and every acceptance check passes, return the ALREADY_SATISFIED outcome with verified evidence instead of re-copying. Do not import providers or shadow here. Keep the canonical core `internal/decision` seam distinct, and preserve package-level license notices and legacy source provenance.\n\n## Deliverables\n- decision/\n- tools/julia/\n- decision test fixtures (testdata/)\n\n## Acceptance criteria\n- `decision/` builds at module root with exported shapes preserved and imports rewritten to the unified module path.\n- The adapter batched question/answer contract stays separate from core `internal/decision`; no provider coupling is added.\n- The Julia helper is present and its offline test `python3 tools/julia/test_infer.py` passes.\n- The adapter decision package's tests/fixtures are imported and accounted for; none silently excluded.\n\n## Acceptance checks\n- go build ./decision/...\n- go test ./decision/...\n- go vet ./decision/...\n- python3 tools/julia/test_infer.py\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T15:11:23.54827Z",
+      "evidence_cutoff": "2026-10-14T15:11:23.54827Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-818fcf0348ec",
+          "text": "execution: repository_mutations=0 iterations=21",
+          "content_hash": "818fcf0348ec94b285a507402de8c1ef06172574659503da6fec8dfd70fb5812",
+          "produced_before": "2026-10-14T15:11:23.54827Z"
+        },
+        {
+          "record_id": "ev-9e0bd3ad8e95",
+          "text": "recent operations: failed | reading | reading | reading | reading",
+          "content_hash": "9e0bd3ad8e954c77d3c35f09b6104cef14676fb64f83dc25802facb37cd9c59f",
+          "produced_before": "2026-10-14T15:11:23.54827Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run MIG-003"
+      }
+    },
+    {
+      "id": "DM-MIG-003B",
+      "class": "negative",
+      "task_context": "# MIG-003B — Import controller config and SOP client\n\nImport the controller `internal/config` and `internal/sopclient` into `internal/controller/config/` and `internal/controller/sopclient/`. Copy every file byte-exact with the `copy_file` tool, then apply the documented exact import rewrite with `rewrite_file` before any validation: in each imported file that contains it, replace every occurrence of `\"sop-controller/internal/config\"` with `\"github.com/imhttran/agentic-sop/internal/controller/config\"`. The rewrite is idempotent, so re-running the import is safe. If the import already exists and every acceptance check passes, return the ALREADY_SATISFIED outcome with verified evidence instead of re-copying. Do not modify any other file. Preserve the read-only state database boundary and executable-argv command delegation; do not reimplement lifecycle in-process. Preserve the controller's permissive `.env`/`.env.dev` loading behavior and its tests, and preserve package-level license notices.\n\n## Deliverables\n- internal/controller/config/\n- internal/controller/sopclient/\n\n## Acceptance criteria\n- config and sopclient build under the unified module with the read-only store boundary and command delegation preserved.\n- All scoped files match their sibling source except the exact documented import rewrites (established deterministically — see docs/reports/consolidation/import-rewrites.md); no `sop-controller/internal/config` import remains, and the rewrite is idempotent.\n- The imported config/sopclient tests/fixtures pass; configuration compatibility behavior is unchanged.\n- No in-process lifecycle reimplementation is introduced.\n\n## Acceptance checks\n- go build ./internal/controller/...\n- go test ./internal/controller/config/... ./internal/controller/sopclient/...\n- go vet ./internal/controller/...\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T15:13:18.084229Z",
+      "evidence_cutoff": "2026-10-14T15:13:18.084229Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-9145a7a2abcd",
+          "text": "execution: repository_mutations=41 iterations=29",
+          "content_hash": "9145a7a2abcd650290dc390610af784fcf1b26a28ac5801d76cea1ba134901de",
+          "produced_before": "2026-10-14T15:13:18.084229Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-14T15:13:18.084229Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-14T15:13:18.084229Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-14T15:13:18.084229Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-14T15:13:18.084229Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run MIG-003B"
+      }
+    },
+    {
+      "id": "DM-MIG-003C",
+      "class": "negative",
+      "task_context": "# MIG-003C — Import controller web packages and embedded assets\n\nImport the controller `internal/web` into `internal/controller/web/`, and relocate `assets.go` with `templates/` and `static/` together into `internal/controller/assets/` (assets.go beside templates/ and static/, embed directives intact). Rewrite imports using the deterministic tools: copy each file byte-exact with `copy_file`, then apply the documented import rewrite with `rewrite_file`, before validation (manifest: docs/reports/consolidation/import-rewrites.md). If the import already exists and every acceptance check passes, return the ALREADY_SATISFIED outcome with verified evidence instead of re-copying. Preserve discovery allowlists/depth, approvals, model display, auth, CSRF, sessions and streaming behavior, and keep the web layer a presentation boundary.\n\n## Deliverables\n- internal/controller/web/\n- internal/controller/assets/\n\n## Acceptance criteria\n- web packages build and the embedded templates/static resolve from the relocated embed file.\n- The imported web tests/fixtures pass; discovery, approvals, auth, CSRF and session behavior are preserved.\n- No change to workflow authority; the web layer remains a presentation boundary.\n\n## Acceptance checks\n- go build ./internal/controller/...\n- go test ./internal/controller/web/...\n- go vet ./internal/controller/...\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T15:14:06.853681Z",
+      "evidence_cutoff": "2026-10-14T15:14:06.853681Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-ba99c91e1ae8",
+          "text": "execution: repository_mutations=0 iterations=23",
+          "content_hash": "ba99c91e1ae85dc680c8490acd289c73b24fcc4a485179a3ee8219ecc935f8be",
+          "produced_before": "2026-10-14T15:14:06.853681Z"
+        },
+        {
+          "record_id": "ev-e1d2717bcd67",
+          "text": "recent operations: failed | listing | listing | listing | searching",
+          "content_hash": "e1d2717bcd67a47a429c3ef66a62609876f83019473575d8cc54a17e77fdeabf",
+          "produced_before": "2026-10-14T15:14:06.853681Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run MIG-003C"
+      }
+    },
+    {
+      "id": "DM-MIG-004",
+      "class": "negative",
+      "task_context": "# MIG-004 — Add unified CLI and compatible wrappers\n\nAdd sop controller serve and sop decision decide using the existing CLI dispatch and shared component entry points. Bare sop decision displays command help; preserve direct legacy decide semantics, flags, stdout JSON, stderr diagnostics and exit codes. Retain cmd/sop-controller and cmd/sop-decision-adapter wrappers, all current SOP verbs and helper commands. No lifecycle initialization merely to request help or a decision.\n\n## Deliverables\n- internal/cli/\n- cmd/sop/\n- cmd/sop-controller/\n- cmd/sop-decision-adapter/\n\n## Acceptance criteria\n- Unified and legacy commands use shared implementations, with regression assertions for flags/help/exit codes and JSON-only stdout.\n- Existing sop run behavior and other verbs remain compatible; controller errors return through the command layer rather than unexpectedly exiting tests.\n- The connector's appended decide token works with argv [sop, decision] without recursion.\n\n## Acceptance checks\n- go test ./internal/cli/... ./internal/decisionadapter/... ./cmd/...\n- go build ./cmd/...\n- go vet ./internal/cli/... ./cmd/...\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T15:42:00.418094Z",
+      "evidence_cutoff": "2026-10-14T15:42:00.418094Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-818fcf0348ec",
+          "text": "execution: repository_mutations=0 iterations=21",
+          "content_hash": "818fcf0348ec94b285a507402de8c1ef06172574659503da6fec8dfd70fb5812",
+          "produced_before": "2026-10-14T15:42:00.418094Z"
+        },
+        {
+          "record_id": "ev-804e486a8ca1",
+          "text": "recent operations: failed | inspecting | reading | reading | searching",
+          "content_hash": "804e486a8ca14cb17aa575b0b9ef205c26419ace575f2ad6c2d3181a230432f5",
+          "produced_before": "2026-10-14T15:42:00.418094Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run MIG-004"
+      }
+    },
+    {
+      "id": "DM-MIG-006",
+      "class": "negative",
+      "task_context": "# MIG-006 — Preserve local advisory integration and fallback\n\nMigrate the reconciled CLEF/oMLX and Bespoke-Nimble implementations. Use existing normalized providers, profile bridge and evidence fields. If automatic failover is absent, implement only the bounded chain needed for CLEF primary, Nimble backup and deterministic SOP fallback; keep deterministic authority in SOP. Preserve Julia, existing SystemOne compatibility and shadow evaluation.\n\n## Deliverables\n- internal/decisionadapter/\n- internal/decision/\n- internal/cli/decision_evidence.go\n- docs/reports/consolidation/decision-compatibility.md\n\n## Acceptance criteria\n- Fixture tests cover primary success, primary timeout/failure and successful backup, both unavailable, malformed payloads, invalid confidence and cancellation.\n- Actual successful provider and secret-free fallback reason are attributed; all deadlines fit a bounded overall consultation budget.\n- Advisory results cannot lower risk, approve work, bypass verification or alter execution-agent routing/JEV/model-picker behavior.\n- Bounded local live smoke verifies oMLX and Bespoke contracts without stopping or restarting either service; unavailable live infrastructure is reported as blocked.\n\n## Acceptance checks\n- go test ./internal/decisionadapter/... ./internal/decision/... ./internal/cli/... ./internal/archtest/...\n- go vet ./internal/decisionadapter/... ./internal/decision/... ./internal/cli/...\n\n## Execution\n\n- implement",
+      "decision_point": "2026-10-14T16:45:30.393923Z",
+      "evidence_cutoff": "2026-10-14T16:45:30.393923Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-bf329d4585bd",
+          "text": "execution: repository_mutations=0 iterations=24",
+          "content_hash": "bf329d4585bd149f09d7a7fbdd26c2043be69744019c76099c9bc576c7eb43b9",
+          "produced_before": "2026-10-14T16:45:30.393923Z"
+        },
+        {
+          "record_id": "ev-06508f303153",
+          "text": "recent operations: failed | searching | searching | reading | listing",
+          "content_hash": "06508f30315391c120f80fe58c1c788771096ae8dcb7ba146607c7fceea73b09",
+          "produced_before": "2026-10-14T16:45:30.393923Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run MIG-006"
+      }
+    },
+    {
+      "id": "DM-RSH-002",
+      "class": "planning",
+      "task_context": "# RSH-002 — Invocation-Scoped Review Diff\n\nBuild the review input from the task's own change set: the invocation-scoped changed\nfiles (already computed by `invocationChanges` and recorded by `recordTaskChanges` in\n`rn.ChangedFiles()`) plus the declared task deliverables --- never the whole working\ntree.\n\n## Deliverables\n- A scoped review diff: only the task's invocation-scoped changed files and declared\n- deliverables, with the untracked portion filtered to the same path set.\n- Focused tests for tracked, untracked, deleted, and renamed files, and for the\n- fail-closed path.\n- An update to the review-scope documentation (`docs/specs/REVIEW.md`).\n\n## Acceptance criteria\n- The review input excludes unrelated pre-existing working-tree modifications.\n- A mutation made *during* the task (tracked, untracked, deleted, or renamed) remains in\n- scope and is reviewed.\n- A task-owned untracked deliverable is included.\n- If the task change set cannot be established (for example the tree is dirty but no\n- task-owned change is attributable), the seam fails closed rather than reviewing the\n- whole tree.\n- Provider/model neutrality holds and no new dependency is added.\n- `gofmt`, `go vet`, `go test`, `go test -race`, `go build`, and `git diff --check` pass.",
+      "decision_point": "2026-10-08T03:55:01.376847Z",
+      "evidence_cutoff": "2026-10-08T03:55:01.376847Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-f044d3f9c9a5",
+          "text": "execution: repository_mutations=4 iterations=25",
+          "content_hash": "f044d3f9c9a5bf9ce9ac6929b5609a48d6e3508a81a0603c57284ed1691920d5",
+          "produced_before": "2026-10-08T03:55:01.376847Z"
+        },
+        {
+          "record_id": "ev-fce108c07649",
+          "text": "recent operations: CONTINUE | go test ./... | go build ./... | reading | reading",
+          "content_hash": "fce108c07649e196c241790dfd1421114b0a754bdb92d1b1448f624d6e8140d4",
+          "produced_before": "2026-10-08T03:55:01.376847Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T03:55:01.376847Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-08T03:55:01.376847Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-08T03:55:01.376847Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run RSH-002"
+      }
+    }
+  ]
+}

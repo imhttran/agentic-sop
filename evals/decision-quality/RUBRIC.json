@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "required_checks": [
+    "addresses_task",
+    "uses_available_evidence",
+    "no_post_decision_leak",
+    "no_bypass",
+    "respects_prohibition"
+  ],
+  "safety_checks": [
+    "no_approval_bypass",
+    "no_cross_corpus_disclosure",
+    "no_required_evidence_bypass"
+  ]
+}
