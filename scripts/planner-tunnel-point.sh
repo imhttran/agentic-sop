@@ -6,13 +6,15 @@
 # `sop mcp --planner` inside one project directory. This script rewrites that
 # wrapper for the project you name, optionally builds a fresh sop binary from
 # origin/main first, and checks the wrapper locally with a read-only
-# sop_question_list call. It never restarts the tunnel client; it prints the
-# command to do that.
+# sop_question_list call. It never restarts the tunnel; use
+# scripts/planner-tunnel-candidate.sh for the verified process lifecycle.
 #
 # Usage:
-#   scripts/planner-tunnel-point.sh [--build] [--binary PATH] [--checkout PATH] PROJECT_DIR
+#   scripts/planner-tunnel-point.sh [--dry-run] [--build] [--binary PATH] [--checkout PATH] PROJECT_DIR
 #
 #   PROJECT_DIR     the SOP project the planner should serve (must contain .agent-sdlc)
+#   --dry-run       check the project, binary, build inputs, and wrapper locally, but
+#                   write nothing and leave the live wrapper unchanged
 #   --build         build sop from origin/main into the binary path first
 #   --binary PATH   the sop binary the wrapper runs (default: .run/spike/sop-planner)
 #   --checkout PATH the agentic-sop checkout whose .run/tunnel and .run/spike to use
@@ -30,6 +32,10 @@
 # The new wrapper is written to a temporary file and checked first; the live
 # wrapper is replaced only if the check passes. An existing wrapper is copied to
 # .run/tunnel/sop-mcp-planner.sh.bak-<timestamp> before it is replaced.
+#
+# This script does not start, stop, or restart the tunnel. Use
+# scripts/planner-tunnel-candidate.sh for the candidate lifecycle. The local
+# wrapper check below is a local MCP check, not a live ChatGPT test.
 
 set -euo pipefail
 
@@ -47,12 +53,14 @@ cleanup() {
 trap cleanup EXIT
 
 BUILD=0
+DRY_RUN=0
 BINARY=""
 CHECKOUT=""
 PROJECT=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --build) BUILD=1 ;;
+    --dry-run) DRY_RUN=1 ;;
     --binary) [ $# -ge 2 ] || usage; BINARY="$2"; shift ;;
     --checkout) [ $# -ge 2 ] || usage; CHECKOUT="$2"; shift ;;
     -h|--help) usage ;;
@@ -88,22 +96,35 @@ PROJECT="$(cd "$PROJECT" && pwd)"
 #    current checkout and its local changes are never touched.
 if [ "$BUILD" = 1 ]; then
   command -v go >/dev/null 2>&1 || { echo "point: go is required for --build" >&2; exit 1; }
-  git fetch -q origin main
-  TREE="$(mktemp -d "${TMPDIR:-/tmp}/sop-main.XXXXXX")"
-  rmdir "$TREE"
-  git worktree add -q --detach "$TREE" origin/main
-  mkdir -p "$(dirname "$BINARY")"
-  echo "point: building sop from origin/main ($(git rev-parse --short origin/main)) -> $BINARY"
-  (cd "$TREE" && go build -o "$BINARY" ./cmd/sop)
+  if [ "$DRY_RUN" = 1 ]; then
+    echo "point: dry-run: would fetch origin/main and build $(shquote "$BINARY") from a temporary worktree"
+  else
+    git fetch -q origin main
+    TREE="$(mktemp -d "${TMPDIR:-/tmp}/sop-main.XXXXXX")"
+    rmdir "$TREE"
+    git worktree add -q --detach "$TREE" origin/main
+    mkdir -p "$(dirname "$BINARY")"
+    echo "point: building sop from origin/main ($(git rev-parse --short origin/main)) -> $BINARY"
+    (cd "$TREE" && go build -o "$BINARY" ./cmd/sop)
+  fi
 fi
-[ -x "$BINARY" ] || { echo "point: sop binary not found or not executable: $BINARY (use --build)" >&2; exit 1; }
+if [ "$DRY_RUN" = 1 ] && [ ! -x "$BINARY" ]; then
+  echo "point: dry-run: binary does not exist yet; --build would create it" >&2
+elif [ ! -x "$BINARY" ]; then
+  echo "point: sop binary not found or not executable: $BINARY (use --build)" >&2
+  exit 1
+fi
 
 # 2. Write the new wrapper to a temporary file with absolute, quoted paths: the
 #    tunnel does not see this shell's environment. PWD is exported so the server
 #    reports the same path spelling as the shell that ran sop run (needed only by
 #    binaries older than the repository-identity fix; harmless otherwise).
-mkdir -p "$(dirname "$WRAPPER")"
-CANDIDATE="$(mktemp "$WRAPPER.new.XXXXXX")"
+if [ "$DRY_RUN" = 1 ]; then
+  CANDIDATE="$(mktemp "${TMPDIR:-/tmp}/sop-planner-wrapper.XXXXXX")"
+else
+  mkdir -p "$(dirname "$WRAPPER")"
+  CANDIDATE="$(mktemp "$WRAPPER.new.XXXXXX")"
+fi
 cat > "$CANDIDATE" <<EOF
 #!/bin/sh
 # Planner MCP wrapper.
@@ -114,6 +135,13 @@ export PWD="\$PROJECT"
 exec $(shquote "$BINARY") mcp --planner
 EOF
 chmod +x "$CANDIDATE"
+
+if [ "$DRY_RUN" = 1 ] && [ ! -x "$BINARY" ]; then
+  echo "point: dry-run: wrapper would contain:"
+  sed 's/^/  /' "$CANDIDATE"
+  echo "point: dry-run: local MCP check skipped (binary not built yet)"
+  exit 0
+fi
 
 # 3. Check the new wrapper locally with a read-only call before installing it.
 REPLY="$(printf '%s\n' \
@@ -132,6 +160,15 @@ case "$REPLY" in
 esac
 
 # 4. Back up the current wrapper, then atomically install the checked one.
+if [ "$DRY_RUN" = 1 ]; then
+  if [ -f "$WRAPPER" ]; then
+    echo "point: dry-run: would back up $WRAPPER and install the checked wrapper"
+  else
+    echo "point: dry-run: would install the checked wrapper at $WRAPPER"
+  fi
+  echo "point: dry-run: live wrapper left unchanged"
+  exit 0
+fi
 if [ -f "$WRAPPER" ]; then
   BACKUP="$WRAPPER.bak-$(date +%Y%m%d-%H%M%S)"
   cp "$WRAPPER" "$BACKUP"
@@ -143,8 +180,13 @@ echo "point: wrapper now serves $PROJECT"
 
 cat <<'EOF'
 
-Next: restart the tunnel client so it starts the new wrapper.
-  1. Press Ctrl-C in the tab running tunnel-client (or: pkill -f "tunnel-client run").
-  2. Start it again:
-     tunnel-client run --profile sop-status-spike
+Next: the wrapper is configured, but the tunnel was not restarted. Use the
+candidate helper so the exact process is verified and rollback is preserved:
+
+  scripts/planner-tunnel-candidate.sh status --checkout <checkout>
+  scripts/planner-tunnel-candidate.sh start  --checkout <checkout>
+
+If the tunnel is already running an unverified process, stop it explicitly
+before starting a candidate. Do not use a broad pkill/killall; the candidate
+helper refuses to signal a PID it cannot verify.
 EOF
