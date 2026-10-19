@@ -205,7 +205,61 @@ func ResolveSelection(cfg config.SecurityConfig, detection Detection, auto bool)
 		selection.Diagnostics = append(selection.Diagnostics, fmt.Sprintf("%s: %s", disabled.ID, disabled.Reason))
 	}
 	selection.Coverage = expectedCoverage(selection.Adapters, selection.Disabled, detection, cfg)
+	selection.Coverage = refineDependencyCoverage(selection.Coverage, selection.Adapters, detection, cfg)
 	return selection
+}
+
+// refineDependencyCoverage keeps the read-only readiness projection honest: a
+// selected dependency adapter that cannot account for every in-scope obligation
+// (or lacks a pin/database/executable) must not project language coverage as
+// covered. The scan itself still runs and fails closed.
+func refineDependencyCoverage(coverage []CategoryCoverage, adapters []SelectedAdapter, detection Detection, cfg config.SecurityConfig) []CategoryCoverage {
+	for i := range coverage {
+		if coverage[i].Category != CategoryDependencies {
+			continue
+		}
+		for j := range coverage[i].Languages {
+			language := &coverage[i].Languages[j]
+			if language.State != CoverageStateCovered {
+				continue
+			}
+			covered := false
+			reason := ""
+			for _, adapter := range adapters {
+				if adapterCategory(adapter.Config) != CategoryDependencies {
+					continue
+				}
+				if !adapter.RepositoryWide && !containsLanguage(adapter.Languages, language.Language) {
+					continue
+				}
+				id := normalizeAdapterID(adapter.Config.ID)
+				status := CapabilityAvailable
+				switch id {
+				case AdapterIDCargoAudit:
+					status = capabilityForCargoAudit(detection, adapter.Config, cfg.AdvisoryDatabasePath)
+				case AdapterIDOSVScanner:
+					status = capabilityForOSV(detection, adapter.Config, cfg.OSVDatabasePath)
+				}
+				if status == CapabilityAvailable || status == CapabilityProposed {
+					covered = true
+					break
+				}
+				if reason == "" {
+					reason = capabilityReason(id, adapter.Config, detection, cfg.AdvisoryDatabasePath, cfg.OSVDatabasePath)
+				}
+			}
+			if covered {
+				continue
+			}
+			language.State = CoverageStateUnsupported
+			if reason == "" {
+				reason = "selected dependency adapter cannot prove this language's coverage"
+			}
+			language.Reasons = append(language.Reasons, reason)
+		}
+		coverage[i].State = aggregateLanguageState(coverage[i].Languages)
+	}
+	return coverage
 }
 
 // automaticAdapters fills only coverage that no explicit adapter, enabled or

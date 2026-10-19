@@ -313,6 +313,37 @@ func TestCargoAuditResumeInvalidatesOnDatabaseIdentity(t *testing.T) {
 	}
 }
 
+func TestCargoAuditDatabaseIdentityCoversLocalContent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, cargoAuditDatabaseFile), []byte(`{"last-commit":"1111111111111111111111111111111111111111","last-updated":"2026-10-01T00:00:00Z","advisory-count":1}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	advisory := filepath.Join(dir, "crates", "fixture", "RUSTSEC-2020-0001.md")
+	if err := os.MkdirAll(filepath.Dir(advisory), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(advisory, []byte("first advisory body\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	first, err := cargoDatabaseIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(first, "digest=") {
+		t.Fatalf("identity = %q, want a content digest", first)
+	}
+	if err := os.WriteFile(advisory, []byte("edited advisory body\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := cargoDatabaseIdentity(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second == first {
+		t.Fatalf("identity = %q after an advisory change; want an invalidating identity", second)
+	}
+}
+
 func TestCargoAuditTimeoutUsesBoundedContext(t *testing.T) {
 	root := cargoWorkspace(t, true)
 	adapter, err := BuildAdapter(config.SecurityAdapterConfig{

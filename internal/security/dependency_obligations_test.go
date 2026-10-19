@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -309,8 +310,11 @@ func TestOSVExplicitInputOutsideInventoryRejected(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if exec.Status == StatusCompleted && exec.Coverage == CoverageComplete {
-		t.Fatalf("explicit out-of-inventory input produced clean coverage: %+v", exec)
+	if exec.Status != StatusFailed || exec.Coverage != CoverageUnknown {
+		t.Fatalf("status/coverage = %s/%s, want FAILED/UNKNOWN (%v)", exec.Status, exec.Coverage, exec.Diagnostics)
+	}
+	if !diagnosticContains(exec.Diagnostics, "is not an in-scope dependency obligation") {
+		t.Fatalf("diagnostics = %v, want the out-of-inventory input reason", exec.Diagnostics)
 	}
 }
 
@@ -448,6 +452,103 @@ func TestCargoAuditExplicitSubsetReportsRemainingObligations(t *testing.T) {
 	if !diagnosticContains(exec.Diagnostics, "omitted by the explicit lockfile setting") {
 		t.Fatalf("diagnostics = %v, want the omitted obligation", exec.Diagnostics)
 	}
+}
+
+func TestDependencyCapabilityReflectsIncompleteInventory(t *testing.T) {
+	command, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	findCandidate := func(t *testing.T, candidates []AdapterCandidate, id string) AdapterCandidate {
+		t.Helper()
+		for _, candidate := range candidates {
+			if candidate.ID == id {
+				return candidate
+			}
+		}
+		t.Fatalf("candidate %s not found in %+v", id, candidates)
+		return AdapterCandidate{}
+	}
+
+	t.Run("missing obligation", func(t *testing.T) {
+		root := t.TempDir()
+		rustPackages(t, root, "a", "b")
+		rustLock(t, root, "a")
+		detection, err := DetectRepository(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cargo := config.SecurityAdapterConfig{
+			ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+			Command: []string{command}, Version: "0.21.2",
+		}
+		candidates := ClassifyCapabilitiesWithDatabases(detection, []config.SecurityAdapterConfig{cargo}, cargoDatabaseFixture(t), "")
+		candidate := findCandidate(t, candidates, AdapterIDCargoAudit)
+		if candidate.Status != CapabilityUnsupported || !strings.Contains(candidate.Reason, "missing dependency input packages/b/Cargo.lock") {
+			t.Fatalf("cargo-audit candidate = %+v, want unsupported with the missing obligation", candidate)
+		}
+
+		database := filepath.Join(t.TempDir(), "db")
+		writeOSVDatabase(t, database, []string{"crates.io"}, time.Now().UTC())
+		osv := config.SecurityAdapterConfig{
+			ID: AdapterIDOSVScanner, Category: config.SecurityCategoryDependencies,
+			Command: []string{command}, Version: "2.7.0", Languages: []string{"rust"},
+		}
+		candidates = ClassifyCapabilitiesWithDatabases(detection, []config.SecurityAdapterConfig{osv}, "", database)
+		candidate = findCandidate(t, candidates, AdapterIDOSVScanner)
+		if candidate.Status != CapabilityUnsupported || !strings.Contains(candidate.Reason, "missing dependency input packages/b/Cargo.lock") {
+			t.Fatalf("osv candidate = %+v, want unsupported with the missing obligation", candidate)
+		}
+
+		proposed := SelectCandidatesWithDatabases(detection, nil, cargoDatabaseFixture(t), "")
+		candidate = findCandidate(t, proposed, AdapterIDCargoAudit)
+		if candidate.Status != CapabilityUnsupported || !strings.Contains(candidate.Reason, "missing dependency input packages/b/Cargo.lock") {
+			t.Fatalf("proposed cargo-audit = %+v, want unsupported with the missing obligation", candidate)
+		}
+	})
+
+	t.Run("explicit subset", func(t *testing.T) {
+		root := t.TempDir()
+		rustPackages(t, root, "a", "b")
+		rustLock(t, root, "a")
+		rustLock(t, root, "b")
+		detection, err := DetectRepository(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		cargo := config.SecurityAdapterConfig{
+			ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+			Command: []string{command}, Version: "0.21.2", Lockfile: "packages/a/Cargo.lock",
+		}
+		candidates := ClassifyCapabilitiesWithDatabases(detection, []config.SecurityAdapterConfig{cargo}, cargoDatabaseFixture(t), "")
+		candidate := findCandidate(t, candidates, AdapterIDCargoAudit)
+		if candidate.Status != CapabilityUnsupported || !strings.Contains(candidate.Reason, "omitted by the explicit dependency input list") {
+			t.Fatalf("cargo-audit candidate = %+v, want unsupported with the omitted obligation", candidate)
+		}
+	})
+
+	t.Run("invalid layout", func(t *testing.T) {
+		root := t.TempDir()
+		cargoTestFile(t, root, "Cargo.toml", "[workspace\nmembers = [\"packages/a\"]\n")
+		cargoTestPackage(t, root, "packages/a", "a")
+		cargoTestLock(t, root, "packages/a")
+		detection, err := DetectRepository(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(detection.Issues) == 0 {
+			t.Fatal("invalid TOML produced no detection issue")
+		}
+		cargo := config.SecurityAdapterConfig{
+			ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+			Command: []string{command}, Version: "0.21.2",
+		}
+		candidates := ClassifyCapabilitiesWithDatabases(detection, []config.SecurityAdapterConfig{cargo}, cargoDatabaseFixture(t), "")
+		candidate := findCandidate(t, candidates, AdapterIDCargoAudit)
+		if candidate.Status != CapabilityUnsupported || !strings.Contains(candidate.Reason, "unsupported or ambiguous") {
+			t.Fatalf("cargo-audit candidate = %+v, want unsupported with the invalid layout", candidate)
+		}
+	})
 }
 
 func cargoAdapterWithLockfile(t *testing.T, database, lockfile string, run func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error)) Adapter {

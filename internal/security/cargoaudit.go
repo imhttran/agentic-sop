@@ -852,9 +852,21 @@ func cvss31BaseScore(vector string) (float64, bool) {
 // by its HEAD commit; any other directory falls back to a content digest.
 func cargoDatabaseIdentity(dir string) (string, error) {
 	if meta, ok := readCargoDatabaseMeta(dir); ok {
-		if identity := cargoAuditMetadataString(meta); identity != "" {
-			return identity, nil
+		// Scanner metadata alone is not content-sensitive: an edited advisory file
+		// with unchanged metadata must not reuse earlier evidence. Include the local
+		// content digest beside the declared identity.
+		digest, err := rulesIdentity(dir)
+		if err != nil {
+			return "", fmt.Errorf("advisory database content digest is unavailable: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
 		}
+		if strings.TrimSpace(digest) == "" {
+			return "", fmt.Errorf("empty advisory database content digest")
+		}
+		identity := cargoAuditMetadataString(meta)
+		if identity == "" {
+			return "digest=" + digest, nil
+		}
+		return identity + ";digest=" + digest, nil
 	}
 	if commit := cargoGitHead(dir); commit != "" {
 		// Include the content digest as well as HEAD so uncommitted changes to a

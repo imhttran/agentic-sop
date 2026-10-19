@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -326,5 +327,55 @@ func TestSecurityScanAutoFollowsRustContent(t *testing.T) {
 	}
 	if out.Scan.RequiredMode == nil {
 		t.Fatal("scan did not report required-mode readiness")
+	}
+}
+
+func TestSecurityInspectReadinessRejectsMissingObligation(t *testing.T) {
+	dir := t.TempDir()
+	writeFileT(t, dir, "packages/a/Cargo.toml", "[package]\nname = \"a\"\nversion = \"0.1.0\"\n")
+	writeFileT(t, dir, "packages/a/Cargo.lock", "version = 3\n")
+	writeFileT(t, dir, "packages/b/Cargo.toml", "[package]\nname = \"b\"\nversion = \"0.1.0\"\n")
+	if err := os.MkdirAll(filepath.Join(dir, stateDirName, "advisory-db"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	command, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeConfig(t, dir, "project:\n  name: x\nsecurity:\n  enabled: true\n  mode: required\n  required_categories: [dependencies]\n  advisory_database_path: .agent-sdlc/advisory-db\n  adapters:\n    - id: cargo-audit\n      category: dependencies\n      protocol: builtin\n      command: ["+fmt.Sprintf("%q", command)+"]\n      version: \"0.21.2\"\n")
+
+	code, stdout, stderr := runCLI(t, dir, "security", "inspect", "--json")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var out struct {
+		RequiredReady   bool                        `json:"required_ready"`
+		RequiredReasons []string                    `json:"required_reasons"`
+		Selected        []security.AdapterCandidate `json:"selected"`
+	}
+	if err := json.Unmarshal([]byte(stdout), &out); err != nil {
+		t.Fatalf("inspect JSON: %v\n%s", err, stdout)
+	}
+	if out.RequiredReady {
+		t.Fatalf("required_ready = true with a missing obligation: %+v", out.RequiredReasons)
+	}
+	if !strings.Contains(strings.Join(out.RequiredReasons, ";"), "missing dependency input packages/b/Cargo.lock") {
+		t.Fatalf("required reasons = %v, want the missing obligation", out.RequiredReasons)
+	}
+	found := false
+	for _, candidate := range out.Selected {
+		if candidate.ID != security.AdapterIDCargoAudit {
+			continue
+		}
+		found = true
+		if candidate.Status != security.CapabilityUnsupported {
+			t.Fatalf("cargo-audit status = %s, want unsupported", candidate.Status)
+		}
+		if !strings.Contains(candidate.Reason, "missing dependency input packages/b/Cargo.lock") {
+			t.Fatalf("cargo-audit reason = %q, want the missing obligation", candidate.Reason)
+		}
+	}
+	if !found {
+		t.Fatalf("selected = %+v, want cargo-audit", out.Selected)
 	}
 }
