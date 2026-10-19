@@ -407,7 +407,13 @@ Dependency scanning is driven by an explicit inventory of in-scope inputs:
   virtual, and implicit-member workspaces resolve their actual lockfiles.
   Members, globs, exclusions, the root package, explicit `package.workspace`
   references, and in-root path dependencies are honored. Directory ancestry alone
-  does not make a nested package a workspace member.
+  does not make a nested package a workspace member. An absolute or
+  repository-escaping `package.workspace` reference is reported as an unsupported
+  layout instead of being treated as an independent package.
+- A `members` glob that matches a file where a package directory is expected is
+  reported even when another match is a valid package. Content below an
+  already-matched directory is not a separate member position, and `exclude`
+  still removes glob-expanded members.
 - Excluded and undeclared nested packages are independent packages with their own
   `Cargo.lock` obligations. A workspace member does not own a lockfile.
 - Every in-scope obligation must be accounted for. Present inputs are scanned;

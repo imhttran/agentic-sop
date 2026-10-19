@@ -34,7 +34,16 @@ func cargoDatabaseFixture(t *testing.T) string {
 	return path
 }
 
+// cargoAuditTestNow pins freshness checks in adapter tests. The advisory-db
+// fixture records last-updated 2026-10-01, so this value is fresh and stable
+// regardless of the real calendar date.
+var cargoAuditTestNow = time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+
 func cargoAdapter(t *testing.T, database string, stale string, run func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error)) Adapter {
+	return cargoAdapterAt(t, database, stale, cargoAuditTestNow, run)
+}
+
+func cargoAdapterAt(t *testing.T, database string, stale string, now time.Time, run func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error)) Adapter {
 	t.Helper()
 	// Every scan first verifies the pinned tool version. Answer that probe with the
 	// pinned value so the test body only observes the real scan invocation.
@@ -54,6 +63,9 @@ func cargoAdapter(t *testing.T, database string, stale string, run func(context.
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+	if built, ok := adapter.(*cargoAuditAdapter); ok {
+		built.now = func() time.Time { return now }
 	}
 	return adapter
 }

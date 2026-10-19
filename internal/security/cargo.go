@@ -81,7 +81,7 @@ func parseCargoManifest(data []byte) (cargoManifest, error) {
 // resolveCargoWorkspaces builds workspace membership and Rust lockfile
 // obligations from parsed Cargo.toml records. It is deterministic, read-only, and
 // confined to repository-relative paths.
-func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []string) ([]CargoWorkspace, []Lockfile, []string) {
+func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs, files []string) ([]CargoWorkspace, []Lockfile, []string) {
 	byPath := map[string]cargoManifestRecord{}
 	byDir := map[string]cargoManifestRecord{}
 	var issues []string
@@ -101,7 +101,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []s
 		if record.ParseErr != nil || record.Manifest.Workspace == nil {
 			continue
 		}
-		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir, dirs)
+		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir, dirs, files)
 		workspaces = append(workspaces, workspace)
 		issues = append(issues, workspaceIssues...)
 		for _, member := range members {
@@ -129,6 +129,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []s
 		}
 		target, ok := normalizeCargoPath(record.Dir, record.Manifest.Package.Workspace)
 		if !ok {
+			issues = append(issues, fmt.Sprintf("%s package.workspace reference %q is absolute or escapes the repository; unsupported layout", record.Path, record.Manifest.Package.Workspace))
 			continue
 		}
 		if !workspaceRoots[joinRel(target, "Cargo.toml")] {
@@ -184,7 +185,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []s
 // members/exclude, the root package, and path dependencies; package.workspace
 // only identifies the workspace a package believes it belongs to and never
 // creates membership by itself.
-func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord, dirs []string) (CargoWorkspace, []string, []string) {
+func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord, dirs, files []string) (CargoWorkspace, []string, []string) {
 	workspace := CargoWorkspace{Manifest: workspaceRecord.Path}
 	var issues []string
 	declared := append([]string(nil), workspaceRecord.Manifest.Workspace.Members...)
@@ -193,6 +194,7 @@ func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []car
 
 	members := map[string]bool{}
 	explicitMembers := map[string]bool{}
+	excludeMatcher := cargoExcludeMatcher(workspaceRecord.Dir, workspaceRecord.Manifest.Workspace.Exclude, &issues)
 	// A non-virtual workspace root is an implicit member.
 	if workspaceRecord.Manifest.Package != nil {
 		members[workspaceRecord.Dir] = true
@@ -235,7 +237,28 @@ func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []car
 					continue
 				}
 				if cargoGlobMatch(normalized, dir) {
+					if excludeMatcher(dir) {
+						continue
+					}
 					issues = append(issues, fmt.Sprintf("workspace %s member pattern %q matched directory %s without Cargo.toml", workspaceRecord.Path, pattern, dir))
+				}
+			}
+			for _, file := range files {
+				if strings.EqualFold(filepath.Base(file), "Cargo.toml") {
+					continue
+				}
+				// A file below a directory the same pattern already matched is not a
+				// distinct member position (for example crates/** also matches every
+				// source file under crates/app). Only surface files that stand in for a
+				// package directory at this pattern's match depth.
+				if cargoGlobMatch(normalized, repoDir(file)) {
+					continue
+				}
+				if cargoGlobMatch(normalized, file) {
+					if excludeMatcher(file) {
+						continue
+					}
+					issues = append(issues, fmt.Sprintf("workspace %s member pattern %q matched file %s, which is not a package directory; the member glob is ambiguous", workspaceRecord.Path, pattern, file))
 				}
 			}
 		}
@@ -244,7 +267,6 @@ func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []car
 		}
 	}
 
-	excludeMatcher := cargoExcludeMatcher(workspaceRecord.Dir, workspaceRecord.Manifest.Workspace.Exclude, &issues)
 	// The root package is always a member, and an explicitly listed member is not
 	// removed by exclude; Cargo applies exclude to glob expansion and path
 	// dependencies.

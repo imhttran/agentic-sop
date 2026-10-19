@@ -31,6 +31,10 @@ type cargoAuditAdapter struct {
 	exec         Executor
 	timeout      time.Duration
 	maxOutput    int
+	// now is the freshness clock. Production leaves it nil (time.Now); tests
+	// inject a fixed clock so freshness assertions never depend on the
+	// calendar date when the test runs.
+	now func() time.Time
 }
 
 // cargoAuditStaleMaxAge is the freshness boundary cargo-audit itself uses for a
@@ -125,6 +129,15 @@ func (a *cargoAuditAdapter) declaredLanguages() []Language {
 	return []Language{LanguageRust}
 }
 
+// clock returns the current UTC time for freshness decisions. Tests replace
+// a.now to remove calendar dependence; production uses the wall clock.
+func (a *cargoAuditAdapter) clock() time.Time {
+	if a.now != nil {
+		return a.now().UTC()
+	}
+	return time.Now().UTC()
+}
+
 // currentProvenance fingerprints the local database before execution so resume
 // can compare an unchanged database without running the scanner.
 func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
@@ -156,7 +169,7 @@ func (a *cargoAuditAdapter) currentProvenance(req Request) (Provenance, error) {
 		return prov, err
 	}
 	prov.AdvisoryDatabaseIdentity = identity
-	metadata, stale := cargoDatabaseFreshness(dir, time.Now().UTC())
+	metadata, stale := cargoDatabaseFreshness(dir, a.clock())
 	prov.AdvisoryDatabaseMetadata = metadata
 	prov.AdvisoryDatabaseStale = stale
 	return prov, nil
@@ -546,7 +559,7 @@ func (a *cargoAuditAdapter) Scan(ctx context.Context, req Request) (Execution, e
 			AdvisoryCount: report.Database.AdvisoryCount,
 		}
 		metadata = append(metadata, cargoAuditMetadataString(dbMeta))
-		stale, freshKnown := cargoDatabaseStale(dbMeta.LastUpdated, time.Now().UTC())
+		stale, freshKnown := cargoDatabaseStale(dbMeta.LastUpdated, a.clock())
 		if !freshKnown {
 			// Missing freshness evidence is not clean. Treat it as stale so the
 			// explicit policy decides and required mode cannot pass.
