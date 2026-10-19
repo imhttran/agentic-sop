@@ -48,7 +48,8 @@ decision-history fix
 The operator should not copy commands, apply patches, build binaries, or restart
 the tunnel by hand. The agent owns preparation, deployment, and evidence
 collection; the operator approves the two boundaries that matter (starting the
-candidate and promoting a verified build).
+candidate and promoting a verified build). The reusable skill is
+[`/mcp-live-validation`](../guides/MCP-LIVE-VALIDATION.md).
 
 1. **Isolate.** Create a branch or worktree for the fix. Do not edit the active
    SOP working tree or the live tunnel state.

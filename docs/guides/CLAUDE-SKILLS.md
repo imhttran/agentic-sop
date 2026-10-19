@@ -104,6 +104,11 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
 | `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
 | `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
+| `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix |
+
+`/mcp-live-validation` prepares an isolated candidate and, after approval, stops the
+verified baseline and starts the candidate. It never replaces the production binary or
+merges; local tests are not independent validation.
 
 \* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
 default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
