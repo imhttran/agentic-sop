@@ -398,12 +398,40 @@ If the scan cannot produce evidence, the result is `INDETERMINATE`:
 
 ## 5. Go and Rust dependency scanning
 
+### Dependency obligations
+
+Dependency scanning is driven by an explicit inventory of in-scope inputs:
+
+- Cargo workspaces are parsed from `Cargo.toml` with a TOML library. A
+  `[workspace]` declaration is a workspace even without `members`. Ordinary,
+  virtual, and implicit-member workspaces resolve their actual lockfiles.
+  Members, globs, exclusions, the root package, explicit `package.workspace`
+  references, and in-root path dependencies are honored. Directory ancestry alone
+  does not make a nested package a workspace member.
+- Excluded and undeclared nested packages are independent packages with their own
+  `Cargo.lock` obligations. A workspace member does not own a lockfile.
+- Every in-scope obligation must be accounted for. Present inputs are scanned;
+  missing or explicitly omitted inputs are reported by path. Partial analysis is
+  `FAILED` with `PARTIAL` or `UNKNOWN` coverage, never clean, and findings from
+  present inputs remain in the report.
+- An explicit `inputs` list (OSV) or `lockfile` (cargo-audit) is validated against
+  the inventory. A subset leaves the remaining obligations reported unless
+  `security.exclude` removes them from scope; it never implies full-language
+  coverage.
+- Unsupported or ambiguous Cargo layouts are reported as explicit issues and
+  cannot produce clean dependency coverage.
+- Go source without `go.mod` is an unsupported dependency input, not an empty
+  scan. A repository with no Go or Rust dependency content is reported as a
+  completed no-op with `no_applicable_content: true`; no scanner ran, and a
+  completed no-op does not satisfy a required dependency category.
+
 ### Dependency advisories (OSV-Scanner)
 
-OSV-Scanner scans explicit Go `go.mod` files and present Rust `Cargo.lock` files.
-It resolves nested Go modules and Cargo workspaces from content, respects
-declared exclusions, and never generates or modifies a manifest or lockfile. A
-detected Rust ecosystem without a `Cargo.lock` is a failure, not a clean result.
+OSV-Scanner scans the Go `go.mod` and present Rust `Cargo.lock` inputs in the
+obligation inventory. It resolves nested Go modules and Cargo workspaces from
+content, respects declared exclusions, and never generates or modifies a manifest
+or lockfile. A missing `Cargo.lock` or a Go source tree without `go.mod` is a
+failure, not a clean result.
 
 The adapter runs with `--offline`, `--all-packages`, `--no-resolve`, and
 `--no-call-analysis=all`, against an explicit local cache. It never uses the live
@@ -436,11 +464,13 @@ timeout, or scanner failure is never clean.
 
 ### Dependency advisories (cargo-audit)
 
-cargo-audit resolves the Cargo workspace and its actual `Cargo.lock`; a workspace
-member does not own a lockfile. The adapter always passes `--file`, `--json`,
-`--no-fetch`, and an explicit `--db`. It never generates or modifies a lockfile,
-never runs `fix`, and never uploads source. It remains supported for existing
-Rust-only configurations and is never replaced by OSV automatically.
+cargo-audit resolves the Cargo workspace and its actual `Cargo.lock` through the
+obligation inventory; a workspace member does not own a lockfile, while excluded
+and undeclared nested packages keep separate obligations. The adapter always
+passes `--file`, `--json`, `--no-fetch`, and an explicit `--db`. It never
+generates or modifies a lockfile, never runs `fix`, and never uploads source. It
+remains supported for existing Rust-only configurations and is never replaced by
+OSV automatically.
 
 Provision the pinned executable once, separately from scanning:
 

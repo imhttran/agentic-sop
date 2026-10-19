@@ -157,8 +157,8 @@ func TestCargoAuditMissingLockfile(t *testing.T) {
 	if exec.Status != StatusFailed || exec.Coverage == CoverageComplete {
 		t.Fatalf("status/coverage = %s/%s, want failed and not complete", exec.Status, exec.Coverage)
 	}
-	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "no Cargo.lock") {
-		t.Errorf("diagnostics = %v, want missing lockfile", exec.Diagnostics)
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "missing dependency input Cargo.lock") {
+		t.Errorf("diagnostics = %v, want the missing lockfile obligation", exec.Diagnostics)
 	}
 }
 
@@ -473,11 +473,14 @@ func TestCargoAuditUnsupportedTarget(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if execResult.Status != StatusFailed || execResult.Coverage == CoverageComplete {
-		t.Fatalf("status/coverage = %s/%s, want failed and not complete", execResult.Status, execResult.Coverage)
+	if execResult.Status != StatusCompleted || !execResult.NoApplicableContent {
+		t.Fatalf("status/no-applicable = %s/%t, want a completed no-op", execResult.Status, execResult.NoApplicableContent)
 	}
-	if !strings.Contains(strings.Join(execResult.Diagnostics, " "), "unsupported") {
-		t.Errorf("diagnostics = %v, want an unsupported-target diagnostic", execResult.Diagnostics)
+	if len(execResult.Languages) != 0 {
+		t.Fatalf("languages = %v, want no claimed Rust coverage", execResult.Languages)
+	}
+	if !strings.Contains(strings.Join(execResult.Diagnostics, " "), "no applicable Rust dependency content") {
+		t.Errorf("diagnostics = %v, want an explicit no-applicable-content diagnostic", execResult.Diagnostics)
 	}
 }
 

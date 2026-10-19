@@ -47,6 +47,8 @@ Use `sop security inspect --json`. It is read-only and reports:
 - Cargo workspaces and the actual `Cargo.lock` locations;
 - configured and selected adapters, effective enable/disable state and reason,
   and explicit/automatic selection mode;
+- the resolved dependency obligation inventory, including missing Go `go.mod` or
+  Rust `Cargo.lock` inputs;
 - capability and language coverage, explicit overlaps, and missing prerequisites;
 - proposed adapters for the detected content.
 
@@ -149,6 +151,12 @@ Automatic selection fills only unconfigured, enabled coverage. It never re-adds 
 disabled adapter and never runs overlapping automatic coverage twice. Explicit
 overlap is allowed but must be reported as visible evidence.
 
+Dependency coverage follows the resolved obligation inventory, not only the
+lockfiles that happen to exist. A workspace member shares its workspace lockfile;
+excluded and undeclared nested packages keep separate obligations. If an explicit
+`inputs` or `lockfile` selects a subset, report the remaining obligations unless
+`security.exclude` intentionally removes them from scope.
+
 ## SCAN
 
 Run one governed, report-only scan through SOP. Use auto selection only to fill
@@ -181,7 +189,8 @@ For each finding, compare it with the current source and dependency evidence:
   reachability;
 - execution failures, missing tools, missing inputs, unavailable databases,
   stale databases, unsupported languages, and disabled coverage are findings
-  about coverage. They must not be reported as clean;
+  about coverage. Missing inputs must be reported by path, and partial analysis
+  must not be reported as clean;
 - distinguish advisories from tool/database failures.
 
 Do not quote a detected secret value. Refer only to the rule ID, path, line,
@@ -215,7 +224,15 @@ It is not proof that the repository has no vulnerabilities.
 ## GO AND RUST DEPENDENCY REQUIREMENTS
 
 - Resolve explicit Go `go.mod` files and the Cargo workspace's actual
-  `Cargo.lock`; do not assume a workspace member owns a lockfile.
+  `Cargo.lock` through the dependency obligation inventory. Do not assume a
+  workspace member owns a lockfile, and do not assign nested packages to a
+  workspace by directory ancestry alone.
+- Account for every in-scope obligation. Present inputs are scanned; missing or
+  explicitly omitted inputs are reported by path. Findings from present inputs
+  remain visible, but the scan is not complete.
+- A detected Go source tree without `go.mod` is unsupported dependency input, not
+  an empty success. A repository with no applicable Go/Rust dependency content is
+  reported as a completed no-op without claiming that a scanner ran.
 - Never let a scanner generate or modify a manifest or lockfile.
 - OSV-Scanner runs with `--offline`, `--all-packages`, `--no-resolve`,
   `--no-call-analysis=all`, an explicit offline cache, and a controlled empty

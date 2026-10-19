@@ -248,6 +248,7 @@ operator-local lifecycle state. They stay in `plans/` rather than moving to `his
 | [plans/PLAN-SOP-Validation-Evidence-Reuse.md](plans/PLAN-SOP-Validation-Evidence-Reuse.md)                               | IMPLEMENTED               | SOP validation evidence reuse                                         |
 | [plans/PLAN-Security-Scanner-Addon.md](plans/PLAN-Security-Scanner-Addon.md)                                             | IMPLEMENTED               | the Semgrep CE and Gitleaks security scanner add-on (SEC-001–SEC-005); the path is kept because `internal/planner/security_plan_test.go` compiles this plan |
 | [plans/PLAN-Security-Scan-Skill.md](plans/PLAN-Security-Scan-Skill.md)                                                   | IMPLEMENTED (archived)    | the Go/Rust security-scan skill and cargo-audit adapter; the path is kept because `.agent-sdlc/archive/plan-security-scan-skill/` records it |
+| [plans/PLAN-Dependency-Coverage-Fixes.md](plans/PLAN-Dependency-Coverage-Fixes.md)                                       | IMPLEMENTED               | Cargo workspace detection, dependency obligation inventory, and empty-analysis rejection |
 
 ### Planner spike and retained execution records
 
@@ -299,6 +300,7 @@ is owned by the documents they link.
 - [reports/SECURITY-SCANNER-BASELINE.md](reports/SECURITY-SCANNER-BASELINE.md) — the first real-project report-only baseline: clean `origin/main` content identity, pinned Semgrep/Gitleaks provenance, declared exclusions, production-versus-fixture separation, source-backed dispositions for 27 findings, coverage gaps, and required-mode readiness.
 - [reports/SECURITY-SCAN-SKILL.md](reports/SECURITY-SCAN-SKILL.md) — the Go/Rust security-scan skill and cargo-audit adapter: detection, auto selection, Semgrep language coverage, pinned advisory-database fixtures, validation results, SOP execution limitations, and remaining gaps.
 - [reports/SOP-EXECUTION-RELIABILITY-REVIEW.md](reports/SOP-EXECUTION-RELIABILITY-REVIEW.md) — the SOP execution-reliability review evidence: direct reliability fixes, the bounded SOP-006 Rust demonstration, and the explicit limits on replaying earlier runs.
+- [reports/SECURITY-DEPENDENCY-COVERAGE.md](reports/SECURITY-DEPENDENCY-COVERAGE.md) — the dependency-coverage follow-up: Cargo workspace/obligation correctness, missing-input and empty-analysis behavior, real-scanner evidence, and the report-only dogfood result.
 
 ## Historical Documentation
 

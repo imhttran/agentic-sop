@@ -191,6 +191,42 @@ func TestOSVRealCLIControlsScannerLocalSuppression(t *testing.T) {
 	}
 }
 
+func TestOSVRealCLIRequiresEveryRustLockfile(t *testing.T) {
+	database := filepath.Join(t.TempDir(), "db")
+	realOSVDatabase(t, database, []string{"crates.io"})
+	adapter := integrationOSVAdapter(t, database)
+	adapter.languages = []Language{LanguageRust}
+
+	workspace := t.TempDir()
+	writeFile(t, filepath.Join(workspace, "packages", "a", "Cargo.toml"), "[package]\nname = \"a\"\nversion = \"0.1.0\"\n")
+	writeFile(t, filepath.Join(workspace, "packages", "b", "Cargo.toml"), "[package]\nname = \"b\"\nversion = \"0.1.0\"\n")
+	writeFile(t, filepath.Join(workspace, "packages", "a", "Cargo.lock"), "version = 3\n\n[[package]]\nname = \"vulnerable\"\nversion = \"0.2.0\"\nsource = \"registry+https://github.com/rust-lang/crates.io-index\"\nchecksum = \"0000000000000000000000000000000000000000000000000000000000000000\"\n")
+	beforeA, _ := rulesIdentity(filepath.Join(workspace, "packages", "a", "Cargo.lock"))
+	beforeB, _ := rulesIdentity(filepath.Join(workspace, "packages", "b", "Cargo.toml"))
+
+	exec, err := adapter.Scan(context.Background(), osvRequest(workspace))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Status != StatusFailed || exec.Coverage != CoveragePartial {
+		t.Fatalf("status/coverage = %s/%s, want FAILED/PARTIAL (%v)", exec.Status, exec.Coverage, exec.Diagnostics)
+	}
+	if !diagnosticContains(exec.Diagnostics, "missing dependency input packages/b/Cargo.lock") {
+		t.Fatalf("diagnostics = %v, want the missing package obligation", exec.Diagnostics)
+	}
+	if len(exec.Findings) != 1 || exec.Findings[0].RuleID != "RUSTSEC-2024-0001" {
+		t.Fatalf("findings = %+v, want the present package's finding preserved", exec.Findings)
+	}
+	afterA, _ := rulesIdentity(filepath.Join(workspace, "packages", "a", "Cargo.lock"))
+	afterB, _ := rulesIdentity(filepath.Join(workspace, "packages", "b", "Cargo.toml"))
+	if beforeA != afterA || beforeB != afterB {
+		t.Fatal("OSV scan modified a Rust input")
+	}
+	if _, err := os.Stat(filepath.Join(workspace, "packages", "b", "Cargo.lock")); err == nil {
+		t.Fatal("OSV scan generated a missing Cargo.lock")
+	}
+}
+
 func TestOSVRealCLIMissingEcosystemIsNotClean(t *testing.T) {
 	database := filepath.Join(t.TempDir(), "db")
 	realOSVDatabase(t, database, []string{"Go"})

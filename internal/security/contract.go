@@ -237,6 +237,10 @@ type Provenance struct {
 	// lockfile or go.mod must invalidate reused evidence even when the database is
 	// unchanged.
 	LockfileIdentity string `json:"lockfile_identity,omitempty"`
+	// ObligationIdentity records the complete resolved obligation inventory,
+	// including missing or unsupported inputs. It invalidates reused evidence when
+	// an obligation is added, removed, or changes state.
+	ObligationIdentity string `json:"obligation_identity,omitempty"`
 	// Exclusions records the configured out-of-scope patterns the scan was given.
 	// They are declared scope, not coverage gaps, and are visible as evidence so a
 	// reader can tell a declared exclusion from an unexpected in-scope skip.
@@ -263,24 +267,31 @@ const (
 // Execution is one adapter's complete result. It satisfies the same contract for
 // built-in and external adapters.
 type Execution struct {
-	ProtocolVersion    string          `json:"protocol_version"`
-	AdapterID          string          `json:"adapter_id"`
-	AdapterVersion     string          `json:"adapter_version,omitempty"`
-	Category           Category        `json:"category"`
-	Status             ExecutionStatus `json:"status"`
-	ExitCode           int             `json:"exit_code"`
-	StartedAt          time.Time       `json:"started_at"`
-	EndedAt            time.Time       `json:"ended_at"`
-	Coverage           Coverage        `json:"coverage"`
-	Selection          string          `json:"selection,omitempty"`
-	Languages          []Language      `json:"languages,omitempty"`
-	RepositoryWide     bool            `json:"repository_wide,omitempty"`
-	Disabled           bool            `json:"disabled,omitempty"`
-	Skipped            []SkippedFile   `json:"skipped,omitempty"`
-	Diagnostics        []string        `json:"diagnostics,omitempty"`
-	Findings           []Finding       `json:"findings,omitempty"`
-	Provenance         Provenance      `json:"provenance"`
-	NativeReportDigest string          `json:"native_report_digest,omitempty"`
+	ProtocolVersion string          `json:"protocol_version"`
+	AdapterID       string          `json:"adapter_id"`
+	AdapterVersion  string          `json:"adapter_version,omitempty"`
+	Category        Category        `json:"category"`
+	Status          ExecutionStatus `json:"status"`
+	ExitCode        int             `json:"exit_code"`
+	StartedAt       time.Time       `json:"started_at"`
+	EndedAt         time.Time       `json:"ended_at"`
+	Coverage        Coverage        `json:"coverage"`
+	Selection       string          `json:"selection,omitempty"`
+	Languages       []Language      `json:"languages,omitempty"`
+	RepositoryWide  bool            `json:"repository_wide,omitempty"`
+	Disabled        bool            `json:"disabled,omitempty"`
+	// NoApplicableContent marks a completed no-op: the repository has no content
+	// for this adapter's capability, so no scanner ran and no language coverage is
+	// claimed from selection metadata.
+	NoApplicableContent bool `json:"no_applicable_content,omitempty"`
+	// Obligations preserves the resolved dependency input inventory, including
+	// missing/unsupported inputs.
+	Obligations        []DependencyObligation `json:"obligations,omitempty"`
+	Skipped            []SkippedFile          `json:"skipped,omitempty"`
+	Diagnostics        []string               `json:"diagnostics,omitempty"`
+	Findings           []Finding              `json:"findings,omitempty"`
+	Provenance         Provenance             `json:"provenance"`
+	NativeReportDigest string                 `json:"native_report_digest,omitempty"`
 	// NativeReport is the sanitized native report retained for debugging. It is
 	// never written into the normalized execution JSON itself and never carries a
 	// detected secret value.
@@ -315,6 +326,14 @@ func (e Execution) Validate() error {
 	for _, language := range e.Languages {
 		if !isKnownLanguage(language) {
 			return fmt.Errorf("execution: adapter %s has unknown language %q", e.AdapterID, language)
+		}
+	}
+	for i, obligation := range e.Obligations {
+		if !isKnownLanguage(obligation.Language) {
+			return fmt.Errorf("execution: adapter %s obligation %d has unknown language %q", e.AdapterID, i, obligation.Language)
+		}
+		if strings.TrimSpace(obligation.Input) == "" {
+			return fmt.Errorf("execution: adapter %s obligation %d has no input", e.AdapterID, i)
 		}
 	}
 	if e.Disabled && e.Status != StatusSkipped {

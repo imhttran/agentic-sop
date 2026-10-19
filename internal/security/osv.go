@@ -101,19 +101,20 @@ func (a *osvAdapter) currentProvenance(req Request) (Provenance, error) {
 		// deterministic, so resume can compare it without creating the temp file.
 		RulesIdentity: DigestBytes(nil),
 	}
-	inputs, err := a.resolveInputs(req)
+	plan, err := a.resolveInputPlan(req)
 	if err != nil {
 		return prov, err
 	}
-	identity, err := osvInputIdentity(req.WorkspaceRoot, inputs)
+	identity, err := osvInputIdentity(req.WorkspaceRoot, plan.Inputs)
 	if err != nil {
 		return prov, err
 	}
 	prov.LockfileIdentity = identity
-	if len(inputs) == 0 {
+	prov.ObligationIdentity = plan.Detection.ObligationIdentity(a.declaredLanguages()...)
+	if len(plan.Inputs) == 0 {
 		return prov, nil
 	}
-	databases, _, err := a.resolveDatabases(req, inputs)
+	databases, _, err := a.resolveDatabases(req, plan.Inputs)
 	if err != nil {
 		return prov, err
 	}
@@ -123,83 +124,120 @@ func (a *osvAdapter) currentProvenance(req Request) (Provenance, error) {
 	return prov, nil
 }
 
-// resolveInputs returns the explicit go.mod and Cargo.lock inputs. Configured
-// inputs win; otherwise detected repository content is used. A detected
-// ecosystem whose required input is missing is an error, never a clean no-op.
-func (a *osvAdapter) resolveInputs(req Request) ([]osvInput, error) {
+// osvInputPlan is the resolved input inventory for one OSV execution. Missing
+// obligations are scanned-input gaps, not clean coverage.
+type osvInputPlan struct {
+	Detection   Detection
+	Inputs      []osvInput
+	Obligations []DependencyObligation
+	Missing     []DependencyObligation
+}
+
+// resolveInputPlan returns the explicit or detected inputs plus every in-scope
+// obligation, including obligations that are missing or omitted by an explicit
+// input subset. Configured inputs are validated against the inventory rather than
+// treated as complete language coverage.
+func (a *osvAdapter) resolveInputPlan(req Request) (osvInputPlan, error) {
+	selectedLanguages := a.declaredLanguages()
 	selected := map[Language]bool{}
-	for _, language := range a.declaredLanguages() {
+	for _, language := range selectedLanguages {
 		selected[language] = true
 	}
+	detection, err := DetectRepositoryScoped(req.WorkspaceRoot, req.Scope.Excluded)
+	if err != nil {
+		return osvInputPlan{}, fmt.Errorf("resolve OSV inputs: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
+	}
+	if len(detection.Issues) > 0 {
+		return osvInputPlan{}, fmt.Errorf("dependency layout is unsupported or ambiguous: %s", SanitizeText(strings.Join(detection.Issues, "; "), MaxDiagnosticBytes))
+	}
+	plan := osvInputPlan{
+		Detection:   detection,
+		Obligations: detection.SelectedObligations(selectedLanguages...),
+	}
 	matcher := NewExcludeMatcher(req.Scope.Excluded)
-	var out []osvInput
+	obligationByInput := map[string]DependencyObligation{}
+	for _, obligation := range plan.Obligations {
+		obligationByInput[obligation.Input] = obligation
+	}
+
 	if len(a.inputs) > 0 {
+		covered := map[string]bool{}
 		for _, raw := range a.inputs {
 			path, reason := NormalizePath(raw)
 			if path == "" {
-				return nil, fmt.Errorf("configured OSV input rejected: %s", reason)
+				return osvInputPlan{}, fmt.Errorf("configured OSV input rejected: %s", reason)
 			}
 			if matcher.Excluded(path) {
-				return nil, fmt.Errorf("configured OSV input %s is outside the declared scope", path)
+				return osvInputPlan{}, fmt.Errorf("configured OSV input %s is outside the declared scope", path)
 			}
-			language, ecosystem, ok := osvInputKind(path)
+			obligation, ok := obligationByInput[path]
 			if !ok {
-				return nil, fmt.Errorf("configured OSV input %s is not a go.mod or Cargo.lock", path)
+				return osvInputPlan{}, fmt.Errorf("configured OSV input %s is not an in-scope dependency obligation", path)
 			}
-			if !selected[language] {
-				return nil, fmt.Errorf("configured OSV input %s is %s but the adapter languages exclude it", path, language)
+			if !selected[obligation.Language] {
+				return osvInputPlan{}, fmt.Errorf("configured OSV input %s is %s but the adapter languages exclude it", path, obligation.Language)
 			}
 			abs := joinPath(req.WorkspaceRoot, path)
 			if err := verifyOSVInput(abs, path); err != nil {
-				return nil, err
+				return osvInputPlan{}, err
 			}
-			out = append(out, osvInput{Path: path, Abs: abs, Language: language, Ecosystem: ecosystem})
+			plan.Inputs = append(plan.Inputs, osvInput{Path: path, Abs: abs, Language: obligation.Language, Ecosystem: osvEcosystem(obligation.Language)})
+			covered[path] = true
 		}
-		return sortOSVInputs(out), nil
-	}
-
-	detection, err := DetectRepositoryScoped(req.WorkspaceRoot, req.Scope.Excluded)
-	if err != nil {
-		return nil, fmt.Errorf("resolve OSV inputs: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
-	}
-	for _, language := range []Language{LanguageGo, LanguageRust} {
-		if !selected[language] {
-			continue
-		}
-		switch language {
-		case LanguageGo:
-			for _, manifest := range detection.Manifests {
-				if manifest.Language != LanguageGo || strings.ToLower(manifest.Kind) != "go.mod" {
-					continue
-				}
-				abs := joinPath(req.WorkspaceRoot, manifest.Path)
-				if err := verifyOSVInput(abs, manifest.Path); err != nil {
-					return nil, err
-				}
-				out = append(out, osvInput{Path: manifest.Path, Abs: abs, Language: LanguageGo, Ecosystem: "Go"})
-			}
-		case LanguageRust:
-			if !detection.HasLanguage(LanguageRust) {
+		plan.Inputs = sortOSVInputs(plan.Inputs)
+		for _, obligation := range plan.Obligations {
+			if covered[obligation.Input] {
 				continue
 			}
-			present := false
-			for _, lockfile := range detection.PresentLockfiles() {
-				if lockfile.Language != LanguageRust {
-					continue
-				}
-				present = true
-				abs := joinPath(req.WorkspaceRoot, lockfile.Path)
-				if err := verifyOSVInput(abs, lockfile.Path); err != nil {
-					return nil, err
-				}
-				out = append(out, osvInput{Path: lockfile.Path, Abs: abs, Language: LanguageRust, Ecosystem: "crates.io"})
+			missing := obligation
+			if missing.Present {
+				missing.Issues = append(missing.Issues, "input is present but omitted by the explicit OSV inputs list")
 			}
-			if !present {
-				return nil, fmt.Errorf("Rust content detected but no Cargo.lock was found; dependency scan was not performed and the result is not clean")
-			}
+			plan.Missing = append(plan.Missing, missing)
+		}
+		return plan, nil
+	}
+
+	for _, obligation := range plan.Obligations {
+		if !obligation.Present {
+			plan.Missing = append(plan.Missing, obligation)
+			continue
+		}
+		abs := joinPath(req.WorkspaceRoot, obligation.Input)
+		if err := verifyOSVInput(abs, obligation.Input); err != nil {
+			return osvInputPlan{}, err
+		}
+		plan.Inputs = append(plan.Inputs, osvInput{Path: obligation.Input, Abs: abs, Language: obligation.Language, Ecosystem: osvEcosystem(obligation.Language)})
+	}
+	plan.Inputs = sortOSVInputs(plan.Inputs)
+	return plan, nil
+}
+
+func osvApplicableLabel(languages []Language) string {
+	if len(languages) == 1 {
+		switch languages[0] {
+		case LanguageGo:
+			return "Go"
+		case LanguageRust:
+			return "Rust"
 		}
 	}
-	return sortOSVInputs(out), nil
+	return "Go or Rust"
+}
+
+func missingObligationDiagnostic(obligation DependencyObligation) string {
+	reason := fmt.Sprintf("missing dependency input %s for %s", obligation.Input, obligation.Manifest)
+	if len(obligation.Issues) > 0 {
+		reason += ": " + strings.Join(obligation.Issues, "; ")
+	}
+	return SanitizeText(reason, MaxDiagnosticBytes)
+}
+
+func osvEcosystem(language Language) string {
+	if language == LanguageGo {
+		return "Go"
+	}
+	return "crates.io"
 }
 
 func sortOSVInputs(inputs []osvInput) []osvInput {
@@ -210,17 +248,6 @@ func sortOSVInputs(inputs []osvInput) []osvInput {
 		return inputs[i].Language < inputs[j].Language
 	})
 	return inputs
-}
-
-func osvInputKind(path string) (Language, string, bool) {
-	switch strings.ToLower(filepath.Base(filepath.FromSlash(path))) {
-	case "go.mod":
-		return LanguageGo, "Go", true
-	case "cargo.lock":
-		return LanguageRust, "crates.io", true
-	default:
-		return "", "", false
-	}
 }
 
 func verifyOSVInput(abs, rel string) error {
@@ -574,18 +601,31 @@ func (a *osvAdapter) Scan(ctx context.Context, req Request) (Execution, error) {
 	exec := newExecution(a.id, a.category, a.version, a.configDigest, "", req)
 	exec.Provenance.ScannerVersion = a.version
 
-	inputs, err := a.resolveInputs(req)
+	plan, err := a.resolveInputPlan(req)
 	if err != nil {
 		exec.Status = StatusFailed
 		exec.Coverage = CoverageUnknown
 		exec.Diagnostics = []string{SanitizeText(err.Error(), MaxDiagnosticBytes)}
 		return finish(exec, nil)
 	}
+	exec.Obligations = plan.Obligations
+	exec.Provenance.ObligationIdentity = plan.Detection.ObligationIdentity(a.declaredLanguages()...)
+	inputs := plan.Inputs
 	if len(inputs) == 0 {
+		if len(plan.Missing) > 0 {
+			exec.Status = StatusFailed
+			exec.Coverage = CoverageUnknown
+			for _, obligation := range plan.Missing {
+				exec.Diagnostics = append(exec.Diagnostics, missingObligationDiagnostic(obligation))
+			}
+			sanitizeExecution(&exec)
+			return finish(exec, nil)
+		}
 		exec.Status = StatusCompleted
 		exec.Coverage = CoverageComplete
+		exec.NoApplicableContent = true
 		exec.Provenance.LockfileIdentity = ""
-		exec.Diagnostics = []string{"no Go or Rust dependency inputs were detected for the selected languages"}
+		exec.Diagnostics = []string{"no applicable " + osvApplicableLabel(a.declaredLanguages()) + " dependency content; scanner was not executed"}
 		sanitizeExecution(&exec)
 		return finish(exec, nil)
 	}
@@ -704,11 +744,23 @@ func (a *osvAdapter) Scan(ctx context.Context, req Request) (Execution, error) {
 	}
 
 	exec.Languages = sortedLanguages(covered)
+	missingObligations := len(plan.Missing) > 0
+	if missingObligations {
+		for _, obligation := range plan.Missing {
+			exec.Diagnostics = append(exec.Diagnostics, missingObligationDiagnostic(obligation))
+		}
+	}
 	switch {
 	case failures > 0 && successes == 0:
 		exec.Status = StatusFailed
 		exec.Coverage = CoverageUnknown
 	case failures > 0:
+		exec.Status = StatusFailed
+		exec.Coverage = CoveragePartial
+	case missingObligations && successes == 0:
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+	case missingObligations:
 		exec.Status = StatusFailed
 		exec.Coverage = CoveragePartial
 	case successes == 0:
