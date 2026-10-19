@@ -35,7 +35,9 @@ binary built before it delivers only the latest decision. The evidence:
   `LOCAL_DONE` with a `VERIFIED` acceptance check.
 - The deterministic durability/authority checks pass (§2, §12, §13).
 
-Scope and explicit non-claims:
+Scope and explicit non-claims. The single disposition is the GO above; PARTIAL applies
+only to what it does not cover (unattended operation, and the closure-evidence gaps in
+[`../reports/planner/SPIKE-CLOSURE-AUDIT-2026-10-19.md`](../reports/planner/SPIKE-CLOSURE-AUDIT-2026-10-19.md)):
 
 - **In scope (GO):** an operator-assisted ChatGPT planner loop — a human drives ChatGPT
   to read a planner question and submit a bounded answer; SOP applies it and the executor
@@ -68,7 +70,7 @@ Scope and explicit non-claims:
 
 | Criterion (plan)                                                                                        | Evidence                                                                                                                                                                                | Status                            |
 | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------- |
-| Real-client transcript plus machine evidence, limitations, and a GO/PARTIAL/NO-GO outcome               | `SPIKE-002-connection-discovery.md` §9–§10.2; `SPIKE-004-live-evidence.md`; durable demo records (§4)                                                                                   | **met** (PARTIAL overall; §0)     |
+| Real-client transcript plus machine evidence, limitations, and a GO/PARTIAL/NO-GO outcome               | `SPIKE-002-connection-discovery.md` §9–§10.2; `SPIKE-004-live-evidence.md`; durable demo records (§4)                                                                                   | **met** (GO for the operator-assisted loop; §0)     |
 | Report identifies real vs simulated components, transport limits, session requirement                   | §7; §8                                                                                                                                                                                  | **met**                           |
 | A Zed-agent-only result is reported as PARTIAL, not the external-client gate                            | Result is **not** Zed-only: the external client (ChatGPT) is verified                                                                                                                   | **met**                           |
 | Checklist: a real client lists SOP tools and reads correct repo status                                  | `SPIKE-002` §9 (`sop_status` → "no tasks")                                                                                                                                              | **met (live)**                    |
@@ -414,3 +416,10 @@ updated to match.
 
 Still open: the HTTP 409 MCP initialization error (§6) and the one-time
 `TestCrossModuleTimeoutAndCancellation` failure (§13).
+
+## 16. Disposition wording reconciled (2026-10-19)
+
+Editorial only; no evidence was rerun or edited. The §2 outcome row still read "PARTIAL
+overall", which contradicted §0. It now reads GO for the operator-assisted loop, and §0 names
+the one disposition and points to the closure audit for the remaining PARTIAL items. The §15
+entries are a dated record of earlier wording and are left as written.
