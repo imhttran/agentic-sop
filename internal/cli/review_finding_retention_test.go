@@ -198,6 +198,19 @@ func TestNoChangeFixWithCompletionTokenStillFailsClosed(t *testing.T) {
 	if !strings.Contains(stdout, "NO_CHANGES_PRODUCED") {
 		t.Errorf("the NO_CHANGES_PRODUCED guard did not fire:\n%s", stdout)
 	}
+	// The run report keeps the finding that sent the run into the fix cycle, and the
+	// validation that ran before review, so it agrees with gate.json instead of reading
+	// "No findings" and "NOT RUN".
+	report := retentionArtifact(t, dir, "report.md")
+	if !strings.Contains(report, "nil deref") || strings.Contains(report, "No findings.") {
+		t.Errorf("report.md dropped the unresolved review finding:\n%s", report)
+	}
+	if strings.Contains(report, "NOT RUN") || !strings.Contains(report, "PASS UNIT_TEST") {
+		t.Errorf("report.md dropped the validation results that ran before review:\n%s", report)
+	}
+	if gate := retentionArtifact(t, dir, "gate.json"); !strings.Contains(gate, "unresolved finding") {
+		t.Errorf("gate.json no longer records the unresolved finding:\n%s", gate)
+	}
 }
 
 // TestCleanReviewWithNoChangeCompletionStillPasses proves a legitimate no-change

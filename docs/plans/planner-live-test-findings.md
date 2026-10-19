@@ -69,8 +69,12 @@ round completed with both decisions. This closes the gap left by the scripted-ex
   spelling still matches its repository.
 - **The planner server must be restarted after a fixture recreate**, or it keeps serving
   the deleted directory.
-- **Report and gate disagree on failed attempt 2:** `report.md` listed "No findings" while
-  `gate.json` failed on "1 unresolved finding(s) at a failing severity". Not yet diagnosed.
+- **Report and gate disagree on failed attempt 2:** `report.md` listed "No findings" and
+  validation "NOT RUN" while `gate.json` failed on "1 unresolved finding(s) at a failing
+  severity". **Fixed afterwards:** the fix-cycle exits (a fix with no repository change, or
+  a fix that returns a non-completed outcome) built a fresh result without the review report
+  and validation results that sent the run into the fix cycle. They now carry both, so the
+  report agrees with `gate.json`; the gate decision and classification are unchanged.
 
 ## Live result: `planner-chatgpt` — successful operator-assisted ChatGPT loop
 
