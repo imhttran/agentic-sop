@@ -370,8 +370,9 @@ in-scope inputs, not by the lockfiles that happen to exist:
   reported unless `security.exclude` removes them from scope; a subset never
   implies full-language coverage.
 - Unsupported or ambiguous Cargo layouts (invalid TOML, unsafe or unmatched member
-  patterns, nested workspaces, dangling `package.workspace` references) are
-  explicit issues and cannot produce clean dependency coverage.
+  patterns, a members glob matching a directory without `Cargo.toml`, nested
+  workspaces, dangling or unlisted `package.workspace` references) are explicit
+  issues and cannot produce clean dependency coverage.
 - Detected Go source without `go.mod` is an unsupported dependency input, not an
   empty scan. A genuine repository with no Go or Rust dependency content is
   reported as a completed no-op with `no_applicable_content: true`; no scanner ran

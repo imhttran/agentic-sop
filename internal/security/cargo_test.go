@@ -256,6 +256,21 @@ func TestCargoDotMemberIsTheRootPackage(t *testing.T) {
 	}
 }
 
+func TestCargoGlobMatchingNonPackageDirectoryIsInvalid(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\n")
+	cargoTestPackage(t, root, "crates/app", "app")
+	cargoTestFile(t, root, "crates/notes/readme.md", "not a package\n")
+	cargoTestLock(t, root, ".")
+	workspace := workspaceFor(t, root)
+	if !sameStrings(workspace.Resolved, []string{"crates/app"}) {
+		t.Fatalf("resolved = %v, want only the package directory", workspace.Resolved)
+	}
+	if !strings.Contains(strings.Join(workspace.Issues, ";"), "crates/notes without Cargo.toml") {
+		t.Fatalf("issues = %v, want the non-package glob match", workspace.Issues)
+	}
+}
+
 func TestCargoExcludeParentRemovesGlobMembers(t *testing.T) {
 	root := t.TempDir()
 	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates\"]\n")

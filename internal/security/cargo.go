@@ -81,7 +81,7 @@ func parseCargoManifest(data []byte) (cargoManifest, error) {
 // resolveCargoWorkspaces builds workspace membership and Rust lockfile
 // obligations from parsed Cargo.toml records. It is deterministic, read-only, and
 // confined to repository-relative paths.
-func resolveCargoWorkspaces(root string, records []cargoManifestRecord) ([]CargoWorkspace, []Lockfile, []string) {
+func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []string) ([]CargoWorkspace, []Lockfile, []string) {
 	byPath := map[string]cargoManifestRecord{}
 	byDir := map[string]cargoManifestRecord{}
 	var issues []string
@@ -101,7 +101,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord) ([]Cargo
 		if record.ParseErr != nil || record.Manifest.Workspace == nil {
 			continue
 		}
-		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir)
+		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir, dirs)
 		workspaces = append(workspaces, workspace)
 		issues = append(issues, workspaceIssues...)
 		for _, member := range members {
@@ -184,7 +184,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord) ([]Cargo
 // members/exclude, the root package, and path dependencies; package.workspace
 // only identifies the workspace a package believes it belongs to and never
 // creates membership by itself.
-func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord) (CargoWorkspace, []string, []string) {
+func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord, dirs []string) (CargoWorkspace, []string, []string) {
 	workspace := CargoWorkspace{Manifest: workspaceRecord.Path}
 	var issues []string
 	declared := append([]string(nil), workspaceRecord.Manifest.Workspace.Members...)
@@ -224,6 +224,19 @@ func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []car
 			// remove it; exclude filters glob-expanded members and path dependencies.
 			if !glob {
 				explicitMembers[candidate.Dir] = true
+			}
+		}
+		if glob && !strings.HasSuffix(normalized, "Cargo.toml") {
+			for _, dir := range dirs {
+				if dir == workspaceRecord.Dir {
+					continue
+				}
+				if _, ok := byDir[dir]; ok {
+					continue
+				}
+				if cargoGlobMatch(normalized, dir) {
+					issues = append(issues, fmt.Sprintf("workspace %s member pattern %q matched directory %s without Cargo.toml", workspaceRecord.Path, pattern, dir))
+				}
 			}
 		}
 		if matched == 0 {
