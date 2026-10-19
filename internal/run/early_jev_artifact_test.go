@@ -183,6 +183,9 @@ func TestWriteEarlyJEVArtifactAppendsHistory(t *testing.T) {
 // failure returns an error without panicking or altering other files
 // (P3-004-S2/S3).
 func TestWriteEarlyJEVArtifactFailureDoesNotPanicOrAlterOtherFiles(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions, so the run dir cannot be made unwritable")
+	}
 	dir := t.TempDir()
 	r, err := New(dir, "T004")
 	if err != nil {
