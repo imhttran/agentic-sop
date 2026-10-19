@@ -128,6 +128,27 @@ func TestOneSuccessfulAdapterCannotHideAFailedRequiredObligation(t *testing.T) {
 	}
 }
 
+func TestNoApplicableContentCannotSatisfyRequiredCoverage(t *testing.T) {
+	detection := Detection{Languages: []Language{LanguageGo, LanguageRust}}
+	policy := Policy{Enabled: true, Mode: "required", RequiredCategories: []string{"dependencies"}, FailOn: []string{"high"}, UnknownSeverity: "indeterminate"}
+	execs := []Execution{{
+		ProtocolVersion: ProtocolVersion, AdapterID: AdapterIDOSVScanner, Category: CategoryDependencies,
+		Status: StatusCompleted, Coverage: CoverageComplete, NoApplicableContent: true,
+	}}
+	evaluation := EvaluatePolicyWithDetection(execs, policy, &detection)
+	if evaluation.Verdict == VerdictPass {
+		t.Fatalf("no-op dependency evidence passed a required gate: %v", evaluation.Reasons)
+	}
+	if !strings.Contains(strings.Join(evaluation.Reasons, " "), "no COMPLETE") {
+		t.Fatalf("reasons = %v, want missing language coverage", evaluation.Reasons)
+	}
+	for _, category := range CoverageByCategory(execs, &detection, policy) {
+		if category.Category == CategoryDependencies && category.State == CoverageStateCovered {
+			t.Fatalf("no-op dependency evidence reported covered: %+v", category)
+		}
+	}
+}
+
 func TestGlobalDisableIsNotARequiredGateExemption(t *testing.T) {
 	evaluation := EvaluatePolicyWithDetection(nil, Policy{
 		Enabled: false, Mode: "required", RequiredCategories: []string{"sast"},

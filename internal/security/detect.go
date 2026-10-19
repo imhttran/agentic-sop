@@ -553,6 +553,70 @@ func dependencyObligations(detection Detection) []DependencyObligation {
 	return sortDependencyObligations(out)
 }
 
+// dependencyInventoryGap reports why the selected dependency inputs cannot
+// account for every in-scope obligation for the given languages. It is a
+// read-only projection for capability and readiness reporting; it never changes
+// scan execution, and it never treats an omitted or missing input as clean.
+func dependencyInventoryGap(detection Detection, languages []Language, explicitInputs []string, explicitLockfile string) string {
+	if len(languages) == 0 {
+		languages = []Language{LanguageGo, LanguageRust}
+	}
+	if len(detection.Issues) > 0 {
+		return "dependency layout is unsupported or ambiguous: " + detection.Issues[0]
+	}
+	obligations := detection.SelectedObligations(languages...)
+	if len(obligations) == 0 {
+		return ""
+	}
+	byInput := make(map[string]DependencyObligation, len(obligations))
+	for _, obligation := range obligations {
+		byInput[obligation.Input] = obligation
+	}
+	covered := map[string]bool{}
+	addInput := func(raw, label string) string {
+		if strings.TrimSpace(raw) == "" {
+			return ""
+		}
+		path, reason := NormalizePath(raw)
+		if path == "" {
+			return "configured " + label + " rejected: " + reason
+		}
+		obligation, ok := byInput[path]
+		if !ok {
+			return "configured " + label + " " + path + " is not an in-scope dependency obligation"
+		}
+		if !containsLanguage(languages, obligation.Language) {
+			return "configured " + label + " " + path + " is outside the adapter language scope"
+		}
+		info, err := os.Lstat(joinPath(detection.workspaceRoot(), path))
+		if err != nil {
+			return "configured " + label + " " + path + " is unavailable"
+		}
+		if info.Mode()&os.ModeSymlink != 0 || !info.Mode().IsRegular() {
+			return "configured " + label + " " + path + " is not a regular file"
+		}
+		covered[path] = true
+		return ""
+	}
+	if reason := addInput(explicitLockfile, "lockfile"); reason != "" {
+		return reason
+	}
+	for _, raw := range explicitInputs {
+		if reason := addInput(raw, "dependency input"); reason != "" {
+			return reason
+		}
+	}
+	for _, obligation := range obligations {
+		if !obligation.Present {
+			return missingObligationDiagnostic(obligation)
+		}
+		if len(covered) > 0 && !covered[obligation.Input] {
+			return "input is present but omitted by the explicit dependency input list: " + obligation.Input
+		}
+	}
+	return ""
+}
+
 func sortDependencyObligations(values []DependencyObligation) []DependencyObligation {
 	out := append([]DependencyObligation(nil), values...)
 	sort.Slice(out, func(i, j int) bool {
@@ -657,7 +721,10 @@ func SelectCandidatesWithDatabases(detection Detection, configured []config.Secu
 		if db == "" {
 			db = strings.TrimSpace(advisoryDatabasePath)
 		}
-		if !detection.HasPresentLockfile(LanguageRust) {
+		if reason := dependencyInventoryGap(detection, []Language{LanguageRust}, nil, raw.Lockfile); reason != "" {
+			deps.Status = CapabilityUnsupported
+			deps.Reason = reason
+		} else if !detection.HasPresentLockfile(LanguageRust) {
 			deps.Status = CapabilityUnsupported
 		} else if db == "" {
 			deps.Status = CapabilityUnsupported
@@ -698,7 +765,14 @@ func SelectCandidatesWithDatabases(detection Detection, configured []config.Secu
 		if db == "" {
 			db = strings.TrimSpace(osvDatabasePath)
 		}
-		if len(osv.Languages) == 0 {
+		declared := configuredLanguages(raw.Languages)
+		if len(declared) == 0 {
+			declared = []Language{LanguageGo, LanguageRust}
+		}
+		if reason := dependencyInventoryGap(detection, declared, raw.Inputs, ""); reason != "" {
+			osv.Status = CapabilityUnsupported
+			osv.Reason = reason
+		} else if len(osv.Languages) == 0 {
 			osv.Status = CapabilityUnsupported
 		} else if db == "" {
 			osv.Status = CapabilityUnsupported
@@ -878,6 +952,9 @@ func capabilityReason(id string, raw config.SecurityAdapterConfig, detection Det
 			return "scanner executable is unavailable"
 		}
 	case AdapterIDCargoAudit:
+		if reason := dependencyInventoryGap(detection, []Language{LanguageRust}, nil, raw.Lockfile); reason != "" {
+			return reason
+		}
 		if !detection.HasLanguage(LanguageRust) || !detection.HasPresentLockfile(LanguageRust) {
 			return "no Rust content with a Cargo.lock"
 		}
@@ -892,6 +969,13 @@ func capabilityReason(id string, raw config.SecurityAdapterConfig, detection Det
 			return "scanner executable is unavailable"
 		}
 	case AdapterIDOSVScanner:
+		declared := configuredLanguages(raw.Languages)
+		if len(declared) == 0 {
+			declared = []Language{LanguageGo, LanguageRust}
+		}
+		if reason := dependencyInventoryGap(detection, declared, raw.Inputs, ""); reason != "" {
+			return reason
+		}
 		if len(selectedOSVLanguages(detection, raw)) == 0 {
 			return "no go.mod or Cargo.lock inputs for the selected languages"
 		}
@@ -934,6 +1018,9 @@ func capabilityForSemgrep(detection Detection, raw config.SecurityAdapterConfig)
 }
 
 func capabilityForCargoAudit(detection Detection, raw config.SecurityAdapterConfig, databasePath string) CapabilityStatus {
+	if dependencyInventoryGap(detection, []Language{LanguageRust}, nil, raw.Lockfile) != "" {
+		return CapabilityUnsupported
+	}
 	if !detection.HasLanguage(LanguageRust) || !detection.HasPresentLockfile(LanguageRust) {
 		return CapabilityUnsupported
 	}
@@ -951,6 +1038,13 @@ func capabilityForCargoAudit(detection Detection, raw config.SecurityAdapterConf
 }
 
 func capabilityForOSV(detection Detection, raw config.SecurityAdapterConfig, databasePath string) CapabilityStatus {
+	declared := configuredLanguages(raw.Languages)
+	if len(declared) == 0 {
+		declared = []Language{LanguageGo, LanguageRust}
+	}
+	if dependencyInventoryGap(detection, declared, raw.Inputs, "") != "" {
+		return CapabilityUnsupported
+	}
 	languages := selectedOSVLanguages(detection, raw)
 	if len(languages) == 0 {
 		return CapabilityUnsupported

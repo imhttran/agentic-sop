@@ -104,14 +104,196 @@ func TestCargoImplicitWorkspaceMembers(t *testing.T) {
 	}
 }
 
-func TestCargoExplicitWorkspaceReference(t *testing.T) {
+func TestCargoExplicitWorkspaceReferenceWithMembership(t *testing.T) {
 	root := t.TempDir()
-	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = []\n")
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/app\"]\n")
 	cargoTestFile(t, root, "crates/app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\nworkspace = \"../..\"\n")
 	cargoTestLock(t, root, ".")
 	workspace := workspaceFor(t, root)
 	if !sameStrings(workspace.Resolved, []string{"crates/app"}) {
-		t.Fatalf("resolved = %v, want the explicit workspace member", workspace.Resolved)
+		t.Fatalf("resolved = %v, want the listed workspace member", workspace.Resolved)
+	}
+	if len(workspace.Issues) != 0 {
+		t.Fatalf("issues = %v, want no invalid-layout issue", workspace.Issues)
+	}
+}
+
+func TestCargoPackageWorkspaceAloneIsNotMembership(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = []\n")
+	cargoTestFile(t, root, "crates/app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\nworkspace = \"../..\"\n")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 || len(detection.Workspaces[0].Resolved) != 0 {
+		t.Fatalf("workspaces = %+v, want an empty workspace", detection.Workspaces)
+	}
+	if !strings.Contains(strings.Join(detection.Issues, ";"), "does not match workspace membership") {
+		t.Fatalf("issues = %v, want the unlisted package.workspace issue", detection.Issues)
+	}
+}
+
+func TestCargoOutsideWorkspaceMemberWithPackageReference(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "ws/Cargo.toml", "[workspace]\nmembers = [\"../pkg\"]\n")
+	cargoTestFile(t, root, "pkg/Cargo.toml", "[package]\nname = \"pkg\"\nversion = \"0.1.0\"\nworkspace = \"../ws\"\n")
+	cargoTestLock(t, root, "ws")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 {
+		t.Fatalf("workspaces = %+v, want one workspace", detection.Workspaces)
+	}
+	workspace := detection.Workspaces[0]
+	if !sameStrings(workspace.Resolved, []string{"pkg"}) {
+		t.Fatalf("resolved = %v, want the outside member", workspace.Resolved)
+	}
+	if len(workspace.Issues) != 0 {
+		t.Fatalf("issues = %v, want no invalid-layout issue", workspace.Issues)
+	}
+}
+
+func TestCargoStringDependenciesAreValid(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/app\"]\n")
+	cargoTestFile(t, root, "crates/app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nserde = \"1.0\"\n")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Issues) != 0 {
+		t.Fatalf("issues = %v, want string dependencies to parse", detection.Issues)
+	}
+	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"crates/app"}) {
+		t.Fatalf("workspaces = %+v, want crates/app", detection.Workspaces)
+	}
+}
+
+func TestCargoWorkspaceDependencyPathIsImplicitMember(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"app\"]\n\n[workspace.dependencies]\nhelper = { path = \"helper\" }\n")
+	cargoTestFile(t, root, "app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhelper = { workspace = true }\n")
+	cargoTestPackage(t, root, "helper", "helper")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"app", "helper"}) {
+		t.Fatalf("workspaces = %+v, want app and helper", detection.Workspaces)
+	}
+	if len(detection.Obligations) != 1 || detection.Obligations[0].Input != "Cargo.lock" {
+		t.Fatalf("obligations = %+v, want only the workspace root lockfile", detection.Obligations)
+	}
+}
+
+func TestCargoUnusedWorkspaceDependencyPathIsNotMember(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"app\"]\n\n[workspace.dependencies]\nunused = { path = \"unused\" }\n")
+	cargoTestPackage(t, root, "app", "app")
+	cargoTestPackage(t, root, "unused", "unused")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"app"}) {
+		t.Fatalf("workspaces = %+v, want only app", detection.Workspaces)
+	}
+	missing := detection.MissingObligations(LanguageRust)
+	if len(missing) != 1 || missing[0].Input != "unused/Cargo.lock" {
+		t.Fatalf("missing obligations = %+v, want the independent unused package", missing)
+	}
+}
+
+func TestCargoExcludedPathDependencyDoesNotPromoteDescendants(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"app\"]\nexclude = [\"helper\"]\n")
+	cargoTestFile(t, root, "app/Cargo.toml", "[package]\nname = \"app\"\nversion = \"0.1.0\"\n\n[dependencies]\nhelper = { path = \"../helper\" }\n")
+	cargoTestFile(t, root, "helper/Cargo.toml", "[package]\nname = \"helper\"\nversion = \"0.1.0\"\n\n[dependencies]\ninner = { path = \"../inner\" }\n")
+	cargoTestPackage(t, root, "inner", "inner")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 || !sameStrings(detection.Workspaces[0].Resolved, []string{"app"}) {
+		t.Fatalf("workspaces = %+v, want only app", detection.Workspaces)
+	}
+	missing := map[string]bool{}
+	for _, obligation := range detection.MissingObligations(LanguageRust) {
+		missing[obligation.Input] = true
+	}
+	if !missing["helper/Cargo.lock"] || !missing["inner/Cargo.lock"] {
+		t.Fatalf("missing obligations = %+v, want independent helper and inner obligations", missing)
+	}
+}
+
+func TestCargoRootPackageIsNotExcludedByDot(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[package]\nname = \"root\"\nversion = \"0.1.0\"\n\n[workspace]\nmembers = []\nexclude = [\".\"]\n")
+	cargoTestLock(t, root, ".")
+	workspace := workspaceFor(t, root)
+	if !sameStrings(workspace.Resolved, []string{"."}) {
+		t.Fatalf("resolved = %v, want the root package", workspace.Resolved)
+	}
+}
+
+func TestCargoDotMemberIsTheRootPackage(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[package]\nname = \"root\"\nversion = \"0.1.0\"\n\n[workspace]\nmembers = [\".\"]\n")
+	cargoTestLock(t, root, ".")
+	workspace := workspaceFor(t, root)
+	if !sameStrings(workspace.Resolved, []string{"."}) {
+		t.Fatalf("resolved = %v, want the root package", workspace.Resolved)
+	}
+	if len(workspace.Issues) != 0 {
+		t.Fatalf("issues = %v, want a valid root member", workspace.Issues)
+	}
+}
+
+func TestCargoExcludeParentRemovesGlobMembers(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates\"]\n")
+	cargoTestPackage(t, root, "crates/app", "app")
+	cargoTestLock(t, root, ".")
+	detection, err := DetectRepository(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detection.Workspaces) != 1 || len(detection.Workspaces[0].Resolved) != 0 {
+		t.Fatalf("workspaces = %+v, want the glob member excluded by its parent", detection.Workspaces)
+	}
+	missing := detection.MissingObligations(LanguageRust)
+	if len(missing) != 1 || missing[0].Input != "crates/app/Cargo.lock" {
+		t.Fatalf("missing obligations = %+v, want the independent excluded package", missing)
+	}
+}
+
+func TestCargoExplicitMemberWinsOverExclude(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/app\", \"crates/*\"]\nexclude = [\"crates\"]\n")
+	cargoTestPackage(t, root, "crates/app", "app")
+	cargoTestPackage(t, root, "crates/other", "other")
+	cargoTestLock(t, root, ".")
+	workspace := workspaceFor(t, root)
+	if !sameStrings(workspace.Resolved, []string{"crates/app"}) {
+		t.Fatalf("resolved = %v, want the explicit member only", workspace.Resolved)
+	}
+}
+
+func TestCargoExcludeLiteralGlobDoesNotMatch(t *testing.T) {
+	root := t.TempDir()
+	cargoTestFile(t, root, "Cargo.toml", "[workspace]\nmembers = [\"crates/*\"]\nexclude = [\"crates/*\"]\n")
+	cargoTestPackage(t, root, "crates/app", "app")
+	cargoTestLock(t, root, ".")
+	workspace := workspaceFor(t, root)
+	if !sameStrings(workspace.Resolved, []string{"crates/app"}) {
+		t.Fatalf("resolved = %v, want the glob member; exclude is not a glob", workspace.Resolved)
 	}
 }
 

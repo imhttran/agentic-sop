@@ -346,9 +346,15 @@ in-scope inputs, not by the lockfiles that happen to exist:
 
 - Cargo workspace detection MUST parse `Cargo.toml` with a TOML library. A
   `[workspace]` declaration is a workspace even when it has no `members` list.
-  Members, exclusions, globs, the root package of an ordinary workspace, explicit
-  `package.workspace` references, and in-root path dependencies are resolved from
-  content. Directory ancestry alone MUST NOT prove workspace membership.
+  Members, exclusions, globs, the root package of an ordinary workspace, and
+  in-root path dependencies are resolved from content. A path dependency
+  inherited through `[workspace.dependencies]` and `workspace = true` is a path
+  dependency too. A `package.workspace` reference is validated against workspace
+  membership; it does not create membership by itself. Directory ancestry alone
+  MUST NOT prove workspace membership.
+- `exclude` entries are path prefixes, not globs: excluding `crates` also excludes
+  glob-expanded members below `crates`. An explicitly listed member is not removed
+  by `exclude`; Cargo applies `exclude` to glob expansion and path dependencies.
 - An excluded or undeclared nested package is an independent package with its own
   `Cargo.lock` obligation. A workspace member does not own a lockfile.
 - The obligation inventory records Go `go.mod` inputs and Rust workspace/package
