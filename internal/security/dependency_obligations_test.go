@@ -570,5 +570,8 @@ func cargoAdapterWithLockfile(t *testing.T, database, lockfile string, run func(
 	if err != nil {
 		t.Fatal(err)
 	}
+	if built, ok := adapter.(*cargoAuditAdapter); ok {
+		built.now = func() time.Time { return cargoAuditTestNow }
+	}
 	return adapter
 }

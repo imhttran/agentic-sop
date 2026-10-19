@@ -81,7 +81,7 @@ func parseCargoManifest(data []byte) (cargoManifest, error) {
 // resolveCargoWorkspaces builds workspace membership and Rust lockfile
 // obligations from parsed Cargo.toml records. It is deterministic, read-only, and
 // confined to repository-relative paths.
-func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs, files []string) ([]CargoWorkspace, []Lockfile, []string) {
+func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs []string) ([]CargoWorkspace, []Lockfile, []string) {
 	byPath := map[string]cargoManifestRecord{}
 	byDir := map[string]cargoManifestRecord{}
 	var issues []string
@@ -101,7 +101,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs, fi
 		if record.ParseErr != nil || record.Manifest.Workspace == nil {
 			continue
 		}
-		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir, dirs, files)
+		workspace, members, workspaceIssues := cargoWorkspaceMembership(record, records, byDir, dirs)
 		workspaces = append(workspaces, workspace)
 		issues = append(issues, workspaceIssues...)
 		for _, member := range members {
@@ -185,7 +185,7 @@ func resolveCargoWorkspaces(root string, records []cargoManifestRecord, dirs, fi
 // members/exclude, the root package, and path dependencies; package.workspace
 // only identifies the workspace a package believes it belongs to and never
 // creates membership by itself.
-func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord, dirs, files []string) (CargoWorkspace, []string, []string) {
+func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []cargoManifestRecord, byDir map[string]cargoManifestRecord, dirs []string) (CargoWorkspace, []string, []string) {
 	workspace := CargoWorkspace{Manifest: workspaceRecord.Path}
 	var issues []string
 	declared := append([]string(nil), workspaceRecord.Manifest.Workspace.Members...)
@@ -241,24 +241,6 @@ func cargoWorkspaceMembership(workspaceRecord cargoManifestRecord, records []car
 						continue
 					}
 					issues = append(issues, fmt.Sprintf("workspace %s member pattern %q matched directory %s without Cargo.toml", workspaceRecord.Path, pattern, dir))
-				}
-			}
-			for _, file := range files {
-				if strings.EqualFold(filepath.Base(file), "Cargo.toml") {
-					continue
-				}
-				// A file below a directory the same pattern already matched is not a
-				// distinct member position (for example crates/** also matches every
-				// source file under crates/app). Only surface files that stand in for a
-				// package directory at this pattern's match depth.
-				if cargoGlobMatch(normalized, repoDir(file)) {
-					continue
-				}
-				if cargoGlobMatch(normalized, file) {
-					if excludeMatcher(file) {
-						continue
-					}
-					issues = append(issues, fmt.Sprintf("workspace %s member pattern %q matched file %s, which is not a package directory; the member glob is ambiguous", workspaceRecord.Path, pattern, file))
 				}
 			}
 		}

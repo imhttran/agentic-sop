@@ -88,6 +88,9 @@ func TestCargoAuditCleanFixture(t *testing.T) {
 	if len(exec.Findings) != 0 {
 		t.Fatalf("findings = %+v, want none", exec.Findings)
 	}
+	if exec.Provenance.AdvisoryDatabaseStale {
+		t.Fatal("fixture database is stale at the injected test clock; the test would depend on the calendar")
+	}
 	for _, want := range []string{"--file", "--json", "--no-fetch", "--db"} {
 		if !containsArg(argv, want) {
 			t.Errorf("argv = %v, want %s", argv, want)
@@ -125,6 +128,9 @@ func TestCargoAuditSeededFixture(t *testing.T) {
 	}
 	if len(exec.Findings) != 1 {
 		t.Fatalf("findings = %d, want 1", len(exec.Findings))
+	}
+	if exec.Provenance.AdvisoryDatabaseStale {
+		t.Fatal("fixture database is stale at the injected test clock; the test would depend on the calendar")
 	}
 	finding := exec.Findings[0]
 	if finding.RuleID != "RUSTSEC-2020-0071" {

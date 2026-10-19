@@ -1,10 +1,11 @@
 # PLAN — Security Scanner Residual Findings
 
 **Type:** Correctness plan (dependency-layout detection and freshness evidence).
-**Status:** IMPLEMENTED — verification complete; PR #74 open for review.
+**Status:** IMPLEMENTED — original PR #74 merged; the post-review correction is
+on `fix/security-residual-findings` and needs a follow-up PR.
 **Baseline:** `agentic-sop` `main` @ `d4d8b8df` (includes PR #72 @ `a56b7239` and PR #73 @ `d4d8b8df`).
 **Branch:** `fix/security-residual-findings`.
-**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (open for review; not merged).
+**PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) (merged at `cca30c9`). The correction on this branch is **not** part of #74 and requires a follow-up PR.
 
 ## Project
 
@@ -18,9 +19,11 @@ The review of the dependency-coverage work left three residual defects:
    silently reinterpreted: normalization fails, the reference is skipped, and the
    package may look independent instead of unsupported.
 2. A `members` glob that matches a non-package file (for example
-   `crates/README.txt` under `members = ["crates/*"]`) is invisible whenever
-   another match is a valid package directory, so discovery reports coverage it
-   cannot prove.
+   `crates/README.txt` under `members = ["crates/*"]`) was believed to hide a
+   valid package match. Reproduction with pinned Cargo 1.98.0 **invalidated**
+   this finding: Cargo ignores ordinary files matched by a members glob and only
+   fails on a matched directory without `Cargo.toml`. The correction follows
+   Cargo and keeps the directory diagnostic.
 3. cargo-audit freshness tests use fixed `last-updated` fixture timestamps
    compared against `time.Now()`, so their meaning changes with the calendar
    date.
@@ -49,6 +52,10 @@ crates/* with crates/app + crates/empty (no manifest) -> exit 101 (fatal)
 crates/** with crates/app/src (no manifest)          -> exit 101 (fatal)
 valid package.workspace = "../.." in a member        -> resolves
 ```
+
+The file-glob finding was therefore invalidated by reproduction. Discovery
+ignores ordinary files matched by a members glob, matching Cargo, while retaining
+the explicit diagnostic for a matched directory without `Cargo.toml`.
 
 This plan reuses the existing detection, adapter, policy, evidence, resume, and
 CLI surfaces. It adds no scanner framework, does not execute Cargo during
@@ -87,26 +94,28 @@ root that is not an ancestor of the package.
 
 - none
 
-## SEC-RES-002 — Diagnose invalid member-glob matches
+## SEC-RES-002 — Correct member-glob handling to match Cargo
 
 Reproduce `members = ["crates/*"]` with a valid `crates/app` package and a
-matching `crates/README.txt` file. Verify pinned Cargo behavior in isolated
-fixtures, then make discovery account for matching files as well as matching
-directories. A valid match must not hide an invalid one. Exclusions, explicit
-members, repository boundaries, and read-only discovery are preserved.
+matching `crates/README.txt` file. Pinned Cargo accepts that repository, so the
+original finding is invalidated: discovery must ignore ordinary files matched by
+a members glob. Matched directories without `Cargo.toml` remain explicit
+unsupported-layout issues. Exclusions, explicit members, repository boundaries,
+and read-only discovery are preserved.
 
 ### Deliverables
 
-- `internal/security/detect.go`: retain in-scope file paths for Cargo analysis.
-- `internal/security/cargo.go`: report member-glob matches that are files, while
-  ignoring content below an already-matched directory and honoring `exclude`.
-- Regression tests for a file matching alongside a valid member, excluded
-  matches, and no Cargo execution during discovery.
+- Keep member-glob handling aligned with pinned Cargo: ignore ordinary file
+  matches and report only a matched directory without `Cargo.toml`.
+- Regression tests for a file match alongside a valid member, a non-package
+  directory, exclusions, and no Cargo execution during discovery.
 
 ### Acceptance Criteria
 
-- Invalid member-glob matches remain visible even when valid members also match.
-- Nested content below a matched directory does not produce noise.
+- A repository Cargo accepts is not rejected because an ordinary file matches a
+  members glob.
+- Matched directories without `Cargo.toml` remain visible even when valid
+  members also match.
 - Excluded glob matches are not treated as in-scope members.
 - Discovery does not fetch dependencies, generate lockfiles, or modify source.
 
@@ -186,9 +195,15 @@ final diff review, and delivery.
 ## Delivery
 
 - Implementation commit: `458de839fbab02bce2d5c7ab51946f5c598a173a`.
+- Correction after PR review: member-glob file matches are ignored to match pinned
+  Cargo; the original finding is recorded as invalidated. The unsafe workspace
+  reference fix and production freshness policy are unchanged.
+- PR #74 was merged at `cca30c9` before the correction could be attached. The
+  correction commit remains on `fix/security-residual-findings` and is not in
+  `main`; a follow-up PR is required.
 - PR #74 opened against `main`; all 12 CI checks passed on the head
   (`fmt, vet, build, test`, race detector, Windows installer, installer/plugin
   packaging, tagged JEV acceptance, real scanner integration, CodeQL).
 - Project security configuration remains report-only; required mode is exercised
   only in isolated fixtures. No merge, auto-merge, or branch/worktree deletion
-  occurred.
+  was performed by this work; PR #74 was merged by the repository owner.
