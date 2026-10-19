@@ -2,8 +2,11 @@ package cli
 
 import (
 	"bytes"
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -138,5 +141,68 @@ func TestMCPPlannerStatusOnlyMutuallyExclusive(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "mutually exclusive") {
 		t.Errorf("stderr = %q, want a mutual-exclusion message", errOut.String())
+	}
+}
+
+// TestMCPPlannerServerHasNoInitializationGate pins the server side of the observed
+// tunnel-client 409 (mcp_initialization_required, SPIKE-005 §6). The planner server
+// keeps no session state: a tools/call is answered without a preceding initialize,
+// and parallel read sessions (one question-get and one status each, some without an
+// initialize) all succeed and leave the question untouched. The 409 therefore
+// originates in tunnel-client, not here.
+func TestMCPPlannerServerHasNoInitializationGate(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.PLANNED, MaxAttempts: 3})
+	writePlanMeta(t, dir, "plan-x", "abc")
+	q := seedQuestion(t, dir, "T001", "plan-x@abc")
+
+	get := fmt.Sprintf(`{"jsonrpc":"2.0","id":%%d,"method":"tools/call","params":{"name":"sop_question_get","arguments":{"question_id":%q}}}`, q.ID)
+	status := `{"jsonrpc":"2.0","id":%d,"method":"tools/call","params":{"name":"sop_status","arguments":{}}}`
+	handshake := `{"jsonrpc":"2.0","id":1,"method":"initialize"}` + "\n" +
+		`{"jsonrpc":"2.0","method":"notifications/initialized"}` + "\n"
+
+	const sessions = 8
+	var wg sync.WaitGroup
+	errs := make(chan string, sessions*4)
+	for i := 0; i < sessions; i++ {
+		withInit := i%2 == 0
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			input := fmt.Sprintf(get, 2) + "\n" + fmt.Sprintf(status, 3) + "\n"
+			if withInit {
+				input = handshake + input
+			}
+			var out bytes.Buffer
+			srv := mcp.NewServer(Version, mcpPlannerTools(dir, deps{})...)
+			if err := srv.Serve(context.Background(), strings.NewReader(input), &out); err != nil {
+				errs <- fmt.Sprintf("serve: %v", err)
+				return
+			}
+			dec := json.NewDecoder(&out)
+			for dec.More() {
+				var m map[string]any
+				if err := dec.Decode(&m); err != nil {
+					errs <- fmt.Sprintf("decode: %v", err)
+					return
+				}
+				if m["error"] != nil {
+					errs <- fmt.Sprintf("protocol error (init=%v): %v", withInit, m["error"])
+				}
+				if res, ok := m["result"].(map[string]any); ok && res["isError"] == true {
+					errs <- fmt.Sprintf("tool error (init=%v): %v", withInit, res)
+				}
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		t.Error(e)
+	}
+
+	if _, out, _ := runCLI(t, dir, "question", q.ID); !strings.Contains(out, "PENDING") {
+		t.Errorf("parallel reads changed the question: %q", out)
 	}
 }
