@@ -1,0 +1,502 @@
+From c9349dc08b5f917c0d59dd0f16c4303e88e9f864 Mon Sep 17 00:00:00 2001
+From: Claude <noreply@anthropic.com>
+Date: Mon, 19 Oct 2026 19:44:59 +0000
+Subject: [PATCH] mcpclient: keep stdio readiness across re-initialize and late
+ Close of stale connections
+
+The stdio initialization guard keeps one readiness flag for the shared child,
+used by every session. Three paths revoked it while another session was using
+the child, so its calls were rejected with 409 / -32002:
+
+- An accepted initialize always cleared readiness until a notifications/initialized
+  arrived. Another session's call landing in that window was rejected, and a
+  server that rejects a duplicate initialize (go-sdk does) left the child unready
+  until restart. A child that is already ready now stays ready; a child that is
+  not ready still needs the full handshake.
+- Close() on a connection whose request had already finished (for example after
+  its response POST failed) reset readiness and closed the shared pipes under a
+  sibling request. Such a late Close is now a no-op for the guard-enabled stdio
+  transport.
+- Close() of an abandoned connection (read or write failure) reset readiness that
+  by then described a replacement child that a sibling had re-handshaken. The
+  reset now applies only if no reset has happened since the connection started
+  (a per-transport child epoch). The destructive close of the pipes is kept.
+
+A Close with the slot held, in-flight requests and fatal I/O still reset readiness
+and close.
+
+Tests: replace the test that pinned the window, and add cross-session,
+rejected-reinitialize, late-Close (finished, abandoned, concurrent), closed-child,
+in-flight-close and abandoned-read cases.
+
+Co-Authored-By: Claude Sonnet 5.5 <noreply@anthropic.com>
+Claude-Session: https://claude.ai/code/session_01Esu3pgtRnyfjdYLZKJmxT3
+---
+ .../serialized_forwarding_transport.go        | 128 +++++++++++-
+ pkg/mcpclient/stdio_initialization_test.go    | 191 +++++++++++++++++-
+ 2 files changed, 309 insertions(+), 10 deletions(-)
+
+diff --git a/pkg/mcpclient/serialized_forwarding_transport.go b/pkg/mcpclient/serialized_forwarding_transport.go
+index 31d1e81..98bc593 100644
+--- a/pkg/mcpclient/serialized_forwarding_transport.go
++++ b/pkg/mcpclient/serialized_forwarding_transport.go
+@@ -128,6 +128,10 @@ type serializedForwardingTransport struct {
+ 	requireInitialization bool
+ 	initializeSucceeded   bool
+ 	initializationReady   bool
++	// childEpoch advances whenever readiness is reset because the child was lost or
++	// closed. A connection remembers the epoch it started in so that a late Close of
++	// an older connection cannot reset readiness that now describes a replacement.
++	childEpoch uint64
+ }
+ 
+ const maxRetiredResponseIDs = 1024
+@@ -167,6 +171,7 @@ func (t *serializedForwardingTransport) Connect(
+ 		transport:             t,
+ 		lockHeld:              true,
+ 		observationGeneration: t.observation.generation(),
++		childEpoch:            t.currentChildEpoch(),
+ 	}, nil
+ }
+ 
+@@ -299,6 +304,14 @@ type serializedForwardingConnection struct {
+ 	observationToken      protocolObservationToken
+ 	observationWriteDone  chan struct{}
+ 	observationWriteReady bool
++
++	// lifecycleDone records that this connection's request finished normally: its
++	// response was consumed, or nothing reached the child. A later Close of such a
++	// connection has nothing in flight to abort and must not touch the shared child.
++	lifecycleDone bool
++
++	// childEpoch is the transport's epoch when this connection took the slot.
++	childEpoch uint64
+ }
+ 
+ func (c *serializedForwardingConnection) Write(
+@@ -322,7 +335,7 @@ func (c *serializedForwardingConnection) Write(
+ 			// handshake. Leave deadline retirement to the processor as usual.
+ 			c.completeObservedWrite(msg, false, false)
+ 			if !c.shouldAwaitDeadlineRetirement(ctx, err) {
+-				c.release()
++				c.releaseDone()
+ 			}
+ 			return ForwardingWriteResult{}, err
+ 		}
+@@ -335,7 +348,7 @@ func (c *serializedForwardingConnection) Write(
+ 		// No bytes reached the child, so there is no response to read or retire.
+ 		// Preserve the pipes even if the command deadline races this local reply.
+ 		c.markDeadlineRetirableWithoutResponse(true)
+-		c.release()
++		c.releaseDone()
+ 		payload, err := json.Marshal(map[string]any{
+ 			"jsonrpc": "2.0", "id": callerID.Raw(),
+ 			"error": map[string]any{
+@@ -355,7 +368,7 @@ func (c *serializedForwardingConnection) Write(
+ 	if c.shouldSuppressInitializedNotification(msg) {
+ 		c.markWriteCompleted(true)
+ 		c.markDeadlineRetirableWithoutResponse(true)
+-		c.release()
++		c.releaseDone()
+ 		return ForwardingWriteResult{}, nil
+ 	}
+ 
+@@ -365,8 +378,9 @@ func (c *serializedForwardingConnection) Write(
+ 		if method == "initialize" {
+ 			// Publish the new handshake before a concurrent reader can observe
+ 			// its response, but preserve readiness if cancellation prevented writing.
++			// An already-ready child stays ready (see beginInitialize).
+ 			c.transport.resetInitializedNotification()
+-			c.transport.resetInitialization()
++			c.transport.beginInitialize()
+ 		} else if !expectResponse && method == initializedNotificationMethod {
+ 			c.transport.markInitializationReady()
+ 		}
+@@ -383,7 +397,11 @@ func (c *serializedForwardingConnection) Write(
+ 		// response-deadline path. Keep the slot until it retires or closes.
+ 	} else if !expectResponse {
+ 		c.markDeadlineRetirableWithoutResponse(err == nil)
+-		c.release()
++		if err == nil {
++			c.releaseDone()
++		} else {
++			c.release()
++		}
+ 	} else if err != nil || result.PreservedError != nil || result.StatusCode >= http.StatusBadRequest {
+ 		c.release()
+ 	}
+@@ -666,6 +684,62 @@ func (t *serializedForwardingTransport) resetInitialization() {
+ 	t.initializedMu.Lock()
+ 	t.initializeSucceeded = false
+ 	t.initializationReady = false
++	t.childEpoch++
++	t.initializedMu.Unlock()
++}
++
++// currentChildEpoch returns the epoch a new connection starts in.
++func (t *serializedForwardingTransport) currentChildEpoch() uint64 {
++	if t == nil {
++		return 0
++	}
++	t.initializedMu.Lock()
++	defer t.initializedMu.Unlock()
++	return t.childEpoch
++}
++
++// resetInitializationFromEpoch resets readiness only if no reset has happened since
++// the connection that is closing started. Otherwise the child it used is already gone
++// and the readiness flags describe a replacement that must not be revoked.
++//
++// Safety invariant: skipping the reset is only correct because a reset that advances
++// the epoch while the lifecycle slot is released comes from an I/O failure, and the
++// forwarding layer has already closed the shared connection in that case
++// (shouldCloseAfterForwardingError), so the stale connection's own Close reaches an
++// already-detached connection and cannot affect a replacement child. An in-flight
++// cancellation keeps the slot (shouldAwaitDeadlineRetirement) and so reaches Close as
++// the slot holder with a matching epoch, which still resets. A reset that is not paired
++// with closing the shared connection (a rejected initialized-notification write that is
++// not an I/O error) would break this invariant; stdio responses carry no HTTP status,
++// so that case is not reachable today.
++func (t *serializedForwardingTransport) resetInitializationFromEpoch(epoch uint64) {
++	if t == nil || !t.requireInitialization {
++		return
++	}
++	t.initializedMu.Lock()
++	defer t.initializedMu.Unlock()
++	if t.childEpoch != epoch {
++		return
++	}
++	t.initializeSucceeded = false
++	t.initializationReady = false
++	t.initializedNotification = false
++	t.childEpoch++
++}
++
++// beginInitialize records an accepted initialize. A child that is already ready
++// stays ready: its handshake completed and it was not closed, so another session's
++// re-initialize must not revoke readiness for requests already using it (a
++// duplicate initialize the server rejects would otherwise leave it unready until
++// a restart). A child that is not ready starts a fresh handshake.
++func (t *serializedForwardingTransport) beginInitialize() {
++	if t == nil || !t.requireInitialization {
++		return
++	}
++	t.initializedMu.Lock()
++	if !t.initializationReady {
++		t.initializeSucceeded = false
++	}
+ 	t.initializedMu.Unlock()
+ }
+ 
+@@ -704,9 +778,24 @@ func (c *serializedForwardingConnection) Close() error {
+ 	if c.isRetired() {
+ 		return nil
+ 	}
++	if c.transport != nil && c.transport.requireInitialization && c.lifecycleFinished() {
++		// A late Close of an older, finished connection (for example after its
++		// response POST failed) has nothing in flight. The shared child may be
++		// serving another session, so neither its readiness nor its pipes are this
++		// connection's to reset. Abandoned requests, fatal I/O and a Close while the
++		// slot is held still take the destructive path below.
++		return nil
++	}
+ 	if c.transport != nil {
+-		c.transport.resetInitializedNotification()
+-		c.transport.resetInitialization()
++		c.stateMu.Lock()
++		epoch := c.childEpoch
++		c.stateMu.Unlock()
++		if c.transport.requireInitialization {
++			c.transport.resetInitializationFromEpoch(epoch)
++		} else {
++			c.transport.resetInitializedNotification()
++			c.transport.resetInitialization()
++		}
+ 		c.transport.observation.childClosed(c.observationGeneration, "stdio_connection_closed")
+ 	}
+ 	defer c.release()
+@@ -756,6 +845,10 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+ 		if err := c.acquireLifecycle(ctx); err != nil {
+ 			return jsonrpc.ID{}, err
+ 		}
++		epoch := c.transport.currentChildEpoch()
++		c.stateMu.Lock()
++		c.childEpoch = epoch
++		c.stateMu.Unlock()
+ 	}
+ 
+ 	expectedID := callerID
+@@ -782,6 +875,7 @@ func (c *serializedForwardingConnection) acquire(ctx context.Context, expectResp
+ 	c.requestMethod = method
+ 	c.deadlineRetirable = false
+ 	c.retired = false
++	c.lifecycleDone = false
+ 	if c.transport != nil && (c.transport.observation != nil || c.transport.requireInitialization) {
+ 		c.observationWriteDone = make(chan struct{})
+ 		c.observationWriteReady = false
+@@ -830,6 +924,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+ 		return false
+ 	}
+ 	if !c.awaitingResponse {
++		c.lifecycleDone = true
+ 		return true
+ 	}
+ 
+@@ -844,6 +939,7 @@ func (c *serializedForwardingConnection) shouldReleaseAfterRead(msg jsonrpc.Mess
+ 	}
+ 
+ 	c.awaitingResponse = false
++	c.lifecycleDone = true
+ 	return true
+ }
+ 
+@@ -856,6 +952,24 @@ func (c *serializedForwardingConnection) release() {
+ 	}
+ }
+ 
++// releaseDone releases the slot for a request that finished normally.
++func (c *serializedForwardingConnection) releaseDone() {
++	c.stateMu.Lock()
++	if c.lockHeld {
++		c.lifecycleDone = true
++	}
++	c.stateMu.Unlock()
++	c.release()
++}
++
++// lifecycleFinished reports whether this connection no longer holds the lifecycle
++// slot because its request finished normally.
++func (c *serializedForwardingConnection) lifecycleFinished() bool {
++	c.stateMu.Lock()
++	defer c.stateMu.Unlock()
++	return !c.lockHeld && c.lifecycleDone
++}
++
+ func (c *serializedForwardingConnection) releaseRetired() {
+ 	c.stateMu.Lock()
+ 	lockHeld := c.lockHeld
+diff --git a/pkg/mcpclient/stdio_initialization_test.go b/pkg/mcpclient/stdio_initialization_test.go
+index 906c96d..66ba167 100644
+--- a/pkg/mcpclient/stdio_initialization_test.go
++++ b/pkg/mcpclient/stdio_initialization_test.go
+@@ -7,6 +7,7 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
++	"sync"
+ 	"testing"
+ 
+ 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
+@@ -282,18 +283,148 @@ func TestStdioInitializationReadyClearsOnCloseOrFatalIO(t *testing.T) {
+ 	}
+ }
+ 
+-func TestStdioInitializationReinitializeRequiresNewNotification(t *testing.T) {
++// A re-initialize on a child that already completed its handshake and was not closed
++// must not revoke readiness: other sessions share the child and may be mid-use.
++func TestStdioInitializationReinitializeKeepsReadyChildReady(t *testing.T) {
++	t.Parallel()
++	for _, shim := range []bool{false, true} {
++		name := "caller_notification"
++		if shim {
++			name = "shim_notification"
++		}
++		t.Run(name, func(t *testing.T) {
++			t.Parallel()
++			transport, base := initializationTransport(shim)
++			initializationReady(t, transport, base, shim)
++			id := initializationID(t, "second-initialize")
++			initializationRoundTrip(t, transport, base, &jsonrpc.Request{ID: id, Method: "initialize"}, &jsonrpc.Response{ID: id})
++			// Between the second initialize response and any second notification.
++			request := &jsonrpc.Request{ID: initializationID(t, "tool"), Method: "tools/call"}
++			initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++			require.Zero(t, base.closeCalls.Load())
++		})
++	}
++}
++
++// Cross-session: session B re-initializes the shared child while session A's call is
++// in flight. A's call must not be rejected in the window before B's notification.
++func TestStdioInitializationOtherSessionCallSurvivesReinitializeWindow(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false) // session A is ready
++	idB := initializationID(t, "initialize-B")
++	initializationRoundTrip(t, transport, base, &jsonrpc.Request{ID: idB, Method: "initialize"}, &jsonrpc.Response{ID: idB})
++
++	callA := &jsonrpc.Request{ID: initializationID(t, float64(0)), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, callA, &jsonrpc.Response{ID: callA.ID})
++
++	initializationNotify(t, transport, initializedNotificationMethod) // B's notification
++	callB := &jsonrpc.Request{ID: initializationID(t, float64(1)), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, callB, &jsonrpc.Response{ID: callB.ID})
++	require.Equal(t, []string{"initialize", initializedNotificationMethod, "initialize", "tools/call", initializedNotificationMethod, "tools/call"}, base.writtenMethods())
++}
++
++// A server may reject a duplicate initialize (go-sdk does) while staying initialized.
++// That error must not strand the ready child as unready until a restart.
++func TestStdioInitializationRejectedReinitializeKeepsReadyChildReady(t *testing.T) {
+ 	t.Parallel()
+ 	transport, base := initializationTransport(false)
+ 	initializationReady(t, transport, base, false)
+-	id := initializationID(t, "second-initialize")
+-	initializationRoundTrip(t, transport, base, &jsonrpc.Request{ID: id, Method: "initialize"}, &jsonrpc.Response{ID: id})
++	id := initializationID(t, "duplicate-initialize")
++	initializationRoundTrip(t, transport, base, &jsonrpc.Request{ID: id, Method: "initialize"},
++		&jsonrpc.Response{ID: id, Error: &jsonrpc.Error{Code: -32603, Message: "duplicate initialize received"}})
++	initializationNotify(t, transport, initializedNotificationMethod)
++	request := &jsonrpc.Request{ID: initializationID(t, "tool"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++}
++
++// Enforcement is preserved for a child that really was closed (and so respawned): a
++// later initialize alone does not make it ready; the notification does.
++func TestStdioInitializationClosedChildStillRequiresFullHandshake(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++	conn, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	require.NoError(t, conn.Close()) // holds the slot: a real close
++	require.EqualValues(t, 1, base.closeCalls.Load())
++
+ 	request := &jsonrpc.Request{ID: initializationID(t, "tool"), Method: "tools/call"}
+ 	initializationRequireRejected(t, transport, base, request)
++	id := initializationID(t, "initialize-after-close")
++	initializationRoundTrip(t, transport, base, &jsonrpc.Request{ID: id, Method: "initialize"}, &jsonrpc.Response{ID: id})
++	initializationRequireRejected(t, transport, base, request)
+ 	initializationNotify(t, transport, initializedNotificationMethod)
+ 	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
+ }
+ 
++// A late Close of an older connection whose request already finished (the dispatcher
++// does this after a non-deadline response-POST failure) must not reset readiness or
++// close the shared pipes under a sibling request that holds the lifecycle slot.
++func TestStdioInitializationLateCloseOfFinishedConnectionKeepsSiblingReady(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++
++	id1 := initializationID(t, "call-1")
++	conn1, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = conn1.Write(context.Background(), nil, &jsonrpc.Request{ID: id1, Method: "tools/call"})
++	require.NoError(t, err)
++	base.enqueueRead(&jsonrpc.Response{ID: id1}, nil)
++	_, err = conn1.Read(context.Background())
++	require.NoError(t, err)
++
++	id2 := initializationID(t, "call-2")
++	conn2, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = conn2.Write(context.Background(), nil, &jsonrpc.Request{ID: id2, Method: "tools/call"})
++	require.NoError(t, err)
++
++	require.NoError(t, conn1.Close()) // late close of the finished connection
++	require.Zero(t, base.closeCalls.Load(), "shared pipes must stay open under the in-flight sibling")
++
++	base.enqueueRead(&jsonrpc.Response{ID: id2}, nil)
++	_, err = conn2.Read(context.Background())
++	require.NoError(t, err)
++	next := &jsonrpc.Request{ID: initializationID(t, "call-3"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, next, &jsonrpc.Response{ID: next.ID})
++	require.NoError(t, conn1.Close(), "Close stays idempotent")
++	require.Zero(t, base.closeCalls.Load())
++}
++
++// Closing a connection that still has a request in flight remains destructive: the
++// response may arrive late on the shared pipes, so the child is closed and unready.
++func TestStdioInitializationCloseOfInFlightRequestStillResets(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++	conn, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = conn.Write(context.Background(), nil, &jsonrpc.Request{ID: initializationID(t, "in-flight"), Method: "tools/call"})
++	require.NoError(t, err)
++	require.NoError(t, conn.Close())
++	require.EqualValues(t, 1, base.closeCalls.Load())
++	initializationRequireRejected(t, transport, base, &jsonrpc.Request{ID: initializationID(t, "next"), Method: "tools/call"})
++}
++
++// A request abandoned by a read failure resets readiness itself; the late Close that
++// follows must neither undo that nor be needed to enforce the guard.
++func TestStdioInitializationAbandonedReadThenLateCloseStaysUnready(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++	conn, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = conn.Write(context.Background(), nil, &jsonrpc.Request{ID: initializationID(t, "abandoned"), Method: "tools/call"})
++	require.NoError(t, err)
++	base.enqueueRead(nil, io.EOF)
++	_, err = conn.Read(context.Background())
++	require.ErrorIs(t, err, io.EOF)
++	require.NoError(t, conn.Close())
++	initializationRequireRejected(t, transport, base, &jsonrpc.Request{ID: initializationID(t, "next"), Method: "tools/call"})
++}
++
+ func TestStdioInitializationCanceledUnwrittenInitializePreservesReadyChild(t *testing.T) {
+ 	t.Parallel()
+ 	transport, base := initializationTransport(false)
+@@ -477,3 +608,57 @@ func initializationReady(t *testing.T, transport ForwardingTransport, base *stub
+ 		initializationNotify(t, transport, initializedNotificationMethod)
+ 	}
+ }
++
++// A request abandoned by a read failure leaves the slot with a connection whose Close
++// is still destructive (it purges the shared pipes). If a sibling has meanwhile
++// re-handshaken the replaced child, that late Close must not revoke the sibling's
++// readiness: the readiness it would reset describes a different child.
++func TestStdioInitializationLateCloseOfAbandonedConnectionKeepsReplacementReady(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++
++	abandoned, err := transport.Connect(context.Background())
++	require.NoError(t, err)
++	_, err = abandoned.Write(context.Background(), nil, &jsonrpc.Request{ID: initializationID(t, "abandoned"), Method: "tools/call"})
++	require.NoError(t, err)
++	base.enqueueRead(nil, io.EOF)
++	_, err = abandoned.Read(context.Background())
++	require.ErrorIs(t, err, io.EOF) // child lost: readiness reset, slot released
++
++	// A sibling completes the full handshake on the replacement child.
++	initializationReady(t, transport, base, false)
++
++	require.NoError(t, abandoned.Close()) // the dispatcher's late Close of the old connection
++
++	request := &jsonrpc.Request{ID: initializationID(t, "tool"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++}
++
++// Late Closes of finished connections racing with the next requests must neither
++// race (-race) nor revoke readiness.
++func TestStdioInitializationConcurrentLateClosesKeepReadiness(t *testing.T) {
++	t.Parallel()
++	transport, base := initializationTransport(false)
++	initializationReady(t, transport, base, false)
++	var wg sync.WaitGroup
++	for i := 0; i < 50; i++ {
++		id := initializationID(t, fmt.Sprintf("call-%d", i))
++		conn, err := transport.Connect(context.Background())
++		require.NoError(t, err)
++		_, err = conn.Write(context.Background(), nil, &jsonrpc.Request{ID: id, Method: "tools/call"})
++		require.NoError(t, err)
++		base.enqueueRead(&jsonrpc.Response{ID: id}, nil)
++		_, err = conn.Read(context.Background())
++		require.NoError(t, err)
++		wg.Add(1)
++		go func() {
++			defer wg.Done()
++			_ = conn.Close()
++		}()
++	}
++	wg.Wait()
++	require.Zero(t, base.closeCalls.Load())
++	request := &jsonrpc.Request{ID: initializationID(t, "final"), Method: "tools/call"}
++	initializationRoundTrip(t, transport, base, request, &jsonrpc.Response{ID: request.ID})
++}
+-- 
+2.43.0
+
