@@ -1157,13 +1157,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 				pendingOutcome, pendingSource = fix.Outcome, "FIX"
 				continue
 			}
-			return outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles, approval), nil
+			return withVerification(outcomeResult(ctx, cfg, rn, "FIX", fix.Outcome, cycles, approval), suite, report), nil
 		}
 
 		if !fixMutation && !alreadySatisfied && !legacyNoChange {
 			_ = rn.SetStage(runpkg.Failed)
 			ar.Emit(activity.StageFailed, "FAIL", "no repository changes")
-			return noChangesFailure(cfg, "FIX", "agent reported a fix but produced no repository changes"), nil
+			return withVerification(noChangesFailure(cfg, "FIX", "agent reported a fix but produced no repository changes"), suite, report), nil
 		}
 		_ = rn.Write("diff.patch", diff)
 	}
@@ -1498,6 +1498,16 @@ func writeAutonomySummary(w io.Writer, d autonomy.Decision) {
 // fail builds a FAIL result carrying a single reason.
 func fail(reason string) quality.Result {
 	return quality.Result{Decision: quality.Fail, Reasons: []string{reason}}
+}
+
+// withVerification carries the validation results and review findings that sent the
+// lifecycle into a fix cycle onto a result that ends during that cycle. Without them the
+// run report reads "validation NOT RUN" and "No findings" while gate.json still records
+// the unresolved findings. It changes no decision: the gate and classification are kept.
+func withVerification(r lifeResult, suite testrunner.SuiteResult, report review.Report) lifeResult {
+	r.suite = suite
+	r.report = report
+	return r
 }
 
 // noChangesFailure is the terminal result for SOP's own deterministic verdict that a
