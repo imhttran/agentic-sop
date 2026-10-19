@@ -425,7 +425,7 @@ func TestCrossModuleTimeoutAndCancellation(t *testing.T) {
 				go func() {
 					deadline := time.Now().Add(5 * time.Second)
 					for time.Now().Before(deadline) {
-						if _, err := os.Stat(pidPath); err == nil {
+						if pidFileWritten(pidPath) {
 							cancel()
 							return
 						}
@@ -466,12 +466,20 @@ func waitForPIDFile(t *testing.T, path string) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(path); err == nil {
+		if pidFileWritten(path) {
 			return
 		}
 		time.Sleep(5 * time.Millisecond)
 	}
 	t.Fatalf("fixture never wrote its pid file %s", path)
+}
+
+// pidFileWritten reports whether the fixture has written a pid, not merely created
+// the file: os.WriteFile creates it before writing, so an existence check can race
+// with the write and read an empty file.
+func pidFileWritten(path string) bool {
+	data, err := os.ReadFile(path)
+	return err == nil && len(strings.TrimSpace(string(data))) > 0
 }
 
 func readPID(t *testing.T, path string) int {
