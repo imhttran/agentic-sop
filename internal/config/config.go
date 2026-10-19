@@ -151,6 +151,12 @@ type Config struct {
 	// (RAG-SOP-003). An omitted block leaves existing behavior unchanged; the
 	// SOP_RAG_* environment overrides it, resolved by RAGConfig.Resolved.
 	RAG RAGConfig `yaml:"rag"`
+	// AdvisoryRetrieval is the experimental, disabled-by-default bounded advisory
+	// retrieval configuration (RDM-003). An omitted block leaves existing behavior
+	// unchanged; the SOP_ADVISORY_RETRIEVAL_* environment overrides it, resolved by
+	// AdvisoryRetrievalConfig.Resolved. Installer selection is out of scope: the
+	// producer executable is named directly.
+	AdvisoryRetrieval AdvisoryRetrievalConfig `yaml:"advisory_retrieval"`
 	// Providers configures the optional provider/runtime inspection layer (Phase 4):
 	// per-provider endpoints and the opt-in pre-execution model validation. An
 	// omitted block leaves existing behavior unchanged.

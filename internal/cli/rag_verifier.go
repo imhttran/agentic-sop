@@ -266,6 +266,27 @@ type ragTelemetry struct {
 	// nil until then.
 	PromptIncluded *bool  `json:"prompt_included,omitempty"`
 	ReasonCode     string `json:"reason_code,omitempty"`
+	// Additive advisory-retrieval association (RDM-003). Existing keys are
+	// unchanged; every new key is omitempty and content-free.
+	//
+	// AdvisoryPhase distinguishes the planning retrieval from the recovery
+	// retrieval for the same attempt.
+	AdvisoryPhase string `json:"advisory_phase,omitempty"`
+	// AdvisoryStatus and AdvisoryReason are bounded, content-free outcome labels.
+	AdvisoryStatus string `json:"advisory_status,omitempty"`
+	AdvisoryReason string `json:"advisory_reason,omitempty"`
+	// AdvisoryCount and AdvisoryTokens report the mapped item count and tokens.
+	AdvisoryCount  int `json:"advisory_count,omitempty"`
+	AdvisoryTokens int `json:"advisory_tokens,omitempty"`
+	// AdvisoryCorpus and AdvisoryCompatibility name the corpus scope and the
+	// compatibility limit applied to the retrieval.
+	AdvisoryCorpus        string `json:"advisory_corpus,omitempty"`
+	AdvisoryCompatibility string `json:"advisory_compatibility,omitempty"`
+	// AdvisoryRecords lists the stable source references of the records actually
+	// retrieved. AdvisoryIncluded lists the references the compiled prompt
+	// actually included.
+	AdvisoryRecords  []string `json:"advisory_records,omitempty"`
+	AdvisoryIncluded []string `json:"advisory_included,omitempty"`
 }
 
 const (
@@ -279,6 +300,17 @@ const (
 	ragReasonFailure  = "RETRIEVAL_FAILED"
 	ragReasonRequired = "REQUIRED_EVIDENCE_MISSING"
 	ragReasonFallback = "OPTIONAL_FALLBACK"
+
+	// Bounded advisory-retrieval reason codes (RDM-003). They are content-free:
+	// no document bodies, prompts, credentials, or producer error text.
+	ragReasonAdvisoryDisabled     = "ADVISORY_DISABLED"
+	ragReasonAdvisoryTimeout      = "ADVISORY_TIMEOUT"
+	ragReasonAdvisoryUnsupported  = "ADVISORY_UNSUPPORTED_CORPUS"
+	ragReasonAdvisoryInvalidQuery = "ADVISORY_INVALID_QUERY"
+	ragReasonAdvisoryFailed       = "ADVISORY_RETRIEVAL_FAILED"
+	ragReasonAdvisoryUnavailable  = "ADVISORY_UNAVAILABLE"
+	ragReasonAdvisoryNoCorpus     = "ADVISORY_NO_CORPUS"
+	ragReasonAdvisoryRequired     = "ADVISORY_REQUIRED_EVIDENCE"
 )
 
 // writeRAGTelemetry writes the bounded rag.json artifact beside the other run
@@ -305,6 +337,36 @@ func knowledgeCitations(items []sopctx.Item) []string {
 		}
 	}
 	return out
+}
+
+// updateAdvisoryInclusion refreshes rag.json with the advisory source references that the
+// compiled prompt actually included. It is written only after compilation, so inclusion is
+// never reported before it occurs. It never writes prompt text or retrieved content.
+func updateAdvisoryInclusion(rn *runpkg.Run, dir, taskID, evidence string, citations []string) {
+	if len(citations) == 0 {
+		return
+	}
+	path := filepath.Join(dir, ".agent-sdlc", "runs", taskID, "rag.json")
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	var rec ragTelemetry
+	if json.Unmarshal(b, &rec) != nil {
+		return
+	}
+	included := make([]string, 0, len(citations))
+	for _, c := range citations {
+		if strings.Contains(evidence, prompt.ItemHeader(sopctx.SourceKnowledgeRAG, c)+"\n") {
+			included = append(included, c)
+		}
+	}
+	rec.AdvisoryIncluded = included
+	out, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return
+	}
+	_ = rn.Write("rag.json", string(append(out, '\n')))
 }
 
 // updateRAGPromptInclusion refreshes rag.json with prompt_included after the prompt

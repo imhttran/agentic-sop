@@ -709,7 +709,8 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// it already holds. It is deterministic and model-free; the trace records its
 		// summary and nothing reads it back to drive a decision.
 		var ragCitations []string
-		ctxSummary, ragCitations = implementContext(ctx, spec, plan, rn, cfg, trouting, failureCtx, d)
+		var advisoryCitations []string
+		ctxSummary, ragCitations, advisoryCitations = implementContext(ctx, spec, plan, rn, cfg, trouting, failureCtx, d)
 		// The Prompt Compiler (CTX-005) owns the structure of the model input: it turns
 		// the canonical context, the prior attempt, and caller observations into
 		// deterministic, bounded, provenance-carrying evidence. It invokes no model.
@@ -730,6 +731,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// Prompt inclusion (RAG-SOP-003 4B-2B2a-3): refresh rag.json after the compiler
 		// has applied its own budget, using exact citation identities.
 		updateRAGPromptInclusion(rn, dir, spec.ID, input, ragCitations)
+		updateAdvisoryInclusion(rn, dir, spec.ID, input, advisoryCitations)
 		// Record the deterministic input size (canonical context and compiled prompt) for
 		// this attempt. It is diagnostic measurement only (RBV-013): nothing reads it
 		// back, and no value is inferred from text length.
@@ -2182,7 +2184,7 @@ func loadPriorPlan(rn *runpkg.Run) (*planner.Plan, error) {
 	return p, nil
 }
 
-func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) (sopctx.Context, []string) {
+func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Plan, rn *runpkg.Run, cfg config.Config, trouting *taskRouting, failureCtx string, d deps) (sopctx.Context, []string, []string) {
 	execution := sopctx.Item{
 		Source:   sopctx.SourceExecution,
 		Identity: "execution",
@@ -2246,6 +2248,19 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 	} else {
 		knowledge = optionalRAGKnowledge(ctx, cfg, spec, d)
 	}
+	// Experimental bounded advisory retrieval (RDM-003). It is a separate, optional
+	// layer from the RAG-SOP-003 path: a task with declared required evidence keeps
+	// its authoritative attempt evidence and never runs a second retrieval.
+	var advisory AdvisoryResult
+	if !d.ragAttempt.Attempted && spec != nil && len(spec.RequiredEvidence) == 0 {
+		fc := strings.TrimSpace(failureCtx)
+		if fc == "" && d.attempt != nil {
+			fc = strings.TrimSpace(d.attempt.FailureContext)
+		}
+		var advItems []sopctx.Item
+		advItems, advisory = advisoryKnowledgeForAttempt(ctx, cfg, spec, d.advisoryRetriever, cfg.Project.Name, fc)
+		knowledge = append(knowledge, advItems...)
+	}
 	// Content-free RAG telemetry (RAG-SOP-003 4B-2B2a). used_in_context is true only
 	// when knowledge items actually enter the context.
 	rec := ragTelemetry{TaskID: spec.ID, Attempt: d.attemptNumber, Mode: ragModeOptional, Status: ragStatusSucceed, ReasonCode: ragReasonNone}
@@ -2272,6 +2287,22 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 	if rec.Mode == ragModeOptional && rec.Status == ragStatusSucceed && !rec.UsedInContext && rec.Corpus != "" {
 		rec.Status, rec.ReasonCode = ragStatusFailed, ragReasonFallback
 	}
+	if advisory.Attempted {
+		rec.AdvisoryPhase = string(advisory.Phase)
+		rec.AdvisoryStatus = advisory.Status
+		rec.AdvisoryReason = advisory.ReasonCode
+		rec.AdvisoryCompatibility = advisory.Compatibility
+		rec.AdvisoryCount = len(advisory.Items)
+		rec.AdvisoryTokens = advisory.Tokens
+		seen := map[string]bool{}
+		for _, it := range advisory.Items {
+			rec.AdvisoryRecords = append(rec.AdvisoryRecords, it.SourceRef)
+			if c := string(it.Corpus); c != "" && !seen[c] {
+				seen[c] = true
+				rec.AdvisoryCorpus = strings.TrimSpace(rec.AdvisoryCorpus + " " + c)
+			}
+		}
+	}
 	writeRAGTelemetry(rn, rec)
 
 	return sopctx.FromInputs(sopctx.Inputs{
@@ -2282,7 +2313,7 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 		Recovery:     recovery,
 		Memory:       memory,
 		Knowledge:    knowledge,
-	}, sopctx.DefaultLimits()), knowledgeCitations(knowledge)
+	}, sopctx.DefaultLimits()), knowledgeCitations(knowledge), advisoryCitations(advisory.Items)
 }
 
 // applicableDecisionItems returns the durable decisions applicable to the current

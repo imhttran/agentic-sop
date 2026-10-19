@@ -1,0 +1,36 @@
+{
+  "version": 1,
+  "description": "RDM-004 tuning corpus. Separate from the held-out set. Used only to freeze the keyword query, prompt template, and rubric before the final run; never used as an independent final evaluation.",
+  "split": "tuning",
+  "cases": [
+    {
+      "id": "dq-tun-001",
+      "class": "planning",
+      "task_context": "Tune the FTS5 query assembly over historical evidence.",
+      "decision_point": "2026-01-10T00:00:00Z",
+      "evidence_cutoff": "2026-01-10T00:00:00Z",
+      "pre_decision_evidence": [
+        {"record_id": "ev-tun-001", "text": "FTS5 MATCH uses quoted phrases from task context.", "content_hash": "h-tun-001", "produced_before": "2026-01-01T00:00:00Z"}
+      ],
+      "eventual_solution_ids": ["sol-tun-001"],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {"kind": "plan", "decision": "PROCEED", "rationale": "Tuning change is scoped."}
+    },
+    {
+      "id": "dq-tun-002",
+      "class": "recovery",
+      "negative_kind": "",
+      "task_context": "Tune the repeat count and token-budget parity checks.",
+      "decision_point": "2026-01-11T00:00:00Z",
+      "evidence_cutoff": "2026-01-11T00:00:00Z",
+      "pre_decision_evidence": [
+        {"record_id": "ev-tun-002", "text": "Harness records token use per repeat.", "content_hash": "h-tun-002", "produced_before": "2026-01-02T00:00:00Z"}
+      ],
+      "eventual_solution_ids": ["sol-tun-002"],
+      "near_duplicate_solution_ids": [],
+      "executable": true,
+      "expected": {"kind": "recovery", "decision": "AUTO_FIX", "rationale": "Wire the checks."}
+    }
+  ]
+}

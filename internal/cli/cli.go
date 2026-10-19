@@ -100,6 +100,9 @@ type deps struct {
 	// 4B-2A3a). It is attached to the attempt-local deps copy by runScheduledTask and
 	// read by implementContext; it is never global or shared across tasks/attempts.
 	ragAttempt attemptRetrieval
+	// advisoryRetriever is the injectable bounded advisory-retrieval seam (RDM-003).
+	// Nil in production, where the local SQLite index is opened from configuration.
+	advisoryRetriever AdvisoryRetriever
 	// attemptNumber is the current execution attempt (from task.Attempt), reused for
 	// RAG telemetry association. No new counter is introduced.
 	attemptNumber int

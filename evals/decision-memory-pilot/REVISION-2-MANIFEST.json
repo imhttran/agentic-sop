@@ -1,0 +1,55 @@
+{
+  "revision": 2,
+  "parent_revision": 1,
+  "status": "development_evidence",
+  "original_pilot": {
+    "usable_for_retrieval_claim": false,
+    "reason": "arm B retrieved no evidence; both arms had identical prompts",
+    "prompt_equality": "unverified (prompts not persisted)"
+  },
+  "defect": {
+    "query": "all task-context tokens joined with implicit AND",
+    "effect": "zero matches on natural-language task descriptions"
+  },
+  "correction": {
+    "fts_join": "OR",
+    "relevance_floor_terms": 2,
+    "scope": "tuning only"
+  },
+  "tuning_validation": {
+    "retrieved_threshold_compliant": 57,
+    "retrieved_below_floor": 0,
+    "below_floor_rejected": 110,
+    "semantic_relevance": "not_judged"
+  },
+  "heldout_audit": {
+    "cases": 24,
+    "with_evidence": 8,
+    "without": 16,
+    "retrieved_items": 25,
+    "below_floor_rejected": 63,
+    "semantic_relevance": "not_judged",
+    "model_calls": 0
+  },
+  "future_evaluation": [
+    "freeze a new held-out revision",
+    "persist retrieved IDs, inclusion, predictions, safety, usage",
+    "do not enlarge the sample to obtain a pass",
+    "report GO/NO-GO/INSUFFICIENT EVIDENCE"
+  ],
+  "preserved": [
+    "PROTOCOL.md",
+    "RUBRIC.json",
+    "corpus-tuning.json",
+    "corpus-heldout.json",
+    "PROTOCOL.sha256",
+    "CORPUS.sha256"
+  ],
+  "coverage_gate": {
+    "applied_to": "disposition labels",
+    "AUTO_FIX": 2,
+    "minimum": 3,
+    "pass": false,
+    "sample_enlarged": false
+  }
+}

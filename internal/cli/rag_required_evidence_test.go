@@ -559,7 +559,7 @@ func TestRAGTelemetryAttemptUsesCurrentTaskAttempt(t *testing.T) {
 		t.Fatalf("runpkg.New: %v", err)
 	}
 	// attemptNumber mirrors task.Attempt; here it is 2 (a later attempt), not 0.
-	if _, _ = implementContext(context.Background(), &taskfile.Spec{ID: "S001", Title: "t"}, &planner.Plan{}, mustRun(t, dir, "S001"), config.Config{}, nil, "", deps{attemptNumber: 2}); false {
+	if _, _, _ = implementContext(context.Background(), &taskfile.Spec{ID: "S001", Title: "t"}, &planner.Plan{}, mustRun(t, dir, "S001"), config.Config{}, nil, "", deps{attemptNumber: 2}); false {
 	}
 	m := readRAGTelemetry(t, dir, "S001")
 	if m["attempt"].(float64) != 2 {

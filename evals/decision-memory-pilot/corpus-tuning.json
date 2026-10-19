@@ -1,0 +1,1655 @@
+{
+  "version": 1,
+  "description": "Source-backed planning decisions (tuning split).",
+  "split": "tuning",
+  "cases": [
+    {
+      "id": "DM-C6",
+      "class": "negative",
+      "task_context": "# C6 — Record remaining boundaries in the closure documentation\n\nAdd or maintain the remaining-boundaries documentation in the reconciled closure artifacts: local archive state, installed binaries, live services and backup media were not rechecked and a repository merge does not verify machine deployment; legacy notices, issue/release redirection and archival remain separate decisions with no retirement; existing provider reliability and performance limitations in the completion report are neither erased nor waived; Go is unavailable so runtime suites were not rerun for these documentation-only edits; and migration CI is not independently reverified (no fresh CI pass claimed).\n\n## Deliverables\n- Remaining-boundaries section in the reconciled closure documentation\n- Explicit statements for local machine state, migration CI, legacy retirement, provider/performance limitations and the Go-unavailable environment\n- Preserved references to the recorded limitations in docs/reports/consolidation/completion.md\n\n## Acceptance criteria\n- Every boundary from the human plan is represented exactly once with an unambiguous status\n- No statement infers current local SOP state from historical documents or claims fresh CI\n- Provider reliability/performance limitations remain recorded without erasure or waiver",
+      "decision_point": "2026-10-16T15:01:22.647251Z",
+      "evidence_cutoff": "2026-10-16T15:01:22.647251Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-fe2fd39ab737",
+          "text": "execution: repository_mutations=1 iterations=30",
+          "content_hash": "fe2fd39ab73779e09214a9f348c588a3df1036dcb6f63352d7b31af83434a897",
+          "produced_before": "2026-10-16T15:01:22.647251Z"
+        },
+        {
+          "record_id": "ev-024ebff9ef1c",
+          "text": "recent operations: PASS | PASS | reading | reading | reading",
+          "content_hash": "024ebff9ef1c5a3f9e65c7432e8ef5c8732068bc611ef3fd06c5936c418da7ce",
+          "produced_before": "2026-10-16T15:01:22.647251Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-16T15:01:22.647251Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-16T15:01:22.647251Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-16T15:01:22.647251Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run C6"
+      }
+    },
+    {
+      "id": "DM-C7",
+      "class": "planning",
+      "task_context": "# C7 — Validate documentation closure and report evidence provenance\n\nRun the repository relative documentation link check over docs/**/*.md and README.md (scripts/checks/check-doc-links.sh, anchor-aware variant scripts/link_check.py) and git diff --check, then produce the closure evidence report. The report must separate local-only, committed and merged evidence, state that runtime suites were not rerun because Go is unavailable, state that current machine SOP state and migration CI remain unverified, and confirm that no commit, push, merge, deploy, import, state-database edit or repository retirement is performed by this closure.\n\n## Deliverables\n- Recorded link-check output showing broken links: 0 and git diff --check PASS\n- Closure evidence report distinguishing local, committed and merged evidence and listing unverified boundaries\n- Explicit no-side-effect statement (no commit/push/merge/deploy/import/state edit/retirement)\n\n## Acceptance criteria\n- scripts/checks/check-doc-links.sh reports 0 broken links and git diff --check passes\n- The report attributes merge and ancestry claims to git evidence and completion claims to the recorded report, never conflating them with fresh local state\n- No runtime behavior, configuration, plan lifecycle or local state database is modified",
+      "decision_point": "2026-10-16T15:02:57.822793Z",
+      "evidence_cutoff": "2026-10-16T15:02:57.822793Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-971950edca02",
+          "text": "execution: repository_mutations=0 iterations=16",
+          "content_hash": "971950edca02448b4bba9b0a0869ebe0abdebfd5e78b9cf3d1bf298db99ca6d1",
+          "produced_before": "2026-10-16T15:02:57.822793Z"
+        },
+        {
+          "record_id": "ev-532a5e70563c",
+          "text": "recent operations: CONTINUE | python3 scripts/link_check.py | searching | git log -1 --format=%H | scripts/checks/check-doc-links.sh",
+          "content_hash": "532a5e70563c722c9c20ec4e2d1e50c75bb20da278ddf91091ecf42787ce437c",
+          "produced_before": "2026-10-16T15:02:57.822793Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run C7"
+      }
+    },
+    {
+      "id": "DM-CONV-001",
+      "class": "planning",
+      "task_context": "# CONV-001 — Capture Convergence Baseline\n\nRecord the exact current convergence behavior and the authoritative\nimplementation points that govern it, before any production change, so the\n\"before\" state is unambiguous and the CONV-004 change is anchored.\n\n## Deliverables\n- `docs/reports/implementation-convergence/CONV-001-convergence-baseline.md` - the convergence-baseline report recording the current progress semantics, the termination arithmetic, and the exact authoritative files/line anchors for DISCOVER, IMPLEMENT, FIX, progress accounting, mutation accounting, stale/no-progress detection, continuation/checkpoint behavior, and NO_PROGRESS termination.\n\n## Acceptance criteria\n- The DISCOVER -\u003e CHANGE -\u003e FINALIZE state machine and the point at which\n- `CHANGE` is entered (first verified mutation) are recorded.\n- The current progress semantics table is reproduced from the implementation.\n- The termination arithmetic (`implementNowAfter + staleIterations`) is recorded\n- with the observed run evidence.\n- Continuation/checkpoint behavior (`inspected`, `maxCheckpointFiles`,\n- `inspectedSummary`) is recorded.\n- The NO_PROGRESS diagnostics (`IMPLEMENT_NO_PROGRESS` / `FIX_NO_PROGRESS`) and\n- their retryable disposition are recorded.\n- No production change is made.",
+      "decision_point": "2026-10-07T19:03:47.980995Z",
+      "evidence_cutoff": "2026-10-07T19:03:47.980995Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-c32139296d2b",
+          "text": "execution: repository_mutations=1 iterations=28",
+          "content_hash": "c32139296d2bef4557d7654227d2b00b202fa5134b29b2aa3561cd416d093abb",
+          "produced_before": "2026-10-07T19:03:47.980995Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-07T19:03:47.980995Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-07T19:03:47.980995Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-07T19:03:47.980995Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-07T19:03:47.980995Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "AUTO_FIX",
+        "rationale": "recorded SOP disposition AUTO_FIX for run CONV-001"
+      }
+    },
+    {
+      "id": "DM-CONV-004",
+      "class": "negative",
+      "task_context": "# CONV-004 — Minimal Provider-Neutral Convergence Enforcement\n\nImplement the smallest provider-neutral change in the shared phased engine so a\nrun in IMPLEMENT/FIX that has sufficient context must converge toward a mutation\nattempt, a concrete blocker, or an explicit terminal failure, instead of merely\nbeing bounded.\nThis is a bounded implementation task, not an architecture-discovery task. The\nauthoritative production targets, the primary acceptance regressions, the root\ncause, and the required mutation are stated here; read only those, then implement\nthe change. Do not perform broad repository discovery.\nAUTHORITATIVE PRODUCTION TARGETS (read; implement in these):\n- `internal/ollamaagent/orchestrate.go` - `executePhased`, the shared IMPLEMENT/FIX loop, and its existing `implFinalize` tool-denial path (the in-repo precedent to reuse).\n- `internal/ollamaagent/state.go` - `executionState`: `stalled`, `observeDiscovery`, `observeMutation`, `countNonMutatingInteraction`.\n- `internal/ollamaagent/policy.go` - `CapabilityPolicy`, `policyFor`, and the thresholds `implementNowAfter` (12) and `staleIterations` (5).\nAUTHORITATIVE REGRESSION TESTS (primary acceptance; they MUST pass UNCHANGED):\n- `internal/ollamaagent/convergence_regression_test.go`:\n  - `TestConvergenceImplementCreditedDiscoveryStopsAtNoProgressBound`\n  - `TestConvergenceImplementIsDeterministic`\n  - `TestConvergenceFixCreditedDiscoveryStopsAtNoProgressBound`\n  - `TestConvergenceFixIsDeterministic`\nROOT CAUSE (established by CONV-001; do not re-diagnose):\nThe shared phased engine bounds a non-mutating run - it stops at\n`implementNowAfter + staleIterations` (12 + 5 = 17) - but it never REQUIRES\nconvergence: after the discovery window it still allows non-mutating repository\ntools, so a model can consume the entire pre-mutation window and the stale\nallowance with read-only activity and produce no mutation, no blocker, and no\noutcome. `stalled` only counts stale turns; the only tool-revocation phase\ntoday is `imp",
+      "decision_point": "2026-10-07T20:02:36.429853Z",
+      "evidence_cutoff": "2026-10-07T20:02:36.429853Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-18e28f347d63",
+          "text": "execution: repository_mutations=3 iterations=44",
+          "content_hash": "18e28f347d63294365b5bc0069048627454701b9fd8739667e55e929f40a5ed0",
+          "produced_before": "2026-10-07T20:02:36.429853Z"
+        },
+        {
+          "record_id": "ev-024ebff9ef1c",
+          "text": "recent operations: PASS | PASS | reading | reading | reading",
+          "content_hash": "024ebff9ef1c5a3f9e65c7432e8ef5c8732068bc611ef3fd06c5936c418da7ce",
+          "produced_before": "2026-10-07T20:02:36.429853Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-07T20:02:36.429853Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-07T20:02:36.429853Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-07T20:02:36.429853Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run CONV-004"
+      }
+    },
+    {
+      "id": "DM-CONV-005",
+      "class": "negative",
+      "task_context": "# CONV-005 — Regression and Safety Verification\n\nVerify the enforcement change against the regressions and the full repository\ngates, with explicit attention to safety and lifecycle behavior.\n\n## Deliverables\n- `docs/reports/implementation-convergence/CONV-005-regression-safety.md` - the verification report recording the focused regressions, the full suite, and the safety/lifecycle checks below.\n\n## Acceptance criteria\n- `go build ./...`, `go test ./...`, and `go vet ./...` pass.\n- The IMPLEMENT and FIX convergence regressions pass.\n- Retry semantics are unchanged: a non-converging run still yields the retryable\n- incomplete disposition; retries are never silently reset.\n- Continuation/checkpoint behavior is unchanged: the inspected-path checkpoint is\n- still produced and still bounded.\n- Approval boundaries, fail-closed behavior, and lifecycle transitions are\n- unchanged.\n- Provider neutrality holds: no provider/model/domain name or branch is added.\n- The change does not regress a run that mutates.",
+      "decision_point": "2026-10-07T20:32:17.891206Z",
+      "evidence_cutoff": "2026-10-07T20:32:17.891206Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-c32139296d2b",
+          "text": "execution: repository_mutations=1 iterations=28",
+          "content_hash": "c32139296d2bef4557d7654227d2b00b202fa5134b29b2aa3561cd416d093abb",
+          "produced_before": "2026-10-07T20:32:17.891206Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-07T20:32:17.891206Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-07T20:32:17.891206Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-07T20:32:17.891206Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-07T20:32:17.891206Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run CONV-005"
+      }
+    },
+    {
+      "id": "DM-CONV-006",
+      "class": "negative",
+      "task_context": "# CONV-006 — Clef Dogfood Verification\n\nCompare the harness before and after CONV-004 against the preserved CLEF-014\ncase, as external, read-only dogfood evidence.\n\n## Deliverables\n- `docs/reports/implementation-convergence/CONV-006-clef-dogfood-comparison.md` - the comparison report: same repaired CLEF-014 task/context, same default budget, harness before vs after the CONV-004 change.\n\n## Acceptance criteria\n- The comparison uses the same repaired CLEF-014 task/context and the same\n- default budget, with no increase to `SOP_OLLAMA_STALE_ITERATIONS`.\n- The preserved CLEF-014 evidence is not rewritten, and its task definition is\n- not modified.\n- The report states whether the run converged (mutation attempt / concrete\n- blocker) or terminated, and whether the terminal remained fail-closed and\n- retryable.\n- No Clef production code is changed by this task.",
+      "decision_point": "2026-10-07T20:58:50.846072Z",
+      "evidence_cutoff": "2026-10-07T20:58:50.846072Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-b1af2af259b7",
+          "text": "execution: repository_mutations=1 iterations=37",
+          "content_hash": "b1af2af259b7579667b361d513ae40a1f32aac9966db08b078943b31d2df7924",
+          "produced_before": "2026-10-07T20:58:50.846072Z"
+        },
+        {
+          "record_id": "ev-4c41e3174a28",
+          "text": "recent operations: PASS | PASS | reading | searching | reading",
+          "content_hash": "4c41e3174a2857ad5b1c0804f83b11671c57c01597d1ede1e1b4619addb7fba0",
+          "produced_before": "2026-10-07T20:58:50.846072Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-07T20:58:50.846072Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-07T20:58:50.846072Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-07T20:58:50.846072Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run CONV-006"
+      }
+    },
+    {
+      "id": "DM-CTX-001",
+      "class": "negative",
+      "task_context": "# CTX-001 — Context Engine\n\nIntroduce a canonical, deterministic representation of the context supplied to an agent, with deterministic provenance, bounded context limits, and trace/evaluation support — without implementing RAG, embeddings, retrieval, or prompt redesign.\n\n## Deliverables\n- One canonical context contract (Task, Repository, Execution, Recovery contexts) adapted to repository conventions\n- Deterministic provenance on every context item (source, path, reason, priority, size) with no secrets persisted\n- Deterministic, bounded context limits using bytes/characters/lines/items/files (no token budgets)\n- Task context from specification, plan, acceptance criteria, dependencies, lifecycle state, capability\n- Repository context from already-known evidence: repository root, branch, known files, changed files, package/module metadata, explicit task references\n- Execution context: selected model class, provider, capability, execution budget, attempt number\n- Recovery/replan context: previous attempt, failure classification, verification evidence, replan reason, bounded failure context\n- Trace observability for context items, files, bytes, truncated flag, and source-category counts (trace schema 4 → 5 if persisted structure changes)\n- Evaluation fixtures and regression cases asserting context behavior\n- Documentation for the context contract, provenance, and limits\n- Investigation of consuming AGENT-005 replan context through the Context Engine without breaking AGENT-005\n\n## Acceptance criteria\n- One canonical context contract exists\n- Context has deterministic provenance\n- Context ordering is deterministic\n- Context size is bounded\n- Token counting is not required\n- Task evidence is supported\n- Repository evidence is supported\n- Execution evidence is supported\n- Recovery/replan evidence is supported\n- The model cannot expand its own context budget\n- Context cannot grant additional authority\n- Secrets are excluded\n- Trace records context metadata\n- Trace remains o",
+      "decision_point": "2026-10-06T04:25:52.891136Z",
+      "evidence_cutoff": "2026-10-06T04:25:52.891136Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-7590752365b7",
+          "text": "execution: repository_mutations=0 iterations=28",
+          "content_hash": "7590752365b7592d955b18ec2f3a94cab4f8a9e18a8ea0681c650e24b95740a5",
+          "produced_before": "2026-10-06T04:25:52.891136Z"
+        },
+        {
+          "record_id": "ev-9d54cd336fc8",
+          "text": "recent operations: failed | reading | listing | listing | listing",
+          "content_hash": "9d54cd336fc80d69c9e02e9a7734b2098767d5f2bcfaf3fe4487287eec5dc564",
+          "produced_before": "2026-10-06T04:25:52.891136Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run CTX-001"
+      }
+    },
+    {
+      "id": "DM-EV-003",
+      "class": "planning",
+      "task_context": "# EV-003 — Retrieval-Enabled Evaluation Using Existing Capabilities\n\nExecute the **E1 offline, model-free** evaluation over the EV-002 corpus using the\nexisting `repoindex`, `retrieval`, and `retrievalgate` facilities, and record the\ncomparison against the baseline.\n\n## Deliverables\n- `docs/reports/ev-context-run/EV-003-retrieval-evaluation.md` — per-case and aggregate\n- precision@k, recall@k, MRR, and context bytes for baseline vs retrieval, plus the\n- measured retrieval overhead (index build time and search time) for the live corpus.\n\n## Acceptance criteria\n- The evaluation is model-free and deterministic: identical inputs yield an identical\n- report.\n- Every result exposes source, score, reason, and rank (CTX-003 contract).\n- Ranking is unaffected by filesystem iteration order.\n- The report states explicitly which required metrics are measured (retrieval quality,\n- context size, retrieval overhead) and which are not (task success, latency, tokens).\n- No production behavior change is made and no new dependency is added.",
+      "decision_point": "2026-10-08T03:15:05.494416Z",
+      "evidence_cutoff": "2026-10-08T03:15:05.494416Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-6d1affecf64e",
+          "text": "execution: repository_mutations=2 iterations=12",
+          "content_hash": "6d1affecf64eb780f859608df067f70c967d77c52337c5c8efe4c9caf7bc605c",
+          "produced_before": "2026-10-08T03:15:05.494416Z"
+        },
+        {
+          "record_id": "ev-f4631198f695",
+          "text": "recent operations: CONTINUE | go test ./internal/retrievalgate/ -run TestEV003LiveEvaluation -v | inspecting | go vet ./... | go test ./...",
+          "content_hash": "f4631198f69578af063dcb581830636e18db5391f733ad5558fef6c5de648ba0",
+          "produced_before": "2026-10-08T03:15:05.494416Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T03:15:05.494416Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-08T03:15:05.494416Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-08T03:15:05.494416Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run EV-003"
+      }
+    },
+    {
+      "id": "DM-LC-003",
+      "class": "planning",
+      "task_context": "# LC-003 — Scope Historicalization Approval Check to the Active Plan\n\nMake the historicalize readiness scan consider only the active plan's tasks (or\napply the `Applicable` staleness rule), so a stale approval on an unrelated completed\ntask cannot make a plan ineligible. This enforces I2.\n\n## Deliverables\n- A scoped approval check in historicalization readiness, plus tests for the active, stale, and cross-plan cases.\n\n## Acceptance criteria\n- A pending approval belonging to a task **not** in the active plan does not make the plan ineligible.\n- A pending approval on an **active-plan** task still makes the plan ineligible, with the task id in the reason (unchanged behavior).\n- A PENDING approval belonging to an active-plan task blocks historicalization regardless of whether that task is satisfied. A PENDING approval belonging to a task outside the active plan does not block historicalization. Resolved approvals do not block.\n- Readiness is deterministic and model-free; no run/archive artifact is modified.\n- `gofmt -l .` is clean and the Go build/test/race gates pass.",
+      "decision_point": "2026-10-08T16:06:52.513459Z",
+      "evidence_cutoff": "2026-10-08T16:06:52.513459Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-2606f70710c3",
+          "text": "execution: repository_mutations=2 iterations=20",
+          "content_hash": "2606f70710c3dd8b26e4640ec128c1efac81cbc84b0c048c7dd27c92b161fd3d",
+          "produced_before": "2026-10-08T16:06:52.513459Z"
+        },
+        {
+          "record_id": "ev-c512a052190f",
+          "text": "recent operations: CONTINUE | go test -race ./internal/planflow/ ./internal/run/ -count=1 | go vet ./... | gofmt -l . | reading",
+          "content_hash": "c512a052190f7fd8cd450b54223d12cab55286fefc5ed86aa91208a471625392",
+          "produced_before": "2026-10-08T16:06:52.513459Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T16:06:52.513459Z"
+        },
+        {
+          "record_id": "ev-3dedd9db0cf8",
+          "text": "validation UNIT_TEST: go test ./... -\u003e FAIL",
+          "content_hash": "3dedd9db0cf888b6206d6a32e844fdf87748827d725506639617f64ce5ce2ddd",
+          "produced_before": "2026-10-08T16:06:52.513459Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run LC-003"
+      }
+    },
+    {
+      "id": "DM-LC-004",
+      "class": "planning",
+      "task_context": "# LC-004 — Align Closure Invariants: complete vs historicalize\n\nEnsure `sop plan complete` and `sop plan historicalize` agree on closure invariants:\n`complete` must not archive a plan that has an unresolved approval or missing\nverification. This enforces I3/I4/I5.\n\n## Deliverables\n- `plan complete` reusing the readiness invariants (or an equivalent fail-closed check), plus tests proving the tightening and proving clean-plan completion is unchanged.\n\n## Acceptance criteria\n- `sop plan complete` refuses, with a clear reason, when the active plan has an unresolved approval or unresolved verification — matching historicalize readiness.\n- A clean, fully-satisfied plan still completes exactly as before (regression), preserving task history and the `COMPLETE` disposition.\n- No approval authority, quality threshold, or human boundary is changed.\n- `gofmt -l .` is clean and the Go build/test/race gates pass.",
+      "decision_point": "2026-10-08T18:12:04.874999Z",
+      "evidence_cutoff": "2026-10-08T18:12:04.874999Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-f6c65290b79d",
+          "text": "execution: repository_mutations=2 iterations=37",
+          "content_hash": "f6c65290b79dca294b81a20c3bbffa2a84c7ce023acec70e3e6e1b2c144a4e2a",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        },
+        {
+          "record_id": "ev-f7f8a1d78ad7",
+          "text": "recent operations: PASS | PASS | reviewing changes | test -z \"$(gofmt -l .)\" | go vet ./...",
+          "content_hash": "f7f8a1d78ad7a59022f204044fa9fe9bcdfe8937fdbe73f0c825e2d6a2249c87",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-08T18:12:04.874999Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run LC-004"
+      }
+    },
+    {
+      "id": "DM-LC-007",
+      "class": "planning",
+      "task_context": "# LC-007 — Supported Stale-Approval Supersession\n\nRemove the plan-closure deadlock that LC-004 would otherwise create: a satisfied\nactive-plan task can carry a `PENDING` approval that no supported operation can clear\n(the approval boundary refuses a decision on a satisfied task, and external\ncompletion is rejected on an already-complete task). Provide an explicit,\noperator-authorized way to supersede such a request without overloading `DECLINED`,\nso the shared closure gates (LC-004) block only states an operator can actually leave.\n\n## Deliverables\n- A supported, explicit operator operation that supersedes a stale `PENDING` approval\n- on a satisfied task, records an audited reason and operator, preserves the original\n- request in append-only history, and is idempotent and fail-closed.\n\n## Acceptance criteria\n- `ApprovalSuperseded` is an explicit `ApprovalStatus`, and `Resolved()` recognizes\n- `SUPERSEDED` alongside `APPROVED` and `DECLINED`.\n- A supported command `sop approval supersede \u003ctask-id\u003e --reason TEXT --by NAME`\n- exists; an explicit reason and an identifiable operator are required.\n- Supersession is permitted only for a `PENDING` approval whose task is satisfied; a\n- pending request on an unsatisfied task is refused (it must be decided, not\n- superseded), and a non-pending head is refused.\n- The original request is preserved verbatim in append-only `approval-history.json`;\n- the head is rewritten to `SUPERSEDED` recording the operator, reason, timestamp, and\n- the request identity.\n- Repeated supersession calls are idempotent: no duplicate history entry and no change\n- to an already-superseded head.\n- Persistence failures fail closed: a history or head write failure returns an error\n- and reports no successful supersession, leaving the head `PENDING`.\n- Existing `PENDING`, `APPROVED`, and `DECLINED` records remain readable with unchanged\n- semantics; no existing artifact is rewritten.\n- RM-003's `approval.json`, `approval-history.json`, and archive remain",
+      "decision_point": "2026-10-08T17:22:51.244102Z",
+      "evidence_cutoff": "2026-10-08T17:22:51.244102Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-7945136181b1",
+          "text": "execution: repository_mutations=6 iterations=39",
+          "content_hash": "7945136181b1e9d867605d59e20bb6431050dc5fea0cb20979954e5d51b7a408",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        },
+        {
+          "record_id": "ev-f7f8a1d78ad7",
+          "text": "recent operations: PASS | PASS | reviewing changes | test -z \"$(gofmt -l .)\" | go vet ./...",
+          "content_hash": "f7f8a1d78ad7a59022f204044fa9fe9bcdfe8937fdbe73f0c825e2d6a2249c87",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-08T17:22:51.244102Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run LC-007"
+      }
+    },
+    {
+      "id": "DM-ORCH-002",
+      "class": "negative",
+      "task_context": "# ORCH-002 — Worker Assignment Contract\n\nDefine a canonical provider-neutral Worker contract. Conceptually an assignment receives Task, Scope, Context, AllowedTools, Budget, OutputContract, and RepositoryIdentity, and produces something equivalent to AssignmentID, Status, Findings, ProposedChanges, ChangedFiles, Evidence, Progress, and Diagnostics. Do not require these exact Go types; reuse the existing provider/agent layer wherever it can be extended cleanly.\n\n## Deliverables\n- Canonical WorkAssignment and WorkResult contracts expressed through the existing agent/provider capability interface.\n- Scope and repository-identity fields enforced at the contract boundary.\n\n## Acceptance criteria\n- Assignment and result types contain no provider- or model-specific fields.\n- A deterministic fake/test adapter plus at least one other adapter satisfy the contract in tests.\n- Malformed or out-of-scope results fail safely rather than being reinterpreted as success.",
+      "decision_point": "2026-10-06T12:46:02.859631Z",
+      "evidence_cutoff": "2026-10-06T12:46:02.859631Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-5acc6b0b6eb1",
+          "text": "execution: repository_mutations=8 iterations=57",
+          "content_hash": "5acc6b0b6eb1d9fc60f45333f786f0abf07d2e0acbcca0c569929c40ebcceb35",
+          "produced_before": "2026-10-06T12:46:02.859631Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-06T12:46:02.859631Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T12:46:02.859631Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T12:46:02.859631Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T12:46:02.859631Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run ORCH-002"
+      }
+    },
+    {
+      "id": "DM-ORCH-005",
+      "class": "planning",
+      "task_context": "# ORCH-005 — Scope \u0026 Write Ownership\n\nConcurrent repository mutation is the highest-risk part of Phase 9. Design explicit write ownership, defaulting toward one writer/integrator rather than unrestricted parallel writes. If workers are allowed direct mutation, scopes must be disjoint and enforced; do not rely on prompt instructions for correctness.\n\n## Deliverables\n- An explicit write-ownership model with a single-writer/integrator default.\n- Deterministic enforcement of disjoint scopes when direct mutation is permitted.\n\n## Acceptance criteria\n- Overlapping write scopes are detected and rejected deterministically.\n- Correctness does not depend on prompt instructions such as \"do not edit the same file\".\n- Tests cover the default single-writer path and the disjoint multi-writer path.",
+      "decision_point": "2026-10-06T12:52:40.770329Z",
+      "evidence_cutoff": "2026-10-06T12:52:40.770329Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-a41617149028",
+          "text": "execution: repository_mutations=4 iterations=18",
+          "content_hash": "a41617149028764df8424dd4601b6b52c4e5f960c0e10cf284a6092a4a38efd0",
+          "produced_before": "2026-10-06T12:52:40.770329Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-06T12:52:40.770329Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T12:52:40.770329Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T12:52:40.770329Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T12:52:40.770329Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run ORCH-005"
+      }
+    },
+    {
+      "id": "DM-ORCH-007",
+      "class": "negative",
+      "task_context": "# ORCH-007 — Integration Stage\n\nDefine an explicit integration stage, distinct from worker execution: WORK to RESULTS to INTEGRATE to VERIFY. Verification stays centralized and authoritative; the integrator must not automatically trust worker claims — repository state is authoritative.\n\n## Deliverables\n- An explicit integration stage and its recorded outputs.\n- The centralized verification path (deterministic validation, review, quality gate) kept unchanged.\n\n## Acceptance criteria\n- Integration is distinguishable from worker execution in state and in trace.\n- Worker-reported validation is never treated as authoritative final verification.\n- Existing validation ownership is unweakened and its regressions pass.",
+      "decision_point": "2026-10-06T12:57:24.214531Z",
+      "evidence_cutoff": "2026-10-06T12:57:24.214531Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-98da242b3a7e",
+          "text": "execution: repository_mutations=6 iterations=40",
+          "content_hash": "98da242b3a7ec8c71dcdadb68df79c38cc5c60658bdc39b37bf4cee32287cd2e",
+          "produced_before": "2026-10-06T12:57:24.214531Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-06T12:57:24.214531Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T12:57:24.214531Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T12:57:24.214531Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T12:57:24.214531Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run ORCH-007"
+      }
+    },
+    {
+      "id": "DM-ORCH-009",
+      "class": "negative",
+      "task_context": "# ORCH-009 — Orchestration Trace \u0026 Evaluation\n\nExtend AGENT-001 traceability so a run makes the orchestration graph reconstructable: assignment created, worker selected, model class selected, provider/model resolved, worker started, worker completed, result accepted/rejected, integration started, integration completed, verification result, and termination. Do not log secrets or unnecessary prompt content. Extend AGENT-003 with model-free evaluation fixtures for single-worker success, parallel independent workers, worker failure, worker no-progress, worker conflict, stale worker result, integration failure, verification failure, bounded retry/replan, and successful multi-worker integration.\n\n## Deliverables\n- Orchestration trace events that make the orchestration graph reconstructable.\n- Model-free, deterministic evaluation fixtures for the enumerated scenarios.\n\n## Acceptance criteria\n- A recorded run reconstructs the orchestration graph from trace alone.\n- Evaluation remains model-free and deterministic; no live external provider is required.\n- Trace contains no secrets and no unnecessary prompt content.",
+      "decision_point": "2026-10-06T13:39:23.287826Z",
+      "evidence_cutoff": "2026-10-06T13:39:23.287826Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-14b4b53c1c0e",
+          "text": "execution: repository_mutations=1 iterations=44",
+          "content_hash": "14b4b53c1c0ec90b54cc8e42704599165616aaba8ed051e423e273e7ee902075",
+          "produced_before": "2026-10-06T13:39:23.287826Z"
+        },
+        {
+          "record_id": "ev-17b5bfceadd7",
+          "text": "recent operations: PASS | PASS | reading | reading | searching",
+          "content_hash": "17b5bfceadd732ba50196ddcbd8d02ab1a09f60576a896eb252b4a773d6505d0",
+          "produced_before": "2026-10-06T13:39:23.287826Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T13:39:23.287826Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T13:39:23.287826Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T13:39:23.287826Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run ORCH-009"
+      }
+    },
+    {
+      "id": "DM-ORCH-010",
+      "class": "negative",
+      "task_context": "# ORCH-010 — Context \u0026 Routing Integration\n\nReuse the Phase 8 Context Engine; each worker receives the smallest sufficient context (global task context plus worker scope plus retrieved evidence), never the complete repository by default. The structural index and BM25 retrieval should construct worker-specific context. Adaptive routing remains capability- and evidence-driven: different assignments may legitimately use different model classes, but provider/model assignments must not be hardcoded. Decision Memory may inform but not control orchestration, and current repository evidence remains authoritative.\n\n## Deliverables\n- Worker-scoped context assembly built on the Phase 8 Context Engine and retrieval.\n- Capability- and evidence-driven routing for assignments.\n\n## Acceptance criteria\n- Worker context is bounded and scoped; workers do not receive full-repository context by default.\n- Routing resolves abstract capability requirements without hardcoded provider or model names.\n- Stale decision memory never overrides current repository evidence; tests cover stale-memory rejection.",
+      "decision_point": "2026-10-06T14:41:32.499005Z",
+      "evidence_cutoff": "2026-10-06T14:41:32.499005Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-2ac159c15f40",
+          "text": "execution: repository_mutations=2 iterations=28",
+          "content_hash": "2ac159c15f40fd1b3c09fb36c479589a17493fde1967cee05e34c4b5050144c0",
+          "produced_before": "2026-10-06T14:41:32.499005Z"
+        },
+        {
+          "record_id": "ev-c60385eab447",
+          "text": "recent operations: failed | listing | reading | reading | reading",
+          "content_hash": "c60385eab4477bb2672fe318b2df00c4bda16e220dc2ff6d2c54403fda864d45",
+          "produced_before": "2026-10-06T14:41:32.499005Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-06T14:41:32.499005Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-06T14:41:32.499005Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-06T14:41:32.499005Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run ORCH-010"
+      }
+    },
+    {
+      "id": "DM-P3-006",
+      "class": "planning",
+      "task_context": "# P3-006 — Implement task-triage analysis seam\n\nInvoke JEV for task triage with bounded context.\n\n## Acceptance criteria\n- Triage runs only when enabled\n- Triage receives no mutation handle\n- Absence/disable is a no-op\n- Provider failure is recorded, never a finding\n- Read-only with no side effects\n- go test ./internal/cli/... ./internal/run/... passes",
+      "decision_point": "2026-09-30T17:04:13.638301Z",
+      "evidence_cutoff": "2026-09-30T17:04:13.638301Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T17:04:13.638301Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T17:04:13.638301Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T17:04:13.638301Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P3-006"
+      }
+    },
+    {
+      "id": "DM-P3-009",
+      "class": "planning",
+      "task_context": "# P3-009 — Implement pre-execution analysis seam\n\nInvoke JEV immediately before agent execution with bounded context.\n\n## Acceptance criteria\n- Gate is analysis-only and read-only\n- It must not execute or mutate anything\n- No-op when disabled/absent\n- Provider failure recorded separately from findings\n- go test ./internal/cli/... ./internal/run/... passes",
+      "decision_point": "2026-09-30T17:12:57.31573Z",
+      "evidence_cutoff": "2026-09-30T17:12:57.31573Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T17:12:57.31573Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T17:12:57.31573Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T17:12:57.31573Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P3-009"
+      }
+    },
+    {
+      "id": "DM-P3-011",
+      "class": "planning",
+      "task_context": "# P3-011 — Integrate pre-execution gate\n\nRun the pre-execution gate after precheck and before implementation, and act on its deterministic disposition.\n\n## Acceptance criteria\n- Normal bounded tasks continue\n- Deterministic dispositions apply\n- No new task states\n- Disabled means no behavior change\n- go test ./internal/cli/... ./internal/scheduler/... passes",
+      "decision_point": "2026-09-30T17:23:07.752271Z",
+      "evidence_cutoff": "2026-09-30T17:23:07.752271Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T17:23:07.752271Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T17:23:07.752271Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T17:23:07.752271Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P3-011"
+      }
+    },
+    {
+      "id": "DM-P3-014",
+      "class": "planning",
+      "task_context": "# P3-014 — Add security and ownership-boundary tests\n\nProve JEV cannot mutate state or bypass gates.\n\n## Acceptance criteria\n- Ownership/boundary tests are deterministic and pass\n- go test ./internal/jev/... ./internal/cli/... passes\n- go test -race ./internal/jev/... ./internal/cli/... passes",
+      "decision_point": "2026-09-30T17:33:10.358796Z",
+      "evidence_cutoff": "2026-09-30T17:33:10.358796Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T17:33:10.358796Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T17:33:10.358796Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T17:33:10.358796Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P3-014"
+      }
+    },
+    {
+      "id": "DM-P3-017",
+      "class": "planning",
+      "task_context": "# P3-017 — Phase 3 acceptance validation\n\nConfirm every Phase 3 acceptance criterion is met.\n\n## Acceptance criteria\n- All PRD §8 criteria pass\n- Existing tests pass\n- Documentation distinguishes implemented from proposed behavior\n- Validation follows the Overall Validation section (go test ./..., go test -race ./..., go vet ./..., go build ./...), using make check if applicable",
+      "decision_point": "2026-09-30T17:41:48.627092Z",
+      "evidence_cutoff": "2026-09-30T17:41:48.627092Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T17:41:48.627092Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T17:41:48.627092Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T17:41:48.627092Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P3-017"
+      }
+    },
+    {
+      "id": "DM-P35-004",
+      "class": "planning",
+      "task_context": "# P35-004 — Integrate routing into the lifecycle\n\nSelect the task's implementation-agent model from the routing decision.\n\n## Acceptance criteria\n- A disabled router is a strict no-op\n- A manual override wins\n- The selected class resolves to a concrete model\n- No gate is bypassed\n- Routing only selects a model; it never blocks, approves, or bypasses a gate",
+      "decision_point": "2026-09-30T21:01:10.767241Z",
+      "evidence_cutoff": "2026-09-30T21:01:10.767241Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T21:01:10.767241Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T21:01:10.767241Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T21:01:10.767241Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P35-004"
+      }
+    },
+    {
+      "id": "DM-P35-006",
+      "class": "planning",
+      "task_context": "# P35-006 — Unit and end-to-end tests\n\nProve routing behavior deterministically with no live provider.\n\n## Acceptance criteria\n- Deterministic, fast, offline tests cover the compatibility, escalation, fallback, override, and secrecy requirements\n- go test ./... passes\n- go test -race ./internal/cli/ ./internal/router/ passes",
+      "decision_point": "2026-09-30T21:06:40.325988Z",
+      "evidence_cutoff": "2026-09-30T21:06:40.325988Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T21:06:40.325988Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T21:06:40.325988Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T21:06:40.325988Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run P35-006"
+      }
+    },
+    {
+      "id": "DM-P35-007",
+      "class": "planning",
+      "task_context": "# P35-007 — Document the routing layer\n\nMake the routing rules authoritative and discoverable.\n\n## Acceptance criteria\n- Links resolve\n- Precedence, classes, and the boundary are documented\n- The router is described as opt-in and off by default\n- Link check reports 0 broken links",
+      "decision_point": "2026-09-30T21:08:40.571749Z",
+      "evidence_cutoff": "2026-09-30T21:08:40.571749Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-09-30T21:08:40.571749Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-09-30T21:08:40.571749Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-09-30T21:08:40.571749Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "RETRY",
+        "rationale": "recorded SOP disposition RETRY for run P35-007"
+      }
+    },
+    {
+      "id": "DM-PREVIEW-001",
+      "class": "negative",
+      "task_context": "# PREVIEW-001 — Preview scope and freeze\n\nDefine the preview's authoritative baseline and freeze it: the `main` revision,\nincluded repositories, and the explicit boundary that `harden-001` (acceptance\nenforcement, default OFF) is deferred and not part of the preview.\n\n## Deliverables\n- `docs/preview/SCOPE.md` — preview baseline revision, included components, and the deferred-branch boundary.\n\n## Acceptance criteria\n- The preview baseline revision is recorded exactly and matches a pushed `main` commit.\n- `harden-001` is recorded as deferred (unmerged; enforcement default OFF) with its checkpoint SHA.\n- No component is claimed preview-ready without evidence.",
+      "decision_point": "2026-10-09T19:07:53.046459Z",
+      "evidence_cutoff": "2026-10-09T19:07:53.046459Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-80bc6ce58481",
+          "text": "execution: repository_mutations=3 iterations=23",
+          "content_hash": "80bc6ce584819b1c4901ebcc8177faa8d420e8c6a41bf12533afc3eb8f89c4d4",
+          "produced_before": "2026-10-09T19:07:53.046459Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-09T19:07:53.046459Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-09T19:07:53.046459Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-09T19:07:53.046459Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-09T19:07:53.046459Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run PREVIEW-001"
+      }
+    },
+    {
+      "id": "DM-PREVIEW-002",
+      "class": "planning",
+      "task_context": "# PREVIEW-002 — Install and quickstart verification\n\nVerify a clean install path end to end: `./install.sh` builds and installs the CLI,\nand a first-run quickstart (`sop init`, `sop status`, `sop run --task`) works on a\ndisposable project.\n\n## Deliverables\n- `docs/preview/QUICKSTART-VERIFICATION.md` — exact commands, versions, and observed results.\n\n## Acceptance criteria\n- `./install.sh` succeeds from a clean checkout and the installed binary reports a version.\n- A disposable project completes `sop init` → `sop status` → a bounded `sop run --task`.\n- Every command's observed result is recorded; unavailable steps are labeled UNAVAILABLE.",
+      "decision_point": "2026-10-09T19:11:11.40325Z",
+      "evidence_cutoff": "2026-10-09T19:11:11.40325Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-9d00b16fa41b",
+          "text": "execution: repository_mutations=1 iterations=26",
+          "content_hash": "9d00b16fa41be49231a06468717a353e92fae60e556a9ccd5b1f958f1329472f",
+          "produced_before": "2026-10-09T19:11:11.40325Z"
+        },
+        {
+          "record_id": "ev-5da79cc4f72a",
+          "text": "recent operations: CONTINUE | go vet ./... | go test ./... | go build ./... | preparing outcome",
+          "content_hash": "5da79cc4f72ae29c79422b64ab70cd1121ec687b6c209fe6edb67098a9d833d0",
+          "produced_before": "2026-10-09T19:11:11.40325Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run PREVIEW-002"
+      }
+    },
+    {
+      "id": "DM-RDM-001",
+      "class": "planning",
+      "task_context": "# RDM-001 — Confirm the baseline\n\nInspect repository instructions, branch state, current RAG code, tests, configuration, and telemetry. Record the base commit and dependency versions. Locate prior evaluation dataset, results, and operator decision. Map each existing capability to its implementation and verification evidence. Identify the smallest implementation delta and supported artifact locations. Preflight the SQLite driver, FTS5 availability, build tags, and supported-platform packaging. Map PostgreSQL coupling in startup, configuration, health checks, retrieval, and tests. Define backend selection using existing configuration conventions, including SOP_RAG_ENABLED, rag.enabled, and rag.json. Do not silently change explicitly configured PostgreSQL users to SQLite.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Baseline inventory with implemented, missing, and unverified items\n- Base commit and dependency version record\n- Prior evaluation artifact status record\n- Minimal implementation delta and artifact location map\n- FTS5 and SQLite driver preflight result\n- PostgreSQL coupling map and backend selection definition\n\n## Acceptance criteria\n- Produce a baseline inventory with implemented, missing, and unverified items.\n- Preserve unrelated work; use an isolated branch or worktree for implementation.\n- Do not treat missing historical artifacts as evidence of a passing evaluation.\n- Continue with a documented fresh evaluation if old artifacts are unavailable; stop only if current correctness or required access cannot be established.\n- Confirm SOP_RAG_ENABLED, rag.enabled, and rag.json behavior before proposing changes.\n- Record whether FTS5 is available on supported platforms without adding an external SQLite CLI prerequisite.",
+      "decision_point": "2026-10-19T17:07:56.357404Z",
+      "evidence_cutoff": "2026-10-19T17:07:56.357404Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-7590752365b7",
+          "text": "execution: repository_mutations=0 iterations=28",
+          "content_hash": "7590752365b7592d955b18ec2f3a94cab4f8a9e18a8ea0681c650e24b95740a5",
+          "produced_before": "2026-10-19T17:07:56.357404Z"
+        },
+        {
+          "record_id": "ev-7716ffbe4ad0",
+          "text": "recent operations: PASS | PASS | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "7716ffbe4ad0f23d02cc203fadf9286d134231be2a230af33273902420501894",
+          "produced_before": "2026-10-19T17:07:56.357404Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T17:07:56.357404Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T17:07:56.357404Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T17:07:56.357404Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "RETRY",
+        "rationale": "recorded SOP disposition RETRY for run RDM-001"
+      }
+    },
+    {
+      "id": "DM-RDM-002",
+      "class": "planning",
+      "task_context": "# RDM-002 — Record verified outcomes\n\nDefine a versioned outcome record and generate it from existing run evidence. Include identity, context, decision, result, recovery, provenance, and lifecycle fields as specified. Treat structured evidence as the source of truth. Make any generated rationale cite its sources and stay distinguishable from observed facts.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Versioned outcome record schema\n- Ingestion implementation that writes outcome records from existing run evidence\n- Tests for deduplication, provenance, redaction, status preservation, and invalidation\n\n## Acceptance criteria\n- Repeated ingestion of the same source is idempotent.\n- Failed, partial, blocked, and successful outcomes remain distinct.\n- A gate pass cannot silently convert a partial outcome into a verified success.\n- Missing evidence is explicit; unsupported records cannot support claims of a successful fix.\n- Source deletion, supersession, or access changes invalidate affected index entries.\n- Test deduplication, provenance, redaction, status preservation, and invalidation with representative records.",
+      "decision_point": "2026-10-19T17:10:35.871797Z",
+      "evidence_cutoff": "2026-10-19T17:10:35.871797Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-bf329d4585bd",
+          "text": "execution: repository_mutations=0 iterations=24",
+          "content_hash": "bf329d4585bd149f09d7a7fbdd26c2043be69744019c76099c9bc576c7eb43b9",
+          "produced_before": "2026-10-19T17:10:35.871797Z"
+        },
+        {
+          "record_id": "ev-7716ffbe4ad0",
+          "text": "recent operations: PASS | PASS | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "7716ffbe4ad0f23d02cc203fadf9286d134231be2a230af33273902420501894",
+          "produced_before": "2026-10-19T17:10:35.871797Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T17:10:35.871797Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T17:10:35.871797Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T17:10:35.871797Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run RDM-002"
+      }
+    },
+    {
+      "id": "DM-RDM-002B",
+      "class": "negative",
+      "task_context": "# RDM-002B — Build the local index and retrieval boundary\n\nWrite versioned outcome files atomically and index only complete, eligible records in a separate local SQLite database with structured metadata tables and an FTS5 index. Use stable record IDs and content hashes for idempotent updates. Apply corpus scope and eligibility constraints before ranking and limiting. Implement bounded, parameterized queries with safe FTS query handling. Provide operations to rebuild the index and inspect its status. Detect index/source drift and exclude invalid or superseded evidence. Adapt existing PostgreSQL retrieval to the shared boundary only where necessary; the local path must never initialize a PostgreSQL client or read database credentials.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Atomic versioned outcome-file writer and reader\n- Separate local SQLite index with structured metadata and an FTS5 table\n- Idempotent ingest and update using stable record IDs and content hashes\n- Corpus- and eligibility-scoped, bounded, parameterized search with safe FTS syntax handling\n- Index rebuild and status operations\n- Drift detection that excludes deleted, superseded, modified, or unauthorized evidence\n- Backend-neutral bounded retrieval boundary with typed errors\n\n## Acceptance criteria\n- A clean local setup ingests and retrieves representative history with PostgreSQL absent and no database credentials configured.\n- Automated checks verify that the local path never initializes a PostgreSQL client or attempts a PostgreSQL connection.\n- Search handles exact errors, task IDs, punctuation, empty queries, and unmatched queries without SQL or FTS syntax failures.\n- Duplicate ingestion and interrupted ingestion preserve consistent, complete records.\n- Rebuilding from the same frozen source records returns the same eligible IDs and ranking under the pinned implementa",
+      "decision_point": "2026-10-19T18:58:24.316037Z",
+      "evidence_cutoff": "2026-10-19T18:58:24.316037Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-8c2f909c03a7",
+          "text": "execution: repository_mutations=14 iterations=6",
+          "content_hash": "8c2f909c03a7aac40c64d0a0c7718d8c7baf12c47c7eacbd2f905dbb693872ef",
+          "produced_before": "2026-10-19T18:58:24.316037Z"
+        },
+        {
+          "record_id": "ev-7716ffbe4ad0",
+          "text": "recent operations: PASS | PASS | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "7716ffbe4ad0f23d02cc203fadf9286d134231be2a230af33273902420501894",
+          "produced_before": "2026-10-19T18:58:24.316037Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T18:58:24.316037Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T18:58:24.316037Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T18:58:24.316037Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run RDM-002B"
+      }
+    },
+    {
+      "id": "DM-RDM-003",
+      "class": "negative",
+      "task_context": "# RDM-003 — Add bounded advisory retrieval\n\nRetrieve applicable history before planning and after a failed attempt when recovery is being considered. Filter by authorized repository or corpus, task context, and version compatibility. Retrieve failure records as warnings and verified correction records as candidate remedies. Attach source references and compatibility limits to each result. Bound retrieval time, result count, and injected tokens. Extend current telemetry only where needed to associate retrieved records with the current attempt and actual prompt inclusion. Use explicit experimental configuration for implementation and evaluation; installer selection is not a prerequisite.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Bounded retrieval integration for planning and failure recovery\n- Corpus and repository scoping with compatibility limits\n- Source references and explicit typed error handling\n- Telemetry associating retrieved records with the current attempt and actual prompt inclusion\n- Focused regression coverage for disabled, optional-failure, required-evidence, and cross-corpus behavior\n\n## Acceptance criteria\n- Disabled mode performs zero retrieval and preserves existing behavior.\n- Optional timeout or retrieval failure records a reason and follows the existing fallback path.\n- Missing required evidence blocks execution through the existing supported mechanism.\n- Cross-corpus, stale-record, malicious-instruction, and concurrent-attempt fixtures preserve policy and evidence boundaries.\n- Retrieved approvals never satisfy current approval requirements.\n- Existing passing tests are reused when their inputs are unchanged. Rerun affected tests after changes and required full gates at integration milestones.\n\n## Acceptance checks\n- go test ./internal/cli -run TestAdvisoryDisabledRetrievesNothing\n- go test ./internal/cli -run TestAdv",
+      "decision_point": "2026-10-19T19:12:58.425756Z",
+      "evidence_cutoff": "2026-10-19T19:12:58.425756Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-b6ff58b13ffa",
+          "text": "execution: repository_mutations=21 iterations=6",
+          "content_hash": "b6ff58b13ffad9bea67409e34ecac1b0e98e4dc6417506f214bb7416e73b54bd",
+          "produced_before": "2026-10-19T19:12:58.425756Z"
+        },
+        {
+          "record_id": "ev-7716ffbe4ad0",
+          "text": "recent operations: PASS | PASS | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "7716ffbe4ad0f23d02cc203fadf9286d134231be2a230af33273902420501894",
+          "produced_before": "2026-10-19T19:12:58.425756Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T19:12:58.425756Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T19:12:58.425756Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T19:12:58.425756Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run RDM-003"
+      }
+    },
+    {
+      "id": "DM-RDM-004",
+      "class": "planning",
+      "task_context": "# RDM-004 — Evaluate decision quality\n\nCreate at least 30 held-out cases: 10 planning, 10 recovery, and 10 negative cases covering irrelevant evidence, obsolete fixes, missing evidence, or policy manipulation. Keep tuning cases separate. Freeze the corpus, labels, expected outcomes, and scoring rules before the final run. For each historical case, expose only evidence available before its decision point. Exclude its eventual solution and near-duplicate solution records. If sufficient independent cases do not exist, report insufficient evidence and keep the feature experimental. First compare A and B with the same model, prompt template, execution constraints, and comparable evidence-token budget. Freeze a local keyword evaluation before considering semantic retrieval.\nEvaluation arms: A is current task context without historical retrieval; B is current task context plus SQLite FTS5 keyword retrieval; C (conditional) is current task context plus local hybrid keyword and semantic retrieval; P (optional) is current task context plus the existing PostgreSQL backend, with its retrieval mode explicitly recorded. Run each case three times per evaluated arm. Report unimplemented or unavailable optional arms as not evaluated. Record model version and sampling settings. Repeated runs measure variability; they do not increase the number of independent cases. Use sandboxed replay for executable tasks and a fixed, arm-blind review rubric for plans.\nMeasure: primary is the percentage of cases with a correct plan or verified recovery, averaged across repeats. Secondary measures repeated failed actions, unnecessary escalations, human interventions, unsupported claims, and citation accuracy. Operational measures added p50/p95 latency, token use, and actual or estimated cost. Diagnostic only: recall@5, precision@5, and MRR.\nProposed pilot gate, frozen before evaluation: the selected retrieval arm improves the primary score by at least 10 percentage points over A; C must also improve",
+      "decision_point": "2026-10-19T19:26:44.310336Z",
+      "evidence_cutoff": "2026-10-19T19:26:44.310336Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-bf62fab55741",
+          "text": "execution: repository_mutations=9 iterations=26",
+          "content_hash": "bf62fab55741adc08fead3cb70e483ec98a84fc6c919dc4256216e60b81564fe",
+          "produced_before": "2026-10-19T19:26:44.310336Z"
+        },
+        {
+          "record_id": "ev-29c93e98656a",
+          "text": "recent operations: decision-evidence-unavailable | CONTINUE | go test ./... | go build ./... | reading",
+          "content_hash": "29c93e98656a931ccc19c7f32c37cfa976984b612118b273fa3afe036df53dee",
+          "produced_before": "2026-10-19T19:26:44.310336Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T19:26:44.310336Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T19:26:44.310336Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T19:26:44.310336Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run RDM-004"
+      }
+    },
+    {
+      "id": "DM-RM-003",
+      "class": "negative",
+      "task_context": "# RM-003 — Offline Aggregator (Pure Library and Tests)\n\nImplement the deterministic, model-free aggregation as a pure internal library plus\ntests and golden fixtures. It reads recorded run artifacts through the existing reader\nshapes, emits the RM-002 metrics with denominators and coverage, and is wired to **no**\nCLI command and **no** production runtime path.\n\n## Deliverables\n- `internal/runmetrics/` — a deterministic aggregator with no new dependency and no provider/model-specific logic.\n- `internal/runmetrics/testdata/` — fixtures covering present, absent, and zero-valued artifacts.\n- `internal/runmetrics/*_test.go` — tests asserting the goldens, the zero-vs-`UNAVAILABLE` distinction, coverage percentages, and reproducibility.\n- `docs/reports/run-metrics/RM-003-aggregation-results.md` — the aggregate over the live run evidence, with per-metric denominators and coverage.\n\n## Acceptance criteria\n- The aggregator reads only recorded artifacts and makes no model call and no network call.\n- Absent and zero-valued artifacts are handled distinctly: absent is `UNAVAILABLE` and reduces coverage, zero is a recorded measurement.\n- Each emitted metric includes its denominator and coverage percentage.\n- Golden fixtures pass and two runs over the same inputs produce identical output.\n- No file under `internal/cli/` is modified and no production runtime path imports the new library; the package adds no `go.mod` requirement.\n- Token usage is emitted as `UNAVAILABLE` when not recorded and is absent from any gate/budget/routing field.",
+      "decision_point": "2026-10-08T14:46:58.92502Z",
+      "evidence_cutoff": "2026-10-08T14:46:58.92502Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-6439e0a67a5e",
+          "text": "execution: repository_mutations=3 iterations=35",
+          "content_hash": "6439e0a67a5e85d6c19cf3c311d44a388744eebafb3f2ae6bb8bd438c5ed4b35",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        },
+        {
+          "record_id": "ev-2d0aa1511778",
+          "text": "recent operations: failed | test -z \"$(gofmt -l .)\" | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "2d0aa15117782e9fa341cfd22a6a29c14d2dd157c585068ebd6976a8cdf2a01d",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        },
+        {
+          "record_id": "ev-42c9dabc0ee8",
+          "text": "validation LINT: test -z \"$(gofmt -l .)\" -\u003e PASS",
+          "content_hash": "42c9dabc0ee89be35921a006336239d8f44fe9dbdffa298ec8d022dd22888051",
+          "produced_before": "2026-10-08T14:46:58.92502Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run RM-003"
+      }
+    },
+    {
+      "id": "DM-S5",
+      "class": "planning",
+      "task_context": "# S5 — CLI inspection and auto-selection surface\n\nTrace the existing cmd/ security command wiring, then add sop security inspect --json and sop security scan --auto that fill missing built-in categories from detected content while explicit configuration stays authoritative.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Discovery note in the change record describing the existing security command wiring\n- sop security inspect --json returning detection and capability status\n- sop security scan --auto flag wired to the deterministic selection function\n- CLI tests for inspector JSON shape and auto selection behavior\n\n## Acceptance criteria\n- Inspect --json emits detected languages, lockfiles, and adapter capability statuses.\n- Auto mode adds missing built-in categories only and never overrides explicit configuration.\n- Without --auto, behavior is unchanged.\n- CLI tests pass with a fake executor; real-tool checks are gated and reported as not run.",
+      "decision_point": "2026-10-18T02:21:46.412361Z",
+      "evidence_cutoff": "2026-10-18T02:21:46.412361Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-ba99c91e1ae8",
+          "text": "execution: repository_mutations=0 iterations=23",
+          "content_hash": "ba99c91e1ae85dc680c8490acd289c73b24fcc4a485179a3ee8219ecc935f8be",
+          "produced_before": "2026-10-18T02:21:46.412361Z"
+        },
+        {
+          "record_id": "ev-7716ffbe4ad0",
+          "text": "recent operations: PASS | PASS | go vet ./... | go test ./... | go build ./...",
+          "content_hash": "7716ffbe4ad0f23d02cc203fadf9286d134231be2a230af33273902420501894",
+          "produced_before": "2026-10-18T02:21:46.412361Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-18T02:21:46.412361Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-18T02:21:46.412361Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-18T02:21:46.412361Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run S5"
+      }
+    },
+    {
+      "id": "DM-S8",
+      "class": "negative",
+      "task_context": "# S8 — Full verification and packaging checks\n\nRun the acceptance command set and fix any regression without widening scope.\n\n## Declared repository paths\nThese name repository paths. They are not report deliverables, but SOP does verify through the outcome criteria that each path exists at completion.\n- Focused test inventory covering Go-only, Rust-only, mixed, clean/seeded, unavailable, malformed, timeout, stale/missing database, missing lockfile, resume invalidation, and redaction\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Verification record listing each command and result\n- Note of gated real-tool checks reported as not run\n\n## Acceptance criteria\n- gofmt, go vet ./..., go build ./..., and go test ./... pass.\n- Documentation link checks and packaging checks pass.\n- No scanner tool is installed and no shell authorization or approval policy is changed.\n- Unrelated changes and untracked state are preserved.",
+      "decision_point": "2026-10-18T02:24:48.891278Z",
+      "evidence_cutoff": "2026-10-18T02:24:48.891278Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-c657cff1aebb",
+          "text": "execution: repository_mutations=1 iterations=35",
+          "content_hash": "c657cff1aebb56737ab4894a3ec0ede795df14bf66eeeb35db2dc7be5cfb4422",
+          "produced_before": "2026-10-18T02:24:48.891278Z"
+        },
+        {
+          "record_id": "ev-a16f489fc007",
+          "text": "recent operations: PASS | PASS | listing | listing | listing",
+          "content_hash": "a16f489fc007cafd2a83e99c7eafaeb0b83c88ba557f148ec658af351566db9e",
+          "produced_before": "2026-10-18T02:24:48.891278Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-18T02:24:48.891278Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-18T02:24:48.891278Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-18T02:24:48.891278Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run S8"
+      }
+    },
+    {
+      "id": "DM-SEC-RES-003",
+      "class": "planning",
+      "task_context": "# SEC-RES-003 — Remove calendar dependence from freshness tests\n\nReplace wall-clock freshness decisions in cargo-audit tests with an injected\nclock. Cover fresh, stale, unknown freshness, the exact 90-day boundary, and\nresume invalidation when a previously fresh database ages without changing its\ncontent identity. Production freshness policy is unchanged.\n\n## Declared repository paths\nThese name repository paths. They are not report deliverables, but SOP does verify through the outcome criteria that each path exists at completion.\n- `internal/security/cargoaudit.go`: injectable freshness clock used by `currentProvenance` and `Scan`; production defaults to `time.Now`.\n- `internal/security/cargoaudit_test.go`: fixed test clock for adapter tests.\n\n## Expected outcomes (descriptive)\nReport these in your summary. They do not require a new file unless an acceptance criterion or a required deliverable file names one.\n- Regression tests for the boundary, unknown metadata, fixture aging, and resume invalidation.\n\n## Acceptance criteria\n- Freshness tests produce the same result regardless of execution date.\n- Fresh, stale, unknown, and the exact 90-day boundary are explicit.\n- Aged evidence invalidates reuse even when content identity is unchanged.\n- Tracked fixtures are not edited by tests and production policy is not weakened.\n\n## Acceptance checks\n- go test ./internal/security\n- go vet ./internal/security",
+      "decision_point": "2026-10-19T02:53:21.749587Z",
+      "evidence_cutoff": "2026-10-19T02:53:21.749587Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-486c53760bf0",
+          "text": "execution: repository_mutations=2 iterations=52",
+          "content_hash": "486c53760bf0292127a87380b5b0216ffb6b72c0ed20598f58cfb6613f3c65ec",
+          "produced_before": "2026-10-19T02:53:21.749587Z"
+        },
+        {
+          "record_id": "ev-96738ad50808",
+          "text": "recent operations: CONTINUE | reading | go test -count=1 ./internal/security | go test -count=1 -run 'CargoDatabase|CargoAuditResume|CargoAuditStalePolicy' ./internal/security | git status --short --branch",
+          "content_hash": "96738ad508086b4658e2b1d6c85dcc3859a9180b0ec76ceeec105e25ff70ca25",
+          "produced_before": "2026-10-19T02:53:21.749587Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-19T02:53:21.749587Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-19T02:53:21.749587Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-19T02:53:21.749587Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "CONTINUE",
+        "rationale": "recorded SOP disposition CONTINUE for run SEC-RES-003"
+      }
+    },
+    {
+      "id": "DM-SOP-001",
+      "class": "negative",
+      "task_context": "# SOP-001 — Add opt-in Cargo authorization and enforce the verdict gate on dependents\n\nAdd two independent, default-off permissions: one that lets the agent tool harness run supported\nCargo commands, and one that lets plan acceptance checks run them. Classify supported Cargo\ncommands (build, test, check, clippy, fmt --check) through internal/commandpolicy only when the\nrelevant permission is enabled; reject unsupported subcommands and arguments, shell syntax, and a\n--manifest-path that resolves outside the repository before execution. Confirm that a failed\nrequired acceptance check prevents a dependent task from executing, reusing the existing verdict\ngate. Document the configuration keys, defaults, and the authorization boundary in\ndocs/reference/configuration.md. Existing Go and read-only Git classification stays unchanged.\n\n## Declared repository paths\nThese name repository paths. They are not report deliverables, but SOP does verify through the outcome criteria that each path exists at completion.\n- internal/commandpolicy/cargo.go\n- internal/commandpolicy/cargo_test.go\n- internal/toolharness/cargo_test.go\n- internal/cli/acceptance_cargo_test.go\n- internal/config/cargo_permissions_test.go\n\n## Acceptance criteria\n- Agent-tool and acceptance-check Cargo permissions operate independently and default off.\n- Supported Cargo commands execute only when their relevant permission is enabled.\n- Unsupported arguments, shell syntax, and manifest-path escapes are rejected before execution.\n- Failed required acceptance prevents dependent-task execution.\n- Existing Go and read-only Git behavior remains compatible.\n\n## Acceptance checks\n- go test ./internal/config -run TestCargoPermissionsDefaultOff\n- go test ./internal/config -run TestCargoPermissionsIndependent\n- go test ./internal/commandpolicy -run TestCargoRequiresPermission\n- go test ./internal/commandpolicy -run TestCargoRejectsUnsupportedArguments\n- go test ./internal/commandpolicy -run TestCargoRejectsManifestPathEscape",
+      "decision_point": "2026-10-18T02:38:55.149004Z",
+      "evidence_cutoff": "2026-10-18T02:38:55.149004Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-4de3e31649e4",
+          "text": "execution: repository_mutations=7 iterations=37",
+          "content_hash": "4de3e31649e4d99a25133c92729fa47126ef7c02c71cf1c6dae8d09b9d1a537c",
+          "produced_before": "2026-10-18T02:38:55.149004Z"
+        },
+        {
+          "record_id": "ev-024ebff9ef1c",
+          "text": "recent operations: PASS | PASS | reading | reading | reading",
+          "content_hash": "024ebff9ef1c5a3f9e65c7432e8ef5c8732068bc611ef3fd06c5936c418da7ce",
+          "produced_before": "2026-10-18T02:38:55.149004Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-18T02:38:55.149004Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-18T02:38:55.149004Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-18T02:38:55.149004Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run SOP-001"
+      }
+    },
+    {
+      "id": "DM-SOP-002",
+      "class": "negative",
+      "task_context": "# SOP-002 — Detect execution prerequisites before implementation\n\nBefore invoking the implementation model, check each declared validation and acceptance command\nagainst the authorization path that will actually run it, and check declared tools (on PATH),\nmanifests (file exists inside the repository), and required environment variables (presence\nonly). Report a specific setup blocker instead of calling the model. Preflight never executes a\ntask command to decide readiness and never prints a secret value. A setup failure consumes no\nimplementation continuation budget.\n\n## Declared repository paths\nThese name repository paths. They are not report deliverables, but SOP does verify through the outcome criteria that each path exists at completion.\n- internal/cli/preflight.go\n- internal/cli/preflight_test.go\n\n## Acceptance criteria\n- A command-policy mismatch is detected before a model call.\n- Missing tools, manifests, or declared environment variables produce a specific setup blocker.\n- Secret values are never printed.\n- Setup failures do not consume implementation continuation budgets.\n- Preflight does not execute arbitrary task commands to determine readiness.\n\n## Acceptance checks\n- go test ./internal/cli -run TestPreflightPolicyMismatchBeforeModelCall\n- go test ./internal/cli -run TestPreflightMissingTool\n- go test ./internal/cli -run TestPreflightMissingManifest\n- go test ./internal/cli -run TestPreflightMissingEnvVarNeverPrintsValue\n- go test ./internal/cli -run TestPreflightConflictingPermission\n- go test ./internal/cli -run TestPreflightFailureKeepsContinuationBudget\n- go test ./internal/cli -run TestPreflightExecutesNoTaskCommand\n- go vet ./...",
+      "decision_point": "2026-10-18T02:54:47.788041Z",
+      "evidence_cutoff": "2026-10-18T02:54:47.788041Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-9a6a4876225b",
+          "text": "execution: repository_mutations=4 iterations=9",
+          "content_hash": "9a6a4876225b9dba949426e8c6a14e89f02d149ec7879380a62d340259c8b15b",
+          "produced_before": "2026-10-18T02:54:47.788041Z"
+        },
+        {
+          "record_id": "ev-14dde4cf79c0",
+          "text": "recent operations: PASS | PASS | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "14dde4cf79c0d173af25acc3c3de7866f347ee7f804b973d00da43ce4fa51f74",
+          "produced_before": "2026-10-18T02:54:47.788041Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-18T02:54:47.788041Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-18T02:54:47.788041Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-18T02:54:47.788041Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "BLOCK",
+        "rationale": "recorded SOP disposition BLOCK for run SOP-002"
+      }
+    },
+    {
+      "id": "DM-SPIKE-003",
+      "class": "negative",
+      "task_context": "# SPIKE-003 — Durable question and decision contract\n\nDefine and implement the smallest durable question/decision contract using\nexisting SOP services and persistence patterns, with narrowly scoped CLI/MCP\naccess. Keep PENDING, ANSWERED, APPLIED, REJECTED, and SUPERSEDED question states\nseparate from the run's WAITING_FOR_PLANNER stage. Record application before\ndispatching continuation. Proceed only after SPIKE-002 connectivity is verified.\n\n## Acceptance criteria\n- Question and answer are independently recorded.\n- Duplicate and stale submissions are handled deterministically.\n- No approval tools are exposed to the planner role.",
+      "decision_point": "2026-10-14T21:50:51.746403Z",
+      "evidence_cutoff": "2026-10-14T21:50:51.746403Z",
+      "pre_decision_evidence": [
+        {
+          "record_id": "ev-708a9fc6237c",
+          "text": "execution: repository_mutations=18 iterations=107",
+          "content_hash": "708a9fc6237cbbbbba77b46bcc5c25a0fdb2c1415a8b3e41971b895de6e97a1f",
+          "produced_before": "2026-10-14T21:50:51.746403Z"
+        },
+        {
+          "record_id": "ev-ddb80241a3cd",
+          "text": "recent operations: NEEDS_HUMAN | NEEDS_HUMAN | reviewing changes | go vet ./... | go test ./...",
+          "content_hash": "ddb80241a3cd1cdc2402d88970dc1b613f667dcf1d13cbf51c0885fcef0e1bad",
+          "produced_before": "2026-10-14T21:50:51.746403Z"
+        },
+        {
+          "record_id": "ev-480b24db83fa",
+          "text": "validation BUILD: go build ./... -\u003e PASS",
+          "content_hash": "480b24db83fa74ba5aa65c03f558039337862c23ba5725438ac7f6d5ae4cecd6",
+          "produced_before": "2026-10-14T21:50:51.746403Z"
+        },
+        {
+          "record_id": "ev-fecf27421b4c",
+          "text": "validation UNIT_TEST: go test ./... -\u003e PASS",
+          "content_hash": "fecf27421b4cb7e8d416c775423935c0c988c627d2daa41df4fe01728330f202",
+          "produced_before": "2026-10-14T21:50:51.746403Z"
+        },
+        {
+          "record_id": "ev-ca4d111f00ef",
+          "text": "validation LINT: go vet ./... -\u003e PASS",
+          "content_hash": "ca4d111f00ef945523f74ffa682c1c2489ca379ef5f36bd5f31687496ad8cdde",
+          "produced_before": "2026-10-14T21:50:51.746403Z"
+        }
+      ],
+      "eventual_solution_ids": [],
+      "near_duplicate_solution_ids": [],
+      "executable": false,
+      "expected": {
+        "kind": "plan",
+        "decision": "NEEDS_HUMAN",
+        "rationale": "recorded SOP disposition NEEDS_HUMAN for run SPIKE-003"
+      }
+    }
+  ]
+}
