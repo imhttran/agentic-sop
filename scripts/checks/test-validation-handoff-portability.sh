@@ -68,6 +68,16 @@ sha() {
   else sha256sum "$1" | awk '{print $1}'; fi
 }
 
+file_mtime() {
+  # GNU stat uses -c, BSD/macOS stat uses -f. Probe the GNU form first: on Linux
+  # `stat -f` succeeds and prints filesystem statistics instead of an error.
+  if stat -c %Y "$1" >/dev/null 2>&1; then
+    stat -c %Y "$1"
+  else
+    stat -f %m "$1"
+  fi
+}
+
 write_results() {
   local path="$1" status="$2" candidate_sha="$3" source_rev="$4" workflow_id="$5" validator="$6"
   python3 - "$path" "$status" "$candidate_sha" "$source_rev" "$workflow_id" "$validator" <<'PY'
@@ -261,7 +271,7 @@ fi
 # rebuilding or redownloading the candidate.
 # ---------------------------------------------------------------------------
 
-CANDIDATE_MTIME_BEFORE="$(stat -f %m "$CANDIDATE" 2>/dev/null || stat -c %Y "$CANDIDATE")"
+CANDIDATE_MTIME_BEFORE="$(file_mtime "$CANDIDATE")"
 MANIFEST_SHA_BEFORE="$(sha "$MANIFEST")"
 if python3 "$VALIDATOR" --handoff "$ROOT/handoff-pass.json" --checkout "$ROOT" \
   --schema "$SCHEMA" --json >"$TMP/review.json" 2>"$TMP/review.err"; then
@@ -269,7 +279,7 @@ if python3 "$VALIDATOR" --handoff "$ROOT/handoff-pass.json" --checkout "$ROOT" \
   assert_eq "$(json_get "$TMP/review.json" next_permitted_action)" "PREPARE_PR"
   assert_eq "$(json_get "$TMP/review.json" validation_status)" "PASS"
   assert_eq "$(json_get "$TMP/review.json" candidate_sha256)" "$CANDIDATE_SHA"
-  CANDIDATE_MTIME_AFTER="$(stat -f %m "$CANDIDATE" 2>/dev/null || stat -c %Y "$CANDIDATE")"
+  CANDIDATE_MTIME_AFTER="$(file_mtime "$CANDIDATE")"
   assert_eq "$CANDIDATE_MTIME_AFTER" "$CANDIDATE_MTIME_BEFORE"
   assert_eq "$(sha "$MANIFEST")" "$MANIFEST_SHA_BEFORE"
   [ ! -d "$ROOT/.run/tunnel/build" ] || fail "reviewer created a build directory"
