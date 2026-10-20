@@ -86,6 +86,25 @@ func TestValidationHandoffPortability(t *testing.T) {
 	}
 }
 
+// TestPlannerTunnelCandidateLifecycle runs the candidate lifecycle suite in CI:
+// provision, preflight, start, stop, startup failure, rollback (including a
+// baseline that exits immediately), the JSON handoff, and the wrapper pointer. It
+// launches stub tunnel processes, so it needs bash, ps, and python3; it is skipped
+// on Windows.
+func TestPlannerTunnelCandidateLifecycle(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the candidate lifecycle fixture uses POSIX processes and shell")
+	}
+	cmd := exec.Command("bash", filepath.Join("..", "..", "scripts", "checks", "test-planner-tunnel-candidate.sh"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("candidate lifecycle test failed: %v\n%s", err, out)
+	}
+	if !strings.Contains(string(out), "all candidate lifecycle tests passed") {
+		t.Fatalf("candidate lifecycle test did not report success:\n%s", out)
+	}
+}
+
 // TestMCPLiveValidationHandoffArtifact proves the helper's JSON handoff records the
 // portable, versioned contract without claiming independent validation.
 func TestMCPLiveValidationHandoffArtifact(t *testing.T) {

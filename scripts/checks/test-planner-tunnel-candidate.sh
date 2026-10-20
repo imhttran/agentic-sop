@@ -543,6 +543,39 @@ else
   pass "the rolled-back baseline can be stopped explicitly"
 fi
 
+# 10b. Rollback to a baseline that exits immediately: the failure is reported and
+#      recorded, not lost to a silent abort. The manifest is snapshotted first and
+#      restored afterwards, so later tests see the same state as before.
+cp "$MANIFEST" "$TMP/manifest.before-10b"
+if ! run_candidate start >"$TMP/out" 2>&1; then
+  fail "restart before the failing-baseline rollback failed: $(cat "$TMP/out")"
+else
+  CAND_PID="$(mg process_pid)"
+  cp "$BASELINE" "$TMP/baseline.good"
+  cat > "$BASELINE" <<'EOF'
+#!/bin/sh
+if [ "${1:-}" = "--version" ]; then
+  echo "0.0.16+bad-baseline"
+  exit 0
+fi
+exit 1
+EOF
+  chmod +x "$BASELINE"
+  BAD_BASELINE_SHA="$(sha "$BASELINE")"
+  sed -i.bak "s/^baseline_sha256=.*/baseline_sha256=$BAD_BASELINE_SHA/; s/^baseline_version=.*/baseline_version=0.0.16+bad-baseline/" "$MANIFEST"
+  if run_candidate rollback --start --startup-timeout 2 >"$TMP/out" 2>&1; then
+    fail "rollback --start should fail for a baseline that exits immediately"
+  else
+    assert_contains "$(cat "$TMP/out")" "baseline did not confirm startup"
+    assert_eq "$(mg state)" "rolled-back"
+    wait_dead "$CAND_PID" || fail "candidate PID $CAND_PID is still alive after the failed rollback"
+    pass "rollback to a baseline that exits immediately reports and records the failure"
+  fi
+  mv "$TMP/baseline.good" "$BASELINE"
+fi
+mv "$TMP/manifest.before-10b" "$MANIFEST"
+rm -f "$MANIFEST.bak"
+
 # ---------------------------------------------------------------------------
 # 11. Handoff contract.
 # ---------------------------------------------------------------------------

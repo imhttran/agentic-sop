@@ -256,8 +256,12 @@ set_manifest_value() {
 # Process identity
 # ---------------------------------------------------------------------------
 
+# process_command_of prints the command line of PID $1, or nothing when the process
+# is gone. It never fails: under set -euo pipefail a failing `ps` for a process that
+# has just exited would otherwise abort the caller's assignment silently (for
+# example a candidate that dies immediately after launch).
 process_command_of() {
-  ps -p "$1" -o command= 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//'
+  ps -p "$1" -o command= 2>/dev/null | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' || true
 }
 
 process_alive() {
@@ -1016,6 +1020,11 @@ terminate_pid() {
   [ -n "$pid" ] || return 0
   process_alive "$pid" || return 0
   actual="$(process_command_of "$pid")"
+  # The process may exit between the liveness check and ps; that is a stop, not an
+  # identity change.
+  if [ -z "$actual" ] && ! process_alive "$pid"; then
+    return 0
+  fi
   if [ -n "$expected" ] && [ "$actual" != "$expected" ]; then
     die "refusing to signal PID $pid: command changed (expected '$expected', got '$actual')"
   fi
@@ -1026,6 +1035,9 @@ terminate_pid() {
   done
   if process_alive "$pid"; then
     actual="$(process_command_of "$pid")"
+    if [ -z "$actual" ] && ! process_alive "$pid"; then
+      return 0
+    fi
     [ "$actual" = "$expected" ] || die "PID $pid changed identity; refusing to force-kill"
     warn "PID $pid did not exit after ${timeout}s; sending SIGKILL"
     kill -KILL "$pid" 2>/dev/null || true
