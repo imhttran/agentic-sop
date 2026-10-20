@@ -140,3 +140,30 @@ func TestUpdateValidationRefusesInvalidConfiguration(t *testing.T) {
 		t.Errorf("invalid configuration was modified:\n%s", got)
 	}
 }
+
+func TestTemplateForDirNestedWebCommandsParse(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "web"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "web", "package.json"), []byte(`{"scripts":{"build":"next build","e2e":"playwright test","typecheck":"tsc --noEmit"},"dependencies":{"next":"^15.0.0"}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "web", "next.config.ts"), []byte("export default {}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	text, detection := TemplateForDir("nested", dir)
+	if detection.Kind != "nextjs" {
+		t.Fatalf("kind = %q, want nextjs", detection.Kind)
+	}
+	if !strings.Contains(text, "cd 'web' && npm run build") {
+		t.Fatalf("template does not carry the nested command:\n%s", text)
+	}
+	cfg, err := Parse([]byte(text))
+	if err != nil {
+		t.Fatalf("nested template does not parse: %v", err)
+	}
+	if len(cfg.Validation.Build) != 1 || cfg.Validation.Build[0] != "cd 'web' && npm run build" {
+		t.Errorf("build = %v", cfg.Validation.Build)
+	}
+}
