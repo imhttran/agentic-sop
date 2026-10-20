@@ -132,6 +132,11 @@ of the read-only capabilities, and `/sop-rag-integrate` advises whether a projec
 retrieval augmentation at all and plans a scoped integration (or recommends NO-RAG);
 see [docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md).
 
+The provider-neutral `/mcp-live-validation` skill prepares pinned MCP candidates,
+produces a versioned cross-agent validation handoff, and preserves approval-gated
+start, rollback, and promotion boundaries; see
+[the MCP live-validation guide](docs/guides/MCP-LIVE-VALIDATION.md).
+
 ## Basic Workflow
 
 ```text
@@ -162,7 +167,7 @@ Detailed state transitions and lifecycle rules live in the specifications:
 ## Status
 
 SOP V1 and the subsequent routing, provider, recovery, distribution, approval,
-agentic reliability, and context-efficiency layers are implemented. See
+agentic reliability, and context-efficiency layers are implemented. Optional local decision memory is implemented but disabled by default pending a valid held-out benefit evaluation. See
 [Project Status](docs/reference/PROJECT-STATUS.md) for delivery evidence and known
 limitations, [Backlog](docs/plans/BACKLOG.md) for future work, and the
 [performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for measured results
