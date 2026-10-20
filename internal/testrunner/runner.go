@@ -194,6 +194,11 @@ func (r *Runner) Run(ctx context.Context, check Check) Result {
 // plain field scan is enough; no shell is involved.
 func isGofmtListing(command string) bool {
 	fields := strings.Fields(command)
+	// A nested module's check is generated as "cd '<dir>' && gofmt -l ."; the
+	// leading directory change does not alter what gofmt lists.
+	if len(fields) > 3 && fields[0] == "cd" && fields[2] == "&&" {
+		fields = fields[3:]
+	}
 	if len(fields) < 2 || fields[0] != "gofmt" {
 		return false
 	}

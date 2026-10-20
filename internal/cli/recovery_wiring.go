@@ -64,13 +64,15 @@ func recordRecovery(rn *runpkg.Run, rec recovery.Recovery) error {
 	return err
 }
 
-// priorNoProgressRecoveries counts automatic no-progress recoveries already
+// priorNoProgressRecoveries counts automatic checkpoint recoveries already
 // recorded for this run, so the first stop may resume from its checkpoint and a
-// second stop is terminal. The journal is the durable source of truth.
+// second stop is terminal. Only a checkpoint resume counts: other no-change
+// records (a refused retry, a human boundary) share the class but never spent
+// the bounded recovery. The journal is the durable source of truth.
 func priorNoProgressRecoveries(rn *runpkg.Run) int {
 	count := 0
 	for _, rec := range recoveryHistory(rn) {
-		if rec.Class == recovery.ImplementationNoProgress {
+		if rec.Change == recovery.ChangeResumeCheckpoint {
 			count++
 		}
 	}

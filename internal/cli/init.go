@@ -44,6 +44,12 @@ func runInit(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 		}
 		if present {
 			detection := projectdetect.Detect(dir)
+			if detection.Kind == projectdetect.KindUnknown || detection.Empty() {
+				// Never replace an operator's commands with nothing.
+				fmt.Fprintf(stderr, "init: no validation commands were detected for this project; .agent-sdlc/config.yaml was not changed\n")
+				reportDetectionWarnings(stderr, detection)
+				return exitError
+			}
 			if err := config.UpdateValidation(config.Path(dir), config.Validation{
 				Build: detection.Validation.Build,
 				Test:  detection.Validation.Test,

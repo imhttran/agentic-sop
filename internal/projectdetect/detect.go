@@ -403,9 +403,15 @@ func selectPackage(files manifestFiles) (*packageInfo, []string) {
 // not treated as repository-level evidence.
 const maxManifestDepth = 2
 
+// skippedDirs are never searched: dependency and build output, plus auxiliary
+// folders (tests, fixtures, examples, tooling, docs) whose manifests describe a
+// side module, not the project, and must not make a repository "mixed".
 var skippedDirs = map[string]bool{
 	".git": true, ".agent-sdlc": true, "node_modules": true, "vendor": true,
 	"target": true, "dist": true, "build": true, ".next": true, "coverage": true,
+	"test": true, "tests": true, "testdata": true, "fixtures": true,
+	"example": true, "examples": true, "tools": true, "scripts": true,
+	"docs": true, "third_party": true,
 }
 
 func findManifests(root string) manifestFiles {

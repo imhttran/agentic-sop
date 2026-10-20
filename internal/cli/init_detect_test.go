@@ -1,6 +1,8 @@
 package cli
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -144,5 +146,28 @@ func TestInitRefreshValidationUpdatesOnlyDetection(t *testing.T) {
 		if !strings.Contains(all, want) {
 			t.Errorf("refresh missing %q: %v", want, all)
 		}
+	}
+}
+
+// TestInitRefreshValidationRefusesUnknownProject proves a refresh that detects
+// nothing leaves the existing configuration byte for byte unchanged.
+func TestInitRefreshValidationRefusesUnknownProject(t *testing.T) {
+	dir := t.TempDir()
+	const original = "version: 1\nproject:\n  name: py\nvalidation:\n  test:\n    - pytest\n"
+	writeFileT(t, dir, ".agent-sdlc/config.yaml", original)
+
+	code, _, stderr := runCLI(t, dir, "init", "--refresh-validation")
+	if code == exitOK {
+		t.Fatalf("refresh of an unknown project succeeded; stderr=%s", stderr)
+	}
+	if !strings.Contains(stderr, "was not changed") {
+		t.Errorf("stderr = %q, want the refusal", stderr)
+	}
+	got, err := os.ReadFile(filepath.Join(dir, ".agent-sdlc", "config.yaml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Errorf("configuration changed:\n%s", got)
 	}
 }

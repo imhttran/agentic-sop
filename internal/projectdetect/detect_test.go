@@ -285,3 +285,25 @@ func TestDetectSelectsNextPackageOverUnrelatedRootPackage(t *testing.T) {
 		t.Errorf("selected the unrelated root package: %v", d.Validation.Build)
 	}
 }
+
+// TestDetectIgnoresAuxiliaryManifests proves side modules in test, example, and
+// tooling folders do not make a Rust repository mixed or add their checks.
+func TestDetectIgnoresAuxiliaryManifests(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "Cargo.toml", "[package]\nname = \"app\"\n")
+	write(t, dir, "tools/gen/go.mod", "module example.com/gen\n")
+	write(t, dir, "testdata/fixture/package.json", `{"scripts":{"build":"x"}}`)
+	write(t, dir, "examples/demo/Cargo.toml", "[package]\nname = \"demo\"\n")
+	write(t, dir, "tests/e2e/package.json", `{"scripts":{"test":"x"}}`)
+	d := Detect(dir)
+	if d.Kind != KindRust {
+		t.Fatalf("kind = %q, want rust; auxiliary manifests must be ignored (%+v)", d.Kind, d.Manifests)
+	}
+	all := append(append(append([]string{}, d.Validation.Build...), d.Validation.Test...), d.Validation.Lint...)
+	for _, cmd := range all {
+		if strings.HasPrefix(cmd, "cd ") {
+			t.Errorf("auxiliary folder command proposed: %q", cmd)
+		}
+	}
+	assertNoGo(t, d)
+}
