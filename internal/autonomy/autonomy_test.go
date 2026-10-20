@@ -392,20 +392,23 @@ func TestSecurityDecisionRequiresHumanAtEveryLevel(t *testing.T) {
 	}
 }
 
-// TestNoProgressIsNotAutoContinue proves a bounded no-progress stop is never
-// continued automatically at any autonomy level: it requires a human/operator
-// decision, unlike productive incomplete work.
-func TestNoProgressIsNotAutoContinue(t *testing.T) {
-	c := failure.Classification{Kind: failure.NoProgress, Disposition: failure.Block, Confidence: failure.High,
+// TestNoProgressIsBoundedAutoRetry proves a no-progress stop takes one bounded
+// automatic retry at every autonomy level that permits retries, so the recorded
+// checkpoint is used, and never becomes a productive continuation or a human
+// approval. Disabling retries falls back to the terminal operator block.
+func TestNoProgressIsBoundedAutoRetry(t *testing.T) {
+	c := failure.Classification{Kind: failure.NoProgress, Disposition: failure.Retry, Confidence: failure.High,
 		Reason: "the invocation made no repository progress within its bounded stale allowance"}
 	for _, level := range []Level{Low, Balanced, High} {
 		d := Decide(c, PolicyFor(level))
-		if d.Action == ActionAutoContinue {
-			t.Fatalf("%s: a bounded no-progress stop must not auto-continue: %+v", level, d)
+		if d.Action != ActionAutoRetry || d.RequiresHuman {
+			t.Fatalf("%s: a no-progress stop must take one bounded automatic retry, not terminate or ask a human: %+v", level, d)
 		}
-		if d.Action != ActionTerminal || d.RequiresHuman {
-			t.Fatalf("%s: a bounded no-progress stop must be TERMINAL and not require a human approval: %+v", level, d)
-		}
+	}
+	noRetry := PolicyFor(Balanced)
+	noRetry.AutoRetry = false
+	if d := Decide(c, noRetry); d.Action != ActionTerminal || d.RequiresHuman {
+		t.Fatalf("retries disabled: decision = %+v, want TERMINAL without a human approval", d)
 	}
 }
 

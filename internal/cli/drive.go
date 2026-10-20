@@ -58,9 +58,11 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 	}
 
 	// Equivalent to `sop init`: create state and the configuration template.
-	if _, err := ensureProjectInitialized(dir); err != nil {
+	if _, warnings, err := ensureProjectInitialized(dir); err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
+	} else {
+		reportWarnings(stderr, warnings)
 	}
 
 	cfg, err := loadConfigOrDefault(dir)
@@ -874,10 +876,23 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			// stop and a missing required validation set each name their own terminal
 			// operator-intervention state, so the stored diagnostic is not misreported as
 			// an exhausted retry budget. Both stay terminal (no requeue here).
+			if res.classification.Kind == failure.NoProgress {
+				// The bounded checkpoint recovery was already spent. Record the single
+				// actionable blocker report and block with the preserved diagnostic.
+				max := cfg.AutonomyPolicy().MaxContinuations
+				if max <= 0 {
+					max = autonomy.DefaultMaxContinuations
+				}
+				budgets := recovery.Budgets{Continuations: recovery.Budget{Used: rn.ReadContinuations(), Max: max}}
+				rec := recovery.Recovery{Attempt: task.Attempt, Class: recovery.ImplementationNoProgress, Action: recovery.ActionHuman, Reason: recovery.ReasonNoMaterialChange}
+				if err := applyNoProgressBlock(saver, task, rn, rec, budgets, stdout); err != nil {
+					fmt.Fprintf(stderr, "run: %v\n", err)
+				}
+				_ = rn.RecordAttempt(outcomeSignature(res.gate))
+				return exitError
+			}
 			reason := domain.RETRIES_EXHAUSTED
 			switch res.classification.Kind {
-			case failure.NoProgress:
-				reason = domain.NO_PROGRESS
 			case failure.ValidationNotConfigured:
 				reason = domain.VALIDATION_NOT_CONFIGURED
 			}
@@ -972,7 +987,7 @@ func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, 
 		}
 		budgets := recovery.Budgets{Continuations: recovery.Budget{Used: rn.ReadContinuations(), Max: maxContinuations}}
 		base := recovery.Evidence{Kind: cls.Kind, Disposition: cls.Disposition, Attempt: task.Attempt}
-		dec, rec := recovery.Recover(recovery.Policy{}, recoveryEvidence(rn, cls, signature), prevSignature, base, budgets.Continuations)
+		dec, rec := recovery.Recover(recovery.Policy{}, recoveryEvidence(rn, cls, signature, priorNoProgressRecoveries(rn)), prevSignature, base, budgets.Continuations)
 		if recoverRefusesRetry(dec) {
 			if err := applyNoProgressBlock(saver, task, rn, rec, budgets, stdout); err != nil {
 				fmt.Fprintf(stderr, "run: %v\n", err)
@@ -1003,10 +1018,14 @@ func recoverTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature, 
 
 	if err := requeueTask(saver, task, true); err != nil {
 		if errors.Is(err, domain.ErrRetryExhausted) {
-			if berr := blockTask(saver, task, domain.RETRIES_EXHAUSTED); berr != nil {
+			reason := domain.RETRIES_EXHAUSTED
+			if cls.Kind == failure.NoProgress {
+				reason = domain.NO_PROGRESS
+			}
+			if berr := blockTask(saver, task, reason); berr != nil {
 				fmt.Fprintf(stderr, "run: %v\n", berr)
 			}
-			fmt.Fprintf(stdout, "%s %s (retry budget exhausted; BLOCKED)\n", task.ID, label)
+			fmt.Fprintf(stdout, "%s %s (retry budget exhausted; BLOCKED: %s)\n", task.ID, label, reason)
 			return exitError
 		}
 		fmt.Fprintf(stderr, "run: %v\n", err)

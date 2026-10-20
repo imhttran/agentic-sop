@@ -318,6 +318,12 @@ func TestReplanNeverForNoProgress(t *testing.T) {
 	if res.code != exitError {
 		t.Fatalf("code=%d, want error; stdout=%s", res.code, res.stdout)
 	}
+	// The first no-progress stop takes one bounded checkpoint recovery; the second
+	// identical stop is the terminal classification. Replanning never applies.
+	res = runReplanCLI(t, dir, "diff\n", a, jev.NewClearFake(), "run")
+	if res.code != exitError {
+		t.Fatalf("second run: code=%d, want error; stdout=%s", res.code, res.stdout)
+	}
 	if strings.Contains(res.stdout, "replanning") {
 		t.Errorf("a NO_PROGRESS stop must never replan: %q", res.stdout)
 	}

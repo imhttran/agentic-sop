@@ -181,9 +181,11 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	// verify what it changed. It writes only the config template and the state
 	// self-ignore; the ad-hoc task has no scheduler store to initialize.
 	if _, cerr := config.LoadDir(dir); errors.Is(cerr, config.ErrNotFound) {
-		if _, werr := ensureConfigTemplate(dir); werr != nil {
+		if _, warnings, werr := ensureConfigTemplate(dir); werr != nil {
 			fmt.Fprintf(stderr, "run: %v\n", werr)
 			return exitError
+		} else {
+			reportWarnings(stderr, warnings)
 		}
 	}
 	cfg, err := loadConfigOrDefault(dir)
@@ -1661,6 +1663,13 @@ func pendingResult(ctx context.Context, cfg config.Config, rn *runpkg.Run, outco
 // NEEDS_HUMAN; any other reported failure becomes FAIL.
 func classifiedOutcome(cfg config.Config, rn *runpkg.Run, outcome *agent.Outcome, class failure.Classification, cycles int) lifeResult {
 	reason := outcomeReason(outcome)
+	// A no-progress stop is recoverable exactly once. The recovery journal is the
+	// durable evidence that the checkpoint retry was already spent, so this
+	// invocation is the terminal classification rather than another retry.
+	if class.Kind == failure.NoProgress && priorNoProgressRecoveries(rn) > 0 {
+		class.Disposition = failure.Block
+		class.Reason = "bounded no-progress recovery exhausted: " + class.Reason
+	}
 	decision := decideAutonomy(cfg, class)
 
 	if outcome.Status == agent.OutcomeNeedsHuman && class.Retryable() {

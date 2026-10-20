@@ -23,6 +23,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/decision"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/projectdetect"
 	"github.com/imhttran/agentic-sop/internal/provider"
 )
 
@@ -1064,8 +1065,52 @@ func (c *Config) JEVActive() bool {
 	return c.Quality.JEVEnabled()
 }
 
-// Template renders the documented default configuration for `sop init`.
+// Template renders the documented default configuration for `sop init`. It is
+// the established Go-oriented template retained for callers that have no project
+// directory to inspect. `sop init` uses TemplateForDir so an unfamiliar project
+// is never silently given Go validation commands.
 func Template(projectName string) string {
+	return TemplateWithValidation(projectName, Validation{
+		Build: []string{"go build ./..."},
+		Test:  []string{"go test ./..."},
+		Lint:  []string{"go vet ./...", "gofmt -l ."},
+	}, "")
+}
+
+// TemplateForDir renders the configuration template from the project actually
+// found in dir. The returned detection is the evidence the caller may report;
+// the template itself carries the detected commands and any conflicts so a later
+// reader can see why the policy was chosen. An unknown project yields an empty
+// validation block, never a Go fallback.
+func TemplateForDir(projectName, dir string) (string, projectdetect.Detection) {
+	detection := projectdetect.Detect(dir)
+	validation := Validation{
+		Build: detection.Validation.Build,
+		Test:  detection.Validation.Test,
+		Lint:  detection.Validation.Lint,
+	}
+	return TemplateWithValidation(projectName, validation, detectionNote(detection)), detection
+}
+
+// detectionNote describes the detection evidence for the generated validation
+// comment. It names the project kind, languages, and unresolved conflicts so an
+// operator sees why these commands were selected.
+func detectionNote(d projectdetect.Detection) string {
+	if d.Kind == projectdetect.KindUnknown {
+		return ""
+	}
+	note := fmt.Sprintf("Detected project: %s (%s).", d.Kind, d.LanguageText())
+	if len(d.Conflicts) > 0 {
+		note += " Detection conflicts: " + strings.Join(d.Conflicts, "; ")
+	}
+	return note
+}
+
+// TemplateWithValidation renders the documented configuration with the supplied
+// validation policy. note is an optional detection explanation rendered above the
+// command lists. It is the single template owner; Template and TemplateForDir
+// only choose the validation policy.
+func TemplateWithValidation(projectName string, validation Validation, note string) string {
 	name := strings.TrimSpace(projectName)
 	if name == "" {
 		name = "project"
@@ -1099,19 +1144,7 @@ agent:
   # served by the Ollama provider, not the harness itself.
   model: %s
 
-validation:
-  # Deterministic verification commands, run in order (build, then test, then
-  # lint) and stopping at the first failure. A task that changes the repository
-  # cannot pass without configured validation, so keep this block for any
-  # project SOP implements in. For a Go module the four required checks are
-  # go build, go test, go vet, and a gofmt formatting check.
-  build:
-    - go build ./...
-  test:
-    - go test ./...
-  lint:
-    - go vet ./...
-    - gofmt -l .
+%s
 
 review:
   # self | open-code-review
@@ -1261,7 +1294,44 @@ output:
 workflow:
   # local | pull-request
   mode: local
-`, CurrentVersion, name, DefaultHarness, DefaultProvider, DefaultModel, DefaultMaxFixCycles)
+`, CurrentVersion, name, DefaultHarness, DefaultProvider, DefaultModel, validationBlock(validation, note), DefaultMaxFixCycles)
+}
+
+// validationBlock renders the validation policy with the existing schema. An
+// empty policy is stated explicitly so a reader never mistakes it for an omitted
+// default: SOP will fail closed instead of running another language's commands.
+func validationBlock(v Validation, note string) string {
+	var b strings.Builder
+	b.WriteString("validation:\n")
+	b.WriteString("  # Deterministic verification commands, run in order (build, then test, then\n")
+	b.WriteString("  # lint) and stopping at the first failure. A task that changes the repository\n")
+	b.WriteString("  # cannot pass without configured validation. Commands are selected from this\n")
+	b.WriteString("  # project's manifests, structure, and explicit Makefile targets; an unknown\n")
+	b.WriteString("  # project gets no commands rather than another language's defaults.\n")
+	if note != "" {
+		fmt.Fprintf(&b, "  # %s\n", note)
+	}
+	if len(v.Build) == 0 && len(v.Test) == 0 && len(v.Lint) == 0 {
+		b.WriteString("  # No supported project type was detected, so validation is intentionally\n")
+		b.WriteString("  # empty. Configure build/test/lint for this project before SOP can verify a\n")
+		b.WriteString("  # change; SOP fails closed on an unconfigured change requirement.\n")
+		return b.String()
+	}
+	writeValidationList(&b, "build", v.Build)
+	writeValidationList(&b, "test", v.Test)
+	writeValidationList(&b, "lint", v.Lint)
+	return b.String()
+}
+
+func writeValidationList(b *strings.Builder, name string, commands []string) {
+	fmt.Fprintf(b, "  %s:\n", name)
+	if len(commands) == 0 {
+		b.WriteString("    []\n")
+		return
+	}
+	for _, command := range commands {
+		fmt.Fprintf(b, "    - %s\n", command)
+	}
 }
 
 // sortedKeys returns a map's keys in a stable order for error messages.

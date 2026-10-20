@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -72,6 +73,13 @@ type executionState struct {
 	// at, so the next bounded invocation resumes instead of repeating discovery.
 	// It holds paths only — never file contents, prompts, or secrets.
 	inspected []string
+
+	// verifiedCommands records the configured validation commands this invocation
+	// executed successfully. A first successful execution of one is legitimate
+	// verification progress for a read-only task, so it resets the stale streak once.
+	// Repeating the same command never resets it again, so a loop cannot defeat the
+	// no-progress guard.
+	verifiedCommands map[string]bool
 }
 
 // maxCheckpointFiles bounds the continuation checkpoint, so a long discovery run
@@ -154,6 +162,47 @@ func (st *executionState) observeDiscovery(iteration int, root, name string, arg
 	}
 	st.discoverySeen[identity] = true
 	return true
+}
+
+// observeVerification credits the first successful execution of one of the task's
+// configured validation commands as progress. A verification-only task completes
+// by running its validation, not by mutating the repository, so a successful
+// required command must not be counted as a stale turn. The credit is per command
+// and per invocation: repeating it never resets the streak again.
+func (st *executionState) observeVerification(req agent.Request, name string, args map[string]any, succeeded bool) bool {
+	if !succeeded || name != toolharness.ToolRunCommand {
+		return false
+	}
+	command, _ := args["command"].(string)
+	key := normalizeCommand(command)
+	if key == "" {
+		return false
+	}
+	required := false
+	for _, candidate := range req.ValidationCommands {
+		if normalizeCommand(candidate) == key {
+			required = true
+			break
+		}
+	}
+	if !required {
+		return false
+	}
+	if st.verifiedCommands == nil {
+		st.verifiedCommands = map[string]bool{}
+	}
+	if st.verifiedCommands[key] {
+		return false
+	}
+	st.verifiedCommands[key] = true
+	return true
+}
+
+// normalizeCommand compares a command by whitespace-normalized text, so the
+// harness matches the configured validation command regardless of incidental
+// spacing. It is never a security boundary: command authorization is unchanged.
+func normalizeCommand(command string) string {
+	return strings.Join(strings.Fields(command), " ")
 }
 
 // stalled stops unmutated runs after five stale turns. Discovery may reset the

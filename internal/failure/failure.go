@@ -139,14 +139,14 @@ const (
 	// diagnostic IMPLEMENT_NO_CHANGES, and it never invokes the bounded fix loop.
 	NoChangesDetected Kind = "IMPLEMENT_NO_CHANGES"
 	// NoProgress: the harness's bounded stale-iteration guard stopped an invocation
-	// that made no repository progress well before its budget. Unlike
-	// IncompleteImplementation (the work is merely unfinished and a fresh bounded
-	// invocation may make progress), a no-progress stop is not productive: it made no
-	// governed mutation and nothing about the environment changes, so an automatic
-	// continuation would simply repeat — it is not auto-continued. A human/operator
-	// decides the next action (a changed capability, scope, or model). The signal is
-	// SOP's own fixed harness diagnostic, never agent prose, and it is not an
-	// approval gate.
+	// that made no repository progress well before its budget. The harness emits a
+	// continuation checkpoint naming what it inspected, so one bounded automatic
+	// recovery can resume from that evidence instead of repeating discovery. The
+	// disposition is therefore Retry while a recovery budget remains; the recovery
+	// policy refuses a second no-progress recovery and the driver then terminates
+	// as a bounded automation block. A repeated, unchanged failure is never retried.
+	// The signal is SOP's own fixed harness diagnostic, never agent prose, and it is
+	// not an approval gate.
 	NoProgress        Kind = "NO_PROGRESS"
 	AutoFixExhausted  Kind = "AUTO_FIX_EXHAUSTED"
 	TransientProvider Kind = "TRANSIENT_PROVIDER"
@@ -333,8 +333,8 @@ func Classify(ev Evidence) Classification {
 	//     unchanged conditions. It is therefore not auto-continued; a human/operator
 	//     decides the next action. The signal is SOP's own diagnostic, not prose.
 	if r := evidenceReasonText(ev); harnessNoProgress(strings.ToLower(r)) {
-		return Classification{Kind: NoProgress, Disposition: Block, Confidence: High,
-			Reason: describe(r, "the invocation made no repository progress within its bounded stale allowance; an automatic continuation would repeat under unchanged conditions and is not taken")}
+		return Classification{Kind: NoProgress, Disposition: Retry, Confidence: High,
+			Reason: describe(r, "the invocation made no repository progress within its bounded stale allowance; one bounded recovery resumes from its recorded checkpoint, and a repeated unchanged stop is not retried")}
 	}
 
 	// 2c. A required validation set that is not configured cannot verify the change,

@@ -167,11 +167,18 @@ func Decide(c failure.Classification, p Policy) Decision {
 		return humanDecision(c, p, risk, reasonOr(c.Reason, "the failure crosses an authority boundary that requires a human"))
 	}
 
-	// 1b. A bounded no-progress stop is a terminal automation state at every level:
-	//     no human decision exists (there is nothing to approve or decline), but the
-	//     task must not continue automatically under unchanged conditions either.
+	// 1b. A bounded no-progress stop is recoverable once. The harness emits a
+	//     continuation checkpoint with the attempt, so the next invocation resumes
+	//     from what was already inspected instead of repeating discovery. The retry
+	//     consumes the task's existing retry budget; the recovery policy refuses a
+	//     second no-progress recovery, so a genuinely stalled task reaches the
+	//     terminal state below after its bounded budget. This is an automation
+	//     recovery, not a human approval decision.
 	if c.Kind == failure.NoProgress {
-		return auto(ActionTerminal, c, p, RiskLow, "no repository progress under unchanged conditions; the task is blocked for operator intervention, not a human approval")
+		if c.Disposition == failure.Retry && p.AutoRetry {
+			return auto(ActionAutoRetry, c, p, RiskLow, "no repository progress; one bounded retry resumes from the recorded checkpoint")
+		}
+		return auto(ActionTerminal, c, p, RiskLow, "no repository progress and the bounded recovery is spent or disabled; the task is blocked for operator intervention, not a human approval")
 	}
 
 	// 1c. A required validation set that is not configured is a terminal

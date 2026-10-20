@@ -61,11 +61,22 @@ func TestUnchangedFailureNotRetried(t *testing.T) {
 	if d.Action != ActionRetrySame || rec.Change != ChangeNewEvidence {
 		t.Fatalf("changed failure = %+v %+v, want retry_same with new evidence", d, rec)
 	}
-	// Repeated discovery with no repository change does not continue the same way.
+	// Repeated discovery with no repository change gets ONE bounded checkpoint
+	// recovery, then a second stop is refused.
 	disc := AttemptEvidence{Kind: failure.IncompleteImplementation, DiscoveryOnly: true, Signature: "sig-c"}
+	d, rec = Recover(Policy{Enabled: true, MaxEscalations: 2}, disc, "", Evidence{Class: model.ClassSmall, Kind: disc.Kind}, Budget{Max: 4})
+	if d.Action != ActionRetrySame || d.Reason != ReasonResumeCheckpoint || rec.Change != ChangeResumeCheckpoint {
+		t.Fatalf("first discovery-only = %+v %+v, want one checkpoint retry", d, rec)
+	}
+	disc.PriorRecoveries = 1
 	d, _ = Recover(Policy{Enabled: true, MaxEscalations: 2}, disc, "", Evidence{Class: model.ClassSmall, Kind: disc.Kind}, Budget{Max: 4})
 	if d.Action != ActionHuman || d.Reason != ReasonNoMaterialChange {
-		t.Fatalf("discovery-only = %+v, want human no material change", d)
+		t.Fatalf("second discovery-only = %+v, want human no material change", d)
+	}
+	// An unchanged signature is never retried, even on the first recovery.
+	d, _ = Recover(Policy{Enabled: true, MaxEscalations: 2}, disc, "sig-c", Evidence{Class: model.ClassSmall, Kind: disc.Kind}, Budget{Max: 4})
+	if d.Action != ActionHuman || d.Reason != ReasonUnchangedFailure {
+		t.Fatalf("unchanged discovery-only = %+v, want human unchanged", d)
 	}
 }
 

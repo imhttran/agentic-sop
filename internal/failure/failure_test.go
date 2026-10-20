@@ -881,18 +881,19 @@ func TestExplicitHumanRequestStillNeedsHuman(t *testing.T) {
 	}
 }
 
-// TestHarnessNoProgressIsNotAutoContinue proves a bounded no-progress stop is not
+// TestHarnessNoProgressIsBoundedRetry proves a bounded no-progress stop is not
 // productive incomplete work: it carries the harness's own no-progress diagnostic,
-// so it classifies as NO_PROGRESS with a human disposition and is never continued
-// automatically, while ordinary unfinished work still continues.
-func TestHarnessNoProgressIsNotAutoContinue(t *testing.T) {
+// so it classifies as NO_PROGRESS with a retry disposition (one bounded recovery
+// resumes from the recorded checkpoint). A repeated unchanged stop is refused by
+// the recovery policy rather than classified anew.
+func TestHarnessNoProgressIsBoundedRetry(t *testing.T) {
 	const reason = "FIX_NO_PROGRESS: the Ollama agent FIX made no repository progress after 5 consecutive stale iterations (iterations=16, repository_mutations=0, changed_files=0, termination=no_progress); a retry may succeed"
 	got := Classify(Evidence{Source: "FIX", Outcome: &agent.Outcome{Status: agent.OutcomeFailed, Reason: reason}})
 	if got.Kind != NoProgress {
 		t.Fatalf("kind = %s, want %s", got.Kind, NoProgress)
 	}
-	if got.Disposition != Block {
-		t.Fatalf("disposition = %s, want BLOCK (blocked for operator, not a human approval)", got.Disposition)
+	if got.Disposition != Retry {
+		t.Fatalf("disposition = %s, want RETRY (one bounded checkpoint recovery)", got.Disposition)
 	}
 }
 
