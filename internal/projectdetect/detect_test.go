@@ -31,7 +31,8 @@ func containsCommand(cmds []string, want string) bool {
 func assertNoGo(t *testing.T, d Detection) {
 	t.Helper()
 	for _, cmd := range append(append(append([]string{}, d.Validation.Build...), d.Validation.Test...), d.Validation.Lint...) {
-		if strings.HasPrefix(cmd, "go ") || strings.HasPrefix(cmd, "gofmt ") {
+		if strings.Contains(cmd, "go build ./...") || strings.Contains(cmd, "go test ./...") ||
+			strings.Contains(cmd, "go vet ./...") || strings.Contains(cmd, "gofmt -l .") {
 			t.Fatalf("non-Go detection proposed a Go command: %q", cmd)
 		}
 	}
@@ -81,8 +82,8 @@ func TestDetectNestedNextJS(t *testing.T) {
 	if d.Kind != KindNextJS {
 		t.Fatalf("kind = %q, want %q (manifests %v)", d.Kind, KindNextJS, d.Manifests)
 	}
-	if !containsCommand(d.Validation.Build, "npm run build") {
-		t.Errorf("build = %v, want npm run build", d.Validation.Build)
+	if !containsCommand(d.Validation.Build, "cd 'web' && npm run build") {
+		t.Errorf("build = %v, want the nested web build", d.Validation.Build)
 	}
 }
 
@@ -123,8 +124,8 @@ func TestDetectGo(t *testing.T) {
 	if d.Kind != KindGo {
 		t.Fatalf("kind = %q, want %q", d.Kind, KindGo)
 	}
-	if !reflect.DeepEqual(d.Validation, goValidation()) {
-		t.Errorf("validation = %+v, want the established Go set %+v", d.Validation, goValidation())
+	if !reflect.DeepEqual(d.Validation, goValidation(".")) {
+		t.Errorf("validation = %+v, want the established Go set %+v", d.Validation, goValidation("."))
 	}
 }
 
@@ -177,5 +178,110 @@ func TestDetectIgnoresDependencyDirectories(t *testing.T) {
 	d := Detect(dir)
 	if d.Kind != KindUnknown {
 		t.Fatalf("kind = %q, want unknown; dependency manifests must be ignored", d.Kind)
+	}
+}
+
+func TestDetectNestedRustWithoutMakefile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "crates/app/Cargo.toml", "[package]\nname = \"app\"\n")
+	d := Detect(dir)
+	if d.Kind != KindRust {
+		t.Fatalf("kind = %q, want rust", d.Kind)
+	}
+	for _, want := range []string{
+		"cd 'crates/app' && cargo build --locked",
+		"cd 'crates/app' && cargo test --locked",
+		"cd 'crates/app' && cargo fmt --check",
+		"cd 'crates/app' && cargo clippy --locked --all-targets -- -D warnings",
+	} {
+		all := append(append(append([]string{}, d.Validation.Build...), d.Validation.Test...), d.Validation.Lint...)
+		if !containsCommand(all, want) {
+			t.Errorf("missing nested Rust command %q in %+v", want, d.Validation)
+		}
+	}
+	assertNoGo(t, d)
+}
+
+func TestDetectNestedGoWithoutMakefile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "services/api/go.mod", "module example.com/api\n\ngo 1.27\n")
+	d := Detect(dir)
+	if d.Kind != KindGo {
+		t.Fatalf("kind = %q, want go", d.Kind)
+	}
+	for _, want := range []string{
+		"cd 'services/api' && go build ./...",
+		"cd 'services/api' && go test ./...",
+		"cd 'services/api' && go vet ./...",
+		"cd 'services/api' && gofmt -l .",
+	} {
+		all := append(append(append([]string{}, d.Validation.Build...), d.Validation.Test...), d.Validation.Lint...)
+		if !containsCommand(all, want) {
+			t.Errorf("missing nested Go command %q in %+v", want, d.Validation)
+		}
+	}
+}
+
+func TestDetectNestedNextJSWithoutMakefile(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "apps/web/package.json", `{"scripts":{"build":"next build","e2e":"playwright test","typecheck":"tsc --noEmit"},"dependencies":{"next":"^15.0.0"}}`)
+	write(t, dir, "apps/web/next.config.ts", "export default {}\n")
+	d := Detect(dir)
+	if d.Kind != KindNextJS {
+		t.Fatalf("kind = %q, want nextjs", d.Kind)
+	}
+	if !containsCommand(d.Validation.Build, "cd 'apps/web' && npm run build") {
+		t.Errorf("build = %v, want the nested package build", d.Validation.Build)
+	}
+	if !containsCommand(d.Validation.Test, "cd 'apps/web' && npm run e2e") {
+		t.Errorf("test = %v, want the nested package e2e", d.Validation.Test)
+	}
+	if !containsCommand(d.Validation.Lint, "cd 'apps/web' && npm run typecheck") {
+		t.Errorf("lint = %v, want the nested package typecheck", d.Validation.Lint)
+	}
+	assertNoGo(t, d)
+}
+
+func TestDetectRootManifestWinsOverNested(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		root      string
+		nested    string
+		wantBuild string
+	}{
+		{"go", "go.mod", "services/api/go.mod", "go build ./..."},
+		{"rust", "Cargo.toml", "crates/app/Cargo.toml", "cargo build --locked"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			if tc.name == "go" {
+				write(t, dir, tc.root, "module example.com/root\n\ngo 1.27\n")
+				write(t, dir, tc.nested, "module example.com/nested\n\ngo 1.27\n")
+			} else {
+				write(t, dir, tc.root, "[package]\nname = \"root\"\n")
+				write(t, dir, tc.nested, "[package]\nname = \"nested\"\n")
+			}
+			d := Detect(dir)
+			if !containsCommand(d.Validation.Build, tc.wantBuild) {
+				t.Errorf("build = %v, want the root command %q", d.Validation.Build, tc.wantBuild)
+			}
+		})
+	}
+}
+
+func TestDetectSelectsNextPackageOverUnrelatedRootPackage(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "package.json", `{"scripts":{"build":"tools build"},"devDependencies":{"typescript":"^5.0.0"}}`)
+	write(t, dir, "web/package.json", `{"scripts":{"build":"next build","e2e":"playwright test"},"dependencies":{"next":"^15.0.0"}}`)
+	write(t, dir, "web/next.config.ts", "export default {}\n")
+	d := Detect(dir)
+	if d.Kind != KindNextJS {
+		t.Fatalf("kind = %q, want nextjs", d.Kind)
+	}
+	if !containsCommand(d.Validation.Build, "cd 'web' && npm run build") {
+		t.Errorf("build = %v, want the nested Next.js package, not the root tooling package", d.Validation.Build)
+	}
+	if containsCommand(d.Validation.Build, "npm run build") {
+		t.Errorf("selected the unrelated root package: %v", d.Validation.Build)
 	}
 }

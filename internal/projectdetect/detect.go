@@ -16,6 +16,10 @@
 //     was actually detected, so a stale Makefile target cannot select an
 //     unsupported toolchain.
 //
+// Commands for a nested manifest run from that manifest's directory. Root-level
+// commands keep their established spelling (no `cd` prefix), and root-level
+// Makefile aggregate targets are preserved.
+//
 // Proposed commands use only the existing validation schema (build/test/lint).
 // Callers own configuration precedence: an existing configuration is never
 // replaced by this proposal.
@@ -23,6 +27,7 @@ package projectdetect
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -105,15 +110,16 @@ func Detect(dir string) Detection {
 	files := findManifests(root)
 	makefile, targets := readMakeTargets(root)
 
-	hasGo := files.has("go.mod") || files.has("go.work")
-	hasRust := files.has("Cargo.toml")
-	pkg := files.packageJSON()
+	goManifest, hasGo := selectManifest(files.gos)
+	rustManifest, hasRust := selectManifest(files.rusts)
+	pkg, packageWarnings := selectPackage(files)
 	hasNode := pkg != nil
-	hasNext := files.hasNextConfig() || (pkg != nil && pkg.hasDependency("next"))
+	hasNext := hasNode && (files.nextDirs[pkg.dir] || pkg.hasDependency("next"))
 
 	d := Detection{MakeTargets: targetList(targets)}
 	d.Manifests = append(d.Manifests, files.paths...)
 	sort.Strings(d.Manifests)
+	d.Warnings = append(d.Warnings, packageWarnings...)
 
 	if hasGo {
 		d.Languages = append(d.Languages, LanguageGo)
@@ -157,19 +163,19 @@ func Detect(dir string) Detection {
 	switch {
 	case hasGo && hasRust && hasNode:
 		d.Validation = mergeValidation(
-			mergeValidation(goValidation(), rustValidation(targets, hasRust)),
+			mergeValidation(goValidation(goManifest.Dir), rustValidation(rustManifest.Dir, targets, hasRust)),
 			webValidation(pkg, targets, hasNode),
 		)
 	case hasGo && hasRust:
-		d.Validation = mergeValidation(goValidation(), rustValidation(targets, hasRust))
+		d.Validation = mergeValidation(goValidation(goManifest.Dir), rustValidation(rustManifest.Dir, targets, hasRust))
 	case hasGo && hasNode:
-		d.Validation = mergeValidation(goValidation(), webValidation(pkg, targets, hasNode))
+		d.Validation = mergeValidation(goValidation(goManifest.Dir), webValidation(pkg, targets, hasNode))
 	case hasRust && hasNode:
-		d.Validation = mergeValidation(rustValidation(targets, hasRust), webValidation(pkg, targets, hasNode))
+		d.Validation = mergeValidation(rustValidation(rustManifest.Dir, targets, hasRust), webValidation(pkg, targets, hasNode))
 	case hasGo:
-		d.Validation = goValidation()
+		d.Validation = goValidation(goManifest.Dir)
 	case hasRust:
-		d.Validation = rustValidation(targets, hasRust)
+		d.Validation = rustValidation(rustManifest.Dir, targets, hasRust)
 	case hasNode:
 		d.Validation = webValidation(pkg, targets, hasNode)
 	}
@@ -180,28 +186,30 @@ func Detect(dir string) Detection {
 	return d
 }
 
-// goValidation is the established Go command set. It is used only when a Go
-// manifest was detected.
-func goValidation() Validation {
+// goValidation is the established Go command set. A nested manifest keeps the
+// same checks but runs them from its own directory.
+func goValidation(dir string) Validation {
+	prefix := dirPrefix(dir)
 	return Validation{
-		Build: []string{"go build ./..."},
-		Test:  []string{"go test ./..."},
-		Lint:  []string{"go vet ./...", "gofmt -l ."},
+		Build: []string{prefix + "go build ./..."},
+		Test:  []string{prefix + "go test ./..."},
+		Lint:  []string{prefix + "go vet ./...", prefix + "gofmt -l ."},
 	}
 }
 
 // rustValidation proposes Cargo commands and, when the repository declares one,
-// its aggregate rust-check target.
-func rustValidation(targets map[string]bool, detected bool) Validation {
+// its root-level aggregate rust-check target.
+func rustValidation(dir string, targets map[string]bool, detected bool) Validation {
 	if !detected {
 		return Validation{}
 	}
+	prefix := dirPrefix(dir)
 	v := Validation{
-		Build: []string{"cargo build --locked"},
-		Test:  []string{"cargo test --locked"},
+		Build: []string{prefix + "cargo build --locked"},
+		Test:  []string{prefix + "cargo test --locked"},
 		Lint: []string{
-			"cargo fmt --check",
-			"cargo clippy --locked --all-targets -- -D warnings",
+			prefix + "cargo fmt --check",
+			prefix + "cargo clippy --locked --all-targets -- -D warnings",
 		},
 	}
 	if targets["rust-check"] {
@@ -211,31 +219,33 @@ func rustValidation(targets map[string]bool, detected bool) Validation {
 }
 
 // webValidation proposes the package manager's scripts and, when the repository
-// declares them, its aggregate web targets. The package manager is selected from
-// the lockfiles next to the detected package.json.
+// declares them, its root-level aggregate web targets. The selected package is
+// the one that owns the detected web app; a nested package runs its scripts from
+// its own directory.
 func webValidation(pkg *packageInfo, targets map[string]bool, detected bool) Validation {
 	if !detected || pkg == nil {
 		return Validation{}
 	}
 	pm := pkg.packageManager()
+	prefix := dirPrefix(pkg.dir)
 	var v Validation
 	if targets["web-check"] {
 		v.Build = append(v.Build, "make web-check")
 	} else if pkg.hasScript("build") {
-		v.Build = append(v.Build, pm+" run build")
+		v.Build = append(v.Build, prefix+pm+" run build")
 	}
 	if targets["web-e2e"] {
 		v.Test = append(v.Test, "make web-e2e")
 	} else if pkg.hasScript("e2e") {
-		v.Test = append(v.Test, pm+" run e2e")
+		v.Test = append(v.Test, prefix+pm+" run e2e")
 	} else if pkg.hasScript("test") {
-		v.Test = append(v.Test, pm+" test")
+		v.Test = append(v.Test, prefix+pm+" test")
 	}
 	if pkg.hasScript("lint") {
-		v.Lint = append(v.Lint, pm+" run lint")
+		v.Lint = append(v.Lint, prefix+pm+" run lint")
 	}
 	if !targets["web-check"] && pkg.hasScript("typecheck") {
-		v.Lint = append(v.Lint, pm+" run typecheck")
+		v.Lint = append(v.Lint, prefix+pm+" run typecheck")
 	}
 	return dedupe(v)
 }
@@ -268,6 +278,22 @@ func dedupeList(in []string) []string {
 	return out
 }
 
+// dirPrefix renders the shell prefix that runs a command from a nested manifest
+// directory. Root-level commands are unchanged (empty prefix).
+func dirPrefix(dir string) string {
+	dir = filepath.ToSlash(dir)
+	if dir == "" || dir == "." || dir == "./" {
+		return ""
+	}
+	return "cd " + shellQuote(dir) + " && "
+}
+
+// shellQuote quotes a relative directory for a POSIX shell. It never evaluates
+// the path: the value is repository evidence, not caller input.
+func shellQuote(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'"
+}
+
 func (d *Detection) detectConflicts(makefile string, hasGo, hasRust, hasNode bool) {
 	if !hasRust && containsTarget(d.MakeTargets, "rust-check") {
 		d.Conflicts = append(d.Conflicts, "Makefile declares rust-check but no Cargo.toml was detected; the rust-check target is not proposed")
@@ -280,27 +306,97 @@ func (d *Detection) detectConflicts(makefile string, hasGo, hasRust, hasNode boo
 	}
 }
 
+// manifest is one discovered manifest and the directory that owns it.
+type manifest struct {
+	// Path is the repository-relative, slash-separated manifest path.
+	Path string
+	// Dir is the repository-relative, slash-separated directory; "." is root.
+	Dir string
+	// Abs is the absolute manifest path.
+	Abs string
+}
+
 // manifestFiles records the manifests found during the bounded walk.
 type manifestFiles struct {
-	paths       []string
-	set         map[string]bool
-	packages    []string
-	nextConfigs []string
+	paths    []string
+	set      map[string]bool
+	gos      []manifest
+	rusts    []manifest
+	packages []manifest
+	nextDirs map[string]bool
 }
 
 func (m manifestFiles) has(name string) bool { return m.set[name] }
 
-func (m manifestFiles) hasNextConfig() bool { return len(m.nextConfigs) > 0 }
+// selectManifest picks the manifest that owns a language. A root manifest always
+// wins; otherwise the shallowest nested manifest is used, with a deterministic
+// lexicographic tie-break.
+func selectManifest(manifests []manifest) (manifest, bool) {
+	if len(manifests) == 0 {
+		return manifest{}, false
+	}
+	for _, m := range manifests {
+		if m.Dir == "." {
+			return m, true
+		}
+	}
+	return manifests[0], true
+}
 
-func (m manifestFiles) packageJSON() *packageInfo {
-	if len(m.packages) == 0 {
-		return nil
+// selectPackage picks the package.json that owns the web application.
+//
+// A Next.js package wins over an unrelated root package (for example a root
+// tooling package.json next to web/package.json). Without Next.js, a root
+// package wins; otherwise the shallowest nested package is used. The choice is
+// deterministic and never falls through to a package that does not belong to the
+// detected app.
+func selectPackage(files manifestFiles) (*packageInfo, []string) {
+	if len(files.packages) == 0 {
+		return nil, nil
 	}
-	info, err := readPackageJSON(m.packages[0])
-	if err != nil {
-		return nil
+	var warnings []string
+	var packages []*packageInfo
+	for _, m := range files.packages {
+		info, err := readPackageJSON(m.Abs)
+		if err != nil {
+			warnings = append(warnings, fmt.Sprintf("package manifest %s could not be read and was ignored: %v", m.Path, err))
+			continue
+		}
+		info.dir = m.Dir
+		packages = append(packages, info)
 	}
-	return info
+	if len(packages) == 0 {
+		return nil, warnings
+	}
+
+	var web []*packageInfo
+	for _, pkg := range packages {
+		if files.nextDirs[pkg.dir] || pkg.hasDependency("next") {
+			web = append(web, pkg)
+		}
+	}
+	if len(web) > 0 {
+		chosen := web[0]
+		if len(web) > 1 {
+			warnings = append(warnings, fmt.Sprintf("multiple Next.js package manifests were detected; using %s", chosen.path))
+		}
+		if chosen.dir != "" && chosen.dir != "." {
+			for _, pkg := range packages {
+				if pkg.dir == "." {
+					warnings = append(warnings, fmt.Sprintf("using nested web package %s instead of an unrelated root package.json", chosen.path))
+					break
+				}
+			}
+		}
+		return chosen, warnings
+	}
+
+	for _, pkg := range packages {
+		if pkg.dir == "." {
+			return pkg, warnings
+		}
+	}
+	return packages[0], warnings
 }
 
 // maxManifestDepth bounds the structure walk. A manifest deeper than this is
@@ -313,7 +409,7 @@ var skippedDirs = map[string]bool{
 }
 
 func findManifests(root string) manifestFiles {
-	res := manifestFiles{set: map[string]bool{}}
+	res := manifestFiles{set: map[string]bool{}, nextDirs: map[string]bool{}}
 	_ = filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -332,30 +428,54 @@ func findManifests(root string) manifestFiles {
 			}
 			return nil
 		}
+		dir := filepath.ToSlash(filepath.Dir(rel))
 		switch entry.Name() {
 		case "go.mod", "go.work", "Cargo.toml":
 			res.set[entry.Name()] = true
 			res.paths = append(res.paths, rel)
+			m := manifest{Path: rel, Dir: dir, Abs: path}
+			if entry.Name() == "Cargo.toml" {
+				res.rusts = append(res.rusts, m)
+			} else {
+				res.gos = append(res.gos, m)
+			}
 		case "package.json":
-			res.packages = append(res.packages, path)
 			res.paths = append(res.paths, rel)
+			res.packages = append(res.packages, manifest{Path: rel, Dir: dir, Abs: path})
 		default:
 			if strings.HasPrefix(entry.Name(), "next.config.") {
-				res.nextConfigs = append(res.nextConfigs, path)
 				res.paths = append(res.paths, rel)
+				res.nextDirs[dir] = true
 			}
 		}
 		return nil
 	})
-	sort.Slice(res.packages, func(i, j int) bool {
-		return strings.Count(res.packages[i], string(filepath.Separator)) <
-			strings.Count(res.packages[j], string(filepath.Separator))
-	})
+	sortManifests(res.gos)
+	sortManifests(res.rusts)
+	sortManifests(res.packages)
 	return res
+}
+
+func sortManifests(manifests []manifest) {
+	sort.SliceStable(manifests, func(i, j int) bool {
+		di, dj := manifestDepth(manifests[i]), manifestDepth(manifests[j])
+		if di != dj {
+			return di < dj
+		}
+		return manifests[i].Path < manifests[j].Path
+	})
+}
+
+func manifestDepth(m manifest) int {
+	if m.Dir == "." {
+		return 0
+	}
+	return strings.Count(m.Dir, "/") + 1
 }
 
 type packageInfo struct {
 	path    string
+	dir     string
 	Scripts map[string]string `json:"scripts"`
 	Deps    map[string]string `json:"dependencies"`
 	DevDeps map[string]string `json:"devDependencies"`
@@ -410,8 +530,8 @@ func exists(path string) bool {
 
 var makeTargetPattern = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9_.-]*)\s*:`)
 
-// readMakeTargets returns the Makefile path (empty when absent) and its declared
-// targets. Only a target line is recognized; recipe lines are ignored.
+// readMakeTargets returns the root Makefile path (empty when absent) and its
+// declared targets. Only a target line is recognized; recipe lines are ignored.
 func readMakeTargets(root string) (string, map[string]bool) {
 	for _, name := range []string{"GNUmakefile", "Makefile", "makefile"} {
 		path := filepath.Join(root, name)
