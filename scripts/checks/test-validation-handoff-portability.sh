@@ -243,6 +243,7 @@ write_manifest candidate-running "$CANARY_PID" "$CANARY_CMD"
 
 if run_handoff --format json --agent claude --capabilities filesystem,process_execution \
   --local-status PASS --tests "$ROOT/tests.txt" --deployment-approval APPROVED \
+  --approval-reference "operator approval (test fixture)" \
   --issue PORTABILITY-A --output "$ROOT/handoff-running.json" >"$TMP/out" 2>&1; then
   assert_valid "$ROOT/handoff-running.json"
   assert_eq "$(json_get "$ROOT/handoff-running.json" workflow.next_permitted_action)" "RUN_INDEPENDENT_VALIDATION"
@@ -255,6 +256,7 @@ WORKFLOW_ID="$(json_get "$ROOT/handoff-running.json" workflow_id)"
 write_results "$ROOT/results-chatgpt.json" PASS "$CANDIDATE_SHA" "$SOURCE_REV" "$WORKFLOW_ID" chatgpt
 if run_handoff --format json --agent claude --capabilities filesystem,process_execution \
   --local-status PASS --tests "$ROOT/tests.txt" --deployment-approval APPROVED \
+  --approval-reference "operator approval (test fixture)" \
   --results-json "$ROOT/results-chatgpt.json" --validation-status PASS \
   --issue PORTABILITY-A --output "$ROOT/handoff-pass.json" >"$TMP/out" 2>&1; then
   assert_valid "$ROOT/handoff-pass.json"
@@ -317,14 +319,45 @@ make_variant unsupported-schema 'd["schema"] = "mcp-live-validation/validation-h
 make_variant unapproved-deployment 'd["approval"]["deployment"]["status"] = "PENDING"; d["workflow"]["status"] = "PREPARED"; d["workflow"]["next_permitted_action"] = "START_CANDIDATE"'
 make_variant stale-time 'd["generated_at"] = "2000-01-01T00:00:00Z"'
 make_variant wrong-source-revision 'd["independent_validation"]["results"]["source_revision"] = "c" * 40'
+make_variant approval-without-reference 'd["approval"]["deployment"]["reference"] = ""'
+make_variant credential-in-value 'd["local_verification"]["results"] += " Authorization: Bearer abcdefghijklmnopqrstuvwxyz0123"'
 
-for variant in stale-commit candidate-sha missing-evidence missing-candidate-identity wrong-workflow-id unsupported-schema unapproved-deployment stale-time wrong-source-revision; do
+for variant in stale-commit candidate-sha missing-evidence missing-candidate-identity wrong-workflow-id unsupported-schema unapproved-deployment stale-time wrong-source-revision approval-without-reference credential-in-value; do
   assert_invalid "$ROOT/variant-$variant.json"
   assert_eq "$(sha "$CANDIDATE")" "$CANDIDATE_SHA_BEFORE"
   assert_eq "$(sha "$BASELINE")" "$BASELINE_SHA_BEFORE"
   kill -0 "$CANARY_PID" 2>/dev/null || fail "invalid handoff stopped the canary process"
 done
 pass "scenario C: stale, mismatched, missing-evidence, unsupported, and unapproved handoffs are rejected safely"
+
+# A credential value is reported by path only, never echoed.
+python3 "$VALIDATOR" --handoff "$ROOT/variant-credential-in-value.json" --checkout "$ROOT" \
+  --schema "$SCHEMA" >"$TMP/cred.out" 2>&1 || true
+assert_contains "$(cat "$TMP/cred.out")" "local_verification.results"
+case "$(cat "$TMP/cred.out")" in
+  *abcdefghijklmnopqrstuvwxyz0123*) fail "the validator echoed a credential value" ;;
+  *) pass "scenario C: a credential pasted into a value is rejected without being echoed" ;;
+esac
+
+# The validator must be told whether to cross-check a checkout; it never prints a
+# bare OK for an artifact it did not check.
+if python3 "$VALIDATOR" --handoff "$ROOT/handoff-pass.json" --schema "$SCHEMA" >"$TMP/nomode.out" 2>&1; then
+  fail "the validator accepted a handoff without --checkout or --artifact-only"
+else
+  assert_contains "$(cat "$TMP/nomode.out")" "--checkout"
+  pass "scenario C: the validator requires --checkout or --artifact-only"
+fi
+
+# An approval must name the human decision behind it.
+if run_handoff --format json --agent claude --capabilities filesystem,process_execution \
+  --local-status PASS --tests "$ROOT/tests.txt" --deployment-approval APPROVED \
+  --issue PORTABILITY-A --output "$ROOT/handoff-noref.json" >"$TMP/out" 2>&1; then
+  fail "the helper recorded APPROVED without an approval reference"
+else
+  assert_contains "$(cat "$TMP/out")" "requires --approval-reference"
+  [ ! -e "$ROOT/handoff-noref.json" ] || fail "a refused handoff was written"
+  pass "scenario C: the helper refuses APPROVED without an approval reference"
+fi
 
 # ---------------------------------------------------------------------------
 # Summary
