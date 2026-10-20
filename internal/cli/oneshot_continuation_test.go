@@ -27,7 +27,7 @@ func TestOneShotContinuesIndependentTaskAfterBlock(t *testing.T) {
 	}
 	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), oneshotTwoTaskPlan)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
-	seedTask(t, dir, &domain.Task{ID: "S001", Title: "A", Status: domain.PLANNED, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "S001", Title: "A", Status: domain.PLANNED, Attempt: 1, MaxAttempts: 1})
 	seedTask(t, dir, &domain.Task{ID: "S002", Title: "B", Status: domain.PLANNED, MaxAttempts: 3})
 	a := outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeNeedsHuman, Reason: noProgressReason}}
 

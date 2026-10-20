@@ -646,6 +646,11 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 
 		recovery, repeatStop := st.progress.observe(actionFingerprint(name, args, result, toolErr))
 		discovered := st.observeDiscovery(iteration, h.tools.Root(), name, args, result, toolErr)
+		// A successful required validation command is verification progress, even
+		// after the discovery window: a read-only verification task completes by
+		// running the checks, not by mutating the repository. The credit is once per
+		// command, so repeating it cannot defeat the stale guard.
+		verifiedCommand := st.observeVerification(req, name, args, commandSucceeded && toolErr == nil)
 		// CHANGE activity is later consumed as task change evidence. No-op, failed,
 		// or unverified file attempts remain audited but must not emit it. The
 		// emitted event carries the progress signal the harness already
@@ -655,7 +660,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		if !candidate || justMutated || name == toolharness.ToolRunCommand {
 			recordToolActivity(ctx, name, args, toolTurnSignal(justMutated, discovered))
 		}
-		progressStop := st.stalled(justMutated, discovered, h.staleLimitFor(deliverables, st, b.StaleIterations))
+		progressStop := st.stalled(justMutated, discovered || verifiedCommand, h.staleLimitFor(deliverables, st, b.StaleIterations))
 		terminate := repeatStop || progressStop
 		if justMutated && st.phase == implDiscover {
 			st.phase = implChange

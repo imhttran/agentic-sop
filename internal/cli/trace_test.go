@@ -94,6 +94,12 @@ func TestRunTraceNoProgressPreservesSemantics(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
+	// The first no-progress stop takes one bounded checkpoint recovery; the second
+	// identical stop is the terminal block this trace evaluates.
+	code, _, _ = runInjectedCLI(t, dir, "diff\n", a, "run")
+	if code != exitError {
+		t.Fatalf("second run: code=%d, want %d", code, exitError)
+	}
 	tr := readRunTrace(t, dir, "S001")
 	if tr.Termination.Kind != "NO_PROGRESS" {
 		t.Errorf("termination kind = %q, want NO_PROGRESS", tr.Termination.Kind)

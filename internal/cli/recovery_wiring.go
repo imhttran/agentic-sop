@@ -28,7 +28,7 @@ const (
 // recoveryEvidence derives the typed evidence from SOP's own observations. It
 // never parses agent prose; the classification, the recorded change set, and the
 // outcome signature are the inputs.
-func recoveryEvidence(rn *runpkg.Run, c failure.Classification, signature string) recovery.AttemptEvidence {
+func recoveryEvidence(rn *runpkg.Run, c failure.Classification, signature string, priorRecoveries int) recovery.AttemptEvidence {
 	changed := rn != nil && len(rn.ChangedFiles()) > 0
 	// Discovery-only is the harness no-progress signal (or an explicit no-change
 	// verdict) with no repository change. A productive CONTINUE (unfinished but
@@ -36,11 +36,12 @@ func recoveryEvidence(rn *runpkg.Run, c failure.Classification, signature string
 	// budget owns that case.
 	discoveryOnly := !changed && c.Kind == failure.NoProgress
 	return recovery.AttemptEvidence{
-		Kind:          c.Kind,
-		Disposition:   c.Disposition,
-		RepoChanged:   changed,
-		DiscoveryOnly: discoveryOnly,
-		Signature:     signature,
+		Kind:            c.Kind,
+		Disposition:     c.Disposition,
+		RepoChanged:     changed,
+		DiscoveryOnly:   discoveryOnly,
+		Signature:       signature,
+		PriorRecoveries: priorRecoveries,
 	}
 }
 
@@ -61,6 +62,19 @@ func recordRecovery(rn *runpkg.Run, rec recovery.Recovery) error {
 	defer f.Close()
 	_, err = f.Write(append(data, '\n'))
 	return err
+}
+
+// priorNoProgressRecoveries counts automatic no-progress recoveries already
+// recorded for this run, so the first stop may resume from its checkpoint and a
+// second stop is terminal. The journal is the durable source of truth.
+func priorNoProgressRecoveries(rn *runpkg.Run) int {
+	count := 0
+	for _, rec := range recoveryHistory(rn) {
+		if rec.Class == recovery.ImplementationNoProgress {
+			count++
+		}
+	}
+	return count
 }
 
 // recoveryHistory reads the run's recovery journal in order. A missing journal is

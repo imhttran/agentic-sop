@@ -27,7 +27,7 @@ import (
 // unchanged" or "attention was added" — never an expansion of authority.
 func TestDecisionEvidenceFailureMatrix(t *testing.T) {
 	humanBoundary := failure.Classification{Kind: failure.AmbiguousContract, Disposition: failure.NeedsHuman, Reason: "ambiguous"}
-	blockBoundary := failure.Classification{Kind: failure.NoProgress, Disposition: failure.Retry, Reason: "no progress"}
+	blockBoundary := failure.Classification{Kind: failure.NoProgress, Disposition: failure.Block, Reason: "no progress"}
 
 	for _, tc := range []struct {
 		name        string

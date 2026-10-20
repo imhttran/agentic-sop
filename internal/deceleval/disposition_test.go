@@ -55,9 +55,11 @@ func TestAnalyzeExecutionPostureSeparation(t *testing.T) {
 }
 
 // TestAnalyzeExecutionPostureFrozen proves the analysis on the frozen baseline is
-// deterministic and matches the recorded corpus: 14 exact mismatches reduce to 0
-// unsafe continuations, 1 more-conservative, 1 both-withhold (dme-real-close-004),
-// and 12 posture-equivalent.
+// deterministic and matches the recorded corpus. A no-progress stop now takes one
+// bounded checkpoint retry before the terminal block, so the seven no-progress
+// scenarios are recorded as RETRY (proceed) against BLOCK/NEEDS_HUMAN labels: 20
+// exact mismatches reduce to 7 less-conservative, 1 more-conservative, 0
+// both-withhold, and 12 posture-equivalent.
 func TestAnalyzeExecutionPostureFrozen(t *testing.T) {
 	corpusPath, freezePath := corpusPaths()
 	if err := VerifyFreeze(corpusPath, freezePath); err != nil {
@@ -72,8 +74,8 @@ func TestAnalyzeExecutionPostureFrozen(t *testing.T) {
 		t.Fatal(err)
 	}
 	a := AnalyzeExecutionPosture(RunBaseline(c, sha))
-	if a.Total != 14 || a.LessConservative != 0 || a.MoreConservative != 1 || a.BothWithhold != 1 || a.PostureEquivalent != 12 {
-		t.Fatalf("frozen buckets = total %d less %d more %d both %d equiv %d, want 14/0/1/1/12",
+	if a.Total != 20 || a.LessConservative != 7 || a.MoreConservative != 1 || a.BothWithhold != 0 || a.PostureEquivalent != 12 {
+		t.Fatalf("frozen buckets = total %d less %d more %d both %d equiv %d, want 20/7/1/0/12",
 			a.Total, a.LessConservative, a.MoreConservative, a.BothWithhold, a.PostureEquivalent)
 	}
 	var close004 *PostureMismatch
@@ -82,8 +84,8 @@ func TestAnalyzeExecutionPostureFrozen(t *testing.T) {
 			close004 = &a.Rows[i]
 		}
 	}
-	if close004 == nil || close004.Baseline != "BLOCK" || close004.Expected != "NEEDS_HUMAN" ||
-		close004.BaselinePosture != PostureTerminal || close004.ExpectedPosture != PostureHuman {
-		t.Errorf("dme-real-close-004 posture = %+v, want BLOCK/TERMINAL vs NEEDS_HUMAN/HUMAN", close004)
+	if close004 == nil || close004.Baseline != "RETRY" || close004.Expected != "NEEDS_HUMAN" ||
+		close004.BaselinePosture != PostureProceed || close004.ExpectedPosture != PostureHuman {
+		t.Errorf("dme-real-close-004 posture = %+v, want RETRY/PROCEED vs NEEDS_HUMAN/HUMAN", close004)
 	}
 }

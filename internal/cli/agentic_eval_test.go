@@ -79,6 +79,11 @@ func TestAgenticEvalImplementationNoProgress(t *testing.T) {
 	if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
 		t.Fatalf("code=%d, want %d", code, exitError)
 	}
+	// The first no-progress stop takes one bounded checkpoint recovery; the second
+	// identical stop is the terminal operator block the fixture evaluates.
+	if code, _, _ := runInjectedCLI(t, dir, "diff\n", a, "run"); code != exitError {
+		t.Fatalf("second run: code=%d, want %d", code, exitError)
+	}
 	runEvalFixture(t, "implementation/no-progress.expect.json", loadEvalTrace(t, dir, "S001"))
 }
 

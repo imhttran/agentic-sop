@@ -78,6 +78,7 @@ const (
 	ReasonMissingPrerequisite = "a required prerequisite is missing; it must be supplied"
 	ReasonUnchangedFailure    = "the failure is unchanged since the previous attempt; it is not retried"
 	ReasonNoMaterialChange    = "no material change in approach; the attempt is not retried"
+	ReasonResumeCheckpoint    = "no repository progress; the next attempt resumes from the recorded checkpoint"
 	ReasonContinuationLimit   = "maximum continuations reached; a human decision is required"
 	ReasonRoutingInactive     = "model routing is not configured; no fallback is selected"
 	ReasonOverrideKept        = "an explicit operator class override is kept; no fallback is selected"
@@ -89,11 +90,12 @@ const (
 
 // Fixed material-change phrases. A recovery with an empty Change is refused.
 const (
-	ChangeClass         = "the model class changes"
-	ChangeStrategy      = "the strategy is replanned on the same class"
-	ChangeProgress      = "the repository changed since the previous attempt"
-	ChangeNewEvidence   = "the failure signature changed since the previous attempt"
-	ChangeLocalFallback = "the configured cloud fallback replaces the unavailable local runtime"
+	ChangeClass            = "the model class changes"
+	ChangeStrategy         = "the strategy is replanned on the same class"
+	ChangeProgress         = "the repository changed since the previous attempt"
+	ChangeNewEvidence      = "the failure signature changed since the previous attempt"
+	ChangeLocalFallback    = "the configured cloud fallback replaces the unavailable local runtime"
+	ChangeResumeCheckpoint = "the next attempt resumes from the persisted discovery checkpoint"
 )
 
 // AttemptEvidence is the typed evidence an attempt is classified from.
@@ -110,6 +112,11 @@ type AttemptEvidence struct {
 	DiscoveryOnly bool
 	// Signature is the attempt's outcome signature (runpkg.Run.RecordAttempt).
 	Signature string
+	// PriorRecoveries counts earlier automatic no-progress recoveries recorded for
+	// this task. The first no-progress stop may resume from its checkpoint; a
+	// second one is refused, so recovery is bounded independently of the retry
+	// budget's size.
+	PriorRecoveries int
 }
 
 // Classify maps attempt evidence to exactly one class (see the precedence above).
@@ -185,10 +192,20 @@ func Recover(p Policy, ev AttemptEvidence, prevSignature string, base Evidence, 
 		d = Decide(p, base)
 		unchanged := prevSignature != "" && ev.Signature == prevSignature
 		if ev.DiscoveryOnly {
-			// A discovery-only attempt made no repository change. Retrying it is not a
-			// material change in approach, even when no previous signature exists or
-			// escalation/replan is disabled.
-			d.Action, d.ToClass, d.Reason = ActionHuman, "", ReasonNoMaterialChange
+			// A discovery-only attempt made no repository change. Its harness diagnostic
+			// carries the checkpoint of what it already inspected, so ONE bounded retry is
+			// a material change in approach: it resumes from that checkpoint instead of
+			// repeating discovery. A repeated stop, or a second recovery after the first
+			// was already spent, is refused and becomes the terminal no-progress block.
+			if unchanged {
+				d.Action, d.ToClass, d.Reason = ActionHuman, "", ReasonUnchangedFailure
+				break
+			}
+			if ev.PriorRecoveries > 0 {
+				d.Action, d.ToClass, d.Reason = ActionHuman, "", ReasonNoMaterialChange
+				break
+			}
+			d.Action, d.ToClass, d.Reason, change = ActionRetrySame, base.Class, ReasonResumeCheckpoint, ChangeResumeCheckpoint
 			break
 		}
 		switch d.Action {

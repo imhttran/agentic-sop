@@ -187,7 +187,7 @@ func TestDecisionEvidenceGovernedBaselinePreserved(t *testing.T) {
 		cls  failure.Classification
 	}{
 		{"human boundary", failure.Classification{Kind: failure.AmbiguousContract, Disposition: failure.NeedsHuman, Reason: "ambiguous"}},
-		{"terminal stop", failure.Classification{Kind: failure.NoProgress, Disposition: failure.Retry, Reason: "no progress"}},
+		{"terminal stop", failure.Classification{Kind: failure.NoProgress, Disposition: failure.Block, Reason: "no progress"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			in := decisionEvidenceResult(tc.cls)
