@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"path/filepath"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/memindex"
@@ -25,6 +26,8 @@ func captureOutcome(dir string, cfg config.Config, taskID string) error {
 	if !resolved.Enabled {
 		return nil
 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(resolved.CaptureTimeoutMS)*time.Millisecond)
+	defer cancel()
 	rec, err := outcomefile.IngestRunFor(filepath.Join(dir, config.DirName, "runs"), taskID, cfg.Project.Name)
 	if err != nil {
 		return err
@@ -36,11 +39,11 @@ func captureOutcome(dir string, cfg config.Config, taskID string) error {
 	if _, _, err := outcomefile.Write(resolved.OutcomesDir, rec); err != nil {
 		return err
 	}
-	ix, err := memindex.Open(resolved.IndexPath)
+	ix, err := memindex.OpenContext(ctx, resolved.IndexPath)
 	if err != nil {
 		return err
 	}
 	defer ix.Close()
-	_, err = ix.RebuildFromDir(context.Background(), resolved.OutcomesDir)
+	_, err = ix.RebuildFromDir(ctx, resolved.OutcomesDir)
 	return err
 }

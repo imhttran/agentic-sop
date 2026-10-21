@@ -18,7 +18,12 @@ type RebuildReport struct {
 // keyed by stable record ID, plus a per-record exclusion map for ineligible records.
 // The map is suitable for LocalRetriever.Current and DetectDrift.
 func Snapshot(dir string) (map[string]outcomefile.OutcomeRecord, error) {
-	records, _, err := outcomefile.ReadAll(dir)
+	return SnapshotContext(context.Background(), dir)
+}
+
+// SnapshotContext reads source records within the caller's deadline.
+func SnapshotContext(ctx context.Context, dir string) (map[string]outcomefile.OutcomeRecord, error) {
+	records, _, err := outcomefile.ReadAllContext(ctx, dir)
 	if err != nil {
 		return nil, err
 	}
@@ -34,7 +39,7 @@ func Snapshot(dir string) (map[string]outcomefile.OutcomeRecord, error) {
 // excluded and not indexed. Documents rejected by the reader carry an explicit reason.
 // The result is deterministic for the same frozen source records.
 func (ix *Index) RebuildFromDir(ctx context.Context, dir string) (RebuildReport, error) {
-	records, rejected, err := outcomefile.ReadAll(dir)
+	records, rejected, err := outcomefile.ReadAllContext(ctx, dir)
 	if err != nil {
 		return RebuildReport{}, err
 	}

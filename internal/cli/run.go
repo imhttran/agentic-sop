@@ -452,7 +452,10 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// Decision-memory capture. It runs after verification and after the report artifacts
 	// exist, is idempotent, and is strictly best-effort: a capture failure is reported on
 	// the console and never changes the task verdict or the run outcome.
-	if err := captureOutcome(dir, cfg, spec.ID); err != nil {
+	captureStarted := time.Now()
+	captureErr := captureOutcome(dir, cfg, spec.ID)
+	writeMemoryCapture(rn, cfg, captureStarted, captureErr, stdout)
+	if err := captureErr; err != nil {
 		fmt.Fprintf(stdout, "decision memory: capture skipped: %v\n", err)
 	}
 	return res, nil
@@ -2302,9 +2305,10 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 	if rec.Mode == ragModeOptional && rec.Status == ragStatusSucceed && !rec.UsedInContext && rec.Corpus != "" {
 		rec.Status, rec.ReasonCode = ragStatusFailed, ragReasonFallback
 	}
-	if advisory.Attempted {
+	if advisory.Status != "" {
 		rec.AdvisoryPhase = string(advisory.Phase)
 		rec.AdvisoryStatus = advisory.Status
+		rec.AdvisoryDurationMS = advisory.DurationMS
 		rec.AdvisoryReason = advisory.ReasonCode
 		rec.AdvisoryCompatibility = advisory.Compatibility
 		rec.AdvisoryCount = len(advisory.Items)

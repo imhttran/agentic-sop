@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
@@ -273,8 +274,10 @@ type ragTelemetry struct {
 	// retrieval for the same attempt.
 	AdvisoryPhase string `json:"advisory_phase,omitempty"`
 	// AdvisoryStatus and AdvisoryReason are bounded, content-free outcome labels.
-	AdvisoryStatus string `json:"advisory_status,omitempty"`
-	AdvisoryReason string `json:"advisory_reason,omitempty"`
+	ObservedAt         time.Time `json:"observed_at"`
+	AdvisoryDurationMS int64     `json:"advisory_duration_ms"`
+	AdvisoryStatus     string    `json:"advisory_status,omitempty"`
+	AdvisoryReason     string    `json:"advisory_reason,omitempty"`
 	// AdvisoryCount and AdvisoryTokens report the mapped item count and tokens.
 	AdvisoryCount  int `json:"advisory_count,omitempty"`
 	AdvisoryTokens int `json:"advisory_tokens,omitempty"`
@@ -320,11 +323,15 @@ func writeRAGTelemetry(rn *runpkg.Run, rec ragTelemetry) {
 		return
 	}
 	rec.Phase = "rag"
+	rec.ObservedAt = time.Now().UTC()
 	b, err := json.MarshalIndent(rec, "", "  ")
 	if err != nil {
 		return
 	}
 	_ = rn.Write("rag.json", string(append(b, '\n')))
+	if rec.AdvisoryStatus != "" && rec.AdvisoryReason != ragReasonAdvisoryDisabled {
+		_ = rn.Write(fmt.Sprintf("memory-retrieval-%d.json", rec.ObservedAt.UnixNano()), string(append(b, '\n')))
+	}
 }
 
 // knowledgeCitations returns the stable citation identities of the selected
@@ -362,11 +369,7 @@ func updateAdvisoryInclusion(rn *runpkg.Run, dir, taskID, evidence string, citat
 		}
 	}
 	rec.AdvisoryIncluded = included
-	out, err := json.MarshalIndent(rec, "", "  ")
-	if err != nil {
-		return
-	}
-	_ = rn.Write("rag.json", string(append(out, '\n')))
+	writeRAGTelemetry(rn, rec)
 }
 
 // updateRAGPromptInclusion refreshes rag.json with prompt_included after the prompt
@@ -400,7 +403,7 @@ func updateRAGPromptInclusion(rn *runpkg.Run, dir, taskID, evidence string, cita
 		return
 	}
 	if rn != nil {
-		_ = rn.Write("rag.json", string(append(out, '\n')))
+		writeRAGTelemetry(rn, rec)
 		return
 	}
 	_ = os.WriteFile(path, append(out, '\n'), 0o644)

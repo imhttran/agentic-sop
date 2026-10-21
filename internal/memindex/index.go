@@ -66,6 +66,14 @@ type Index struct {
 // ErrLockTimeout instead of a hang, and WAL mode lets readers proceed while a writer
 // holds the write lock.
 func Open(path string) (*Index, error) {
+	return OpenContext(context.Background(), path)
+}
+
+// OpenContext includes database setup in the caller's deadline.
+func OpenContext(ctx context.Context, path string) (*Index, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if strings.TrimSpace(path) == "" {
 		return nil, &retrievalboundary.InvalidQueryError{Reason: "empty index path"}
 	}
@@ -73,16 +81,16 @@ func Open(path string) (*Index, error) {
 	if err != nil {
 		return nil, fmt.Errorf("memindex: open: %w", err)
 	}
-	if _, err := db.Exec(`PRAGMA busy_timeout = ` + fmt.Sprint(busyTimeoutMS) + `;`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA busy_timeout = `+fmt.Sprint(busyTimeoutMS)+`;`); err != nil {
 		db.Close()
 		return nil, wrapSQL(err)
 	}
-	if _, err := db.Exec(`PRAGMA journal_mode = WAL;`); err != nil {
+	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode = WAL;`); err != nil {
 		db.Close()
 		return nil, wrapSQL(err)
 	}
 	ix := &Index{db: db, path: path}
-	if err := ix.migrate(); err != nil {
+	if err := ix.migrate(ctx); err != nil {
 		db.Close()
 		return nil, err
 	}
@@ -98,9 +106,9 @@ func (ix *Index) Close() error { return ix.db.Close() }
 // migrate creates the schema if absent and records the schema version. It is idempotent:
 // every statement uses IF NOT EXISTS and the version row is inserted only when absent, so
 // a healthy database opened twice never errors.
-func (ix *Index) migrate() error {
+func (ix *Index) migrate(ctx context.Context) error {
 	var cur string
-	err := ix.db.QueryRow(`SELECT v FROM schema_meta WHERE k='schema_version'`).Scan(&cur)
+	err := ix.db.QueryRowContext(ctx, `SELECT v FROM schema_meta WHERE k='schema_version'`).Scan(&cur)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
 		// A missing schema_meta is a fresh (or pre-version) database; any other error
 		// is resolved by the CREATE statements below, which fail closed if the file is
@@ -111,7 +119,7 @@ func (ix *Index) migrate() error {
 		// The memory index is disposable and derived from authoritative outcome files,
 		// so a layout change rebuilds it instead of migrating rows in place.
 		for _, s := range []string{`DROP TABLE IF EXISTS records_fts;`, `DROP TABLE IF EXISTS records;`, `DROP TABLE IF EXISTS schema_meta;`} {
-			if _, err := ix.db.Exec(s); err != nil {
+			if _, err := ix.db.ExecContext(ctx, s); err != nil {
 				return wrapSQL(err)
 			}
 		}
@@ -134,12 +142,12 @@ func (ix *Index) migrate() error {
 		`CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(record_id UNINDEXED, body);`,
 	}
 	for _, s := range stmts {
-		if _, err := ix.db.Exec(s); err != nil {
+		if _, err := ix.db.ExecContext(ctx, s); err != nil {
 			return wrapSQL(err)
 		}
 	}
 	if cur != fmt.Sprint(SchemaVersion) {
-		if _, err := ix.db.Exec(`INSERT INTO schema_meta(k,v) VALUES('schema_version', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, fmt.Sprint(SchemaVersion)); err != nil {
+		if _, err := ix.db.ExecContext(ctx, `INSERT INTO schema_meta(k,v) VALUES('schema_version', ?) ON CONFLICT(k) DO UPDATE SET v=excluded.v`, fmt.Sprint(SchemaVersion)); err != nil {
 			return wrapSQL(err)
 		}
 	}

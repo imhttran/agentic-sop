@@ -21,6 +21,8 @@ func runMemory(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitUsage
 	}
 	switch args[0] {
+	case "enable", "disable", "status":
+		return runMemoryOperations(args, stdout, stderr, d)
 	case "add":
 		return runMemoryAdd(args[1:], stdout, stderr, d)
 	case "list":
@@ -32,7 +34,7 @@ func runMemory(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 }
 
-const memoryUsage = "usage: sop memory add --decision <text> --reason <text> [--scope repository|project|architecture] [--source <id>] [--evidence <text>] | sop memory list [--scope <scope>]"
+const memoryUsage = "usage: sop memory enable|disable|status | sop memory add --decision <text> --reason <text> [--scope repository|project|architecture] [--source <id>] [--evidence <text>] | sop memory list [--scope <scope>]"
 
 // runMemoryAdd records one decision.
 func runMemoryAdd(args []string, stdout, stderr io.Writer, d deps) int {

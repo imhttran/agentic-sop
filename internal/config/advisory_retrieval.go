@@ -43,6 +43,8 @@ type AdvisoryRetrievalConfig struct {
 	// Enabled is the master opt-in. It is false unless explicitly enabled by the
 	// environment or the `advisory_retrieval:` block.
 	Enabled bool `yaml:"enabled"`
+	// CaptureTimeoutMS bounds capture index maintenance; zero uses 5000 ms.
+	CaptureTimeoutMS int `yaml:"capture_timeout_ms"`
 	// IndexPath is the local, rebuildable SQLite memory index.
 	IndexPath string `yaml:"index_path"`
 	// OutcomesDir is the directory of authoritative outcome documents used for drift
@@ -116,6 +118,12 @@ func (a AdvisoryRetrievalConfig) Resolved(getenv func(string) string) (AdvisoryR
 		a.CompatibilityFloor = v
 	}
 
+	if a.CaptureTimeoutMS < 0 {
+		return AdvisoryRetrievalConfig{}, fmt.Errorf("advisory_retrieval: capture_timeout_ms must not be negative")
+	}
+	if a.CaptureTimeoutMS == 0 {
+		a.CaptureTimeoutMS = 5000
+	}
 	if a.TimeoutMS <= 0 {
 		a.TimeoutMS = DefaultAdvisoryRetrievalTimeoutMS
 	}
