@@ -14,6 +14,7 @@
 package outcomefile
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -287,6 +288,14 @@ func Read(path string) (OutcomeRecord, error) {
 // rejected file names to explicit reasons. A temporary file or a file without the
 // document extension is never selected.
 func ReadAll(dir string) ([]OutcomeRecord, map[string]string, error) {
+	return ReadAllContext(context.Background(), dir)
+}
+
+// ReadAllContext checks cancellation before listing and between documents.
+func ReadAllContext(ctx context.Context, dir string) ([]OutcomeRecord, map[string]string, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, nil, err
+	}
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -298,6 +307,9 @@ func ReadAll(dir string) ([]OutcomeRecord, map[string]string, error) {
 	byID := map[string]OutcomeRecord{}
 	fileForID := map[string]string{}
 	for _, e := range entries {
+		if err := ctx.Err(); err != nil {
+			return nil, nil, err
+		}
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, DocumentExt) || strings.HasPrefix(name, tempPrefix) {
 			continue
@@ -568,7 +580,7 @@ func verificationFromReport(rep runReport) []Verification {
 // existingArtifacts lists the run files that exist, so the record's provenance never
 // names a file that was not captured.
 func existingArtifacts(runDir string) []string {
-	names := []string{"report.json", "report.md", "state.json", "counts.json", "trace.json"}
+	names := []string{"report.json", "report.md", "state.json", "counts.json", "trace.json", "rag.json"}
 	var out []string
 	for _, n := range names {
 		p := filepath.Join(runDir, n)

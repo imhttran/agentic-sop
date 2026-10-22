@@ -268,7 +268,7 @@ func TestUpdateAdvisoryInclusionOnlyAfterCompilation(t *testing.T) {
 }
 
 func TestOpenAdvisoryRetrieverRequiresConfig(t *testing.T) {
-	_, closeFn, err := openAdvisoryRetriever(config.AdvisoryRetrievalConfig{})
+	_, closeFn, err := openAdvisoryRetriever(context.Background(), config.AdvisoryRetrievalConfig{})
 	if err == nil {
 		closeFn()
 		t.Fatal("openAdvisoryRetriever accepted an empty configuration")

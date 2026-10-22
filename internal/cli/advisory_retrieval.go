@@ -27,6 +27,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
@@ -92,11 +93,12 @@ type AdvisoryItem struct {
 // AdvisoryResult is the explicit, attempt-scoped outcome of one advisory
 // retrieval. It is returned to the caller, never stored on shared deps.
 type AdvisoryResult struct {
-	Attempted bool
-	Phase     AdvisoryPhase
-	Corpus    retrievalboundary.Corpus
-	Items     []AdvisoryItem
-	Tokens    int
+	DurationMS int64
+	Attempted  bool
+	Phase      AdvisoryPhase
+	Corpus     retrievalboundary.Corpus
+	Items      []AdvisoryItem
+	Tokens     int
 	// Compatibility is the configured compatibility floor applied to the result.
 	Compatibility string
 	// Status and ReasonCode are bounded, content-free telemetry labels.
@@ -116,15 +118,15 @@ type advisoryRetrievalFunc func(ctx context.Context, q retrievalboundary.ScopedQ
 
 // openAdvisoryRetriever builds the local bounded retriever: the SQLite FTS index plus the
 // authoritative outcome snapshot used for drift exclusion. The caller closes it.
-func openAdvisoryRetriever(cfg config.AdvisoryRetrievalConfig) (AdvisoryRetriever, func(), error) {
-	ix, err := memindex.Open(cfg.IndexPath)
+func openAdvisoryRetriever(ctx context.Context, cfg config.AdvisoryRetrievalConfig) (AdvisoryRetriever, func(), error) {
+	ix, err := memindex.OpenContext(ctx, cfg.IndexPath)
 	if err != nil {
 		return nil, nil, err
 	}
 	lr := &memindex.LocalRetriever{
 		Index: ix,
-		Current: func(context.Context) (map[string]outcomefile.OutcomeRecord, error) {
-			return memindex.Snapshot(cfg.OutcomesDir)
+		Current: func(ctx context.Context) (map[string]outcomefile.OutcomeRecord, error) {
+			return memindex.SnapshotContext(ctx, cfg.OutcomesDir)
 		},
 	}
 	return lr, func() { _ = ix.Close() }, nil
@@ -223,7 +225,9 @@ func advisoryCorpora(resolved config.AdvisoryRetrievalConfig) []retrievalboundar
 // any typed boundary error are reported with a bounded reason code and no items, so
 // the caller follows the existing fallback path. The token budget is admitted per
 // item, so the configured bound is never exceeded, even momentarily.
-func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever AdvisoryRetriever, spec *taskfile.Spec, repository, failureContext string, phase AdvisoryPhase) AdvisoryResult {
+func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever AdvisoryRetriever, spec *taskfile.Spec, repository, failureContext string, phase AdvisoryPhase) (result AdvisoryResult) {
+	started := time.Now()
+	defer func() { result.DurationMS = time.Since(started).Milliseconds() }()
 	resolved, err := cfg.AdvisoryRetrieval.Resolved(nil)
 	if err != nil {
 		// An explicitly ENABLED block with an invalid value is actionable but still
@@ -234,6 +238,8 @@ func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever Advisory
 		return AdvisoryResult{Phase: phase, Status: ragStatusSkipped, ReasonCode: ragReasonAdvisoryDisabled}
 	}
 
+	ctx, cancel := context.WithTimeout(ctx, resolved.Timeout())
+	defer cancel()
 	out := AdvisoryResult{Attempted: true, Phase: phase, Status: ragStatusFailed, Compatibility: resolved.CompatibilityFloor}
 
 	corpora := advisoryCorpora(resolved)
@@ -244,9 +250,12 @@ func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever Advisory
 	if retriever == nil {
 		// The local path is the default: a separate SQLite index plus the authoritative
 		// outcome files for drift exclusion. No subprocess and no database service.
-		r, closeFn, oerr := openAdvisoryRetriever(resolved)
+		r, closeFn, oerr := openAdvisoryRetriever(ctx, resolved)
 		if oerr != nil {
 			out.ReasonCode = ragReasonAdvisoryUnavailable
+			if ctx.Err() != nil {
+				out.ReasonCode = ragReasonAdvisoryTimeout
+			}
 			out.Err = oerr
 			return out
 		}
@@ -302,7 +311,7 @@ func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever Advisory
 // reason code. It never copies producer error text.
 func ragReasonFromError(err error) string {
 	switch {
-	case errors.Is(err, retrievalboundary.ErrTimeout):
+	case errors.Is(err, retrievalboundary.ErrTimeout), errors.Is(err, context.DeadlineExceeded), errors.Is(err, context.Canceled):
 		return ragReasonAdvisoryTimeout
 	case errors.Is(err, retrievalboundary.ErrUnsupportedCorpus):
 		return ragReasonAdvisoryUnsupported
