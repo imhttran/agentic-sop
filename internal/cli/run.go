@@ -453,10 +453,10 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// exist, is idempotent, and is strictly best-effort: a capture failure is reported on
 	// the console and never changes the task verdict or the run outcome.
 	captureStarted := time.Now()
-	captureErr := captureOutcome(dir, cfg, spec.ID)
-	writeMemoryCapture(rn, cfg, captureStarted, captureErr, stdout)
-	if err := captureErr; err != nil {
-		fmt.Fprintf(stdout, "decision memory: capture skipped: %v\n", err)
+	captureReport, captureErr := captureOutcome(dir, cfg, spec.ID)
+	writeMemoryCapture(rn, cfg, captureStarted, captureReport, captureErr, stdout)
+	if captureErr != nil {
+		fmt.Fprintf(stdout, "decision memory: capture failed (task verdict unchanged): %v\n", captureErr)
 	}
 	return res, nil
 }

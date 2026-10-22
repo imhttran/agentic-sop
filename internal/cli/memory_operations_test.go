@@ -16,6 +16,7 @@ import (
 
 func TestMemoryWorkspaceEnableDisablePreservesConfig(t *testing.T) {
 	dir := t.TempDir()
+	clearAdvisoryEnv(t)
 	initProject(t, dir)
 	before, err := config.LoadDir(dir)
 	if err != nil {
@@ -42,6 +43,144 @@ func TestMemoryWorkspaceEnableDisablePreservesConfig(t *testing.T) {
 	}
 }
 
+// TestMemoryEnablePreparesEnvironmentIndexPath is the reported failure: an environment
+// index override pointing at a new directory was never prepared, so enable reported
+// success while the following capture could not open the index.
+func TestMemoryEnablePreparesEnvironmentIndexPath(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	envRoot := filepath.Join(t.TempDir(), "env-memory")
+	indexPath := filepath.Join(envRoot, "index.db")
+	t.Setenv(config.EnvAdvisoryRetrievalIndex, indexPath)
+
+	code, out, errOut := runCLI(t, dir, "memory", "enable")
+	if code != exitOK {
+		t.Fatalf("enable: %d %s %s", code, out, errOut)
+	}
+	if !strings.Contains(out, config.EnvAdvisoryRetrievalIndex+"="+indexPath) {
+		t.Fatalf("enable did not report the applicable environment override: %s", out)
+	}
+	if _, err := os.Stat(envRoot); err != nil {
+		t.Fatalf("enable did not prepare the effective index parent: %v", err)
+	}
+
+	cfg, err := config.LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	writeRunReport(t, dir, "T1", "PARTIAL")
+	if _, err := captureOutcome(dir, *cfg, "T1"); err != nil {
+		t.Fatalf("capture after enable: %v", err)
+	}
+	if _, err := os.Stat(indexPath); err != nil {
+		t.Fatalf("capture did not use the prepared environment index: %v", err)
+	}
+}
+
+// TestMemoryEnableRejectsInvalidEffectiveConfiguration covers both an environment override
+// and a preserved workspace value that Resolved alone accepts but every retrieval rejects.
+func TestMemoryEnableRejectsInvalidEffectiveConfiguration(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		env   map[string]string
+		write string
+		want  string
+	}{
+		{
+			name: "environment corpus",
+			env:  map[string]string{config.EnvAdvisoryRetrievalCorpora: "bogus"},
+			want: "unsupported corpus",
+		},
+		{
+			name: "environment timeout above the retrieval ceiling",
+			env:  map[string]string{config.EnvAdvisoryRetrievalTimeout: "60000"},
+			want: "time budget out of range",
+		},
+		{
+			name: "preserved workspace corpus",
+			write: `project:
+  name: x
+advisory_retrieval:
+  enabled: false
+  allowed_corpora:
+    - not-a-corpus
+`,
+			want: "unsupported corpus",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			initProject(t, dir)
+			if tc.write != "" {
+				writeConfig(t, dir, tc.write)
+			}
+			for k, v := range tc.env {
+				t.Setenv(k, v)
+			}
+
+			code, out, errOut := runCLI(t, dir, "memory", "enable")
+			if code != exitError {
+				t.Fatalf("enable accepted an invalid effective configuration: %d %s %s", code, out, errOut)
+			}
+			if !strings.Contains(errOut, tc.want) {
+				t.Fatalf("stderr = %q, want an actionable %q message", errOut, tc.want)
+			}
+			if strings.Contains(out, "enabled=true") {
+				t.Fatalf("enable reported success for an invalid effective configuration: %s", out)
+			}
+			cfg, err := config.LoadDir(dir)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.AdvisoryRetrieval.Enabled {
+				t.Fatal("enable persisted enabled=true for an invalid effective configuration")
+			}
+		})
+	}
+}
+
+// TestMemoryEnableReportsEnvironmentPrecedence proves the workspace flag and the effective
+// flag stay distinguishable when the environment disables the layer.
+func TestMemoryEnableReportsEnvironmentPrecedence(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	t.Setenv(config.EnvAdvisoryRetrievalEnabled, "false")
+	code, out, errOut := runCLI(t, dir, "memory", "enable")
+	if code != exitOK {
+		t.Fatalf("enable: %d %s %s", code, out, errOut)
+	}
+	if !strings.Contains(out, "Workspace advisory memory enabled=true") || !strings.Contains(out, "Effective advisory memory enabled=false") {
+		t.Fatalf("enable did not report workspace and effective state separately: %s", out)
+	}
+}
+
+// TestMemoryDisableIgnoresUnhealthyStorage proves disable stays usable when the configured
+// memory storage cannot be opened.
+func TestMemoryDisableIgnoresUnhealthyStorage(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, `project:
+  name: x
+advisory_retrieval:
+  enabled: true
+  index_path: /dev/null/index.db
+  outcomes_dir: /dev/null/outcomes
+  allowed_corpora:
+    - outcome
+`)
+	code, out, errOut := runCLI(t, dir, "memory", "disable")
+	if code != exitOK {
+		t.Fatalf("disable: %d %s %s", code, out, errOut)
+	}
+	cfg, err := config.LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.AdvisoryRetrieval.Enabled {
+		t.Fatal("disable did not persist enabled=false")
+	}
+}
+
 type deadlineMemoryRetriever struct{}
 
 func (deadlineMemoryRetriever) Retrieve(ctx context.Context, q retrievalboundary.ScopedQuery) (retrievalboundary.Result, error) {
@@ -62,6 +201,7 @@ func TestMemoryRetrievalTimeoutContinuesWithoutContext(t *testing.T) {
 }
 func TestMemoryObservationHistoryAndStatus(t *testing.T) {
 	dir := t.TempDir()
+	clearAdvisoryEnv(t)
 	initProject(t, dir)
 	rn, err := runpkg.New(dir, "T1")
 	if err != nil {
