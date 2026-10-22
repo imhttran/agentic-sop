@@ -1,8 +1,8 @@
 # SOP RAG Decision Memory Plan
 
 Date: 2026-10-19
-Revision: 5 — canonical rendered layout; acceptance checks added for implemented tasks.
-Status: Final planning document, ready for implementation. No repository changes or rollout performed.
+Revision: 6 — implementation status reconciled after PR #100.
+Status: IMPLEMENTED (opt-in, disabled by default). Local SQLite/FTS5 capture and bounded advisory retrieval merged in PR #100; retrieval benefit and enablement remain unproven.
 Target: `imhttran/agentic-sop`; reuse the existing RAG integration where suitable.
 
 ## Project
