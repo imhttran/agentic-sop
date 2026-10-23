@@ -361,6 +361,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runDecision(rest, stdout, stderr, d)
 	case "orchestrate":
 		return runOrchestrate(rest, stdout, stderr, d)
+	case "compare":
+		return runCompare(rest, stdout, stderr)
 	default:
 		fmt.Fprintf(stderr, "unknown command: %s\n", command)
 		fmt.Fprintln(stderr, "run `sop --help` for usage")
@@ -417,6 +419,7 @@ Commands:
   memory    record and list durable engineering decisions (CTX-010 decision memory)
   reconcile reconcile an intentional PLAN change (--accept-changed <id>, --list-changed)
   orchestrate  run the opt-in multi-agent orchestration path for one task (default off)
+  compare    run the opt-in HIP-003 baseline/candidate comparison harness (default off)
   providers inspect configured provider runtimes and their models (--models)
   controller serve the SOP Controller dashboard (read-only)
   decision  the decision-adapter CLI: decision decide | decision shadow
