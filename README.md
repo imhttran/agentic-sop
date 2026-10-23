@@ -137,6 +137,28 @@ produces a versioned cross-agent validation handoff, and preserves approval-gate
 start, rollback, and promotion boundaries; see
 [the MCP live-validation guide](docs/guides/MCP-LIVE-VALIDATION.md).
 
+## Planner–Executor Coordination
+
+The merged interactive planner baseline lets an executor publish progress,
+blockers, test results, and completion evidence with `sop result publish`. A
+planner connected through `sop mcp --planner` can retrieve task results and
+questions, then record a bound `continue`, `correct`, `revise`, or `escalate`
+decision. The executor applies that decision with
+`sop planner continue --apply` and resumes through `sop run`.
+
+Planner decisions are advice, never human approval, and published results are
+evidence, never automatic task completion. Resumption is currently interactive;
+no unattended ChatGPT invocation or notification channel is claimed. See the
+[planner–executor implementation plan](docs/plans/PLAN-Executore-Integration.md)
+and [CLI reference](docs/reference/CLI.md).
+
+Optional evaluation tooling is also available outside the default execution
+path: [`sop compare`](docs/guides/HIP-COMPARE.md) runs bounded
+baseline/candidate comparisons, and the
+[Promptfoo adapter](docs/security-promptfoo.md) performs report-only behavioral
+security evaluations. Neither tool can promote a candidate or alter deterministic
+execution governance.
+
 ## Basic Workflow
 
 ```text
