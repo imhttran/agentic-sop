@@ -288,3 +288,43 @@ func TestRedactionRemovesCredentialValues(t *testing.T) {
 		t.Fatalf("redaction left the secret: %q", got)
 	}
 }
+
+func TestCommandExecutorAppliesAllowedInstructionOnly(t *testing.T) {
+	worktree := t.TempDir()
+	exec := commandExecutor{}
+	res, err := exec.Execute(context.Background(), ExecutorInput{
+		Manifest:             &TaskManifest{ID: "TEST", TaskFile: "TASK.md"},
+		Worktree:             worktree,
+		AllowedPaths:         []string{"prompts/sop.md"},
+		VerificationCommands: []string{"true"},
+		Instructions:         InstructionSet{Name: "candidate", Files: []InstructionFile{{Path: "prompts/sop.md", Content: "candidate text"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Completed || !res.AcceptancePassed {
+		t.Fatalf("result = %+v, want completed and accepted", res)
+	}
+	data, err := os.ReadFile(filepath.Join(worktree, "prompts", "sop.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "candidate text" {
+		t.Fatalf("instruction content = %q", data)
+	}
+}
+
+func TestCommandExecutorRejectsDisallowedInstruction(t *testing.T) {
+	worktree := t.TempDir()
+	_, err := (commandExecutor{}).Execute(context.Background(), ExecutorInput{
+		Manifest:             &TaskManifest{ID: "TEST", TaskFile: "TASK.md"},
+		Worktree:             worktree,
+		AllowedPaths:         []string{"prompts/sop.md"},
+		VerificationCommands: []string{"true"},
+		Instructions:         InstructionSet{Name: "candidate", Files: []InstructionFile{{Path: "internal/cli/cli.go", Content: "tampered"}}},
+	})
+	var de *DisallowedEditError
+	if !errors.As(err, &de) {
+		t.Fatalf("error = %v, want DisallowedEditError", err)
+	}
+}

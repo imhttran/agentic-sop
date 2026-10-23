@@ -354,6 +354,27 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 	res := ExecutorResult{}
 	env := scrubbedEnv(in)
 
+	// Step 0: apply the arm's instruction set to the worktree. The baseline
+	// declares no edits; the candidate may touch only the manifest's allowed
+	// prompt or skill paths. The runner checks the resulting diff again, but this
+	// pre-write check means an out-of-list instruction never reaches the worktree.
+	for _, f := range in.Instructions.Files {
+		if bad := disallowed([]string{f.Path}, in.AllowedPaths); bad != "" {
+			return res, &DisallowedEditError{Path: bad}
+		}
+		dest := filepath.Join(in.Worktree, filepath.FromSlash(f.Path))
+		if !pathWithin(dest, in.Worktree) {
+			return res, fmt.Errorf("instruction path escapes the worktree: %s", f.Path)
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return res, fmt.Errorf("create instruction directory for %s: %w", f.Path, err)
+		}
+		if err := os.WriteFile(dest, []byte(f.Content), 0o644); err != nil {
+			return res, fmt.Errorf("apply instruction %s: %w", f.Path, err)
+		}
+		res.EvidencePaths = append(res.EvidencePaths, "instruction applied: "+f.Path)
+	}
+
 	// Step 1: the arm's agent work, if a command was configured. An operator that
 	// wants no model call passes an empty command; then only verification decides.
 	if strings.TrimSpace(c.opts.ExecutorCommand) != "" {
@@ -404,6 +425,10 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 // scrubbedEnv is the operator environment without clearly-secret variables, plus
 // the arm's shared inputs passed as HIPCOMPARE_* variables.
 func scrubbedEnv(in ExecutorInput) []string {
+	taskFile := ""
+	if in.Manifest != nil {
+		taskFile = in.Manifest.TaskFile
+	}
 	out := make([]string, 0, len(os.Environ())+12)
 	for _, kv := range os.Environ() {
 		i := strings.IndexByte(kv, '=')
@@ -418,7 +443,7 @@ func scrubbedEnv(in ExecutorInput) []string {
 	out = append(out,
 		"HIPCOMPARE_WORKTREE="+in.Worktree,
 		"HIPCOMPARE_STARTING_COMMIT="+in.StartingCommit,
-		"HIPCOMPARE_TASK_FILE="+in.Manifest.TaskFile,
+		"HIPCOMPARE_TASK_FILE="+taskFile,
 		"HIPCOMPARE_INSTRUCTION_NAME="+in.Instructions.Name,
 		"HIPCOMPARE_INSTRUCTION_TEXT="+in.Instructions.Instructions,
 		"HIPCOMPARE_VERIFICATION="+strings.Join(in.VerificationCommands, "\n"),
@@ -441,4 +466,15 @@ func sortedCopy(in []string) []string {
 // with the observed elapsed time.
 func timeLimitMillis(seconds int) int64 {
 	return int64(seconds) * 1000
+}
+
+// pathWithin reports whether child is inside parent after cleaning. It is used
+// before writing a candidate instruction so a path can never escape the arm
+// worktree.
+func pathWithin(child, parent string) bool {
+	rel, err := filepath.Rel(parent, child)
+	if err != nil || filepath.IsAbs(rel) {
+		return false
+	}
+	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
