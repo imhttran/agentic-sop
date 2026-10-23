@@ -166,6 +166,8 @@ single owner. This table is that map.
 
 ## Guides
 
+- [guides/HIP-COMPARE.md](guides/HIP-COMPARE.md) — the opt-in, bounded `sop compare` baseline/candidate harness; the recorded pilot promoted no candidate and was inconclusive for effectiveness.
+- [security-promptfoo.md](security-promptfoo.md) — the optional, report-only Promptfoo behavioral-evaluation adapter, its pinned installation, isolation, configuration, normalized evidence and current live-coverage limits.
 - [guides/INSTALLATION.md](guides/INSTALLATION.md) — **the installation entry point**: `./install.sh` on macOS/Linux, its options, where the binary goes, the agent skills it delegates, safety, and removal.
 - [guides/WINDOWS-INSTALLATION.md](guides/WINDOWS-INSTALLATION.md) — `install.ps1`: the parameters, the binary directory and PATH guidance, how the skills are copied and marked, uninstall, and what the installer never does.
 - [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md) — the native Claude Code plugin package: what it exposes, the official local-install steps, and how it is generated from `skills/`.
@@ -194,6 +196,9 @@ to `history/` when SOP or the repository still references its path: the archive 
 `scripts/agents/sop-agent.sh` name one of them. Moving such a plan would break
 `sop run`/`resume`/`reconcile`, so the path is kept and the status is declared here.
 
+- [plans/PLAN-Executore-Integration.md](plans/PLAN-Executore-Integration.md) — the active four-stage planner–executor plan. PE-1 and PE-2 are merged: planners can retrieve bound task/decision context and submit non-approval advice, while executors can durably publish results and consume applied decisions. PE-3 continuation acceptance and PE-4 recovery/hardening remain pending; unattended invocation is not claimed.
+- [plans/PROMPTFOO-COVERAGE-GAP.md](plans/PROMPTFOO-COVERAGE-GAP.md) — the preserved lifecycle/evidence-association gap for the merged Promptfoo evaluation work; verify-first records do not rewrite the original task verdicts.
+- [plans/HIP-006-pilot-evidence.md](plans/HIP-006-pilot-evidence.md) and [plans/HIP-007-adoption-report.md](plans/HIP-007-adoption-report.md) — the bounded `sop compare` pilot evidence and adoption verdict: no candidate promoted; effectiveness remains inconclusive.
 - [plans/BACKLOG.md](plans/BACKLOG.md) — known gaps and future candidates (the running list between phases), including the decision-model evaluation follow-ups (DME-FU-001–005) and their promotion criteria [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md).
 - [plans/PLAN-RAG-SOP-Integration.md](plans/PLAN-RAG-SOP-Integration.md) — the RAG integration plan (RAG-SOP-001–004): architecture, adapter implementation, required PostgreSQL integration validation, comparative evaluation, and the operator rollout decision. The evaluation criteria are fixed in [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) and the recorded outcome is [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
 - [plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md) — Phase 9 (ORCH-001–ORCH-012): the deterministic multi-agent orchestration system. **Delivery record**: all twelve tasks are `LOCAL_DONE`; the adoption gate ([reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps multi-agent **opt-in**, so single-agent stays the default.
