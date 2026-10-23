@@ -32,6 +32,9 @@ type EffectRequest struct {
 	Kind          string
 	Target        string
 	Body          string
+	// Command is the command-policy evidence for this effect. Production controls
+	// classify it with commandpolicy; fixture controls may ignore it.
+	Command []string
 }
 
 // ControlDecision is the outcome of the real controls that run before any effect.
@@ -66,6 +69,7 @@ type AttemptedCall struct {
 	Kind          string
 	Target        string
 	Body          string
+	Command       []string
 }
 
 // ExecutedCall is recorded only after the controls allow the call and the
@@ -74,6 +78,7 @@ type ExecutedCall struct {
 	CorrelationID string
 	Kind          string
 	Target        string
+	Command       []string
 }
 
 // CallRecord is the joined record for one correlation id: the attempt, the
@@ -149,30 +154,43 @@ func NewRecordingTools(controls Controls, effect RecordingBoundary) *RecordingTo
 	return &RecordingTools{Controls: controls, Effect: effect, Log: NewCallLog()}
 }
 
-// RequestWrite records the attempt, runs the controls, and — only when every
-// control allows it — performs the stubbed effect and records the execution under
-// the same correlation id. An unsupported effect kind is refused before the
-// controls and never reaches the effect boundary.
+// RequestWrite records an external write with no command-policy evidence. It is
+// the fixture-compatible form; production controls should use Request and supply
+// a Command.
 func (r *RecordingTools) RequestWrite(ctx context.Context, kind, target, body string) (CallRecord, error) {
-	id, err := newCorrelationID()
-	if err != nil {
-		return CallRecord{}, err
+	return r.Request(ctx, EffectRequest{Kind: kind, Target: target, Body: body})
+}
+
+// Request records the attempt, runs the controls, and — only when every control
+// allows it — performs the stubbed effect and records the execution under the
+// same correlation id. An unsupported effect kind is refused before the controls
+// and never reaches the effect boundary.
+func (r *RecordingTools) Request(ctx context.Context, req EffectRequest) (CallRecord, error) {
+	id := strings.TrimSpace(req.CorrelationID)
+	if id == "" {
+		var err error
+		id, err = newCorrelationID()
+		if err != nil {
+			return CallRecord{}, err
+		}
 	}
-	req := EffectRequest{CorrelationID: id, Kind: kind, Target: target, Body: body}
-	rec := CallRecord{Attempted: AttemptedCall{CorrelationID: id, Kind: kind, Target: target, Body: body}}
+	req.CorrelationID = id
+	rec := CallRecord{Attempted: AttemptedCall{
+		CorrelationID: id, Kind: req.Kind, Target: req.Target, Body: req.Body, Command: append([]string(nil), req.Command...),
+	}}
 
 	r.Log.mu.Lock()
 	r.Log.attempted = append(r.Log.attempted, rec.Attempted)
 	r.Log.mu.Unlock()
 
-	if kind != EffectKindWrite {
-		rec.Decision = ControlDecision{DeniedBy: "effect_kind", Detail: fmt.Sprintf("unsupported effect kind %q", kind)}
+	if req.Kind != EffectKindWrite {
+		rec.Decision = ControlDecision{DeniedBy: "effect_kind", Detail: fmt.Sprintf("unsupported effect kind %q", req.Kind)}
 		r.Log.mu.Lock()
 		r.Log.records = append(r.Log.records, rec)
 		r.Log.mu.Unlock()
 		return rec, &DeniedError{Decision: rec.Decision}
 	}
-	if strings.TrimSpace(target) == "" {
+	if strings.TrimSpace(req.Target) == "" {
 		rec.Decision = ControlDecision{DeniedBy: "effect_target", Detail: "effect target is required"}
 		r.Log.mu.Lock()
 		r.Log.records = append(r.Log.records, rec)
@@ -197,7 +215,7 @@ func (r *RecordingTools) RequestWrite(ctx context.Context, kind, target, body st
 		r.Log.mu.Unlock()
 		return rec, fmt.Errorf("evaltarget: recording effect: %w", err)
 	}
-	executed := ExecutedCall{CorrelationID: id, Kind: kind, Target: target}
+	executed := ExecutedCall{CorrelationID: id, Kind: req.Kind, Target: req.Target, Command: append([]string(nil), req.Command...)}
 	r.Log.mu.Lock()
 	r.Log.executed = append(r.Log.executed, executed)
 	rec.Executed = &executed

@@ -1,10 +1,9 @@
 # Promptfoo delivery — coverage and reconciliation gaps
 
-Status: open follow-up. The implementation is delivered on PR #113; the plan
-remains open. This note records the two gaps that prevent claiming the plan's
-original S3–S5 tasks are complete.
+Status: coverage gap closed; lifecycle reconciliation remains a separate follow-up.
+The implementation is delivered on PR #113; the plan remains open.
 
-## 1. Lifecycle reconciliation gap
+## 1. Lifecycle reconciliation gap (separate follow-up)
 
 S3, S4, and S5 are plan tasks. Their verification records are separate
 verify-first tasks:
@@ -40,46 +39,56 @@ example an operator command that binds an existing verification run's report
 digest and verdict to a plan task's criteria without rewriting its original
 outcome, or a plan-stage acceptance mapping that can reference an external
 verification task. The mechanism must preserve the original attempt history and
-must not turn a model-driven task into a claimed pass.
+must not turn a model-driven task into a claimed pass. It must not replace
+missing security coverage.
 
-## 2. Coverage gap: fixture controls vs real SOP controls
+## 2. Real-control acceptance coverage (closed)
 
-The AISEC suite in `internal/evaltarget/aisec.go` drives the S2 target's
-`Controls` seam with fixture implementations:
+The acceptance suite now separates three layers.
 
-- AISEC-001/003/004 use `denyApprovalControls` (a test double).
-- AISEC-005 uses `denyPolicyControls` (a test double).
-- AISEC-006 uses `AllowAllControls` (a test double).
-- AISEC-002 uses the runner's `RequireExecutedEvidence` check.
+### Evaluator unit tests (fixtures)
 
-These cases prove that the **evaluator** records attempts, detects executed
-effects, detects protected-data disclosure, and detects a completion claim with
-no executed evidence. They do **not** exercise SOP's real approval store,
-authorization/policy code, or verification gate. The plan's requirement that
-only external effects are stubbed while the controls under evaluation run for
-real is therefore not met; the coverage is fixture-only for controls.
+`internal/evaltarget/aisec_test.go` exercises `AISECCases` with fixture controls
+(`AllowAllControls`, `denyApprovalControls`, `denyPolicyControls`). These tests
+prove the evaluator's recording, detection, and permissive-control behavior; they
+are not security-control evidence.
 
-AISEC-002 specifically demonstrates **detection** of a false verification claim
-(no executed evidence). It does not demonstrate **prevention** — it does not run
-SOP's verification gate and prove that the gate refuses to record a passed
-verification. Prevention remains uncovered.
+### Integration tests of real SOP controls
 
-Live-model coverage is also narrow: one pinned-Promptfoo invocation through the
-adapter against local Ollama (`qwen3.5:4b`) with one `contains` assertion. It
-proves the adapter/binary/reporting path, not the six AISEC scenarios. The live
-check is timing-sensitive on a cold local model and is documented as manual
-evidence, separate from deterministic fixture coverage.
+`internal/evaltarget/production_controls_test.go` runs AISEC-001/003/004/005/006
+with `ProductionControls`:
 
-**Requested follow-up:** wire the `Controls` implementations to the real SOP
-approval/policy/verification boundaries, add a live-model run of the six AISEC
-scenarios where model access is available, and report deterministic versus live
-coverage separately.
+- AISEC-001/003/004: a real `approval.Service` has no request or a
+  differently-scoped approved target; `Authorize` denies; the recording effect
+  never executes.
+- AISEC-005: a real approved target exists, but `commandpolicy.Classify` sees a
+  force-push (`DENIED`); `Policy` denies before the effect boundary.
+- AISEC-006: a real approved target matches, and `commandpolicy.Classify` sees a
+  safe `go test`; the recording effect executes.
+
+`internal/cli/aisec_integration_test.go` runs AISEC-002 through the production
+lifecycle: a trusted-harness completion claim without execution evidence is made,
+the lifecycle classifies `IMPLEMENT_NO_CHANGES` as `CONTINUE`, the report is not
+`PASS`, and the persisted gate artifact is reconciled to `CONTINUE` rather than a
+successful completion gate. This is **refusal of a passed verdict** (prevention
+of a persisted successful gate) for that claim. It does not claim that a
+standalone verification component blocks all possible false claims independently
+of the lifecycle.
+
+### Live-model adversarial evaluations
+
+Not implemented in this PR. The live check is one pinned-Promptfoo invocation
+through the adapter against local Ollama (`qwen3.5:4b`) with one `contains`
+assertion. It proves the adapter/binary/reporting path, not the six AISEC
+scenarios. Live coverage remains a separate future layer and is not substituted
+for the deterministic and real-control integration evidence above.
 
 ## Current delivery state
 
-- Implementation commit: `b15ac99` (feature commit `6da31939`; plan commit
-  `962a90c`).
-- PR: https://github.com/imhttran/agentic-sop/pull/113 (draft; not merged).
-- CI on `b15ac99`: green.
-- Current acceptance records: S3V/S4V/S5V `VERIFIED`.
-- Plan tasks: S4 `BLOCKED`, S5 `PLANNED`; not claimed complete.
+- Plan commit: `962a90c`
+- Implementation commit: `6da31939`
+- CI/test fix: `b15ac99`
+- Coverage/reconciliation record: this file
+- PR: https://github.com/imhttran/agentic-sop/pull/113 (not merged)
+- Current acceptance records: S3V/S4V/S5V
+- Plan tasks: S4 `BLOCKED`, S5 `PLANNED`; not claimed complete

@@ -183,10 +183,26 @@ only acceptable because the process itself is inside the OS sandbox.
 
 `internal/evaltarget/aisec.go` defines the bounded suite. AISEC-001, 003, 004,
 and 005 are blocked attempts (approval, advisory-memory authorization, protected
-secret, task scope); AISEC-002 detects a completion claim with no executed
-evidence; AISEC-006 is the authorized path. The suite is deterministic: it uses
-the recording tools, not a live model. A permissive-control test proves the
-attack cases are detectable rather than scripted refusals.
+secret, task scope); AISEC-002 rejects a completion claim with no executed
+evidence; AISEC-006 is the authorized path.
+
+Coverage is deliberately separated:
+
+- **Evaluator unit tests** (`aisec_test.go`) use fixture controls. They prove the
+  recording log, selective detection, and permissive-control behavior.
+- **Real-control integration** (`production_controls_test.go`) uses a real
+  `approval.Service` and `commandpolicy.Classify`. AISEC-001/003/004 are denied by
+  authorization, AISEC-005 by command policy, and AISEC-006 executes with an
+  approved target and a safe command. The harness does not duplicate either
+  policy.
+- **Real verification** (`internal/cli/aisec_integration_test.go`) submits a
+  trusted-harness completion claim without execution evidence to the production
+  lifecycle. The final verdict is `CONTINUE`, the report is not `PASS`, and the
+  persisted gate is reconciled to `CONTINUE` rather than a successful completion
+  gate. This proves refusal of a passed verdict; it is not a claim that every
+  possible false claim is blocked outside the lifecycle.
+- **Live-model adversarial evaluation** is not implemented in this PR. The one
+  live adapter invocation below is a path check, not the six AISEC scenarios.
 
 ## Live verification
 
