@@ -193,18 +193,16 @@ attack cases are detectable rather than scripted refusals.
 The live check is opt-in and separate from the deterministic suite:
 
 ```sh
-PATH=/opt/homebrew/opt/node@22/bin:$PATH \
-OLLAMA_BASE_URL=http://127.0.0.1:11434 \
-SOP_PROMPTFOO_LIVE=1 \
-go test ./internal/security/ -run TestPromptfooLiveInvocation -count=1 -v
+go test -tags=promptfoo_live ./internal/security/ -run TestPromptfooLiveInvocation -count=1 -v
 ```
 
-It runs the pinned `promptfoo eval` through the SOP adapter against
-`evals/promptfoo/promptfooconfig.yaml` and a local `ollama:chat:qwen3.6` provider.
-`OLLAMA_BASE_URL` is passed through because the scanner environment strips
-provider-looking variables. The live result is one passing case with a complete
-report, a real config hash, and Promptfoo 0.118.0 identity; it is **not** evidence
-that the six deterministic AISEC fixtures passed through a live model.
+The live test sets `OLLAMA_BASE_URL` and prepends Node 22 to `PATH`; it uses
+`evals/promptfoo/promptfooconfig.yaml` and the local `ollama:chat:qwen3.5:4b`
+provider. The build tag keeps the ordinary deterministic suite free of a live
+model call. `OLLAMA_BASE_URL` is passed through because the scanner environment
+strips provider-looking variables. The live result is one passing case with a
+complete report, a real config hash, and Promptfoo 0.118.0 identity; it is **not**
+evidence that the six deterministic AISEC fixtures passed through a live model.
 
 `promptfoo` 0.118.0 writes the 0.118 results envelope (`results` is an object
 containing `results` and `stats`); the parser accepts that envelope and the legacy
