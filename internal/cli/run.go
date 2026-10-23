@@ -652,7 +652,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		if d.resumeFrom == string(runpkg.Implementing) {
 			// Resumed run: the PLAN stage already completed in the parked run, so it is NOT
 			// repeated. Load the plan that run produced so earlier stages are preserved.
-			prior, perr := loadPriorPlan(rn)
+			prior, perr := loadPriorPlan(dir, rn)
 			if perr != nil {
 				return lifeResult{}, fmt.Errorf("planner resume: %w", perr)
 			}
@@ -2188,14 +2188,52 @@ func completionValidationCommands(cfg config.Config) []string {
 // recovery evidence handed to this attempt. It is deterministic and model-free: the
 // harness owns selection, ordering, provenance, and limits, and the model never selects
 // its own context.
-// loadPriorPlan reads the plan a parked run already produced, so a resumed run does
-// not repeat the PLAN stage.
-func loadPriorPlan(rn *runpkg.Run) (*planner.Plan, error) {
+// loadPriorPlan reads the plan a parked run already produced, so a resumed run
+// does not repeat the PLAN stage. A run parked by `sop planner ask` before it has
+// executed has no per-run plan.md; the active plan is then the same plan that run
+// would have produced, so it is loaded from plan provenance rather than failing
+// the resume with a missing-file error.
+func loadPriorPlan(dir string, rn *runpkg.Run) (*planner.Plan, error) {
 	data, err := os.ReadFile(filepath.Join(rn.Dir(), "plan.md"))
-	if err != nil {
+	if err == nil {
+		p, perr := planner.PlanFromMarkdown(string(data))
+		if perr != nil || p == nil {
+			return nil, fmt.Errorf("parse prior plan: %v", perr)
+		}
+		return p, nil
+	}
+	if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("read prior plan: %w", err)
 	}
-	p, perr := planner.PlanFromMarkdown(string(data))
+	return loadActivePlan(dir)
+}
+
+// loadActivePlan compiles the project's active plan from the provenance file's
+// source document. It is the resume fallback for a run that never reached the PLAN
+// stage, and it fails closed when no readable source exists.
+func loadActivePlan(dir string) (*planner.Plan, error) {
+	data, err := os.ReadFile(filepath.Join(dir, config.DirName, planMetaName))
+	if err != nil {
+		return nil, fmt.Errorf("read prior plan: the run has no plan.md and no active plan is recorded: %w", err)
+	}
+	var meta struct {
+		Source string `json:"source"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return nil, fmt.Errorf("read prior plan: unreadable plan provenance: %w", err)
+	}
+	source := strings.TrimSpace(meta.Source)
+	if source == "" {
+		return nil, errors.New("read prior plan: the run has no plan.md and the active plan records no source")
+	}
+	if !filepath.IsAbs(source) {
+		source = filepath.Join(dir, source)
+	}
+	doc, err := os.ReadFile(source)
+	if err != nil {
+		return nil, fmt.Errorf("read prior plan: the active plan source is unreadable: %w", err)
+	}
+	p, perr := planner.PlanFromMarkdown(string(doc))
 	if perr != nil || p == nil {
 		return nil, fmt.Errorf("parse prior plan: %v", perr)
 	}
