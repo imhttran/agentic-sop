@@ -1,57 +1,77 @@
-# HIP-006 — Bounded pilot evidence
+# HIP-006 — Bounded pilot evidence and reconciliation
 
-Recorded: 2026-10-23. This record is authoritative for the pilot result. It uses
-the six initial arm executions only; no held-out pair was run and no retry or
-budget increase was applied.
+Recorded: 2026-10-23. This record corrects the earlier count. It reconciles every
+launched baseline/candidate arm, including the discarded setup attempt.
 
-## Executions
+## Execution reconciliation
 
-| Pair | Arm | Completed | Acceptance | Human interventions | Tokens | Elapsed | Turns / outcome |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| S1 | baseline | no | no | 0 | UNAVAILABLE | 204650 ms | `CONTINUE`; S1 requires network verification of the Promptfoo pin, which is outside the allow-list |
-| S1 | candidate | no | no | 0 | UNAVAILABLE | 544 ms | invalid candidate compile; see correction below |
-| S2 | baseline | no | no | 0 | UNAVAILABLE | 22247 ms | `IMPLEMENT_NO_PROGRESS`, 6 turns |
-| S2 | candidate | no | no | 0 | UNAVAILABLE | 23256 ms | `IMPLEMENT_NO_PROGRESS`, 8 turns |
-| S3 | baseline | no | no | 0 | UNAVAILABLE | 25949 ms | `IMPLEMENT_NO_PROGRESS`, 6 turns |
-| S3 | candidate | no | no | 0 | UNAVAILABLE | 23686 ms | `CONTINUE`, no repository change |
+| # | Attempt | Arm | Outcome | Classification | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | S1 setup attempt, before guard correction | baseline | Harness rejected SOP state and staged `TASK.md` as edits; candidate never launched | setup failure / invalid | `docs/plans/pilot/logs/s1-setup-attempt.log` |
+| 2 | S1 rerun | baseline | `CONTINUE`; S1 needs network verification of the Promptfoo pin | task acceptance failure | `docs/plans/pilot/out-s1/comparison.json` |
+| 3 | S1 rerun | candidate | compile failure: `internal/ollamaagent/prompt.go:258:1: syntax error` | compile failure / invalid | `docs/plans/pilot/out-s1/comparison.json` |
+| 4 | S2 | baseline | `IMPLEMENT_NO_PROGRESS`, 6 turns | task acceptance failure | `docs/plans/pilot/out-s2/comparison.json` |
+| 5 | S2 | candidate | `IMPLEMENT_NO_PROGRESS`, 8 turns | task acceptance failure | `docs/plans/pilot/out-s2/comparison.json` |
+| 6 | S3 | baseline | `IMPLEMENT_NO_PROGRESS`, 6 turns | task acceptance failure | `docs/plans/pilot/out-s3/comparison.json` |
+| 7 | S3 | candidate | `CONTINUE`; no repository change | task acceptance failure | `docs/plans/pilot/out-s3/comparison.json` |
 
-`Tokens` is `UNAVAILABLE` because the executor did not report a token measure.
-It is not substituted with zero. The comparison files contain `0` as the
-unpopulated field; the report treats that as missing telemetry.
+**Actual launched arm executions: 7.** Six appear in the three recorded
+comparison files; one is the discarded S1 setup attempt recorded only in its log.
+The intended three-pair budget was six executions, so this is **one execution over
+the initial pair budget**. It is still below the absolute eight-execution ceiling.
+No held-out pair was run and no automatic retry was used.
 
-## Evidence paths
+The S1 setup attempt's comparison file was removed before the rerun and is not
+recoverable. Its harness log is preserved above; no result is fabricated for it.
 
-- `docs/plans/pilot/out-s1/comparison.json`
-- `docs/plans/pilot/out-s1/comparison.md`
-- `docs/plans/pilot/out-s2/comparison.json`
-- `docs/plans/pilot/out-s2/comparison.md`
-- `docs/plans/pilot/out-s3/comparison.json`
-- `docs/plans/pilot/out-s3/comparison.md`
-- Arm run evidence is preserved in each comparison's `evidence_paths`.
+## Candidate activation
 
-## Invalid S1 candidate run
+- The baseline arm ran `/Users/imhttran/go/bin`-independent `go run ./cmd/sop`
+  inside its own worktree. It used the unmodified source.
+- The candidate executor applied `internal/ollamaagent/prompt.go` inside the
+  candidate worktree, then ran `go run ./cmd/sop` from that same worktree.
+- The S1 candidate compile error at the appended instruction line is direct proof
+  that the compiler loaded the changed source. S2 and S3 candidate arms built and
+  ran the same worktree source and recorded `instructions_applied`.
+- No immutable compiled-binary hash was captured. Activation is source-build
+  activation, not proof of a signed or deployed binary identity.
 
-The first candidate content appended its instruction outside a Go string,
-causing `internal/ollamaagent/prompt.go:258:1: syntax error: non-declaration
-statement outside function body`. This is a harness input defect, not a model
-result. The candidate was corrected by inserting the instruction inside the
-IMPLEMENT guidance string. The corrected candidate was used for S2 and S3.
-S1 was not re-run: the six-execution initial budget was already consumed and no
-promotion criteria were met.
+## Token limits
 
-## Budget accounting
+- **Configured:** 200000 tokens per run.
+- **Enforced:** the per-run time limit is enforced. The token limit is enforced
+  only when the executor reports `TokensUsed`. The SOP command executor does not
+  report token usage.
+- **Unavailable:** token usage in all pilot runs. The `tokens_used: 0` values in
+  the historical comparison JSON are unpopulated fields, not measured zeros.
+- The pilot therefore has **no token-cost comparison** and no evidence that the
+  token limit was reached or enforced.
 
-- Initial pairs attempted: 3 (S1, S2, S3).
-- Arm executions: 6 of 8 absolute maximum.
-- Held-out pair: not run; promotion criteria were not met.
-- Automatic retries: 0.
-- Per-run limits: 900 seconds and 200000 tokens; both arms were below the time
-  limit, and token use is unavailable.
+## Results
 
-## Result
+| Pair | Baseline | Candidate | Fixed acceptance |
+| --- | --- | --- | --- |
+| S1 | task failure; network unavailable | invalid compile | invalid pair |
+| S2 | no-progress, 6 turns, 22247 ms | no-progress, 8 turns, 23256 ms | both fail |
+| S3 | no-progress, 6 turns, 25949 ms | continue, no change, 23686 ms | both fail |
 
-The candidate is not eligible for retention. It did not pass any task's fixed
-acceptance check, did not reduce human interventions, and did not reduce elapsed
-time without increasing discovery. S2's candidate used more discovery turns than
-its baseline; S3's candidate made no repository change. The baseline is retained.
-The pilot is negative/inconclusive, which is a valid outcome.
+Human interventions were 0 in all recorded arms. The pilot is **inconclusive**
+for candidate quality and **negative** for the candidate as tested: no arm passed
+its fixed acceptance checks, and the candidate did not reduce discovery or cost.
+S2 and S3 show similar task failure, but this is not reproducibility evidence for
+a correct candidate; the candidate was not accepted in either pair.
+
+## Evidence
+
+- `docs/plans/pilot/out-s1/comparison.json` and `.md` (rerun only)
+- `docs/plans/pilot/out-s2/comparison.json` and `.md`
+- `docs/plans/pilot/out-s3/comparison.json` and `.md`
+- `docs/plans/pilot/logs/s1-setup-attempt.log`
+- `docs/plans/pilot/logs/s1-rerun.log`
+- `docs/plans/pilot/logs/s2.log`
+- `docs/plans/pilot/logs/s3.log`
+
+The harness now copies each arm's SOP run artifacts and executor output into the
+comparison `evidence/` directory before removing the disposable worktree. The
+historical pilot did not use that copy path; its evidence remains the comparison
+files and logs above.

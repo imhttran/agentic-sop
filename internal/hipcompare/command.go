@@ -158,6 +158,7 @@ func Command(ctx context.Context, args []string, stdout io.Writer) int {
 		WorktreeRoot:    filepath.Join(os.TempDir(), "hipcompare-worktrees"),
 		Exec:            newCommandExecutor(opts),
 		Repository:      root,
+		EvidenceRoot:    filepath.Join(outDir, "evidence"),
 		Now:             time.Now,
 		PriorExecutions: priorExecutions,
 		PriorArms:       priorArms,
@@ -372,7 +373,7 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 		if err := os.WriteFile(dest, []byte(f.Content), 0o644); err != nil {
 			return res, fmt.Errorf("apply instruction %s: %w", f.Path, err)
 		}
-		res.EvidencePaths = append(res.EvidencePaths, "instruction applied: "+f.Path)
+		res.InstructionsApplied = append(res.InstructionsApplied, f.Path)
 	}
 
 	// Step 1: the arm's agent work, if a command was configured. An operator that
@@ -382,8 +383,8 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 		cmd.Dir = in.Worktree
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()
-		if s := strings.TrimSpace(string(out)); s != "" {
-			res.EvidencePaths = append(res.EvidencePaths, s)
+		if s := string(out); s != "" {
+			res.Output += s
 		}
 		if err != nil {
 			res.Failures = append(res.Failures, fmt.Sprintf("executor command failed: %v", err))
@@ -409,8 +410,8 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 		cmd.Dir = in.Worktree
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()
-		if s := strings.TrimSpace(string(out)); s != "" {
-			res.EvidencePaths = append(res.EvidencePaths, fmt.Sprintf("verification[%d]: %s", i, s))
+		if s := string(out); s != "" {
+			res.Output += fmt.Sprintf("verification[%d]: %s\n", i, s)
 		}
 		if err != nil {
 			res.Failures = append(res.Failures, fmt.Sprintf("verification command %d failed: %v", i, err))

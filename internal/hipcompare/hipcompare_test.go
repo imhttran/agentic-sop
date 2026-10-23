@@ -82,6 +82,7 @@ func testRunnerConfig(t *testing.T, repo, commit string, exec ArmExecutor, allow
 		WorktreeRoot:    t.TempDir(),
 		Exec:            exec,
 		Repository:      repo,
+		EvidenceRoot:    t.TempDir(),
 		Now:             time.Now,
 		PriorExecutions: 0,
 	}
@@ -280,6 +281,72 @@ func TestDeterministicFixtureWritesBothReportsWithoutModelCalls(t *testing.T) {
 		if !strings.Contains(string(md), want) {
 			t.Errorf("markdown missing %q:\n%s", want, md)
 		}
+	}
+}
+
+func TestCommandExecutorRunsAfterApplyingInstruction(t *testing.T) {
+	worktree := t.TempDir()
+	exec := commandExecutor{opts: CommandOptions{ExecutorCommand: "grep -q unique-candidate-marker prompt.txt"}}
+	res, err := exec.Execute(context.Background(), ExecutorInput{
+		Manifest:             &TaskManifest{ID: "TEST", TaskFile: "TASK.md"},
+		Worktree:             worktree,
+		AllowedPaths:         []string{"prompt.txt"},
+		VerificationCommands: []string{"true"},
+		Instructions:         InstructionSet{Name: "candidate", Files: []InstructionFile{{Path: "prompt.txt", Content: "unique-candidate-marker\n"}}},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Completed || !res.AcceptancePassed {
+		t.Fatalf("result = %+v, want completed and accepted", res)
+	}
+	if len(res.InstructionsApplied) != 1 || res.InstructionsApplied[0] != "prompt.txt" {
+		t.Fatalf("instructions applied = %v", res.InstructionsApplied)
+	}
+}
+
+func TestRunRecordsReportedTokenLimit(t *testing.T) {
+	repo, commit := testGitRepo(t)
+	cfg := testRunnerConfig(t, repo, commit, testExecutor{
+		result: ExecutorResult{Completed: true, AcceptancePassed: true, TokensUsed: 1001, TokensReported: true},
+	}, []string{"prompt.md"})
+	res, err := runArm(context.Background(), cfg, cfg.WorktreeRoot, DeriveFingerprint(FingerprintInputs{}), ArmCandidate, cfg.Candidate, true, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || !res.LimitFailure || res.Completed {
+		t.Fatalf("result = %+v, want a token limit failure", res)
+	}
+}
+
+func TestRunDoesNotTreatUnreportedTokensAsZero(t *testing.T) {
+	repo, commit := testGitRepo(t)
+	cfg := testRunnerConfig(t, repo, commit, testExecutor{
+		result: ExecutorResult{Completed: true, AcceptancePassed: true, TokensReported: false},
+	}, []string{"prompt.md"})
+	res, err := runArm(context.Background(), cfg, cfg.WorktreeRoot, DeriveFingerprint(FingerprintInputs{}), ArmCandidate, cfg.Candidate, true, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || res.LimitFailure || res.TokensReported {
+		t.Fatalf("result = %+v, want no token limit failure and unreported usage", res)
+	}
+}
+
+func TestRunPersistsArmEvidenceBeforeRemovingWorktree(t *testing.T) {
+	repo, commit := testGitRepo(t)
+	cfg := testRunnerConfig(t, repo, commit, testExecutor{
+		result: ExecutorResult{Completed: true, AcceptancePassed: true, Output: "executor output\n"},
+	}, []string{"prompt.md"})
+	res, err := runArm(context.Background(), cfg, cfg.WorktreeRoot, DeriveFingerprint(FingerprintInputs{}), ArmCandidate, cfg.Candidate, true, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil || len(res.EvidencePaths) == 0 {
+		t.Fatalf("result = %+v, want persisted evidence paths", res)
+	}
+	if _, err := os.Stat(res.EvidencePaths[0]); err != nil {
+		t.Fatalf("evidence path %s: %v", res.EvidencePaths[0], err)
 	}
 }
 

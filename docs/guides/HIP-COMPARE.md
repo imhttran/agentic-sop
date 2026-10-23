@@ -43,6 +43,9 @@ The command writes `comparison.json` and `comparison.md` into `RESULT_DIR`.
 - Ordinary task implementation edits are allowed and recorded; they are not
   confused with candidate-instruction edits.
 - The executor receives a scrubbed environment and a per-run time/token limit.
+- The time limit is enforced by the harness. The token limit is enforced only
+  when the executor reports token usage; a command executor that cannot count
+  tokens records `tokens_reported: false` and the report shows `UNAVAILABLE`.
 - The harness never pushes, merges, publishes, or changes external state.
 - Fixed maximums: 3 pairs, 1 held-out pair, 8 executions, 900 seconds per run,
   200000 tokens per run, and zero automatic retries.
@@ -50,9 +53,12 @@ The command writes `comparison.json` and `comparison.md` into `RESULT_DIR`.
 ## Evidence
 
 Each comparison records per-arm completion, acceptance, human interventions,
-tokens (or `UNAVAILABLE`), elapsed time, failures, changed paths, evidence paths,
-the instruction hashes, the fingerprint, and the budget usage. A failed or
-timed-out arm is recorded as a failure and is never retried automatically.
+reported tokens (or `UNAVAILABLE`), elapsed time, failures, changed paths,
+evidence paths, the instruction hashes, the fingerprint, the budget usage, and a
+`verdict`. `completed` means all planned arms ran, not that the experiment
+succeeded. The harness copies each arm's SOP run artifacts and executor output
+into `RESULT_DIR/evidence/<arm>/` before removing the disposable worktree; a
+failed or timed-out arm is recorded and never retried automatically.
 
 See `docs/plans/HIP-006-pilot-evidence.md` and
 `docs/plans/HIP-007-adoption-report.md` for the bounded pilot result.

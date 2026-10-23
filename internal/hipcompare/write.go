@@ -153,7 +153,7 @@ func compareMarkdown(cmp Comparison) string {
 		cmp.Budget.Pairs, MaxPairs, cmp.Budget.HeldOutPairs, MaxHeldOutPairs)
 	fmt.Fprintf(&b, "- Executions: %d used of this budget's ceiling %d (absolute maximum %d)\n",
 		cmp.Executions, cmp.Budget.ExecutionCeiling(), MaxExecutions)
-	fmt.Fprintf(&b, "- Per run: %ds time limit, %d token limit; %d automatic retries\n\n",
+	fmt.Fprintf(&b, "- Per run: %ds time limit (enforced), %d token limit (enforced only when usage is reported); %d automatic retries\n\n",
 		cmp.Budget.PerRunTimeSeconds, cmp.Budget.PerRunTokenLimit, cmp.Budget.AutomaticRetries)
 
 	b.WriteString("| Metric | Baseline | Candidate |\n")
@@ -165,7 +165,7 @@ func compareMarkdown(cmp Comparison) string {
 	writeRow("Completed", boolText(base, func(a ArmResult) string { return boolString(a.Completed) }), boolText(cand, func(a ArmResult) string { return boolString(a.Completed) }))
 	writeRow("Acceptance", boolText(base, func(a ArmResult) string { return boolString(a.AcceptancePassed) }), boolText(cand, func(a ArmResult) string { return boolString(a.AcceptancePassed) }))
 	writeRow("Human interventions", boolText(base, func(a ArmResult) string { return fmt.Sprintf("%d", a.HumanInterventions) }), boolText(cand, func(a ArmResult) string { return fmt.Sprintf("%d", a.HumanInterventions) }))
-	writeRow("Tokens", boolText(base, func(a ArmResult) string { return fmt.Sprintf("%d", a.TokensUsed) }), boolText(cand, func(a ArmResult) string { return fmt.Sprintf("%d", a.TokensUsed) }))
+	writeRow("Tokens", boolText(base, func(a ArmResult) string { return tokensText(a) }), boolText(cand, func(a ArmResult) string { return tokensText(a) }))
 	writeRow("Elapsed (ms)", boolText(base, func(a ArmResult) string { return fmt.Sprintf("%d", a.ElapsedMillis) }), boolText(cand, func(a ArmResult) string { return fmt.Sprintf("%d", a.ElapsedMillis) }))
 	writeRow("Failures", boolText(base, func(a ArmResult) string { return failuresText(a) }), boolText(cand, func(a ArmResult) string { return failuresText(a) }))
 	writeRow("Evidence", boolText(base, func(a ArmResult) string { return evidenceText(a) }), boolText(cand, func(a ArmResult) string { return evidenceText(a) }))
@@ -204,6 +204,13 @@ func failuresText(a ArmResult) string {
 		return "none"
 	}
 	return strings.Join(a.Failures, "; ")
+}
+
+func tokensText(a ArmResult) string {
+	if !a.TokensReported {
+		return "UNAVAILABLE"
+	}
+	return fmt.Sprintf("%d", a.TokensUsed)
 }
 
 func evidenceText(a ArmResult) string {

@@ -67,26 +67,38 @@ type ExecutorResult struct {
 	AcceptancePassed   bool
 	HumanInterventions int
 	TokensUsed         int
-	Failures           []string
-	EvidencePaths      []string
+	// TokensReported distinguishes a measured zero from an unavailable token
+	// measure. A command executor that cannot count tokens reports false.
+	TokensReported bool
+	// Output is the executor's bounded combined output. The runner persists it
+	// beside the copied run artifacts when an evidence root is configured.
+	Output string
+	// InstructionsApplied lists the candidate instruction files actually written
+	// into the worktree before the executor ran.
+	InstructionsApplied []string
+	Failures            []string
+	EvidencePaths       []string
 }
 
 // ArmResult is the recorded outcome of one arm execution. It is always produced
 // by an executed arm, even a failed one, so the results file never loses an arm.
 type ArmResult struct {
-	Arm                Arm      `json:"arm"`
-	Worktree           string   `json:"worktree"`
-	StartingCommit     string   `json:"starting_commit"`
-	Completed          bool     `json:"completed"`
-	AcceptancePassed   bool     `json:"acceptance_passed"`
-	HumanInterventions int      `json:"human_interventions"`
-	TokensUsed         int      `json:"tokens_used"`
-	ElapsedMillis      int64    `json:"elapsed_millis"`
-	Failures           []string `json:"failures"`
-	EvidencePaths      []string `json:"evidence_paths"`
-	ChangedPaths       []string `json:"changed_paths"`
-	LimitFailure       bool     `json:"limit_failure"`
-	LimitFailureReason string   `json:"limit_failure_reason,omitempty"`
+	Arm                 Arm      `json:"arm"`
+	Worktree            string   `json:"worktree"`
+	StartingCommit      string   `json:"starting_commit"`
+	Completed           bool     `json:"completed"`
+	AcceptancePassed    bool     `json:"acceptance_passed"`
+	HumanInterventions  int      `json:"human_interventions"`
+	TokensUsed          int      `json:"tokens_used"`
+	TokensReported      bool     `json:"tokens_reported"`
+	Output              string   `json:"output,omitempty"`
+	InstructionsApplied []string `json:"instructions_applied,omitempty"`
+	ElapsedMillis       int64    `json:"elapsed_millis"`
+	Failures            []string `json:"failures"`
+	EvidencePaths       []string `json:"evidence_paths"`
+	ChangedPaths        []string `json:"changed_paths"`
+	LimitFailure        bool     `json:"limit_failure"`
+	LimitFailureReason  string   `json:"limit_failure_reason,omitempty"`
 }
 
 // RunnerConfig is everything Run needs. The executor settings are held once and
@@ -108,8 +120,11 @@ type RunnerConfig struct {
 	// Exec is the shared arm executor.
 	Exec ArmExecutor
 	// Repository is the primary checkout: worktrees are created around it.
-	Repository string
-	Now        func() time.Time
+	// EvidenceRoot, when set, receives a copy of each arm's SOP run artifacts and
+	// captured executor output before the worktree is removed.
+	Repository   string
+	EvidenceRoot string
+	Now          func() time.Time
 	// PriorExecutions is the number of arm executions already recorded for this
 	// fingerprint in earlier invocations. It is added to this run's executions when
 	// the budget gate checks the ceiling, so a caller cannot exceed the fixed count
@@ -130,9 +145,13 @@ type Comparison struct {
 	Arms           []ArmResult `json:"arms"`
 	Budget         Budget      `json:"budget_usage"`
 	Executions     int         `json:"executions"`
-	// Completed is true only when every planned arm ran and none hit a limit. A
-	// stored comparison is resumed only when it is Completed.
+	// Completed is true only when every planned arm ran and none hit a limit. It
+	// records batch completion, not experimental success; Verdict carries the
+	// acceptance result.
 	Completed bool `json:"completed"`
+	// Verdict states whether the comparison is eligible, not eligible, or
+	// inconclusive. It is derived from the arm acceptance results and telemetry.
+	Verdict string `json:"verdict"`
 }
 
 // BudgetError reports an attempt to execute beyond the fixed budget.
@@ -233,6 +252,7 @@ func Run(ctx context.Context, cfg RunnerConfig, fp Fingerprint) (Comparison, err
 		}
 	}
 	cmp.Completed = allOK && len(cmp.Arms) >= planned
+	cmp.Verdict = verdict(cmp)
 	return cmp, nil
 }
 
@@ -294,16 +314,28 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 	elapsed := now().Sub(started).Milliseconds()
 
 	res := &ArmResult{
-		Arm:                arm,
-		Worktree:           name,
-		StartingCommit:     commit,
-		HumanInterventions: ec.HumanInterventions,
-		TokensUsed:         ec.TokensUsed,
-		ElapsedMillis:      elapsed,
-		Failures:           append([]string{}, ec.Failures...),
-		EvidencePaths:      append([]string{}, ec.EvidencePaths...),
-		Completed:          ec.Completed,
-		AcceptancePassed:   ec.AcceptancePassed,
+		Arm:                 arm,
+		Worktree:            name,
+		StartingCommit:      commit,
+		HumanInterventions:  ec.HumanInterventions,
+		TokensUsed:          ec.TokensUsed,
+		TokensReported:      ec.TokensReported,
+		Output:              ec.Output,
+		InstructionsApplied: append([]string{}, ec.InstructionsApplied...),
+		ElapsedMillis:       elapsed,
+		Failures:            append([]string{}, ec.Failures...),
+		EvidencePaths:       append([]string{}, ec.EvidencePaths...),
+		Completed:           ec.Completed,
+		AcceptancePassed:    ec.AcceptancePassed,
+	}
+
+	// Preserve the arm's SOP run artifacts and captured output before the deferred
+	// worktree removal discards them. A copy failure is visible but does not hide
+	// the arm result.
+	if cfg.EvidenceRoot != "" {
+		if err := persistArmEvidence(cfg.EvidenceRoot, worktree, cfg.Manifest.ID, arm, res); err != nil {
+			res.Failures = append(res.Failures, fmt.Sprintf("evidence copy failed: %v", err))
+		}
 	}
 
 	// Change detection records the task's implementation footprint. It deliberately
@@ -341,7 +373,7 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 		return res, nil
 	}
 
-	if ec.TokensUsed > cfg.Budget.PerRunTokenLimit {
+	if ec.TokensReported && ec.TokensUsed > cfg.Budget.PerRunTokenLimit {
 		res.Failures = append(res.Failures, "token limit exceeded")
 		res.LimitFailure = true
 		res.LimitFailureReason = fmt.Sprintf("per-run token limit of %d exceeded (%d used)", cfg.Budget.PerRunTokenLimit, ec.TokensUsed)
@@ -375,6 +407,73 @@ func filterHarnessPaths(paths []string, taskFile string) []string {
 		out = append(out, p)
 	}
 	return out
+}
+
+// persistArmEvidence copies the arm's SOP run artifacts and captured output into
+// the configured evidence root before the disposable worktree is removed. Missing
+// run artifacts are not fabricated; the executor output is still preserved.
+func persistArmEvidence(root, worktree, taskID string, arm Arm, res *ArmResult) error {
+	dir := filepath.Join(root, string(arm))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return err
+	}
+	if res.Output != "" {
+		path := filepath.Join(dir, "executor-output.txt")
+		if err := os.WriteFile(path, []byte(res.Output), 0o644); err != nil {
+			return err
+		}
+		res.EvidencePaths = append(res.EvidencePaths, path)
+	}
+	if len(res.InstructionsApplied) > 0 {
+		path := filepath.Join(dir, "instructions-applied.txt")
+		if err := os.WriteFile(path, []byte(strings.Join(res.InstructionsApplied, "\n")+"\n"), 0o644); err != nil {
+			return err
+		}
+		res.EvidencePaths = append(res.EvidencePaths, path)
+	}
+	runSrc := filepath.Join(worktree, ".agent-sdlc", "runs", taskID)
+	runDst := filepath.Join(dir, "runs", taskID)
+	if _, err := os.Stat(runSrc); err == nil {
+		if err := copyTree(runSrc, runDst); err != nil {
+			return err
+		}
+		res.EvidencePaths = append(res.EvidencePaths, runDst)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return nil
+}
+
+// copyTree copies a directory or file without following symlinks. It is used only
+// for bounded run artifacts inside the disposable worktree.
+func copyTree(src, dst string) error {
+	info, err := os.Stat(src)
+	if err != nil {
+		return err
+	}
+	if !info.IsDir() {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, data, info.Mode().Perm())
+	}
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return err
+	}
+	for _, entry := range entries {
+		if entry.Type()&os.ModeSymlink != 0 {
+			continue
+		}
+		if err := copyTree(filepath.Join(src, entry.Name()), filepath.Join(dst, entry.Name())); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // fpShort returns the first 12 hex characters of the fingerprint digest, for
