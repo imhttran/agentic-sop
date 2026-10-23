@@ -32,7 +32,9 @@ recoverable. Its harness log is preserved above; no result is fabricated for it.
   candidate worktree, then ran `go run ./cmd/sop` from that same worktree.
 - The S1 candidate compile error at the appended instruction line is direct proof
   that the compiler loaded the changed source. S2 and S3 candidate arms built and
-  ran the same worktree source and recorded `instructions_applied`.
+  ran the same worktree source and recorded `instruction applied:
+  internal/ollamaagent/prompt.go` in their arm evidence. The new harness records
+  the same fact in `instructions_applied`.
 - No immutable compiled-binary hash was captured. Activation is source-build
   activation, not proof of a signed or deployed binary identity.
 
