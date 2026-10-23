@@ -162,7 +162,12 @@ type Question struct {
 	// RunEpoch identifies the bound run instance (its creation timestamp), so a
 	// question whose run has since been superseded by a newer run for the same task
 	// is detected as stale.
-	RunEpoch        string    `json:"run_epoch,omitempty"`
+	RunEpoch string `json:"run_epoch,omitempty"`
+	// Attempt narrows the binding to one execution attempt of the task. A decision
+	// recorded against an earlier attempt is stale once the task has moved on, even
+	// when the run itself was not replaced. Zero declares no attempt binding, so
+	// existing records are unaffected.
+	Attempt         int       `json:"attempt,omitempty"`
 	PlanRevision    string    `json:"plan_revision,omitempty"`
 	RepoFingerprint string    `json:"repo_fingerprint,omitempty"`
 	ReturnStage     string    `json:"return_stage,omitempty"`

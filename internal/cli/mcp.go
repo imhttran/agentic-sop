@@ -103,17 +103,21 @@ func mcpStatusTool(dir string) mcp.Tool {
 	}).WithReadOnly()
 }
 
-// mcpPlannerTools is the planner-scoped surface: status, question list/get, and answer
-// submission. It deliberately excludes the human approval actions (sop_approve,
-// sop_decline), validation, and review, so a planner role can never approve, decline,
-// or otherwise act on a human gate. Receiving an answer never applies it, approves a
-// task, or resumes execution.
+// mcpPlannerTools is the planner-scoped surface: status, question list/get, answer
+// submission, task-result retrieval, and the decision operations. It deliberately
+// excludes the human approval actions (sop_approve, sop_decline), validation, and
+// review, so a planner role can never approve, decline, or otherwise act on a human
+// gate. Receiving an answer or a decision never applies it, approves a task, or
+// resumes execution.
 func mcpPlannerTools(dir string, d deps) []mcp.Tool {
 	return []mcp.Tool{
 		mcpStatusTool(dir),
 		mcpQuestionListTool(dir),
 		mcpQuestionGetTool(dir),
 		mcpAnswerSubmitTool(dir),
+		mcpTaskResultTool(dir),
+		mcpDecisionListTool(dir),
+		mcpDecisionSubmitTool(dir),
 	}
 }
 

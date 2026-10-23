@@ -32,7 +32,7 @@ func TestMCPPlannerSurfaceShape(t *testing.T) {
 	for _, tl := range tools {
 		got[tl.Name] = tl
 	}
-	want := []string{"sop_status", "sop_question_list", "sop_question_get", "sop_answer_submit"}
+	want := []string{"sop_status", "sop_question_list", "sop_question_get", "sop_answer_submit", "sop_task_result", "sop_decision_list", "sop_decision_submit"}
 	if len(tools) != len(want) {
 		t.Errorf("planner surface has %d tools, want %d: %v", len(tools), len(want), got)
 	}
@@ -47,13 +47,15 @@ func TestMCPPlannerSurfaceShape(t *testing.T) {
 			t.Errorf("planner surface must not expose %s", forbidden)
 		}
 	}
-	for _, ro := range []string{"sop_status", "sop_question_list", "sop_question_get"} {
+	for _, ro := range []string{"sop_status", "sop_question_list", "sop_question_get", "sop_task_result", "sop_decision_list"} {
 		if !got[ro].ReadOnly {
 			t.Errorf("%s must be read-only", ro)
 		}
 	}
-	if got["sop_answer_submit"].ReadOnly {
-		t.Errorf("sop_answer_submit must not be marked read-only")
+	for _, rw := range []string{"sop_answer_submit", "sop_decision_submit"} {
+		if got[rw].ReadOnly {
+			t.Errorf("%s must not be marked read-only", rw)
+		}
 	}
 }
 
@@ -84,14 +86,14 @@ func TestMCPPlannerServerSurface(t *testing.T) {
 
 	// tools/list: exactly the planner tools.
 	list := resps[1]["result"].(map[string]any)["tools"].([]any)
-	if len(list) != 4 {
-		t.Fatalf("tools/list = %d tools, want 4", len(list))
+	if len(list) != 7 {
+		t.Fatalf("tools/list = %d tools, want 7", len(list))
 	}
 	seen := map[string]bool{}
 	for _, raw := range list {
 		seen[raw.(map[string]any)["name"].(string)] = true
 	}
-	for _, n := range []string{"sop_status", "sop_question_list", "sop_question_get", "sop_answer_submit"} {
+	for _, n := range []string{"sop_status", "sop_question_list", "sop_question_get", "sop_answer_submit", "sop_task_result", "sop_decision_list", "sop_decision_submit"} {
 		if !seen[n] {
 			t.Errorf("tools/list missing %s", n)
 		}
