@@ -12,6 +12,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/mcp"
 	"github.com/imhttran/agentic-sop/internal/question"
 	"github.com/imhttran/agentic-sop/internal/store"
+	"github.com/imhttran/agentic-sop/internal/taskresult"
 )
 
 // decisionActions is the closed planner-decision vocabulary. It is advice, never
@@ -180,6 +181,16 @@ func taskResultText(dir, taskID string) (string, error) {
 	}
 	if q := activeQuestionForTask(dir, task.ID); q != nil {
 		lines = append(lines, fmt.Sprintf("question: %s %s revision=%d", q.ID, q.State, q.Revision))
+	}
+	published, perr := taskresult.List(dir, task.ID)
+	if perr != nil {
+		return "", perr
+	}
+	for _, r := range published {
+		lines = append(lines, fmt.Sprintf("result: %s attempt=%d by=%s: %s", r.Kind, r.Attempt, r.PublishedBy, oneLine(r.Summary)))
+		for _, e := range r.Evidence {
+			lines = append(lines, "result_evidence: "+e)
+		}
 	}
 	return mcp.JoinLines(lines), nil
 }

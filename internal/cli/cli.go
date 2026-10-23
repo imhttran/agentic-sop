@@ -301,6 +301,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runAnswer(rest, stdout, stderr, d)
 	case "planner":
 		return runPlanner(rest, stdout, stderr, d)
+	case "result":
+		return runResult(rest, stdout, stderr, d)
 	case "plan":
 		return runPlan(rest, stdout, stderr, d)
 	case "tasks":
@@ -393,6 +395,7 @@ Commands:
   question  show a planner question, or list questions (question list [--state S])
   answer    record a planner answer (records ANSWERED only; never applies or approves)
   planner   planner continuation: ask | status | continue (opt-in; SPIKE-004)
+  result    publish executor results (publish|list); evidence only, never completion
   plan      generate PLAN.md, or sop plan activate|supersede|complete|historicalize
   tasks     build and persist tasks from .agent-sdlc/plan.json
   validate  run the configured build/test/lint commands (--cache reuses an identical verification)
