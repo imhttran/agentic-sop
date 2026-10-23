@@ -325,6 +325,12 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 		guardErr = fmt.Errorf("baseline must not edit: changed %v", changed)
 		res.Failures = append(res.Failures, guardErr.Error())
 	}
+	if guardErr != nil {
+		// A rejected change is not a completed arm, even when the executor
+		// otherwise reported success. The arm is recorded, but never accepted.
+		res.Completed = false
+		res.AcceptancePassed = false
+	}
 
 	// Enforce the time limit as an observation, even when the executor ignores the
 	// context. A run that overran its deadline is a limit failure, never a completed
