@@ -419,7 +419,7 @@ func persistArmEvidence(root, worktree, taskID string, arm Arm, res *ArmResult) 
 	}
 	if res.Output != "" {
 		path := filepath.Join(dir, "executor-output.txt")
-		if err := os.WriteFile(path, []byte(res.Output), 0o644); err != nil {
+		if err := os.WriteFile(path, []byte(redactText(res.Output)), 0o644); err != nil {
 			return err
 		}
 		res.EvidencePaths = append(res.EvidencePaths, path)

@@ -57,8 +57,9 @@ reported tokens (or `UNAVAILABLE`), elapsed time, failures, changed paths,
 evidence paths, the instruction hashes, the fingerprint, the budget usage, and a
 `verdict`. `completed` means all planned arms ran, not that the experiment
 succeeded. The harness copies each arm's SOP run artifacts and executor output
-into `RESULT_DIR/evidence/<arm>/` before removing the disposable worktree; a
-failed or timed-out arm is recorded and never retried automatically.
+into `RESULT_DIR/evidence/<arm>/` before removing the disposable worktree; the
+output is redacted and bounded. A failed or timed-out arm is recorded and never
+retried automatically.
 
 See `docs/plans/HIP-006-pilot-evidence.md` and
 `docs/plans/HIP-007-adoption-report.md` for the bounded pilot result.

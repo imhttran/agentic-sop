@@ -358,6 +358,33 @@ func TestRedactionRemovesCredentialValues(t *testing.T) {
 	}
 }
 
+func TestWriteArtifactsRedactsExecutorOutput(t *testing.T) {
+	t.Setenv("SOP_TOKEN", "super-secret-value")
+	dir := t.TempDir()
+	cmp := Comparison{
+		Version:        SchemaVersion,
+		TaskID:         "REDACT",
+		StartingCommit: "abc",
+		Fingerprint:    DeriveFingerprint(FingerprintInputs{}),
+		Arms: []ArmResult{{
+			Arm:      ArmCandidate,
+			Output:   "token=abc SOP_TOKEN=super-secret-value",
+			Failures: []string{"SOP_TOKEN=super-secret-value"},
+		}},
+		Budget: DefaultBudget(),
+	}
+	if err := WriteArtifacts(dir, cmp); err != nil {
+		t.Fatal(err)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, ResultsFileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(data), "super-secret-value") {
+		t.Fatalf("results leaked a credential: %s", data)
+	}
+}
+
 func TestCommandExecutorAppliesAllowedInstructionOnly(t *testing.T) {
 	worktree := t.TempDir()
 	exec := commandExecutor{}

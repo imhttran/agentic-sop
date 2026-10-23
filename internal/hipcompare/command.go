@@ -384,7 +384,7 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()
 		if s := string(out); s != "" {
-			res.Output += s
+			res.Output = boundOutput(res.Output + s)
 		}
 		if err != nil {
 			res.Failures = append(res.Failures, fmt.Sprintf("executor command failed: %v", err))
@@ -411,7 +411,7 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()
 		if s := string(out); s != "" {
-			res.Output += fmt.Sprintf("verification[%d]: %s\n", i, s)
+			res.Output = boundOutput(res.Output + fmt.Sprintf("verification[%d]: %s\n", i, s))
 		}
 		if err != nil {
 			res.Failures = append(res.Failures, fmt.Sprintf("verification command %d failed: %v", i, err))
@@ -467,6 +467,17 @@ func sortedCopy(in []string) []string {
 // with the observed elapsed time.
 func timeLimitMillis(seconds int) int64 {
 	return int64(seconds) * 1000
+}
+
+// maxExecutorOutput bounds the executor text retained in the result and the
+// evidence artifact. The bound is a display/storage guard, not a token count.
+const maxExecutorOutput = 64 << 10
+
+func boundOutput(s string) string {
+	if len(s) <= maxExecutorOutput {
+		return s
+	}
+	return s[:maxExecutorOutput] + "\n[truncated]\n"
 }
 
 // pathWithin reports whether child is inside parent after cleaning. It is used

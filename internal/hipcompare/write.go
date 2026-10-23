@@ -48,6 +48,8 @@ func redactComparison(cmp Comparison) Comparison {
 		cmp.Arms[i].Failures = redactAll(cmp.Arms[i].Failures)
 		cmp.Arms[i].EvidencePaths = redactAll(cmp.Arms[i].EvidencePaths)
 		cmp.Arms[i].ChangedPaths = redactAll(cmp.Arms[i].ChangedPaths)
+		cmp.Arms[i].InstructionsApplied = redactAll(cmp.Arms[i].InstructionsApplied)
+		cmp.Arms[i].Output = redactText(cmp.Arms[i].Output)
 		cmp.Arms[i].LimitFailureReason = redactText(cmp.Arms[i].LimitFailureReason)
 	}
 	return cmp
