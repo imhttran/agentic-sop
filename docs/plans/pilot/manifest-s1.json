@@ -1,0 +1,16 @@
+{
+  "schema_version": "hip-003.v1",
+  "id": "S1",
+  "title": "Promptfoo S1 inspection",
+  "task_file": "docs/plans/pilot/S1-task.md",
+  "task_inputs": {
+    "task": "S1"
+  },
+  "verification_commands": [
+    "go build ./...",
+    "go test ./internal/security ./internal/config -count=1"
+  ],
+  "allowed_candidate_paths": [
+    "internal/ollamaagent/prompt.go"
+  ]
+}
