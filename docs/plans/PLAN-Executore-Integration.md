@@ -1,10 +1,12 @@
-# Project
+# Implementation Plan
+
+## Project
 
 SOP Planner–Executor Integration
 
-## Summary
+Durable, bidirectional coordination between ChatGPT as planner and a coding agent running in Zed as executor, built on the existing SOP CLI, MCP planner tools, durable state, and governance controls.
 
-Implement durable, bidirectional coordination between ChatGPT as planner and a coding agent running in Zed as executor.
+## Summary
 
 The intended workflow is:
 
@@ -32,124 +34,6 @@ The user should not manually copy questions, answers, or execution results betwe
 - Do not claim unattended ChatGPT invocation unless a supported trigger mechanism has been verified.
 - Every phase must be independently reviewable and mergeable.
 
-## Stage 1 — Planner Communication Contract
-
-### Objective
-
-Complete the minimum bidirectional contract needed for planner–executor coordination.
-
-### Tasks
-
-- Inventory existing MCP planner and SOP task APIs.
-- Reuse existing question, answer, task, approval, and evidence records.
-- Define any missing task-result and planner-decision operations.
-- Bind decisions to the correct plan revision, task, attempt, and question where applicable.
-- Support idempotent submissions and stale-revision rejection.
-- Preserve the distinction between advice, authorized execution, and human approval.
-- Add focused contract and authorization tests.
-- Open a focused PR.
-
-### Acceptance Criteria
-
-- ChatGPT can retrieve a task result or pending question through MCP.
-- ChatGPT can record a decision or correction request using a supported interface.
-- The executor can retrieve the recorded decision.
-- Stale and duplicate submissions are handled safely.
-- No model answer is treated as approval.
-- Existing SOP tests pass.
-- PR is reviewed and merged before operational validation.
-
-## Stage 2 — Zed Executor Integration
-
-### Dependencies
-
-Stage 1 merged.
-
-### Objective
-
-Allow the Zed coding agent to participate in the planner workflow using existing SOP execution capabilities.
-
-### Tasks
-
-- Inspect existing Zed/ACP and SOP agent integration.
-- Implement only missing result-publishing and decision-consumption functionality.
-- Ensure the executor can report progress, questions, blockers, test results, and completion evidence.
-- Ensure the executor can resume from an accepted planner decision.
-- Preserve task and attempt identity.
-- Handle unavailable planner decisions without busy-looping or unauthorized continuation.
-- Add focused regression tests.
-- Open a focused PR.
-
-### Acceptance Criteria
-
-- Zed can publish task results and questions to SOP.
-- Zed can consume an applicable planner decision.
-- Zed can continue execution without manual question/answer copying.
-- An unavailable or invalid decision cannot trigger execution.
-- Task history and evidence remain durable.
-- PR is reviewed and merged before operational validation.
-
-## Stage 3 — Planner Continuation
-
-### Dependencies
-
-Stages 1 and 2 merged.
-
-### Objective
-
-Enable ChatGPT to continue planning and decision-making from persisted SOP state.
-
-### Tasks
-
-- Provide a clear interface for pending planner work.
-- Expose the evidence needed to make a decision without requiring full log copying.
-- Support planner decisions such as continue, request correction, revise plan, or escalate to human.
-- Distinguish supported interactive continuation from automatic event-driven invocation.
-- Use an existing supported notification or invocation mechanism if available.
-- Do not add a new service solely to simulate automatic ChatGPT participation.
-- Add focused continuation tests.
-- Open a focused PR.
-
-### Acceptance Criteria
-
-- ChatGPT can retrieve the current decision context through MCP.
-- ChatGPT can submit a decision that the executor can consume.
-- The workflow resumes from durable state after a new ChatGPT interaction.
-- Any automatic notification or invocation behavior is demonstrated, not assumed.
-- Unsupported unattended behavior is documented as a limitation.
-- PR is reviewed and merged before operational validation.
-
-## Stage 4 — Recovery and Hardening
-
-### Dependencies
-
-Stages 1–3 merged.
-
-### Objective
-
-Ensure safe continuation across failures, restarts, and repeated requests.
-
-### Tasks
-
-- Reuse existing checkpoint and attempt state.
-- Handle duplicate decisions and submissions.
-- Reject stale plan revisions and task attempts.
-- Handle executor disconnects and planner unavailability.
-- Preserve evidence across retries and restarts.
-- Enforce existing approval boundaries.
-- Add regression tests for observed failure modes.
-- Open a focused PR.
-
-### Acceptance Criteria
-
-- Repeated submissions do not cause duplicate execution.
-- Stale decisions cannot affect newer task attempts.
-- Interrupted tasks resume from valid checkpoints.
-- Approval requirements remain enforced.
-- Evidence is retained and attributable to the correct attempt.
-- Existing SOP verification gates pass.
-- PR is reviewed and merged.
-
 ## Delivery and Validation Policy
 
 For each stage:
@@ -171,6 +55,123 @@ Do not create a separate exploratory test project.
 Do not repeatedly test capabilities already established by earlier MCP spikes.
 
 Do not invent passing integration evidence. Clearly identify capabilities that have not yet been exercised end-to-end.
+
+## PE-1 — Planner Communication Contract
+
+Complete the minimum bidirectional contract needed for planner–executor coordination.
+
+Work for this stage:
+
+- Inventory existing MCP planner and SOP task APIs.
+- Reuse existing question, answer, task, approval, and evidence records.
+- Define any missing task-result and planner-decision operations.
+- Bind decisions to the correct plan revision, task, attempt, and question where applicable.
+- Support idempotent submissions and stale-revision rejection.
+- Preserve the distinction between advice, authorized execution, and human approval.
+- Add focused contract and authorization tests.
+- Open a focused PR.
+
+### Dependencies
+
+None
+
+### Acceptance Criteria
+
+- ChatGPT can retrieve a task result or pending question through MCP.
+- ChatGPT can record a decision or correction request using a supported interface.
+- The executor can retrieve the recorded decision.
+- Stale and duplicate submissions are handled safely.
+- No model answer is treated as approval.
+- Existing SOP tests pass.
+- PR is reviewed and merged before operational validation.
+
+## PE-2 — Zed Executor Integration
+
+Allow the Zed coding agent to participate in the planner workflow using existing SOP execution capabilities.
+
+Work for this stage:
+
+- Inspect existing Zed/ACP and SOP agent integration.
+- Implement only missing result-publishing and decision-consumption functionality.
+- Ensure the executor can report progress, questions, blockers, test results, and completion evidence.
+- Ensure the executor can resume from an accepted planner decision.
+- Preserve task and attempt identity.
+- Handle unavailable planner decisions without busy-looping or unauthorized continuation.
+- Add focused regression tests.
+- Open a focused PR.
+
+### Dependencies
+
+- PE-1
+
+### Acceptance Criteria
+
+- Zed can publish task results and questions to SOP.
+- Zed can consume an applicable planner decision.
+- Zed can continue execution without manual question/answer copying.
+- An unavailable or invalid decision cannot trigger execution.
+- Task history and evidence remain durable.
+- PR is reviewed and merged before operational validation.
+
+## PE-3 — Planner Continuation
+
+Enable ChatGPT to continue planning and decision-making from persisted SOP state.
+
+Work for this stage:
+
+- Provide a clear interface for pending planner work.
+- Expose the evidence needed to make a decision without requiring full log copying.
+- Support planner decisions such as continue, request correction, revise plan, or escalate to human.
+- Distinguish supported interactive continuation from automatic event-driven invocation.
+- Use an existing supported notification or invocation mechanism if available.
+- Do not add a new service solely to simulate automatic ChatGPT participation.
+- Add focused continuation tests.
+- Open a focused PR.
+
+### Dependencies
+
+- PE-1
+- PE-2
+
+### Acceptance Criteria
+
+- ChatGPT can retrieve the current decision context through MCP.
+- ChatGPT can submit a decision that the executor can consume.
+- The workflow resumes from durable state after a new ChatGPT interaction.
+- Any automatic notification or invocation behavior is demonstrated, not assumed.
+- Unsupported unattended behavior is documented as a limitation.
+- PR is reviewed and merged before operational validation.
+
+## PE-4 — Recovery and Hardening
+
+Ensure safe continuation across failures, restarts, and repeated requests.
+
+Work for this stage:
+
+- Reuse existing checkpoint and attempt state.
+- Handle duplicate decisions and submissions.
+- Reject stale plan revisions and task attempts.
+- Handle executor disconnects and planner unavailability.
+- Preserve evidence across retries and restarts.
+- Enforce existing approval boundaries.
+- Add regression tests for observed failure modes.
+- Open a focused PR.
+
+### Dependencies
+
+- PE-1
+- PE-2
+- PE-3
+
+### Acceptance Criteria
+
+- Repeated submissions do not cause duplicate execution.
+- Stale decisions cannot affect newer task attempts.
+- Interrupted tasks resume from valid checkpoints.
+- Approval requirements remain enforced.
+- Evidence is retained and attributable to the correct attempt.
+- Existing SOP verification gates pass.
+- PR is reviewed and merged.
 
 ## Final Acceptance
 
