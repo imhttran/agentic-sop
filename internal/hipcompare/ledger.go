@@ -151,6 +151,35 @@ func (l *ExperimentLedger) Complete(id, status string) error {
 	return fmt.Errorf("ledger: reservation %s not found", id)
 }
 
+// Count returns the number of reservations and the fixed ceiling. A missing
+// ledger means no reservations and the configured default ceiling.
+func (l *ExperimentLedger) Count() (int, int, error) {
+	if l == nil || l.Path == "" {
+		return 0, 0, errors.New("ledger: path is required")
+	}
+	f, err := os.Open(l.Path)
+	if os.IsNotExist(err) {
+		return 0, l.Max, nil
+	}
+	if err != nil {
+		return 0, 0, fmt.Errorf("ledger: open: %w", err)
+	}
+	defer f.Close()
+	if err := lockLedger(f); err != nil {
+		return 0, 0, fmt.Errorf("ledger: lock: %w", err)
+	}
+	defer unlockLedger(f)
+	state, err := readLedger(f)
+	if err != nil {
+		return 0, 0, err
+	}
+	max := state.MaxExecutions
+	if max == 0 {
+		max = l.Max
+	}
+	return len(state.Entries), max, nil
+}
+
 // Read returns the current ledger state.
 func (l *ExperimentLedger) Read() (ledgerFile, error) {
 	if l == nil || l.Path == "" {

@@ -229,9 +229,20 @@ func Run(ctx context.Context, cfg RunnerConfig, fp Fingerprint) (Comparison, err
 
 	// Budget gate: the shared ledger reserves each arm before launch. The
 	// per-comparison PriorExecutions value is retained only for result accounting;
-	// it cannot substitute for the shared reservation.
+	// it cannot substitute for the shared reservation. Preflight the whole pair so
+	// one remaining slot cannot launch a baseline and then fail to reserve its
+	// candidate.
 	planned := len(steps)
-	_ = planned
+	count, max, cerr := cfg.Ledger.Count()
+	if cerr != nil {
+		return cmp, cerr
+	}
+	if max > 0 && count+planned > max {
+		cmp.Verdict = "Inconclusive: the shared experiment budget cannot fit this pair."
+		return cmp, &BudgetError{Reason: fmt.Sprintf(
+			"budget exhaustion: %d reservations plus %d planned arms exceed the shared maximum %d; refusing to launch either arm",
+			count, planned, max)}
+	}
 
 	// Carry forward prior arm records so a resumed incomplete comparison keeps its
 	// execution accounting and never loses an already-executed arm.

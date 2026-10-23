@@ -429,6 +429,40 @@ func TestRunReservesEachArmBeforeLaunch(t *testing.T) {
 	}
 }
 
+type countingExecutor struct{ calls *int }
+
+func (c countingExecutor) Execute(context.Context, ExecutorInput) (ExecutorResult, error) {
+	(*c.calls)++
+	return ExecutorResult{Completed: true, AcceptancePassed: true}, nil
+}
+
+func TestRunRefusesPartialPairBeforeLaunch(t *testing.T) {
+	repo, commit := testGitRepo(t)
+	ledgerPath := filepath.Join(t.TempDir(), "ledger.json")
+	ledger := NewExperimentLedger(ledgerPath, 8)
+	for i := 0; i < 7; i++ {
+		id, err := ledger.Reserve("fp", "T", ArmBaseline, "out")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := ledger.Complete(id, LedgerFailed); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := 0
+	cfg := testRunnerConfig(t, repo, commit, countingExecutor{calls: &calls}, []string{"prompt.md"})
+	cfg.Ledger = ledger
+	cfg.OutputDir = t.TempDir()
+	_, err := Run(context.Background(), cfg, DeriveFingerprint(FingerprintInputs{}))
+	var be *BudgetError
+	if !errors.As(err, &be) {
+		t.Fatalf("error = %v, want BudgetError", err)
+	}
+	if calls != 0 {
+		t.Fatalf("launched %d arms before the pair budget check", calls)
+	}
+}
+
 func TestWriteArtifactsRedactsExecutorOutput(t *testing.T) {
 	t.Setenv("SOP_TOKEN", "super-secret-value")
 	dir := t.TempDir()

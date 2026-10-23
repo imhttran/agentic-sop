@@ -52,6 +52,8 @@ The command writes `comparison.json` and `comparison.md` into `RESULT_DIR`.
 - A shared reservation ledger records each arm before launch. A failed, timed-out,
   or interrupted arm remains counted; restarting does not reset the budget, and a
   different output directory cannot bypass it. Raising the ceiling is refused.
+  The whole pair is preflighted, so one remaining slot cannot start a baseline and
+  then fail to reserve its candidate.
 - The time limit is enforced by the harness. The token limit is enforced only
   when the executor reports token usage; a command executor that cannot count
   tokens records `tokens_reported: false` and the report shows `UNAVAILABLE`.
