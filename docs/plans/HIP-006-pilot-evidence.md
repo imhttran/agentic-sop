@@ -28,8 +28,8 @@ recoverable. Its harness log is preserved above; no result is fabricated for it.
 
 ## Candidate activation
 
-- The baseline arm ran `/Users/imhttran/go/bin`-independent `go run ./cmd/sop`
-  inside its own worktree. It used the unmodified source.
+- The baseline arm ran `go run ./cmd/sop` inside its own worktree without a
+  prebuilt SOP binary. It used the unmodified source.
 - The candidate executor applied `internal/ollamaagent/prompt.go` inside the
   candidate worktree, then ran `go run ./cmd/sop` from that same worktree.
 - The S1 candidate compile error at the appended instruction line is direct proof
