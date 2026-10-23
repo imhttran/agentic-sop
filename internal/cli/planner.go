@@ -284,6 +284,7 @@ func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
 		Project:         projectIdentity(dir),
 		RunID:           taskID,
 		RunEpoch:        currentRunEpoch(dir, taskID),
+		Attempt:         task.Attempt,
 		PlanRevision:    currentPlanRevision(dir),
 		RepoFingerprint: repoFingerprint(dir),
 		ReturnStage:     string(stage),

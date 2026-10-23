@@ -161,8 +161,15 @@ func questionBindingCheck(dir string) question.BindingCheck {
 			return "", err
 		}
 		defer st.Close()
-		if _, err := st.Get(taskID); err != nil {
+		task, err := st.Get(taskID)
+		if err != nil {
 			return fmt.Sprintf("bound task %q is not in current SOP state", taskID), nil
+		}
+		// An attempt binding is narrower than the run binding: a task that has moved
+		// to a later attempt refuses a decision made for an earlier one, so a decision
+		// can never be applied to work it was not made against.
+		if q.Attempt > 0 && task.Attempt != q.Attempt {
+			return fmt.Sprintf("bound attempt %d is not current %d", q.Attempt, task.Attempt), nil
 		}
 		if reason, stale := bindingRunStale(dir, q); stale {
 			return reason, nil
