@@ -837,6 +837,10 @@ func (c *Config) applyDefaults() {
 	// The security add-on is disabled unless explicitly enabled; defaults are
 	// applied only inside an enabled block.
 	c.applySecurityDefaults()
+	// The optional AI-evaluation block fills its defaults (and normalizes the
+	// local profile) before validation, so an enabled block with an omitted
+	// profile, data_handling, or provider cannot fail on a value it never wrote.
+	c.applySecurityEvalDefaults()
 }
 
 // Validate reports the first policy violation in the configuration.

@@ -115,6 +115,8 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		DatabasePath:    cfg.Security.AdvisoryDatabasePath,
 		OSVDatabasePath: cfg.Security.OSVDatabasePath,
 		StalePolicy:     cfg.Security.StaleAdvisoryDatabase,
+		WorkspaceRoot:   dir,
+		Evaluation:      &cfg.Security.Evaluation,
 	})
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
@@ -201,9 +203,10 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 		printSecurityScan(stdout, scan, refs)
 	}
 
-	// Report-only records the verdict without blocking delivery. Required mode
-	// exits non-zero for FAIL or INDETERMINATE.
-	if policy.Mode == config.SecurityModeRequired && scan.Verdict != security.VerdictPass {
+	// Report-only records the verdict without blocking delivery: a PASS, a PASS
+	// with recorded findings, or a REPORT_ONLY verdict all exit zero. Required mode
+	// exits non-zero for anything but a clean PASS.
+	if policy.Mode == config.SecurityModeRequired && scan.Verdict != security.VerdictPass && scan.Verdict != security.VerdictReportOnly {
 		return exitError
 	}
 	return exitOK

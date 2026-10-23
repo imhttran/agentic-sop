@@ -29,6 +29,11 @@ type BuildOptions struct {
 	// StalePolicy is the global stale-database policy. A cargo-audit adapter may
 	// override it with its own stale key.
 	StalePolicy string
+	// WorkspaceRoot is the repository the evaluation config paths resolve against.
+	WorkspaceRoot string
+	// Evaluation is the optional Promptfoo evaluation block. It is appended as one
+	// additional adapter when explicitly enabled.
+	Evaluation *config.SecurityEvalConfig
 }
 
 // BuildAdapters turns the validated configuration into adapters. Selection is
@@ -54,7 +59,59 @@ func BuildAdapters(cfgs []config.SecurityAdapterConfig, opts BuildOptions) ([]Ad
 		}
 		out = append(out, adapter)
 	}
+	if opts.Evaluation != nil && isEvaluationEnabled(*opts.Evaluation) {
+		adapter, err := buildPromptfooAdapter(*opts.Evaluation, opts)
+		if err != nil {
+			return nil, err
+		}
+		if err := adapter.Descriptor().Validate(); err != nil {
+			return nil, fmt.Errorf("security adapter %q: %w", adapter.Descriptor().AdapterID, err)
+		}
+		out = append(out, adapter)
+	}
 	return out, nil
+}
+
+// buildPromptfooAdapter maps the validated evaluation configuration onto the
+// adapter, including the pinned config and dataset hashes. This is the one
+// mapping from config to promptfooOptions.
+func buildPromptfooAdapter(e config.SecurityEvalConfig, opts BuildOptions) (Adapter, error) {
+	if strings.TrimSpace(opts.WorkspaceRoot) == "" {
+		return nil, fmt.Errorf("security: promptfoo evaluation requires a workspace root")
+	}
+	configHash := ""
+	if p := strings.TrimSpace(e.ConfigPath); p != "" {
+		configHash = HashFile(filepath.Join(opts.WorkspaceRoot, filepath.FromSlash(p)))
+	}
+	datasetHash := ""
+	if p := strings.TrimSpace(e.DatasetPath); p != "" {
+		datasetHash = HashFile(filepath.Join(opts.WorkspaceRoot, filepath.FromSlash(p)))
+	}
+	timeout := opts.Timeout
+	if e.ProcessTimeoutSeconds > 0 {
+		timeout = time.Duration(e.ProcessTimeoutSeconds) * time.Second
+	}
+	return newPromptfooAdapter(promptfooOptions{
+		version:      e.PromptfooVersion,
+		configPath:   e.ConfigPath,
+		target:       e.Target,
+		attack:       e.AttackProvider,
+		grading:      e.GradingProvider,
+		profile:      e.Profile,
+		sevMode:      e.SeverityMode,
+		reportOnly:   e.ReportOnly,
+		enabled:      true,
+		configHash:   configHash,
+		datasetHash:  datasetHash,
+		requestLimit: e.RequestLimit,
+		concurrency:  e.Concurrency,
+		remote:       e.RemoteProvider || strings.EqualFold(e.Profile, config.SecurityEvalProfileRemote),
+		dataHandling: e.DataHandling,
+	}, opts.Executor, timeout, opts.MaxOutputBytes), nil
+}
+
+func isEvaluationEnabled(e config.SecurityEvalConfig) bool {
+	return e.Enabled != nil && *e.Enabled
 }
 
 // BuildAdapter builds one configured adapter.

@@ -67,6 +67,10 @@ type SecurityConfig struct {
 	// Adapters selects the adapters by stable ID and category. It is replaceable
 	// through configuration alone; the runner never branches on a specific ID.
 	Adapters []SecurityAdapterConfig `yaml:"adapters"`
+	// Evaluation is the optional Promptfoo AI-evaluation adapter configuration.
+	// It is disabled unless explicitly enabled and is validated independently of
+	// the scanner adapters.
+	Evaluation SecurityEvalConfig `yaml:"evaluation"`
 }
 
 // SecurityAdapterConfig is one configured adapter. Built-in adapters wrap a
@@ -251,6 +255,7 @@ func ResolveSecurityEnv(c *Config) error {
 		return err
 	}
 	c.applySecurityDefaults()
+	c.applySecurityEvalDefaults()
 	return c.validateSecurity()
 }
 
@@ -390,6 +395,9 @@ func validateDisabledSecurity(s SecurityConfig) error {
 		return err
 	}
 	if err := validateSecurityCategories(s.Categories); err != nil {
+		return err
+	}
+	if err := validateSecurityEval(s); err != nil {
 		return err
 	}
 	for _, raw := range s.RequiredCategories {

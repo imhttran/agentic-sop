@@ -75,7 +75,9 @@ const maxEscalationAttempts = 4
 // return after exactly one lifecycle — the pre-Phase-5 behavior.
 func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (lifeResult, error) {
 	if !recoverableLoop(d) {
-		return executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+		res, err := executeLifecycle(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+		reconcileGateArtifact(rn, &res)
+		return res, err
 	}
 
 	cur, curD := a, d
@@ -106,6 +108,7 @@ func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Age
 			// routing attempt, each replan, and each escalated retry — is recorded. A
 			// write failure is surfaced but never changes the decision.
 			recordAttempt(rn, curD, res, dec, attempt, stdout)
+			reconcileGateArtifact(rn, &res)
 			return res, err
 		}
 
@@ -498,4 +501,24 @@ func boundedText(s string, max int) string {
 		cut--
 	}
 	return s[:cut] + "\n…(truncated)\n"
+}
+
+// reconcileGateArtifact keeps the persisted gate artifact consistent with the
+// effective run decision. Validation can record PASS before the driver classifies
+// a no-change continuation; without this, gate.json would claim a successful
+// completion gate for a run whose final verdict is CONTINUE.
+func reconcileGateArtifact(rn *runpkg.Run, res *lifeResult) {
+	if rn == nil || res == nil {
+		return
+	}
+	if res.classification.Disposition != failure.Continue {
+		return
+	}
+	if res.gate.Decision == quality.Pass {
+		res.gate.Decision = quality.Continue
+	}
+	if reason := strings.TrimSpace(res.classification.Reason); reason != "" && len(res.gate.Reasons) == 0 {
+		res.gate.Reasons = []string{reason}
+	}
+	writeRunJSON(rn, "gate.json", res.gate)
 }
