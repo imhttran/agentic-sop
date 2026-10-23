@@ -21,6 +21,12 @@ sop compare \
 
 `--pairs N`, `--held-out-pairs N`, `--per-run-seconds N`, and
 `--per-run-tokens N` may lower the fixed limits. They cannot raise them.
+`--budget-ledger PATH` selects the shared reservation ledger; it defaults to
+`.hipcompare-budget.json` in the repository root. The ledger is shared across
+output directories and restarts, and the first run fixes its ceiling.
+
+The held-out allowance is conditional on promotion and is not automatically
+available.
 
 The command writes `comparison.json` and `comparison.md` into `RESULT_DIR`.
 
@@ -43,6 +49,9 @@ The command writes `comparison.json` and `comparison.md` into `RESULT_DIR`.
 - Ordinary task implementation edits are allowed and recorded; they are not
   confused with candidate-instruction edits.
 - The executor receives a scrubbed environment and a per-run time/token limit.
+- A shared reservation ledger records each arm before launch. A failed, timed-out,
+  or interrupted arm remains counted; restarting does not reset the budget, and a
+  different output directory cannot bypass it. Raising the ceiling is refused.
 - The time limit is enforced by the harness. The token limit is enforced only
   when the executor reports token usage; a command executor that cannot count
   tokens records `tokens_reported: false` and the report shows `UNAVAILABLE`.
@@ -62,4 +71,5 @@ output is redacted and bounded. A failed or timed-out arm is recorded and never
 retried automatically.
 
 See `docs/plans/HIP-006-pilot-evidence.md` and
-`docs/plans/HIP-007-adoption-report.md` for the bounded pilot result.
+`docs/plans/HIP-007-adoption-report.md` for the bounded pilot result:
+**No candidate promoted; pilot inconclusive for effectiveness.**

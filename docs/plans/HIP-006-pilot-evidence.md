@@ -19,7 +19,9 @@ launched baseline/candidate arm, including the discarded setup attempt.
 comparison files; one is the discarded S1 setup attempt recorded only in its log.
 The intended three-pair budget was six executions, so this is **one execution over
 the initial pair budget**. It is still below the absolute eight-execution ceiling.
-No held-out pair was run and no automatic retry was used.
+No held-out pair was run. **The held-out allowance was conditional on promotion
+and was not available because no promotion criteria were met.** No automatic retry
+was used.
 
 The S1 setup attempt's comparison file was removed before the rerun and is not
 recoverable. Its harness log is preserved above; no result is fabricated for it.
@@ -57,11 +59,11 @@ recoverable. Its harness log is preserved above; no result is fabricated for it.
 | S2 | no-progress, 6 turns, 22247 ms | no-progress, 8 turns, 23256 ms | both fail |
 | S3 | no-progress, 6 turns, 25949 ms | continue, no change, 23686 ms | both fail |
 
-Human interventions were 0 in all recorded arms. The pilot is **inconclusive**
-for candidate quality and **negative** for the candidate as tested: no arm passed
-its fixed acceptance checks, and the candidate did not reduce discovery or cost.
-S2 and S3 show similar task failure, but this is not reproducibility evidence for
-a correct candidate; the candidate was not accepted in either pair.
+Human interventions were 0 in all recorded arms. **No candidate promoted; pilot
+inconclusive for effectiveness.** The candidate did not pass any fixed acceptance
+check, and the recorded failures do not establish candidate quality or
+reproducibility. S2 and S3 show similar task failure, but that is not evidence
+that a correct candidate is reproducible.
 
 ## Evidence
 
@@ -72,6 +74,9 @@ a correct candidate; the candidate was not accepted in either pair.
 - `docs/plans/pilot/logs/s1-rerun.log`
 - `docs/plans/pilot/logs/s2.log`
 - `docs/plans/pilot/logs/s3.log`
+- `docs/plans/pilot/budget-ledger.json` (retrospective seven-entry reconciliation;
+  the original runs predate the shared ledger)
+- `docs/plans/pilot/SANITIZATION.md` (credential scan and path-transformation record)
 
 The harness now copies each arm's SOP run artifacts and executor output into the
 comparison `evidence/` directory before removing the disposable worktree. The

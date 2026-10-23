@@ -21,6 +21,7 @@ type CommandOptions struct {
 	BaselinePath   string
 	CandidatePath  string
 	OutDir         string
+	BudgetLedger   string
 	StartingCommit string
 	// Executor settings are shared by both arms. They are provided on the command
 	// line so both arms carry the identical settings into the fingerprint.
@@ -98,6 +99,11 @@ func Command(ctx context.Context, args []string, stdout io.Writer) int {
 		fmt.Fprintf(stdout, "compare: %v\n", err)
 		return 1
 	}
+	ledgerPath := opts.BudgetLedger
+	if ledgerPath == "" {
+		ledgerPath = filepath.Join(root, ".hipcompare-budget.json")
+	}
+	ledger := NewExperimentLedger(ledgerPath, budget.MaxExecutions)
 
 	// Every fingerprint component is derived from task inputs, the starting commit,
 	// instruction hashes, executor/model settings, tool permissions, and verification
@@ -159,6 +165,8 @@ func Command(ctx context.Context, args []string, stdout io.Writer) int {
 		Exec:            newCommandExecutor(opts),
 		Repository:      root,
 		EvidenceRoot:    filepath.Join(outDir, "evidence"),
+		Ledger:          ledger,
+		OutputDir:       outDir,
 		Now:             time.Now,
 		PriorExecutions: priorExecutions,
 		PriorArms:       priorArms,
@@ -182,7 +190,7 @@ func Command(ctx context.Context, args []string, stdout io.Writer) int {
 
 // commandUsage documents the invocation and the fixed limits.
 const commandUsage = `usage: sop compare --manifest MANIFEST.json --baseline BASE.json --candidate CAND.json
-                   [--out DIR] [--commit SHA] [--executor NAME] [--model NAME]
+                   [--out DIR] [--budget-ledger PATH] [--commit SHA] [--executor NAME] [--model NAME]
                    [--executor-command CMD] [--setting K=V] [--allow-tool NAME]...
                    [--pairs N] [--held-out-pairs N] [--per-run-seconds S]
                    [--per-run-tokens N]
@@ -240,6 +248,12 @@ func parseCommandArgs(args []string) (CommandOptions, error) {
 				return opts, err
 			}
 			opts.OutDir = v
+		case "--budget-ledger":
+			v, err := value()
+			if err != nil {
+				return opts, err
+			}
+			opts.BudgetLedger = v
 		case "--commit":
 			v, err := value()
 			if err != nil {

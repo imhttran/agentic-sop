@@ -69,12 +69,12 @@ that path and records the rejection.
 This probe launched no model call:
 
 ```text
-/Users/imhttran/go/bin/sop present
+<sop-bin> present
 ollama healthy (19 models)
 configured model: deepseek-v4.1-flash:cloud
 ```
 
-The executor command is available as `/Users/imhttran/go/bin/sop`; the model is
+The executor command is available as `<sop-bin>`; the model is
 configured through the existing SOP configuration. No credential values were
 read into the manifest, and the harness passes only a scrubbed environment to the
 arm executor. The probe records availability only; it is not a pilot result.

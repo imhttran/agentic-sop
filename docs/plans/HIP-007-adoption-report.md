@@ -5,13 +5,13 @@ experimental validity.
 
 ## Decision
 
-**Do not retain the candidate.** The baseline is preserved. No candidate prompt
-or skill change is included in the PR.
+**No candidate promoted; pilot inconclusive for effectiveness.** The baseline is
+preserved. No candidate prompt or skill change is included in the PR.
 
-The pilot is **negative for the candidate as tested** and **inconclusive** for
-candidate quality: every recorded arm failed its fixed acceptance checks, the S1
-pair was invalid because the candidate did not compile, token usage is unavailable,
-and no held-out pair qualified.
+The implementation is delivered and tested independently of the experimental
+result: every recorded arm failed its fixed acceptance checks, the S1 pair was
+invalid because the candidate did not compile, token usage is unavailable, and no
+held-out pair qualified.
 
 ## Execution accounting
 
@@ -20,7 +20,9 @@ and no held-out pair qualified.
 - Discarded S1 setup attempt: 1 baseline arm, log only; its comparison artifact was
   removed before preservation and is not reconstructed.
 - Initial three-pair budget: 6 executions. Actual: 7, so **one over the initial
-  pair budget**. Absolute ceiling: 8. No held-out pair, no automatic retries.
+  pair budget**. Absolute ceiling: 8. No held-out pair, no automatic retries. The
+  held-out allowance was conditional on promotion and was not available because no
+  promotion criteria were met.
 - Per-run limits: 900 seconds enforced; 200000 tokens configured. Token usage was
   not reported by the executor, so token-limit enforcement has no evidence.
 

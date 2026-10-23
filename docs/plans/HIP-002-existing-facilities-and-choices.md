@@ -75,13 +75,15 @@ write lessons to shared advisory memory.
 
 Confirmation: no existing pilot implementation or active plan covers this work.
 
-Evidence:
+Evidence from read-only inspection:
 
-- `git status` shows only untracked entries: `.sop-evidence/`,
-  `docs/plans/HIP-001-bootstrap-baseline.md`,
-  `docs/plans/PLAN-Executore-Integration.md`, and
-  `docs/plans/PROMPT-SOP-Harness-Improvement-Pilot.md`. No tracked source file
-  changed.
+- `git status --short --branch` printed
+  `## feat/sop-harness-improvement-pilot...origin/feat/sop-harness-improvement-pilot`
+  and showed no tracked file change.
+- `git diff` printed no output. No tracked source file changed.
+- `git status --porcelain=v1 -uall` listed only untracked entries. These are
+  `.sop-evidence/` and untracked plan notes under `docs/plans/`. No tracked source
+  file changed.
 - `docs/plans/` holds `HIP-001-bootstrap-baseline.md`, which is a bootstrap note
   that modifies no source file. `.sop-evidence/` holds run evidence only.
 
@@ -94,12 +96,14 @@ These untracked entries are user-owned. This stage does not modify, revert,
 discard, or clean them.
 
 - `.sop-evidence/`
-- `docs/plans/HIP-001-bootstrap-baseline.md`
+- `docs/plans/HIP-001-bootstrap-baseline.md` (created by this stage; untracked)
+- `docs/plans/HIP-002-existing-facilities-and-choices.md` (created by this stage; untracked)
 - `docs/plans/PLAN-Executore-Integration.md`
 - `docs/plans/PROMPT-SOP-Harness-Improvement-Pilot.md`
 
-The stage adds only this note. It records no fabricated run results and launches
-no model calls.
+The stage adds only the two HIP plan notes. Each listed entry was left
+unchanged. It records no fabricated run results
+and launches no model calls.
 
 ## 8. Acceptance mapping
 
@@ -109,6 +113,6 @@ no model calls.
 | Each integration point listed with a file path or command | Section 3 |
 | Extension pattern named with inspected path | Section 4 |
 | Advisory-memory provenance verdict stated | Section 5 |
-| No existing pilot or active plan, citing git status and docs/plans/ | Section 6 |
-| Only the new note added; untracked entries unchanged | Section 7 |
+| No existing pilot or active plan, citing git status and git diff | Section 6 |
+| Only the two HIP notes added; untracked entries unchanged | Section 7 |
 | No fabricated results or model calls | Section 7 |

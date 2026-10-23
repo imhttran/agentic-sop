@@ -1,0 +1,77 @@
+{
+  "version": "hip-003.budget.v1",
+  "max_executions": 8,
+  "note": "Retrospective reconciliation of the seven launched arms. The held-out allowance was conditional on promotion and was not available.",
+  "entries": [
+    {
+      "id": "s1-setup-baseline",
+      "fingerprint": "setup-invalid",
+      "task_id": "S1",
+      "arm": "baseline",
+      "output_dir": "discarded (log only)",
+      "status": "failed",
+      "reserved_at": "2026-10-23T15:13:00Z",
+      "completed_at": "2026-10-23T15:13:00Z"
+    },
+    {
+      "id": "s1-rerun-baseline",
+      "fingerprint": "8478224673ec",
+      "task_id": "S1",
+      "arm": "baseline",
+      "output_dir": "docs/plans/pilot/out-s1",
+      "status": "failed",
+      "reserved_at": "2026-10-23T15:20:00Z",
+      "completed_at": "2026-10-23T15:23:00Z"
+    },
+    {
+      "id": "s1-rerun-candidate",
+      "fingerprint": "8478224673ec",
+      "task_id": "S1",
+      "arm": "candidate",
+      "output_dir": "docs/plans/pilot/out-s1",
+      "status": "failed",
+      "reserved_at": "2026-10-23T15:23:00Z",
+      "completed_at": "2026-10-23T15:23:01Z"
+    },
+    {
+      "id": "s2-baseline",
+      "fingerprint": "9a107ab5a8df",
+      "task_id": "S2",
+      "arm": "baseline",
+      "output_dir": "docs/plans/pilot/out-s2",
+      "status": "failed",
+      "reserved_at": "2026-10-23T16:31:00Z",
+      "completed_at": "2026-10-23T16:32:00Z"
+    },
+    {
+      "id": "s2-candidate",
+      "fingerprint": "9a107ab5a8df",
+      "task_id": "S2",
+      "arm": "candidate",
+      "output_dir": "docs/plans/pilot/out-s2",
+      "status": "failed",
+      "reserved_at": "2026-10-23T16:32:00Z",
+      "completed_at": "2026-10-23T16:32:00Z"
+    },
+    {
+      "id": "s3-baseline",
+      "fingerprint": "88ac73651520",
+      "task_id": "S3",
+      "arm": "baseline",
+      "output_dir": "docs/plans/pilot/out-s3",
+      "status": "failed",
+      "reserved_at": "2026-10-23T16:34:00Z",
+      "completed_at": "2026-10-23T16:34:00Z"
+    },
+    {
+      "id": "s3-candidate",
+      "fingerprint": "88ac73651520",
+      "task_id": "S3",
+      "arm": "candidate",
+      "output_dir": "docs/plans/pilot/out-s3",
+      "status": "failed",
+      "reserved_at": "2026-10-23T16:34:00Z",
+      "completed_at": "2026-10-23T16:34:00Z"
+    }
+  ]
+}

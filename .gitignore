@@ -25,3 +25,6 @@
 # Rust build output generated when an editor analyzes the security fixtures;
 # never project content. Fixture Cargo.lock files stay tracked deliberately.
 target/
+
+# HIP comparison harness shared budget ledger (opt-in runtime state).
+.hipcompare-budget.json

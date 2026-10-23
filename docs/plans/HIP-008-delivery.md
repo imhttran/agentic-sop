@@ -22,8 +22,9 @@ setup attempt is preserved only as a log. This is one over the initial six-arm
 pair budget but below the absolute eight-arm ceiling. No held-out pair ran.
 
 S2 and S3 are valid execution pairs but no arm passed fixed acceptance; S1 is
-invalid as a comparison. The pilot is negative for the candidate as tested and
-inconclusive for candidate quality. The candidate is not included in the PR.
+invalid as a comparison. **No candidate promoted; pilot inconclusive for
+effectiveness.** The held-out allowance was conditional on promotion and was not
+available. The candidate is not included in the PR.
 
 Token usage was not reported by the executor. The 200000-token limit is configured
 but its enforcement is unproven; the 900-second time limit is enforced.

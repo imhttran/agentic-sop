@@ -124,7 +124,11 @@ type RunnerConfig struct {
 	// captured executor output before the worktree is removed.
 	Repository   string
 	EvidenceRoot string
-	Now          func() time.Time
+	// Ledger is the shared experiment-budget reservation ledger. Each arm is
+	// reserved before it launches and remains counted on failure or restart.
+	Ledger    *ExperimentLedger
+	OutputDir string
+	Now       func() time.Time
 	// PriorExecutions is the number of arm executions already recorded for this
 	// fingerprint in earlier invocations. It is added to this run's executions when
 	// the budget gate checks the ceiling, so a caller cannot exceed the fixed count
@@ -190,6 +194,9 @@ func Run(ctx context.Context, cfg RunnerConfig, fp Fingerprint) (Comparison, err
 	if cfg.Worktrees == nil {
 		return Comparison{}, errors.New("Run: no worktree manager configured")
 	}
+	if cfg.Ledger == nil {
+		return Comparison{}, errors.New("Run: shared budget ledger is required")
+	}
 	if cfg.StartingCommit == "" {
 		return Comparison{}, errors.New("Run: starting commit is required")
 	}
@@ -220,13 +227,11 @@ func Run(ctx context.Context, cfg RunnerConfig, fp Fingerprint) (Comparison, err
 		{ArmCandidate, cfg.Candidate, true},
 	}
 
-	// Budget gate: the executions already recorded plus this run's planned arms
-	// must fit inside the fixed ceiling. It runs before the adapter is invoked, so
-	// a caller that re-invokes the command cannot exceed the fixed count.
+	// Budget gate: the shared ledger reserves each arm before launch. The
+	// per-comparison PriorExecutions value is retained only for result accounting;
+	// it cannot substitute for the shared reservation.
 	planned := len(steps)
-	if err := enforceExecutionBudget(cfg.Budget, cfg.PriorExecutions, planned); err != nil {
-		return cmp, err
-	}
+	_ = planned
 
 	// Carry forward prior arm records so a resumed incomplete comparison keeps its
 	// execution accounting and never loses an already-executed arm.
@@ -236,7 +241,23 @@ func Run(ctx context.Context, cfg RunnerConfig, fp Fingerprint) (Comparison, err
 
 	allOK := true
 	for _, s := range steps {
+		reservation, rerr := cfg.Ledger.Reserve(fp.Digest, cfg.Manifest.ID, s.arm, cfg.OutputDir)
+		if rerr != nil {
+			cmp.Verdict = "Inconclusive: the shared experiment budget refused the next execution."
+			return cmp, rerr
+		}
 		res, err := runArm(ctx, cfg, base, fp, s.arm, s.set, s.apply, now)
+		status := LedgerFailed
+		if res != nil {
+			if res.LimitFailure {
+				status = LedgerLimitFailure
+			} else if res.Completed && res.AcceptancePassed {
+				status = LedgerCompleted
+			}
+		}
+		if cerr := cfg.Ledger.Complete(reservation, status); cerr != nil && err == nil {
+			err = cerr
+		}
 		if res != nil {
 			cmp.Arms = append(cmp.Arms, *res)
 			cmp.Executions++
