@@ -340,7 +340,7 @@ func TestTimeoutTerminatesChildGroup(t *testing.T) {
 		t.Fatalf("pids = %v, want the shell and its child", pids)
 	}
 	for _, pid := range pids {
-		if processAlive(pid) {
+		if !waitProcessGone(pid, 2*time.Second) {
 			t.Errorf("process %d survived the timeout", pid)
 		}
 	}
@@ -386,7 +386,7 @@ func TestCancellationTerminatesChildGroup(t *testing.T) {
 		t.Fatalf("pids = %v, want the shell and its child", pids)
 	}
 	for _, pid := range pids {
-		if processAlive(pid) {
+		if !waitProcessGone(pid, 2*time.Second) {
 			t.Errorf("process %d survived cancellation", pid)
 		}
 	}
@@ -431,4 +431,19 @@ func parsePIDs(out string) []int {
 		}
 	}
 	return pids
+}
+
+// waitProcessGone tolerates a short reap delay for a killed descendant
+// (notably a zombie on Linux) without treating it as a survivor.
+func waitProcessGone(pid int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for {
+		if !processAlive(pid) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
