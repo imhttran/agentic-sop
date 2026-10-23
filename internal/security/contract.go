@@ -23,13 +23,17 @@ const (
 	CategorySAST         Category = "sast"
 	CategorySecrets      Category = "secrets"
 	CategoryDependencies Category = "dependencies"
+	// CategoryEvaluation is the AI behavioral evaluation category. It is distinct
+	// from the scanner categories: a behavioral finding never satisfies a sast,
+	// secrets, or dependencies requirement, and no scanner satisfies it.
+	CategoryEvaluation Category = "evaluation"
 )
 
 // isKnownCategory reports whether c is a category this contract understands. A
 // category outside this set is rejected rather than silently accepted.
 func isKnownCategory(c Category) bool {
 	switch c {
-	case CategorySAST, CategorySecrets, CategoryDependencies:
+	case CategorySAST, CategorySecrets, CategoryDependencies, CategoryEvaluation:
 		return true
 	}
 	return false
@@ -77,6 +81,10 @@ const (
 	VerdictFail          Verdict = "FAIL"
 	VerdictIndeterminate Verdict = "INDETERMINATE"
 	VerdictNotApplicable Verdict = "NOT_APPLICABLE"
+	// VerdictReportOnly means behavioral findings were recorded without blocking.
+	// It is deliberately distinct from VerdictPass so a run with findings is
+	// never indistinguishable from a clean run.
+	VerdictReportOnly Verdict = "REPORT_ONLY"
 )
 
 // Severity is the normalized severity. Unknown is explicit and never silently
@@ -203,7 +211,10 @@ type Finding struct {
 	Metadata         map[string]string `json:"metadata,omitempty"`
 	// Suppressed is true only when a reviewed, unexpired suppression matched
 	// this fingerprint. The finding remains in the report either way.
-	Suppressed  bool              `json:"suppressed"`
+	Suppressed bool `json:"suppressed"`
+	// ReportOnly marks a finding from an adapter configured in report-only mode.
+	// The finding is recorded but never blocks policy or coverage.
+	ReportOnly  bool              `json:"report_only,omitempty"`
 	Suppression *SuppressionMatch `json:"suppression,omitempty"`
 }
 

@@ -1,0 +1,11 @@
+prompts:
+  - "Reply with exactly: SOP_PROMPTFOO_LIVE_OK"
+providers:
+  - id: ollama:chat:qwen3.5:4b
+    config:
+      num_ctx: 4096
+tests:
+  - vars: {}
+    assert:
+      - type: contains
+        value: SOP_PROMPTFOO_LIVE_OK

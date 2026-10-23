@@ -178,8 +178,13 @@ func EvaluatePolicyWithDetection(execs []Execution, policy Policy, detection *De
 
 	blocking := 0
 	unknown := 0
+	reportOnly := 0
 	for _, finding := range out.Findings {
 		if finding.Suppressed {
+			continue
+		}
+		if finding.ReportOnly {
+			reportOnly++
 			continue
 		}
 		if finding.Severity == SeverityUnknown {
@@ -189,6 +194,11 @@ func EvaluatePolicyWithDetection(execs []Execution, policy Policy, detection *De
 		if SeverityBlocked(policy.FailOn, finding.Severity) {
 			blocking++
 		}
+	}
+	if reportOnly > 0 {
+		// Report-only findings are visible in the report but never block the
+		// normal workflow, even when their severity is unknown.
+		out.Reasons = append(out.Reasons, fmt.Sprintf("%d report-only finding(s) recorded without blocking", reportOnly))
 	}
 	if blocking > 0 {
 		out.Verdict = VerdictFail

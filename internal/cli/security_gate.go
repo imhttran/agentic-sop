@@ -77,6 +77,8 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 		DatabasePath:    cfg.Security.AdvisoryDatabasePath,
 		OSVDatabasePath: cfg.Security.OSVDatabasePath,
 		StalePolicy:     cfg.Security.StaleAdvisoryDatabase,
+		WorkspaceRoot:   dir,
+		Evaluation:      &cfg.Security.Evaluation,
 	})
 	if err != nil {
 		return indeterminate("adapter configuration is invalid: " + err.Error())
