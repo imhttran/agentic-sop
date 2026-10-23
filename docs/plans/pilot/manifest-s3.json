@@ -1,0 +1,15 @@
+{
+  "schema_version": "hip-003.v1",
+  "id": "S3",
+  "title": "Promptfoo S3 AISEC suite",
+  "task_file": "docs/plans/pilot/S3-task.md",
+  "task_inputs": {
+    "task": "S3"
+  },
+  "verification_commands": [
+    "go test ./internal/evaltarget -run TestAISEC -count=1"
+  ],
+  "allowed_candidate_paths": [
+    "internal/ollamaagent/prompt.go"
+  ]
+}

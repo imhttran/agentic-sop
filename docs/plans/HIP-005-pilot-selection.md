@@ -35,15 +35,19 @@ pairs.
 
 - Allowed candidate path: `internal/ollamaagent/prompt.go`
 - Baseline SHA-256: `cabbce12e75ba3cafbd3021bebad724d18a47dffd844b5df1dc75639729460c5`
-- Candidate SHA-256: `00c4d2cf99b12f994630d190451bf522e356f8cc2f0d43b16c965528ab8f2dfe`
+- Candidate SHA-256: `14e0b78ebcdb3d4f128862d3bd999d2eb796c8c95071efc8eb9c7fb455a74b22`
 - Benchmark manifest hash: computed by `DeriveFingerprint` from the task inputs,
   starting commit `962a90cd`, these two instruction hashes, the executor/model
   settings, tool permissions, and the fixed verification commands.
 
-Candidate diff (appended to the baseline prompt file):
+Candidate diff (inserted inside the IMPLEMENT guidance string):
 
 ```diff
-+Before the first repository write, state the exact file paths and the smallest change; do not spend more than two discovery tool calls before the first write.
+ For IMPLEMENT, work in three phases: discover enough context to make the change,
+-make the change, then finalize.
++make the change, then finalize. Before the first repository write, state the exact
++file paths and the smallest change; do not spend more than two discovery tool calls
++before the first write.
 ```
 
 The baseline instruction set declares no file edits. The candidate instruction
@@ -83,3 +87,14 @@ arm executor. The probe records availability only; it is not a pilot result.
 - The selected task inputs and acceptance commands are frozen for the comparison.
 - A changed task input, commit, instruction hash, executor/model setting, tool
   permission, or verification command invalidates the resume fingerprint.
+
+## 6. Post-run correction
+
+The first S1 attempt used a candidate file whose added line was appended outside
+the Go string and therefore did not compile. That pair is recorded as an invalid
+harness/input run, not as a model result. The candidate content was corrected by
+inserting the line inside the IMPLEMENT guidance string; the corrected hash above
+is the one used by the S2 and S3 comparisons. The S1 pair was not re-run because
+the six-execution initial budget was already consumed and no promotion criteria
+were met. The S1 result remains evidence of the network limitation in that task,
+not a candidate verdict.
