@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -305,32 +306,17 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 		AcceptancePassed:   ec.AcceptancePassed,
 	}
 
-	// Change detection runs for both arms. The baseline must make no edit, so any
-	// baseline change is itself a failure. The candidate's diff against the starting
-	// commit is what the guard checks against the allowed list. It runs even after a
-	// limit failure so a disallowed edit is never hidden.
+	// Change detection records the task's implementation footprint. It deliberately
+	// does not reject ordinary task edits: both arms are expected to do the task. The
+	// candidate instruction guard is enforced before the executor runs, in
+	// commandExecutor.Execute, where only the declared prompt/skill files may be
+	// applied. Harness-owned SOP state and the staged task file are not task edits.
 	changed, cerr := changedPaths(ctx, worktree, commit)
 	if cerr != nil {
 		res.Failures = append(res.Failures, fmt.Sprintf("change detection failed: %v", cerr))
 		return res, cerr
 	}
-	res.ChangedPaths = changed
-	var guardErr error
-	if arm == ArmCandidate {
-		if bad := disallowed(changed, cfg.Manifest.AllowedCandidatePaths); bad != "" {
-			guardErr = &DisallowedEditError{Path: bad}
-			res.Failures = append(res.Failures, guardErr.Error())
-		}
-	} else if len(changed) != 0 {
-		guardErr = fmt.Errorf("baseline must not edit: changed %v", changed)
-		res.Failures = append(res.Failures, guardErr.Error())
-	}
-	if guardErr != nil {
-		// A rejected change is not a completed arm, even when the executor
-		// otherwise reported success. The arm is recorded, but never accepted.
-		res.Completed = false
-		res.AcceptancePassed = false
-	}
+	res.ChangedPaths = filterHarnessPaths(changed, cfg.Manifest.TaskFile)
 
 	// Enforce the time limit as an observation, even when the executor ignores the
 	// context. A run that overran its deadline is a limit failure, never a completed
@@ -344,7 +330,7 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 			// No automatic retry: a failure is recorded and execution stops.
 			res.Failures = append(res.Failures, execErr.Error())
 		}
-		return res, guardErr
+		return res, nil
 	}
 
 	if elapsed > timeLimitMillis(cfg.Budget.PerRunTimeSeconds) {
@@ -352,7 +338,7 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 		res.LimitFailure = true
 		res.LimitFailureReason = fmt.Sprintf("per-run time limit of %ds exceeded", cfg.Budget.PerRunTimeSeconds)
 		res.Completed = false
-		return res, guardErr
+		return res, nil
 	}
 
 	if ec.TokensUsed > cfg.Budget.PerRunTokenLimit {
@@ -360,7 +346,7 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 		res.LimitFailure = true
 		res.LimitFailureReason = fmt.Sprintf("per-run token limit of %d exceeded (%d used)", cfg.Budget.PerRunTokenLimit, ec.TokensUsed)
 		res.Completed = false
-		return res, guardErr
+		return res, nil
 	}
 
 	if !ec.Completed {
@@ -369,7 +355,26 @@ func runArm(ctx context.Context, cfg RunnerConfig, base string, fp Fingerprint, 
 	if !ec.AcceptancePassed {
 		res.Failures = append(res.Failures, "acceptance checks did not pass")
 	}
-	return res, guardErr
+	return res, nil
+}
+
+// filterHarnessPaths removes SOP's own runtime state and the staged task file
+// from the arm's implementation footprint. Those paths are harness plumbing, not
+// task output, and they must not make a clean arm look like a baseline edit.
+func filterHarnessPaths(paths []string, taskFile string) []string {
+	out := make([]string, 0, len(paths))
+	task := filepath.Clean(taskFile)
+	for _, p := range paths {
+		clean := filepath.Clean(p)
+		if clean == ".agent-sdlc" || strings.HasPrefix(clean, ".agent-sdlc"+string(filepath.Separator)) {
+			continue
+		}
+		if taskFile != "" && clean == task {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // fpShort returns the first 12 hex characters of the fingerprint digest, for

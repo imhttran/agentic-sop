@@ -174,22 +174,21 @@ func TestExecutionBudgetRefusesOverCeiling(t *testing.T) {
 	}
 }
 
-func TestRunRejectsCandidateEditOutsideAllowedPaths(t *testing.T) {
+func TestRunRecordsCandidateTaskEdit(t *testing.T) {
 	repo, commit := testGitRepo(t)
 	cfg := testRunnerConfig(t, repo, commit, testExecutor{
 		write:  "bad.txt",
 		result: ExecutorResult{Completed: true, AcceptancePassed: true},
 	}, []string{"prompt.md"})
 	res, err := runArm(context.Background(), cfg, cfg.WorktreeRoot, DeriveFingerprint(FingerprintInputs{}), ArmCandidate, cfg.Candidate, true, time.Now)
-	if err == nil {
-		t.Fatal("disallowed candidate edit was accepted")
+	if err != nil {
+		t.Fatal(err)
 	}
-	var de *DisallowedEditError
-	if !errors.As(err, &de) {
-		t.Fatalf("error = %v, want DisallowedEditError", err)
+	if res == nil || !res.Completed {
+		t.Fatalf("result = %+v, want a completed candidate arm", res)
 	}
-	if res == nil || res.Completed {
-		t.Fatalf("result = %+v, want a recorded non-completed arm", res)
+	if len(res.ChangedPaths) != 1 || res.ChangedPaths[0] != "bad.txt" {
+		t.Fatalf("changed paths = %v, want [bad.txt]", res.ChangedPaths)
 	}
 }
 
@@ -211,18 +210,21 @@ func TestRunAcceptsCandidateEditInsideAllowedPaths(t *testing.T) {
 	}
 }
 
-func TestRunRejectsBaselineEdit(t *testing.T) {
+func TestRunRecordsBaselineTaskEdit(t *testing.T) {
 	repo, commit := testGitRepo(t)
 	cfg := testRunnerConfig(t, repo, commit, testExecutor{
 		write:  "prompt.md",
 		result: ExecutorResult{Completed: true, AcceptancePassed: true},
 	}, []string{"prompt.md"})
 	res, err := runArm(context.Background(), cfg, cfg.WorktreeRoot, DeriveFingerprint(FingerprintInputs{}), ArmBaseline, cfg.Baseline, false, time.Now)
-	if err == nil || !strings.Contains(err.Error(), "baseline must not edit") {
-		t.Fatalf("error = %v, want baseline edit refusal", err)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if res == nil || res.Completed {
-		t.Fatalf("result = %+v, want a recorded non-completed arm", res)
+	if res == nil || !res.Completed {
+		t.Fatalf("result = %+v, want a completed baseline arm", res)
+	}
+	if len(res.ChangedPaths) != 1 || res.ChangedPaths[0] != "prompt.md" {
+		t.Fatalf("changed paths = %v, want [prompt.md]", res.ChangedPaths)
 	}
 }
 
