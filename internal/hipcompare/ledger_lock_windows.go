@@ -2,10 +2,21 @@
 
 package hipcompare
 
-import "os"
+import (
+	"os"
 
-// Windows has no flock equivalent in the standard library. The ledger is still
-// written atomically under a single process; cross-process reservation locking is
-// not available on Windows without an additional platform dependency.
-func lockLedger(_ *os.File) error   { return nil }
-func unlockLedger(_ *os.File) error { return nil }
+	"golang.org/x/sys/windows"
+)
+
+// lockLedger takes an exclusive lock on the ledger file so concurrent
+// reservations across processes and output directories serialize the
+// read-modify-write.
+func lockLedger(f *os.File) error {
+	var ol windows.Overlapped
+	return windows.LockFileEx(windows.Handle(f.Fd()), windows.LOCKFILE_EXCLUSIVE_LOCK, 0, 1, 0, &ol)
+}
+
+func unlockLedger(f *os.File) error {
+	var ol windows.Overlapped
+	return windows.UnlockFileEx(windows.Handle(f.Fd()), 0, 1, 0, &ol)
+}
