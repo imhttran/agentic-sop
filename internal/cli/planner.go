@@ -77,14 +77,41 @@ func currentRunEpoch(dir, taskID string) string {
 }
 
 // plannerHumanGate reports whether the task is at a human decision boundary.
+// plannerHumanGate reports whether a human decision currently owns the task. It
+// reads the authoritative approval record together with the task lifecycle, and
+// fails closed on unknown state:
+//
+//   - a PENDING request is a gate whatever the stage says;
+//   - a BLOCKED task has not left its boundary (a decline records the decision but
+//     does not requeue the task), so it stays gated;
+//   - a parked WAITING_FOR_HUMAN stage survives the decision that resolved it, so it
+//     remains a gate unless an explicit APPROVED, DECLINED, or SUPERSEDED decision is
+//     recorded. A missing record is unknown state and is not treated as resolved.
+//
+// The requeued case that motivated this is a needs-human outcome that returns the
+// task to PLANNED while the stage stays parked and the operator declines: the task is
+// runnable again and its stale stage must not keep blocking planner questions.
 func plannerHumanGate(dir string, task *domain.Task) bool {
-	if stage, ok := runpkg.Load(dir, task.ID); ok && stage == runpkg.WaitingForHuman {
+	head, have := runpkg.At(runpkg.Dir(dir, task.ID)).Approval()
+	if have && head.Status == domain.ApprovalPending {
 		return true
 	}
-	if req, ok := runpkg.At(runpkg.Dir(dir, task.ID)).Approval(); ok && req.Status == domain.ApprovalPending {
+	if task.IsBlocked() {
 		return true
 	}
-	return false
+	stage, ok := runpkg.Load(dir, task.ID)
+	if !ok || stage != runpkg.WaitingForHuman {
+		return false
+	}
+	if !have {
+		return true
+	}
+	switch head.Status {
+	case domain.ApprovalDeclined, domain.ApprovalApproved, domain.ApprovalSuperseded:
+		return false
+	default:
+		return true
+	}
 }
 
 // questionsForTask lists every question whose task identity is taskID, across states.
