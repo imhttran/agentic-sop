@@ -302,6 +302,28 @@ func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	// Establish the run's durable identity BEFORE binding the question. Resume never resets
+	// an existing run: it preserves state.json's id and created_at, and persisting the
+	// current stage is a no-op on the stage itself. For a task that has not run yet it
+	// materializes state.json at CREATED, so the epoch read below is the same epoch the
+	// executor will later resume. Binding after the stage write (the previous order) left a
+	// first-run question with an empty run epoch, so a decision made for one run could be
+	// resumed in another.
+	rn, err := runpkg.Resume(dir, taskID)
+	if err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	if err := rn.SetStage(rn.State().Stage); err != nil {
+		fmt.Fprintf(stderr, "planner: %v\n", err)
+		return exitError
+	}
+	epoch := currentRunEpoch(dir, taskID)
+	if strings.TrimSpace(epoch) == "" {
+		fmt.Fprintf(stderr, "planner: run epoch is unavailable for %s; refusing to persist an unbound question\n", taskID)
+		return exitError
+	}
+
 	q, err := svc.CreateQuestion(&question.Question{
 		Identity:        taskID,
 		Kind:            kind,
@@ -310,7 +332,7 @@ func runPlannerAsk(args []string, stdout, stderr io.Writer, d deps) int {
 		SubmittedBy:     "executor",
 		Project:         projectIdentity(dir),
 		RunID:           taskID,
-		RunEpoch:        currentRunEpoch(dir, taskID),
+		RunEpoch:        epoch,
 		Attempt:         task.Attempt,
 		PlanRevision:    currentPlanRevision(dir),
 		RepoFingerprint: repoFingerprint(dir),

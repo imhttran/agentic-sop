@@ -21,8 +21,10 @@ func setupExternalContinuation(t *testing.T) (string, string, *question.Question
 	return setupExternalContinuationFixture(t, true)
 }
 
-// setupExternalContinuationLegacy raises the same fixture WITHOUT a run epoch, so the
-// question and its continuation both carry an empty run_epoch — the `cont:q-1:` shape.
+// setupExternalContinuationLegacy raises the same fixture in the pre-epoch shape: the
+// question and its continuation both carry an empty run_epoch — the `cont:q-1:` record a
+// legacy question has on disk. planner ask now always binds an epoch, so the legacy shape
+// is constructed through the question service rather than by omitting a run state.
 func setupExternalContinuationLegacy(t *testing.T) (string, string, *question.Question) {
 	return setupExternalContinuationFixture(t, false)
 }
@@ -32,18 +34,28 @@ func setupExternalContinuationFixture(t *testing.T, bindEpoch bool) (string, str
 	dir := t.TempDir()
 	head := setupExtProject(t, dir, extPlannerConfig, extPlanTwo)
 
-	// Bind a real run epoch before the question is raised, so the continuation carries a
-	// non-empty run_epoch and the epoch guard is exercised rather than skipped.
+	var q *question.Question
 	if bindEpoch {
+		// Bind a real run epoch before the question is raised, so the continuation carries a
+		// non-empty run_epoch and the epoch guard is exercised rather than skipped.
 		seedRunState(t, dir, "S001", "2026-01-01T00:00:00Z")
+		if code, _, errS := runCLI(t, dir, "planner", "ask", "S001",
+			"--question", "Proceed with the merged implementation?",
+			"--option", "yes", "--option", "no"); code != exitOK {
+			t.Fatalf("ask: code=%d stderr=%s", code, errS)
+		}
+		q = pendingQuestion(t, dir)
+	} else {
+		// A question persisted before planner ask bound the run epoch carries no run_epoch,
+		// but it does carry the plan/repository bindings ask has always recorded. Reproduce
+		// that shape (empty epoch, real plan binding) so the legacy discharge rule is what is
+		// exercised, not a wholly unbound question.
+		q = createQuestion(t, dir, &question.Question{
+			Identity: "S001", Kind: "blocking", Body: "Proceed with the merged implementation?",
+			Project: projectIdentity(dir), RunID: "S001", Revision: 1,
+			PlanRevision: currentPlanRevision(dir), RepoFingerprint: repoFingerprint(dir),
+		})
 	}
-
-	if code, _, errS := runCLI(t, dir, "planner", "ask", "S001",
-		"--question", "Proceed with the merged implementation?",
-		"--option", "yes", "--option", "no"); code != exitOK {
-		t.Fatalf("ask: code=%d stderr=%s", code, errS)
-	}
-	q := pendingQuestion(t, dir)
 	if code, _, errS := runCLI(t, dir, "answer", q.ID, "--body", "yes", "--idempotency-key", "k1"); code != exitOK {
 		t.Fatalf("answer: code=%d stderr=%s", code, errS)
 	}
