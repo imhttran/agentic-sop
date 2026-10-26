@@ -1,0 +1,77 @@
+{
+  "contract_version": 1,
+  "questions": [
+    {
+      "contract_version": 1,
+      "id": "q-1",
+      "identity": "PA-1",
+      "kind": "planner-round-1",
+      "body": "Which acceptance marker should the fixture record?",
+      "submitted_by": "executor",
+      "revision": 1,
+      "state": "APPLIED",
+      "project": "pe3-acceptance",
+      "run_id": "PA-1",
+      "plan_revision": "plan@cc6002dcedc09c9e8e6e06357d70f3403a8a565c512862d1d267ab9f582e158f",
+      "repo_fingerprint": "<FIXTURE>",
+      "return_stage": "IMPLEMENTING",
+      "deadline": "0001-01-01T00:00:00Z",
+      "options": [
+        "accepted",
+        "declined"
+      ],
+      "created_at": "2026-10-26T16:14:47.051096Z",
+      "updated_at": "2026-10-26T16:28:21.685927Z"
+    }
+  ],
+  "answers": [
+    {
+      "contract_version": 1,
+      "id": "a-2",
+      "question_id": "q-1",
+      "body": "accepted",
+      "answered_by": "chatgpt",
+      "expected_revision": 1,
+      "chosen_action": "continue",
+      "created_at": "2026-10-26T16:25:10.051968Z"
+    }
+  ],
+  "outcomes": [
+    {
+      "contract_version": 1,
+      "id": "o-3",
+      "question_id": "q-1",
+      "answer_id": "a-2",
+      "kind": "ACCEPTED",
+      "revision": 1,
+      "submitted_by": "chatgpt",
+      "at": "2026-10-26T16:25:10.051973Z"
+    },
+    {
+      "contract_version": 1,
+      "id": "o-4",
+      "question_id": "q-1",
+      "kind": "APPLIED",
+      "reason": "answer applied",
+      "at": "2026-10-26T16:28:21.685931Z"
+    }
+  ],
+  "continuations": [
+    {
+      "contract_version": 1,
+      "id": "cont:q-1:",
+      "question_id": "q-1",
+      "task_id": "PA-1",
+      "run_id": "PA-1",
+      "run_epoch": "",
+      "return_stage": "IMPLEMENTING",
+      "state": "PENDING",
+      "generation": 0,
+      "claimed_at": "0001-01-01T00:00:00Z",
+      "attempts": 0,
+      "completed_at": "0001-01-01T00:00:00Z",
+      "created_at": "2026-10-26T16:28:21.685929Z",
+      "updated_at": "2026-10-26T16:28:21.685929Z"
+    }
+  ]
+}
