@@ -168,7 +168,14 @@ in the active plan and is not already complete, its dependencies are satisfied, 
 `--commit` (default HEAD) is contained by HEAD, and the configured validation passes. It
 records the task in the local terminal state (`LOCAL_DONE`) and writes provenance
 (`.agent-sdlc/runs/<task-id>/external-completion.json`); it fabricates no attempt, no model
-run, and no approval, and it never touches retry, human-boundary, or approval state.
+run, and no approval, and it never touches retry, human-boundary, or approval state. It also
+discharges the planner continuations that the completion makes unsatisfiable: a continuation
+bound to the task, whose question matches the live plan revision and whose run epoch matches
+the live run, is recorded `EXTERNALLY_COMPLETED` — never `COMPLETED`, because no stage ran —
+while a stale, mismatched, already-terminal, or concurrently held continuation is reported
+and left untouched. Question, answer, and outcome history is preserved verbatim, and a
+continuation-store failure aborts the completion rather than recording it with an owed
+continuation.
 Deterministic lexical retrieval (CTX-003) ranks the Structural Repository Index against
 query terms with a fixed BM25 ranker: `sop retrieve <term>...` prints ranked candidates
 (`rank`, `score`, `source`, `id`). Ranking is deterministic — scores are aggregate term

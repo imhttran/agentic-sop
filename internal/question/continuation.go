@@ -25,17 +25,24 @@ const (
 	// merely because it parked. A superseded continuation is never claimable and is never
 	// replayed.
 	ContinuationSuperseded ContinuationState = "SUPERSEDED"
+	// ContinuationExternallyCompleted: an external completion proved the task's work is
+	// already in shared history, so the owed stage work was DISCHARGED WITHOUT BEING RUN.
+	// It is terminal and explicitly NOT completion of the owed work: no stage executed and
+	// no checkpoint advanced under it. A discharged continuation is never claimable and is
+	// never replayed.
+	ContinuationExternallyCompleted ContinuationState = "EXTERNALLY_COMPLETED"
 )
 
 // Terminal reports whether a continuation state is terminal (no further transition).
 func (s ContinuationState) Terminal() bool {
-	return s == ContinuationCompleted || s == ContinuationSuperseded
+	return s == ContinuationCompleted || s == ContinuationSuperseded || s == ContinuationExternallyCompleted
 }
 
 // Known reports whether s is one of the closed continuation states.
 func (s ContinuationState) Known() bool {
 	switch s {
-	case ContinuationPending, ContinuationClaimed, ContinuationCompleted, ContinuationSuperseded:
+	case ContinuationPending, ContinuationClaimed, ContinuationCompleted, ContinuationSuperseded,
+		ContinuationExternallyCompleted:
 		return true
 	default:
 		return false

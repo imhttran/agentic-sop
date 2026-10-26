@@ -93,6 +93,17 @@ type Store interface {
 	// CompleteContinuation/FenceAndMutate is unchanged, and a superseded continuation can
 	// never afterwards be claimed, completed, or fence-mutated.
 	ResolveYieldedContinuation(id string, now time.Time) (*Continuation, bool, error)
+	// DischargeExternalContinuation records the terminal, NON-execution outcome for a
+	// continuation whose task an external completion proved already merged. The owed
+	// stage work is discharged without being run, so the record becomes
+	// EXTERNALLY_COMPLETED — never COMPLETED, which would claim the stage executed.
+	//
+	// It transitions only from a non-terminal state (PENDING, or CLAIMED held by a worker
+	// that will never resume), so it can never complete, resurrect, or replay work, and a
+	// discharged continuation can never afterwards be claimed, completed, or
+	// fence-mutated. The caller owns the binding checks: it must establish the same task,
+	// the live plan revision, the live run epoch, and a contained implementation commit.
+	DischargeExternalContinuation(id, reason string, now time.Time) (*Continuation, bool, error)
 	// FenceAndMutate coordinates claim verification with a protected mutation: it runs
 	// mutate() only while the caller still holds the presented generation, under the
 	// store's cross-process lock, so a reclaimed worker cannot write afterward. The
@@ -604,6 +615,27 @@ func (m *MemoryStore) ResolveYieldedContinuation(id string, now time.Time) (*Con
 	}
 	c.State = ContinuationSuperseded
 	c.Reason = "superseded by a later planner question (recovered after restart)"
+	c.UpdatedAt = now.UTC()
+	cp = *c
+	return &cp, true, nil
+}
+
+// DischargeExternalContinuation implements Store. It terminalizes a continuation whose
+// task an external completion proved already merged, recording EXTERNALLY_COMPLETED
+// (never COMPLETED) and preserving the question, answer, and outcome history untouched.
+func (m *MemoryStore) DischargeExternalContinuation(id, reason string, now time.Time) (*Continuation, bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	c, ok := m.conts[id]
+	if !ok {
+		return nil, false, fmt.Errorf("%w: continuation %q", ErrNotFound, id)
+	}
+	cp := *c
+	if c.State.Terminal() {
+		return &cp, false, nil // terminal: never re-discharged or replayed
+	}
+	c.State = ContinuationExternallyCompleted
+	c.Reason = strings.TrimSpace(reason)
 	c.UpdatedAt = now.UTC()
 	cp = *c
 	return &cp, true, nil

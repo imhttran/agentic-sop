@@ -215,6 +215,14 @@ func (s *Service) ResolveYieldedContinuation(id string) (*Continuation, bool, er
 	return s.store.ResolveYieldedContinuation(id, s.clock())
 }
 
+// DischargeExternalContinuation terminalizes a continuation whose task an external
+// completion proved already merged. The owed stage work was never run, so the record
+// becomes EXTERNALLY_COMPLETED, not COMPLETED. It reports discharged=true only on an
+// actual non-terminal -> EXTERNALLY_COMPLETED transition.
+func (s *Service) DischargeExternalContinuation(id, reason string) (*Continuation, bool, error) {
+	return s.store.DischargeExternalContinuation(id, reason, s.clock())
+}
+
 // FenceAndMutate coordinates claim verification with a protected mutation (the
 // caller's checkpoint write): mutate runs only while the caller holds the presented
 // generation, under the store's cross-process lock. It replaces a separate

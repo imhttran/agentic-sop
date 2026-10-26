@@ -248,6 +248,64 @@ func TestSupersedeContinuationFencedAndTerminal(t *testing.T) {
 // predecessor whose supersession was never recorded (the crash gap) is terminalized to
 // SUPERSEDED (never COMPLETED), cannot be claimed or completed afterwards, and persists. A
 // non-CLAIMED continuation is never resolved.
+func TestDischargeExternalContinuationIsTerminalAndPreservesHistory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "questions.json")
+	fs, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	svc := NewService(fs, nil)
+	q, id := appliedQuestion(t, svc)
+
+	c, tr, err := svc.DischargeExternalContinuation(id, "external completion: commit abc is contained in HEAD; owed stage was not executed")
+	if err != nil || !tr {
+		t.Fatalf("discharge: tr=%v err=%v", tr, err)
+	}
+	if c.State != ContinuationExternallyCompleted {
+		t.Fatalf("state = %s, want EXTERNALLY_COMPLETED", c.State)
+	}
+	if c.State == ContinuationCompleted {
+		t.Fatal("external discharge must never record COMPLETED: no stage ran")
+	}
+	if !c.State.Terminal() {
+		t.Fatal("a discharged continuation must be terminal")
+	}
+
+	// The question and its answer history are untouched: discharge is a continuation
+	// disposition, not a rewrite of what the planner decided.
+	got, answers, err := svc.ReadQuestion(q.ID)
+	if err != nil {
+		t.Fatalf("read question: %v", err)
+	}
+	if got.State != StateApplied {
+		t.Errorf("question state = %s, want APPLIED", got.State)
+	}
+	if len(answers) != 1 || answers[0].Body != "a" {
+		t.Errorf("answer history changed: %+v", answers)
+	}
+
+	// Idempotent and terminal: no repeat discharge, no claim, no completion.
+	if _, tr, _ := svc.DischargeExternalContinuation(id, "again"); tr {
+		t.Fatal("a terminal continuation was discharged twice")
+	}
+	if _, ok, _ := svc.ClaimContinuation(id, "B", time.Minute); ok {
+		t.Fatal("a discharged continuation was claimed")
+	}
+	if _, tr, _ := svc.CompleteContinuation(id, c.Generation, "B"); tr {
+		t.Fatal("a discharged continuation was completed")
+	}
+
+	// Persists across reopen.
+	fs2, err := OpenFileStore(path)
+	if err != nil {
+		t.Fatalf("reopen: %v", err)
+	}
+	reopened, err := NewService(fs2, nil).Continuation(q.ID, "e1")
+	if err != nil || reopened.State != ContinuationExternallyCompleted {
+		t.Fatalf("reopen continuation = %+v err=%v, want EXTERNALLY_COMPLETED", reopened, err)
+	}
+}
+
 func TestResolveYieldedContinuationRecoversCrashGap(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "questions.json")
 	fs, err := OpenFileStore(path)
