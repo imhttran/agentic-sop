@@ -250,7 +250,7 @@ no new approval gate is introduced.
 Extend the existing reuse rules so a LOW/MEDIUM tier whose selected command set and
 diff are unchanged reuses a prior passing result, and JEV is not re-invoked on
 unchanged inputs. The rules stay as specified in
-[../reference/PERFORMANCE.md](../reference/PERFORMANCE.md): only a passing/clean
+[../../reference/PERFORMANCE.md](../../reference/PERFORMANCE.md): only a passing/clean
 result is cacheable, reuse never crosses a run or plan, and a miss is always safe.
 
 ### Dependencies
@@ -319,11 +319,11 @@ read from its global location.
 
 ### Deliverables
 
-- Updates to [../specs/VALIDATION.md](../specs/VALIDATION.md),
-  [../specs/QUALITY.md](../specs/QUALITY.md), [../specs/OPENJEV.md](../specs/OPENJEV.md),
-  [../specs/HUMAN-APPROVAL.md](../specs/HUMAN-APPROVAL.md),
-  [../reference/CONFIGURATION.md](../reference/CONFIGURATION.md),
-  [../reference/PERFORMANCE.md](../reference/PERFORMANCE.md) (PERF008), and the docs
+- Updates to [../../specs/VALIDATION.md](../../specs/VALIDATION.md),
+  [../../specs/QUALITY.md](../../specs/QUALITY.md), [../../specs/OPENJEV.md](../../specs/OPENJEV.md),
+  [../../specs/HUMAN-APPROVAL.md](../../specs/HUMAN-APPROVAL.md),
+  [../../reference/CONFIGURATION.md](../../reference/CONFIGURATION.md),
+  [../../reference/PERFORMANCE.md](../../reference/PERFORMANCE.md) (PERF008), and the docs
   index.
 - A doc-links check passes.
 

@@ -1,7 +1,7 @@
 # Security scan skill and Go/Rust adapter capability
 
 **Date:** 2026-10-17
-**Plan:** [PLAN-Security-Scan-Skill.md](../plans/PLAN-Security-Scan-Skill.md)
+**Plan:** [PLAN-Security-Scan-Skill.md](../history/plans/PLAN-Security-Scan-Skill.md)
 **Scope:** reusable `sop-security-scan` skill, content detection, auto selection,
 Semgrep language coverage, and a `cargo-audit` dependency adapter.
 **Tracking:** issue #40 contains overlapping dependency-scanning follow-up. This
