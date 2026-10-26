@@ -285,7 +285,7 @@ all twelve tasks are `LOCAL_DONE`. The deterministic adoption gate
 ([PHASE-9-MULTI-AGENT-ADOPTION.md](../reports/PHASE-9-MULTI-AGENT-ADOPTION.md)) keeps
 multi-agent execution **opt-in**, so default execution stays single-agent and Phase 9
 changes no default behavior. Plan:
-[PHASE-9-MULTI-AGENT-ORCHESTRATION.md](PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
+[PHASE-9-MULTI-AGENT-ORCHESTRATION.md](../history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 
 The post-Phase-8 governance pass (POST8-001) is complete. The remaining Phase 8
 follow-up is the persistent cross-run verification cache, tracked above as
@@ -522,7 +522,7 @@ Carried forward when `plan-sop-developer-preview` was disposed `SUPERSEDED`
 (2026-10-13); each item's status was re-checked against `main` at that time. The original
 register and its HOLD verdict are preserved in
 [history/developer-preview/](../history/developer-preview/README.md); the plan remains at
-[PLAN-SOP-Developer-Preview.md](PLAN-SOP-Developer-Preview.md). Two preview findings are
+[PLAN-SOP-Developer-Preview.md](../history/plans/PLAN-SOP-Developer-Preview.md). Two preview findings are
 no longer open and are **not** carried: the documentation link gate (KI-03) now passes
 (`scripts/checks/check-doc-links.sh` → `broken links: 0`), and the acceptance-verification
 escape (KI-01/KI-05) now has a mechanism — structured acceptance checks plus the opt-in

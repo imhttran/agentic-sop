@@ -24,12 +24,12 @@ task outcome was rewritten; PREVIEW-002–PREVIEW-005 remain unresolved, not com
 - **Lifecycle record (archive):** `.agent-sdlc/archive/plan-sop-developer-preview/`
   (`plan.json`, `plan.meta.json`, `tasks.json`, `lifecycle.json`; gitignored, retained
   outside the removed worktree).
-- **Deliverables (preserved evidence):** [docs/history/developer-preview/](../history/developer-preview/README.md)
+- **Deliverables (preserved evidence):** [docs/history/developer-preview/](../developer-preview/README.md)
   — SCOPE, QUICKSTART-VERIFICATION, KNOWN-ISSUES, READINESS (HOLD), and the index, with
   operator-authored provenance labelled.
 - **Carried-forward findings:** the still-open items — the missing `examples/`, the
   governed-install gap, and cross-repository controller/adapter verification — are tracked
-  in [docs/plans/BACKLOG.md](BACKLOG.md) § *Developer Preview carry-forward*.
+  in [docs/plans/BACKLOG.md](../../plans/BACKLOG.md) § *Developer Preview carry-forward*.
 - There is no repository-consolidation plan; the findings were carried into the backlog.
 
 ## Project
