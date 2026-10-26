@@ -10,8 +10,8 @@ consolidated repository has been used and accepted.
 - Their source is now consolidated into `agentic-sop` (one module, one unified
   `sop` executable, legacy wrappers retained) — see
   `docs/guides/REPOSITORY-CONSOLIDATION.md`.
-- **Both legacy remotes are now archived (read-only) on GitHub**, as observed on
-  2026-10-19. Archival happened before the deprecation notices below, so a notice
+- **Both legacy remotes are now archived (read-only) on GitHub**, as verified on
+  2026-10-26. Archival happened before the deprecation notices below, so a notice
   can only be added by unarchiving, committing the notice, and archiving again.
   No readiness gate has been verified for either repository; see
   [Readiness checklist](#readiness-checklist).
@@ -37,19 +37,28 @@ consolidated repository has been used and accepted.
 
 ## Readiness checklist
 
-Status as of 2026-10-19. A legacy repository is **verified ready** only when every
+Status as of 2026-10-26. A legacy repository is **verified ready** only when every
 row is confirmed with evidence. Nothing below has been verified from `agentic-sop`;
 the legacy repositories are outside this repository's scope. "Unverified" means not
 checked, not failed.
 
 | Item | `sop-controller` | `sop-decision-adapters` |
 | --- | --- | --- |
-| Remote archived | yes (observed) | yes (observed) |
+| Remote archived | yes (verified 2026-10-26) | yes (verified 2026-10-26) |
+| C1–C7 closure documentation merged | yes; historical closure is merged | yes; historical closure is merged |
+| Relevant consolidated CI | pass on current merged PRs; migration-era CI is not independently reverified | pass on current merged PRs; migration-era CI is not independently reverified |
+| Source history preserved | verified by the ancestry evidence | verified by the ancestry evidence |
 | README deprecation/redirect notice | missing | missing |
-| Local dependency check (nothing still builds or imports the legacy repo) | unverified | unverified |
-| Consolidated-command equivalence (`sop controller serve` / `sop decision` replace the legacy executables) | unverified | unverified |
-| Rollback backup confirmed (full history plus uncommitted deltas) | unverified | unverified |
+| Issue/release redirection | missing | missing |
+| Local dependency check (nothing still builds, imports, serves or automates against the legacy repo) | operator-local confirmation missing | operator-local confirmation missing |
+| Consolidated-command usage (`sop controller serve` / `sop decision`) | operator-local confirmation missing | operator-local confirmation missing |
+| Rollback backup confirmed (full history plus uncommitted deltas) | operator-local confirmation missing | operator-local confirmation missing |
 | Unique-work disposition (legacy-only commits or deltas resolved) | unverified | unresolved |
+
+The merged closure and preserved ancestry satisfy only part of the gate. A repository
+is not retrospectively ready merely because its remote is archived. Missing evidence
+means **not verified / not ready** until deprecation and redirection are present and
+the operator-local usage, dependency, unique-work and rollback checks are confirmed.
 
 The gate criteria and the "RD-01" disposition item referenced in the status report
 are not defined in this repository. Record their source here once it is known.
