@@ -493,3 +493,48 @@ bundle, then commit it on a branch.
 
 The fixture is disposable. Remove `$TMPDIR/planner-2q-live` only after its evidence is
 exported, and point the tunnel wrapper back at its previous working directory.
+
+## Troubleshooting: the connector keeps the old tool list after a binary or wrapper change
+
+**Symptom.** The planner surface in the checkout registers seven tools, but the connector
+exposes only the four older ones (`sop_status`, `sop_question_list`, `sop_question_get`,
+`sop_answer_submit`). `sop_task_result`, `sop_decision_list` and `sop_decision_submit` are
+missing, so a planner cannot read a task result or read and submit a decision.
+
+**Cause.** `tunnel-client` starts the stdio MCP command **once, at startup**, and keeps that
+single child for the life of the tunnel:
+
+```text
+INFO stdio MCP command started
+     command: <checkout>/.run/tunnel/sop-mcp-planner.sh
+```
+
+Repointing the wrapper (`scripts/planner-tunnel-point.sh`) or replacing the binary on disk
+does **not** affect the running child: the process keeps the executable image it started
+with. `ps` shows the argv path, not the inode, so a path check looks correct while the
+served surface is the old one. In the observed run the child had been alive since before the
+wrapper repoint, while a fresh invocation of the same wrapper reported all seven tools.
+
+**Diagnose before restarting anything.**
+
+1. Compare start times: `ps -o pid,ppid,lstart,command -p <tunnel-pid>,<child-pid>`. The
+   child's start time equals the tunnel's and predates the wrapper and binary mtimes.
+2. Check what the wrapper serves now by invoking it directly and reading `tools/list`. A
+   fresh process shows the current surface; the live child does not change.
+3. Check whether a rebuild is even relevant: the surface lives in
+   `internal/cli/mcp.go` and `internal/cli/mcp_decision.go`. If neither has a commit newer
+   than the binary, the binary is current and only the process is stale.
+
+Do not rebuild or restart when those three checks show a current process serving the current
+surface; that would repeat a passing check.
+
+**Fix.** Restart only the stale tunnel, with no rebuild and no wrapper change: stop the
+verified `tunnel-client` PID, relaunch the same profile, then confirm the new
+`stdio MCP command started` line, `readyz: 200`, and a child whose start time is current.
+
+**Connector discovery is a separate requirement.** A tunnel restart does not prove the
+connector refreshed. The connector must re-run discovery against the new server; confirm in
+the tunnel log that `rpc_request_id: openai-mcp-discover` entries appear from a client
+instance after the restart timestamp. If they do not, refresh the connector in ChatGPT
+(reconnect it, or disable and re-enable it) before concluding anything about the tool list,
+and only then verify the surface from the conversation by calling `sop_task_result`.
