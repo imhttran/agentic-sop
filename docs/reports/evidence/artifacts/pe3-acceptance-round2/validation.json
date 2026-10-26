@@ -1,0 +1,14 @@
+{
+  "Results": [
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tpe3probe\t0.168s\n",
+      "Stderr": "",
+      "Duration": 309821875,
+      "Status": "PASS"
+    }
+  ],
+  "Status": "PASS"
+}
