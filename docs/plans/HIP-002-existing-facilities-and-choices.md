@@ -99,7 +99,7 @@ discard, or clean them.
 - `docs/plans/HIP-001-bootstrap-baseline.md` (created by this stage; untracked)
 - `docs/plans/HIP-002-existing-facilities-and-choices.md` (created by this stage; untracked)
 - `docs/plans/PLAN-Executore-Integration.md`
-- `docs/history/PROMPT-SOP-Harness-Improvement-Pilot.md`
+- `docs/history/plans/PROMPT-SOP-Harness-Improvement-Pilot.md`
 
 The stage adds only the two HIP plan notes. Each listed entry was left
 unchanged. It records no fabricated run results
