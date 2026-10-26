@@ -195,7 +195,10 @@ limitations, [Backlog](docs/plans/BACKLOG.md) for future work, and the
 [performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for measured results
 and their scope. Repository consolidation is complete; its
 [evidence and compatibility boundaries](docs/guides/REPOSITORY-CONSOLIDATION.md)
-do not establish current local machine or CI status.
+do not establish current local machine or CI status. The legacy `sop-controller`
+and `sop-decision-adapters` GitHub remotes are currently archived read-only,
+but archival readiness is not verified; see the
+[legacy transition checklist](docs/guides/LEGACY-REPOSITORY-TRANSITION.md#readiness-checklist).
 
 ## Documentation
 
