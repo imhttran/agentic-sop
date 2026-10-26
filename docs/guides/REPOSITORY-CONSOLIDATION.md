@@ -121,7 +121,11 @@ core `54aa6a1a8f73a3b6debef0c54472351c2a817080`,
 controller `f8502a500e52420ff0b4935b8abc0ebb5b218f2b` and
 adapter `f319f60df470705db220d67875fdefbe4666e5da`.
 
-The legacy `sop-controller` and `sop-decision-adapters` repositories remain intact as
-rollback sources. Their deprecation notices, issue/release redirection and archival
-remain separate, later operator-approved decisions; no retirement or deletion has
-occurred.
+The legacy `sop-controller` and `sop-decision-adapters` source histories remain
+intact as rollback sources. Both GitHub remotes are currently archived read-only,
+as verified on 2026-10-26. That observed remote state is **not** evidence that the
+archival-readiness gate was satisfied: README deprecation notices and issue/release
+redirection are absent, while current consolidated-command usage, dependency
+retirement and rollback backups still require operator-local confirmation. See the
+[legacy transition checklist](LEGACY-REPOSITORY-TRANSITION.md#readiness-checklist).
+No repository was deleted or had its history rewritten.
