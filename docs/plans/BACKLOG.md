@@ -582,3 +582,28 @@ The numbered implementation plans remain in [this directory](.).
 ## Known limitations (current)
 
 See [the current limitations reference](../reference/PROJECT-STATUS.md#known-limitations-current).
+
+## Planner question run-epoch binding (PE-4)
+
+**Status:** Open. Found during PE-3 live acceptance (2026-10-26).
+
+`runPlannerAsk` assigns `RunEpoch: currentRunEpoch(dir, taskID)` **before** calling
+`runpkg.SetStageOnExisting`, which is what creates the run's `state.json`. On a task with
+no prior run the question therefore binds an **empty** run epoch, and the run epoch exists
+only afterwards. The continuation inherits the empty value, so its identity is
+`cont:q-1:` rather than `cont:q-1:<epoch>`.
+
+Consequences:
+
+- `plannerResume` still proceeds, because the stale-binding rule only fires when both the
+  bound and the live values are non-empty — so a decision made for one run can be resumed
+  in a different run of the same task;
+- `sop_decision_list` reports the question's plan revision but not the absence of an epoch
+  binding, while `sop_task_result` reports the live epoch, so a planner cannot see the gap.
+
+Observed in `docs/reports/evidence/artifacts/pe3-acceptance-round2/`: the question bound
+`run_epoch: null`, the continuation was `cont:q-1:`, and the run state appeared immediately
+after the question with `created_at 2026-10-26T16:39:10.077218Z`.
+
+Expected fix: establish (or read) the run epoch before binding the question, and surface an
+unbound epoch explicitly in the read surface instead of only showing the live value.
