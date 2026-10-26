@@ -352,3 +352,40 @@ recorded in SOP state* — not merely that individual tasks or tests passed. Rec
 already-committed work into lifecycle state, and closing a satisfied plan, are part of the
 outcome, not a reason to stop. This rule adds no workflow layer: it states how the existing
 `sop run` driver, the bounded fix/recovery loop, and the approval policy already behave.
+
+## 12. Planner Continuation — Interactive, Never Unattended
+
+A planner (including ChatGPT through the Secure MCP Tunnel) participates through the
+planner-only MCP surface. The supported loop is interactive and operator-visible:
+
+1. the planner reads the decision context — `sop_task_result` for the task's state, plan and
+   run binding, evidence paths, and published results; `sop_decision_list` for its questions
+   with the action vocabulary, body, options, deadline, return stage, and any binding that
+   would refuse a submission; `sop_question_list` for project-wide pending work; and
+   `sop_question_get` for one question's full record;
+2. the planner submits a decision — `sop_decision_submit` with `continue`, `correct`,
+   `revise`, or `escalate`, and an `expected_revision` when it wants to fence a stale
+   revision;
+3. the executor consumes it — `sop planner continue --apply` applies the recorded answer and
+   records the durable continuation;
+4. `sop run` performs the resumed stage work and is the only path that may complete that
+   continuation.
+
+A decision is advice, not authorization. It never approves a task, never crosses a human
+gate, and never resumes execution by itself. A decision whose bound plan revision, attempt,
+run epoch, repository identity, or task no longer matches live state is refused (`STALE`)
+and leaves the prior record intact; a plan revision therefore invalidates the decisions bound
+to it, while active tasks under the new revision are unaffected. The read surface reports the
+same refusal in advance, using the submit path's own binding rule, so the two cannot disagree.
+
+**Unattended behavior is not supported and is not claimed.** SOP provides no automatic
+notification, no event-driven or webhook invocation, no background polling of the planner,
+and no push channel to a planner client. A planner does not learn about new work by being
+called; it learns by asking, in an interaction the operator or the client initiates.
+Resumption requires a subsequent `sop planner continue --apply` or `sop run`. No service,
+daemon, or scheduler was added to simulate automatic planner participation, and none may be
+assumed by an integration or by an acceptance test.
+
+**Binding.** Any claim that a planner was notified, called back, or resumed automatically
+MUST be backed by a demonstrated mechanism. Absent one, the limitation above applies and the
+interaction is to be described as interactive.
