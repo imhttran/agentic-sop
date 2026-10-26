@@ -129,7 +129,7 @@ discard, or clean them.
 
 - `.sop-evidence/` (untracked directory)
 - `docs/plans/PLAN-Executore-Integration.md` (untracked file)
-- `docs/plans/PROMPT-SOP-Harness-Improvement-Pilot.md` (untracked file)
+- `docs/history/PROMPT-SOP-Harness-Improvement-Pilot.md` (untracked file)
 
 No tracked file was modified. The stage adds only the two HIP plan notes.
 
