@@ -538,3 +538,42 @@ the tunnel log that `rpc_request_id: openai-mcp-discover` entries appear from a 
 instance after the restart timestamp. If they do not, refresh the connector in ChatGPT
 (reconnect it, or disable and re-enable it) before concluding anything about the tool list,
 and only then verify the surface from the conversation by calling `sop_task_result`.
+
+### The tunnel is gone entirely: the daemon follows its MCP child
+
+**Symptom.** No `tunnel-client` process is running, so the connector fails before it calls
+any tool. This presents as a missing-tool problem even though nothing is wrong with the
+served surface.
+
+**Cause.** `tunnel-client` treats the stdio child as part of its own lifetime. When the child
+exits, the daemon logs and shuts down with it:
+
+```text
+INFO stdio MCP command exited                        err="signal: terminated"
+INFO stdio MCP command failed; requesting tunnel-client shutdown
+```
+
+Any SIGTERM to the child (end of a login session, sleep, a supervisor, or an operator stop)
+therefore stops the whole tunnel. Observed on 2026-10-26: the child was terminated at
+08:57:49 and the daemon exited with it, leaving no listener behind.
+
+**Check.**
+
+1. `ps -eo pid,ppid,lstart,command | grep -E 'tunnel-client run|sop-mcp-planner'` — expect
+   one daemon and one child whose start time equals the daemon's.
+2. Read the current health URL from the profile's `url_file` under
+   `~/Library/Application Support/tunnel-client/health/`. The listen port is ephemeral
+   (`127.0.0.1:0`), so a URL from an earlier run is not evidence about the current one.
+3. `curl -fsS "$URL/readyz"` — expect `200` with body `ready`.
+4. Tail the profile log for the last `stdio MCP command exited` entry. If it follows the
+   last `🟢 tunnel-client started`, the tunnel died with its child.
+
+**Do not read `/health/mcp` as a failure.** For a stdio target `tunnel-client` skips the
+startup probe (`Skipping MCP probe for transport`), so the snapshot stays
+`state: not_observed` with `tools_list.ok: false` until a client actually discovers the
+server. `not_observed` is the expected idle state, not evidence that tools are missing.
+
+**Fix.** Start the daemon again with the same profile, confirm `readyz: 200`, then re-run
+the connector discovery check above: a new client instance must produce
+`openai-mcp-discover` entries. Do not rebuild the binary or rewrite the wrapper for this
+symptom — neither is stale.
