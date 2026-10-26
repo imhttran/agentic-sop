@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/mcp"
@@ -258,9 +259,33 @@ func decisionListText(dir, taskID string) (string, error) {
 	if len(qs) == 0 {
 		return mcp.JoinLines(append(lines, "decisions: 0")), nil
 	}
+	// The closed action vocabulary is reported once so a planner knows exactly what it may
+	// submit without reading the tool schema or the source.
+	lines = append(lines, "actions: "+strings.Join(decisionActions, ", "))
+	check := questionBindingCheck(dir)
 	for _, q := range qs {
 		lines = append(lines, fmt.Sprintf("question: %s state=%s revision=%d attempt=%d plan_revision=%s",
 			q.ID, q.State, q.Revision, q.Attempt, q.PlanRevision))
+		// The decision context itself: what is being asked, which options were offered,
+		// when it expires, and what stage a continuation would return to. Without these a
+		// planner would have to copy from an operator log or guess.
+		lines = append(lines, "question_body: "+oneLine(q.Body))
+		if len(q.Options) > 0 {
+			lines = append(lines, "question_options: "+strings.Join(q.Options, " | "))
+		}
+		if !q.Deadline.IsZero() {
+			lines = append(lines, "question_deadline: "+q.Deadline.UTC().Format(time.RFC3339))
+		}
+		if rs := strings.TrimSpace(q.ReturnStage); rs != "" {
+			lines = append(lines, "question_return_stage: "+rs)
+		}
+		// Surface a decision that submission would refuse, using the SAME binding rule the
+		// submit path applies, so the two can never disagree.
+		if reason, berr := check(context.Background(), q); berr != nil {
+			return "", berr
+		} else if reason != "" {
+			lines = append(lines, "question_stale: "+reason)
+		}
 		answers, aerr := fs.AnswersFor(q.ID)
 		if aerr != nil {
 			return "", aerr

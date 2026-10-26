@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/question"
@@ -189,6 +190,89 @@ func TestMCPDecisionAttemptBindingIsStale(t *testing.T) {
 	}
 	if len(answers) != 0 {
 		t.Errorf("stale decision recorded %d answer(s), want 0", len(answers))
+	}
+	if got.State != question.StatePending {
+		t.Errorf("question state = %s, want PENDING", got.State)
+	}
+	if len(outcomes) != 1 || outcomes[0].Kind != question.OutcomeStale {
+		t.Errorf("outcomes = %v, want one STALE audit record", outcomes)
+	}
+}
+
+// TestMCPDecisionListExposesDecisionContext proves the read surface carries everything a
+// planner needs to decide: the action vocabulary, the question itself, its options, its
+// deadline, and the stage a continuation would return to. Without these a planner would
+// have to copy from an operator log.
+func TestMCPDecisionListExposesDecisionContext(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.PLANNED, Attempt: 1, MaxAttempts: 3})
+	writePlanMeta(t, dir, "plan-x", "abc")
+	deadline := time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	createQuestion(t, dir, &question.Question{
+		Identity: "T001", Kind: "blocking", Body: "which documentation format should the demo use?",
+		RunID: "T001", PlanRevision: "plan-x@abc", Revision: 1, Attempt: 1,
+		Options: []string{"markdown", "plain text"}, Deadline: deadline, ReturnStage: "IMPLEMENTING",
+	})
+
+	out, err := callPlannerTool(t, dir, "sop_decision_list", `{"task_id":"T001"}`)
+	if err != nil {
+		t.Fatalf("sop_decision_list: %v", err)
+	}
+	for _, want := range []string{
+		"actions: continue, correct, revise, escalate",
+		"question_body: which documentation format should the demo use?",
+		"question_options: markdown | plain text",
+		"question_deadline: 2030-01-02T03:04:05Z",
+		"question_return_stage: IMPLEMENTING",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("decision list missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "question_stale:") {
+		t.Errorf("a fully bound decision was reported stale:\n%s", out)
+	}
+}
+
+// TestMCPDecisionSupersededPlanRevisionIsRefused proves criterion PE-3-4: a decision bound to
+// a superseded plan revision is refused rather than applied to the current revision. The
+// refusal is also surfaced by the read path, using the submit path's own binding rule, and
+// it leaves the question and its history untouched.
+func TestMCPDecisionSupersededPlanRevisionIsRefused(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "x", Status: domain.PLANNED, Attempt: 1, MaxAttempts: 3})
+	// The live plan has moved on; the question was raised against the earlier revision.
+	writePlanMeta(t, dir, "plan-x", "new")
+	q := createQuestion(t, dir, &question.Question{
+		Identity: "T001", Kind: "blocking", Body: "proceed with the merged change?", RunID: "T001",
+		PlanRevision: "plan-x@old", Revision: 1, Attempt: 1,
+	})
+
+	list, err := callPlannerTool(t, dir, "sop_decision_list", `{"task_id":"T001"}`)
+	if err != nil {
+		t.Fatalf("sop_decision_list: %v", err)
+	}
+	if !strings.Contains(list, "question_stale:") || !strings.Contains(list, "plan revision changed") {
+		t.Errorf("decision list did not flag the superseded plan revision:\n%s", list)
+	}
+
+	out, err := callPlannerTool(t, dir, "sop_decision_submit",
+		`{"question_id":"`+q.ID+`","action":"continue","body":"go"}`)
+	if err != nil {
+		t.Fatalf("sop_decision_submit: %v", err)
+	}
+	if !strings.Contains(out, "STALE") || !strings.Contains(out, "plan revision changed") {
+		t.Errorf("superseded-plan decision = %q, want STALE with the plan reason", out)
+	}
+
+	got, answers, outcomes, err := readQuestion(dir, q.ID)
+	if err != nil {
+		t.Fatalf("read question: %v", err)
+	}
+	if len(answers) != 0 {
+		t.Errorf("a refused decision recorded %d answer(s), want 0", len(answers))
 	}
 	if got.State != question.StatePending {
 		t.Errorf("question state = %s, want PENDING", got.State)
