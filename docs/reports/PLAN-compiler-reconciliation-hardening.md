@@ -110,7 +110,7 @@ existing structured plan, and UNKNOWN validation was not relaxed.
   capability requirements consistently in validation and `CapabilityGaps`, so a
   case/repeated-whitespace variant cannot bypass the missing-ownership gate.
   Word boundaries are preserved: `External Tool` and `ExternalTool` stay distinct.
-- Normalized the [Clef source](../plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md)
+- Normalized the [Clef source](../history/plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md)
   into explicit supported fields while retaining every original task-guidance
   body, global constraint, non-goal, execution policy, and report requirement.
   Title/objective/acceptance/mode/dependencies for 001–007, 009, and 010 match the

@@ -15,7 +15,7 @@
 > **Lifecycle record.** SOP's archive for the plan is preserved outside the removed
 > worktree at `.agent-sdlc/archive/plan-sop-developer-preview/` (gitignored). The
 > superseded plan remains at
-> [`docs/plans/PLAN-SOP-Developer-Preview.md`](../../plans/PLAN-SOP-Developer-Preview.md).
+> [`docs/plans/PLAN-SOP-Developer-Preview.md`](../plans/PLAN-SOP-Developer-Preview.md).
 
 This is the index for the **Developer Preview** of SOP (Agentic SOP). It collects the
 preview's scope, verification evidence, known issues, and readiness assessment.
