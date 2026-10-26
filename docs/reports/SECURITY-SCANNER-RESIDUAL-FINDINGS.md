@@ -2,7 +2,7 @@
 
 **Type:** Historical evidence (non-normative)
 **Date:** 2026-10-19
-**Plan:** [PLAN-Security-Scanner-Residual-Findings.md](../plans/PLAN-Security-Scanner-Residual-Findings.md)
+**Plan:** [PLAN-Security-Scanner-Residual-Findings.md](../history/plans/PLAN-Security-Scanner-Residual-Findings.md)
 **Branch:** `fix/security-residual-findings`
 **Implementation commit:** `458de839fbab02bce2d5c7ab51946f5c598a173a`
 **PR:** [#74](https://github.com/imhttran/agentic-sop/pull/74) merged at `cca30c9`. The correction on this branch is **not** included and requires a follow-up PR.

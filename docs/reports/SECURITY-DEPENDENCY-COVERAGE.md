@@ -2,7 +2,7 @@
 
 **Type:** Historical evidence (non-normative)
 **Date:** 2026-10-18
-**Plan:** [PLAN-Dependency-Coverage-Fixes.md](../plans/PLAN-Dependency-Coverage-Fixes.md)
+**Plan:** [PLAN-Dependency-Coverage-Fixes.md](../history/plans/PLAN-Dependency-Coverage-Fixes.md)
 **Branch:** `fix/dependency-coverage-obligations`
 **Implementation commit:** `553ffb1`
 **PR:** #72 (open for review)
