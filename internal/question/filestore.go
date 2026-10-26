@@ -411,6 +411,27 @@ func (f *FileStore) ResolveYieldedContinuation(id string, now time.Time) (*Conti
 	return out, resolved, nil
 }
 
+// DischargeExternalContinuation implements Store by delegating to the memory view and
+// persisting an actual transition. It is a non-terminal -> EXTERNALLY_COMPLETED
+// transition only; it never records COMPLETED, because no stage ran.
+func (f *FileStore) DischargeExternalContinuation(id, reason string, now time.Time) (*Continuation, bool, error) {
+	done, err := f.beginWrite()
+	if err != nil {
+		return nil, false, err
+	}
+	defer done()
+	out, discharged, cerr := f.mem.DischargeExternalContinuation(id, reason, now)
+	if cerr != nil {
+		return out, false, cerr
+	}
+	if discharged {
+		if perr := f.persist(); perr != nil {
+			return out, false, perr
+		}
+	}
+	return out, discharged, nil
+}
+
 // FenceAndMutate implements Store. It verifies the claim and runs mutate() while
 // holding the cross-process lock, so a reclaimed worker cannot write afterward.
 func (f *FileStore) FenceAndMutate(id string, generation int, worker string, mutate func() error) error {

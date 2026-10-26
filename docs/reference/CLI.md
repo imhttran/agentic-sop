@@ -168,7 +168,21 @@ in the active plan and is not already complete, its dependencies are satisfied, 
 `--commit` (default HEAD) is contained by HEAD, and the configured validation passes. It
 records the task in the local terminal state (`LOCAL_DONE`) and writes provenance
 (`.agent-sdlc/runs/<task-id>/external-completion.json`); it fabricates no attempt, no model
-run, and no approval, and it never touches retry, human-boundary, or approval state.
+run, and no approval, and it never touches retry, human-boundary, or approval state. It also
+discharges the planner continuations that the completion makes unsatisfiable, before the
+completion is recorded, so a recorded completion leaves no actionable continuation behind. A
+continuation bound to the task, whose question matches the live plan revision and whose run
+epoch matches the live run, is recorded `EXTERNALLY_COMPLETED` — never `COMPLETED`, because no
+stage ran. A continuation whose bindings provably belong to another task, another plan
+revision, or another run epoch is stale: it is reported and left untouched, because it can
+never be resumed against this run. An unprovable binding (a missing question, or missing plan
+or run-epoch proof) or a continuation held by a live worker refuses the completion instead, so
+possibly-owed work is never stranded. A continuation and its question that both predate
+run-epoch binding — the legacy empty-epoch case, as with `cont:q-1:` — are accepted on the plan
+binding. Question, answer, and outcome history is preserved verbatim. Discharge is idempotent,
+so retrying after a partial discharge skips the already-terminal records untouched; a
+continuation-store failure aborts the completion rather than recording it with an owed
+continuation.
 Deterministic lexical retrieval (CTX-003) ranks the Structural Repository Index against
 query terms with a fixed BM25 ranker: `sop retrieve <term>...` prints ranked candidates
 (`rank`, `score`, `source`, `id`). Ranking is deterministic — scores are aggregate term

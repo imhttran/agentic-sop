@@ -188,6 +188,18 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 		return exitError
 	}
 
+	// Invariant I2: discharge the planner continuations this completion makes
+	// unsatisfiable BEFORE the completion is recorded, so a recorded external completion
+	// never leaves an actionable continuation behind. This is not completion of the owed
+	// work: external completion proves the work is already in shared history, so the owed
+	// stage is discharged without running and the record says EXTERNALLY_COMPLETED. The
+	// call is not best-effort: if the continuation store cannot record the disposition the
+	// command fails without marking the task complete, so the operator can retry.
+	if err := reconcileExternalContinuations(dir, task, commit, stdout, stderr); err != nil {
+		fmt.Fprintf(stderr, "task complete: planner continuations not reconciled: %v\n", err)
+		return exitError
+	}
+
 	// Record the transition. The domain method is the one authority for it, so the status
 	// is never set by hand.
 	if err := task.CompleteExternally(); err != nil {
