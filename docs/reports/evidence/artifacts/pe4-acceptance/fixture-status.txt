@@ -1,0 +1,5 @@
+Plan: plan
+Source: PLAN.md
+State: ACTIVE
+
+PB-1 PLANNED Record the accepted decision

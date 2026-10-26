@@ -1,0 +1,54 @@
+{
+  "status": "VERIFIED",
+  "criteria": [
+    {
+      "ID": "deliverable-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "accepted.txt",
+      "Command": "",
+      "Evidence": "met",
+      "Argv": null,
+      "ExitCode": 0,
+      "Output": ""
+    },
+    {
+      "ID": "criterion-1",
+      "Required": true,
+      "Boundary": false,
+      "Met": true,
+      "Description": "accepted.txt contains exactly `accepted`",
+      "Command": "go test ./...",
+      "Evidence": "met",
+      "Argv": [
+        "go",
+        "test",
+        "-json",
+        "./..."
+      ],
+      "ExitCode": 0,
+      "Output": "{\"Time\":\"2026-10-26T12:34:35.631486-05:00\",\"Action\":\"start\",\"Package\":\"pe4probe\"}\n{\"Time\":\"2026-10-26T12:34:35.802788-05:00\",\"Action\":\"run\",\"Package\":\"pe4probe\",\"Test\":\"TestAcceptedMarker\"}\n{\"Time\":\"2026-10-26T12:34:35.80284-05:00\",\"Action\":\"output\",\"Package\":\"pe4probe\",\"Test\":\"TestAcceptedMarker\",\"Output\":\"=== RUN   TestAcceptedMarker\\n\",\"OutputType\":\"frame\"}\n{\"Time\":\"2026-10-26T12:34:35.80289-05",
+      "WorkDir": "<FIXTURE>"
+    }
+  ],
+  "reasons": [
+    "every required criterion was independently met"
+  ],
+  "lifecycle": "LOCAL_DONE",
+  "validation": {
+    "passed": true,
+    "reasons": [
+      "all required checks passed"
+    ]
+  },
+  "acceptance_mapping": [
+    {
+      "criterion_id": "criterion-1",
+      "description": "accepted.txt contains exactly `accepted`",
+      "required": true,
+      "kind": "check",
+      "check_ref": "check-1"
+    }
+  ]
+}
