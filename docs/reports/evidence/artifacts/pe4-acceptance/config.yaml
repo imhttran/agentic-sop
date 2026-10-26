@@ -1,0 +1,20 @@
+version: 1
+project:
+  name: pe4-acceptance-v1
+  integration_branch: main
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+planner:
+  enabled: true
+validation:
+  test:
+    - go test ./...
+review:
+  engine: self
+quality:
+  require_tests: true
+  max_fix_cycles: 1
+workflow:
+  mode: local

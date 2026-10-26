@@ -1,0 +1,28 @@
+SOP
+
+Project: pe4-acceptance-v1
+Harness: tool
+Provider: ollama
+Model: deepseek-v4.1-flash:cloud
+Provider source: configuration
+
+Source: PLAN.md
+Plan: current
+
+Tasks: 1
+Done: 1
+Not required: 0
+Ready: 0
+Blocked: 0
+
+all tasks done (0 completed this run)
+SOP COMPLETE
+
+Project: pe4-acceptance-v1
+Source: PLAN.md
+Tasks: 1/1 complete
+
+Final gate: PASS
+
+Report:
+.agent-sdlc/runs/PB-1/report.md

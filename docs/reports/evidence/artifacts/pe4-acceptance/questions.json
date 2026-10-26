@@ -1,0 +1,82 @@
+{
+  "contract_version": 1,
+  "questions": [
+    {
+      "contract_version": 1,
+      "id": "q-1",
+      "identity": "PB-1",
+      "kind": "planner-round-1",
+      "body": "The implementation is complete. Continue to verification?",
+      "submitted_by": "executor",
+      "revision": 1,
+      "state": "APPLIED",
+      "project": "pe4-acceptance-v1",
+      "run_id": "PB-1",
+      "run_epoch": "2026-10-26T17:24:12.633178Z",
+      "plan_revision": "plan@a09bfa55b609c235c9a7ce28f8c7557ce73fb65fb726bf90539230594a4e53ba",
+      "repo_fingerprint": "<FIXTURE>",
+      "return_stage": "IMPLEMENTING",
+      "deadline": "0001-01-01T00:00:00Z",
+      "options": [
+        "accepted",
+        "revise"
+      ],
+      "created_at": "2026-10-26T17:24:12.634078Z",
+      "updated_at": "2026-10-26T17:34:28.153437Z"
+    }
+  ],
+  "answers": [
+    {
+      "contract_version": 1,
+      "id": "a-2",
+      "question_id": "q-1",
+      "body": "accepted",
+      "answered_by": "chatgpt",
+      "idempotency_key": "pe4-q1-1",
+      "expected_revision": 1,
+      "chosen_action": "continue",
+      "rationale": "PE-4 live acceptance: epoch-bound continuation",
+      "created_at": "2026-10-26T17:29:38.371025Z"
+    }
+  ],
+  "outcomes": [
+    {
+      "contract_version": 1,
+      "id": "o-3",
+      "question_id": "q-1",
+      "answer_id": "a-2",
+      "kind": "ACCEPTED",
+      "revision": 1,
+      "submitted_by": "chatgpt",
+      "idempotency_key": "pe4-q1-1",
+      "at": "2026-10-26T17:29:38.371031Z"
+    },
+    {
+      "contract_version": 1,
+      "id": "o-4",
+      "question_id": "q-1",
+      "kind": "APPLIED",
+      "reason": "answer applied",
+      "at": "2026-10-26T17:34:28.153441Z"
+    }
+  ],
+  "continuations": [
+    {
+      "contract_version": 1,
+      "id": "cont:q-1:2026-10-26T17:24:12.633178Z",
+      "question_id": "q-1",
+      "task_id": "PB-1",
+      "run_id": "PB-1",
+      "run_epoch": "2026-10-26T17:24:12.633178Z",
+      "return_stage": "IMPLEMENTING",
+      "state": "COMPLETED",
+      "generation": 1,
+      "claimed_by": "sop-planner-cli",
+      "claimed_at": "2026-10-26T17:34:31.006054Z",
+      "attempts": 1,
+      "completed_at": "2026-10-26T17:34:35.887999Z",
+      "created_at": "2026-10-26T17:34:28.15344Z",
+      "updated_at": "2026-10-26T17:34:35.887999Z"
+    }
+  ]
+}

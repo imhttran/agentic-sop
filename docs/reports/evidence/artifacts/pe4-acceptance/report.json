@@ -1,0 +1,108 @@
+{
+  "id": "PB-1",
+  "stage": "PASSED",
+  "provider": "ollama",
+  "review_engine": "self",
+  "decision": "PASS",
+  "reasons": [
+    "all required checks passed"
+  ],
+  "fix_cycles": 0,
+  "execution_mode": "",
+  "verified_first": false,
+  "validation": [
+    {
+      "Category": "UNIT_TEST",
+      "Command": "go test ./...",
+      "ExitCode": 0,
+      "Stdout": "ok  \tpe4probe\t0.167s\n",
+      "Stderr": "",
+      "Duration": 303794500,
+      "Status": "PASS"
+    }
+  ],
+  "findings": [],
+  "performance": {
+    "id": "PB-1",
+    "total_ms": 4786,
+    "stages_ms": {
+      "implement": 3536,
+      "review": 561,
+      "validation": 303
+    },
+    "validation_ms": {
+      "test": 303
+    },
+    "counts": {
+      "agent_calls": 1,
+      "agent_calls_avoided": 0,
+      "validation_runs": 1,
+      "validation_reused": 0,
+      "review_runs": 1,
+      "review_reused": 0,
+      "fix_cycles": 0,
+      "plan_repairs": 0
+    },
+    "input": {
+      "assemblies": 1,
+      "context_bytes": 570,
+      "prompt_bytes": 1272,
+      "output_bytes": 172
+    }
+  },
+  "outcome": {
+    "status": "VERIFIED",
+    "criteria": [
+      {
+        "ID": "deliverable-1",
+        "Required": true,
+        "Boundary": false,
+        "Met": true,
+        "Description": "accepted.txt",
+        "Command": "",
+        "Evidence": "met",
+        "Argv": null,
+        "ExitCode": 0,
+        "Output": ""
+      },
+      {
+        "ID": "criterion-1",
+        "Required": true,
+        "Boundary": false,
+        "Met": true,
+        "Description": "accepted.txt contains exactly `accepted`",
+        "Command": "go test ./...",
+        "Evidence": "met",
+        "Argv": [
+          "go",
+          "test",
+          "-json",
+          "./..."
+        ],
+        "ExitCode": 0,
+        "Output": "{\"Time\":\"2026-10-26T12:34:35.631486-05:00\",\"Action\":\"start\",\"Package\":\"pe4probe\"}\n{\"Time\":\"2026-10-26T12:34:35.802788-05:00\",\"Action\":\"run\",\"Package\":\"pe4probe\",\"Test\":\"TestAcceptedMarker\"}\n{\"Time\":\"2026-10-26T12:34:35.80284-05:00\",\"Action\":\"output\",\"Package\":\"pe4probe\",\"Test\":\"TestAcceptedMarker\",\"Output\":\"=== RUN   TestAcceptedMarker\\n\",\"OutputType\":\"frame\"}\n{\"Time\":\"2026-10-26T12:34:35.80289-05",
+        "WorkDir": "<FIXTURE>"
+      }
+    ],
+    "reasons": [
+      "every required criterion was independently met"
+    ],
+    "lifecycle": "LOCAL_DONE",
+    "validation": {
+      "passed": true,
+      "reasons": [
+        "all required checks passed"
+      ]
+    },
+    "acceptance_mapping": [
+      {
+        "criterion_id": "criterion-1",
+        "description": "accepted.txt contains exactly `accepted`",
+        "required": true,
+        "kind": "check",
+        "check_ref": "check-1"
+      }
+    ]
+  },
+  "generated_at": "2026-10-26T17:34:35.869937Z"
+}
