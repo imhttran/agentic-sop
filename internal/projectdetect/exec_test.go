@@ -8,6 +8,24 @@ import (
 	"testing"
 )
 
+// tempRoot returns the test's temporary directory with symlinks resolved.
+//
+// On macOS TMPDIR is commonly reached through a symlink (/var -> /private/var),
+// so a child process reports its working directory as the resolved path. Comparing
+// that against an unresolved temp path fails whenever TMPDIR happens to be set to
+// the symlinked spelling, which makes these tests depend on the caller's
+// environment. Resolving the expectation once here keeps the comparison about the
+// directory SOP chooses, not about how TMPDIR was spelled.
+func tempRoot(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	resolved, err := filepath.EvalSymlinks(root)
+	if err != nil {
+		t.Fatalf("resolve temp dir %s: %v", root, err)
+	}
+	return resolved
+}
+
 // installFakeTools writes one fake executable per tool. Each fake records its
 // working directory and arguments, then succeeds. The test never runs a real
 // toolchain, so it is deterministic and independent of the host's languages.
@@ -101,7 +119,7 @@ func TestGeneratedNestedCommandsRunFromManifestDirectory(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			root := t.TempDir()
+			root := tempRoot(t)
 			for rel, content := range tc.files {
 				write(t, root, rel, content)
 			}
@@ -126,7 +144,7 @@ func TestGeneratedNestedCommandsRunFromManifestDirectory(t *testing.T) {
 }
 
 func TestGeneratedRootCommandsRemainUnchangedAndRunAtRoot(t *testing.T) {
-	root := t.TempDir()
+	root := tempRoot(t)
 	write(t, root, "go.mod", "module example.com/root\n\ngo 1.27\n")
 	installFakeTools(t, root)
 	d := Detect(root)
@@ -148,7 +166,7 @@ func TestGeneratedRootCommandsRemainUnchangedAndRunAtRoot(t *testing.T) {
 }
 
 func TestGeneratedMixedRootAndNestedCommandsUseBothDirectories(t *testing.T) {
-	root := t.TempDir()
+	root := tempRoot(t)
 	write(t, root, "Cargo.toml", "[package]\nname = \"root\"\n")
 	write(t, root, "web/package.json", `{"scripts":{"build":"next build"},"dependencies":{"next":"^15.0.0"}}`)
 	write(t, root, "web/next.config.ts", "export default {}\n")
