@@ -169,3 +169,9 @@ controller-https:
 
 controller-keychain-token:
 	./scripts/controller/keychain-token.sh
+
+
+show-ollama:
+	ollama ps
+	ollama list
+	# nvidia-smi
