@@ -148,8 +148,13 @@ decision. The executor applies that decision with
 
 Planner decisions are advice, never human approval, and published results are
 evidence, never automatic task completion. Resumption is currently interactive;
-no unattended ChatGPT invocation or notification channel is claimed. See the
-[planner–executor implementation plan](docs/plans/PLAN-Executore-Integration.md)
+no unattended ChatGPT invocation or notification channel is claimed. PE-1 through
+PE-4 implementation and live acceptance are merged; the merged PE-4 evidence
+records all four tasks as `LOCAL_DONE`. Completing the plan remains a separate
+operator-local SOP lifecycle action and is not inferred from that repository
+evidence. See the
+[planner–executor implementation plan](docs/plans/PLAN-Executore-Integration.md),
+[PE-4 acceptance evidence](docs/reports/evidence/artifacts/pe4-acceptance/README.md),
 and [CLI reference](docs/reference/CLI.md).
 
 Optional evaluation tooling is also available outside the default execution
