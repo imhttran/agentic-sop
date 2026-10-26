@@ -37,7 +37,6 @@ measurements. This is distinct from the earlier, already-implemented
 `PLAN-Phase-6-Interactive-Approval`; it is the reliability/evaluation workstream
 that follows the closeout.
 
-
 ## Post-performance architecture (Phase 8) — delivered
 
 **Status:** Delivered (Phase 8). The pre-performance closure and baseline completed
@@ -87,7 +86,7 @@ project is unchanged.
 Remaining trust-boundary note (design, not a defect): cross-environment reuse assumes
 the identity inputs (repository state, validation commands, toolchain) are genuinely
 equivalent across the sharing worktrees. The store treats a shared location as
-trusted operator input; the false-hit analysis for sharing across *heterogeneous*
+trusted operator input; the false-hit analysis for sharing across _heterogeneous_
 environments (not just sibling worktrees of one repository) remains future work. That
 is the residual item below, not the previously-described "deliberately not wired" gap,
 which is closed.
@@ -100,12 +99,11 @@ not every measurement the baselines would like. Documented gaps (recorded as
 
 - a tool-call count — `Counts` has no field (only the JEV record has `ToolCalls`);
 - a per-category (`build`/`test`/`lint`) `validation_ms` breakdown for a safely
-  *reused* validation;
+  _reused_ validation;
 - per-step PLAN timing (a slow plan is one number, not a profile).
 
 Sources: `docs/history/PREJEV017-PERFORMANCE-BASELINE.md` and the PREJEV018
 remaining-issues register (I4–I6).
-
 
 ## Local network service (team mode)
 
@@ -212,7 +210,6 @@ would fall through to a human boundary, contradicting `BLOCK`'s documented "not 
 human approval" definition. Add an explicit terminal case plus a test. Surfaced by
 the pre-Phase-6 closeout; currently unreachable.
 
-
 ## SOP-EXTERNAL-COMPLETION
 
 **Status:** Delivered. `sop task complete <task-id> --external` records a task completed
@@ -247,7 +244,6 @@ does not advance dependent tasks beyond what the evidence supports
 Surfaced when CTX-001 (Context Engine) was implemented and merged by a coding agent and
 `sop run` could not record it: the model recognized the existing implementation, produced no
 repository change, and the task was classified `IMPLEMENT_NO_PROGRESS` and blocked.
-
 
 ## Phase 10 — Dynamic Worker Action Space
 
@@ -448,7 +444,7 @@ The 2026-10-13 rerun evidence is preserved in
 
 - **Priority:** P3
 - **Status:** Proposed
-- **Problem:** The JEV shadow experiment (`jev-shadow-v1`) measures a *hypothetical*
+- **Problem:** The JEV shadow experiment (`jev-shadow-v1`) measures a _hypothetical_
   use of JEV as a failure-disposition classifier, not production early-JEV behavior:
   production short-circuits fail-closed, `INCOMPLETE`, and `ERROR` results before
   policy runs. There is no evaluation of JEV's actual production mapping.
@@ -563,7 +559,7 @@ escape (KI-01/KI-05) now has a mechanism — structured acceptance checks plus t
   reach the sibling `sop-controller` / `sop-decision-adapters` repositories and cannot run
   remote-ref Git commands. Controller runtime parity and live `decision.provider: command`
   dispatch remain unverified, so no production/GO claim can cover the controller
-  integration surface. Adapter *shadow* evidence now exists
+  integration surface. Adapter _shadow_ evidence now exists
   ([TEL-003](../reports/decision-telemetry/TEL-003-integration.md)), but live dispatch is
   still unobserved.
 - **Requirements:** provide an operator-authorized cross-repository integration workspace
@@ -585,7 +581,7 @@ See [the current limitations reference](../reference/PROJECT-STATUS.md#known-lim
 
 ## Planner question run-epoch binding (PE-4)
 
-**Status:** Open. Found during PE-3 live acceptance (2026-10-26).
+**Status:** Resolved (PE-4). `runPlannerAsk` now materializes (or resumes) the run's durable state and reads the epoch from it before creating the question, so a newly raised question always binds a non-empty run epoch. `sop_decision_list` reports the binding (`question_run_epoch:`) and labels a record with no epoch explicitly as `unbound (legacy)`; legacy empty-epoch questions remain decidable and the stale/mismatched bindings are still refused. Found during PE-3 live acceptance (2026-10-26).
 
 `runPlannerAsk` assigns `RunEpoch: currentRunEpoch(dir, taskID)` **before** calling
 `runpkg.SetStageOnExisting`, which is what creates the run's `state.json`. On a task with

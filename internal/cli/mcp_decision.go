@@ -279,6 +279,13 @@ func decisionListText(dir, taskID string) (string, error) {
 		if rs := strings.TrimSpace(q.ReturnStage); rs != "" {
 			lines = append(lines, "question_return_stage: "+rs)
 		}
+		// The run-epoch binding is what ties a decision to one run. Report it explicitly,
+		// including its absence for records persisted before planner ask bound the epoch.
+		if ep := strings.TrimSpace(q.RunEpoch); ep != "" {
+			lines = append(lines, "question_run_epoch: "+ep)
+		} else {
+			lines = append(lines, "question_run_epoch: unbound (legacy)")
+		}
 		// Surface a decision that submission would refuse, using the SAME binding rule the
 		// submit path applies, so the two can never disagree.
 		if reason, berr := check(context.Background(), q); berr != nil {

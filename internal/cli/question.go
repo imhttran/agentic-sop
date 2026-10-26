@@ -115,6 +115,11 @@ func bindingRunStale(dir string, q *question.Question) (string, bool) {
 	if runID != strings.TrimSpace(q.Identity) {
 		return fmt.Sprintf("bound run %q does not match task %q", runID, q.Identity), true
 	}
+	// Legacy: a question persisted before planner ask bound the run epoch carries no epoch.
+	// It is treated as unbound rather than stale, because there is no bound value to compare
+	// against; the task, run, plan revision, attempt, and repository bindings still apply.
+	// New questions always bind an epoch (see runPlannerAsk), so this path only covers
+	// records created before that guarantee existed.
 	epoch := strings.TrimSpace(q.RunEpoch)
 	if epoch == "" {
 		return "", false
