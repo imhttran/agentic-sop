@@ -435,6 +435,9 @@ merges.
 `sop mcp` serves the Model Context Protocol over stdio. Its tools call the same
 services as the CLI, so the workflow is not reimplemented; only registered,
 project-scoped tools exist.
+The opt-in `--start-work` tools launch `sop prompt` or `sop run` as a detached child
+process rather than running work inside the server, and record each job under
+`.agent-sdlc/runs/mcp-work/` (see [the CLI reference](../reference/CLI.md#starting-work-over-mcp)).
 
 ## Decision Layer (optional)
 

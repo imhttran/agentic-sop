@@ -321,6 +321,25 @@ func ActivePlanID(dir string) (id, source string, ok bool) {
 	return id, source, true
 }
 
+// ActivePlanSource reads the recorded active plan's source path (relative to dir)
+// and the content fingerprint it was built from, or ok=false when none is
+// recorded. It lets a caller ask "is this plan document the one SOP already
+// holds?" without scanning Markdown or rebuilding the plan.
+func ActivePlanSource(dir string) (source, sha256 string, ok bool) {
+	meta := readMetadata(filepath.Join(dir, config.DirName, metaFileName))
+	source = strings.TrimSpace(meta.Source)
+	sha256 = strings.TrimSpace(meta.SourceSHA256)
+	return source, sha256, source != "" && sha256 != ""
+}
+
+// SourceFingerprint is the content fingerprint SOP records for a planning
+// document, so a caller can compare a file against ActivePlanSource.
+func SourceFingerprint(data []byte) string { return fingerprint(data) }
+
+// SourceRel is the recorded (project-relative) form of a planning document path,
+// matching the form ActivePlanSource returns.
+func SourceRel(dir, path string) string { return relOf(dir, path) }
+
 // Lifecycle records a plan's terminal disposition, written into its archive beside
 // the task-record snapshot and provenance.
 type Lifecycle struct {

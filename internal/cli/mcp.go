@@ -17,6 +17,9 @@ import (
 	"github.com/imhttran/agentic-sop/internal/validate"
 )
 
+// mcpUsage is the one-line usage for `sop mcp`.
+const mcpUsage = "usage: sop mcp [--status-only | --planner] [--start-work]"
+
 // runMCP serves the Model Context Protocol over stdio. The exposed tools call
 // the same application services as the CLI commands, so the workflow is never
 // reimplemented for MCP. Requests are read from stdin and responses written to
@@ -26,21 +29,31 @@ import (
 // from tools/list and rejected by tools/call, so the restriction is enforced
 // server-side rather than by the client. This is the planner-safe surface for a
 // connection spike, which must expose no human approval action.
+//
+// --start-work additionally registers sop_start_work and sop_work_status, which
+// let a client start `sop prompt` / `sop run` in the background. It is opt-in for
+// the default and planner surfaces and refused with --status-only.
 func runMCP(args []string, stdout, stderr io.Writer, d deps) int {
-	statusOnly, planner := false, false
+	statusOnly, planner, startWork := false, false, false
 	for _, a := range args {
 		switch a {
 		case "--status-only":
 			statusOnly = true
 		case "--planner":
 			planner = true
+		case "--start-work":
+			startWork = true
 		default:
-			fmt.Fprintln(stderr, "usage: sop mcp [--status-only | --planner]")
+			fmt.Fprintln(stderr, mcpUsage)
 			return exitUsage
 		}
 	}
 	if statusOnly && planner {
 		fmt.Fprintln(stderr, "mcp: --status-only and --planner are mutually exclusive")
+		return exitUsage
+	}
+	if statusOnly && startWork {
+		fmt.Fprintln(stderr, "mcp: --start-work cannot be combined with --status-only")
 		return exitUsage
 	}
 
@@ -57,6 +70,9 @@ func runMCP(args []string, stdout, stderr io.Writer, d deps) int {
 		tools = mcpToolsWithMode(dir, d, true)
 	default:
 		tools = mcpTools(dir, d)
+	}
+	if startWork {
+		tools = append(tools, mcpStartWorkTools(dir, defaultWorkEnv())...)
 	}
 
 	server := mcp.NewServer(Version, tools...)
