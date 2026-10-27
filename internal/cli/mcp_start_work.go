@@ -78,19 +78,45 @@ const (
 	workOutcomeBusy           = "busy"
 	workOutcomeAlreadyRan     = "already_ran"
 	workOutcomeInMemory       = "in_memory"
+	// workOutcomeTaskInProgress: a task is mid-run, so another `sop run` (for
+	// example one started in a terminal) may be working in this project.
+	workOutcomeTaskInProgress = "task_in_progress"
+	// workOutcomePlanBlocked: `sop run PLAN` would stop at a reconciliation gate
+	// (a different plan with unfinished work is active, or the plan changed).
+	workOutcomePlanBlocked = "plan_blocked"
 )
+
+// workMidRunStatuses are the task states a live `sop run` passes through
+// between picking a task up and finishing it. A task left in one of them means
+// a run is working on it now, or one was interrupted there. This is a cheap
+// stand-in for a shared run lock: it cannot tell those two apart, so it fails
+// closed and points the operator at `sop resume`.
+var workMidRunStatuses = map[domain.TaskStatus]bool{
+	domain.BRANCH_CREATED:   true,
+	domain.TESTS_WRITTEN:    true,
+	domain.RED_VERIFIED:     true,
+	domain.IMPLEMENTING:     true,
+	domain.LOCAL_TESTS_PASS: true,
+	domain.REVIEW:           true,
+	domain.REVIEW_PASS:      true,
+	domain.FIX_REQUIRED:     true,
+}
 
 // workJob is the durable record of one MCP-started job.
 type workJob struct {
-	Version     int       `json:"version"`
-	ID          string    `json:"id"`
-	Kind        string    `json:"kind"`
-	Capability  string    `json:"capability,omitempty"`
-	Source      string    `json:"source,omitempty"`
-	Fingerprint string    `json:"fingerprint"`
-	Args        []string  `json:"args"`
-	PID         int       `json:"pid"`
-	StartedAt   time.Time `json:"started_at"`
+	Version    int    `json:"version"`
+	ID         string `json:"id"`
+	Kind       string `json:"kind"`
+	Capability string `json:"capability,omitempty"`
+	Source     string `json:"source,omitempty"`
+	// SourceSHA256 is a plan's content fingerprint, comparable with the active
+	// plan's recorded fingerprint. Fingerprint identifies the work (path and
+	// content for a plan; capability and text for a prompt).
+	SourceSHA256 string    `json:"source_sha256,omitempty"`
+	Fingerprint  string    `json:"fingerprint"`
+	Args         []string  `json:"args"`
+	PID          int       `json:"pid"`
+	StartedAt    time.Time `json:"started_at"`
 }
 
 // workExit records how a job's process ended, when the server observed it.
@@ -245,7 +271,7 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 	// Resolve the work and its fingerprint before taking the lock, so a bad
 	// argument fails without touching state.
 	job := workJob{Version: 1}
-	var planData []byte
+	var planDoc string
 	if prompt != "" {
 		capName := strings.ToLower(strings.TrimSpace(in.Capability))
 		if capName == "" {
@@ -269,7 +295,7 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 		if err != nil {
 			return nil, fmt.Errorf("plan_path: %w", err)
 		}
-		planData, err = os.ReadFile(confined)
+		planData, err := os.ReadFile(confined)
 		if err != nil {
 			return nil, fmt.Errorf("read plan: %w", err)
 		}
@@ -278,7 +304,9 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 		}
 		job.Kind = workKindPlan
 		job.Source = planflow.SourceRel(dir, resolved)
-		job.Fingerprint = planflow.SourceFingerprint(planData)
+		job.SourceSHA256 = planflow.SourceFingerprint(planData)
+		job.Fingerprint = workFingerprint(workKindPlan, job.Source, job.SourceSHA256)
+		planDoc = resolved
 	}
 
 	root := workRoot(dir)
@@ -308,15 +336,40 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 			"Another SOP job started over MCP is still running in this project; wait for it to finish before starting new work.", &j), nil
 	}
 
+	// A task mid-run means another `sop run` may be driving this project (one
+	// started outside MCP is not in the job list). Fail closed.
+	tasks, err := loadWorkTasks(dir)
+	if err != nil {
+		return nil, err
+	}
+	if busy := midRunTasks(tasks); len(busy) > 0 {
+		doc := workDoc(dir, workOutcomeTaskInProgress,
+			"Task(s) "+strings.Join(busy, ", ")+" are mid-run, so another `sop run` may be working in this project. "+
+				"Wait for it to finish. If nothing is running, the run was interrupted: recover it from a terminal with `sop resume` and `sop run`.", nil)
+		doc["in_progress"] = busy
+		return doc, nil
+	}
+
+	// Ask the plan flow, without mutating anything, whether `sop run PLAN` would
+	// stop at a reconciliation gate, so the client is told now rather than after
+	// the job starts and fails.
+	if job.Kind == workKindPlan {
+		if err := planflow.PreflightPlan(dir, planDoc, tasks); err != nil {
+			doc := workDoc(dir, workOutcomePlanBlocked, err.Error(), nil)
+			if src, _, ok := planflow.ActivePlanSource(dir); ok {
+				doc["active_plan"] = src
+			}
+			return doc, nil
+		}
+	}
+
 	if !in.Rerun {
 		prev := latestWithFingerprint(jobs, job.Fingerprint)
 		if job.Kind == workKindPlan {
-			if src, sha, ok := planflow.ActivePlanSource(dir); ok && src == job.Source && sha == job.Fingerprint {
+			if src, sha, ok := planflow.ActivePlanSource(dir); ok && src == job.Source && sha == job.SourceSHA256 {
 				doc := workDoc(dir, workOutcomeInMemory,
 					"SOP already holds this plan as its active plan. Pass rerun=true to run it again with `sop run`, which resumes unfinished tasks.", prev)
-				if tasks, err := workTaskLines(dir); err == nil {
-					doc["all_tasks_satisfied"] = tasks.allSatisfied
-				}
+				doc["all_tasks_satisfied"] = len(tasks) > 0 && domain.AllSatisfied(tasks)
 				return doc, nil
 			}
 		}
@@ -342,6 +395,14 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 		job.Args = []string{"run", job.Source}
 	}
 
+	// Record the job before launching it, so work can never run unrecorded (and
+	// so escape the duplicate checks). The pid is filled in after the start.
+	jobPath := filepath.Join(jobDir, workJobFile)
+	job.StartedAt = env.now().UTC()
+	if err := writeJSONFile(jobPath, job); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return nil, err
+	}
 	logPath := filepath.Join(jobDir, workLogFile)
 	pid, wait, err := env.launch(dir, job.Args, logPath)
 	if err != nil {
@@ -349,9 +410,13 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 		return nil, fmt.Errorf("start %s: %w", strings.Join(job.Args[:1], " "), err)
 	}
 	job.PID = pid
-	job.StartedAt = env.now().UTC()
-	if err := writeJSONFile(filepath.Join(jobDir, workJobFile), job); err != nil {
-		return nil, err
+	if err := writeJSONFile(jobPath, job); err != nil {
+		// The work is running; report it rather than fail, and say the record is
+		// incomplete (it will read as "ended" without its pid).
+		view := workJobView{workJob: job, State: workStateRunning, Log: relDir(dir, logPath), dir: jobDir}
+		doc := workDoc(dir, workOutcomeStarted, "Started, but the job record could not be updated with its pid: "+err.Error(), &view)
+		go func() { _ = wait() }()
+		return doc, nil
 	}
 	// Record the exit while this server lives. A detached child outlives the
 	// server; its exit is then reported as "ended" with no code.
@@ -434,6 +499,27 @@ func jobSummary(j workJobView) map[string]any {
 	return s
 }
 
+// loadWorkTasks reads the persisted task graph; it never creates state.
+func loadWorkTasks(dir string) ([]*domain.Task, error) {
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		return nil, err
+	}
+	defer st.Close()
+	return st.List()
+}
+
+// midRunTasks lists the tasks in a mid-run state, as "ID (STATUS)".
+func midRunTasks(tasks []*domain.Task) []string {
+	var out []string
+	for _, t := range tasks {
+		if workMidRunStatuses[t.Status] {
+			out = append(out, fmt.Sprintf("%s (%s)", t.ID, t.Status))
+		}
+	}
+	return out
+}
+
 // workTasks is the persisted task status in the shape sop_status prints.
 type workTasks struct {
 	lines        []string
@@ -442,12 +528,7 @@ type workTasks struct {
 
 // workTaskLines reads the persisted tasks; it never creates state.
 func workTaskLines(dir string) (workTasks, error) {
-	st, err := store.Open(statePath(dir))
-	if err != nil {
-		return workTasks{}, err
-	}
-	defer st.Close()
-	tasks, err := st.List()
+	tasks, err := loadWorkTasks(dir)
 	if err != nil {
 		return workTasks{}, err
 	}

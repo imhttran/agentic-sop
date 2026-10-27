@@ -27,6 +27,9 @@ type fakeWork struct {
 	done      map[int]chan int
 	launchErr error
 	clock     time.Time
+	// recorded notes, per launch, whether job.json already existed when the
+	// process was started.
+	recorded []bool
 }
 
 func newFakeWork() *fakeWork {
@@ -41,6 +44,8 @@ func (f *fakeWork) env() workEnv {
 			if f.launchErr != nil {
 				return 0, nil, f.launchErr
 			}
+			_, statErr := os.Stat(filepath.Join(filepath.Dir(logPath), workJobFile))
+			f.recorded = append(f.recorded, statErr == nil)
 			f.nextPID++
 			pid := f.nextPID
 			f.launches = append(f.launches, append([]string(nil), args...))
@@ -98,6 +103,8 @@ type startDoc struct {
 	Outcome           string   `json:"outcome"`
 	Message           string   `json:"message"`
 	Tasks             []string `json:"tasks"`
+	InProgress        []string `json:"in_progress"`
+	ActivePlan        string   `json:"active_plan"`
 	AllTasksSatisfied *bool    `json:"all_tasks_satisfied"`
 	Job               *struct {
 		ID          string   `json:"id"`
@@ -105,6 +112,7 @@ type startDoc struct {
 		Capability  string   `json:"capability"`
 		Source      string   `json:"source"`
 		Fingerprint string   `json:"fingerprint"`
+		SourceSHA   string   `json:"source_sha256"`
 		Args        []string `json:"args"`
 		PID         int      `json:"pid"`
 		State       string   `json:"state"`
@@ -281,7 +289,7 @@ func TestStartWorkPlan(t *testing.T) {
 	if got := f.launches[0]; len(got) != 2 || got[0] != "run" || got[1] != "docs/PLAN.md" {
 		t.Fatalf("launch args = %v", got)
 	}
-	if doc.Job.Fingerprint != planflow.SourceFingerprint([]byte(plan)) || doc.Job.Source != "docs/PLAN.md" {
+	if doc.Job.SourceSHA != planflow.SourceFingerprint([]byte(plan)) || doc.Job.Source != "docs/PLAN.md" {
 		t.Fatalf("plan job = %+v", doc.Job)
 	}
 	if len(doc.Tasks) != 1 || !strings.HasPrefix(doc.Tasks[0], "T001 PLANNED") {
@@ -303,11 +311,100 @@ func TestStartWorkPlan(t *testing.T) {
 	mustStart(t, dir, f, map[string]any{"plan_path": "docs/PLAN.md", "rerun": true}, workOutcomeStarted)
 	f.finish(t, dir, f.nextPID, 0)
 
-	// An edited plan is different work.
+	// An edited active plan would stop `sop run` at the plan-changed gate, so it
+	// is reported up front instead of starting a job that fails.
 	writeFileT(t, dir, "docs/PLAN.md", plan+"\n## T002 more\n")
-	mustStart(t, dir, f, map[string]any{"plan_path": "docs/PLAN.md"}, workOutcomeStarted)
-	if len(f.launches) != 3 {
-		t.Fatalf("launches = %d, want 3", len(f.launches))
+	changed := mustStart(t, dir, f, map[string]any{"plan_path": "docs/PLAN.md", "rerun": true}, workOutcomePlanBlocked)
+	if !strings.Contains(changed.Message, "plan changed") || changed.ActivePlan != "docs/PLAN.md" {
+		t.Errorf("plan_blocked = %q (active %q)", changed.Message, changed.ActivePlan)
+	}
+	if len(f.launches) != 2 {
+		t.Fatalf("launches = %d, want 2", len(f.launches))
+	}
+	for i, ok := range f.recorded {
+		if !ok {
+			t.Errorf("launch %d started before its job record was written", i)
+		}
+	}
+}
+
+func TestStartWorkPlanBlockedByActivePlan(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "AP-101", Title: "photos", Status: domain.PLANNED, MaxAttempts: 3})
+	active := "# Plan\n\n## AP-101 photos\n"
+	writeFileT(t, dir, "docs/plans/PLAN-ACTIVE.md", active)
+	writeFileT(t, dir, filepath.Join(config.DirName, planMetaName),
+		`{"source":"docs/plans/PLAN-ACTIVE.md","source_kind":"plan","source_sha256":"`+planflow.SourceFingerprint([]byte(active))+`","plan_id":"plan-active"}`)
+	writeFileT(t, dir, "docs/plans/PLAN-NEXT.md", "# Plan\n\n## NX-1 next\n")
+	f := newFakeWork()
+
+	// A different plan while the active plan has unfinished work: blocked, with
+	// the same NEEDS_HUMAN explanation `sop run` would print. rerun cannot skip it.
+	for _, rerun := range []bool{false, true} {
+		doc := mustStart(t, dir, f, map[string]any{"plan_path": "docs/plans/PLAN-NEXT.md", "rerun": rerun}, workOutcomePlanBlocked)
+		if !strings.Contains(doc.Message, "different plan is already active") || doc.ActivePlan != "docs/plans/PLAN-ACTIVE.md" {
+			t.Fatalf("plan_blocked = %q (active %q)", doc.Message, doc.ActivePlan)
+		}
+	}
+	if len(f.launches) != 0 {
+		t.Fatalf("a blocked plan must not launch, got %v", f.launches)
+	}
+
+	// Once the active plan is finished, `sop run` hands off, so the next plan starts.
+	seedTask(t, dir, &domain.Task{ID: "AP-101", Title: "photos", Status: domain.LOCAL_DONE, MaxAttempts: 3})
+	mustStart(t, dir, f, map[string]any{"plan_path": "docs/plans/PLAN-NEXT.md"}, workOutcomeStarted)
+}
+
+func TestStartWorkRefusesWhileATaskIsMidRun(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "one", Status: domain.LOCAL_DONE, MaxAttempts: 3})
+	seedTask(t, dir, &domain.Task{ID: "T002", Title: "two", Status: domain.IMPLEMENTING, MaxAttempts: 3})
+	writeFileT(t, dir, "docs/PLAN.md", "# Plan\n")
+	f := newFakeWork()
+
+	for _, args := range []map[string]any{
+		{"prompt": "review the store", "capability": "review"},
+		{"plan_path": "docs/PLAN.md"},
+		{"plan_path": "docs/PLAN.md", "rerun": true},
+	} {
+		doc := mustStart(t, dir, f, args, workOutcomeTaskInProgress)
+		if len(doc.InProgress) != 1 || doc.InProgress[0] != "T002 (IMPLEMENTING)" {
+			t.Fatalf("in_progress = %v", doc.InProgress)
+		}
+		if !strings.Contains(doc.Message, "sop resume") {
+			t.Errorf("message should point at recovery: %q", doc.Message)
+		}
+	}
+	if len(f.launches) != 0 {
+		t.Fatalf("nothing may launch while a task is mid-run, got %v", f.launches)
+	}
+
+	// Settled states never block.
+	for _, st := range []domain.TaskStatus{domain.PLANNED, domain.READY, domain.BLOCKED, domain.NOT_REQUIRED, domain.LOCAL_DONE} {
+		if workMidRunStatuses[st] {
+			t.Errorf("%s must not count as mid-run", st)
+		}
+	}
+	seedTask(t, dir, &domain.Task{ID: "T002", Title: "two", Status: domain.BLOCKED, MaxAttempts: 3})
+	mustStart(t, dir, f, map[string]any{"prompt": "review the store", "capability": "review"}, workOutcomeStarted)
+}
+
+func TestStartWorkPlanIdentityIncludesPath(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	same := "# Plan\n\n## T001 x\n"
+	writeFileT(t, dir, "docs/plans/A.md", same)
+	writeFileT(t, dir, "docs/plans/B.md", same)
+	f := newFakeWork()
+
+	a := mustStart(t, dir, f, map[string]any{"plan_path": "docs/plans/A.md"}, workOutcomeStarted)
+	f.finish(t, dir, a.Job.PID, 0)
+	// Same content at another path is different work, not "already ran".
+	b := mustStart(t, dir, f, map[string]any{"plan_path": "docs/plans/B.md"}, workOutcomeStarted)
+	if a.Job.Fingerprint == b.Job.Fingerprint || a.Job.SourceSHA != b.Job.SourceSHA {
+		t.Fatalf("fingerprints a=%s b=%s, content a=%s b=%s", a.Job.Fingerprint, b.Job.Fingerprint, a.Job.SourceSHA, b.Job.SourceSHA)
 	}
 }
 
