@@ -145,6 +145,11 @@ planner connected through `sop mcp --planner` can retrieve task results and
 questions, then record a bound `continue`, `correct`, `revise`, or `escalate`
 decision. The executor applies that decision with
 `sop planner continue --apply` and resumes through `sop run`.
+With `sop mcp --planner --start-work`, the planner can also start work itself:
+`sop_start_work` launches `sop prompt` from prompt text or `sop run` from a project
+PLAN.md in the background, and reports status instead when that work is already
+running, already ran, or is the active plan (see
+[Starting work over MCP](docs/reference/CLI.md#starting-work-over-mcp)).
 
 Planner decisions are advice, never human approval, and published results are
 evidence, never automatic task completion. Resumption is currently interactive;

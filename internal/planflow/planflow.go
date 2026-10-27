@@ -237,24 +237,54 @@ func reconcileState(ctx context.Context, opts Options, planPath, metaPath string
 	res.SourceKind = docKind
 	res.PlanID = planID(rel)
 
+	handoff, err := reconcileGate(meta, rel, data, tasks)
+	if err != nil || !handoff {
+		return res, err
+	}
+	// The active plan is complete: release it and initialize the requested plan
+	// in the same invocation.
+	return handOff(ctx, opts, meta, tasks, data, docPath, docKind, rel, planPath, metaPath)
+}
+
+// reconcileGate decides what a requested plan document means for an existing
+// task graph: reuse it (false, nil), hand off from a completed plan (true, nil),
+// or stop at a safety gate (an actionable NEEDS_HUMAN error). It is pure, so
+// PreflightPlan can ask the same question without mutating anything.
+func reconcileGate(meta Metadata, rel string, data []byte, tasks []*domain.Task) (handoff bool, err error) {
 	switch {
 	case meta.Source == "":
 		// No recorded provenance (for example after `sop plan` + `sop tasks`):
 		// reuse rather than block.
-		return res, nil
+		return false, nil
 	case meta.Source == rel && meta.SourceSHA256 == fingerprint(data):
-		return res, nil // same plan, same content
+		return false, nil // same plan, same content
 	case meta.Source == rel:
-		return res, planChangedError(rel)
+		return false, planChangedError(rel)
 	case !domain.AllSatisfied(tasks):
 		// A different plan is requested while the active plan still has
 		// unresolved work: keep the safety gate.
-		return res, differentPlanError(rel, meta.Source, meta.PlanID)
+		return false, differentPlanError(rel, meta.Source, meta.PlanID)
 	default:
-		// The active plan is complete: release it and initialize the requested
-		// plan in the same invocation.
-		return handOff(ctx, opts, meta, tasks, data, docPath, docKind, rel, planPath, metaPath)
+		return true, nil
 	}
+}
+
+// PreflightPlan reports, without changing anything, whether `sop run docPath`
+// would stop at one of Prepare's reconciliation safety gates (the plan changed
+// since its task graph was created, or a different plan with unresolved work is
+// active). It returns that same NEEDS_HUMAN error, or nil when Prepare would
+// reuse, hand off, or initialize. tasks is the current persisted task graph.
+func PreflightPlan(dir, docPath string, tasks []*domain.Task) error {
+	if len(tasks) == 0 {
+		return nil // Prepare initializes; no gate applies
+	}
+	data, err := os.ReadFile(docPath)
+	if err != nil {
+		return fmt.Errorf("planflow: read %s: %w", docPath, err)
+	}
+	meta := readMetadata(filepath.Join(dir, config.DirName, metaFileName))
+	_, err = reconcileGate(meta, relOf(dir, docPath), data, tasks)
+	return err
 }
 
 // handOff releases a completed active plan so an explicitly requested different
@@ -320,6 +350,25 @@ func ActivePlanID(dir string) (id, source string, ok bool) {
 	}
 	return id, source, true
 }
+
+// ActivePlanSource reads the recorded active plan's source path (relative to dir)
+// and the content fingerprint it was built from, or ok=false when none is
+// recorded. It lets a caller ask "is this plan document the one SOP already
+// holds?" without scanning Markdown or rebuilding the plan.
+func ActivePlanSource(dir string) (source, sha256 string, ok bool) {
+	meta := readMetadata(filepath.Join(dir, config.DirName, metaFileName))
+	source = strings.TrimSpace(meta.Source)
+	sha256 = strings.TrimSpace(meta.SourceSHA256)
+	return source, sha256, source != "" && sha256 != ""
+}
+
+// SourceFingerprint is the content fingerprint SOP records for a planning
+// document, so a caller can compare a file against ActivePlanSource.
+func SourceFingerprint(data []byte) string { return fingerprint(data) }
+
+// SourceRel is the recorded (project-relative) form of a planning document path,
+// matching the form ActivePlanSource returns.
+func SourceRel(dir, path string) string { return relOf(dir, path) }
 
 // Lifecycle records a plan's terminal disposition, written into its archive beside
 // the task-record snapshot and provenance.
