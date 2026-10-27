@@ -10,12 +10,17 @@
 # scripts/planner-tunnel-candidate.sh for the verified process lifecycle.
 #
 # Usage:
-#   scripts/planner-tunnel-point.sh [--dry-run] [--build] [--binary PATH] [--checkout PATH] PROJECT_DIR
+#   scripts/planner-tunnel-point.sh [--dry-run] [--build] [--start-work] [--no-next-steps]
+#                                   [--binary PATH] [--checkout PATH] PROJECT_DIR
 #
 #   PROJECT_DIR     the SOP project the planner should serve (must contain .agent-sdlc)
 #   --dry-run       check the project, binary, build inputs, and wrapper locally, but
 #                   write nothing and leave the live wrapper unchanged
 #   --build         build sop from origin/main into the binary path first
+#   --start-work    serve `sop mcp --planner --start-work`, adding sop_start_work and
+#                   sop_work_status; the local check then also requires sop_start_work
+#   --no-next-steps do not print the tunnel restart instructions (for callers such
+#                   as scripts/setup-planner.sh that print their own)
 #   --binary PATH   the sop binary the wrapper runs (default: .run/spike/sop-planner)
 #   --checkout PATH the agentic-sop checkout whose .run/tunnel and .run/spike to use
 #                   (default: the checkout this script runs from). Use it to run the
@@ -54,6 +59,8 @@ trap cleanup EXIT
 
 BUILD=0
 DRY_RUN=0
+START_WORK=0
+NEXT_STEPS=1
 BINARY=""
 CHECKOUT=""
 PROJECT=""
@@ -61,6 +68,8 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --build) BUILD=1 ;;
     --dry-run) DRY_RUN=1 ;;
+    --start-work) START_WORK=1 ;;
+    --no-next-steps) NEXT_STEPS=0 ;;
     --binary) [ $# -ge 2 ] || usage; BINARY="$2"; shift ;;
     --checkout) [ $# -ge 2 ] || usage; CHECKOUT="$2"; shift ;;
     -h|--help) usage ;;
@@ -125,6 +134,8 @@ else
   mkdir -p "$(dirname "$WRAPPER")"
   CANDIDATE="$(mktemp "$WRAPPER.new.XXXXXX")"
 fi
+MCP_ARGS="mcp --planner"
+[ "$START_WORK" = 1 ] && MCP_ARGS="mcp --planner --start-work"
 cat > "$CANDIDATE" <<EOF
 #!/bin/sh
 # Planner MCP wrapper.
@@ -132,7 +143,7 @@ cat > "$CANDIDATE" <<EOF
 PROJECT=$(shquote "$PROJECT")
 cd "\$PROJECT" || exit 1
 export PWD="\$PROJECT"
-exec $(shquote "$BINARY") mcp --planner
+exec $(shquote "$BINARY") $MCP_ARGS
 EOF
 chmod +x "$CANDIDATE"
 
@@ -144,11 +155,28 @@ if [ "$DRY_RUN" = 1 ] && [ ! -x "$BINARY" ]; then
 fi
 
 # 3. Check the new wrapper locally with a read-only call before installing it.
-REPLY="$(printf '%s\n' \
+#    With --start-work, also list the tools: a binary older than sop_start_work
+#    rejects the flag or lacks the tool, and must not replace the live wrapper.
+REQUESTS="$(printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"planner-tunnel-point","version":"0"}}}' \
   '{"jsonrpc":"2.0","method":"notifications/initialized"}' \
-  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sop_question_list","arguments":{}}}' \
-  | "$CANDIDATE" 2>&1 | tail -1)"
+  '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"sop_question_list","arguments":{}}}')"
+if [ "$START_WORK" = 1 ]; then
+  REQUESTS="$REQUESTS
+{\"jsonrpc\":\"2.0\",\"id\":3,\"method\":\"tools/list\"}"
+fi
+OUTPUT="$(printf '%s\n' "$REQUESTS" | "$CANDIDATE" 2>&1 || true)"
+REPLY="$(printf '%s\n' "$OUTPUT" | grep '"id":2' | tail -1)"
+[ -n "$REPLY" ] || REPLY="$(printf '%s\n' "$OUTPUT" | tail -1)"
+if [ "$START_WORK" = 1 ]; then
+  case "$(printf '%s\n' "$OUTPUT" | grep '"id":3' | tail -1)" in
+    *'"sop_start_work"'*) echo "point: local check ok; sop_start_work is served" ;;
+    *)
+      echo "point: local check FAILED; $(shquote "$BINARY") does not serve sop_start_work (use --build for a current binary). The live wrapper was left unchanged. Output:" >&2
+      echo "$OUTPUT" >&2
+      exit 1 ;;
+  esac
+fi
 case "$REPLY" in
   *'"id":2'*'"isError":false'*)
     TEXT="$(printf '%s' "$REPLY" | sed -n 's/.*"text":"\([^"]*\)".*/\1/p')"
@@ -178,6 +206,7 @@ mv -f "$CANDIDATE" "$WRAPPER"
 CANDIDATE=""
 echo "point: wrapper now serves $PROJECT"
 
+[ "$NEXT_STEPS" = 1 ] || exit 0
 cat <<'EOF'
 
 Next: the wrapper is configured, but the tunnel was not restarted. Use the

@@ -9,8 +9,9 @@
 #   ./install.sh --skills claude     + the Claude Code skills (same commands)
 #   ./install.sh --plugin claude     + prepare the Claude Code plugin
 #   ./install.sh --agent claude      + the Claude Code agent wrapper (sop-agent)
+#   ./install.sh --planner-setup     + sop-setup-planner, the planner MCP setup command
 #   ./install.sh --all               CLI + every present agent's skills + the plugin
-#                                    + the agent wrapper
+#                                    + the agent wrapper + sop-setup-planner
 #
 # The CLI is built from this checkout and written to a user-writable bin directory
 # (--bin-dir, else $SOP_BIN_DIR, else $GOBIN, else `go env GOPATH`/bin). This script
@@ -35,6 +36,7 @@ repo_dir=$script_dir
 skills=none
 plugin=none
 agent=none
+planner_setup=0
 bin_dir=""
 dry_run=0
 # failed records whether any step that ran reported a problem. Every step still runs,
@@ -56,7 +58,11 @@ Options:
   --agent <none|claude>            install the Claude Code agent wrapper as
                                    sop-agent beside sop, for SOP_AGENT_COMMAND
                                    (default: none)
+  --planner-setup                  install sop-setup-planner beside sop: it sets up
+                                   the planner MCP server for a project (default
+                                   project: this checkout)
   --all                            --skills all --plugin claude --agent claude
+                                   --planner-setup
   --bin-dir <path>                 where to install the sop binary
                                    (default: $SOP_BIN_DIR, else $GOBIN, else
                                    `go env GOPATH`/bin)
@@ -98,7 +104,8 @@ while [ $# -gt 0 ]; do
       shift 2
       ;;
     --agent=*) agent=${1#--agent=}; shift ;;
-    --all) skills=all; plugin=claude; agent=claude; shift ;;
+    --planner-setup) planner_setup=1; shift ;;
+    --all) skills=all; plugin=claude; agent=claude; planner_setup=1; shift ;;
     --bin-dir)
       [ $# -ge 2 ] || { echo "install: --bin-dir requires a path" >&2; exit 2; }
       bin_dir=$2
@@ -326,6 +333,39 @@ install_agent() {
 EOF
 }
 
+# install_planner_setup writes sop-setup-planner beside sop: a small shim that
+# runs this checkout's scripts/setup-planner.sh, so the command works from any
+# directory and always runs the checkout's current script.
+install_planner_setup() {
+  [ "$planner_setup" -eq 1 ] || return 0
+  target_dir=$1
+  src="$repo_dir/scripts/setup-planner.sh"
+  dest="$target_dir/sop-setup-planner"
+
+  echo
+  echo "Installing the planner setup command:"
+  echo "  to: $dest"
+  if [ "$dry_run" -eq 1 ]; then
+    echo "would: write a shim that runs $src"
+    return 0
+  fi
+  # Single-quote the checkout path for the shim, escaping embedded quotes.
+  quoted_repo=$(printf '%s' "$repo_dir" | sed "s/'/'\\\\''/g")
+  tmp="$target_dir/.sop-setup-planner.$$"
+  {
+    echo '#!/bin/sh'
+    echo '# Installed by agentic-sop install.sh; re-run the installer if the checkout moves.'
+    echo "exec '$quoted_repo/scripts/setup-planner.sh' --checkout '$quoted_repo' \"\$@\""
+  } >"$tmp"
+  chmod 0755 "$tmp"
+  mv -f "$tmp" "$dest"
+  echo "  installed: $dest"
+  echo
+  echo "  Set up the planner MCP server (default project: $repo_dir):"
+  echo
+  echo "    sop-setup-planner [PROJECT_DIR]"
+}
+
 # --- Report ------------------------------------------------------------------
 
 report_path() {
@@ -364,6 +404,9 @@ echo "  bin dir:  $target_dir"
 echo "  skills:   $skills"
 echo "  plugin:   $plugin"
 echo "  agent:    $agent"
+if [ "$planner_setup" -eq 1 ]; then
+  echo "  planner:  sop-setup-planner"
+fi
 if [ "$dry_run" -eq 1 ]; then
   echo "  dry run:  yes (nothing will be changed)"
 fi
@@ -373,6 +416,7 @@ install_cli "$target_dir"
 install_skills "$skills"
 prepare_plugin "$plugin"
 install_agent "$agent" "$target_dir"
+install_planner_setup "$target_dir"
 report_path "$target_dir"
 
 if [ "$failed" -eq 0 ]; then

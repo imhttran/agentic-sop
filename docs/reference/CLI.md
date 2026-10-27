@@ -83,6 +83,28 @@ Over MCP, `sop mcp --planner` exposes the planner-only surface (`sop_status`,
 `sop_question_list`, `sop_question_get`, `sop_answer_submit`) and never the human
 approval actions; `sop mcp --status-only` stays status-only.
 
+## Setting up the planner
+
+One command builds a current `sop`, points the planner MCP wrapper
+(`.run/tunnel/sop-mcp-planner.sh`) at a project with `--start-work`, checks it locally,
+and reports whether the Claude desktop app runs that wrapper:
+
+```text
+sop-setup-planner [--no-build] [--no-start-work] [--register-claude] [--dry-run] [PROJECT_DIR]
+make setup-planner [PROJECT=DIR] [SETUP_PLANNER_ARGS=--register-claude]
+scripts/setup-planner.sh [...]
+```
+
+`PROJECT_DIR` defaults to the agentic-sop checkout. `sop-setup-planner` is installed by
+`./install.sh --planner-setup` (or `--all`) as a shim that runs the checkout's
+`scripts/setup-planner.sh`. The wrapper work is delegated to
+`scripts/planner-tunnel-point.sh --build --start-work`, whose local check refuses a
+binary that does not serve `sop_start_work` and leaves the live wrapper unchanged.
+`--register-claude` adds `"sop-planner": {"command": "<wrapper>"}` to the Claude desktop
+config after backing it up, keeps every other entry, and never overwrites a different
+`sop-planner` entry. The command never restarts the Claude desktop app or the ChatGPT
+tunnel; it prints how. The ChatGPT tunnel runs the same wrapper.
+
 ## Starting work over MCP
 
 `sop mcp --start-work` (alone or with `--planner`) adds two tools. They are opt-in;

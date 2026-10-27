@@ -243,6 +243,69 @@ func TestInstallerInstallsTheAgentWrapper(t *testing.T) {
 	}
 }
 
+// TestInstallerInstallsThePlannerSetupCommand proves --planner-setup writes an
+// executable sop-setup-planner shim beside sop that runs this checkout's
+// scripts/setup-planner.sh from any directory, that --all includes it, and that the
+// default install leaves it out.
+func TestInstallerInstallsThePlannerSetupCommand(t *testing.T) {
+	home := scratchHome(t)
+	bin := filepath.Join(home, "bin")
+	env := installerEnv(t, home, "", nil)
+	shim := filepath.Join(bin, "sop-setup-planner")
+
+	out, err := runInstaller(t, env, "--bin-dir", bin)
+	if err != nil {
+		t.Fatalf("install: %v\n%s", err, out)
+	}
+	if _, err := os.Stat(shim); !os.IsNotExist(err) {
+		t.Fatalf("the default install must not install sop-setup-planner (stat err=%v)", err)
+	}
+
+	out, err = runInstaller(t, env, "--bin-dir", bin, "--planner-setup")
+	if err != nil {
+		t.Fatalf("install --planner-setup: %v\n%s", err, out)
+	}
+	info, err := os.Stat(shim)
+	if err != nil {
+		t.Fatalf("sop-setup-planner not installed: %v\n%s", err, out)
+	}
+	if info.Mode()&0o111 == 0 {
+		t.Errorf("installed sop-setup-planner is not executable: %v", info.Mode())
+	}
+	root := repoRoot(t)
+	if body := read(t, shim); !strings.Contains(body, filepath.Join(root, "scripts", "setup-planner.sh")) || !strings.Contains(body, "--checkout") {
+		t.Errorf("shim does not run this checkout's setup-planner.sh:\n%s", body)
+	}
+
+	// The shim works from any directory: a dry run against a scratch project
+	// resolves the checkout it was installed from and changes nothing.
+	project := filepath.Join(home, "project")
+	if err := os.MkdirAll(filepath.Join(project, ".agent-sdlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command(shim, "--no-build", "--dry-run", project)
+	cmd.Dir = home
+	cmd.Env = env
+	runOut, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sop-setup-planner --dry-run: %v\n%s", err, runOut)
+	}
+	if !strings.Contains(string(runOut), "point: checkout = "+root) || !strings.Contains(string(runOut), "nothing was changed") {
+		t.Errorf("unexpected dry-run output:\n%s", runOut)
+	}
+	if _, err := os.Stat(filepath.Join(root, ".run", "tunnel", "sop-mcp-planner.sh.new")); err == nil {
+		t.Error("dry run left a wrapper candidate in the checkout")
+	}
+
+	// --all includes it. Other --all steps depend on which agents are installed on
+	// the machine, so only the planner step's output is asserted here.
+	allBin := filepath.Join(home, "allbin")
+	out, _ = runInstaller(t, env, "--bin-dir", allBin, "--all", "--dry-run")
+	if !strings.Contains(out, "would: write a shim that runs "+filepath.Join(root, "scripts", "setup-planner.sh")) {
+		t.Errorf("--all does not include the planner setup command:\n%s", out)
+	}
+}
+
 // TestInstallerDelegatesSkillInstallation proves --skills is delegated per agent and
 // lands in that agent's own skills root, without installing into the others.
 func TestInstallerDelegatesSkillInstallation(t *testing.T) {
