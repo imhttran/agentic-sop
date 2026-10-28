@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -234,6 +235,119 @@ func TestTaskReconciliationProvenanceAbsentAndRecorded(t *testing.T) {
 		t.Error("the reads must not mutate plan.json or plan.meta.json")
 	}
 	assertOnlyKnownStateFiles(t, dir)
+}
+
+// TestReconcileRecordsTaskScopedAcceptance proves reconciled acceptance is bound to
+// the task, the concrete definition change, and the acceptance time - and that a
+// later plan write cannot move that acceptance time the way GeneratedAt moves.
+func TestReconcileRecordsTaskScopedAcceptance(t *testing.T) {
+	dir := t.TempDir()
+	st := prepareForReconcile(t, dir, "PLAN.md", planDoc)
+	markExecuted(taskByID(t, st.tasks, "S001"))
+
+	beforeIdentity, err := TaskDefinitionIdentity(dir, "S001")
+	if err != nil || !beforeIdentity.Present {
+		t.Fatalf("before identity: %v present=%v", err, beforeIdentity.Present)
+	}
+
+	write(t, dir, "PLAN.md", strings.ReplaceAll(planDoc, "Application skeleton", "Renamed"))
+	if _, err := reconcileAccept(t, dir, "PLAN.md", st, "S001"); err != nil {
+		t.Fatalf("reconcile --accept-changed: %v", err)
+	}
+
+	got, err := TaskReconciliationProvenance(dir, "S001")
+	if err != nil {
+		t.Fatalf("provenance: %v", err)
+	}
+	if !got.Accepted || got.AcceptedAt.IsZero() {
+		t.Fatalf("provenance = %+v, want a task-scoped acceptance with a time", got)
+	}
+	afterIdentity, err := TaskDefinitionIdentity(dir, "S001")
+	if err != nil || !afterIdentity.Present {
+		t.Fatalf("after identity: %v present=%v", err, afterIdentity.Present)
+	}
+	if got.DefinitionDigestBefore != beforeIdentity.Digest {
+		t.Errorf("digest before = %q, want the recorded definition %q", got.DefinitionDigestBefore, beforeIdentity.Digest)
+	}
+	if got.DefinitionDigestAfter != afterIdentity.Digest {
+		t.Errorf("digest after = %q, want the current definition %q", got.DefinitionDigestAfter, afterIdentity.Digest)
+	}
+	if got.DefinitionDigestBefore == got.DefinitionDigestAfter {
+		t.Error("the acceptance recorded no definition change")
+	}
+
+	// A later plan write refreshes GeneratedAt. It must not touch the acceptance
+	// time, which is the only supported proof of when the change was accepted.
+	firstAccepted := got.AcceptedAt
+	metaPath := filepath.Join(dir, config.DirName, metaFileName)
+	firstGenerated := readMetadata(metaPath).GeneratedAt
+	if _, err := reconcileAccept(t, dir, "PLAN.md", st); err != nil {
+		t.Fatalf("no-op reconcile: %v", err)
+	}
+	again, err := TaskReconciliationProvenance(dir, "S001")
+	if err != nil {
+		t.Fatalf("provenance after no-op: %v", err)
+	}
+	if !again.AcceptedAt.Equal(firstAccepted) {
+		t.Errorf("acceptance time moved on a no-op write: %v -> %v", firstAccepted, again.AcceptedAt)
+	}
+	if !readMetadata(metaPath).GeneratedAt.After(firstGenerated) {
+		t.Log("generated_at did not advance; the independence check is inert in this run")
+	}
+}
+
+// TestUnrelatedAcceptedChangeDoesNotQualifyAnotherTask proves provenance is scoped
+// to the task it names.
+func TestUnrelatedAcceptedChangeDoesNotQualifyAnotherTask(t *testing.T) {
+	dir := t.TempDir()
+	writeMetadataFile(t, dir, Metadata{
+		Source: "docs/PLAN.md", SourceKind: KindPlan, SourceSHA256: "sha", PlanID: "p",
+		AcceptedChanges: []AcceptedChange{{
+			TaskID:     "OTHER",
+			AcceptedAt: time.Now().UTC(),
+		}},
+	})
+	got, err := TaskReconciliationProvenance(dir, "S001")
+	if err != nil {
+		t.Fatalf("provenance: %v", err)
+	}
+	if got.Accepted || got.Present {
+		t.Errorf("provenance = %+v, want absent for a task with no record", got)
+	}
+}
+
+// TestAcceptedChangeWithoutTimeIsUnusable proves a record missing its acceptance
+// time is not silently completed from other metadata.
+func TestAcceptedChangeWithoutTimeIsUnusable(t *testing.T) {
+	dir := t.TempDir()
+	writeMetadataFile(t, dir, Metadata{
+		Source: "docs/PLAN.md", SourceKind: KindPlan, SourceSHA256: "sha", PlanID: "p",
+		GeneratedAt: time.Now().UTC(),
+		AcceptedChanges: []AcceptedChange{{
+			TaskID:                 "S001",
+			DefinitionDigestBefore: "a",
+			DefinitionDigestAfter:  "b",
+		}},
+	})
+	got, err := TaskReconciliationProvenance(dir, "S001")
+	if err != nil {
+		t.Fatalf("provenance: %v", err)
+	}
+	if got.Accepted || !got.AcceptedAt.IsZero() {
+		t.Errorf("provenance = %+v, want unusable evidence with no invented time", got)
+	}
+}
+
+// writeMetadataFile persists plan metadata for a provenance test.
+func writeMetadataFile(t *testing.T, dir string, meta Metadata) {
+	t.Helper()
+	sdlc := filepath.Join(dir, config.DirName)
+	if err := os.MkdirAll(sdlc, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := writeMetadata(filepath.Join(sdlc, metaFileName), meta); err != nil {
+		t.Fatalf("write metadata: %v", err)
+	}
 }
 
 // TestTaskReconciliationProvenanceUnreadableMetadata proves an unreadable

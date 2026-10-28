@@ -111,8 +111,11 @@ type ApprovalInvalidation struct {
 	PlanFingerprintBefore string `json:"plan_fingerprint_before,omitempty"`
 	// PlanFingerprintAfter is the plan source fingerprint of the revised plan.
 	PlanFingerprintAfter string `json:"plan_fingerprint_after,omitempty"`
-	// ReconciledAt is when the plan was reconciled with the task definition (UTC).
-	ReconciledAt time.Time `json:"reconciled_at"`
+	// DefinitionAcceptedAt is when this task's definition change was explicitly
+	// accepted (UTC). It is task-scoped acceptance evidence, never the plan-wide
+	// write time. It is zero for a legacy acceptance recorded before that evidence
+	// existed.
+	DefinitionAcceptedAt time.Time `json:"definition_accepted_at"`
 	// DefinitionDigestBefore is the task definition digest the request was raised
 	// against.
 	DefinitionDigestBefore string `json:"definition_digest_before,omitempty"`

@@ -129,6 +129,30 @@ type Metadata struct {
 	// hashes and why, so a silent refresh stays auditable.
 	ReconciledTasks []string         `json:"reconciled_tasks,omitempty"`
 	AutoReconciled  []AutoReconciled `json:"auto_reconciled,omitempty"`
+	// AcceptedChanges records, per task, the explicit acceptance of one concrete
+	// definition change: which task, when it was accepted, and the definition
+	// digests on both sides. It exists because GeneratedAt is a plan-wide write
+	// time: it cannot prove when a *task's* change was accepted, and reusing it as
+	// acceptance evidence lets an unrelated later plan write make an old approval
+	// request look stale. A task with no record here has no accepted-change
+	// evidence, however recently the metadata file was rewritten.
+	AcceptedChanges []AcceptedChange `json:"accepted_changes,omitempty"`
+}
+
+// AcceptedChange is the durable, task-scoped provenance of one accepted
+// definition change. It is written when an operator explicitly accepts a changed
+// executed task during reconciliation (or the autonomy policy reconciles it).
+type AcceptedChange struct {
+	TaskID string `json:"task_id"`
+	// AcceptedAt is when the acceptance was recorded (UTC). It is the only
+	// supported proof of acceptance time; GeneratedAt is not.
+	AcceptedAt time.Time `json:"accepted_at"`
+	// SourceSHA256 is the requested plan source fingerprint at acceptance.
+	SourceSHA256 string `json:"source_sha256,omitempty"`
+	// DefinitionDigestBefore and DefinitionDigestAfter bind the acceptance to one
+	// concrete change, so a record can never be read as accepting a different one.
+	DefinitionDigestBefore string `json:"definition_digest_before"`
+	DefinitionDigestAfter  string `json:"definition_digest_after"`
 }
 
 // Prepare ensures the project is ready to execute: it reconciles existing tasks,
@@ -542,6 +566,7 @@ type reconcilePlan struct {
 	added                   []string
 	removed                 []string
 	accepted                []string
+	acceptedChanges         []AcceptedChange
 	autoReconciled          []AutoReconciled
 	changedExecuted         []string
 	changedExecutedEquiv    []string
@@ -609,13 +634,16 @@ func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, err
 	// Read the previous provenance once, so the human-approval and automatic-
 	// reconciliation records are both carried forward.
 	prev := readMetadata(metaPath)
+	now := time.Now().UTC()
+	sourceSHA := fingerprint(data)
 	if err := writeMetadata(metaPath, Metadata{
 		Source:          res.Source,
 		SourceKind:      KindPlan,
-		SourceSHA256:    fingerprint(data),
+		SourceSHA256:    sourceSHA,
 		PlanID:          res.PlanID,
-		GeneratedAt:     time.Now().UTC(),
+		GeneratedAt:     now,
 		ReconciledTasks: mergeIDs(prev.ReconciledTasks, diff.accepted),
+		AcceptedChanges: mergeAcceptedChanges(prev.AcceptedChanges, stampAcceptedChanges(diff.acceptedChanges, now, sourceSHA)),
 		AutoReconciled:  mergeAutoReconciled(prev.AutoReconciled, diff.autoReconciled),
 	}); err != nil {
 		return res, err
@@ -734,6 +762,18 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 	diff, err := reconcileGraph(rel, active, desired, acceptSet(accept), opts.AutoAcceptExecuted, mode)
 	if err != nil {
 		return res, reconcilePlan{}, nil, nil, err
+	}
+
+	// Bind every explicitly accepted change to the concrete definitions on both
+	// sides, taken from the recorded and the requested plans. The digests use the
+	// same function the approval boundary uses, so acceptance evidence and a
+	// request's recorded digest are directly comparable.
+	for _, id := range diff.accepted {
+		diff.acceptedChanges = append(diff.acceptedChanges, AcceptedChange{
+			TaskID:                 id,
+			DefinitionDigestBefore: stageDigestByID(recorded, id),
+			DefinitionDigestAfter:  stageDigestByID(plan, id),
+		})
 	}
 
 	res.Unchanged = diff.unchanged
@@ -1045,6 +1085,46 @@ func definitionHash(t *domain.Task) string {
 	sort.Strings(deps)
 	_, _ = io.WriteString(sum, strings.Join(deps, ","))
 	return hex.EncodeToString(sum.Sum(nil))[:16]
+}
+
+// stampAcceptedChanges fills in the acceptance time and the accepted source
+// fingerprint for the changes accepted in this reconciliation. It never rewrites
+// a previously stamped record: acceptance time is evidence, not a mutable field.
+func stampAcceptedChanges(in []AcceptedChange, at time.Time, sourceSHA string) []AcceptedChange {
+	out := make([]AcceptedChange, 0, len(in))
+	for _, c := range in {
+		c.AcceptedAt = at.UTC()
+		c.SourceSHA256 = sourceSHA
+		out = append(out, c)
+	}
+	return out
+}
+
+// mergeAcceptedChanges accumulates task-scoped acceptance evidence, keeping the
+// latest record per task in first-seen order, so repeated reconciliations add
+// provenance instead of discarding earlier history.
+func mergeAcceptedChanges(prev, cur []AcceptedChange) []AcceptedChange {
+	if len(prev) == 0 && len(cur) == 0 {
+		return nil
+	}
+	latest := make(map[string]AcceptedChange, len(prev)+len(cur))
+	order := make([]string, 0, len(prev)+len(cur))
+	for _, list := range [][]AcceptedChange{prev, cur} {
+		for _, c := range list {
+			if c.TaskID == "" {
+				continue
+			}
+			if _, seen := latest[c.TaskID]; !seen {
+				order = append(order, c.TaskID)
+			}
+			latest[c.TaskID] = c
+		}
+	}
+	out := make([]AcceptedChange, 0, len(order))
+	for _, id := range order {
+		out = append(out, latest[id])
+	}
+	return out
 }
 
 // mergeAutoReconciled folds the current reconciliation's automatic records into

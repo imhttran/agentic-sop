@@ -205,14 +205,17 @@ type SupersedeInput struct {
 //  3. A satisfied task is refused with ErrApprovalInvalidateNotApplicable naming
 //     the supersede operation, so a satisfied task is never invalidated into
 //     re-execution.
-//  4. The definition must be proven to have changed after the request was raised.
-//     When the head records a DefinitionDigest, CurrentDefinitionDigest must
-//     differ from it (an equal digest refuses). When the head records no digest
-//     (a legacy request), the caller must prove the definition was accepted as
-//     reconciled after the request: DefinitionAcceptedAsReconciled must be true,
-//     and ReconciledAt must be strictly after head.RequestedAt. Both the recorded
-//     and the current digest must be present. Otherwise it refuses with
-//     ErrApprovalInvalidateNotApplicable.
+//  4. An accepted definition change, after the request, covering the current
+//     definition, must be proven for EVERY request. A different digest alone is
+//     never enough. The caller must supply DefinitionAcceptedAsReconciled (a
+//     task-scoped acceptance record exists), DefinitionAcceptedAt strictly after
+//     head.RequestedAt, and DefinitionAcceptedDigest equal to
+//     CurrentDefinitionDigest, and a current digest at all. A missing or
+//     ambiguous value refuses with ErrApprovalInvalidateNotApplicable; nothing is
+//     inferred or backfilled.
+//  5. When the head records a DefinitionDigest (a stamped request), the current
+//     digest must also differ from it, so a still-applicable request is refused
+//     even when an acceptance record exists.
 //
 // On success the original PENDING head is appended verbatim to the append-only
 // history exactly once (deduped by request id on retry, reusing
@@ -234,13 +237,23 @@ type InvalidateInput struct {
 	// definition. It is compared with the head's recorded digest when that digest
 	// is non-empty.
 	CurrentDefinitionDigest string
-	// DefinitionAcceptedAsReconciled is true when the caller proved that the
-	// reconciled definition change was explicitly accepted after the request was
-	// raised. It is required for a legacy head (no recorded digest).
+	// DefinitionAcceptedAsReconciled is true only when a task-scoped accepted-change
+	// record exists for this task. It is required for EVERY request, stamped or
+	// legacy: a different definition digest alone never proves the change was
+	// accepted. Plan-wide write time is never substituted for it.
 	DefinitionAcceptedAsReconciled bool
-	// ReconciledAt is when the plan was reconciled with the task definition (UTC).
-	// For a legacy head it must be strictly after the request's RequestedAt.
-	ReconciledAt time.Time
+	// DefinitionAcceptedAt is when this task's definition change was accepted (UTC).
+	// It must be strictly after the request's RequestedAt. A zero value is
+	// ambiguous evidence and is refused.
+	DefinitionAcceptedAt time.Time
+	// DefinitionAcceptedDigest is the definition digest the acceptance covered. It
+	// must equal the current definition digest, so an acceptance of some other or
+	// older definition can never authorize this invalidation.
+	DefinitionAcceptedDigest string
+	// DefinitionAcceptedPriorDigest is the digest before the accepted change, when
+	// recorded. When it is present and already equals the current digest, the
+	// acceptance covered no change and the request is refused.
+	DefinitionAcceptedPriorDigest string
 }
 
 // Result is the outcome of recording a decision.
@@ -524,7 +537,7 @@ func (s *Service) Invalidate(taskID string, in InvalidateInput) (Result, error) 
 		InvalidatedAt:          s.now().UTC(),
 		PlanFingerprintBefore:  firstNonEmptyString(in.PriorPlanFingerprint, head.PlanFingerprint),
 		PlanFingerprintAfter:   strings.TrimSpace(in.CurrentPlanFingerprint),
-		ReconciledAt:           in.ReconciledAt.UTC(),
+		DefinitionAcceptedAt:   in.DefinitionAcceptedAt.UTC(),
 		DefinitionDigestBefore: head.DefinitionDigest,
 		DefinitionDigestAfter:  strings.TrimSpace(in.CurrentDefinitionDigest),
 	}
@@ -540,25 +553,39 @@ func (s *Service) Invalidate(taskID string, in InvalidateInput) (Result, error) 
 // recorded digest) requires an accepted-as-reconciled proof strictly after the
 // request. Both digests must be present so the audit record is complete.
 func invalidationProvesRevision(head domain.ApprovalRequest, in InvalidateInput) error {
+	taskID := head.TaskID
 	current := strings.TrimSpace(in.CurrentDefinitionDigest)
 	if current == "" {
-		return fmt.Errorf("%w for task %s (the current definition digest is required)", ErrApprovalInvalidateNotApplicable, head.TaskID)
+		return fmt.Errorf("%w for task %s (the current definition digest is required)", ErrApprovalInvalidateNotApplicable, taskID)
 	}
-	recorded := strings.TrimSpace(head.DefinitionDigest)
-	if recorded != "" {
-		// A stamped request: the current definition must actually differ.
-		if recorded == current {
-			return fmt.Errorf("%w for task %s (the definition digest is unchanged)", ErrApprovalInvalidateNotApplicable, head.TaskID)
-		}
-		return nil
-	}
-	// A legacy request: prove the reconciled definition change was accepted after
-	// the request was raised.
+
+	// Accepted-change evidence is mandatory for every request. A provider failure, a
+	// blocked task, or a plan edit that was never accepted leaves this absent, and
+	// the operation refuses rather than inferring acceptance from a digest.
 	if !in.DefinitionAcceptedAsReconciled {
-		return fmt.Errorf("%w for task %s (a legacy request requires reconciliation provenance)", ErrApprovalInvalidateNotApplicable, head.TaskID)
+		return fmt.Errorf("%w for task %s (an accepted definition change for this task is required)", ErrApprovalInvalidateNotApplicable, taskID)
 	}
-	if in.ReconciledAt.IsZero() || !in.ReconciledAt.After(head.RequestedAt) {
-		return fmt.Errorf("%w for task %s (reconciliation must be accepted after the request was raised)", ErrApprovalInvalidateNotApplicable, head.TaskID)
+	if in.DefinitionAcceptedAt.IsZero() {
+		return fmt.Errorf("%w for task %s (the definition acceptance time is missing or ambiguous)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if !in.DefinitionAcceptedAt.After(head.RequestedAt) {
+		return fmt.Errorf("%w for task %s (the definition change must be accepted after the request was raised)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	accepted := strings.TrimSpace(in.DefinitionAcceptedDigest)
+	if accepted == "" {
+		return fmt.Errorf("%w for task %s (the accepted definition digest is missing or ambiguous)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if accepted != current {
+		return fmt.Errorf("%w for task %s (the accepted change does not cover the current definition)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if before := strings.TrimSpace(in.DefinitionAcceptedPriorDigest); before != "" && before == current {
+		return fmt.Errorf("%w for task %s (the accepted change did not alter the definition)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+
+	// A stamped request must also be stale against the definition it was raised
+	// against, so an accepted change elsewhere in the plan cannot void it.
+	if recorded := strings.TrimSpace(head.DefinitionDigest); recorded != "" && recorded == current {
+		return fmt.Errorf("%w for task %s (the definition digest is unchanged)", ErrApprovalInvalidateNotApplicable, taskID)
 	}
 	return nil
 }

@@ -125,20 +125,33 @@ Every rule is evaluated in order, and a refusal writes nothing:
    invalidated request is refused, so a recorded human decision is never overwritten.
 3. The task must not be satisfied. A satisfied task is refused and points at
    `supersede`.
-4. SOP must be able to prove an accepted definition change **after** the request was
-   raised:
-   - A request raised by this version records the task definition digest and the
-     active plan fingerprint it was raised against. The current definition must
-     produce a **different** digest; while it still matches, the request is refused
-     as unchanged.
-   - A legacy request, recorded before those fields existed, has no digest to
-     compare. It requires SOP's reconciliation provenance instead: the task must be
-     recorded as explicitly accepted during a reconciliation, and that reconciliation
-     must be strictly after the request was raised.
+4. SOP must hold a **task-scoped accepted-change record** for this task, and that
+   record must:
+   - name this task (another task's reconciliation never qualifies),
+   - carry an acceptance time strictly **after** the request was raised,
+   - cover the **current** definition digest, and
+   - describe a real change (its before and after digests must differ).
+
+   This is required for **every** request, including one raised by this version that
+   recorded its definition digest. A different digest alone is not enough: the
+   change must have been accepted, and SOP records that acceptance per task when an
+   operator reconciles with `--accept-changed`.
+
+   Two things that look like evidence and are not:
+   - `plan.meta.json`'s `generated_at` is a plan-wide write time, refreshed by any
+     later plan write — including a no-op one. It never proves when a task's change
+     was accepted, and is not used.
+   - `reconciled_tasks` is a legacy task list. It records that a change was accepted
+     at some point, with no time, so it cannot establish the ordering. A plan whose
+     provenance has only that list has no usable acceptance evidence.
+
+   When a digest was recorded on the request, it must additionally differ from the
+   current one; a still-applicable request is refused even if an acceptance exists.
 
 A provider failure, a blocked task, a repaired implementation, or an edited plan file
 on disk is **not** evidence on its own. A provider failure says nothing about the
-task definition, so it never qualifies; the request must then be decided.
+task definition, so it never qualifies; the request must then be decided. Missing or
+ambiguous acceptance evidence is refused rather than backfilled.
 
 ### Refusal cases
 
@@ -148,8 +161,11 @@ task definition, so it never qualifies; the request must then be decided.
 | Request already `APPROVED`, `DECLINED`, `SUPERSEDED`, or `INVALIDATED` | Refused: a recorded decision is never overwritten |
 | Task satisfied (`LOCAL_DONE`, `MERGED`, `DONE`) | Refused, pointing at `sop approval supersede` |
 | Current definition digest equals the recorded one | Refused: the evidence is still applicable |
-| Legacy request with no reconciliation recorded for the task | Refused: no accepted definition change to prove |
-| Reconciliation recorded before the request | Refused: the definition did not change after the request |
+| No task-scoped accepted-change record for the task | Refused: no accepted definition change to prove |
+| Acceptance recorded before the request (even if the plan file was rewritten afterwards) | Refused: a later plan write is not acceptance evidence |
+| Acceptance belongs to another task | Refused: acceptance is task-scoped |
+| Acceptance covers a different or older definition | Refused: the change it accepted is not this one |
+| Acceptance has no time, or the plan has only a legacy `reconciled_tasks` entry | Refused: ambiguous evidence is never completed by inference |
 | Current definition unreadable or absent | Refused: revision is unproven, never guessed |
 
 ### What it records
@@ -161,7 +177,8 @@ invalidation record carrying:
 
 - the operator's reason, identity, and timestamp;
 - the plan source fingerprint before and after the revision;
-- the task definition digest before and after the revision.
+- the task definition digest before and after the revision;
+- the task-scoped acceptance time of the change being invalidated.
 
 For a legacy request the "before" values are unknown and recorded as empty rather
 than fabricated.

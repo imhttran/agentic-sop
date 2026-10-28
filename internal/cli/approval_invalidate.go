@@ -141,10 +141,14 @@ func invalidationEvidence(projectDir string, st *store.Store, taskID string) (ap
 	if err != nil {
 		return in, err
 	}
-	if provenance.Present {
-		in.DefinitionAcceptedAsReconciled = provenance.Reconciled
-		in.ReconciledAt = provenance.RecordedAt
-	}
+	// Only a task-scoped accepted-change record counts. Legacy list membership
+	// (provenance.Reconciled) and the plan-wide write time are NOT acceptance
+	// evidence, so a plan with no accepted-change records leaves this absent and the
+	// boundary refuses the invalidation.
+	in.DefinitionAcceptedAsReconciled = provenance.Accepted
+	in.DefinitionAcceptedAt = provenance.AcceptedAt
+	in.DefinitionAcceptedDigest = provenance.DefinitionDigestAfter
+	in.DefinitionAcceptedPriorDigest = provenance.DefinitionDigestBefore
 
 	// A task record is not required for the revision proof: an unknown task id is
 	// refused by the boundary with its own message. The store read here only keeps

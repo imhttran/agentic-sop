@@ -482,9 +482,20 @@ func TestInvalidateRefusesUnchangedDefinition(t *testing.T) {
 	svc, records := newTestService(tasks)
 	seedPendingRequest(t, svc, records, "S001", "digest-a")
 
-	in := InvalidateInput{Reason: "plan revised", By: "operator", CurrentDefinitionDigest: "digest-a"}
-	if _, err := svc.Invalidate("S001", in); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+	in := InvalidateInput{
+		Reason:                         "plan revised",
+		By:                             "operator",
+		CurrentDefinitionDigest:        "digest-a",
+		DefinitionAcceptedAsReconciled: true,
+		DefinitionAcceptedAt:           time.Now().UTC().Add(time.Hour),
+		DefinitionAcceptedDigest:       "digest-a",
+	}
+	_, err := svc.Invalidate("S001", in)
+	if !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
 		t.Fatalf("Invalidate err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	if !strings.Contains(err.Error(), "unchanged") {
+		t.Errorf("error %q does not name the unchanged definition", err)
 	}
 	if got := records["S001"].head.Status; got != domain.ApprovalPending {
 		t.Errorf("head status = %s, want unchanged PENDING", got)
@@ -501,12 +512,12 @@ func TestInvalidateRefusesLegacyWithoutReconciliation(t *testing.T) {
 		t.Fatalf("Invalidate without proof err = %v, want ErrApprovalInvalidateNotApplicable", err)
 	}
 	// Accepted, but reconciled before the request was raised.
-	before := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, ReconciledAt: req.RequestedAt.Add(-time.Second)}
+	before := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, DefinitionAcceptedAt: req.RequestedAt.Add(-time.Second), DefinitionAcceptedDigest: "digest-b"}
 	if _, err := svc.Invalidate("S001", before); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
 		t.Fatalf("Invalidate with stale reconciliation err = %v, want ErrApprovalInvalidateNotApplicable", err)
 	}
 	// Accepted, reconciled exactly at the request time (not strictly after).
-	equal := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, ReconciledAt: req.RequestedAt}
+	equal := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, DefinitionAcceptedAt: req.RequestedAt, DefinitionAcceptedDigest: "digest-b"}
 	if _, err := svc.Invalidate("S001", equal); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
 		t.Fatalf("Invalidate at request time err = %v, want ErrApprovalInvalidateNotApplicable", err)
 	}
@@ -525,12 +536,15 @@ func TestInvalidateArchivesAndRecordsProvenance(t *testing.T) {
 	original := *records["S001"].head
 
 	in := InvalidateInput{
-		Reason:                  "plan revised after approval",
-		By:                      "operator",
-		PriorPlanFingerprint:    "plan-1",
-		CurrentPlanFingerprint:  "plan-2",
-		CurrentDefinitionDigest: "digest-b",
-		ReconciledAt:            req.RequestedAt.Add(time.Minute),
+		Reason:                         "plan revised after approval",
+		By:                             "operator",
+		PriorPlanFingerprint:           "plan-1",
+		CurrentPlanFingerprint:         "plan-2",
+		CurrentDefinitionDigest:        "digest-b",
+		DefinitionAcceptedAsReconciled: true,
+		DefinitionAcceptedAt:           req.RequestedAt.Add(time.Minute),
+		DefinitionAcceptedDigest:       "digest-b",
+		DefinitionAcceptedPriorDigest:  "digest-a",
 	}
 	res, err := svc.Invalidate("S001", in)
 	if err != nil {
@@ -563,8 +577,8 @@ func TestInvalidateArchivesAndRecordsProvenance(t *testing.T) {
 	if inv.PlanFingerprintBefore != "plan-1" || inv.PlanFingerprintAfter != "plan-2" {
 		t.Errorf("plan fingerprints = %q/%q", inv.PlanFingerprintBefore, inv.PlanFingerprintAfter)
 	}
-	if !inv.ReconciledAt.Equal(in.ReconciledAt) {
-		t.Errorf("reconciled at = %v, want %v", inv.ReconciledAt, in.ReconciledAt)
+	if !inv.DefinitionAcceptedAt.Equal(in.DefinitionAcceptedAt) {
+		t.Errorf("accepted at = %v, want %v", inv.DefinitionAcceptedAt, in.DefinitionAcceptedAt)
 	}
 	if inv.DefinitionDigestBefore != "digest-a" || inv.DefinitionDigestAfter != "digest-b" {
 		t.Errorf("definition digests = %q/%q", inv.DefinitionDigestBefore, inv.DefinitionDigestAfter)
@@ -608,7 +622,8 @@ func TestInvalidateLegacyRequestWithReconciliation(t *testing.T) {
 		By:                             "operator",
 		CurrentDefinitionDigest:        "digest-b",
 		DefinitionAcceptedAsReconciled: true,
-		ReconciledAt:                   req.RequestedAt.Add(time.Minute),
+		DefinitionAcceptedAt:           req.RequestedAt.Add(time.Minute),
+		DefinitionAcceptedDigest:       "digest-b",
 	}
 	if _, err := svc.Invalidate("S001", in); err != nil {
 		t.Fatalf("Invalidate: %v", err)
@@ -626,7 +641,14 @@ func TestInvalidateHistoryFailureLeavesHeadPending(t *testing.T) {
 	failing := failHistoryRecord{records["S001"]}
 	svc.record = func(string) Record { return failing }
 
-	in := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", ReconciledAt: req.RequestedAt.Add(time.Minute)}
+	in := InvalidateInput{
+		Reason:                         "r",
+		By:                             "op",
+		CurrentDefinitionDigest:        "digest-b",
+		DefinitionAcceptedAsReconciled: true,
+		DefinitionAcceptedAt:           req.RequestedAt.Add(time.Minute),
+		DefinitionAcceptedDigest:       "digest-b",
+	}
 	if _, err := svc.Invalidate("S001", in); err == nil {
 		t.Fatal("Invalidate err = nil, want the history-append failure")
 	}

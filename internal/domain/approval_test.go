@@ -90,14 +90,14 @@ func TestApprovalInvalidationRecordFields(t *testing.T) {
 		InvalidatedAt:          at,
 		PlanFingerprintBefore:  "plan-before",
 		PlanFingerprintAfter:   "plan-after",
-		ReconciledAt:           at.Add(time.Minute),
+		DefinitionAcceptedAt:   at.Add(time.Minute),
 		DefinitionDigestBefore: "digest-before",
 		DefinitionDigestAfter:  "digest-after",
 	}
 	if rec.Reason != "plan revised after approval" || rec.InvalidatedBy != "operator" {
 		t.Fatalf("operator reason/identity not carried: %+v", rec)
 	}
-	if rec.InvalidatedAt.IsZero() || rec.ReconciledAt.IsZero() {
+	if rec.InvalidatedAt.IsZero() || rec.DefinitionAcceptedAt.IsZero() {
 		t.Fatalf("timestamps not carried: %+v", rec)
 	}
 	if rec.PlanFingerprintBefore == "" || rec.PlanFingerprintAfter == "" {
@@ -143,7 +143,7 @@ func TestApprovalInvalidationRoundTrip(t *testing.T) {
 			InvalidatedAt:          at,
 			PlanFingerprintBefore:  "plan-before",
 			PlanFingerprintAfter:   "plan-after",
-			ReconciledAt:           at.Add(time.Minute),
+			DefinitionAcceptedAt:   at.Add(time.Minute),
 			DefinitionDigestBefore: "digest-before",
 			DefinitionDigestAfter:  "digest-after",
 		},
@@ -167,7 +167,7 @@ func TestApprovalInvalidationRoundTrip(t *testing.T) {
 		!got.Invalidation.InvalidatedAt.Equal(req.Invalidation.InvalidatedAt) ||
 		got.Invalidation.PlanFingerprintBefore != req.Invalidation.PlanFingerprintBefore ||
 		got.Invalidation.PlanFingerprintAfter != req.Invalidation.PlanFingerprintAfter ||
-		!got.Invalidation.ReconciledAt.Equal(req.Invalidation.ReconciledAt) ||
+		!got.Invalidation.DefinitionAcceptedAt.Equal(req.Invalidation.DefinitionAcceptedAt) ||
 		got.Invalidation.DefinitionDigestBefore != req.Invalidation.DefinitionDigestBefore ||
 		got.Invalidation.DefinitionDigestAfter != req.Invalidation.DefinitionDigestAfter {
 		t.Fatalf("Invalidation changed across round-trip: %+v != %+v", got.Invalidation, req.Invalidation)

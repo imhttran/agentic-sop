@@ -60,6 +60,23 @@ func TaskDefinitionIdentity(dir, taskID string) (DefinitionIdentity, error) {
 	return DefinitionIdentity{TaskID: id}, nil
 }
 
+// stageDigestByID returns the definition digest of one stage in a compiled plan,
+// or an empty string when the plan does not define it. It is the join between
+// reconciliation acceptance and a request's recorded digest: both sides use
+// stageDigest, so the values are directly comparable.
+func stageDigestByID(plan *planner.Plan, taskID string) string {
+	if plan == nil {
+		return ""
+	}
+	id := strings.TrimSpace(taskID)
+	for _, stage := range plan.Stages {
+		if stage.ID == id {
+			return stageDigest(stage)
+		}
+	}
+	return ""
+}
+
 // stageDigest is the deterministic digest over one persisted plan stage. Fields
 // are hashed in a fixed order, each terminated by a NUL separator, and every
 // list is canonicalized (sorted, de-duplicated) so the digest never depends on
@@ -144,10 +161,22 @@ type ReconciliationProvenance struct {
 	// Present reports whether reconciliation evidence exists for TaskID. It is
 	// true only when Reconciled is true.
 	Present bool
-	// RecordedAt is when that reconciliation was recorded: the plan provenance's
-	// GeneratedAt, which Reconcile rewrites on each reconciliation. It is zero when
-	// Present is false.
+	// RecordedAt is the plan provenance's GeneratedAt. It is a plan-wide write
+	// time, NOT proof of when this task's change was accepted: it is rewritten by
+	// any later plan write, including a no-op one. Callers must not use it as
+	// acceptance evidence; AcceptedAt is that evidence.
 	RecordedAt time.Time
+	// Accepted reports whether a task-scoped accepted-change record exists.
+	Accepted bool
+	// AcceptedAt is when this task's definition change was explicitly accepted. It
+	// is zero unless Accepted is true.
+	AcceptedAt time.Time
+	// DefinitionDigestBefore and DefinitionDigestAfter bind that acceptance to the
+	// concrete change it covers. Both are empty unless Accepted is true.
+	DefinitionDigestBefore string
+	DefinitionDigestAfter  string
+	// AcceptanceSourceSHA256 is the accepted plan revision.
+	AcceptanceSourceSHA256 string
 	// AutoRecords carries the automatic-reconciliation records for TaskID, when an
 	// autonomy policy reconciled it instead of a human.
 	AutoRecords []AutoReconciled
@@ -172,6 +201,22 @@ func TaskReconciliationProvenance(dir, taskID string) (ReconciliationProvenance,
 			out.RecordedAt = meta.GeneratedAt
 			break
 		}
+	}
+	// A task-scoped acceptance record is the only supported proof of when and what
+	// was accepted. The newest record for this task wins; an entry missing its time
+	// or digests stays unusable rather than being completed by inference.
+	for _, rec := range meta.AcceptedChanges {
+		if strings.TrimSpace(rec.TaskID) != id {
+			continue
+		}
+		if out.Accepted && !rec.AcceptedAt.After(out.AcceptedAt) {
+			continue
+		}
+		out.Accepted = rec.AcceptedAt != (time.Time{})
+		out.AcceptedAt = rec.AcceptedAt
+		out.DefinitionDigestBefore = rec.DefinitionDigestBefore
+		out.DefinitionDigestAfter = rec.DefinitionDigestAfter
+		out.AcceptanceSourceSHA256 = rec.SourceSHA256
 	}
 	for _, rec := range meta.AutoReconciled {
 		if rec.TaskID == id {
