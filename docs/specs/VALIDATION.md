@@ -117,7 +117,8 @@ configured set.
 When `verification.scoped` is configured, a plan drive MAY narrow a task's
 `validation.test` commands to the scoped rules that cover the task's accumulated
 change set. Narrowing MUST NOT apply when any changed path matches no rule, when the
-change set is empty or may be truncated, or when the tier is `HIGH`. `build` and
+change set is empty or may be truncated, or when the tier is not `MEDIUM`
+(`LOW` keeps its own targeted set). `build` and
 `lint` MUST NOT be narrowed. Before the drive reports the plan complete, it MUST run
 the full configured validation set against the final tree. A failure MUST withhold
 completion and exit non-zero. The gate holds no state across invocations, so a later

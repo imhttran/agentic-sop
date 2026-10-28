@@ -7,6 +7,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/review"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
 	"github.com/imhttran/agentic-sop/internal/validate"
 	"github.com/imhttran/agentic-sop/internal/verify"
@@ -57,12 +58,13 @@ func (s *runSession) cacheValidation(key string, suite testrunner.SuiteResult) {
 	}
 }
 
-// scope applies verification.scoped selection when this session enables it.
-func (s *runSession) scope(cfg config.Config, v config.Validation, tier verify.Tier, changed []string) config.Validation {
-	if s == nil || !s.scoped {
+// scope applies verification.scoped selection when this session enables it. The
+// task's change set is read only when scoping can apply.
+func (s *runSession) scope(cfg config.Config, v config.Validation, tier verify.Tier, rn *runpkg.Run) config.Validation {
+	if s == nil || !s.scoped || len(cfg.Verification.Scoped) == 0 {
 		return v
 	}
-	return scopeValidation(cfg, v, tier, changed)
+	return scopeValidation(cfg, v, tier, rn.ChangedFiles())
 }
 
 // cachedReview returns a prior clean review for the identity.

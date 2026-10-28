@@ -893,7 +893,8 @@ verification:
 ```
 
 A change with any path that matches no rule runs the full `validation.test` set, and
-`build` and `lint` always run in full. Each rule needs non-empty `paths` and `test`.
+`build` and `lint` always run in full. With `risk_based` on, only `MEDIUM` tasks are
+scoped: `LOW` keeps its `low` set and `HIGH` runs everything. Each rule needs non-empty `paths` and `test`.
 Single-task `sop run`, `sop prompt`, and `sop eval` ignore the block.
 
 ## Related

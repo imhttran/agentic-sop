@@ -10,6 +10,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/verify"
 )
@@ -125,10 +126,7 @@ func TestScopeValidation(t *testing.T) {
 		{Paths: []string{"crates/core/**"}, Test: []string{"test-core"}},
 		{Paths: []string{"crates/cli/**", "crates/core/src/shared.rs"}, Test: []string{"test-cli", "test-core"}},
 	}}}
-	many := make([]string, 64)
-	for i := range many {
-		many[i] = "crates/core/f" + strings.Repeat("x", i)
-	}
+	many := make([]string, runpkg.MaxTaskChangedFiles)
 	cases := []struct {
 		name    string
 		changed []string
@@ -141,6 +139,7 @@ func TestScopeValidation(t *testing.T) {
 		{"empty change set", nil, verify.Medium, full.Test},
 		{"possibly truncated", many, verify.Medium, full.Test},
 		{"high tier", []string{"crates/core/src/lib.rs"}, verify.High, full.Test},
+		{"low tier keeps its own set", []string{"crates/core/src/lib.rs"}, verify.Low, full.Test},
 	}
 	for _, c := range cases {
 		got := scopeValidation(cfg, full, c.tier, c.changed)
@@ -148,7 +147,7 @@ func TestScopeValidation(t *testing.T) {
 			t.Errorf("%s: got %+v, want test %v with build/lint unchanged", c.name, got, c.want)
 		}
 	}
-	if got := (&runSession{}).scope(cfg, full, verify.Medium, []string{"crates/core/src/lib.rs"}); !reflect.DeepEqual(got, full) {
+	if got := (&runSession{}).scope(cfg, full, verify.Medium, nil); !reflect.DeepEqual(got, full) {
 		t.Errorf("unscoped session narrowed validation: %+v", got)
 	}
 }

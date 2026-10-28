@@ -61,8 +61,8 @@ A pure function next to `selectValidation`:
 func scopeValidation(cfg config.Config, v config.Validation, changed []string) config.Validation
 ```
 
-1. If `scoped` is empty, `changed` is empty, or the tier is `HIGH`, return `v`
-   unchanged.
+1. If `scoped` is empty, `changed` is empty or may be truncated, or the tier is
+   not `MEDIUM`, return `v` unchanged.
 2. Every changed path must match at least one rule. If any path matches no rule,
    return `v` unchanged. This is the fail-safe: an unmapped change runs the full set.
 3. Otherwise set `v.Test` to the union of the matched rules' `test` commands,
@@ -83,7 +83,7 @@ validation call sites, right after the change set is recorded:
 - the validate step in the fix loop (`run.go:883`)
 
 ```go
-suite = sessionValidation(ctx, dir, sess.scope(cfg, vset, tier, rn.ChangedFiles()), diff, rec, sess)
+suite = sessionValidation(ctx, dir, sess.scope(cfg, vset, tier, rn), diff, rec, sess)
 ```
 
 The cache needs no change. `validationIdentity` already hashes the command set, so a

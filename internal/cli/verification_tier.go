@@ -68,12 +68,13 @@ func shouldRunJEV(cfg config.Config, tier verify.Tier) bool {
 
 // scopeValidation narrows v.Test to the verification.scoped commands covering the
 // task's changed paths. It returns v unchanged when no rule is configured, the
-// change set is empty or may be truncated, the tier is HIGH, or any changed path
-// matches no rule, so an unmapped change always runs the full set. Build and lint
-// are never narrowed. The plan's final gate re-runs the full set before completion.
+// change set is empty or may be truncated, the tier is not MEDIUM (LOW already
+// runs its own targeted set, HIGH runs everything), or any changed path matches
+// no rule, so an unmapped change always runs the full set. Build and lint are
+// never narrowed. The plan's final gate re-runs the full set before completion.
 func scopeValidation(cfg config.Config, v config.Validation, tier verify.Tier, changed []string) config.Validation {
 	rules := cfg.Verification.Scoped
-	if len(rules) == 0 || len(changed) == 0 || len(changed) >= runpkg.MaxTaskChangedFiles || tier == verify.High {
+	if len(rules) == 0 || len(changed) == 0 || len(changed) >= runpkg.MaxTaskChangedFiles || tier != verify.Medium {
 		return v
 	}
 	matched := make([]bool, len(rules))

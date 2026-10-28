@@ -197,7 +197,8 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 // finalValidationGate runs the full configured validation once before a plan
 // whose tasks validated with verification.scoped tests reports completion. It
 // keeps no state across invocations: re-running `sop run` on a satisfied plan
-// retries it. A pass from the last task on the same tree is reused via sess.
+// retries it. The session cache reuses a pass only when the last task ran the
+// full set on the same tree; after a scoped task the full set runs again.
 func finalValidationGate(ctx context.Context, dir string, cfg config.Config, d deps, sess *runSession, stderr io.Writer) bool {
 	if len(cfg.Verification.Scoped) == 0 {
 		return true
