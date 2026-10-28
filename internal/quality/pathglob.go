@@ -44,13 +44,15 @@ type chunk struct {
 func splitDoubleStar(pattern string) []chunk {
 	parts := strings.Split(pattern, "**")
 	var chunks []chunk
-	for _, p := range parts {
-		p = strings.Trim(p, "/")
-		if p == "" {
+	for i, p := range parts {
+		// Every part after the first was preceded by a `**`, including an interior
+		// one such as `a/**/b`.
+		if i > 0 {
 			chunks = append(chunks, chunk{doubleStar: true})
-			continue
 		}
-		chunks = append(chunks, chunk{segments: strings.Split(p, "/")})
+		if p = strings.Trim(p, "/"); p != "" {
+			chunks = append(chunks, chunk{segments: strings.Split(p, "/")})
+		}
 	}
 	// Collapse runs of consecutive `**` chunks into a single wildcard.
 	var out []chunk

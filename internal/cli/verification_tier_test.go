@@ -125,6 +125,7 @@ func TestScopeValidation(t *testing.T) {
 	cfg := config.Config{Validation: full, Verification: config.Verification{Scoped: []config.ScopedRule{
 		{Paths: []string{"crates/core/**"}, Test: []string{"test-core"}},
 		{Paths: []string{"crates/cli/**", "crates/core/src/shared.rs"}, Test: []string{"test-cli", "test-core"}},
+		{Paths: []string{"crates/**/generated.rs"}, Test: []string{"test-generated"}},
 	}}}
 	many := make([]string, runpkg.MaxTaskChangedFiles)
 	cases := []struct {
@@ -135,6 +136,7 @@ func TestScopeValidation(t *testing.T) {
 	}{
 		{"covered", []string{"crates/core/src/lib.rs"}, verify.Medium, []string{"test-core"}},
 		{"union deduplicated", []string{"crates/core/src/shared.rs", "crates/cli/main.rs"}, verify.Medium, []string{"test-core", "test-cli"}},
+		{"broad and interior-wildcard rules both apply", []string{"crates/core/src/generated.rs"}, verify.Medium, []string{"test-core", "test-generated"}},
 		{"one uncovered", []string{"crates/core/src/lib.rs", "README.md"}, verify.Medium, full.Test},
 		{"empty change set", nil, verify.Medium, full.Test},
 		{"possibly truncated", many, verify.Medium, full.Test},
