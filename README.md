@@ -150,6 +150,9 @@ With `sop mcp --planner --start-work`, the planner can also start work itself:
 PLAN.md in the background, and reports status instead when that work is already
 running, already ran, or is the active plan (see
 [Starting work over MCP](docs/reference/CLI.md#starting-work-over-mcp)).
+`sop-setup-planner [PROJECT_DIR]` (installed with `./install.sh --planner-setup`, or
+`make setup-planner PROJECT=DIR`) sets the planner up for a project in one step; see
+[Setting up the planner](docs/reference/CLI.md#setting-up-the-planner).
 
 Planner decisions are advice, never human approval, and published results are
 evidence, never automatic task completion. Resumption is currently interactive;

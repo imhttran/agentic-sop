@@ -744,6 +744,136 @@ else
 fi
 
 # ---------------------------------------------------------------------------
+# 14. Wrapper pointer --start-work: the wrapper serves the flag, and a binary
+#     without sop_start_work fails the local check and changes nothing.
+# ---------------------------------------------------------------------------
+
+MOCK_SOP_SW="$TMP/mock-sop-start-work"
+cat > "$MOCK_SOP_SW" <<'EOF'
+#!/bin/sh
+# Answer the tools/call; list sop_start_work only when served with --start-work.
+input="$(cat)"
+printf '%s\n' '{"jsonrpc":"2.0","id":2,"result":{"content":[{"type":"text","text":"no pending questions"}],"isError":false}}'
+case "$input" in
+  *tools/list*)
+    case " $* " in
+      *" --start-work "*) printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"tools":[{"name":"sop_status"},{"name":"sop_start_work"},{"name":"sop_work_status"}]}}' ;;
+      *) printf '%s\n' '{"jsonrpc":"2.0","id":3,"result":{"tools":[{"name":"sop_status"}]}}' ;;
+    esac ;;
+esac
+EOF
+chmod +x "$MOCK_SOP_SW"
+
+if ! "$POINT_SCRIPT" --checkout "$POINT_CHECKOUT" --binary "$MOCK_SOP_SW" --start-work --dry-run "$POINT_PROJECT" >"$TMP/out" 2>&1; then
+  fail "point --start-work dry-run failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$TMP/out")" "sop_start_work is served"
+  assert_contains "$(cat "$TMP/out")" "local check ok; sop_question_list"
+  pass "point --start-work checks that sop_start_work is served"
+fi
+
+# The old mock answers questions but has no sop_start_work: refuse, write nothing.
+if "$POINT_SCRIPT" --checkout "$POINT_CHECKOUT" --binary "$MOCK_SOP" --start-work "$POINT_PROJECT" >"$TMP/out" 2>&1; then
+  fail "point --start-work accepted a binary without sop_start_work"
+else
+  assert_contains "$(cat "$TMP/out")" "does not serve sop_start_work"
+  [ ! -e "$POINT_CHECKOUT/.run/tunnel/sop-mcp-planner.sh" ] || fail "a failed --start-work check wrote the live wrapper"
+  pass "point --start-work rejects a binary without sop_start_work"
+fi
+
+# ---------------------------------------------------------------------------
+# 15. setup-planner: defaults to the checkout, writes the --start-work wrapper,
+#     and registers the Claude desktop app only when asked.
+# ---------------------------------------------------------------------------
+
+SETUP_SCRIPT="$REPO_ROOT/scripts/setup-planner.sh"
+SETUP_CHECKOUT="$TMP/setup-checkout"
+SETUP_HOME="$TMP/setup-home"
+mkdir -p "$SETUP_CHECKOUT/scripts" "$SETUP_CHECKOUT/.agent-sdlc" "$SETUP_CHECKOUT/.run/spike" "$SETUP_HOME"
+cp "$POINT_SCRIPT" "$SETUP_SCRIPT" "$SETUP_CHECKOUT/scripts/"
+cp "$MOCK_SOP_SW" "$SETUP_CHECKOUT/.run/spike/sop-planner"
+git -C "$SETUP_CHECKOUT" init -q -b main
+git -C "$SETUP_CHECKOUT" add scripts
+git -C "$SETUP_CHECKOUT" -c user.name=test -c user.email=test@localhost commit -q -m fixture
+SETUP_WRAPPER="$SETUP_CHECKOUT/.run/tunnel/sop-mcp-planner.sh"
+SETUP_ENV=(env HOME="$SETUP_HOME" XDG_CONFIG_HOME="$SETUP_HOME/.config")
+if [ "$(uname -s)" = Darwin ]; then
+  CLAUDE_CFG="$SETUP_HOME/Library/Application Support/Claude/claude_desktop_config.json"
+else
+  CLAUDE_CFG="$SETUP_HOME/.config/Claude/claude_desktop_config.json"
+fi
+
+# Dry run: checks, changes nothing.
+if ! "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build --dry-run >"$TMP/out" 2>&1; then
+  fail "setup-planner dry-run failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$TMP/out")" "nothing was changed"
+  [ ! -e "$SETUP_WRAPPER" ] || fail "setup-planner dry-run wrote the wrapper"
+  pass "setup-planner dry-run changes nothing"
+fi
+
+# Default project is the checkout; without --register-claude it only reports.
+if ! "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build >"$TMP/out" 2>&1; then
+  fail "setup-planner failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$SETUP_WRAPPER")" "PROJECT='$(cd "$SETUP_CHECKOUT" && pwd)'"
+  assert_contains "$(cat "$SETUP_WRAPPER")" "mcp --planner --start-work"
+  assert_contains "$(cat "$TMP/out")" "does not run this wrapper yet"
+  case "$(cat "$TMP/out")" in *"planner-tunnel-candidate.sh status --checkout <checkout>"*) fail "setup-planner printed the point script's generic next steps" ;; esac
+  [ ! -e "$CLAUDE_CFG" ] || fail "setup-planner wrote the Claude config without --register-claude"
+  pass "setup-planner defaults to the checkout and serves --start-work"
+fi
+
+# --register-claude keeps other servers, backs up, and is idempotent.
+mkdir -p "$(dirname "$CLAUDE_CFG")"
+printf '%s\n' '{"mcpServers":{"other":{"command":"/bin/other"}},"theme":"dark"}' > "$CLAUDE_CFG"
+if ! "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build --register-claude "$POINT_PROJECT" >"$TMP/out" 2>&1; then
+  fail "setup-planner --register-claude failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$SETUP_WRAPPER")" "PROJECT='$(cd "$POINT_PROJECT" && pwd)'"
+  python3 - "$CLAUDE_CFG" "$SETUP_WRAPPER" <<'PY' || fail "Claude config not registered as expected: $(cat "$CLAUDE_CFG")"
+import json, sys
+cfg = json.load(open(sys.argv[1]))
+assert cfg["theme"] == "dark"
+assert cfg["mcpServers"]["other"] == {"command": "/bin/other"}
+assert cfg["mcpServers"]["sop-planner"] == {"command": sys.argv[2]}
+PY
+  ls "$CLAUDE_CFG".bak-* >/dev/null 2>&1 || fail "setup-planner did not back up the Claude config"
+  pass "setup-planner --register-claude adds sop-planner and keeps the rest"
+fi
+if ! "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build --register-claude "$POINT_PROJECT" >"$TMP/out" 2>&1; then
+  fail "setup-planner re-run failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$TMP/out")" "already runs this wrapper"
+  pass "setup-planner is idempotent once registered"
+fi
+
+# A relative project path resolves against the caller's directory, not the
+# checkout — even when the checkout has a directory of the same name.
+mkdir -p "$TMP/caller/rel-project/.agent-sdlc" "$SETUP_CHECKOUT/rel-project/.agent-sdlc"
+if ! (cd "$TMP/caller" && "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build rel-project) >"$TMP/out" 2>&1; then
+  fail "setup-planner with a relative project failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$SETUP_WRAPPER")" "PROJECT='$(cd "$TMP/caller/rel-project" && pwd)'"
+  pass "setup-planner resolves a relative project against the caller's directory"
+fi
+if (cd "$TMP/caller" && "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build no-such-project) >"$TMP/out" 2>&1; then
+  fail "setup-planner accepted a missing relative project"
+else
+  assert_contains "$(cat "$TMP/out")" "project directory not found: no-such-project"
+  pass "setup-planner reports a missing project by the name given"
+fi
+
+# A different sop-planner entry is never overwritten.
+printf '%s\n' '{"mcpServers":{"sop-planner":{"command":"/elsewhere/wrapper.sh"}}}' > "$CLAUDE_CFG"
+if "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build --register-claude "$POINT_PROJECT" >"$TMP/out" 2>&1; then
+  fail "setup-planner overwrote a different sop-planner entry"
+else
+  assert_contains "$(cat "$CLAUDE_CFG")" "/elsewhere/wrapper.sh"
+  pass "setup-planner refuses to overwrite a different sop-planner entry"
+fi
+
+# ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 
