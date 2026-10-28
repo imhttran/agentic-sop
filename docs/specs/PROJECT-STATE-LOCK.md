@@ -52,6 +52,8 @@ call or an external validation run.
 
 | Path | State written |
 | --- | --- |
+| `planflow.Prepare` (initial creation: `initialize`) | `plan.json`, `plan.meta.json`, task graph |
+| `planflow.Prepare` (completed-plan handoff: `handOff`) | archive records, plan files, task graph |
 | `planflow.Reconcile` | `plan.json`, `plan.meta.json`, task graph |
 | `planflow.Supersede` | `plan.json`, `plan.meta.json`, task graph |
 | `planflow.Complete` | plan lifecycle records, metadata |
@@ -62,10 +64,10 @@ call or an external validation run.
 | `approval.Service.Invalidate` | head, history |
 | `sop task complete` (external completion, via `run.ResolvePendingApproval`) | head, history |
 
-### Not yet a participant
+### Model calls stay outside the lock
 
-`planflow.Prepare`'s initial-plan path (`initialize` → `ensurePlan` → `ensureTasks`)
-is not yet wired. It can invoke the planner model, and the lock must not be held
-across that call, so it needs its own narrow boundary around the persistence step
-rather than a wrapper at entry. Until then, plan creation is not serialized with the
-other writers.
+`Prepare` builds a plan before it writes: `ensurePlan` and `handOff` may call the
+planner model, so neither takes the lock. `ensurePlan` returns a persistence closure
+instead of writing, and the caller takes the lock only for that closure plus the task
+graph creation. `handOff` takes the lock after `buildPlan` returns. No critical
+section contains a model call or an external validation run.
