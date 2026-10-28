@@ -99,7 +99,38 @@ type ApprovalDecision struct {
 // invalidation closes the request because the plan it authorized is stale, and it
 // authorizes nothing. A request carries this record only when it was invalidated;
 // its Status is then ApprovalInvalidated.
+// ApprovalInvalidation kinds. An EVIDENCE invalidation is authorized by task-scoped
+// accepted-change provenance; an ATTESTED invalidation is authorized by a
+// present-day operator statement because no such provenance exists for a legacy
+// request. They are never conflated: an attested record says what it is.
+const (
+	ApprovalInvalidationEvidence = "EVIDENCE"
+	ApprovalInvalidationAttested = "ATTESTED"
+	// InvalidationSourceUnknownLegacy marks an attested invalidation whose source
+	// provenance is a legacy reconciled_tasks entry: SOP cannot prove when, or for
+	// what reason, that legacy reconciliation happened, and records that instead of
+	// inventing it.
+	InvalidationSourceUnknownLegacy = "UNKNOWN_LEGACY_RECONCILIATION"
+)
+
 type ApprovalInvalidation struct {
+	// Kind is ApprovalInvalidationEvidence or ApprovalInvalidationAttested.
+	Kind string `json:"kind,omitempty"`
+	// ExpectedRequestID is the request the operator named when authorizing an
+	// attested invalidation, so a replacement request can never be acted on.
+	ExpectedRequestID string `json:"expected_request_id,omitempty"`
+	// ObsoleteRequirement is the requirement the operator attests no longer applies.
+	// For an attested invalidation it must be linked to the original request's own
+	// evidence.
+	ObsoleteRequirement string `json:"obsolete_requirement,omitempty"`
+	// ReplacementDefinition is the current definition the operator points at as the
+	// replacement. It is checked for consistency only; it is not proof of semantic
+	// equivalence.
+	ReplacementDefinition string `json:"replacement_definition,omitempty"`
+	// Source records what authorized the invalidation. An attested invalidation of a
+	// legacy request records InvalidationSourceUnknownLegacy, and never claims the
+	// absence of every provider-failure cause.
+	Source string `json:"source,omitempty"`
 	// Reason is the operator's recorded justification for the invalidation.
 	Reason string `json:"reason"`
 	// InvalidatedBy identifies the operator that invalidated the request.

@@ -209,6 +209,55 @@ time (`FAILED`). Neither is the decision state. Read the decision state from
 and any recorded decision. A request whose reason is a provider failure is a normal
 pending gate that needs a decision, not a stale-evidence case.
 
+## Attested invalidation for legacy requests
+
+Some requests predate the accepted-change provenance the evidence-backed path needs.
+For those, SOP offers a separate, explicitly weaker operation:
+
+```bash
+sop approval invalidate-attested TASK \
+  --by reviewer \
+  --reason "the cited deliverable was removed by the reconciled plan" \
+  --expected-request TASK-1 \
+  --obsolete-requirement 'domain.ApprovalRequest' \
+  --replacement-definition 'internal/notify/event.go' \
+  --expect-definition-digest <sha>
+```
+
+It is available only when **all** of the following hold:
+
+- the request is `PENDING`, legacy (no recorded definition digest), and its id equals
+  `--expected-request`, so a replacement request can never be acted on;
+- the task is not satisfied, and the plan provenance names **this** task;
+- no usable accepted-change evidence exists — when it does, the operation refuses and
+  points at `sop approval invalidate`;
+- the request is a human-boundary request (`Stage WAITING_FOR_HUMAN`); a failed
+  execution (`FAILED`) is never attested;
+- `--obsolete-requirement` appears in the request's **own** reason or evidence, and
+  does **not** appear in the current definition;
+- `--replacement-definition` appears in the current definition. This is a
+  **consistency check**, not proof of semantic equivalence;
+- the current definition digest equals `--expect-definition-digest`; it is re-verified
+  under the project lock immediately before the write, so a concurrent change is
+  detected rather than overwritten.
+
+What it records: `kind: ATTESTED`, `Decision` nil, the operator's statements and the
+actual time, and `source: UNKNOWN_LEGACY_RECONCILIATION` — because legacy
+reconciliation history carries no per-task acceptance time, and SOP will not invent
+one. The original request and its evidence stay verbatim in the append-only history.
+The task is not written: status, attempts, and satisfaction are unchanged, and fresh
+verification is still required.
+
+**Replay:** an identical repeat of the whole operation returns the recorded result and
+writes nothing. Any difference — request id, actor, reason, either statement, or the
+expected digest — is refused as a conflict.
+
+**What it does not prove.** The authority is the operator's present-day attestation.
+The guards make a provider-failure-only request ineligible in practice (a failed
+execution is refused, and a provider failure's evidence rarely names an obsolete
+requirement), but SOP does not claim this proves the absence of every such cause for
+every legacy request.
+
 ## Deciding interactively
 
 At a terminal, you can let SOP ask you which gate to decide, instead of naming one:
