@@ -11,6 +11,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 )
 
 // definitionDoc is a one-stage plan whose single stage carries every field the
@@ -385,7 +386,9 @@ func assertOnlyKnownStateFiles(t *testing.T, dir string) {
 	sort.Strings(names)
 	for _, name := range names {
 		switch name {
-		case planFileName, metaFileName, archiveDirName:
+		// The project state lock is a supported state file: reconciliation creates it
+		// and holds it across the read-check-write it performs.
+		case planFileName, metaFileName, archiveDirName, projectlock.FileName:
 		default:
 			t.Errorf("unexpected file under .agent-sdlc: %s", name)
 		}

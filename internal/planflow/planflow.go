@@ -44,6 +44,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	"github.com/imhttran/agentic-sop/internal/taskbuilder"
 )
 
@@ -610,6 +611,17 @@ const (
 // while the graph still held the old definitions. A retry once the file write
 // succeeds completes idempotently.
 func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error) {
+	// Reconciliation reads the recorded plan and the task graph, decides the
+	// change, and then writes plan.json, plan.meta.json, and the graph. The project
+	// lock spans that whole sequence so a concurrent approval operation cannot read
+	// a definition this reconciliation is about to replace. It is released before
+	// returning, and no model call happens anywhere inside it.
+	lock, err := projectlock.Acquire(ctx, opts.Dir)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	defer lock.Release()
+
 	res, diff, plan, data, err := reconcileDiff(ctx, opts, reconcileApply)
 	if err != nil {
 		return res, err
@@ -1422,6 +1434,14 @@ type SupersedeResult struct {
 // task stays FAILED, and a NEEDS_HUMAN record is historical evidence, never an
 // approval. It never executes a task and never runs the lifecycle for one.
 func Supersede(ctx context.Context, opts Options) (SupersedeResult, error) {
+	// Abandoning a plan rewrites plan.json, the provenance, and the graph, so it
+	// takes the same project lock reconciliation does.
+	lock, lockErr := projectlock.Acquire(ctx, opts.Dir)
+	if lockErr != nil {
+		return SupersedeResult{}, lockErr
+	}
+	defer lock.Release()
+
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
 
@@ -1502,6 +1522,14 @@ type CompleteResult struct {
 // verification cannot be completed. It fabricates nothing — the archived records are
 // the task snapshot verbatim — and it never executes a task or runs a model.
 func Complete(opts Options) (CompleteResult, error) {
+	// Archiving the active plan is a plan-state write; bound the wait because this
+	// entry point carries no caller context.
+	lock, lockErr := projectlock.AcquireWait(context.Background(), opts.Dir, 0)
+	if lockErr != nil {
+		return CompleteResult{}, lockErr
+	}
+	defer lock.Release()
+
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
 	meta := readMetadata(metaPath)

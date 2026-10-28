@@ -77,11 +77,46 @@ type Tasks interface {
 	Save(task *domain.Task) error
 }
 
+// LockFunc acquires the project state lock for one operation and returns its
+// release. SOP's approval artifacts and the plan/task stores cannot share a
+// transaction, so every read-check-write in this service runs under this lock.
+type LockFunc func() (release func(), err error)
+
 // Service is the human approval application boundary.
 type Service struct {
 	tasks  Tasks
 	record func(taskID string) Record
 	now    func() time.Time
+	// lock, when set, serializes this service's read-check-write sequences against
+	// every other participating project-state writer. It is optional so the service
+	// stays unit-testable without a filesystem; production callers set it through
+	// NewWithLock.
+	lock LockFunc
+}
+
+// NewWithLock returns a Service that holds the project state lock across each
+// mutating operation. Callers must supply a lock whose scope covers both the
+// approval artifacts and the plan state, otherwise the guarantee is partial.
+func NewWithLock(tasks Tasks, record func(taskID string) Record, lock LockFunc) *Service {
+	s := New(tasks, record)
+	s.lock = lock
+	return s
+}
+
+// enter acquires the project lock for one operation. A nil lock is a no-op so
+// callers that do not participate keep their previous behavior.
+func (s *Service) enter() (func(), error) {
+	if s.lock == nil {
+		return func() {}, nil
+	}
+	release, err := s.lock()
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return func() {}, nil
+	}
+	return release, nil
 }
 
 // New returns a Service over a task store and a per-task record factory. A nil
@@ -271,6 +306,11 @@ type Result struct {
 // kind of gate, supersedes the previous head into the history and starts a new
 // request, so a stale request can never resolve a newer gate.
 func (s *Service) Request(in RequestInput) (domain.ApprovalRequest, error) {
+	release, err := s.enter()
+	if err != nil {
+		return domain.ApprovalRequest{}, err
+	}
+	defer release()
 	taskID := strings.TrimSpace(in.TaskID)
 	if taskID == "" {
 		return domain.ApprovalRequest{}, errors.New("approval: task id is required")
@@ -387,6 +427,11 @@ func (s *Service) Decline(taskID string, in DecisionInput) (Result, error) {
 // on an already-superseded head is idempotent: it appends no duplicate history entry
 // and does not change the head.
 func (s *Service) Supersede(taskID string, in SupersedeInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")
@@ -475,6 +520,11 @@ func (s *Service) Supersede(taskID string, in SupersedeInput) (Result, error) {
 // and leaves the head PENDING. A repeated call on an already-invalidated head is
 // idempotent: it appends no duplicate history entry and does not change the head.
 func (s *Service) Invalidate(taskID string, in InvalidateInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")
@@ -618,6 +668,11 @@ func (s *Service) historyHasRequest(rec Record, id string) bool {
 }
 
 func (s *Service) decide(taskID string, approve bool, in DecisionInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")
