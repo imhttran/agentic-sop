@@ -111,3 +111,15 @@ configured set runs exactly as before. When enabled: `LOW` runs the configured t
 set (falling back to the full set when none is configured, so a tier can never reduce
 verification to nothing), `MEDIUM` runs the build+test set, and `HIGH` runs the full
 configured set.
+
+## 10. Scoped Task Tests and the Final Gate
+
+When `verification.scoped` is configured, a plan drive MAY narrow a task's
+`validation.test` commands to the scoped rules that cover the task's accumulated
+change set. Narrowing MUST NOT apply when any changed path matches no rule, when the
+change set is empty or may be truncated, or when the tier is `HIGH`. `build` and
+`lint` MUST NOT be narrowed. Before the drive reports the plan complete, it MUST run
+the full configured validation set against the final tree. A failure MUST withhold
+completion and exit non-zero. The gate holds no state across invocations, so a later
+`sop run` on the satisfied plan retries it. Outside a plan drive the full set always
+runs.

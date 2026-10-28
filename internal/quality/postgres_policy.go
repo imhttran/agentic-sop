@@ -68,22 +68,25 @@ func PostgresIntegrationRequired(changedPaths []string) bool {
 
 // matchesPostgresPattern reports whether one changed path matches the policy.
 func matchesPostgresPattern(path string) bool {
-	if strings.TrimSpace(path) == "" {
-		return false
+	for _, pattern := range postgresPathPatterns {
+		if MatchPath(pattern, path) {
+			return true
+		}
 	}
+	return false
+}
+
+// MatchPath reports whether a repository-relative path matches a glob with the
+// same semantics as the PostgreSQL policy patterns (see matchGlob). A blank
+// path never matches.
+func MatchPath(pattern, path string) bool {
 	cleaned := filepath.ToSlash(strings.TrimSpace(path))
 	cleaned = strings.TrimPrefix(cleaned, "./")
 	cleaned = strings.TrimSuffix(cleaned, "/")
 	if cleaned == "" {
 		return false
 	}
-	segments := strings.Split(cleaned, "/")
-	for _, pattern := range postgresPathPatterns {
-		if matchGlob(pattern, segments) {
-			return true
-		}
-	}
-	return false
+	return matchGlob(pattern, strings.Split(cleaned, "/"))
 }
 
 // matchGlob matches a slash-separated glob pattern against the path's segments.
