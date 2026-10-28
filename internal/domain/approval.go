@@ -24,13 +24,22 @@ const (
 	// the append-only history rather than deciding it. It is resolved, so the shared
 	// closure gates treat the gate as leaveable.
 	ApprovalSuperseded ApprovalStatus = "SUPERSEDED"
+	// ApprovalInvalidated: an operator invalidated a PENDING request because the
+	// plan it authorized no longer matches the task definition. It is NOT a human
+	// decision and NOT an acceptance: no human approved the request, and the
+	// invalidation never authorizes the work. It is a distinct resolved status, so
+	// no consumer can read it as APPROVED, DECLINED, or SUPERSEDED. It is resolved
+	// because the request can no longer authorize anything, so the shared closure
+	// gates treat the gate as leaveable. The audit provenance lives in the
+	// ApprovalInvalidation record on the request.
+	ApprovalInvalidated ApprovalStatus = "INVALIDATED"
 )
 
 // Resolved reports whether a decision has been recorded for the request. A
-// SUPERSEDED request is resolved: an operator superseded it, so no decision is
-// pending on it.
+// SUPERSEDED or INVALIDATED request is resolved: an operator closed it, so no
+// decision is pending on it.
 func (s ApprovalStatus) Resolved() bool {
-	return s == ApprovalApproved || s == ApprovalDeclined || s == ApprovalSuperseded
+	return s == ApprovalApproved || s == ApprovalDeclined || s == ApprovalSuperseded || s == ApprovalInvalidated
 }
 
 // ApprovalKind names why SOP parked the task at a human gate. It is SOP's own
@@ -79,6 +88,38 @@ type ApprovalDecision struct {
 	LifecycleAction string `json:"lifecycle_action,omitempty"`
 }
 
+// ApprovalInvalidation is the durable audit record of an operator invalidation of
+// an approval request: the operator's reason and identity, when the invalidation
+// happened, the plan source fingerprint on both sides of the revision, when the
+// plan was reconciled with the task definition, and the task definition digest on
+// both sides of the revision.
+//
+// It is deliberately separate from ApprovalDecision. It is not a decision, it
+// carries no Approved value, and it never records a lifecycle action: an
+// invalidation closes the request because the plan it authorized is stale, and it
+// authorizes nothing. A request carries this record only when it was invalidated;
+// its Status is then ApprovalInvalidated.
+type ApprovalInvalidation struct {
+	// Reason is the operator's recorded justification for the invalidation.
+	Reason string `json:"reason"`
+	// InvalidatedBy identifies the operator that invalidated the request.
+	InvalidatedBy string `json:"invalidated_by"`
+	// InvalidatedAt is when the invalidation was recorded (UTC).
+	InvalidatedAt time.Time `json:"invalidated_at"`
+	// PlanFingerprintBefore is the plan source fingerprint the request was raised
+	// against.
+	PlanFingerprintBefore string `json:"plan_fingerprint_before,omitempty"`
+	// PlanFingerprintAfter is the plan source fingerprint of the revised plan.
+	PlanFingerprintAfter string `json:"plan_fingerprint_after,omitempty"`
+	// ReconciledAt is when the plan was reconciled with the task definition (UTC).
+	ReconciledAt time.Time `json:"reconciled_at"`
+	// DefinitionDigestBefore is the task definition digest the request was raised
+	// against.
+	DefinitionDigestBefore string `json:"definition_digest_before,omitempty"`
+	// DefinitionDigestAfter is the task definition digest of the revised definition.
+	DefinitionDigestAfter string `json:"definition_digest_after,omitempty"`
+}
+
 // ApprovalRequest is SOP's authoritative, persisted representation of one human
 // approval gate. It exists so a client resolves a gate by asking SOP (and by
 // acting on this record) rather than inferring one from BLOCKED, NEEDS_HUMAN, or
@@ -102,14 +143,28 @@ type ApprovalRequest struct {
 	Stage string `json:"stage,omitempty"`
 	// Disposition is the failure-classification disposition at request time.
 	Disposition string `json:"disposition,omitempty"`
+	// DefinitionDigest is the digest of the task definition the request was raised
+	// against, when the definition was known at request time. It is optional: a
+	// request may predate a known definition. A later invalidation compares it with
+	// the revised definition digest.
+	DefinitionDigest string `json:"definition_digest,omitempty"`
+	// PlanFingerprint is the active plan source fingerprint the request was raised
+	// against, when it was known at request time. It is audit context for a later
+	// invalidation; an empty value means the request's plan revision is unknown.
+	PlanFingerprint string `json:"plan_fingerprint,omitempty"`
 	// RequestedAt is when the request was first recorded (UTC).
 	RequestedAt time.Time `json:"requested_at"`
 	// RequestedBy identifies who/what raised the request, when known.
 	RequestedBy string `json:"requested_by,omitempty"`
-	// Status is the current request status (PENDING/APPROVED/DECLINED/SUPERSEDED).
+	// Status is the current request status
+	// (PENDING/APPROVED/DECLINED/SUPERSEDED/INVALIDATED).
 	Status ApprovalStatus `json:"status"`
 	// Decision is the recorded decision once the request is resolved, nil while
 	// pending. A superseded request records the supersession provenance here (the
-	// operator, reason, timestamp, and request identity) with Approved=false.
+	// operator, reason, timestamp, and request identity) with Approved=false. An
+	// invalidated request leaves Decision nil: an invalidation is not a decision.
 	Decision *ApprovalDecision `json:"decision,omitempty"`
+	// Invalidation is the audit record of an operator invalidation, nil when the
+	// request was never invalidated. It never sets Decision or a LifecycleAction.
+	Invalidation *ApprovalInvalidation `json:"invalidation,omitempty"`
 }

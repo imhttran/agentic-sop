@@ -17,6 +17,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/planflow"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -37,6 +38,9 @@ func approvalService(st *store.Store, projectDir string) *approval.Service {
 func runApproval(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) >= 1 && args[0] == "supersede" {
 		return runApprovalSupersede(args[1:], stdout, stderr, d)
+	}
+	if len(args) >= 1 && args[0] == "invalidate" {
+		return runApprovalInvalidate(args[1:], stdout, stderr, d)
 	}
 	return runApprovalStatus(args, stdout, stderr, d)
 }
@@ -72,11 +76,19 @@ func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
 	svc := approvalService(st, dir)
 	items := []approvalListingItem{}
 	var stale []approvalListingItem
+	var invalidated []approvalListingItem
 	for _, task := range tasks {
 		view, err := svc.Approval(task.ID)
 		if err != nil {
 			fmt.Fprintf(stderr, "approvals: %s: %v\n", task.ID, err)
 			return exitError
+		}
+		if view.Invalidated {
+			// An invalidated request is not an applicable gate: it authorizes
+			// nothing. The text listing names it in its own section so it is never
+			// confused with a pending request; --json keeps applicable gates only.
+			invalidated = append(invalidated, approvalListingItem{TaskID: view.TaskID, Reason: view.Reason, TaskStatus: string(view.TaskStatus)})
+			continue
 		}
 		if !view.Applicable {
 			// A PENDING request whose task is already satisfied cannot be decided,
@@ -123,6 +135,12 @@ func runApprovals(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(stale) > 0 {
 		fmt.Fprintln(stdout, "\nStale (task already satisfied; clear with `sop approval supersede <task-id> --reason TEXT --by NAME`):")
 		for _, it := range stale {
+			fmt.Fprintf(stdout, "  %s  %s  %s\n", it.TaskID, it.TaskStatus, oneLine(it.Reason))
+		}
+	}
+	if len(invalidated) > 0 {
+		fmt.Fprintln(stdout, "\nInvalidated (not an applicable gate; the plan revision voided the request):")
+		for _, it := range invalidated {
 			fmt.Fprintf(stdout, "  %s  %s  %s\n", it.TaskID, it.TaskStatus, oneLine(it.Reason))
 		}
 	}
@@ -394,6 +412,33 @@ func writeApprovalView(w io.Writer, v approval.View) {
 	if v.Note != "" {
 		fmt.Fprintf(w, "Note: %s\n", v.Note)
 	}
+	if inv := v.Invalidation; inv != nil {
+		fmt.Fprintf(w, "Invalidated: %s\n", inv.InvalidatedAt.Format("2006-01-02T15:04:05Z07:00"))
+		if inv.InvalidatedBy != "" {
+			fmt.Fprintf(w, "Invalidated by: %s\n", inv.InvalidatedBy)
+		}
+		if inv.Reason != "" {
+			fmt.Fprintf(w, "Invalidation reason: %s\n", oneLine(inv.Reason))
+		}
+		if inv.PlanFingerprintBefore != "" || inv.PlanFingerprintAfter != "" {
+			fmt.Fprintf(w, "Plan revisions: %s -> %s\n",
+				shortFingerprint(inv.PlanFingerprintBefore), shortFingerprint(inv.PlanFingerprintAfter))
+		}
+	}
+}
+
+// shortFingerprint abbreviates a plan source fingerprint for one-line status
+// output, keeping it identifiable without printing a full 64-character digest.
+func shortFingerprint(v string) string {
+	const keep = 12
+	v = strings.TrimSpace(v)
+	if v == "" {
+		return "(unknown)"
+	}
+	if len(v) <= keep {
+		return v
+	}
+	return v[:keep]
 }
 
 // recordApprovalDecisionActivity appends a decision event to the task's activity
@@ -437,6 +482,8 @@ func approvalExecutionGate(projectDir string, task *domain.Task, stdout, stderr 
 		fmt.Fprintf(stdout, "%s WAITING_FOR_APPROVAL: %s\n", task.ID, oneLine(req.Reason))
 		fmt.Fprintf(stdout, "Approve with: sop approve %s\n", task.ID)
 		return exitApprovalBlocked
+	case domain.ApprovalInvalidated:
+		return exitOK
 	case domain.ApprovalDeclined:
 		fmt.Fprintf(stderr, "%s BLOCKED (approval declined): %s\n", task.ID, oneLine(req.Reason))
 		fmt.Fprintln(stderr, "A declined approval does not execute; request a new decision before retrying.")
@@ -474,24 +521,56 @@ func humanBoundary(stage runpkg.Stage, cls failure.Classification, d autonomy.De
 // approval application boundary. It is best-effort provenance: a write failure is
 // dropped and never changes the run outcome. It records only SOP's own decision,
 // never a client-supplied gate.
-func recordHumanApprovalRequest(ctx context.Context, rn *runpkg.Run, task *domain.Task, stage runpkg.Stage, disp failure.Disposition, reason, evidence string) {
+func recordHumanApprovalRequest(ctx context.Context, projectDir string, rn *runpkg.Run, task *domain.Task, stage runpkg.Stage, disp failure.Disposition, reason, evidence string) {
 	if task == nil || strings.TrimSpace(task.ID) == "" {
 		return
 	}
 	svc := approval.New(nil, func(string) approval.Record { return rn })
 	if _, err := svc.Request(approval.RequestInput{
-		TaskID:      task.ID,
-		Kind:        domain.ApprovalNeedsHuman,
-		Target:      task.ID,
-		Reason:      oneLine(reason),
-		Evidence:    oneLine(evidence),
-		Stage:       string(stage),
-		Disposition: string(disp),
-		RequestedBy: "sop",
+		TaskID:           task.ID,
+		Kind:             domain.ApprovalNeedsHuman,
+		Target:           task.ID,
+		Reason:           oneLine(reason),
+		Evidence:         oneLine(evidence),
+		Stage:            string(stage),
+		Disposition:      string(disp),
+		DefinitionDigest: taskDefinitionDigest(projectDir, task.ID),
+		PlanFingerprint:  activePlanFingerprint(projectDir),
+		RequestedBy:      "sop",
 	}); err != nil {
 		return
 	}
 	activity.FromContext(ctx).Emit(activity.StageApproval, "REQUESTED", oneLine(reason))
+}
+
+// taskDefinitionDigest returns the deterministic digest of the task definition the
+// request is raised against, when the active plan defines it. An unreadable or
+// absent definition yields an empty digest, so the request stays legacy and a
+// later invalidation falls back to reconciliation provenance instead of guessing.
+func taskDefinitionDigest(projectDir, taskID string) string {
+	if strings.TrimSpace(projectDir) == "" {
+		return ""
+	}
+	identity, err := planflow.TaskDefinitionIdentity(projectDir, taskID)
+	if err != nil || !identity.Present {
+		return ""
+	}
+	return identity.Digest
+}
+
+// activePlanFingerprint returns the recorded source fingerprint of the active plan,
+// or an empty string when no plan is active. It is audit context only: a caller
+// never decides applicability from it, and an unreadable plan never supplies a
+// guess.
+func activePlanFingerprint(projectDir string) string {
+	if strings.TrimSpace(projectDir) == "" {
+		return ""
+	}
+	_, sha, ok := planflow.ActivePlanSource(projectDir)
+	if !ok {
+		return ""
+	}
+	return sha
 }
 
 // runInteractiveDecision lets a human choose among the applicable gates at a terminal

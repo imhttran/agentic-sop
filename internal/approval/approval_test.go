@@ -2,6 +2,7 @@ package approval
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -369,6 +370,268 @@ func TestRequestIsIdempotentForSamePendingGate(t *testing.T) {
 	}
 	if len(records["S001"].history) != 0 {
 		t.Errorf("re-park appended history: %+v", records["S001"].history)
+	}
+}
+
+// failHistoryRecord fails AppendApprovalHistory to prove the fail-closed ordering.
+type failHistoryRecord struct{ *memRecord }
+
+func (f failHistoryRecord) AppendApprovalHistory(domain.ApprovalRequest) error {
+	return errors.New("history write failed")
+}
+
+// pendingTask builds a PLANNED task with no satisfaction.
+func pendingTask(id string) *domain.Task { return &domain.Task{ID: id, Status: domain.PLANNED} }
+
+// seedPendingRequest records a PENDING head for taskID with the given definition
+// digest ("" for a legacy request) and returns its RequestedAt.
+func seedPendingRequest(t *testing.T, svc *Service, records map[string]*memRecord, taskID, digest string) domain.ApprovalRequest {
+	t.Helper()
+	req, err := svc.Request(RequestInput{TaskID: taskID, Reason: gateReason})
+	if err != nil {
+		t.Fatalf("Request: %v", err)
+	}
+	req.DefinitionDigest = digest
+	rec := records[taskID]
+	rec.head = &req
+	return req
+}
+
+func TestInvalidateRequiresReasonAndActor(t *testing.T) {
+	tasks := newMemTasks(pendingTask("S001"))
+	svc, records := newTestService(tasks)
+	seedPendingRequest(t, svc, records, "S001", "digest-a")
+
+	for _, in := range []InvalidateInput{
+		{By: "operator", CurrentDefinitionDigest: "digest-b"},
+		{Reason: "plan revised", CurrentDefinitionDigest: "digest-b"},
+		{Reason: "  ", By: "operator", CurrentDefinitionDigest: "digest-b"},
+	} {
+		if _, err := svc.Invalidate("S001", in); !errors.Is(err, ErrApprovalInvalidateInput) {
+			t.Fatalf("Invalidate(%+v) err = %v, want ErrApprovalInvalidateInput", in, err)
+		}
+	}
+	if head := records["S001"].head; head.Status != domain.ApprovalPending || head.Invalidation != nil {
+		t.Fatalf("refused invalidation changed the head: %+v", head)
+	}
+	if len(records["S001"].history) != 0 {
+		t.Fatalf("refused invalidation appended history: %+v", records["S001"].history)
+	}
+}
+
+func TestInvalidateRefusesResolvedHead(t *testing.T) {
+	for _, status := range []domain.ApprovalStatus{
+		domain.ApprovalApproved,
+		domain.ApprovalDeclined,
+		domain.ApprovalSuperseded,
+		domain.ApprovalInvalidated,
+	} {
+		t.Run(string(status), func(t *testing.T) {
+			tasks := newMemTasks(pendingTask("S001"))
+			svc, records := newTestService(tasks)
+			req := seedPendingRequest(t, svc, records, "S001", "digest-a")
+			req.Status = status
+			records["S001"].head = &req
+
+			in := InvalidateInput{Reason: "plan revised", By: "operator", CurrentDefinitionDigest: "digest-b"}
+			if status == domain.ApprovalInvalidated {
+				// An already-invalidated head is idempotent, never re-written.
+				res, err := svc.Invalidate("S001", in)
+				if err != nil {
+					t.Fatalf("Invalidate on INVALIDATED err = %v, want idempotent success", err)
+				}
+				if !res.Idempotent {
+					t.Fatal("Invalidate on INVALIDATED not reported idempotent")
+				}
+				return
+			}
+			_, err := svc.Invalidate("S001", in)
+			if !errors.Is(err, ErrApprovalResolved) {
+				t.Fatalf("Invalidate err = %v, want ErrApprovalResolved", err)
+			}
+			if !strings.Contains(err.Error(), string(status)) {
+				t.Errorf("error %q does not name the recorded status %s", err, status)
+			}
+			if got := records["S001"].head.Status; got != status {
+				t.Errorf("head status = %s, want unchanged %s", got, status)
+			}
+		})
+	}
+}
+
+func TestInvalidateRefusesSatisfiedTask(t *testing.T) {
+	tasks := newMemTasks(&domain.Task{ID: "S001", Status: domain.LOCAL_DONE})
+	svc, records := newTestService(tasks)
+	seedPendingRequest(t, svc, records, "S001", "digest-a")
+
+	in := InvalidateInput{Reason: "plan revised", By: "operator", CurrentDefinitionDigest: "digest-b"}
+	_, err := svc.Invalidate("S001", in)
+	if !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+		t.Fatalf("Invalidate err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	if !strings.Contains(err.Error(), "supersede") {
+		t.Errorf("error %q does not direct the operator to supersede", err)
+	}
+	if got := records["S001"].head.Status; got != domain.ApprovalPending {
+		t.Errorf("head status = %s, want unchanged PENDING", got)
+	}
+}
+
+func TestInvalidateRefusesUnchangedDefinition(t *testing.T) {
+	tasks := newMemTasks(pendingTask("S001"))
+	svc, records := newTestService(tasks)
+	seedPendingRequest(t, svc, records, "S001", "digest-a")
+
+	in := InvalidateInput{Reason: "plan revised", By: "operator", CurrentDefinitionDigest: "digest-a"}
+	if _, err := svc.Invalidate("S001", in); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+		t.Fatalf("Invalidate err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	if got := records["S001"].head.Status; got != domain.ApprovalPending {
+		t.Errorf("head status = %s, want unchanged PENDING", got)
+	}
+}
+
+func TestInvalidateRefusesLegacyWithoutReconciliation(t *testing.T) {
+	tasks := newMemTasks(pendingTask("S001"))
+	svc, records := newTestService(tasks)
+	req := seedPendingRequest(t, svc, records, "S001", "")
+
+	// No accepted-as-reconciled proof.
+	if _, err := svc.Invalidate("S001", InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b"}); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+		t.Fatalf("Invalidate without proof err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	// Accepted, but reconciled before the request was raised.
+	before := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, ReconciledAt: req.RequestedAt.Add(-time.Second)}
+	if _, err := svc.Invalidate("S001", before); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+		t.Fatalf("Invalidate with stale reconciliation err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	// Accepted, reconciled exactly at the request time (not strictly after).
+	equal := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", DefinitionAcceptedAsReconciled: true, ReconciledAt: req.RequestedAt}
+	if _, err := svc.Invalidate("S001", equal); !errors.Is(err, ErrApprovalInvalidateNotApplicable) {
+		t.Fatalf("Invalidate at request time err = %v, want ErrApprovalInvalidateNotApplicable", err)
+	}
+	if got := records["S001"].head.Status; got != domain.ApprovalPending {
+		t.Errorf("head status = %s, want unchanged PENDING", got)
+	}
+}
+
+func TestInvalidateArchivesAndRecordsProvenance(t *testing.T) {
+	shared := pendingTask("S001")
+	shared.Status = domain.BLOCKED
+	shared.Attempt = 2
+	tasks := newMemTasks(shared)
+	svc, records := newTestService(tasks)
+	req := seedPendingRequest(t, svc, records, "S001", "digest-a")
+	original := *records["S001"].head
+
+	in := InvalidateInput{
+		Reason:                  "plan revised after approval",
+		By:                      "operator",
+		PriorPlanFingerprint:    "plan-1",
+		CurrentPlanFingerprint:  "plan-2",
+		CurrentDefinitionDigest: "digest-b",
+		ReconciledAt:            req.RequestedAt.Add(time.Minute),
+	}
+	res, err := svc.Invalidate("S001", in)
+	if err != nil {
+		t.Fatalf("Invalidate: %v", err)
+	}
+	if res.Idempotent {
+		t.Error("first Invalidate reported idempotent")
+	}
+	if res.View.Status != domain.ApprovalInvalidated {
+		t.Fatalf("view status = %s, want INVALIDATED", res.View.Status)
+	}
+
+	head := records["S001"].head
+	if head.Status != domain.ApprovalInvalidated {
+		t.Fatalf("head status = %s, want INVALIDATED", head.Status)
+	}
+	if head.Decision != nil {
+		t.Errorf("invalidation set Decision = %+v, want nil", head.Decision)
+	}
+	inv := head.Invalidation
+	if inv == nil {
+		t.Fatal("head has no Invalidation record")
+	}
+	if inv.Reason != in.Reason || inv.InvalidatedBy != in.By {
+		t.Errorf("reason/by = %q/%q", inv.Reason, inv.InvalidatedBy)
+	}
+	if inv.InvalidatedAt.IsZero() {
+		t.Error("InvalidatedAt is zero")
+	}
+	if inv.PlanFingerprintBefore != "plan-1" || inv.PlanFingerprintAfter != "plan-2" {
+		t.Errorf("plan fingerprints = %q/%q", inv.PlanFingerprintBefore, inv.PlanFingerprintAfter)
+	}
+	if !inv.ReconciledAt.Equal(in.ReconciledAt) {
+		t.Errorf("reconciled at = %v, want %v", inv.ReconciledAt, in.ReconciledAt)
+	}
+	if inv.DefinitionDigestBefore != "digest-a" || inv.DefinitionDigestAfter != "digest-b" {
+		t.Errorf("definition digests = %q/%q", inv.DefinitionDigestBefore, inv.DefinitionDigestAfter)
+	}
+
+	// The original PENDING request is preserved verbatim, exactly once.
+	if len(records["S001"].history) != 1 {
+		t.Fatalf("history len = %d, want 1", len(records["S001"].history))
+	}
+	archived := records["S001"].history[0]
+	if archived.ID != original.ID || archived.Status != domain.ApprovalPending || archived.Invalidation != nil {
+		t.Fatalf("archived request = %+v, want the verbatim original PENDING request", archived)
+	}
+
+	// The task is not written by invalidation.
+	got := tasks.tasks["S001"]
+	if got.Status != domain.BLOCKED || got.Attempt != 2 || got.IsSatisfied() || got.IsCompleted() {
+		t.Fatalf("task after invalidate = %+v, want unchanged BLOCKED attempt 2 unsatisfied", got)
+	}
+
+	// A retry is idempotent and appends no duplicate history entry.
+	again, err := svc.Invalidate("S001", in)
+	if err != nil {
+		t.Fatalf("retry Invalidate: %v", err)
+	}
+	if !again.Idempotent {
+		t.Error("retry Invalidate not reported idempotent")
+	}
+	if len(records["S001"].history) != 1 {
+		t.Errorf("retry history len = %d, want 1 (no duplicate)", len(records["S001"].history))
+	}
+}
+
+func TestInvalidateLegacyRequestWithReconciliation(t *testing.T) {
+	tasks := newMemTasks(pendingTask("S001"))
+	svc, records := newTestService(tasks)
+	req := seedPendingRequest(t, svc, records, "S001", "")
+
+	in := InvalidateInput{
+		Reason:                         "legacy plan revised",
+		By:                             "operator",
+		CurrentDefinitionDigest:        "digest-b",
+		DefinitionAcceptedAsReconciled: true,
+		ReconciledAt:                   req.RequestedAt.Add(time.Minute),
+	}
+	if _, err := svc.Invalidate("S001", in); err != nil {
+		t.Fatalf("Invalidate: %v", err)
+	}
+	if got := records["S001"].head.Invalidation.DefinitionDigestAfter; got != "digest-b" {
+		t.Errorf("DefinitionDigestAfter = %q, want digest-b", got)
+	}
+}
+
+func TestInvalidateHistoryFailureLeavesHeadPending(t *testing.T) {
+	tasks := newMemTasks(pendingTask("S001"))
+	svc, records := newTestService(tasks)
+	req := seedPendingRequest(t, svc, records, "S001", "digest-a")
+
+	failing := failHistoryRecord{records["S001"]}
+	svc.record = func(string) Record { return failing }
+
+	in := InvalidateInput{Reason: "r", By: "op", CurrentDefinitionDigest: "digest-b", ReconciledAt: req.RequestedAt.Add(time.Minute)}
+	if _, err := svc.Invalidate("S001", in); err == nil {
+		t.Fatal("Invalidate err = nil, want the history-append failure")
+	}
+	if got := records["S001"].head.Status; got != domain.ApprovalPending {
+		t.Errorf("head status = %s, want unchanged PENDING after a history failure", got)
 	}
 }
 
