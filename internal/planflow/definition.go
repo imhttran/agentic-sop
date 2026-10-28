@@ -77,6 +77,33 @@ func stageDigestByID(plan *planner.Plan, taskID string) string {
 	return ""
 }
 
+// TaskDefinitionText renders the persisted stage for a task as text, for consistency
+// checks over what the current definition says. It is not a second definition store:
+// it reads plan.json and returns the same fields stageDigest covers.
+func TaskDefinitionText(dir, taskID string) (string, bool) {
+	plan, ok := loadPersistedPlan(filepath.Join(dir, config.DirName, planFileName))
+	if !ok {
+		return "", false
+	}
+	id := strings.TrimSpace(taskID)
+	for _, stage := range plan.Stages {
+		if stage.ID != id {
+			continue
+		}
+		var b strings.Builder
+		for _, part := range append([]string{stage.ID, stage.Title, stage.Objective},
+			append(append([]string{}, stage.Deliverables...),
+				append(append([]string{}, stage.AcceptanceCriteria...), stage.AcceptanceChecks...)...)...) {
+			if strings.TrimSpace(part) != "" {
+				b.WriteString(part)
+				b.WriteString("\n")
+			}
+		}
+		return b.String(), true
+	}
+	return "", false
+}
+
 // stageDigest is the deterministic digest over one persisted plan stage. Fields
 // are hashed in a fixed order, each terminated by a NUL separator, and every
 // list is canonicalized (sorted, de-duplicated) so the digest never depends on

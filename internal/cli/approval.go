@@ -56,6 +56,9 @@ func runApproval(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) >= 1 && args[0] == "invalidate" {
 		return runApprovalInvalidate(args[1:], stdout, stderr, d)
 	}
+	if len(args) >= 1 && args[0] == "invalidate-attested" {
+		return runApprovalInvalidateAttested(args[1:], stdout, stderr, d)
+	}
 	return runApprovalStatus(args, stdout, stderr, d)
 }
 
@@ -191,6 +194,7 @@ func runApprovalStatus(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintln(stderr, "usage: sop approval <task-id>")
 		fmt.Fprintln(stderr, "       sop approval supersede <task-id> --reason TEXT --by NAME")
 		fmt.Fprintln(stderr, "       sop approval invalidate <task-id> --reason TEXT --by NAME")
+		fmt.Fprintln(stderr, "       sop approval invalidate-attested <task-id> --reason TEXT --by NAME --expected-request ID --obsolete-requirement TEXT --replacement-definition TEXT --expect-definition-digest SHA")
 		return exitUsage
 	}
 	id := args[0]
@@ -428,6 +432,21 @@ func writeApprovalView(w io.Writer, v approval.View) {
 		fmt.Fprintf(w, "Note: %s\n", v.Note)
 	}
 	if inv := v.Invalidation; inv != nil {
+		switch inv.Kind {
+		case domain.ApprovalInvalidationAttested:
+			fmt.Fprintln(w, "Invalidation: attested (operator statement; no accepted-change evidence)")
+		case domain.ApprovalInvalidationEvidence:
+			fmt.Fprintln(w, "Invalidation: evidence-backed")
+		}
+		if inv.ObsoleteRequirement != "" {
+			fmt.Fprintf(w, "Obsolete requirement: %s\n", oneLine(inv.ObsoleteRequirement))
+		}
+		if inv.ReplacementDefinition != "" {
+			fmt.Fprintf(w, "Replacement definition: %s\n", oneLine(inv.ReplacementDefinition))
+		}
+		if inv.Source != "" {
+			fmt.Fprintf(w, "Source: %s\n", inv.Source)
+		}
 		fmt.Fprintf(w, "Invalidated: %s\n", inv.InvalidatedAt.Format("2006-01-02T15:04:05Z07:00"))
 		if inv.InvalidatedBy != "" {
 			fmt.Fprintf(w, "Invalidated by: %s\n", inv.InvalidatedBy)
