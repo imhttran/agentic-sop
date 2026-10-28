@@ -328,6 +328,29 @@ func TestCLIInvalidateRefusesInapplicableRequests(t *testing.T) {
 		}
 	})
 
+	t.Run("unrelated reconciliation is refused", func(t *testing.T) {
+		// Reconciliation evidence is per task: another task's accepted change must
+		// never make this task's request eligible.
+		f := newInvalidationFixture(t, invalidationFixtureOptions{
+			taskStatus: domain.READY,
+			reconciled: []string{"OTHER-999"},
+		})
+		var out, errb bytes.Buffer
+		if code := runApprovalInvalidate(
+			[]string{"S001", "--reason", "r", "--by", "operator"},
+			&out, &errb, invalidationDeps(f.dir)); code == exitOK {
+			t.Fatal("another task's reconciliation must not qualify this request")
+		}
+		if !strings.Contains(errb.String(), "reconciliation provenance") {
+			t.Errorf("stderr = %q, want the reconciliation-provenance refusal", errb.String())
+		}
+		var head domain.ApprovalRequest
+		readApprovalHead(t, f.runDir, &head)
+		if head.Status != domain.ApprovalPending || head.Invalidation != nil {
+			t.Errorf("refusal mutated the head: status=%s", head.Status)
+		}
+	})
+
 	t.Run("reconciliation older than the request is refused", func(t *testing.T) {
 		f := newInvalidationFixture(t, invalidationFixtureOptions{
 			taskStatus:  domain.READY,
