@@ -33,8 +33,9 @@ func approvalService(st *store.Store, projectDir string) *approval.Service {
 }
 
 // runApproval dispatches the `sop approval` command group: a bare task id shows
-// the task's approval boundary, and `supersede` is the supported operator operation
-// that supersedes a stale PENDING request whose task is already satisfied.
+// the task's approval boundary, `supersede` closes a stale PENDING request whose
+// task is already satisfied, and `invalidate` closes a PENDING request whose
+// evidence the revised plan no longer contains.
 func runApproval(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) >= 1 && args[0] == "supersede" {
 		return runApprovalSupersede(args[1:], stdout, stderr, d)
@@ -175,7 +176,8 @@ type approvalListingDoc struct {
 func runApprovalStatus(args []string, stdout, stderr io.Writer, d deps) int {
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: sop approval <task-id>")
-		fmt.Fprintln(stderr, approvalSupersedeUsage)
+		fmt.Fprintln(stderr, "       sop approval supersede <task-id> --reason TEXT --by NAME")
+		fmt.Fprintln(stderr, "       sop approval invalidate <task-id> --reason TEXT --by NAME")
 		return exitUsage
 	}
 	id := args[0]

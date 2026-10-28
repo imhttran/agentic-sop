@@ -261,6 +261,37 @@ func TestCLIInvalidateRefusesInapplicableRequests(t *testing.T) {
 		}
 	})
 
+	t.Run("provider failure alone is refused", func(t *testing.T) {
+		// The reported APPR-004 shape: a legacy request raised by a provider failure,
+		// with no accepted definition change. A provider failure is not evidence that
+		// the task definition changed, so it must never qualify.
+		f := newInvalidationFixture(t, invalidationFixtureOptions{
+			taskStatus:  domain.BLOCKED,
+			reconciled:  []string{},
+			requestedAt: time.Date(2024, 5, 1, 11, 0, 0, 0, time.UTC),
+		})
+		var head domain.ApprovalRequest
+		readApprovalHead(t, f.runDir, &head)
+		head.Reason = "ollama returned an empty response"
+		head.Evidence = "the current run is at an authoritative approval boundary; a human decision is required"
+		writeJSONDoc(t, filepath.Join(f.runDir, "approval.json"), head)
+
+		var out, errb bytes.Buffer
+		if code := runApprovalInvalidate(
+			[]string{"S001", "--reason", "provider failure", "--by", "operator"},
+			&out, &errb, invalidationDeps(f.dir)); code == exitOK {
+			t.Fatal("a provider failure must not qualify as an accepted definition change")
+		}
+		if !strings.Contains(errb.String(), "reconciliation provenance") {
+			t.Errorf("stderr = %q, want the reconciliation-provenance refusal", errb.String())
+		}
+		after := domain.ApprovalRequest{}
+		readApprovalHead(t, f.runDir, &after)
+		if after.Status != domain.ApprovalPending || after.Invalidation != nil {
+			t.Errorf("refusal mutated the head: status=%s invalidation=%+v", after.Status, after.Invalidation)
+		}
+	})
+
 	t.Run("unchanged definition is refused", func(t *testing.T) {
 		// A stamped request whose digest equals the current definition digest.
 		seed := newInvalidationFixture(t, invalidationFixtureOptions{taskStatus: domain.READY})
