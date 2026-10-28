@@ -85,6 +85,7 @@ func runSecurityGate(ctx context.Context, cfg config.Config, dir string, spec *t
 	}
 	runner, err := security.NewRunner(security.RunnerConfig{
 		WorkspaceRoot:  dir,
+		RunDir:         rn.Dir(),
 		RunID:          rn.State().ID,
 		TaskID:         spec.ID,
 		Adapters:       adapters,
