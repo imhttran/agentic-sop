@@ -71,7 +71,11 @@ type promptfooOptions struct {
 
 func (a *promptfooAdapter) Descriptor() Descriptor {
 	locality := "local"
-	network := "none; the pinned local Promptfoo binary makes no request"
+	// The adapter does not select or rewrite providers inside the Promptfoo
+	// config, and it does not sandbox the Promptfoo process. Do not describe this
+	// as network isolation; only the configured provider identities and the
+	// telemetry-disable environment are enforced here.
+	network := "config_path providers only; SOP adds no remote fallback and does not network-isolate the process"
 	if a.remote {
 		locality = "remote"
 		network = "explicitly configured remote providers; telemetry and sharing are disabled"

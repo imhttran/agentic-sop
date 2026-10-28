@@ -143,6 +143,11 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 	if runID == "" {
 		runID = "security-" + time.Now().UTC().Format("20060102T150405Z")
 	}
+	rn, err := runpkg.Open(dir, runID)
+	if err != nil {
+		fmt.Fprintf(stderr, "security: %v\n", err)
+		return exitError
+	}
 	prior, priorNative, err := loadPriorSecurityScan(dir, opts.resume)
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)
@@ -150,6 +155,7 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	runner, err := security.NewRunner(security.RunnerConfig{
 		WorkspaceRoot:      dir,
+		RunDir:             rn.Dir(),
 		RunID:              runID,
 		Adapters:           adapters,
 		Policy:             policy,
@@ -179,11 +185,6 @@ func runSecurityScan(args []string, stdout, stderr io.Writer, d deps) int {
 	scan.Diagnostics = append(append([]string(nil), baselineDiagnostics...), scan.Diagnostics...)
 	scan.Diagnostics = append(selection.Diagnostics, scan.Diagnostics...)
 
-	rn, err := runpkg.Open(dir, runID)
-	if err != nil {
-		fmt.Fprintf(stderr, "security: %v\n", err)
-		return exitError
-	}
 	refs, err := security.WriteArtifacts(rn.Dir(), scan)
 	if err != nil {
 		fmt.Fprintf(stderr, "security: %v\n", err)

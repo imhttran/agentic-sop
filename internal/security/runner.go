@@ -11,7 +11,12 @@ import (
 
 // RunnerConfig is one bounded security stage.
 type RunnerConfig struct {
-	WorkspaceRoot  string
+	WorkspaceRoot string
+	// RunDir is the run's artifact directory (<project>/.agent-sdlc/runs/<id>).
+	// Adapters that persist their own normalized evidence, such as the Promptfoo
+	// evaluation adapter, write under RunDir/security. When empty, no adapter-owned
+	// artifact is written and only the runner's native reports are persisted.
+	RunDir         string
 	RunID          string
 	TaskID         string
 	AttemptID      string
@@ -151,6 +156,7 @@ func (r *Runner) Scan(ctx context.Context) (Scan, error) {
 		TaskID:          r.cfg.TaskID,
 		AttemptID:       r.cfg.AttemptID,
 		WorkspaceRoot:   r.cfg.WorkspaceRoot,
+		OutputPath:      r.cfg.RunDir,
 		Content:         content,
 		Scope:           scope,
 	}

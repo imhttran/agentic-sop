@@ -309,6 +309,51 @@ func TestPromptfooRequiresEnvExecutor(t *testing.T) {
 	}
 }
 
+// TestPromptfooRunnerPersistsEvaluationArtifacts proves the runner forwards its
+// run directory to the evaluation adapter. Without that wiring the adapter cannot
+// write the normalized and sanitized reports the operating guide names.
+func TestPromptfooRunnerPersistsEvaluationArtifacts(t *testing.T) {
+	workspace := t.TempDir()
+	runDir := filepath.Join(workspace, ".agent-sdlc", "runs", "run-eval")
+	ex := &fakeEvalExecutor{version: "0.118.0", results: []byte(`{"results":[{"testCase":{"description":"smoke"},"success":true}]}`)}
+	opts := evalOptions()
+	opts.reportOnly = true
+	adapter := newPromptfooAdapter(opts, ex, time.Second, 1<<20)
+	runner, err := NewRunner(RunnerConfig{
+		WorkspaceRoot: workspace,
+		RunDir:        runDir,
+		RunID:         "run-eval",
+		Adapters:      []Adapter{adapter},
+		Policy:        Policy{Enabled: true, Mode: "report-only", Scope: "workspace", FailOn: []string{"high"}, UnknownSeverity: "indeterminate"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	scan, err := runner.Scan(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if scan.Verdict != VerdictPass {
+		t.Fatalf("verdict = %s, want PASS (%v)", scan.Verdict, scan.Reasons)
+	}
+	for _, name := range []string{"promptfoo.case.json", "promptfoo.raw.json"} {
+		if _, err := os.Stat(filepath.Join(runDir, "security", name)); err != nil {
+			t.Errorf("evaluation artifact %s: %v", name, err)
+		}
+	}
+	raw, err := os.ReadFile(filepath.Join(runDir, "security", "promptfoo.case.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var report EvalReport
+	if err := json.Unmarshal(raw, &report); err != nil {
+		t.Fatalf("normalized report is not valid JSON: %v", err)
+	}
+	if report.Completion != EvalCompletionComplete || report.Verdict != VerdictPass {
+		t.Fatalf("normalized report = completion %s verdict %s", report.Completion, report.Verdict)
+	}
+}
+
 type plainExecutor struct{}
 
 func (plainExecutor) Run(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
