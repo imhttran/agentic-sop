@@ -197,6 +197,13 @@ func (e *Event) validatePayload(p Params) error {
 		if strings.TrimSpace(p.Approval.ID) == "" {
 			return errors.New("notify: waiting_for_human event requires the approval request id")
 		}
+		// An event must never name one task while carrying another task's gate: the
+		// two identities are one fact, so a mismatch is a producer bug, not a
+		// payload to normalize. An approval recorded without a task id is allowed.
+		if approvalTask := strings.TrimSpace(p.Approval.TaskID); approvalTask != "" && e.TaskID != "" && approvalTask != e.TaskID {
+			return fmt.Errorf("notify: waiting_for_human event task %q does not match the approval request task %q",
+				e.TaskID, approvalTask)
+		}
 		e.ApprovalRequestID = strings.TrimSpace(p.Approval.ID)
 		if e.Reason == "" {
 			e.Reason = strings.TrimSpace(p.Approval.Reason)
@@ -215,6 +222,12 @@ func (e *Event) validatePayload(p Params) error {
 // canonical renders the identity fields in one unambiguous, locale-independent
 // form. Each field is length-prefixed so no field value can be confused with the
 // separator and no two distinct field sets can collide.
+//
+// The approval request id is part of the identity because it is part of the
+// transition a waiting_for_human event describes: one request delivered again
+// keeps the same event id, while a new request for the same task, attempt, and
+// transition is a different gate and gets a different id. It is empty for every
+// other kind, so those ids do not depend on which gate raised them.
 func canonical(e Event) string {
 	var b strings.Builder
 	writeField(&b, fmt.Sprintf("%d", e.Version))
@@ -224,6 +237,7 @@ func canonical(e Event) string {
 	writeField(&b, e.TaskID)
 	writeField(&b, fmt.Sprintf("%d", e.Attempt))
 	writeField(&b, e.Transition)
+	writeField(&b, e.ApprovalRequestID)
 	return b.String()
 }
 
@@ -233,8 +247,8 @@ func writeField(b *strings.Builder, v string) {
 }
 
 // identity computes the SHA-256 event id over the canonicalized identity
-// fields. The same transition always yields the same id; a new attempt or a new
-// job yields a different one.
+// fields. The same transition always yields the same id; a new attempt, a new
+// job, or a new approval request yields a different one.
 func identity(e Event) string {
 	sum := sha256.Sum256([]byte(canonical(e)))
 	return hex.EncodeToString(sum[:])

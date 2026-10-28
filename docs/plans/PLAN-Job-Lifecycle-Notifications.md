@@ -40,11 +40,9 @@ None
 
 ### Deliverables
 
-- `internal/notify/event.go` adding `Kind` (`completed`, `failed`, `waiting_for_human`), `Event` (version, event id, kind, project, job id, task id, attempt, reason, next action, occurred-at, source transition), and `NewEvent`, which validates the event and computes its id as a SHA-256 over canonicalized identity fields so the same transition always yields the same id and a new attempt or job yields a new one.
-- Payload rules: a `completed` event carries the job/task outcome and the next action; a `failed` event carries SOP's recorded reason and a next action an operator or agent can execute; a `waiting_for_human` event is produced only from a `PENDING` `domain.ApprovalRequest` and carries the approval request id, its reason, and the resolution command.
-- `internal/config/notifications.go` plus `Config` wiring for a `notifications` block: channel selection (`none`, `file`, `webhook`), the channel's non-secret settings, and a bounded retry policy (max attempts, base delay, max delay, request timeout). A missing block means `none`.
-- Config validation: an unknown channel, a channel enabled without its required settings, or a non-positive retry bound is a configuration error; a channel with no credentials configured is valid and reports `unavailable` at status time rather than failing the whole run.
-- Redaction helpers so a channel's credential-bearing settings are never rendered: status exposes presence booleans and resolved non-secret values only.
+- `internal/notify/event.go`, `internal/notify/event_test.go` — the event kinds, the event value, and `NewEvent`, which validates the payload and computes the event id.
+- `internal/config/notifications.go`, `internal/config/notifications_test.go` — the `notifications` block, its defaults and validation, and the credential-presence status helpers.
+- `internal/config/config.go` — `Config` wiring that resolves an omitted block to channel `none`.
 
 ### Acceptance Criteria
 
@@ -52,6 +50,7 @@ None
 - Event identity is deterministic: the same transition replayed yields the same event id, while a new attempt or a new job yields a different one.
 - An absent `notifications` block yields channel `none`; a malformed block is rejected with an actionable configuration error.
 - No configuration path renders a credential value; only presence is observable.
+- Each kind enforces its payload rules when the event is constructed: a `completed` event requires the outcome and a next action; a `failed` event requires the recorded reason and a next action; a `waiting_for_human` event requires a `PENDING` approval request and carries that request's id, its reason, and a resolution command, and a non-`PENDING` request is rejected.
 
 ### Acceptance Checks
 
@@ -65,6 +64,7 @@ None
 - criterion 2: check 1
 - criterion 3: check 2
 - criterion 4: check 1
+- criterion 5: check 1
 
 ### Failure Behavior
 
@@ -80,10 +80,8 @@ Priority: P1. Persist events and their per-channel delivery state in the existin
 
 ### Deliverables
 
-- Schema migration 7 adding `notification_events` (stable event id primary key, kind, project, job id, task id, attempt, reason, next action, payload, created-at) and `notification_deliveries` (event id + channel primary key, status, attempt count, last error, next-attempt-at, delivered-at, acknowledgement classification, updated-at) with the indexes the worker needs.
-- `internal/store/notifications.go`: `EnqueueNotification` (transactional `INSERT OR IGNORE`, so replay and concurrent enqueues of one event create exactly one event row), `ClaimNotificationDeliveries` (lease with a bounded takeover window so a crashed worker's claim is reclaimable), `RecordDeliveryOutcome`, and read operations for status counts.
-- Delivery status vocabulary: `PENDING`, `IN_FLIGHT`, `DELIVERED`, `AMBIGUOUS`, `EXHAUSTED`, with `EXHAUSTED` reachable only after the configured maximum attempts and carrying the last error.
-- Durable fields required by the issue: attempt count, last error, and next retry time are persisted per delivery and survive process restart.
+- `internal/store/sqlite.go` — schema migration 7 adding the `notification_events` and `notification_deliveries` tables with their indexes.
+- `internal/store/notifications.go`, `internal/store/notifications_test.go` — `EnqueueNotification`, `ClaimNotificationDeliveries`, `RecordDeliveryOutcome`, and the status-count reads.
 
 ### Acceptance Criteria
 
@@ -119,11 +117,9 @@ Priority: P1. Deliver one event through one configured channel behind a narrow a
 
 ### Deliverables
 
-- `internal/notify/channel.go`: `Channel` with `Name`, `Deliver(ctx, Event, idempotencyKey) (Ack, error)`, `Ack` values `Confirmed`, `Ambiguous`, and `Rejected`, and a `Capabilities` value stating whether the channel honors an idempotency key.
-- A local `file` channel appending newline-delimited JSON events to an operator-configured path with an exclusive append, confirming only after the write is durably flushed. It exists so delivery can be verified end to end against a local receiver without any external service.
-- A `webhook` channel performing one bounded HTTP POST per attempt with a stable `Idempotency-Key` header taken from the event identity, classifying `2xx` as `Confirmed`, `408`/`429`/`5xx`/timeout/transport error as `Ambiguous`, and other `4xx` as `Rejected`.
-- A documented idempotency contract in package documentation and in the delivery-status documentation: at-least-once delivery with deduplication by stable event id; exactly-once is claimed only when the channel confirms its idempotency key, and an `AMBIGUOUS` acknowledgement is recorded as ambiguous rather than reported as either delivered or failed.
-- No credential is written to logs, artifacts, or status output.
+- `internal/notify/channel.go`, `internal/notify/channel_test.go` — the `Channel` interface, the `Ack` vocabulary, the `Capabilities` value, and the idempotency contract in the package documentation.
+- `internal/notify/file.go` — the local `file` channel.
+- `internal/notify/webhook.go` — the `webhook` channel.
 
 ### Acceptance Criteria
 
@@ -160,10 +156,9 @@ Priority: P1. Drain due deliveries with bounded exponential backoff, expose exha
 
 ### Deliverables
 
-- `internal/notify/dispatch.go`: `Drain(ctx, Deps)`, which claims due deliveries, delivers each through the configured channel, and records the outcome — `DELIVERED` on confirmation, an incremented attempt with a bounded exponential next-attempt time on ambiguity or transient error, and `EXHAUSTED` once the configured maximum attempts is reached. Backoff is bounded by the configured maximum delay and jittered deterministically from the event id so retries of one event do not stampede.
-- `sop notify status [--json]` reporting channel identity and non-secret settings, availability, per-status delivery counts, the most recent delivery error, and the next scheduled retry; `sop notify drain` running one bounded drain pass; `sop notify test` enqueuing and attempting one operator-authored test event so a channel can be verified without waiting for real work.
-- Drain invocation from the completion path of `sop run` and `sop prompt`, best-effort and unable to affect their exit status, so retries resume on the next invocation after a restart.
-- Delivery failures are isolated: every store write for delivery state is independent of task/job persistence, and an error in the notification path is reported as a notification error, never as a job or task failure.
+- `internal/notify/dispatch.go`, `internal/notify/dispatch_test.go` — `Drain` with bounded exponential backoff and the exhausted-retry transition.
+- `internal/cli/notify.go`, `internal/cli/notify_test.go` — the `sop notify status`, `sop notify drain`, and `sop notify test` operator surface.
+- `internal/cli/run.go`, `internal/cli/prompt.go` — the best-effort drain hook on the command completion path.
 
 ### Acceptance Criteria
 
@@ -172,6 +167,7 @@ Priority: P1. Drain due deliveries with bounded exponential backoff, expose exha
 - An event whose attempts are spent reports `EXHAUSTED` in status together with its last error, and is not retried again.
 - A notification delivery failure leaves the corresponding task status and job outcome unchanged.
 - Draining with an unavailable or unconfigured channel reports that condition explicitly instead of silently succeeding.
+- The operator surface exposes one bounded drain pass, a status report, and a test event, and the drain hook never changes the exit status or output of the command that triggered it.
 
 ### Acceptance Checks
 
@@ -186,6 +182,7 @@ Priority: P1. Drain due deliveries with bounded exponential backoff, expose exha
 - criterion 3: check 1
 - criterion 4: check 2
 - criterion 5: check 2
+- criterion 6: check 2
 
 ### Failure Behavior
 
@@ -201,11 +198,10 @@ Priority: P1. Emit exactly one notification event per required lifecycle transit
 
 ### Deliverables
 
-- Completion emission: the terminal task transitions to `LOCAL_DONE` and `DONE` enqueue a `completed` event carrying the project, task id, the job id when the task ran inside an MCP-started job, the outcome, and the next action.
-- Failure emission: a task that reaches terminal `BLOCKED` enqueues a `failed` event carrying SOP's recorded `domain.BlockedReason` and blocked detail plus a next action — never a `waiting_for_human` event.
-- Human-gate emission: `recordHumanApprovalRequest` in `internal/cli/approval.go` enqueues a `waiting_for_human` event only when SOP records a `PENDING` approval request, carrying the approval request id, its reason, and the recorded resolution command or next action. A `BLOCKED` or `NEEDS_HUMAN` status without an approval request emits nothing.
-- Background job emission: the job's own process records its exit and enqueues the job `completed`/`failed` event, so a detached job that outlives the MCP server still notifies. Job completion reporting no longer depends on the server observing the child, and a job whose task result was never recorded still produces a `failed` event with the recorded exit code and log reference.
-- Attempt identity: a new execution attempt yields its own event id, so a retried or re-run task notifies again, while re-reading state emits nothing new.
+- `internal/cli/lifecycle_notify.go`, `internal/cli/lifecycle_notify_test.go` — the emitter that turns one recorded transition into one event.
+- `internal/cli/approval.go` — human-gate emission from the recorded approval request.
+- `internal/cli/drive.go` — completion and failure emission at the terminal task transitions.
+- `internal/cli/mcp_start_work.go` — background-job emission from the job's own process.
 
 ### Acceptance Criteria
 
@@ -244,10 +240,9 @@ Priority: P1. Answer "are notifications active?" and "was this event delivered?"
 
 ### Deliverables
 
-- An availability value derived from observed evidence rather than configuration: `unavailable` (no channel, or the channel's required capability is missing), `configured_unverified` (a channel is configured but no delivery has been confirmed), `active` (at least one delivery was confirmed on the current channel), and `unknown` (the channel could not be probed).
-- Availability evidence in the response: channel name, resolved non-secret settings, whether credentials are present (boolean only), the last confirmed delivery time, pending and exhausted delivery counts, and the last delivery error.
-- `sop status` gains a notifications line derived from the same service, and `sop_notify`/`sop_status` MCP tools report the same document; the read-only `sop_work_status` document gains a `notifications` object with this evidence alongside the job and task status.
-- Redaction is enforced at the serialization boundary, so no status or MCP response can include a configured secret.
+- `internal/cli/notify.go`, `internal/cli/notify_status_test.go` — the availability value, its evidence, and the serialization-boundary redaction.
+- `internal/cli/mcp.go` — the notification document on the status MCP tools.
+- `internal/cli/mcp_start_work.go` — the `notifications` object in the work-status document.
 
 ### Acceptance Criteria
 
@@ -285,10 +280,10 @@ Priority: P1. Add the required handoff rule wherever an agent is told how to sta
 
 ### Deliverables
 
-- The handoff rule, stated verbatim where agents read it, in the SOP agent instructions and the background-work handoff documentation: whenever starting background work, confirm whether notifications are active; if notifications are unavailable, say so explicitly and offer a scheduled status check; if status cannot be verified, report it as unverified; do not claim a status check is scheduled until scheduling succeeds.
-- The `sop_start_work` tool description and its response document carry the notification evidence, and the response message states plainly when notifications are unavailable or unverified, so an agent cannot report success that the evidence does not support.
-- Documentation in the CLI reference and README covering the configuration block, the delivery guarantees, the ambiguous-acknowledgement behavior, and the exact limitations of each channel — including that no production channel is enabled by this change.
-- An operator runbook: how to configure a channel, how to verify it with `sop notify test`, how to read delivery status, and how to replay an exhausted delivery.
+- `skills/sop/SKILL.md` — the handoff rule in the agent instructions.
+- `docs/reference/CLI.md`, `README.md` — the configuration, the delivery guarantees, the channel limitations, and the no-production-channel statement.
+- `docs/guides/NOTIFICATIONS.md` — the operator runbook.
+- `internal/cli/mcp_start_work.go` — the tool description and the response evidence the rule depends on.
 
 ### Acceptance Criteria
 
@@ -326,16 +321,9 @@ Priority: P1. Add the focused tests the issue requires, including the failure, r
 
 ### Deliverables
 
-- Lifecycle tests: a completed job, a failed job, and a job waiting for a human each produce the correct event and payload, with both ids present when available.
-- Read-only tests: repeated status reads and repeated drains create no new events and no new deliveries.
-- Durability tests: a delivery failure persists attempt count, last error, and next attempt time, and a fresh worker process delivers after restart.
-- Replay and concurrency tests: replaying an event and running two workers concurrently produce exactly one confirmed delivery per event per channel.
-- Attempt tests: a new execution attempt produces its own event and notification.
-- Ambiguity tests: an ambiguous acknowledgement follows the documented idempotency behavior and is reported as ambiguous, not as delivered.
-- Configuration and exhaustion tests: missing configuration and unconfigured channels are reported explicitly, and exhausted retries are visible in status.
-- Isolation tests: a notification failure does not alter a task's status or a job's outcome.
-- Classification tests: a generic `BLOCKED` state without an approval request does not produce a human-action notification.
-- A local-receiver end-to-end check driving a configured `file` channel through enqueue, drain, and status.
+- `internal/notify/lifecycle_acceptance_test.go` — lifecycle, read-only, attempt, ambiguity, and classification scenarios.
+- `internal/store/notify_acceptance_test.go` — durability, replay, restart, and concurrent-worker scenarios.
+- `internal/cli/notify_acceptance_test.go` — isolation, configuration and exhaustion visibility, and the local-receiver end-to-end check.
 
 ### Acceptance Criteria
 

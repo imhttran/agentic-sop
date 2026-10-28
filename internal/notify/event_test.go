@@ -247,3 +247,82 @@ func TestEventRenderingCarriesNoCredential(t *testing.T) {
 		t.Fatalf("event id is not a SHA-256 hex digest: %q", e.ID)
 	}
 }
+
+// TestWaitingForHumanIdentityBindsApprovalRequest proves the approval request is
+// part of the transition a waiting_for_human event describes: redelivering one
+// request keeps its event id, while a new request for the same task, attempt, and
+// transition is a different human gate and gets a distinct id.
+func TestWaitingForHumanIdentityBindsApprovalRequest(t *testing.T) {
+	base := Params{
+		Kind:              KindWaitingForHuman,
+		Project:           "demo",
+		JobID:             "job-7",
+		TaskID:            "task-1",
+		Attempt:           1,
+		Transition:        "WAITING_FOR_HUMAN",
+		Approval:          pendingApproval(),
+		ResolutionCommand: "sop approve appr-1",
+	}
+	first, err := NewEvent(base)
+	if err != nil {
+		t.Fatalf("NewEvent: %v", err)
+	}
+
+	// The same request delivered again, later and with different descriptive
+	// text, is the same event.
+	redelivered := base
+	redelivered.OccurredAt = time.Date(2030, 1, 2, 3, 4, 5, 0, time.UTC)
+	redelivered.ResolutionCommand = "sop approve appr-1 --by operator"
+	replay, err := NewEvent(redelivered)
+	if err != nil {
+		t.Fatalf("NewEvent redelivery: %v", err)
+	}
+	if replay.ID != first.ID {
+		t.Fatalf("redelivered approval request changed the event id: %q != %q", replay.ID, first.ID)
+	}
+
+	// A new request for the same task, attempt, and transition is a new gate.
+	next := base
+	reopened := pendingApproval()
+	reopened.ID = "appr-2"
+	next.Approval = reopened
+	reopenedEvent, err := NewEvent(next)
+	if err != nil {
+		t.Fatalf("NewEvent new request: %v", err)
+	}
+	if reopenedEvent.ID == first.ID {
+		t.Fatal("a new approval request produced the same event id")
+	}
+}
+
+// TestWaitingForHumanRejectsApprovalTaskMismatch proves an event cannot name one
+// task while carrying another task's human gate.
+func TestWaitingForHumanRejectsApprovalTaskMismatch(t *testing.T) {
+	p := Params{
+		Kind:              KindWaitingForHuman,
+		Project:           "demo",
+		TaskID:            "task-1",
+		Attempt:           1,
+		Transition:        "WAITING_FOR_HUMAN",
+		Approval:          pendingApproval(),
+		ResolutionCommand: "sop approve appr-1",
+	}
+	if _, err := NewEvent(p); err != nil {
+		t.Fatalf("matching task ids must be accepted: %v", err)
+	}
+
+	mismatched := pendingApproval()
+	mismatched.TaskID = "task-2"
+	p.Approval = mismatched
+	if _, err := NewEvent(p); err == nil {
+		t.Fatal("expected error when the approval request belongs to another task")
+	}
+
+	// An approval recorded without a task id cannot conflict with the event's.
+	untasked := pendingApproval()
+	untasked.TaskID = ""
+	p.Approval = untasked
+	if _, err := NewEvent(p); err != nil {
+		t.Fatalf("an untasked approval request must be accepted: %v", err)
+	}
+}
