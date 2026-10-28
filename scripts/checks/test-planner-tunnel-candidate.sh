@@ -848,6 +848,22 @@ else
   pass "setup-planner is idempotent once registered"
 fi
 
+# A relative project path resolves against the caller's directory, not the
+# checkout — even when the checkout has a directory of the same name.
+mkdir -p "$TMP/caller/rel-project/.agent-sdlc" "$SETUP_CHECKOUT/rel-project/.agent-sdlc"
+if ! (cd "$TMP/caller" && "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build rel-project) >"$TMP/out" 2>&1; then
+  fail "setup-planner with a relative project failed: $(cat "$TMP/out")"
+else
+  assert_contains "$(cat "$SETUP_WRAPPER")" "PROJECT='$(cd "$TMP/caller/rel-project" && pwd)'"
+  pass "setup-planner resolves a relative project against the caller's directory"
+fi
+if (cd "$TMP/caller" && "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build no-such-project) >"$TMP/out" 2>&1; then
+  fail "setup-planner accepted a missing relative project"
+else
+  assert_contains "$(cat "$TMP/out")" "project directory not found: no-such-project"
+  pass "setup-planner reports a missing project by the name given"
+fi
+
 # A different sop-planner entry is never overwritten.
 printf '%s\n' '{"mcpServers":{"sop-planner":{"command":"/elsewhere/wrapper.sh"}}}' > "$CLAUDE_CFG"
 if "${SETUP_ENV[@]}" "$SETUP_SCRIPT" --checkout "$SETUP_CHECKOUT" --no-build --register-claude "$POINT_PROJECT" >"$TMP/out" 2>&1; then

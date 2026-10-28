@@ -68,6 +68,12 @@ case "$PROJECT" in
   "~") PROJECT="$HOME" ;;
   "~/"*) PROJECT="$HOME/${PROJECT#\~/}" ;;
 esac
+# Resolve the project against the caller's directory now: the point script
+# changes into the checkout before it resolves a path, so a relative path would
+# otherwise name a directory inside the checkout.
+PROJECT_ARG="$PROJECT"
+PROJECT="$(cd "$PROJECT_ARG" 2>/dev/null && pwd)" || {
+  echo "setup-planner: project directory not found: $PROJECT_ARG" >&2; exit 1; }
 WRAPPER="$ROOT/.run/tunnel/sop-mcp-planner.sh"
 
 # 1. Build (optionally), point, and check the wrapper.
