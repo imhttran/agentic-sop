@@ -826,7 +826,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		// same stage the lifecycle's own human boundary sets. No new task state is
 		// introduced.
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
-		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
+		recordHumanApprovalRequest(ctx, dir, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
 		parked = true
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman, Reason: tri.Reason}, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
@@ -853,7 +853,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// than inferring one from a task status. It is provenance only: it never changes
 	// the task status or the run outcome.
 	if err == nil && humanBoundary(res.stage, res.classification, res.decision) {
-		recordHumanApprovalRequest(ctx, rn, task, res.stage, res.classification.Disposition,
+		recordHumanApprovalRequest(ctx, dir, rn, task, res.stage, res.classification.Disposition,
 			firstNonBlank(firstReason(res.gate), res.classification.Reason), res.classification.Reason)
 		parked = true
 	}
@@ -873,7 +873,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		}
 		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
 		if humanBoundary(res.stage, cls, res.decision) {
-			recordHumanApprovalRequest(ctx, rn, task, res.stage, cls.Disposition,
+			recordHumanApprovalRequest(ctx, dir, rn, task, res.stage, cls.Disposition,
 				firstNonBlank(cls.Reason, err.Error()), cls.Reason)
 			parked = true
 		}
@@ -961,7 +961,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if res.outcome.blocksAdvancement() {
 		reason := "required acceptance evidence is missing or failed: " + strings.Join(res.outcome.Reasons, "; ")
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
-		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
+		recordHumanApprovalRequest(ctx, dir, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
 		parked = true
 		return recoverTask(saver, task, rn, string(res.outcome.Status)+"|ACCEPTANCE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman}, cfg.AutonomyPolicy(), reason, stdout, stderr)
 	}
