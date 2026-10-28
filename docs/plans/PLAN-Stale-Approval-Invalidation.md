@@ -140,6 +140,8 @@ If archiving the original request fails, the operation fails closed with the hea
 
 Priority: P1. Expose invalidation as `sop approval invalidate`, wire the revision evidence the service needs, stamp new requests with their definition digest, and teach the execution gate that an invalidated head permits execution while pending and declined heads keep blocking exactly as before.
 
+Execution guidance: before claiming completion, read every implementation and test file that this invocation will cite, and map each acceptance criterion to evidence actually read. Submit an already-satisfied result only after those reads are complete. Preserve correct existing code; do not create changes merely to satisfy progress detection.
+
 ### Dependencies
 
 - APPR-003
