@@ -18,6 +18,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -27,9 +28,21 @@ import (
 // lifecycle all delegate to this one service, so approval semantics live in a
 // single place.
 func approvalService(st *store.Store, projectDir string) *approval.Service {
-	return approval.New(st, func(taskID string) approval.Record {
+	return approval.NewWithLock(st, func(taskID string) approval.Record {
 		return runpkg.At(runpkg.Dir(projectDir, taskID))
-	})
+	}, projectLock(projectDir))
+}
+
+// projectLock adapts the project-scoped state lock to the approval boundary's seam,
+// so every approval operation takes the same lock as reconciliation.
+func projectLock(projectDir string) approval.LockFunc {
+	return func() (func(), error) {
+		l, err := projectlock.AcquireWait(context.Background(), projectDir, 0)
+		if err != nil {
+			return nil, err
+		}
+		return l.Release, nil
+	}
 }
 
 // runApproval dispatches the `sop approval` command group: a bare task id shows

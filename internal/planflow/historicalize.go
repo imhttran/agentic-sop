@@ -1,6 +1,7 @@
 package planflow
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	"github.com/imhttran/agentic-sop/internal/run"
 )
 
@@ -203,6 +205,14 @@ func evaluateHistoricalization(dir string, store TaskStore, targetID, targetSour
 // populated and mutates nothing. On an already-historicalized plan it returns
 // OutcomeAlreadyHistoricalized with no writes.
 func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
+	// Historicalization rewrites the plan state and its provenance; bound the wait
+	// because this entry point carries no caller context.
+	lock, lockErr := projectlock.AcquireWait(context.Background(), opts.Dir, 0)
+	if lockErr != nil {
+		return HistoricalizeResult{}, lockErr
+	}
+	defer lock.Release()
+
 	readiness, err := EvaluateHistoricalization(opts.Dir, opts.Store, opts.Plan, opts.Disposition)
 	if err != nil {
 		return HistoricalizeResult{}, err
