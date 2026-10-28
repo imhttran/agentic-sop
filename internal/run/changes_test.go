@@ -60,16 +60,16 @@ func TestRecordChangedFilesPersistsAndMerges(t *testing.T) {
 func TestRecordChangedFilesIsIdempotentAndBounded(t *testing.T) {
 	r, _ := New(t.TempDir(), "T001")
 
-	paths := make([]string, 0, maxTaskChangedFiles*2)
-	for i := 0; i < maxTaskChangedFiles*2; i++ {
+	paths := make([]string, 0, MaxTaskChangedFiles*2)
+	for i := 0; i < MaxTaskChangedFiles*2; i++ {
 		paths = append(paths, "p"+string(rune('a'+i%26))+string(rune('a'+i/26))+".go")
 	}
 	if err := r.RecordChangedFiles(paths); err != nil {
 		t.Fatalf("RecordChangedFiles: %v", err)
 	}
 	first := r.ChangedFiles()
-	if len(first) > maxTaskChangedFiles {
-		t.Fatalf("ChangedFiles = %d entries, want <= %d", len(first), maxTaskChangedFiles)
+	if len(first) > MaxTaskChangedFiles {
+		t.Fatalf("ChangedFiles = %d entries, want <= %d", len(first), MaxTaskChangedFiles)
 	}
 
 	// Recording the same set again is a no-op: the accumulator is a set, so

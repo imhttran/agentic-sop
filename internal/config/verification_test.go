@@ -86,3 +86,23 @@ func TestDefaultHasVerificationDisabled(t *testing.T) {
 		t.Error("the default configuration must not enable risk-based verification")
 	}
 }
+
+// TestVerificationScopedRejectsIncompleteRule proves a scoped rule that could
+// never match or never run a test is a load error, not a silent narrowing.
+func TestVerificationScopedRejectsIncompleteRule(t *testing.T) {
+	base := "project:\n  name: a\nverification:\n  scoped:\n"
+	for _, rule := range []string{
+		"    - paths: [\"a/**\"]\n",
+		"    - test: [\"t\"]\n",
+		"    - paths: [\"\"]\n      test: [\"t\"]\n",
+		"    - paths: [\"a/**\"]\n      test: [\" \"]\n",
+	} {
+		if _, err := Parse([]byte(base + rule)); err == nil || !strings.Contains(err.Error(), "verification.scoped[0]") {
+			t.Errorf("Parse(%q) error = %v, want a scoped rule error", rule, err)
+		}
+	}
+	c, err := Parse([]byte(base + "    - paths: [\"a/**\"]\n      test: [\"t\"]\n"))
+	if err != nil || len(c.Verification.Scoped) != 1 {
+		t.Fatalf("Parse(valid rule) = %+v, %v", c, err)
+	}
+}

@@ -93,4 +93,4 @@ func isChangeEvent(e activity.Event, runID string) bool {
 
 // maxActivityChangePaths bounds the recovered set, matching the task change-set
 // bound so a legacy stream can never produce a larger attribution than a live run.
-const maxActivityChangePaths = maxTaskChangedFiles
+const maxActivityChangePaths = MaxTaskChangedFiles
