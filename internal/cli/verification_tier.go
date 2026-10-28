@@ -1,8 +1,12 @@
 package cli
 
 import (
+	"slices"
+
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/router"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/validate"
 	"github.com/imhttran/agentic-sop/internal/verify"
@@ -60,4 +64,42 @@ func shouldRunJEV(cfg config.Config, tier verify.Tier) bool {
 		return true
 	}
 	return tier.RequiresJEV()
+}
+
+// scopeValidation narrows v.Test to the verification.scoped commands covering the
+// task's changed paths. It returns v unchanged when no rule is configured, the
+// change set is empty or may be truncated, the tier is not MEDIUM (LOW already
+// runs its own targeted set, HIGH runs everything), or any changed path matches
+// no rule, so an unmapped change always runs the full set. Build and lint are
+// never narrowed. The plan's final gate re-runs the full set before completion.
+func scopeValidation(cfg config.Config, v config.Validation, tier verify.Tier, changed []string) config.Validation {
+	rules := cfg.Verification.Scoped
+	if len(rules) == 0 || len(changed) == 0 || len(changed) >= runpkg.MaxTaskChangedFiles || tier != verify.Medium {
+		return v
+	}
+	matched := make([]bool, len(rules))
+	for _, p := range changed {
+		covered := false
+		for i, r := range rules {
+			if slices.ContainsFunc(r.Paths, func(g string) bool { return quality.MatchPath(g, p) }) {
+				matched[i], covered = true, true
+			}
+		}
+		if !covered {
+			return v
+		}
+	}
+	var test []string
+	for i, r := range rules {
+		if !matched[i] {
+			continue
+		}
+		for _, c := range r.Test {
+			if !slices.Contains(test, c) {
+				test = append(test, c)
+			}
+		}
+	}
+	v.Test = test
+	return v
 }

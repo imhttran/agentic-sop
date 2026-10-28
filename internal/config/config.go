@@ -884,6 +884,9 @@ func (c *Config) Validate() error {
 	if err := c.validateEarlyJEV(); err != nil {
 		return err
 	}
+	if err := c.Verification.validateScoped(); err != nil {
+		return err
+	}
 	switch strings.TrimSpace(c.Decision.Provider) {
 	case "deterministic", "command", "adapter":
 	default:

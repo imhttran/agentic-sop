@@ -104,6 +104,111 @@ What each decision means:
 Both commands are idempotent: repeating the same decision succeeds without changing
 anything, and deciding the other way is refused.
 
+## Invalidating a gate whose evidence is obsolete
+
+A plan reconciliation can change a task's definition while a request raised for the
+old definition is still pending. The request is then undecidable in substance: the
+evidence it names no longer exists. When the task is already satisfied, use
+`sop approval supersede`. When it is not satisfied, use:
+
+```bash
+sop approval invalidate P6-005 --reason "evidence names a deliverable the revised plan removed" --by reviewer
+```
+
+### Eligibility
+
+Every rule is evaluated in order, and a refusal writes nothing:
+
+1. `--reason` and `--by` are mandatory. An invalidation is an audited operator
+   action, never an implicit one.
+2. The request must be `PENDING`. An approved, declined, superseded, or already
+   invalidated request is refused, so a recorded human decision is never overwritten.
+3. The task must not be satisfied. A satisfied task is refused and points at
+   `supersede`.
+4. SOP must hold a **task-scoped accepted-change record** for this task, and that
+   record must:
+   - name this task (another task's reconciliation never qualifies),
+   - carry an acceptance time strictly **after** the request was raised,
+   - cover the **current** definition digest, and
+   - describe a real change (its before and after digests must differ).
+
+   This is required for **every** request, including one raised by this version that
+   recorded its definition digest. A different digest alone is not enough: the
+   change must have been accepted, and SOP records that acceptance per task when an
+   operator reconciles with `--accept-changed`.
+
+   Two things that look like evidence and are not:
+   - `plan.meta.json`'s `generated_at` is a plan-wide write time, refreshed by any
+     later plan write — including a no-op one. It never proves when a task's change
+     was accepted, and is not used.
+   - `reconciled_tasks` is a legacy task list. It records that a change was accepted
+     at some point, with no time, so it cannot establish the ordering. A plan whose
+     provenance has only that list has no usable acceptance evidence.
+
+   When a digest was recorded on the request, it must additionally differ from the
+   current one; a still-applicable request is refused even if an acceptance exists.
+
+A provider failure, a blocked task, a repaired implementation, or an edited plan file
+on disk is **not** evidence on its own. A provider failure says nothing about the
+task definition, so it never qualifies; the request must then be decided. Missing or
+ambiguous acceptance evidence is refused rather than backfilled.
+
+### Refusal cases
+
+| Situation | Result |
+| --- | --- |
+| Missing `--reason` or `--by` | Usage error; nothing is read or written |
+| Request already `APPROVED`, `DECLINED`, `SUPERSEDED`, or `INVALIDATED` | Refused: a recorded decision is never overwritten |
+| Task satisfied (`LOCAL_DONE`, `MERGED`, `DONE`) | Refused, pointing at `sop approval supersede` |
+| Current definition digest equals the recorded one | Refused: the evidence is still applicable |
+| No task-scoped accepted-change record for the task | Refused: no accepted definition change to prove |
+| Acceptance recorded before the request (even if the plan file was rewritten afterwards) | Refused: a later plan write is not acceptance evidence |
+| Acceptance belongs to another task | Refused: acceptance is task-scoped |
+| Acceptance covers a different or older definition | Refused: the change it accepted is not this one |
+| Acceptance has no time, or the plan has only a legacy `reconciled_tasks` entry | Refused: ambiguous evidence is never completed by inference |
+| Current definition unreadable or absent | Refused: revision is unproven, never guessed |
+
+### What it records
+
+The original request and its evidence are appended **verbatim** to the append-only
+approval history before the head changes, at most once: a retry after a partial
+failure cannot duplicate the entry. The head then becomes `INVALIDATED` with an
+invalidation record carrying:
+
+- the operator's reason, identity, and timestamp;
+- the plan source fingerprint before and after the revision;
+- the task definition digest before and after the revision;
+- the task-scoped acceptance time of the change being invalidated.
+
+For a legacy request the "before" values are unknown and recorded as empty rather
+than fabricated.
+
+### What it never does
+
+- **It is not a decision.** `Decision` stays empty and no lifecycle action is
+  recorded, so nothing reads as approved or declined.
+- **It never writes the task.** Status, attempt count, and satisfaction are
+  untouched: the task is not completed, satisfied, or skipped.
+- **It does not replace verification.** The next run must still execute the task and
+  produce fresh outcome evidence. Invalidation removes a gate that can no longer
+  authorize anything; it proves nothing about the work.
+- **It does not weaken blocking.** `PENDING` and `DECLINED` requests still stop a run
+  exactly as before. Only an invalidated request lets the run proceed.
+
+### Reading a gate's state
+
+`sop approvals` prints `<task> <kind> <stage> <reason>`, for example:
+
+```text
+APPR-004  NEEDS_HUMAN  FAILED  ollama returned an empty response
+```
+
+That line names the request **kind** (`NEEDS_HUMAN`) and the **run stage** at request
+time (`FAILED`). Neither is the decision state. Read the decision state from
+`sop approval <task-id>`, which reports `Approval: PENDING|APPROVED|DECLINED|SUPERSEDED|INVALIDATED`
+and any recorded decision. A request whose reason is a provider failure is a normal
+pending gate that needs a decision, not a stale-evidence case.
+
 ## Deciding interactively
 
 At a terminal, you can let SOP ask you which gate to decide, instead of naming one:

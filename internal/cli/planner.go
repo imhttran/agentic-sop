@@ -1062,6 +1062,6 @@ func parkPlannerHuman(ctx context.Context, dir string, task *domain.Task, subjec
 	if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.WaitingForHuman); err != nil {
 		fmt.Fprintf(stderr, "%s planner: %v\n", task.ID, err)
 	}
-	recordHumanApprovalRequest(ctx, runpkg.At(runpkg.Dir(dir, task.ID)), task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
+	recordHumanApprovalRequest(ctx, dir, runpkg.At(runpkg.Dir(dir, task.ID)), task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
 	fmt.Fprintf(stdout, "%s planner: stopped for human review (%s): %s\n", task.ID, subject, oneLine(reason))
 }

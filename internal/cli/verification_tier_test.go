@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 	"github.com/imhttran/agentic-sop/internal/verify"
 )
@@ -113,5 +115,66 @@ func TestRiskBasedLowRunsTargetedSetWithoutAgent(t *testing.T) {
 	}
 	if strings.Contains(string(report), "exit 1") {
 		t.Errorf("the failing full-set test ran; the LOW targeted set was not used:\n%s", report)
+	}
+}
+
+// TestScopeValidation pins scoped test selection: only a fully covered change is
+// narrowed, and every uncertain case runs the full test set.
+func TestScopeValidation(t *testing.T) {
+	full := fullValidationFixture()
+	cfg := config.Config{Validation: full, Verification: config.Verification{Scoped: []config.ScopedRule{
+		{Paths: []string{"crates/core/**"}, Test: []string{"test-core"}},
+		{Paths: []string{"crates/cli/**", "crates/core/src/shared.rs"}, Test: []string{"test-cli", "test-core"}},
+		{Paths: []string{"crates/**/generated.rs"}, Test: []string{"test-generated"}},
+	}}}
+	many := make([]string, runpkg.MaxTaskChangedFiles)
+	cases := []struct {
+		name    string
+		changed []string
+		tier    verify.Tier
+		want    []string
+	}{
+		{"covered", []string{"crates/core/src/lib.rs"}, verify.Medium, []string{"test-core"}},
+		{"union deduplicated", []string{"crates/core/src/shared.rs", "crates/cli/main.rs"}, verify.Medium, []string{"test-core", "test-cli"}},
+		{"broad and interior-wildcard rules both apply", []string{"crates/core/src/generated.rs"}, verify.Medium, []string{"test-core", "test-generated"}},
+		{"one uncovered", []string{"crates/core/src/lib.rs", "README.md"}, verify.Medium, full.Test},
+		{"empty change set", nil, verify.Medium, full.Test},
+		{"possibly truncated", many, verify.Medium, full.Test},
+		{"high tier", []string{"crates/core/src/lib.rs"}, verify.High, full.Test},
+		{"low tier keeps its own set", []string{"crates/core/src/lib.rs"}, verify.Low, full.Test},
+	}
+	for _, c := range cases {
+		got := scopeValidation(cfg, full, c.tier, c.changed)
+		if !reflect.DeepEqual(got.Test, c.want) || !reflect.DeepEqual(got.Build, full.Build) || !reflect.DeepEqual(got.Lint, full.Lint) {
+			t.Errorf("%s: got %+v, want test %v with build/lint unchanged", c.name, got, c.want)
+		}
+	}
+	if got := (&runSession{}).scope(cfg, full, verify.Medium, nil); !reflect.DeepEqual(got, full) {
+		t.Errorf("unscoped session narrowed validation: %+v", got)
+	}
+}
+
+// TestFinalValidationGate proves a plan with scoped rules cannot complete unless
+// the full configured set passes, and that it is a no-op without scoped rules.
+func TestFinalValidationGate(t *testing.T) {
+	dir := t.TempDir()
+	d := deps{readDiff: func(context.Context, string) (string, error) { return "diff", nil }}
+	rules := config.Verification{Scoped: []config.ScopedRule{{Paths: []string{"**"}, Test: []string{"exit 0"}}}}
+	var stderr strings.Builder
+
+	failing := config.Config{Validation: config.Validation{Test: []string{"exit 1"}}, Verification: rules}
+	if finalValidationGate(context.Background(), dir, failing, d, newRunSession(), &stderr) {
+		t.Fatal("final gate passed with a failing full suite")
+	}
+	if !strings.Contains(stderr.String(), "exit 1") {
+		t.Errorf("failure output does not name the failing command: %q", stderr.String())
+	}
+	passing := config.Config{Validation: config.Validation{Test: []string{"exit 0"}}, Verification: rules}
+	if !finalValidationGate(context.Background(), dir, passing, d, newRunSession(), &stderr) {
+		t.Fatal("final gate failed with a passing full suite")
+	}
+	failing.Verification = config.Verification{}
+	if !finalValidationGate(context.Background(), dir, failing, d, newRunSession(), &stderr) {
+		t.Fatal("final gate ran without scoped rules")
 	}
 }

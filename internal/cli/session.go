@@ -7,8 +7,10 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/review"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
 	"github.com/imhttran/agentic-sop/internal/validate"
+	"github.com/imhttran/agentic-sop/internal/verify"
 )
 
 // runSession holds the per-invocation caches that let a run reuse work it can
@@ -28,6 +30,9 @@ import (
 type runSession struct {
 	validation map[string]testrunner.SuiteResult
 	review     map[string]review.Report
+	// scoped enables verification.scoped test selection. Only a plan drive sets
+	// it, because only a drive runs the full-suite gate before completion.
+	scoped bool
 }
 
 func newRunSession() *runSession {
@@ -51,6 +56,15 @@ func (s *runSession) cacheValidation(key string, suite testrunner.SuiteResult) {
 	if s != nil && suite.Passed() {
 		s.validation[key] = suite
 	}
+}
+
+// scope applies verification.scoped selection when this session enables it. The
+// task's change set is read only when scoping can apply.
+func (s *runSession) scope(cfg config.Config, v config.Validation, tier verify.Tier, rn *runpkg.Run) config.Validation {
+	if s == nil || !s.scoped || len(cfg.Verification.Scoped) == 0 {
+		return v
+	}
+	return scopeValidation(cfg, v, tier, rn.ChangedFiles())
 }
 
 // cachedReview returns a prior clean review for the identity.

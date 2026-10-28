@@ -176,9 +176,13 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 	}
 
 	sess := newRunSession()
+	sess.scoped = true
 	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, maxTasks, stdout, stderr)
 	if code == exitOK {
 		if final, err := st.List(); err == nil && domain.AllSatisfied(final) {
+			if !finalValidationGate(ctx, dir, cfg, d, sess, stderr) {
+				return exitError
+			}
 			printCompletion(stdout, dir, cfg, prepared, final)
 			historicalizeOnCompletion(dir, st, stdout, stderr)
 		}
@@ -188,6 +192,28 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 	// nothing when no gate is applicable, so a clean run's output is unchanged.
 	printLeftoverGates(stdout, dir, st)
 	return code
+}
+
+// finalValidationGate runs the full configured validation once before a plan
+// whose tasks validated with verification.scoped tests reports completion. It
+// keeps no state across invocations: re-running `sop run` on a satisfied plan
+// retries it. The session cache reuses a pass only when the last task ran the
+// full set on the same tree; after a scoped task the full set runs again.
+func finalValidationGate(ctx context.Context, dir string, cfg config.Config, d deps, sess *runSession, stderr io.Writer) bool {
+	if len(cfg.Verification.Scoped) == 0 {
+		return true
+	}
+	diff, err := d.readDiff(ctx, dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: final validation: diff: %v\n", err)
+		return false
+	}
+	suite := sessionValidation(ctx, dir, cfg.Validation, diff, perf.NewRecorder("final-validation"), sess)
+	if !suite.Passed() {
+		fmt.Fprintf(stderr, "run: final full-suite validation failed; the plan is not complete\n%s", validationFailureContext(suite))
+		return false
+	}
+	return true
 }
 
 // historicalizationOnCompletionEnv is the opt-in switch for `sop run`'s final
@@ -800,7 +826,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		// same stage the lifecycle's own human boundary sets. No new task state is
 		// introduced.
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
-		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
+		recordHumanApprovalRequest(ctx, dir, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, tri.Reason, tri.Reason)
 		parked = true
 		return recoverTask(saver, task, rn, "TRIAGE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman, Reason: tri.Reason}, cfg.AutonomyPolicy(), tri.Reason, stdout, stderr)
 	}
@@ -827,7 +853,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// than inferring one from a task status. It is provenance only: it never changes
 	// the task status or the run outcome.
 	if err == nil && humanBoundary(res.stage, res.classification, res.decision) {
-		recordHumanApprovalRequest(ctx, rn, task, res.stage, res.classification.Disposition,
+		recordHumanApprovalRequest(ctx, dir, rn, task, res.stage, res.classification.Disposition,
 			firstNonBlank(firstReason(res.gate), res.classification.Reason), res.classification.Reason)
 		parked = true
 	}
@@ -847,7 +873,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		}
 		fmt.Fprintf(stderr, "%s: %v\n", task.ID, err)
 		if humanBoundary(res.stage, cls, res.decision) {
-			recordHumanApprovalRequest(ctx, rn, task, res.stage, cls.Disposition,
+			recordHumanApprovalRequest(ctx, dir, rn, task, res.stage, cls.Disposition,
 				firstNonBlank(cls.Reason, err.Error()), cls.Reason)
 			parked = true
 		}
@@ -935,7 +961,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	if res.outcome.blocksAdvancement() {
 		reason := "required acceptance evidence is missing or failed: " + strings.Join(res.outcome.Reasons, "; ")
 		parkRunAtHumanBoundary(rn, task.ID, stderr)
-		recordHumanApprovalRequest(ctx, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
+		recordHumanApprovalRequest(ctx, dir, rn, task, runpkg.WaitingForHuman, failure.NeedsHuman, reason, reason)
 		parked = true
 		return recoverTask(saver, task, rn, string(res.outcome.Status)+"|ACCEPTANCE|NEEDS_HUMAN", "NEEDS_HUMAN", failure.NeedsHuman, failure.Classification{Disposition: failure.NeedsHuman}, cfg.AutonomyPolicy(), reason, stdout, stderr)
 	}

@@ -112,3 +112,72 @@ The terms MUST, MUST NOT, SHOULD, SHOULD NOT, and MAY are normative.
   MUST remain distinct operations.
 - The explicit `sop approve <task-id>` and `sop decline <task-id>` commands MUST remain
   usable without a terminal, by a human, a script, an MCP client, or a controller.
+
+## 8. Invalidating a Request Whose Evidence Is Obsolete
+
+A plan reconciliation can change a task's definition while a request raised for
+the old definition is still `PENDING`. The evidence the request names no longer
+exists, so the request cannot be decided in substance. SOP MUST provide an
+explicit, operator-authorized invalidation for this case:
+`sop approval invalidate <task-id> --reason TEXT --by NAME`.
+
+### 8.1 Guard conditions
+
+Every guard MUST be evaluated in the fixed order below, and a refusal MUST write
+nothing to the head or to the history.
+
+1. `--reason` and `--by` MUST both be non-empty. An invalidation is an audited
+   operator action, never an implicit one.
+2. The head MUST exist for the task and MUST be `PENDING`. An `APPROVED`,
+   `DECLINED`, `SUPERSEDED`, or `INVALIDATED` head MUST be refused, so a recorded
+   human decision is never overwritten. (A repeated call on an already
+   `INVALIDATED` head MUST be idempotent: it MUST append no history entry and MUST
+   not change the head.)
+3. The task MUST NOT be satisfied. A satisfied task MUST be refused, and the
+   refusal SHOULD direct the operator to `sop approval supersede`.
+4. A **task-scoped accepted-change record** MUST exist for this task, and it MUST
+   name this task, carry an acceptance time strictly **after** the request was
+   raised, cover the **current** definition digest, and describe a real change.
+   This evidence is required for every request, stamped or legacy. A different
+   definition digest alone MUST NOT authorize an invalidation. The plan-wide
+   `generated_at` write time and a legacy `reconciled_tasks` list entry MUST NOT be
+   accepted as acceptance evidence.
+5. When the request recorded its own definition digest, the current digest MUST
+   also differ from it, so a still-applicable request is refused even when an
+   acceptance record exists.
+
+Missing or ambiguous evidence MUST be refused. SOP MUST NOT infer or backfill
+acceptance.
+
+### 8.2 The audit record
+
+The original `PENDING` request MUST be appended **verbatim** to the append-only
+approval history before the head changes, at most once (deduplicated by request
+id, so a retry after a partial failure appends no duplicate). The head status then
+MUST become `INVALIDATED` with an invalidation record carrying:
+
+- `Reason` — the operator's justification;
+- `InvalidatedBy` — the operator identity;
+- `InvalidatedAt` — when the invalidation was recorded;
+- `PlanFingerprintBefore` and `PlanFingerprintAfter` — the plan source fingerprint
+  before and after the accepted revision;
+- `DefinitionAcceptedAt` — the task-scoped acceptance time of the change;
+- `DefinitionDigestBefore` and `DefinitionDigestAfter` — the task definition digest
+  before and after the revision.
+
+For a legacy request the "before" values are unknown and MUST be recorded empty
+rather than fabricated.
+
+### 8.3 What invalidation is not
+
+- It is **not an approval**. It MUST record no `Decision` and no lifecycle action,
+  so nothing reads as approved or declined.
+- It **does not complete or satisfy a task**. It MUST NOT write the task: the
+  status, attempt count, and satisfaction stay unchanged, so the task is not
+  completed, satisfied, or skipped.
+- It **requires re-execution and fresh verification**. The next run MUST still
+  execute the task and produce fresh outcome evidence; invalidation proves nothing
+  about the work.
+- It **does not weaken blocking**. `PENDING` and `DECLINED` requests MUST keep
+  blocking execution exactly as before. Only an `INVALIDATED` request permits the
+  run to proceed.

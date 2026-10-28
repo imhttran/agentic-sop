@@ -876,6 +876,27 @@ configured, a LOW task falls back to the full configured set, so enabling the fe
 cannot reduce verification to nothing. The tier also gates the optional JEV analysis
 (`quality.jev`): with risk-based verification on, JEV runs only for the HIGH tier.
 
+## Scoped task tests
+
+Optional and independent of `risk_based`. When a plan drive (`sop run` over a plan)
+validates a task, it runs only the test commands whose rules cover every path the task
+changed, then runs the full `validation` set once before it reports the plan complete
+(see [../specs/VALIDATION.md](../specs/VALIDATION.md) §10).
+
+```yaml
+verification:
+  scoped:
+    - paths: ["crates/core/**"] # globs; ** spans path segments
+      test: ["cargo test -p core"]
+    - paths: ["crates/cli/**"]
+      test: ["cargo test -p cli"]
+```
+
+A change with any path that matches no rule runs the full `validation.test` set, and
+`build` and `lint` always run in full. With `risk_based` on, only `MEDIUM` tasks are
+scoped: `LOW` keeps its `low` set and `HIGH` runs everything. Each rule needs non-empty `paths` and `test`.
+Single-task `sop run`, `sop prompt`, and `sop eval` ignore the block.
+
 ## Related
 
 - [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md)

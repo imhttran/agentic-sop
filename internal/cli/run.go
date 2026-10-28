@@ -637,7 +637,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// so a verify-first pass still contributes to the task's accumulated
 		// implementation evidence.
 		recordTaskChanges(rn, changedFiles(diff), reports...)
-		suite := sessionValidation(ctx, dir, vset, diff, rec, sess)
+		suite := sessionValidation(ctx, dir, sess.scope(cfg, vset, tier, rn), diff, rec, sess)
 		switch {
 		case len(suite.Results) == 0:
 		case suite.Passed():
@@ -880,7 +880,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		} else {
 			// Validate: deterministic, fail-fast. Uncompilable changes never reach review.
 			_ = rn.SetStage(runpkg.Validating)
-			suite = sessionValidation(ctx, dir, vset, diff, rec, sess)
+			suite = sessionValidation(ctx, dir, sess.scope(cfg, vset, tier, rn), diff, rec, sess)
 		}
 
 		// A non-completed mutating outcome is classified on the deterministic

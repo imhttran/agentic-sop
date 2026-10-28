@@ -25,9 +25,9 @@ import (
 // across all of its invocations.
 const changedFilesName = "changed-files.json"
 
-// maxTaskChangedFiles bounds the accumulated task change set so a long task
+// MaxTaskChangedFiles bounds the accumulated task change set so a long task
 // cannot grow the evidence without limit.
-const maxTaskChangedFiles = 64
+const MaxTaskChangedFiles = 64
 
 // RecordChangedFiles merges paths into the task's accumulated change set and
 // persists it in the run directory. The run directory is keyed by task id and
@@ -73,7 +73,7 @@ func mergeChangedFiles(existing, added []string) []string {
 	out := make([]string, 0, len(existing)+len(added))
 	appendPath := func(p string) {
 		p = strings.TrimSpace(p)
-		if p == "" || seen[p] || len(out) >= maxTaskChangedFiles {
+		if p == "" || seen[p] || len(out) >= MaxTaskChangedFiles {
 			return
 		}
 		seen[p] = true
