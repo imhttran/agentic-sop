@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -49,6 +50,10 @@ type WebhookChannel struct {
 	Transport Transport
 	// Timeout bounds one attempt. A zero value means 10 seconds.
 	Timeout time.Duration
+	// Payload selects the request body style: native (the SOP event JSON, the
+	// default) or slack (a Slack incoming-webhook message). An empty value
+	// selects native.
+	Payload string
 }
 
 // NewWebhookChannel returns a webhook channel for url that uses transport. A nil
@@ -76,7 +81,14 @@ func (c *WebhookChannel) Send(d Delivery) (Ack, error) {
 		return AckRejected, errors.New("notify: webhook channel requires a URL")
 	}
 
-	payload, err := json.Marshal(e)
+	var payload []byte
+	var err error
+	switch NormalizePayloadStyle(c.Payload) {
+	case PayloadSlack:
+		payload, err = EncodeSlackPayload(e)
+	default:
+		payload, err = json.Marshal(e)
+	}
 	if err != nil {
 		return AckRejected, fmt.Errorf("notify: encode event %q: %w", e.ID, err)
 	}
@@ -90,7 +102,10 @@ func (c *WebhookChannel) Send(d Delivery) (Ack, error) {
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.URL, bytes.NewReader(payload))
 	if err != nil {
-		return AckRejected, fmt.Errorf("notify: build webhook request for event %q: %w", e.ID, err)
+		// A construction error can wrap a *url.Error that repeats the endpoint.
+		// last_error is persisted in the outbox and rendered by the CLI, so the
+		// endpoint (which can carry a token) must not appear in the message.
+		return AckRejected, fmt.Errorf("notify: build webhook request for event %q: %s", e.ID, sanitizeWebhookError(err, c.URL))
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set(IdempotencyHeader, d.Key())
@@ -102,8 +117,10 @@ func (c *WebhookChannel) Send(d Delivery) (Ack, error) {
 
 	resp, err := transport.Do(req)
 	if err != nil {
-		// A timeout or a transport error leaves the outcome unknown.
-		return AckAmbiguous, fmt.Errorf("notify: deliver event %q: %w", e.ID, err)
+		// A timeout or a transport error leaves the outcome unknown. The transport
+		// error can be a *url.Error that repeats the full request URL, which may
+		// carry a token; sanitize it before it reaches last_error or the CLI.
+		return AckAmbiguous, fmt.Errorf("notify: deliver event %q: %s", e.ID, sanitizeWebhookError(err, c.URL))
 	}
 	defer func() {
 		_, _ = io.Copy(io.Discard, resp.Body)
@@ -122,4 +139,71 @@ func (c *WebhookChannel) Send(d Delivery) (Ack, error) {
 		// delivery and not a definitive refusal.
 		return AckAmbiguous, fmt.Errorf("notify: deliver event %q: unexpected status %d", e.ID, resp.StatusCode)
 	}
+}
+
+// sanitizeWebhookError returns a URL-free description of err for the webhook
+// endpoint rawURL. It keeps the operation and the underlying reason (for example
+// "context deadline exceeded") but never the request URL, its host, its userinfo,
+// its path, or its query.
+//
+// The endpoint can embed a token and the text is stored as the outbox last_error
+// and printed by the CLI, so the URL must not leak at the source. Any occurrence
+// of the raw endpoint and of its token-bearing components is replaced.
+func sanitizeWebhookError(err error, rawURL string) string {
+	if err == nil {
+		return "unknown error"
+	}
+	msg := err.Error()
+	if u, perr := url.Parse(rawURL); perr == nil {
+		if u.Scheme != "" && u.Host != "" {
+			msg = strings.ReplaceAll(msg, u.Scheme+"://"+u.Host, "<redacted>")
+		}
+		if u.Host != "" {
+			msg = strings.ReplaceAll(msg, u.Host, "<redacted>")
+		}
+		if u.User != nil {
+			if user := u.User.String(); user != "" {
+				msg = strings.ReplaceAll(msg, user, "<redacted>")
+			}
+			if pass, ok := u.User.Password(); ok && pass != "" {
+				msg = strings.ReplaceAll(msg, pass, "<redacted>")
+			}
+		}
+		if u.Path != "" {
+			msg = strings.ReplaceAll(msg, u.Path, "<redacted>")
+		}
+		if u.RawPath != "" && u.RawPath != u.Path {
+			msg = strings.ReplaceAll(msg, u.RawPath, "<redacted>")
+		}
+		if u.RawQuery != "" {
+			msg = strings.ReplaceAll(msg, u.RawQuery, "<redacted>")
+			msg = strings.ReplaceAll(msg, "?"+u.RawQuery, "?<redacted>")
+			for _, kv := range strings.Split(u.RawQuery, "&") {
+				if _, v, ok := strings.Cut(kv, "="); ok && v != "" {
+					msg = strings.ReplaceAll(msg, v, "<redacted>")
+				}
+			}
+		}
+		if rawURL != "" {
+			msg = strings.ReplaceAll(msg, rawURL, "<redacted>")
+		}
+	}
+	// net/url reports a construction failure as `parse "<url>": <reason>`; keep
+	// the reason and drop the quoted URL entirely.
+	if ue := (*url.Error)(nil); errors.As(err, &ue) {
+		return fmt.Sprintf("%s %s: %s", ue.Op, "request failed", scrubURLLikeTokens(ue.Err.Error()))
+	}
+	return scrubURLLikeTokens(msg)
+}
+
+// scrubURLLikeTokens removes any remaining URL-shaped token from msg so a
+// transport error that rebuilds the endpoint textually cannot re-introduce it.
+func scrubURLLikeTokens(msg string) string {
+	fields := strings.Fields(msg)
+	for i, f := range fields {
+		if strings.Contains(f, "://") {
+			fields[i] = "<redacted-url>"
+		}
+	}
+	return strings.Join(fields, " ")
 }

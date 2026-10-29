@@ -89,6 +89,72 @@ func TestNotificationsWebhookWithoutCredentialsIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestNotificationsPayloadStyles(t *testing.T) {
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n    payload: slack\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.NotifyWebhookPayload(); got != "slack" {
+		t.Fatalf("payload = %q, want slack", got)
+	}
+	body = notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n"
+	c, err = parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.NotifyWebhookPayload(); got != "native" {
+		t.Fatalf("default payload = %q, want native", got)
+	}
+}
+
+func TestNotificationsUnknownPayloadRejected(t *testing.T) {
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n    payload: blocks\n"
+	_, err := parseNotify(t, body)
+	if err == nil || !strings.Contains(err.Error(), "notifications.webhook.payload") {
+		t.Fatalf("expected payload error, got %v", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "native, slack") {
+		t.Fatalf("error does not name accepted values: %v", err)
+	}
+}
+
+func TestNotificationsWebhookURLFromEnv(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "https://example.invalid/from-env")
+	body := notifyBase + "notifications:\n  channel: webhook\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := strings.TrimSpace(c.Notifications.Webhook.URL); got != "https://example.invalid/from-env" {
+		t.Fatalf("url not resolved from env, got %q", got)
+	}
+	st := c.NotifyStatus(true)
+	if !st.Available || !st.HookPresent {
+		t.Fatalf("status = %+v", st)
+	}
+}
+
+func TestNotificationsWebhookURLEnvUnset(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "")
+	body := notifyBase + "notifications:\n  channel: webhook\n"
+	if _, err := parseNotify(t, body); err == nil || !strings.Contains(err.Error(), NotifyWebhookURLEnv) {
+		t.Fatalf("expected error naming %s, got %v", NotifyWebhookURLEnv, err)
+	}
+}
+
+func TestNotificationsWebhookURLYAMLWinsOverEnv(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "https://example.invalid/from-env")
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/from-yaml\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := strings.TrimSpace(c.Notifications.Webhook.URL); got != "https://example.invalid/from-yaml" {
+		t.Fatalf("yaml must win over env, got %q", got)
+	}
+}
+
 func TestNotificationsMalformedKeyRejected(t *testing.T) {
 	body := notifyBase + "notifications:\n  channel: file\n  bogus: true\n"
 	_, err := parseNotify(t, body)

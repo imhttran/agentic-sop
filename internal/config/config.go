@@ -740,6 +740,10 @@ func Parse(data []byte) (*Config, error) {
 	if err := c.applyLegacyCargo(); err != nil {
 		return nil, err
 	}
+	// The webhook URL is a secret, so it is read from the environment when the
+	// YAML field is empty. The value is never rendered by status, logs, events,
+	// or errors.
+	c.resolveNotifyWebhookURL(os.Getenv)
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err

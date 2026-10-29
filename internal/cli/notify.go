@@ -386,7 +386,9 @@ func notifyChannel(cfg config.Config) (notify.Channel, error) {
 		if strings.TrimSpace(cfg.Notifications.Webhook.URL) == "" {
 			return nil, fmt.Errorf("channel %q is configured without notifications.webhook.url", config.NotifyChannelWebhook)
 		}
-		return notify.NewWebhookChannel(cfg.Notifications.Webhook.URL, nil), nil
+		ch := notify.NewWebhookChannel(cfg.Notifications.Webhook.URL, nil)
+		ch.Payload = cfg.NotifyWebhookPayload()
+		return ch, nil
 	default:
 		return nil, notify.ErrChannelUnavailable
 	}
