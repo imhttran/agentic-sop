@@ -58,6 +58,16 @@ Slack incoming webhooks post a fixed body; select it with
 | `active` | at least one delivery was confirmed on the current channel |
 | `unknown` | delivery state could not be read |
 
+### Recorded operator-local verification
+
+On 2026-10-29, a Mac installation configured the generic webhook channel with the
+Slack payload format and loaded the endpoint from the local environment. `sop notify
+status` reported `active`, with `delivered=3`, `pending=0`, and `exhausted=0`. Two
+real MCP-started detached jobs (`work-20261029-190255` and
+`work-20261029-190641`) exited successfully and each produced a terminal delivery
+on attempt 1. This verifies that local configuration and delivery path only; it does
+not enable a channel by default or establish deployment on another machine.
+
 Configuration alone never reports `active`. Run `sop notify test` to enqueue and
 attempt one test event; only a confirmed acknowledgement moves the channel to
 `active`.
