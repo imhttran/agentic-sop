@@ -229,3 +229,14 @@ Include the exact outcome and a short, safe error excerpt. If no matching log
 exists, say `sop-run.log: UNAVAILABLE` and link the applicable existing run/report
 artifact instead; never invent a log or use another project's log. Apply this
 reporting rule to delegated SOP commands and capability aliases as well.
+
+## Background work and notifications
+
+Whenever starting background work, confirm whether notifications are active. If
+notifications are unavailable, explicitly say so and offer a scheduled status check.
+If notification status cannot be verified, report it as unverified. Do not claim a
+status check is scheduled until scheduling succeeds.
+
+Check with `sop notify status` (or the `sop_work_status` notification evidence).
+Configuration alone is not verification: only an observed, confirmed delivery
+reports `active`.

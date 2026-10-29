@@ -50,7 +50,7 @@ func (s *Store) Close() error {
 }
 
 // schemaVersion is the current on-disk schema version.
-const schemaVersion = 6
+const schemaVersion = 7
 
 func (s *Store) migrate() error {
 	var version int
@@ -70,6 +70,7 @@ func (s *Store) migrate() error {
 		3: s.migrateDiscoveryIterations,
 		4: s.migrateRequiredEvidence,
 		5: s.migrateBlockedDetail,
+		6: s.migrateNotifications,
 	}
 	for version < schemaVersion {
 		migrate, ok := migrations[version]
@@ -191,6 +192,65 @@ func (s *Store) migrateBlockedDetail() error {
 		return err
 	}
 	_, err := s.db.Exec("PRAGMA user_version = 6")
+	return err
+}
+
+// migrateNotifications adds the durable notification outbox (schema version 7):
+// one notification_events row per transition and one notification_deliveries row
+// per event and channel. The tables stand alone: neither carries a foreign key to
+// tasks, so clearing the active task graph never erases notification history.
+// Only a delivery references its event (ON DELETE CASCADE).
+//
+// Every statement uses IF NOT EXISTS so the migration is idempotent: a database
+// whose recorded version was lowered (for example by an older binary or a test
+// that simulates an earlier schema) migrates again without failing on tables
+// that already exist.
+func (s *Store) migrateNotifications() error {
+	schema := `
+	CREATE TABLE IF NOT EXISTS notification_events (
+		id TEXT PRIMARY KEY,
+		version INTEGER NOT NULL,
+		kind TEXT NOT NULL,
+		project TEXT NOT NULL,
+		job_id TEXT NOT NULL DEFAULT '',
+		task_id TEXT NOT NULL DEFAULT '',
+		attempt INTEGER NOT NULL DEFAULT 0,
+		transition TEXT NOT NULL,
+		reason TEXT NOT NULL DEFAULT '',
+		next_action TEXT NOT NULL DEFAULT '',
+		outcome TEXT NOT NULL DEFAULT '',
+		approval_request_id TEXT NOT NULL DEFAULT '',
+		resolution_command TEXT NOT NULL DEFAULT '',
+		occurred_at TEXT NOT NULL,
+		created_at TEXT NOT NULL
+	);
+
+	CREATE TABLE IF NOT EXISTS notification_deliveries (
+		event_id TEXT NOT NULL,
+		channel TEXT NOT NULL,
+		status TEXT NOT NULL DEFAULT 'PENDING'
+			CHECK (status IN ('PENDING', 'CLAIMED', 'DELIVERED', 'EXHAUSTED')),
+		attempt INTEGER NOT NULL DEFAULT 0,
+		max_attempts INTEGER NOT NULL DEFAULT 1,
+		last_error TEXT NOT NULL DEFAULT '',
+		next_attempt_at TEXT NOT NULL,
+		claim_token TEXT NOT NULL DEFAULT '',
+		lease_expires_at TEXT,
+		delivered_at TEXT,
+		created_at TEXT NOT NULL,
+		updated_at TEXT NOT NULL,
+		PRIMARY KEY (event_id, channel),
+		FOREIGN KEY (event_id) REFERENCES notification_events(id) ON DELETE CASCADE
+	);
+
+	CREATE INDEX IF NOT EXISTS idx_notification_deliveries_claim
+		ON notification_deliveries (status, next_attempt_at, lease_expires_at);
+	CREATE INDEX IF NOT EXISTS idx_notification_deliveries_status
+		ON notification_deliveries (status);
+
+	PRAGMA user_version = 7;
+	`
+	_, err := s.db.Exec(schema)
 	return err
 }
 

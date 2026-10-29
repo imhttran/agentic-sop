@@ -175,7 +175,9 @@ func mcpStartWorkTool(dir string, env workEnv) mcp.Tool {
 		Name: "sop_start_work",
 		Description: "Start SOP work in the background from prompt text (runs `sop prompt`) or a PLAN.md inside the project (runs `sop run PLAN`). " +
 			"If the same work is already running, already ran, or is the plan SOP already holds, returns its status instead of starting it again; " +
-			"pass rerun=true to start it again once it is not running. Only one started job runs per project at a time. Never approves a gate.",
+			"pass rerun=true to start it again once it is not running. Only one started job runs per project at a time. Never approves a gate. " +
+			workNotificationsEvidenceDescription,
+
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -214,11 +216,20 @@ func mcpStartWorkTool(dir string, env workEnv) mcp.Tool {
 	}
 }
 
+// workNotificationsEvidenceDescription is the shared description of the
+// notifications evidence every start-work and work-status response carries. It
+// is the contract an agent follows before it claims that a notification was
+// delivered.
+const workNotificationsEvidenceDescription = "Every response includes a read-only `notifications` object: `channel`, `availability`, `active`, delivery counts, `reason`, and credential presence only (never the webhook URL or the file path). " +
+	"`availability` is `unavailable` when no channel is configured, `configured_unverified` when a channel is configured with no confirmed delivery, `active` only after a confirmed delivery, and `unknown` when SOP could not read the delivery state (the error is in the object). " +
+	"Configuration alone is not delivery proof: only `active` supports a claim that a notification was delivered."
+
 // mcpWorkStatusTool builds sop_work_status, the read-only view of started jobs.
 func mcpWorkStatusTool(dir string, env workEnv) mcp.Tool {
 	return mcp.Tool{
-		Name:        "sop_work_status",
-		Description: "Report MCP-started SOP work: one job by job_id, or the most recent jobs, with state, exit code, a log excerpt, and the project's task status.",
+		Name: "sop_work_status",
+		Description: "Report MCP-started SOP work: one job by job_id, or the most recent jobs, with state, exit code, a log excerpt, and the project's task status. " +
+			workNotificationsEvidenceDescription,
 		InputSchema: map[string]any{
 			"type": "object",
 			"properties": map[string]any{
@@ -422,7 +433,20 @@ func startWork(dir string, env workEnv, in startWorkArgs) (map[string]any, error
 	// server; its exit is then reported as "ended" with no code.
 	go func() {
 		code := wait()
-		_ = writeJSONFile(filepath.Join(jobDir, workExitFile), workExit{ExitCode: code, EndedAt: env.now().UTC()})
+		endedAt := env.now().UTC()
+		_ = writeJSONFile(filepath.Join(jobDir, workExitFile), workExit{ExitCode: code, EndedAt: endedAt})
+		// The job's own process records its terminal event the moment it exits, so a
+		// job that fails before writing a task result still produces one event. The
+		// emitter derives it from the recorded exit and dedups on the deterministic
+		// event id, so a re-read of the exit never enqueues a second event, while a
+		// re-run (a new job id) produces its own.
+		if code == 0 {
+			_, _, _ = emitTransitionCompleted(dir, "", job.ID, 1,
+				fmt.Sprintf("job %s completed (exit 0)", job.ID), "inspect the result with sop_work_status or sop status")
+		} else {
+			_, _, _ = emitTransitionFailed(dir, "", job.ID, 1, false,
+				fmt.Sprintf("job %s exited %d before recording a task result", job.ID, code), "inspect the job log with sop_work_status")
+		}
 	}()
 
 	view := workJobView{workJob: job, State: workStateRunning, Log: relDir(dir, logPath), dir: jobDir}
@@ -481,7 +505,38 @@ func workDoc(dir, outcome, message string, j *workJobView) map[string]any {
 	} else {
 		doc["tasks_error"] = err.Error()
 	}
+	// The notifications object answers "are notifications active?" and "was this
+	// event delivered?" from observed evidence. It is read-only and reports
+	// credential presence only.
+	if notifDoc, err := workNotificationDoc(dir); err == nil {
+		doc["notifications"] = notifDoc
+	} else {
+		doc["notifications_error"] = err.Error()
+	}
 	return doc
+}
+
+// workNotificationDoc builds the shared notification status document for the
+// work-status response. It opens the store read-only and mutates no state.
+//
+// When the delivery state cannot be read, it reports availability unknown with
+// the read error, so the response never labels unreadable evidence as one of the
+// three derived values.
+func workNotificationDoc(dir string) (map[string]any, error) {
+	cfg, err := loadConfigOrDefault(dir)
+	if err != nil {
+		return nil, err
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		return unknownNotificationStatusDoc(cfg), nil
+	}
+	defer st.Close()
+	doc, err := readNotificationStatusDoc(st, cfg)
+	if err != nil {
+		return readOrUnknownNotificationStatusDoc(st, cfg, err), nil
+	}
+	return doc, nil
 }
 
 // jobSummary is the short form of a job used in a list.
@@ -656,6 +711,14 @@ func launchWorkProcess(dir string, args []string, logPath string) (int, func() i
 	}
 	cmd := exec.Command(exe, args...)
 	cmd.Dir = dir
+	// The child owns its terminal event. The job directory is the log's directory
+	// and the job id is its base name, so the child needs no extra argument.
+	jobDir := filepath.Dir(logPath)
+	cmd.Env = append(os.Environ(),
+		JobEnvDir+"="+jobDir,
+		JobEnvID+"="+filepath.Base(jobDir),
+		JobEnvProject+"="+dir,
+	)
 	cmd.Stdout = logFile
 	cmd.Stderr = logFile
 	// Stdin stays nil (the null device): the MCP stdio stream must never reach the

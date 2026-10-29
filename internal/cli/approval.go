@@ -542,6 +542,13 @@ func recordHumanApprovalRequest(ctx context.Context, projectDir string, rn *runp
 	}); err != nil {
 		return
 	}
+	// One waiting_for_human event per recorded PENDING request: the emitter derives
+	// the event from the request SOP recorded and dedups on its deterministic id, so
+	// a replay of the same gate never produces a second event. Emission is best-effort
+	// provenance: a failure never changes the run outcome.
+	if req, ok := rn.Approval(); ok && req.Status == domain.ApprovalPending {
+		_, _, _ = emitTransitionApproval(projectDir, task.ID, task.Attempt, &req)
+	}
 	activity.FromContext(ctx).Emit(activity.StageApproval, "REQUESTED", oneLine(reason))
 }
 

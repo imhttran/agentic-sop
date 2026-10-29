@@ -925,6 +925,10 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 			if err := blockTask(saver, task, reason); err != nil {
 				fmt.Fprintf(stderr, "run: %v\n", err)
 			}
+			// One failed event for the terminal failure transition. A BLOCKED task with
+			// no approval request is a failure, never a human gate.
+			_, _, _ = emitTransitionFailed(dir, task.ID, "", task.Attempt, true,
+				string(reason), "resolve the failure reason, then retry with sop retry")
 			_ = rn.RecordAttempt(outcomeSignature(res.gate))
 			fmt.Fprintf(stdout, "%s BLOCKED (%s exhausted)\n", task.ID, res.classification.Kind)
 			return exitError
@@ -970,6 +974,11 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// One completed event for the terminal success transition. The emitter dedups
+	// on the deterministic event id, so a repeated drain or a replayed stage does
+	// not enqueue a second event, while a new attempt does.
+	_, _, _ = emitTransitionCompleted(dir, task.ID, "", task.Attempt,
+		string(task.Status), "task completed locally; inspect with sop status")
 	// Persist this task's handoff capsule so a dependent task's context can be
 	// compressed between tasks (RBV-011). Best-effort; metadata only.
 	if cfg.ContextEfficiency.Handoff {
