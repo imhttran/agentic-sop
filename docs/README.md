@@ -231,6 +231,7 @@ operator-local lifecycle state. They stay in `plans/` rather than moving to `his
 
 | Plan                                                                                                                     | Declared status           | Read it for                                                           |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------- | --------------------------------------------------------------------- |
+| [plans/PLAN-Stale-Approval-Invalidation.md](plans/PLAN-Stale-Approval-Invalidation.md)                             | IMPLEMENTED               | audited invalidation of stale `PENDING` approval evidence after a proven accepted task-definition change; merged in PR #141 |
 | [plans/ACCEPTANCE-CHECKS-AUTHORING.md](plans/ACCEPTANCE-CHECKS-AUTHORING.md)                                             | guidance                  | how to author a plan stage's deterministic acceptance checks          |
 | [plans/ISSUE-Prompt-Report-Deliverables.md](plans/ISSUE-Prompt-Report-Deliverables.md)                                   | OPEN (deferred)           | the ad-hoc prompt report-deliverable `NO_CHANGES_PRODUCED` follow-up  |
 | [history/plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md](history/plans/PLAN-Agentic-SOP-Decision-Boundary-Readiness-Clef.md) | PLANNED                   | decision-boundary readiness for Clef-Flash                            |
