@@ -1,0 +1,85 @@
+# SOP project configuration.
+version: 1
+project:
+  name: "agentic-sop"
+  integration_branch: main
+agent:
+  harness: tool
+  provider: ollama
+  model: deepseek-v4.1-flash:cloud
+validation:
+  build:
+    - go build ./...
+  test:
+    - go test ./...
+  lint:
+    - go vet ./...
+review:
+  engine: self
+  delegation: false
+quality:
+  require_tests: true
+  max_fix_cycles: 3
+  fail_on:
+    - critical
+    - high
+human:
+  approval_before_commit: true
+autonomy:
+  level: balanced
+workflow:
+  mode: local
+# Workspace-only experimental decision memory (RDM-003). Ignored by git; the
+# installation default remains disabled. Local SQLite only: no PostgreSQL,
+# embeddings, or model downloads.
+advisory_retrieval:
+  enabled: false
+  index_path: "/Users/imhttran/agentic-workspace/agentic-sop/.agent-sdlc/memory/index.db"
+  outcomes_dir: "/Users/imhttran/agentic-workspace/agentic-sop/.agent-sdlc/memory/outcomes"
+  allowed_corpora:
+    - outcome
+    - failure
+  max_results: 5
+  token_budget: 2000
+  timeout_ms: 2000
+  capture_timeout_ms: 5000
+
+# Planner mode is opt-in; enabled locally for the PE-2 live acceptance round trip.
+planner:
+  enabled: true
+  mode: interactive
+  round_limit: 3
+
+# Report-only Promptfoo smoke test. Workspace-local and git-ignored: the
+# target, attack, and grading provider identifiers resolve to the local Ollama
+# endpoint, and no credential is stored here. The reused evaluation config
+# (evals/promptfoo/promptfooconfig.yaml) is the single smoke-test case; it is
+# not an adversarial red-team suite.
+security:
+  enabled: true
+  mode: report-only
+  scope: workspace
+  timeout_seconds: 300
+  evaluation:
+    enabled: true
+    profile: local
+    target: "ollama:chat:qwen3.5:4b"
+    target_provider: "ollama:chat:qwen3.5:4b"
+    attack_provider: "ollama:chat:qwen3.5:4b"
+    grading_provider: "ollama:chat:qwen3.5:4b"
+    promptfoo_version: "0.118.0"
+    config_path: "evals/promptfoo/promptfooconfig.yaml"
+    data_handling: local-only
+    remote_provider: false
+    telemetry_disabled: true
+    report_only: true
+    request_limit: 5
+    concurrency: 1
+    process_timeout_seconds: 300
+    severity_mode: none
+  verification:
+    scoped:
+      - paths: ["internal/quality/**"]
+        test: ["go test ./internal/quality/..."]
+      - paths: ["internal/config/**"]
+        test: ["go test ./internal/config/..."]

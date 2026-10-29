@@ -44,6 +44,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	"github.com/imhttran/agentic-sop/internal/taskbuilder"
 )
 
@@ -187,15 +188,32 @@ func initialize(ctx context.Context, opts Options, planPath, metaPath string) (R
 		res.PlanID = ""
 	}
 
-	plan, rebuilt, docWritten, err := ensurePlan(ctx, opts, docPath, docKind, planPath, metaPath)
+	plan, rebuilt, _, persist, err := ensurePlan(ctx, opts, docPath, docKind, planPath, metaPath)
 	if err != nil {
 		return res, err
 	}
 	res.PlanRebuilt = rebuilt
-	res.PlanDoc = docWritten
 
 	if err := validatePlan(res.Source, plan); err != nil {
 		return res, err
+	}
+
+	// Initial plan creation is a read-decision-write over the same protected state as
+	// reconciliation: the plan files and the task graph. The lock is taken here, after
+	// ensurePlan has finished with the model, and spans the persistence and the graph
+	// creation so no other writer can interleave. It is never held across buildPlan.
+	lock, lockErr := projectlock.Acquire(ctx, opts.Dir)
+	if lockErr != nil {
+		return res, lockErr
+	}
+	defer lock.Release()
+
+	if persist != nil {
+		docWritten, werr := persist()
+		if werr != nil {
+			return res, werr
+		}
+		res.PlanDoc = docWritten
 	}
 
 	created, err := ensureTasks(res.Source, plan, opts.Store)
@@ -329,8 +347,17 @@ func handOff(ctx context.Context, opts Options, meta Metadata, tasks []*domain.T
 		return res, planError(rel, err)
 	}
 
-	// The requested plan is viable: preserve the completed plan, then release
-	// its active association so the new graph can be created without mixing.
+	// The requested plan is viable and buildPlan has finished with the model. Everything
+	// from here rewrites protected plan state — archive, graph clear, plan files, new
+	// graph — so it runs under the project lock, held once and never across the model.
+	lock, lockErr := projectlock.Acquire(ctx, opts.Dir)
+	if lockErr != nil {
+		return res, lockErr
+	}
+	defer lock.Release()
+
+	// Preserve the completed plan, then release its active association so the new
+	// graph can be created without mixing.
 	if _, err := archivePlan(opts.Dir, meta, tasks, planPath, metaPath, DispositionComplete); err != nil {
 		return res, err
 	}
@@ -610,6 +637,17 @@ const (
 // while the graph still held the old definitions. A retry once the file write
 // succeeds completes idempotently.
 func Reconcile(ctx context.Context, opts ReconcileOptions) (ReconcileResult, error) {
+	// Reconciliation reads the recorded plan and the task graph, decides the
+	// change, and then writes plan.json, plan.meta.json, and the graph. The project
+	// lock spans that whole sequence so a concurrent approval operation cannot read
+	// a definition this reconciliation is about to replace. It is released before
+	// returning, and no model call happens anywhere inside it.
+	lock, err := projectlock.Acquire(ctx, opts.Dir)
+	if err != nil {
+		return ReconcileResult{}, err
+	}
+	defer lock.Release()
+
 	res, diff, plan, data, err := reconcileDiff(ctx, opts, reconcileApply)
 	if err != nil {
 		return res, err
@@ -1297,43 +1335,46 @@ func describeTaskDifference(cur, desired *domain.Task) string {
 // ensurePlan returns the machine plan, rebuilding it when the human source is new
 // or has changed. It reports whether the plan was rebuilt and, when generating
 // from a PRD, the relative path of a human plan document it wrote.
-func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, metaPath string) (*planner.Plan, bool, string, error) {
+// ensurePlan resolves the plan a project should execute. It performs the reads and,
+// when the plan must be built, the model call — but it does NOT persist. It returns a
+// closure that performs the persistence, so the caller can take the project lock only
+// for the write and keep it out of the model call.
+func ensurePlan(ctx context.Context, opts Options, docPath, docKind, planPath, metaPath string) (*planner.Plan, bool, string, func() (string, error), error) {
 	if docPath == "" {
 		existing, ok := loadPlan(planPath)
 		if !ok {
-			return nil, false, "", errors.New("planflow: no docs/PLAN.md, PLAN.md, docs/PRD.md, PRD.md, or .agent-sdlc/plan.json found")
+			return nil, false, "", nil, errors.New("planflow: no docs/PLAN.md, PLAN.md, docs/PRD.md, PRD.md, or .agent-sdlc/plan.json found")
 		}
-		return existing, false, "", nil
+		return existing, false, "", nil, nil
 	}
 
 	data, err := os.ReadFile(docPath)
 	if err != nil {
-		return nil, false, "", fmt.Errorf("planflow: read %s: %w", docPath, err)
+		return nil, false, "", nil, fmt.Errorf("planflow: read %s: %w", docPath, err)
 	}
 	rel := relOf(opts.Dir, docPath)
 
 	// Reuse the machine plan only when it was built from this exact source.
 	if meta := readMetadata(metaPath); meta.Source == rel && meta.SourceSHA256 == fingerprint(data) {
 		if existing, ok := loadPlan(planPath); ok {
-			return existing, false, "", nil
+			return existing, false, "", nil, nil
 		}
 	}
 
 	plan, err := buildPlan(ctx, opts.Agent, opts.OnRepair, docKind, string(data))
 	if err != nil {
 		if errors.Is(err, errNoAgent) {
-			return nil, false, "", err
+			return nil, false, "", nil, err
 		}
-		return nil, false, "", planError(rel, err)
+		return nil, false, "", nil, planError(rel, err)
 	}
 	if err := plan.Validate(); err != nil {
-		return nil, false, "", planError(rel, err)
+		return nil, false, "", nil, planError(rel, err)
 	}
-	docWritten, err := persistPlan(opts, plan, docPath, docKind, data, planPath, metaPath)
-	if err != nil {
-		return nil, false, "", err
+	persist := func() (string, error) {
+		return persistPlan(opts, plan, docPath, docKind, data, planPath, metaPath)
 	}
-	return plan, true, docWritten, nil
+	return plan, true, "", persist, nil
 }
 
 // persistPlan writes the machine plan, its provenance, and (when generating from
@@ -1422,6 +1463,14 @@ type SupersedeResult struct {
 // task stays FAILED, and a NEEDS_HUMAN record is historical evidence, never an
 // approval. It never executes a task and never runs the lifecycle for one.
 func Supersede(ctx context.Context, opts Options) (SupersedeResult, error) {
+	// Abandoning a plan rewrites plan.json, the provenance, and the graph, so it
+	// takes the same project lock reconciliation does.
+	lock, lockErr := projectlock.Acquire(ctx, opts.Dir)
+	if lockErr != nil {
+		return SupersedeResult{}, lockErr
+	}
+	defer lock.Release()
+
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
 
@@ -1502,6 +1551,14 @@ type CompleteResult struct {
 // verification cannot be completed. It fabricates nothing — the archived records are
 // the task snapshot verbatim — and it never executes a task or runs a model.
 func Complete(opts Options) (CompleteResult, error) {
+	// Archiving the active plan is a plan-state write; bound the wait because this
+	// entry point carries no caller context.
+	lock, lockErr := projectlock.AcquireWait(context.Background(), opts.Dir, 0)
+	if lockErr != nil {
+		return CompleteResult{}, lockErr
+	}
+	defer lock.Release()
+
 	planPath := filepath.Join(opts.Dir, config.DirName, planFileName)
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
 	meta := readMetadata(metaPath)

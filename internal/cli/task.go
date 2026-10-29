@@ -10,6 +10,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 	"github.com/imhttran/agentic-sop/internal/validate"
@@ -179,7 +180,16 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 	// It reads and writes only the task's own run directory via run.At, so it never
 	// resets the task's run state.json or attempts evidence.
 	approvalRun := runpkg.At(runpkg.Dir(dir, id))
-	if _, derr := runpkg.ResolvePendingApproval(approvalRun); derr != nil {
+	// External completion resolves the approval head, so it participates in the same
+	// project lock as the approval boundary and reconciliation.
+	approvalLock, lerr := projectlock.AcquireWait(context.Background(), dir, 0)
+	if lerr != nil {
+		fmt.Fprintf(stderr, "task complete: %v\n", lerr)
+		return exitError
+	}
+	_, derr := runpkg.ResolvePendingApproval(approvalRun)
+	approvalLock.Release()
+	if derr != nil {
 		fmt.Fprintf(stderr, "task complete: pending approval not resolved: %v\n", derr)
 		return exitError
 	}

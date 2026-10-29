@@ -18,6 +18,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
@@ -27,9 +28,21 @@ import (
 // lifecycle all delegate to this one service, so approval semantics live in a
 // single place.
 func approvalService(st *store.Store, projectDir string) *approval.Service {
-	return approval.New(st, func(taskID string) approval.Record {
+	return approval.NewWithLock(st, func(taskID string) approval.Record {
 		return runpkg.At(runpkg.Dir(projectDir, taskID))
-	})
+	}, projectLock(projectDir))
+}
+
+// projectLock adapts the project-scoped state lock to the approval boundary's seam,
+// so every approval operation takes the same lock as reconciliation.
+func projectLock(projectDir string) approval.LockFunc {
+	return func() (func(), error) {
+		l, err := projectlock.AcquireWait(context.Background(), projectDir, 0)
+		if err != nil {
+			return nil, err
+		}
+		return l.Release, nil
+	}
 }
 
 // runApproval dispatches the `sop approval` command group: a bare task id shows
@@ -42,6 +55,9 @@ func runApproval(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	if len(args) >= 1 && args[0] == "invalidate" {
 		return runApprovalInvalidate(args[1:], stdout, stderr, d)
+	}
+	if len(args) >= 1 && args[0] == "invalidate-attested" {
+		return runApprovalInvalidateAttested(args[1:], stdout, stderr, d)
 	}
 	return runApprovalStatus(args, stdout, stderr, d)
 }
@@ -178,6 +194,7 @@ func runApprovalStatus(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintln(stderr, "usage: sop approval <task-id>")
 		fmt.Fprintln(stderr, "       sop approval supersede <task-id> --reason TEXT --by NAME")
 		fmt.Fprintln(stderr, "       sop approval invalidate <task-id> --reason TEXT --by NAME")
+		fmt.Fprintln(stderr, "       sop approval invalidate-attested <task-id> --reason TEXT --by NAME --expected-request ID --obsolete-requirement TEXT --replacement-definition TEXT --expect-definition-digest SHA")
 		return exitUsage
 	}
 	id := args[0]
@@ -415,6 +432,21 @@ func writeApprovalView(w io.Writer, v approval.View) {
 		fmt.Fprintf(w, "Note: %s\n", v.Note)
 	}
 	if inv := v.Invalidation; inv != nil {
+		switch inv.Kind {
+		case domain.ApprovalInvalidationAttested:
+			fmt.Fprintln(w, "Invalidation: attested (operator statement; no accepted-change evidence)")
+		case domain.ApprovalInvalidationEvidence:
+			fmt.Fprintln(w, "Invalidation: evidence-backed")
+		}
+		if inv.ObsoleteRequirement != "" {
+			fmt.Fprintf(w, "Obsolete requirement: %s\n", oneLine(inv.ObsoleteRequirement))
+		}
+		if inv.ReplacementDefinition != "" {
+			fmt.Fprintf(w, "Replacement definition: %s\n", oneLine(inv.ReplacementDefinition))
+		}
+		if inv.Source != "" {
+			fmt.Fprintf(w, "Source: %s\n", inv.Source)
+		}
 		fmt.Fprintf(w, "Invalidated: %s\n", inv.InvalidatedAt.Format("2006-01-02T15:04:05Z07:00"))
 		if inv.InvalidatedBy != "" {
 			fmt.Fprintf(w, "Invalidated by: %s\n", inv.InvalidatedBy)

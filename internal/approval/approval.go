@@ -77,11 +77,46 @@ type Tasks interface {
 	Save(task *domain.Task) error
 }
 
+// LockFunc acquires the project state lock for one operation and returns its
+// release. SOP's approval artifacts and the plan/task stores cannot share a
+// transaction, so every read-check-write in this service runs under this lock.
+type LockFunc func() (release func(), err error)
+
 // Service is the human approval application boundary.
 type Service struct {
 	tasks  Tasks
 	record func(taskID string) Record
 	now    func() time.Time
+	// lock, when set, serializes this service's read-check-write sequences against
+	// every other participating project-state writer. It is optional so the service
+	// stays unit-testable without a filesystem; production callers set it through
+	// NewWithLock.
+	lock LockFunc
+}
+
+// NewWithLock returns a Service that holds the project state lock across each
+// mutating operation. Callers must supply a lock whose scope covers both the
+// approval artifacts and the plan state, otherwise the guarantee is partial.
+func NewWithLock(tasks Tasks, record func(taskID string) Record, lock LockFunc) *Service {
+	s := New(tasks, record)
+	s.lock = lock
+	return s
+}
+
+// enter acquires the project lock for one operation. A nil lock is a no-op so
+// callers that do not participate keep their previous behavior.
+func (s *Service) enter() (func(), error) {
+	if s.lock == nil {
+		return func() {}, nil
+	}
+	release, err := s.lock()
+	if err != nil {
+		return nil, err
+	}
+	if release == nil {
+		return func() {}, nil
+	}
+	return release, nil
 }
 
 // New returns a Service over a task store and a per-task record factory. A nil
@@ -271,6 +306,11 @@ type Result struct {
 // kind of gate, supersedes the previous head into the history and starts a new
 // request, so a stale request can never resolve a newer gate.
 func (s *Service) Request(in RequestInput) (domain.ApprovalRequest, error) {
+	release, err := s.enter()
+	if err != nil {
+		return domain.ApprovalRequest{}, err
+	}
+	defer release()
 	taskID := strings.TrimSpace(in.TaskID)
 	if taskID == "" {
 		return domain.ApprovalRequest{}, errors.New("approval: task id is required")
@@ -387,6 +427,11 @@ func (s *Service) Decline(taskID string, in DecisionInput) (Result, error) {
 // on an already-superseded head is idempotent: it appends no duplicate history entry
 // and does not change the head.
 func (s *Service) Supersede(taskID string, in SupersedeInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")
@@ -475,6 +520,11 @@ func (s *Service) Supersede(taskID string, in SupersedeInput) (Result, error) {
 // and leaves the head PENDING. A repeated call on an already-invalidated head is
 // idempotent: it appends no duplicate history entry and does not change the head.
 func (s *Service) Invalidate(taskID string, in InvalidateInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")
@@ -545,6 +595,176 @@ func (s *Service) Invalidate(taskID string, in InvalidateInput) (Result, error) 
 		return Result{}, err
 	}
 	return Result{View: s.view(head, task)}, nil
+}
+
+// InvalidateAttestedInput is the operator authorization for an attested
+// invalidation: a legacy PENDING request whose evidence the current definition no
+// longer contains, resolved by a present-day operator statement because no
+// task-scoped acceptance evidence exists to authorize the evidence-backed path.
+type InvalidateAttestedInput struct {
+	Reason                string
+	By                    string
+	ExpectedRequestID     string
+	ObsoleteRequirement   string
+	ReplacementDefinition string
+	// ExpectDefinitionDigest is the digest the operator reviewed. The operation
+	// refuses when the current definition no longer matches it.
+	ExpectDefinitionDigest string
+	// CurrentDefinitionDigest and CurrentDefinitionText are the current persisted
+	// definition, supplied by the caller and re-verified under the lock.
+	CurrentDefinitionDigest string
+	CurrentDefinitionText   string
+	// TaskReconciled reports that the plan provenance names this exact task.
+	TaskReconciled bool
+	// DefinitionAcceptedAsReconciled reports usable accepted-change evidence. When it
+	// is true the operation refuses: the evidence-backed path owns that case.
+	DefinitionAcceptedAsReconciled bool
+	PriorPlanFingerprint           string
+	CurrentPlanFingerprint         string
+}
+
+// InvalidateAttested invalidates a legacy PENDING request on the authority of an
+// explicit operator attestation. Guard order (fail closed, nothing written):
+//
+//  1. Reason, By, ExpectedRequestID, ObsoleteRequirement, ReplacementDefinition and
+//     ExpectDefinitionDigest are required.
+//  2. The head must exist for this task and its ID must equal ExpectedRequestID.
+//  3. REPLAY IS HANDLED BEFORE THE PENDING CHECK: an identical replay of an
+//     attested invalidation returns the recorded result and writes nothing; any
+//     difference is a conflict.
+//  4. The head must be PENDING.
+//  5. The head must be a legacy request with no recorded definition digest.
+//  6. The task must not be satisfied.
+//  7. Usable accepted-change evidence must NOT exist (use the evidence-backed path).
+//  8. The plan provenance must name this exact task.
+//  9. The request must be a human-boundary request (Stage WAITING_FOR_HUMAN), never
+//     a failed execution.
+//  10. The obsolete requirement must be linked to the request's own reason/evidence,
+//     and must not appear in the current definition.
+//  11. The replacement definition must appear in the current definition. That is a
+//     consistency check only, never proof of semantic equivalence.
+//  12. The current definition digest must equal the digest the operator reviewed.
+func (s *Service) InvalidateAttested(taskID string, in InvalidateAttestedInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
+
+	taskID = strings.TrimSpace(taskID)
+	if taskID == "" {
+		return Result{}, errors.New("approval: task id is required")
+	}
+	reason, by := strings.TrimSpace(in.Reason), strings.TrimSpace(in.By)
+	expected := strings.TrimSpace(in.ExpectedRequestID)
+	obsolete := strings.TrimSpace(in.ObsoleteRequirement)
+	replacement := strings.TrimSpace(in.ReplacementDefinition)
+	expectDigest := strings.TrimSpace(in.ExpectDefinitionDigest)
+	if reason == "" || by == "" || expected == "" || obsolete == "" || replacement == "" || expectDigest == "" {
+		return Result{}, ErrApprovalInvalidateInput
+	}
+
+	rec := s.record(taskID)
+	head, ok := rec.Approval()
+	if !ok || head.TaskID != taskID {
+		return Result{}, fmt.Errorf("%w for task %s", ErrApprovalNotRequested, taskID)
+	}
+	if head.ID != expected {
+		return Result{}, fmt.Errorf("%w for task %s (the request is not the expected one)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+
+	task, err := s.task(taskID)
+	if err != nil {
+		return Result{}, err
+	}
+
+	// Replay is evaluated before the PENDING check: an already attested head is not a
+	// pending gate, and an identical repeat must return the recorded result rather than
+	// be reported as a new decision.
+	if head.Status == domain.ApprovalInvalidated {
+		inv := head.Invalidation
+		if inv != nil && inv.Kind == domain.ApprovalInvalidationAttested {
+			if inv.InvalidatedBy == by && inv.Reason == reason &&
+				inv.ExpectedRequestID == expected && inv.ObsoleteRequirement == obsolete &&
+				inv.ReplacementDefinition == replacement && inv.DefinitionDigestAfter == expectDigest {
+				return Result{View: s.view(head, task), Idempotent: true}, nil
+			}
+			return Result{}, fmt.Errorf("%w as INVALIDATED (attested) with a different statement for task %s", ErrApprovalResolved, taskID)
+		}
+		return Result{}, fmt.Errorf("%w as INVALIDATED for task %s", ErrApprovalResolved, taskID)
+	}
+	if head.Status != domain.ApprovalPending {
+		return Result{}, fmt.Errorf("%w as %s for task %s", ErrApprovalResolved, head.Status, taskID)
+	}
+	if strings.TrimSpace(head.DefinitionDigest) != "" {
+		return Result{}, fmt.Errorf("%w for task %s (a stamped request must use the evidence-backed path)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if task != nil && task.IsSatisfied() {
+		return Result{}, fmt.Errorf("%w for task %s (the task is satisfied)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if in.DefinitionAcceptedAsReconciled {
+		return Result{}, fmt.Errorf("%w for task %s (accepted-change evidence exists; use invalidate)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if !in.TaskReconciled {
+		return Result{}, fmt.Errorf("%w for task %s (no reconciliation history names this task)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if head.Stage != "WAITING_FOR_HUMAN" {
+		return Result{}, fmt.Errorf("%w for task %s (the request is not a human-boundary request)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+
+	// The obsolete requirement must be linked to the request's own evidence; absence
+	// from the current definition alone is not evidence that this request is stale.
+	if !containsNormalized(head.Reason, obsolete) && !containsNormalized(head.Evidence, obsolete) {
+		return Result{}, fmt.Errorf("%w for task %s (the obsolete requirement is not part of the request evidence)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if containsNormalized(in.CurrentDefinitionText, obsolete) {
+		return Result{}, fmt.Errorf("%w for task %s (the requirement is still present in the definition)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	if !containsNormalized(in.CurrentDefinitionText, replacement) {
+		return Result{}, fmt.Errorf("%w for task %s (the replacement definition is not part of the current definition)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+	current := strings.TrimSpace(in.CurrentDefinitionDigest)
+	if current == "" || current != expectDigest {
+		return Result{}, fmt.Errorf("%w for task %s (the definition changed since it was reviewed)", ErrApprovalInvalidateNotApplicable, taskID)
+	}
+
+	if !s.historyHasRequest(rec, head.ID) {
+		if err := rec.AppendApprovalHistory(head); err != nil {
+			return Result{}, err
+		}
+	}
+	head.Status = domain.ApprovalInvalidated
+	head.Decision = nil
+	head.Invalidation = &domain.ApprovalInvalidation{
+		Kind:                  domain.ApprovalInvalidationAttested,
+		Source:                domain.InvalidationSourceUnknownLegacy,
+		Reason:                reason,
+		InvalidatedBy:         by,
+		InvalidatedAt:         s.now().UTC(),
+		ExpectedRequestID:     expected,
+		ObsoleteRequirement:   obsolete,
+		ReplacementDefinition: replacement,
+		PlanFingerprintBefore: strings.TrimSpace(in.PriorPlanFingerprint),
+		PlanFingerprintAfter:  strings.TrimSpace(in.CurrentPlanFingerprint),
+		DefinitionDigestAfter: current,
+	}
+	if err := rec.SaveApproval(head); err != nil {
+		return Result{}, err
+	}
+	return Result{View: s.view(head, task)}, nil
+}
+
+// containsNormalized reports whether haystack contains needle under a
+// case-insensitive, whitespace-collapsed comparison. It is a consistency check over
+// text SOP already holds, never proof of meaning.
+func containsNormalized(haystack, needle string) bool {
+	h := normalizeText(haystack)
+	n := normalizeText(needle)
+	return n != "" && strings.Contains(h, n)
+}
+
+func normalizeText(v string) string {
+	return strings.ToLower(strings.Join(strings.Fields(v), " "))
 }
 
 // invalidationProvesRevision reports whether in proves the task definition was
@@ -618,6 +838,11 @@ func (s *Service) historyHasRequest(rec Record, id string) bool {
 }
 
 func (s *Service) decide(taskID string, approve bool, in DecisionInput) (Result, error) {
+	release, err := s.enter()
+	if err != nil {
+		return Result{}, err
+	}
+	defer release()
 	taskID = strings.TrimSpace(taskID)
 	if taskID == "" {
 		return Result{}, errors.New("approval: task id is required")

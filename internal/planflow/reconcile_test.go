@@ -11,6 +11,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 )
 
 // reconcileDocTwo is a two-stage plan used to exercise additions and removals.
@@ -459,6 +460,12 @@ func TestReconcilePlanWriteFailureSurfacesAndRetries(t *testing.T) {
 	// .agent-sdlc still permits reads but makes the atomic temp-file write fail,
 	// exercising the window after the graph mutation.
 	sdlc := filepath.Join(dir, config.DirName)
+	// The project state lock is a real file. Create it while the directory is still
+	// writable, so the failure injected below is the plan write being tested and not
+	// the lock's own creation.
+	if err := os.WriteFile(filepath.Join(sdlc, projectlock.FileName), nil, 0o644); err != nil {
+		t.Fatalf("create lock file: %v", err)
+	}
 	if err := os.Chmod(sdlc, 0o555); err != nil {
 		t.Fatalf("chmod: %v", err)
 	}
