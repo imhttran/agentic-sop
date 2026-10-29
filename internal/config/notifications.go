@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -127,6 +128,9 @@ func (c *Config) validateNotifications() error {
 		if strings.TrimSpace(n.Webhook.URL) == "" {
 			return errors.New("config: notifications.channel \"webhook\" requires notifications.webhook.url")
 		}
+		if u, err := url.Parse(strings.TrimSpace(n.Webhook.URL)); err == nil && u.User != nil {
+			return errors.New("config: notifications.webhook.url must not embed credentials")
+		}
 	}
 	r := n.Retry
 	if r.MaxAttempts < 1 {
@@ -194,8 +198,20 @@ func (c Config) NotifyStatus(credentialsPresent bool) NotifyStatus {
 	case NotifyChannelWebhook:
 		u := strings.TrimSpace(c.Notifications.Webhook.URL)
 		st.HookPresent = u != ""
-		st.HookResolved = u
+		st.HookResolved = redactURLUserinfo(u)
 		st.Available = st.HookPresent && credentialsPresent
 	}
 	return st
+}
+
+// redactURLUserinfo drops any user:password part of a URL so a status view can
+// never render an embedded credential, even for a configuration that predates
+// the validation rule.
+func redactURLUserinfo(raw string) string {
+	u, err := url.Parse(raw)
+	if err != nil || u.User == nil {
+		return raw
+	}
+	u.User = nil
+	return u.String()
 }
