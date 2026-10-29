@@ -1,6 +1,6 @@
 # PLAN — Reliable SOP Job Lifecycle Notifications
 
-**Status:** PROPOSED — implements GitHub issue #138 ("Primary fix: reliable SOP job lifecycle notifications").
+**Status:** IMPLEMENTED — implements GitHub issue #138 ("Primary fix: reliable SOP job lifecycle notifications"); merged in PR #139 (`c2d6061`) with review fixes in PR #148. NTFY-001–NTFY-008 reached `LOCAL_DONE` and the final gate passed; NTFY-005 and NTFY-007 were recorded by SOP's external-completion path, not lifecycle-verified. This records committed-source status, not current operator-local plan state. **No notification has been delivered through a real channel:** availability stays `unavailable`/`configured_unverified` until an operator configures a channel and `sop notify test` observes a confirmed delivery.
 **Rule:** SOP owns the job lifecycle and is authoritative for these events. This plan adds a durable notification outbox and delivery path around SOP's existing lifecycle transitions. It does not enable a production channel, and it never treats a generic `BLOCKED` task as a human-action request.
 
 ## Project
