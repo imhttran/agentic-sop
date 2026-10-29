@@ -111,3 +111,62 @@ func TestNotifyDrainWithoutChannelReportsUnavailable(t *testing.T) {
 		t.Errorf("stderr = %q", errb.String())
 	}
 }
+
+// TestNotifyTestTwiceCreatesTwoEvents proves each explicit test invocation is its
+// own event. A constant identity made the second run deduplicate onto the first
+// delivered row, so it claimed nothing and reported "test delivery not confirmed".
+func TestNotifyTestTwiceCreatesTwoEvents(t *testing.T) {
+	sink := filepath.Join(t.TempDir(), "events.jsonl")
+	dir := notifyFixture(t, config.NotifyChannelFile, sink)
+
+	for i := 1; i <= 2; i++ {
+		var out, errb bytes.Buffer
+		if code := runNotify([]string{"test"}, &out, &errb, notifyDeps(dir)); code != exitOK {
+			t.Fatalf("test %d exit = %d; stderr=%s", i, code, errb.String())
+		}
+		if !strings.Contains(out.String(), "delivered") {
+			t.Fatalf("test %d output = %q", i, out.String())
+		}
+	}
+
+	st, err := store.Open(filepath.Join(dir, config.DirName, "state.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+	counts, err := st.CountNotificationDeliveriesByStatus()
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	delivered := 0
+	for _, c := range counts {
+		if c.Status == "DELIVERED" {
+			delivered = c.Count
+		}
+	}
+	if delivered != 2 {
+		t.Fatalf("delivered = %d, want 2 distinct test events", delivered)
+	}
+
+	// The two events must also be distinct in the channel, not one repeated id.
+	data, err := os.ReadFile(sink)
+	if err != nil {
+		t.Fatalf("read sink: %v", err)
+	}
+	ids := map[string]bool{}
+	for _, line := range strings.Split(strings.TrimSpace(string(data)), "\n") {
+		if line == "" {
+			continue
+		}
+		var ev struct {
+			ID string `json:"id"`
+		}
+		if err := json.Unmarshal([]byte(line), &ev); err != nil {
+			t.Fatalf("decode sink line: %v", err)
+		}
+		ids[ev.ID] = true
+	}
+	if len(ids) != 2 {
+		t.Fatalf("distinct delivered event ids = %d, want 2", len(ids))
+	}
+}
