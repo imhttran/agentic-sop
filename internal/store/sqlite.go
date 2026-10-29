@@ -25,7 +25,7 @@ type Store struct {
 // connection database/sql opens for this Store has foreign_keys enabled, not
 // merely the first one.
 func Open(path string) (*Store, error) {
-	db, err := sql.Open(driverName, "file:"+path+"?_pragma=foreign_keys(1)")
+	db, err := sql.Open(driverName, "file:"+path+"?_pragma=foreign_keys(1)&_pragma=busy_timeout(5000)")
 	if err != nil {
 		return nil, err
 	}
