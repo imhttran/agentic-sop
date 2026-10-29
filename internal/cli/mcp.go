@@ -368,13 +368,20 @@ func mcpStatus(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if len(tasks) == 0 {
-		return "no tasks", nil
-	}
-
 	lines := make([]string, 0, len(tasks))
-	for _, task := range tasks {
-		lines = append(lines, fmt.Sprintf("%s %s %s", task.ID, task.Status, task.Title))
+	if len(tasks) == 0 {
+		lines = append(lines, "no tasks")
+	} else {
+		for _, task := range tasks {
+			lines = append(lines, fmt.Sprintf("%s %s %s", task.ID, task.Status, task.Title))
+		}
+	}
+	// The notification section answers "are notifications active?" from observed
+	// evidence. It is read-only and reports credential presence only.
+	if cfg, err := loadConfigOrDefault(dir); err == nil {
+		if notifDoc, err := readNotificationStatusDoc(st, cfg); err == nil {
+			lines = append(lines, notificationStatusText(notifDoc)...)
+		}
 	}
 	return mcp.JoinLines(lines), nil
 }

@@ -189,6 +189,10 @@ type Config struct {
 	// one for plan acceptance checks. An omitted block keeps every Cargo command
 	// refused, so existing behavior is unchanged; see cargo.go.
 	Cargo Cargo `yaml:"cargo"`
+	// Notifications is the optional, disabled-by-default notification block. An
+	// omitted block resolves to channel none, so existing behavior is unchanged;
+	// see notifications.go. The block carries no credentials.
+	Notifications Notifications `yaml:"notifications"`
 }
 
 // Output is the optional response-output policy. Responses selects the default
@@ -674,8 +678,9 @@ func Default() Config {
 			Provider:   "deterministic",
 			Thresholds: decision.Thresholds{RouteToStrongModel: 0.7, RequireHuman: 0.4},
 		},
-		Workflow: Workflow{Mode: "local"},
-		Output:   Output{Responses: ResponseConcise},
+		Workflow:      Workflow{Mode: "local"},
+		Output:        Output{Responses: ResponseConcise},
+		Notifications: Notifications{Channel: NotifyChannelNone},
 	}
 }
 
@@ -836,6 +841,7 @@ func (c *Config) applyDefaults() {
 	}
 	// The security add-on is disabled unless explicitly enabled; defaults are
 	// applied only inside an enabled block.
+	c.applyNotifyDefaults()
 	c.applySecurityDefaults()
 	// The optional AI-evaluation block fills its defaults (and normalizes the
 	// local profile) before validation, so an enabled block with an omitted
@@ -915,6 +921,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("config: %w", err)
 	}
 	if err := c.validateCargo(); err != nil {
+		return err
+	}
+	if err := c.validateNotifications(); err != nil {
 		return err
 	}
 	return nil

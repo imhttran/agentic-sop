@@ -314,9 +314,17 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 	case "review":
 		return runReview(rest, stdout, stderr, d)
 	case "run":
-		return runRun(rest, stdout, stderr, d)
+		// The drain is best-effort and runs after the command's own outcome is decided,
+		// so a notification failure can never change the run's exit status.
+		code := runRun(rest, stdout, stderr, d)
+		drainNotificationsBestEffort()
+		return code
 	case "prompt":
-		return runPrompt(rest, stdout, stderr, d)
+		code := runPrompt(rest, stdout, stderr, d)
+		drainNotificationsBestEffort()
+		return code
+	case "notify":
+		return runNotify(rest, stdout, stderr, d)
 	case "commit":
 		return runCommit(rest, stdout, stderr, d)
 	case "pr":
