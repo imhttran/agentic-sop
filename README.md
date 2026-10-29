@@ -155,8 +155,9 @@ running, already ran, or is the active plan (see
 [Setting up the planner](docs/reference/CLI.md#setting-up-the-planner).
 
 Planner decisions are advice, never human approval, and published results are
-evidence, never automatic task completion. Resumption is currently interactive;
-no unattended ChatGPT invocation or notification channel is claimed. PE-1 through
+evidence, never automatic task completion. Planner continuation remains interactive
+and does not invoke ChatGPT unattended; lifecycle notifications are a separate,
+opt-in delivery surface. PE-1 through
 PE-4 implementation and live acceptance are merged; the merged PE-4 evidence
 records all four tasks as `LOCAL_DONE`. Completing the plan remains a separate
 operator-local SOP lifecycle action and is not inferred from that repository
@@ -182,7 +183,10 @@ reported from observed evidence, so configuration alone never claims that
 notifications work; run `sop notify test` and check `sop notify status`.
 
 A delivery failure never changes a task's outcome. No production channel is enabled
-by default. See [Notifications](docs/guides/NOTIFICATIONS.md).
+by default. On 2026-10-29, operator-local Mac evidence confirmed three Slack-format
+webhook deliveries (`pending=0`, `exhausted=0`), including terminal notifications for
+two real MCP-started jobs; this is local deployment evidence, not default enablement.
+See [Notifications](docs/guides/NOTIFICATIONS.md).
 
 ## Basic Workflow
 
