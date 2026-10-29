@@ -1,12 +1,15 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/approval"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -119,13 +122,25 @@ func runApprovalInvalidateAttested(args []string, stdout, stderr io.Writer, d de
 	}
 	defer st.Close()
 
+	// The evidence (definition digest and text, reconciliation provenance) and the
+	// invalidation decision must see the same state, so both run under one project
+	// lock. The service is built without its own lock: the lock is not re-entrant.
+	lock, err := projectlock.AcquireWait(context.Background(), dir, 0)
+	if err != nil {
+		fmt.Fprintf(stderr, "approval invalidate-attested: %v\n", err)
+		return exitError
+	}
+	defer lock.Release()
+
 	in, err := attestedEvidence(dir, st, opts)
 	if err != nil {
 		fmt.Fprintf(stderr, "approval invalidate-attested: %v\n", err)
 		return exitError
 	}
 
-	svc := approvalService(st, dir)
+	svc := approval.NewWithLock(st, func(taskID string) approval.Record {
+		return runpkg.At(runpkg.Dir(dir, taskID))
+	}, nil)
 	res, err := svc.InvalidateAttested(opts.id, in)
 	if err != nil {
 		fmt.Fprintf(stderr, "approval invalidate-attested: %v\n", err)

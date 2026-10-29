@@ -60,6 +60,11 @@ func Acquire(ctx context.Context, dir string) (*Lock, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
+		defer cancel()
+	}
 	path := filepath.Join(dir, config.DirName, FileName)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err

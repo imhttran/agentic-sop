@@ -91,9 +91,15 @@ func TaskDefinitionText(dir, taskID string) (string, bool) {
 			continue
 		}
 		var b strings.Builder
-		for _, part := range append([]string{stage.ID, stage.Title, stage.Objective},
-			append(append([]string{}, stage.Deliverables...),
-				append(append([]string{}, stage.AcceptanceCriteria...), stage.AcceptanceChecks...)...)...) {
+		parts := []string{stage.ID, stage.Title, stage.Objective}
+		parts = append(parts, stage.Deliverables...)
+		parts = append(parts, stage.AcceptanceCriteria...)
+		parts = append(parts, stage.AcceptanceChecks...)
+		parts = append(parts, mappingList(stage.AcceptanceMapping)...)
+		parts = append(parts, stage.Dependencies...)
+		parts = append(parts, stage.Requires...)
+		parts = append(parts, stage.RequiredEvidence...)
+		for _, part := range parts {
 			if strings.TrimSpace(part) != "" {
 				b.WriteString(part)
 				b.WriteString("\n")
