@@ -1,6 +1,6 @@
 # PLAN — Invalidate Stale Approval Evidence After an Accepted Plan Revision
 
-**Status:** PROPOSED — implements GitHub issue #140.
+**Status:** IMPLEMENTED — merged in PR #141 (`bf2a562a`). APPR-001–APPR-005 reached `LOCAL_DONE` with `VERIFIED` outcomes and a passing final gate; this records committed-source status, not current operator-local plan state.
 **Rule:** A human decision is SOP's authority. This plan adds one supported operator operation that invalidates a PENDING approval request whose evidence the active plan no longer contains. It never approves, satisfies, completes, or waives work, and it never weakens the blocking semantics of a valid PENDING or DECLINED request.
 
 ## Project
