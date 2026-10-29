@@ -537,13 +537,27 @@ func (s *Store) List() ([]*domain.Task, error) {
 		if err != nil {
 			return nil, err
 		}
+		tasks = append(tasks, task)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	// Close the task cursor before loading children. Each child query runs on
+	// another pooled connection; issuing it while this cursor still holds a read
+	// lock deadlocks against a writer waiting to commit (it holds PENDING, which
+	// blocks the new reader, while this reader blocks its commit), and no busy
+	// timeout can resolve that.
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+
+	for _, task := range tasks {
 		if err := s.loadTaskChildren(task); err != nil {
 			return nil, err
 		}
-		tasks = append(tasks, task)
 	}
 
-	return tasks, rows.Err()
+	return tasks, nil
 }
 
 // rowScanner is satisfied by both *sql.Row and *sql.Rows, allowing the same
