@@ -153,3 +153,26 @@ func TestReleaseWithoutHoldIsSafe(t *testing.T) {
 	var zero Lock
 	zero.Release()
 }
+
+// TestAcquireAppliesDefaultTimeoutWithoutDeadline proves a context with no deadline
+// does not wait forever on a held lock.
+func TestAcquireAppliesDefaultTimeoutWithoutDeadline(t *testing.T) {
+	old := defaultWait
+	defaultWait = 100 * time.Millisecond
+	defer func() { defaultWait = old }()
+
+	dir := t.TempDir()
+	held, err := Acquire(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("hold: %v", err)
+	}
+	defer held.Release()
+
+	start := time.Now()
+	if _, err := Acquire(context.Background(), dir); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("acquire err = %v, want context.DeadlineExceeded", err)
+	}
+	if elapsed := time.Since(start); elapsed > 3*time.Second {
+		t.Fatalf("default timeout took %v, want it bounded", elapsed)
+	}
+}
