@@ -65,8 +65,56 @@ type NotifyFile struct {
 // NotifyWebhook is the webhook channel's non-secret settings. The webhook URL
 // and any credentials stay in the environment; only the endpoint URL is policy.
 type NotifyWebhook struct {
-	// URL is the endpoint the webhook channel posts events to.
+	// URL is the endpoint the webhook channel posts events to. It may be left
+	// empty in YAML and supplied by NotifyWebhookURLEnv at load time; the value
+	// is never rendered by status, logs, events, or errors.
 	URL string `yaml:"url"`
+	// Payload selects the request body style: native (the SOP event JSON, the
+	// default) or slack (a Slack incoming-webhook message).
+	Payload string `yaml:"payload"`
+}
+
+// NotifyWebhookURLEnv is the environment variable that supplies the webhook URL
+// when notifications.webhook.url is empty. The operator sets it once at a hidden
+// terminal prompt, so the secret never enters tracked configuration. A non-empty
+// YAML value takes precedence over the environment.
+const NotifyWebhookURLEnv = "SOP_NOTIFY_WEBHOOK_URL"
+
+// notifyPayloadStyles is the accepted notifications.webhook.payload value set,
+// kept here so a bad value fails at load time with a message naming the accepted
+// values. The default is native, which posts the SOP event JSON.
+var notifyPayloadStyles = map[string]bool{
+	"native": true,
+	"slack":  true,
+}
+
+// NotifyWebhookPayload returns the resolved payload style. An omitted value
+// selects native, so existing behavior is unchanged.
+func (c Config) NotifyWebhookPayload() string {
+	p := strings.TrimSpace(strings.ToLower(c.Notifications.Webhook.Payload))
+	if p == "" {
+		return "native"
+	}
+	return p
+}
+
+// resolveNotifyWebhookURL fills notifications.webhook.url from the environment
+// when the YAML value is empty. A non-empty YAML value takes precedence. The
+// value is never logged: only the resolved setting is used by the webhook
+// channel.
+func (c *Config) resolveNotifyWebhookURL(getenv func(string) string) {
+	if strings.TrimSpace(c.Notifications.Channel) != NotifyChannelWebhook {
+		return
+	}
+	if strings.TrimSpace(c.Notifications.Webhook.URL) != "" {
+		return
+	}
+	if getenv == nil {
+		return
+	}
+	if u := strings.TrimSpace(getenv(NotifyWebhookURLEnv)); u != "" {
+		c.Notifications.Webhook.URL = u
+	}
 }
 
 // NotifyRetry is the bounded retry policy. Every bound is finite and must be
@@ -126,7 +174,13 @@ func (c *Config) validateNotifications() error {
 		}
 	case NotifyChannelWebhook:
 		if strings.TrimSpace(n.Webhook.URL) == "" {
-			return errors.New("config: notifications.channel \"webhook\" requires notifications.webhook.url")
+			return fmt.Errorf("config: notifications.channel \"webhook\" requires notifications.webhook.url or %s", NotifyWebhookURLEnv)
+		}
+		// An omitted payload selects native, so only a non-empty value is checked
+		// against the accepted set.
+		if p := strings.TrimSpace(strings.ToLower(n.Webhook.Payload)); p != "" && !notifyPayloadStyles[p] {
+			return fmt.Errorf("config: unknown notifications.webhook.payload %q (want %s)",
+				n.Webhook.Payload, strings.Join(sortedKeys(notifyPayloadStyles), ", "))
 		}
 		if u, err := url.Parse(strings.TrimSpace(n.Webhook.URL)); err == nil && u.User != nil {
 			return errors.New("config: notifications.webhook.url must not embed credentials")

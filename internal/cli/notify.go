@@ -386,7 +386,9 @@ func notifyChannel(cfg config.Config) (notify.Channel, error) {
 		if strings.TrimSpace(cfg.Notifications.Webhook.URL) == "" {
 			return nil, fmt.Errorf("channel %q is configured without notifications.webhook.url", config.NotifyChannelWebhook)
 		}
-		return notify.NewWebhookChannel(cfg.Notifications.Webhook.URL, nil), nil
+		ch := notify.NewWebhookChannel(cfg.Notifications.Webhook.URL, nil)
+		ch.Payload = cfg.NotifyWebhookPayload()
+		return ch, nil
 	default:
 		return nil, notify.ErrChannelUnavailable
 	}
@@ -420,6 +422,17 @@ func storeNotificationEvent(e notify.Event) store.NotificationEvent {
 	}
 }
 
+// notifyEventFromStore projects a stored event row back into the delivery payload.
+func notifyEventFromStore(ev store.NotificationEvent) notify.Event {
+	return notify.Event{
+		ID: ev.ID, Version: ev.Version, Kind: notify.Kind(ev.Kind), Project: ev.Project,
+		JobID: ev.JobID, TaskID: ev.TaskID, Attempt: ev.Attempt, Transition: ev.Transition,
+		Reason: ev.Reason, NextAction: ev.NextAction, Outcome: ev.Outcome,
+		ApprovalRequestID: ev.ApprovalRequestID, ResolutionCommand: ev.ResolutionCommand,
+		OccurredAt: ev.OccurredAt,
+	}
+}
+
 // notifyOutbox adapts the SQLite store to the worker's claim/record contract.
 type notifyOutbox struct{ st *store.Store }
 
@@ -430,11 +443,19 @@ func (o notifyOutbox) ClaimDue(limit int, now time.Time) ([]notify.DeliveryRecor
 	}
 	out := make([]notify.DeliveryRecord, 0, len(claimed))
 	for _, c := range claimed {
-		out = append(out, notify.DeliveryRecord{
+		rec := notify.DeliveryRecord{
 			EventID: c.EventID, Channel: c.Channel, Status: c.Status,
 			Attempt: c.Attempt, MaxAttempts: c.MaxAttempts, LastError: c.LastError,
 			NextAttemptAt: c.NextAttemptAt, ClaimToken: c.ClaimToken,
-		})
+		}
+		// Send the stored payload, not a skeleton carrying only the event id. If the
+		// event row cannot be read the record keeps a nil Event, and the worker marks
+		// that delivery EXHAUSTED rather than sending an empty message.
+		if ev, err := o.st.GetNotificationEvent(c.EventID); err == nil {
+			e := notifyEventFromStore(ev)
+			rec.Event = &e
+		}
+		out = append(out, rec)
 	}
 	return out, nil
 }

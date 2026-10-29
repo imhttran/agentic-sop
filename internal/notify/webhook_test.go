@@ -4,8 +4,10 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"testing"
+	"time"
 )
 
 // stubTransport is an injected transport that records each request and returns a
@@ -75,6 +77,90 @@ func TestWebhookClassifiesResponses(t *testing.T) {
 				t.Fatalf("ack = %q, want %q", ack, tc.want)
 			}
 		})
+	}
+}
+
+// recordingOutbox is an in-memory outbox for one drain pass. It records the
+// last_error text of each outcome so a test can assert it is URL-free.
+type recordingOutbox struct {
+	records    []DeliveryRecord
+	lastErrors []string
+}
+
+func (o *recordingOutbox) ClaimDue(limit int, now time.Time) ([]DeliveryRecord, error) {
+	if len(o.records) > limit {
+		return o.records[:limit], nil
+	}
+	return o.records, nil
+}
+
+func (o *recordingOutbox) RecordOutcome(token, result, lastError string, nextAttemptAt, now time.Time) error {
+	o.lastErrors = append(o.lastErrors, lastError)
+	return nil
+}
+
+// leakyTransport returns a *url.Error that repeats the full request URL, as
+// net/http does for transport failures. It never touches the network.
+type leakyTransport struct{}
+
+func (leakyTransport) Do(req *http.Request) (*http.Response, error) {
+	return nil, &url.Error{Op: req.Method, URL: req.URL.String(), Err: errors.New("dial tcp: connection refused")}
+}
+
+const secretWebhookURL = "https://user:secret-token@example.invalid/hook/secret-path?token=secret-token"
+
+func TestWebhookTransportErrorDoesNotLeakURL(t *testing.T) {
+	e := mustEvent(t, completedParams())
+	c := NewWebhookChannel(secretWebhookURL, leakyTransport{})
+
+	ack, err := c.Send(Delivery{Event: e, IdempotencyKey: e.ID, Attempt: 1})
+	if err == nil {
+		t.Fatal("expected an error from a failing transport")
+	}
+	if ack != AckAmbiguous {
+		t.Fatalf("ack = %q, want %q", ack, AckAmbiguous)
+	}
+	assertNoWebhookSecret(t, err.Error())
+}
+
+func TestWebhookBuildErrorDoesNotLeakURL(t *testing.T) {
+	e := mustEvent(t, completedParams())
+	// A control character in the URL makes http.NewRequestWithContext fail and
+	// wrap a *url.Error that repeats the endpoint.
+	bad := "https://user:secret-token@example.invalid/hook/secret-path?token=secret-token\x7f"
+	c := NewWebhookChannel(bad, leakyTransport{})
+
+	ack, err := c.Send(Delivery{Event: e, IdempotencyKey: e.ID, Attempt: 1})
+	if err == nil {
+		t.Fatal("expected a request construction error")
+	}
+	if ack != AckRejected {
+		t.Fatalf("ack = %q, want %q", ack, AckRejected)
+	}
+	assertNoWebhookSecret(t, err.Error())
+}
+
+func TestWebhookDrainStoresURIFreeLastError(t *testing.T) {
+	e := mustEvent(t, completedParams())
+	ob := &recordingOutbox{records: []DeliveryRecord{{EventID: e.ID, Channel: "webhook", Attempt: 0, ClaimToken: "tok", Event: &e}}}
+	d := &Drainer{Outbox: ob, Channel: NewWebhookChannel(secretWebhookURL, leakyTransport{}), MaxAttempts: 3}
+	if _, err := d.Drain(1); err != nil {
+		t.Fatalf("drain: %v", err)
+	}
+	if len(ob.lastErrors) == 0 {
+		t.Fatal("no recorded outcome")
+	}
+	for _, le := range ob.lastErrors {
+		assertNoWebhookSecret(t, le)
+	}
+}
+
+func assertNoWebhookSecret(t *testing.T, got string) {
+	t.Helper()
+	for _, secret := range []string{"secret-token", "example.invalid", "secret-path", "user:", secretWebhookURL} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("error leaks %q: %q", secret, got)
+		}
 	}
 }
 

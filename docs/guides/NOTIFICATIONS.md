@@ -26,6 +26,27 @@ An omitted block resolves to channel `none`, so an existing project is unchanged
 The block holds no credentials; a webhook URL is policy, and any secret belongs in
 the environment of the receiver.
 
+## Storing the webhook secret
+
+The webhook URL is a credential. Keep it out of tracked configuration, shell
+arguments, and shell history:
+
+```bash
+cd /path/to/project
+read -rs SLACK_URL && echo && umask 077 && \
+  SLACK_URL="$SLACK_URL" python3 -c \
+  'import os; open(".env","a").write("SOP_NOTIFY_WEBHOOK_URL="+os.environ["SLACK_URL"]+"\n")'
+```
+
+`read -rs` does not echo, the value is never an argument, and `.env` is
+gitignored. SOP resolves the URL from `SOP_NOTIFY_WEBHOOK_URL` at load time — the
+process environment first, then the project's `.env` — so a **detached background
+job resolves it too**, not just an interactive shell. A non-empty
+`notifications.webhook.url` in `config.yaml` still takes precedence.
+
+Slack incoming webhooks post a fixed body; select it with
+`notifications.webhook.payload: slack`.
+
 ## Availability is observed, never assumed
 
 `sop notify status` reports one of:

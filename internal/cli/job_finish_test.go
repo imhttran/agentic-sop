@@ -4,9 +4,12 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/notify"
+	"github.com/imhttran/agentic-sop/internal/store"
 )
 
 // TestFinishBackgroundJobEmitsFromTheJobProcess proves a detached job records its
@@ -65,5 +68,58 @@ func TestFinishBackgroundJobIsNoOpInForeground(t *testing.T) {
 	FinishBackgroundJob(0)
 	if sink.Len() != 0 {
 		t.Fatalf("foreground invocation emitted %d events", sink.Len())
+	}
+}
+
+// TestFinishBackgroundJobDeliversItsOwnEvent proves the terminal event a job
+// enqueues is delivered by the job itself. The event is enqueued after the
+// command's own drain, so without a drain here it would sit PENDING until an
+// unrelated invocation happened to run.
+func TestFinishBackgroundJobDeliversItsOwnEvent(t *testing.T) {
+	sink := filepath.Join(t.TempDir(), "events.jsonl")
+	project := notifyFixture(t, config.NotifyChannelFile, sink)
+	jobDir := filepath.Join(project, "mcp-work", "job-deliver")
+	if err := os.MkdirAll(jobDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	t.Setenv(JobEnvDir, jobDir)
+	t.Setenv(JobEnvID, "job-deliver")
+	t.Setenv(JobEnvProject, project)
+
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("getwd: %v", err)
+	}
+	if err := os.Chdir(project); err != nil {
+		t.Fatalf("chdir: %v", err)
+	}
+	defer func() { _ = os.Chdir(cwd) }()
+
+	FinishBackgroundJob(0)
+
+	st, err := store.Open(filepath.Join(project, config.DirName, "state.db"))
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	defer st.Close()
+	counts, err := st.CountNotificationDeliveriesByStatus()
+	if err != nil {
+		t.Fatalf("counts: %v", err)
+	}
+	delivered := 0
+	for _, c := range counts {
+		if c.Status == "DELIVERED" {
+			delivered = c.Count
+		}
+	}
+	if delivered == 0 {
+		t.Fatal("the job's own event was not delivered by the job process")
+	}
+	data, err := os.ReadFile(sink)
+	if err != nil {
+		t.Fatalf("read sink: %v", err)
+	}
+	if !strings.Contains(string(data), "job-deliver") {
+		t.Errorf("sink does not contain the job event: %s", string(data))
 	}
 }

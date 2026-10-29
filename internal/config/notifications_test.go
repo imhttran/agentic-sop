@@ -1,6 +1,8 @@
 package config
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -89,6 +91,72 @@ func TestNotificationsWebhookWithoutCredentialsIsUnavailable(t *testing.T) {
 	}
 }
 
+func TestNotificationsPayloadStyles(t *testing.T) {
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n    payload: slack\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.NotifyWebhookPayload(); got != "slack" {
+		t.Fatalf("payload = %q, want slack", got)
+	}
+	body = notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n"
+	c, err = parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.NotifyWebhookPayload(); got != "native" {
+		t.Fatalf("default payload = %q, want native", got)
+	}
+}
+
+func TestNotificationsUnknownPayloadRejected(t *testing.T) {
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/hook\n    payload: blocks\n"
+	_, err := parseNotify(t, body)
+	if err == nil || !strings.Contains(err.Error(), "notifications.webhook.payload") {
+		t.Fatalf("expected payload error, got %v", err)
+	}
+	if err != nil && !strings.Contains(err.Error(), "native, slack") {
+		t.Fatalf("error does not name accepted values: %v", err)
+	}
+}
+
+func TestNotificationsWebhookURLFromEnv(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "https://example.invalid/from-env")
+	body := notifyBase + "notifications:\n  channel: webhook\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := strings.TrimSpace(c.Notifications.Webhook.URL); got != "https://example.invalid/from-env" {
+		t.Fatalf("url not resolved from env, got %q", got)
+	}
+	st := c.NotifyStatus(true)
+	if !st.Available || !st.HookPresent {
+		t.Fatalf("status = %+v", st)
+	}
+}
+
+func TestNotificationsWebhookURLEnvUnset(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "")
+	body := notifyBase + "notifications:\n  channel: webhook\n"
+	if _, err := parseNotify(t, body); err == nil || !strings.Contains(err.Error(), NotifyWebhookURLEnv) {
+		t.Fatalf("expected error naming %s, got %v", NotifyWebhookURLEnv, err)
+	}
+}
+
+func TestNotificationsWebhookURLYAMLWinsOverEnv(t *testing.T) {
+	t.Setenv(NotifyWebhookURLEnv, "https://example.invalid/from-env")
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://example.invalid/from-yaml\n"
+	c, err := parseNotify(t, body)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := strings.TrimSpace(c.Notifications.Webhook.URL); got != "https://example.invalid/from-yaml" {
+		t.Fatalf("yaml must win over env, got %q", got)
+	}
+}
+
 func TestNotificationsMalformedKeyRejected(t *testing.T) {
 	body := notifyBase + "notifications:\n  channel: file\n  bogus: true\n"
 	_, err := parseNotify(t, body)
@@ -132,5 +200,63 @@ func TestNotifyStatusRedactsURLUserinfo(t *testing.T) {
 	got := c.NotifyStatus(true).HookResolved
 	if strings.Contains(got, "secret") || strings.Contains(got, "user") {
 		t.Fatalf("status leaked userinfo: %q", got)
+	}
+}
+
+// TestNotifyWebhookURLResolvesFromProjectEnvFile proves a detached job, which has no
+// interactive shell, resolves the webhook secret from the project's .env. Precedence
+// stays: YAML value, then the process environment, then .env.
+func TestNotifyWebhookURLResolvesFromProjectEnvFile(t *testing.T) {
+	const fromEnvFile = "https://hooks.example.invalid/services/T/B/envfile-secret"
+	const fromProcess = "https://hooks.example.invalid/services/T/B/process-secret"
+
+	dir := t.TempDir()
+	stateDir := filepath.Join(dir, ".agent-sdlc")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	writeConfig := func(url string) {
+		body := "version: 1\nproject:\n  name: \"p\"\nnotifications:\n  channel: webhook\n"
+		if url != "" {
+			body += "  webhook:\n    url: \"" + url + "\"\n"
+		}
+		body += "  retry:\n    max_attempts: 3\n    base_delay_ms: 1\n    max_delay_ms: 5\n    request_timeout_seconds: 5\n"
+		if err := os.WriteFile(filepath.Join(stateDir, "config.yaml"), []byte(body), 0o644); err != nil {
+			t.Fatalf("write config: %v", err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("SOP_NOTIFY_WEBHOOK_URL="+fromEnvFile+"\n"), 0o600); err != nil {
+		t.Fatalf("write .env: %v", err)
+	}
+
+	// No YAML value and no process value: .env supplies it.
+	t.Setenv(NotifyWebhookURLEnv, "")
+	writeConfig("")
+	cfg, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	if cfg.Notifications.Webhook.URL != fromEnvFile {
+		t.Fatal(".env value not resolved for a detached job")
+	}
+
+	// The process environment wins over .env.
+	t.Setenv(NotifyWebhookURLEnv, fromProcess)
+	cfg, err = LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir with env: %v", err)
+	}
+	if cfg.Notifications.Webhook.URL != fromProcess {
+		t.Fatal("process environment must win over .env")
+	}
+
+	// An explicit YAML value wins over both.
+	writeConfig("https://hooks.example.invalid/services/T/B/yaml-secret")
+	cfg, err = LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir with yaml: %v", err)
+	}
+	if cfg.Notifications.Webhook.URL != "https://hooks.example.invalid/services/T/B/yaml-secret" {
+		t.Fatal("YAML value must win")
 	}
 }

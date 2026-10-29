@@ -45,9 +45,15 @@ func FinishBackgroundJob(code int) {
 	if code == 0 {
 		_, _, _ = emitTransitionCompleted(projectDir, "", jobID, 1,
 			fmt.Sprintf("job %s completed (exit 0)", jobID), next)
-		return
+	} else {
+		_, _, _ = emitTransitionFailed(projectDir, "", jobID, 1, false,
+			fmt.Sprintf("job %s exited %d before recording a task result", jobID, code),
+			"inspect the job log with sop_work_status")
 	}
-	_, _, _ = emitTransitionFailed(projectDir, "", jobID, 1, false,
-		fmt.Sprintf("job %s exited %d before recording a task result", jobID, code),
-		"inspect the job log with sop_work_status")
+
+	// The terminal event is enqueued after the command's own drain has already run,
+	// so without this pass the job's event would sit PENDING until an unrelated
+	// invocation happened to drain. Drain once here, best-effort, so a finished job
+	// delivers its own notification. Delivery still never changes the exit code.
+	drainNotificationsBestEffort()
 }

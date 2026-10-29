@@ -354,6 +354,32 @@ func (s *Store) RecordDeliveryOutcome(token, result, lastError string, nextAttem
 	return tx.Commit()
 }
 
+// GetNotificationEvent reads one stored event by id. It returns ErrNotFound when no
+// such event exists, so a caller can distinguish a missing event from a read
+// failure. Delivery workers use it to send the stored payload rather than a
+// skeleton carrying only the event id.
+func (s *Store) GetNotificationEvent(id string) (NotificationEvent, error) {
+	var e NotificationEvent
+	var occurredAt string
+	err := s.db.QueryRow(`
+		SELECT id, version, kind, project, job_id, task_id, attempt, transition,
+		       reason, next_action, outcome, approval_request_id, resolution_command, occurred_at
+		FROM notification_events WHERE id = ?
+	`, id).Scan(&e.ID, &e.Version, &e.Kind, &e.Project, &e.JobID, &e.TaskID, &e.Attempt,
+		&e.Transition, &e.Reason, &e.NextAction, &e.Outcome, &e.ApprovalRequestID,
+		&e.ResolutionCommand, &occurredAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return NotificationEvent{}, ErrNotFound
+	}
+	if err != nil {
+		return NotificationEvent{}, err
+	}
+	if t, perr := time.Parse(time.RFC3339Nano, occurredAt); perr == nil {
+		e.OccurredAt = t
+	}
+	return e, nil
+}
+
 // NotificationEventExists reports whether the outbox already holds the event id.
 // The emitter uses it to report recorded=false for a replayed transition without
 // a second event or delivery row.
