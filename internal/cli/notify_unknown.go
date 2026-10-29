@@ -30,6 +30,7 @@ func unknownNotificationStatusDoc(cfg config.Config) map[string]any {
 		"reason":             "Notification delivery state could not be read, so availability is unknown. Fix the reported error and run `sop notify status`.",
 		"last_error":         ReasonUnreadableDeliveryState,
 		"webhook_configured": channel == config.NotifyChannelWebhook && strings.TrimSpace(cfg.Notifications.Webhook.URL) != "",
+		"slack_configured":   slackConfigured(cfg),
 		"file_configured":    channel == config.NotifyChannelFile && strings.TrimSpace(cfg.Notifications.File.Path) != "",
 	}
 	return redactNotificationStatusDoc(doc, cfg)

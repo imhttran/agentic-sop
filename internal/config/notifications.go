@@ -17,7 +17,14 @@ const (
 	NotifyChannelFile = "file"
 	// NotifyChannelWebhook posts events to an HTTP endpoint.
 	NotifyChannelWebhook = "webhook"
+	// NotifyChannelSlack posts events to a Slack incoming webhook. The webhook URL
+	// is a secret and is read from the environment, never from the config file.
+	NotifyChannelSlack = "slack"
 )
+
+// DefaultSlackURLEnv is the environment variable that holds the Slack webhook URL
+// when notifications.slack.url_env is omitted.
+const DefaultSlackURLEnv = "SOP_SLACK_WEBHOOK_URL"
 
 // Bounded retry defaults for the notification delivery policy. They are finite
 // so a channel can never retry without bound.
@@ -34,6 +41,7 @@ var supportedNotifyChannels = map[string]bool{
 	NotifyChannelNone:    true,
 	NotifyChannelFile:    true,
 	NotifyChannelWebhook: true,
+	NotifyChannelSlack:   true,
 }
 
 // Notifications is the optional notification configuration block.
@@ -52,8 +60,19 @@ type Notifications struct {
 	File NotifyFile `yaml:"file"`
 	// Webhook holds the webhook channel's non-secret settings.
 	Webhook NotifyWebhook `yaml:"webhook"`
+	// Slack holds the Slack channel's non-secret settings.
+	Slack NotifySlack `yaml:"slack"`
 	// Retry bounds delivery retries.
 	Retry NotifyRetry `yaml:"retry"`
+}
+
+// NotifySlack is the Slack channel's non-secret settings. The webhook URL is a
+// secret (its path authorizes posting), so the config names only the environment
+// variable that holds it.
+type NotifySlack struct {
+	// URLEnv names the environment variable holding the webhook URL. Omitted, it
+	// is DefaultSlackURLEnv.
+	URLEnv string `yaml:"url_env"`
 }
 
 // NotifyFile is the file channel's non-secret settings.
@@ -93,6 +112,9 @@ func (c *Config) applyNotifyDefaults() {
 	if c.Notifications.Channel == NotifyChannelNone {
 		return
 	}
+	if c.Notifications.Channel == NotifyChannelSlack && strings.TrimSpace(c.Notifications.Slack.URLEnv) == "" {
+		c.Notifications.Slack.URLEnv = DefaultSlackURLEnv
+	}
 	if c.Notifications.Retry.MaxAttempts == 0 {
 		c.Notifications.Retry.MaxAttempts = DefaultNotifyMaxAttempts
 	}
@@ -130,6 +152,10 @@ func (c *Config) validateNotifications() error {
 		}
 		if u, err := url.Parse(strings.TrimSpace(n.Webhook.URL)); err == nil && u.User != nil {
 			return errors.New("config: notifications.webhook.url must not embed credentials")
+		}
+	case NotifyChannelSlack:
+		if !validEnvName(n.Slack.URLEnv) {
+			return errors.New("config: notifications.slack.url_env must be an environment variable name")
 		}
 	}
 	r := n.Retry
@@ -214,4 +240,30 @@ func redactURLUserinfo(raw string) string {
 	}
 	u.User = nil
 	return u.String()
+}
+
+// SlackURLEnv returns the name of the environment variable holding the Slack
+// webhook URL.
+func (c Config) SlackURLEnv() string {
+	if name := strings.TrimSpace(c.Notifications.Slack.URLEnv); name != "" {
+		return name
+	}
+	return DefaultSlackURLEnv
+}
+
+// validEnvName reports whether s is a plausible environment variable name. It is
+// strict on purpose: a pasted URL or token must be rejected, not accepted as a name.
+func validEnvName(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_', r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

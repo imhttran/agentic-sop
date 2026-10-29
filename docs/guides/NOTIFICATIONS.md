@@ -10,11 +10,13 @@ task's outcome.
 
 ```yaml
 notifications:
-  channel: none        # none | file | webhook
+  channel: none        # none | file | webhook | slack
   file:
     path: .agent-sdlc/notifications/events.jsonl
   webhook:
     url: https://example.invalid/hook
+  slack:
+    url_env: SOP_SLACK_WEBHOOK_URL   # names the variable; the URL itself is never in this file
   retry:
     max_attempts: 3
     base_delay_ms: 500
@@ -25,6 +27,33 @@ notifications:
 An omitted block resolves to channel `none`, so an existing project is unchanged.
 The block holds no credentials; a webhook URL is policy, and any secret belongs in
 the environment of the receiver.
+
+## Slack
+
+The `slack` channel posts each event as a text message to a Slack
+[incoming webhook](https://api.slack.com/messaging/webhooks). The generic `webhook`
+channel posts SOP's raw event JSON, which a Slack incoming webhook refuses (it
+requires a `text` field), so use `slack` for Slack.
+
+A Slack webhook URL is a **secret**: its path is what authorizes posting. SOP
+therefore never reads it from the config file and never prints it.
+
+```bash
+export SOP_SLACK_WEBHOOK_URL='<your incoming-webhook URL>'   # in the environment of the process that runs SOP
+sop notify test      # posts one test message
+sop notify status    # reports active only after Slack confirms the post
+```
+
+- Set the variable in the environment of **every process that delivers events**, including
+  background jobs started by an agent; a process without it reports the channel as
+  `unavailable` and names the variable.
+- `notifications.slack.url_env` renames the variable. It must be a variable *name*; a URL
+  or token placed there is rejected, and an inline `slack.url` key is rejected as unknown.
+- Slack does not honour the idempotency key, so the channel does not claim duplicate-free
+  delivery: an event retried after an ambiguous attempt (timeout, 5xx) can post twice. The
+  message ends with a short event id so a duplicate is recognizable.
+- A revoked or deleted webhook returns a 4xx, which is recorded as rejected, not delivered.
+- Event text is escaped so a reason cannot form a link or an `@` mention.
 
 ## Availability is observed, never assumed
 

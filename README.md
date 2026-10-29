@@ -175,8 +175,8 @@ execution governance.
 ## Notifications
 
 SOP records a durable event when background work completes, fails, or stops at a
-human decision, and delivers it through one configured channel (`none`, `file`, or
-`webhook`). Delivery is at-least-once with deduplication by a stable event id,
+human decision, and delivers it through one configured channel (`none`, `file`,
+`webhook`, or `slack`). Delivery is at-least-once with deduplication by a stable event id,
 bounded retries with backoff, and an `EXHAUSTED` terminal state. Availability is
 reported from observed evidence, so configuration alone never claims that
 notifications work; run `sop notify test` and check `sop notify status`.

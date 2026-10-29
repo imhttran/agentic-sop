@@ -180,7 +180,7 @@ func (o *outboxEventSink) Close() error { return o.st.Close() }
 // recorded so it is never silently lost.
 func notificationChannelList(cfg config.Config) []string {
 	switch cfg.NotifyChannel() {
-	case config.NotifyChannelFile, config.NotifyChannelWebhook:
+	case config.NotifyChannelFile, config.NotifyChannelWebhook, config.NotifyChannelSlack:
 		return []string{cfg.NotifyChannel()}
 	default:
 		return nil

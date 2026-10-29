@@ -27,7 +27,7 @@ func TestNotificationsAbsentMeansNone(t *testing.T) {
 }
 
 func TestNotificationsUnknownChannelRejected(t *testing.T) {
-	body := notifyBase + "notifications:\n  channel: slack\n"
+	body := notifyBase + "notifications:\n  channel: pagerduty\n"
 	_, err := parseNotify(t, body)
 	if err == nil {
 		t.Fatal("expected error for unknown channel")
@@ -132,5 +132,40 @@ func TestNotifyStatusRedactsURLUserinfo(t *testing.T) {
 	got := c.NotifyStatus(true).HookResolved
 	if strings.Contains(got, "secret") || strings.Contains(got, "user") {
 		t.Fatalf("status leaked userinfo: %q", got)
+	}
+}
+
+func TestSlackChannelDefaultsItsURLEnv(t *testing.T) {
+	c, err := parseNotify(t, notifyBase+"notifications:\n  channel: slack\n")
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	if got := c.SlackURLEnv(); got != DefaultSlackURLEnv {
+		t.Fatalf("url env = %q, want %q", got, DefaultSlackURLEnv)
+	}
+}
+
+func TestSlackURLEnvMustBeAVariableName(t *testing.T) {
+	for _, bad := range []string{"https://hooks.slack.com/services/T/B/X", "has space", "9LEADING", "a-b"} {
+		body := notifyBase + "notifications:\n  channel: slack\n  slack:\n    url_env: \"" + bad + "\"\n"
+		_, err := parseNotify(t, body)
+		if err == nil {
+			t.Errorf("url_env %q accepted", bad)
+			continue
+		}
+		if strings.Contains(err.Error(), bad) {
+			t.Errorf("error echoes the rejected value: %v", err)
+		}
+	}
+	c, err := parseNotify(t, notifyBase+"notifications:\n  channel: slack\n  slack:\n    url_env: MY_HOOK\n")
+	if err != nil || c.SlackURLEnv() != "MY_HOOK" {
+		t.Fatalf("valid name rejected: %v", err)
+	}
+}
+
+func TestSlackConfigRejectsAnInlineURLKey(t *testing.T) {
+	_, err := parseNotify(t, notifyBase+"notifications:\n  channel: slack\n  slack:\n    url: https://hooks.slack.com/services/T/B/X\n")
+	if err == nil {
+		t.Fatal("an inline slack url key must be rejected: the URL is a secret and belongs in the environment")
 	}
 }

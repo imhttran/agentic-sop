@@ -3,6 +3,9 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,5 +112,73 @@ func TestNotifyDrainWithoutChannelReportsUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(errb.String(), "delivery channel is available") {
 		t.Errorf("stderr = %q", errb.String())
+	}
+}
+
+// TestNotifyTestDeliversThroughSlackChannel proves the Slack channel posts a text
+// message, flips status to active on a confirmed delivery, and never prints the
+// webhook URL.
+func TestNotifyTestDeliversThroughSlackChannel(t *testing.T) {
+	var got []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer srv.Close()
+	hook := srv.URL + "/services/T000/B000/SECRETSECRET"
+	t.Setenv(config.DefaultSlackURLEnv, hook)
+
+	dir := notifyFixture(t, config.NotifyChannelSlack, "")
+	var out, errb bytes.Buffer
+	if code := runNotify([]string{"test"}, &out, &errb, notifyDeps(dir)); code != exitOK {
+		t.Fatalf("notify test exit = %d; stdout=%s stderr=%s", code, out.String(), errb.String())
+	}
+	var msg map[string]string
+	if err := json.Unmarshal(got, &msg); err != nil || msg["text"] == "" {
+		t.Fatalf("slack received %q, want a JSON object with text", got)
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := runNotify([]string{"status", "--json"}, &out, &errb, notifyDeps(dir)); code != exitOK {
+		t.Fatalf("status exit = %d; stderr=%s", code, errb.String())
+	}
+	if strings.Contains(out.String(), "SECRETSECRET") || strings.Contains(out.String(), srv.URL) {
+		t.Fatalf("status leaks the webhook URL: %s", out.String())
+	}
+	doc := map[string]any{}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc["availability"] != NotifyActive || doc["slack_configured"] != true {
+		t.Errorf("status = %v, want active with slack_configured", doc)
+	}
+}
+
+// TestSlackWithoutItsEnvironmentVariableIsUnavailable proves a missing URL is
+// reported explicitly rather than as a configured channel.
+func TestSlackWithoutItsEnvironmentVariableIsUnavailable(t *testing.T) {
+	t.Setenv(config.DefaultSlackURLEnv, "")
+	dir := notifyFixture(t, config.NotifyChannelSlack, "")
+	var out, errb bytes.Buffer
+	if code := runNotify([]string{"status", "--json"}, &out, &errb, notifyDeps(dir)); code != exitOK {
+		t.Fatalf("status exit = %d; stderr=%s", code, errb.String())
+	}
+	doc := map[string]any{}
+	if err := json.Unmarshal(out.Bytes(), &doc); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if doc["availability"] != NotifyUnavailable || doc["slack_configured"] != false {
+		t.Errorf("status = %v, want unavailable", doc)
+	}
+
+	out.Reset()
+	errb.Reset()
+	if code := runNotify([]string{"test"}, &out, &errb, notifyDeps(dir)); code == exitOK {
+		t.Fatalf("notify test succeeded without a webhook URL: %s", out.String())
+	}
+	if !strings.Contains(errb.String(), config.DefaultSlackURLEnv) {
+		t.Errorf("error does not name the variable to set: %q", errb.String())
 	}
 }

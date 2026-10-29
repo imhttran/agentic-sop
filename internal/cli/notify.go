@@ -139,6 +139,11 @@ func notificationStatusDoc(cfg config.Config, byStatus map[string]int, lastError
 	channel := cfg.NotifyChannel()
 	delivered := byStatus[notify.StatusDelivered]
 	availability := notificationAvailability(channel, delivered)
+	if channel == config.NotifyChannelSlack && !slackConfigured(cfg) {
+		// The channel cannot send without its webhook URL, whatever was delivered
+		// before, so it is not available now.
+		availability = NotifyUnavailable
+	}
 	deliveries := map[string]int{}
 	for status, n := range byStatus {
 		deliveries[status] = n
@@ -153,6 +158,7 @@ func notificationStatusDoc(cfg config.Config, byStatus map[string]int, lastError
 		"exhausted":          byStatus[notify.StatusExhausted],
 		"reason":             notificationStatusReason(availability),
 		"webhook_configured": channel == config.NotifyChannelWebhook && strings.TrimSpace(cfg.Notifications.Webhook.URL) != "",
+		"slack_configured":   slackConfigured(cfg),
 		"file_configured":    channel == config.NotifyChannelFile && strings.TrimSpace(cfg.Notifications.File.Path) != "",
 	}
 	if lastError != "" {
@@ -277,6 +283,12 @@ func boolField(doc map[string]any, key string) bool {
 	return false
 }
 
+// slackConfigured reports whether the Slack channel is selected and its webhook
+// URL is present in the environment. It reports presence only, never the value.
+func slackConfigured(cfg config.Config) bool {
+	return cfg.NotifyChannel() == config.NotifyChannelSlack && strings.TrimSpace(os.Getenv(cfg.SlackURLEnv())) != ""
+}
+
 // notificationAvailability derives availability from observed evidence, never from
 // configuration alone.
 func notificationAvailability(channel string, delivered int) string {
@@ -387,6 +399,13 @@ func notifyChannel(cfg config.Config) (notify.Channel, error) {
 			return nil, fmt.Errorf("channel %q is configured without notifications.webhook.url", config.NotifyChannelWebhook)
 		}
 		return notify.NewWebhookChannel(cfg.Notifications.Webhook.URL, nil), nil
+	case config.NotifyChannelSlack:
+		name := cfg.SlackURLEnv()
+		u := strings.TrimSpace(os.Getenv(name))
+		if u == "" {
+			return nil, fmt.Errorf("channel %q is configured but the environment variable %s is not set", config.NotifyChannelSlack, name)
+		}
+		return notify.NewSlackChannel(u, nil), nil
 	default:
 		return nil, notify.ErrChannelUnavailable
 	}
