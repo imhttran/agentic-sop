@@ -199,6 +199,11 @@ Detailed state transitions and lifecycle rules live in the specifications:
 [docs/specs/TASK-LIFECYCLE.md](docs/specs/TASK-LIFECYCLE.md), and
 [docs/specs/EXECUTION.md](docs/specs/EXECUTION.md).
 
+After an accepted plan revision, `sop approval invalidate` can resolve a stale
+`PENDING` approval only when SOP can prove the task-specific definition change.
+It records an audited invalidation and never approves, satisfies, completes, or
+waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-stale-pending-evidence).
+
 ## Status
 
 SOP V1 and the subsequent routing, provider, recovery, distribution, approval,
