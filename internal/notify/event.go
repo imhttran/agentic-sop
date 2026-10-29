@@ -101,6 +101,9 @@ type Event struct {
 	// OccurredAt is when the transition happened. It is outside the identity
 	// hash, so a replay with a different time keeps the same id.
 	OccurredAt time.Time `json:"occurred_at"`
+	// Nonce is the identity discriminator described on Params. It is not part of a
+	// delivered payload's meaning and is never sent to a channel.
+	Nonce string `json:"-"`
 }
 
 // Params carries the caller-supplied inputs of NewEvent. NewEvent fills Version,
@@ -123,6 +126,14 @@ type Params struct {
 	// ResolutionCommand is the command that resolves the human gate. Required for
 	// a waiting_for_human event.
 	ResolutionCommand string
+	// Nonce is an optional identity discriminator for a repeated synthetic event.
+	// It participates in the event id and in nothing else: it is not stored as a
+	// payload field and never reaches a channel. A caller that emits the same
+	// visible event more than once (an operator-run test alert) sets a fresh nonce
+	// per emission so each is a distinct event, while a retry of one delivery keeps
+	// that delivery's recorded id and therefore its identity. Real lifecycle events
+	// leave it empty, so their ids are unchanged.
+	Nonce string
 }
 
 // NewEvent validates the requested event and returns it with its deterministic
@@ -155,6 +166,7 @@ func NewEvent(p Params) (Event, error) {
 		NextAction: strings.TrimSpace(p.NextAction),
 		Outcome:    strings.TrimSpace(p.Outcome),
 		OccurredAt: p.OccurredAt,
+		Nonce:      strings.TrimSpace(p.Nonce),
 	}
 	if e.OccurredAt.IsZero() {
 		e.OccurredAt = time.Now().UTC()
@@ -246,6 +258,13 @@ func canonical(e Event) string {
 	writeField(&b, fmt.Sprintf("%d", e.Attempt))
 	writeField(&b, e.Transition)
 	writeField(&b, e.ApprovalRequestID)
+	// The nonce is conditional so an event without one keeps the id it had before
+	// the field existed. The marker keeps it unambiguous: a nonce can never be
+	// confused with a field an event did set.
+	if e.Nonce != "" {
+		writeField(&b, "nonce")
+		writeField(&b, e.Nonce)
+	}
 	return b.String()
 }
 

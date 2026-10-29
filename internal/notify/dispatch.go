@@ -7,6 +7,8 @@
 package notify
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -339,5 +341,20 @@ func NewTestEvent(project string) (Event, error) {
 		Transition: "NOTIFY_TEST",
 		Outcome:    "notification test event",
 		NextAction: "no action required; this event confirms the notification channel is reachable",
+		// Each explicit test invocation is its own event. Without a fresh nonce every
+		// test produced the same event id, so the second and later runs deduplicated
+		// onto the delivered first row and claimed nothing.
+		Nonce: newTestNonce(),
 	})
+}
+
+// newTestNonce returns a fresh identity discriminator for one test event. A retry
+// of that delivery reuses the row's recorded event id, so the nonce only ever
+// distinguishes one test invocation from the next.
+func newTestNonce() string {
+	var buf [8]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return fmt.Sprintf("t%d", time.Now().UTC().UnixNano())
+	}
+	return hex.EncodeToString(buf[:])
 }
