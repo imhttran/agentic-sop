@@ -326,3 +326,40 @@ func TestWaitingForHumanRejectsApprovalTaskMismatch(t *testing.T) {
 		t.Fatalf("an untasked approval request must be accepted: %v", err)
 	}
 }
+
+func TestWaitingForHumanDerivesTaskAndBindsReason(t *testing.T) {
+	base := func() Params {
+		return Params{
+			Kind:              KindWaitingForHuman,
+			Project:           "demo",
+			Attempt:           1,
+			Transition:        "WAITING_FOR_HUMAN",
+			Approval:          pendingApproval(),
+			ResolutionCommand: "sop approve appr-1 --approve",
+		}
+	}
+
+	p := base()
+	e, err := NewEvent(p)
+	if err != nil {
+		t.Fatalf("NewEvent: %v", err)
+	}
+	if e.TaskID != p.Approval.TaskID || e.TaskID == "" {
+		t.Fatalf("task id = %q, want the approval request's %q", e.TaskID, p.Approval.TaskID)
+	}
+	if e.Reason != p.Approval.Reason {
+		t.Fatalf("reason = %q, want the approval request's %q", e.Reason, p.Approval.Reason)
+	}
+
+	p = base()
+	p.Reason = p.Approval.Reason
+	if _, err := NewEvent(p); err != nil {
+		t.Fatalf("repeating the request's reason: %v", err)
+	}
+
+	p = base()
+	p.Reason = "a different story"
+	if _, err := NewEvent(p); err == nil {
+		t.Fatal("expected error for a reason that conflicts with the approval request")
+	}
+}

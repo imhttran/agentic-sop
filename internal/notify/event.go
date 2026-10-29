@@ -199,18 +199,26 @@ func (e *Event) validatePayload(p Params) error {
 		}
 		// An event must never name one task while carrying another task's gate: the
 		// two identities are one fact, so a mismatch is a producer bug, not a
-		// payload to normalize. An approval recorded without a task id is allowed.
-		if approvalTask := strings.TrimSpace(p.Approval.TaskID); approvalTask != "" && e.TaskID != "" && approvalTask != e.TaskID {
+		// payload to normalize. An omitted task id is taken from the request.
+		approvalTask := strings.TrimSpace(p.Approval.TaskID)
+		if approvalTask != "" && e.TaskID != "" && approvalTask != e.TaskID {
 			return fmt.Errorf("notify: waiting_for_human event task %q does not match the approval request task %q",
 				e.TaskID, approvalTask)
 		}
-		e.ApprovalRequestID = strings.TrimSpace(p.Approval.ID)
-		if e.Reason == "" {
-			e.Reason = strings.TrimSpace(p.Approval.Reason)
+		if e.TaskID == "" {
+			e.TaskID = approvalTask
 		}
-		if e.Reason == "" {
+		e.ApprovalRequestID = strings.TrimSpace(p.Approval.ID)
+		// The request's reason is authoritative: a caller may omit it or repeat it,
+		// but may not describe the gate differently from the request it identifies.
+		approvalReason := strings.TrimSpace(p.Approval.Reason)
+		if approvalReason == "" {
 			return errors.New("notify: waiting_for_human event requires the approval request reason")
 		}
+		if e.Reason != "" && e.Reason != approvalReason {
+			return errors.New("notify: waiting_for_human event reason does not match the approval request reason")
+		}
+		e.Reason = approvalReason
 		e.ResolutionCommand = strings.TrimSpace(p.ResolutionCommand)
 		if e.ResolutionCommand == "" {
 			return errors.New("notify: waiting_for_human event requires the resolution command")
