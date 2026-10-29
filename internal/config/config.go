@@ -22,6 +22,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/decision"
+	"github.com/imhttran/agentic-sop/internal/dotenv"
 	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/projectdetect"
 	"github.com/imhttran/agentic-sop/internal/provider"
@@ -704,12 +705,35 @@ func Load(path string) (*Config, error) {
 
 // LoadDir loads the configuration for a project directory.
 func LoadDir(projectDir string) (*Config, error) {
-	return Load(Path(projectDir))
+	data, err := os.ReadFile(Path(projectDir))
+	if err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, ErrNotFound
+		}
+		return nil, fmt.Errorf("config: read %s: %w", Path(projectDir), err)
+	}
+	// A background job is a detached child of the sop binary and has no interactive
+	// shell, so the webhook secret must also resolve from the project's gitignored
+	// .env. The lookup is built before parsing, so an env-file secret satisfies
+	// validation instead of failing it. Precedence: YAML value, process environment,
+	// then .env.
+	vars, _ := dotenv.LoadDir(projectDir)
+	lookup := func(key string) string {
+		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+			return v
+		}
+		return strings.TrimSpace(vars[key])
+	}
+	return parseWithEnv(data, lookup)
 }
 
 // Parse parses and validates configuration bytes. Unknown keys, malformed YAML,
 // missing required fields, and unsupported versions are all reported as errors.
-func Parse(data []byte) (*Config, error) {
+func Parse(data []byte) (*Config, error) { return parseWithEnv(data, os.Getenv) }
+
+// parseWithEnv is Parse with an injectable environment lookup, so a project loader
+// can add a fallback source (the project's .env) without changing Parse's contract.
+func parseWithEnv(data []byte, getenv func(string) string) (*Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(data))
 	dec.KnownFields(true)
 
@@ -743,7 +767,7 @@ func Parse(data []byte) (*Config, error) {
 	// The webhook URL is a secret, so it is read from the environment when the
 	// YAML field is empty. The value is never rendered by status, logs, events,
 	// or errors.
-	c.resolveNotifyWebhookURL(os.Getenv)
+	c.resolveNotifyWebhookURL(getenv)
 	c.applyDefaults()
 	if err := c.Validate(); err != nil {
 		return nil, err
