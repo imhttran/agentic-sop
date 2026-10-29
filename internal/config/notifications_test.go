@@ -116,3 +116,21 @@ func TestNotificationsStatusRendersNoCredential(t *testing.T) {
 		t.Fatal("status rendered a credential")
 	}
 }
+
+func TestWebhookURLWithCredentialsRejected(t *testing.T) {
+	body := notifyBase + "notifications:\n  channel: webhook\n  webhook:\n    url: https://user:secret@example.com/hook\n"
+	_, err := parseNotify(t, body)
+	if err == nil || !strings.Contains(err.Error(), "credentials") {
+		t.Fatalf("err = %v, want a credentials rejection", err)
+	}
+}
+
+func TestNotifyStatusRedactsURLUserinfo(t *testing.T) {
+	var c Config
+	c.Notifications.Channel = NotifyChannelWebhook
+	c.Notifications.Webhook.URL = "https://user:secret@example.com/hook"
+	got := c.NotifyStatus(true).HookResolved
+	if strings.Contains(got, "secret") || strings.Contains(got, "user") {
+		t.Fatalf("status leaked userinfo: %q", got)
+	}
+}
