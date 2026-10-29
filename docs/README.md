@@ -89,6 +89,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/QUALITY.md](specs/QUALITY.md) — the deterministic quality gate and the bounded fix loop.
 - [specs/HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) — human gates: when approval is required and what must not bypass it.
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
+- [specs/PROJECT-STATE-LOCK.md](specs/PROJECT-STATE-LOCK.md) — the project-scoped advisory lock that serializes the writers of `.agent-sdlc` state and the task graph: what it guarantees (mutual exclusion), what it does not (JSON/SQLite atomicity, non-participating writers), and which operations take it.
 - [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
 - [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
 - [specs/SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md) — the implemented opt-in security scanner add-on: `security-scan/v1` adapter contract, configurable category/adapter selection, Semgrep CE, Gitleaks, cargo-audit, and OSV-Scanner wrappers, execution/coverage states, policy verdicts, baselines, resume, redaction, and the single quality-gate seam.
@@ -178,6 +179,7 @@ single owner. This table is that map.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
 - [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, and inspection.
 - [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
+- [guides/NOTIFICATIONS.md](guides/NOTIFICATIONS.md) — configure job lifecycle notifications (completed, failed, waiting for a human), check availability and delivery status with `sop notify`, and understand the at-least-once delivery and ambiguity limits.
 - [guides/HOW-TO-SETUP-WITH-CLAUDE.md](guides/HOW-TO-SETUP-WITH-CLAUDE.md) — run SOP's SMALL, MEDIUM, and LARGE model classes on Claude, through the Claude Code CLI or the Anthropic API.
 - [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
 - [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, `/rag-ingest`, and `/sop-rag-integrate` RAG skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
