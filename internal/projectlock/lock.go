@@ -37,6 +37,9 @@ const FileName = "state.lock"
 // of its own, so a contended lock fails with a clear error instead of hanging.
 const DefaultTimeout = 30 * time.Second
 
+// defaultWait is DefaultTimeout as applied by Acquire; tests shorten it.
+var defaultWait = DefaultTimeout
+
 // ErrUnsupported reports a platform that cannot provide the advisory lock. SOP
 // never silently degrades to a no-op: a caller that requires the lock must fail
 // rather than proceed unprotected.
@@ -62,7 +65,7 @@ func Acquire(ctx context.Context, dir string) (*Lock, error) {
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, DefaultTimeout)
+		ctx, cancel = context.WithTimeout(ctx, defaultWait)
 		defer cancel()
 	}
 	path := filepath.Join(dir, config.DirName, FileName)
