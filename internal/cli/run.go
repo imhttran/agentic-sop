@@ -1475,7 +1475,11 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	}
 	writeOutcomeSummary(stdout, res.outcome)
 	if res.gate.Decision == quality.Pass {
-		fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
+		if cfg.Human.RequiresApprovalBeforeCommit() {
+			fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
+		} else {
+			fmt.Fprintln(stdout, "completed locally without committing (commit with sop commit).")
+		}
 		return exitOK
 	}
 	return exitError
