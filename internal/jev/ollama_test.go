@@ -1019,3 +1019,23 @@ func TestEveryAuthoritativeCategoryYieldsValidEvidence(t *testing.T) {
 		})
 	}
 }
+
+// TestComplexityKeptOnlyForEarlyPurposes pins that the model's complexity rating
+// reaches early evidence, is dropped for a post-implement review, and an unknown
+// rating is ignored rather than failing the analysis.
+func TestComplexityKeptOnlyForEarlyPurposes(t *testing.T) {
+	r, err := parseModelOutput(`{"status":"PASS","complexity":"high","summary":"s","findings":[]}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := structuredEvidenceFor(r, PurposeTaskTriage).Complexity; got != ComplexityHigh {
+		t.Errorf("triage complexity = %q, want HIGH", got)
+	}
+	if got := structuredEvidenceFor(r, PurposeQuality).Complexity; got != "" {
+		t.Errorf("quality review kept complexity %q", got)
+	}
+	r, err = parseModelOutput(`{"status":"PASS","complexity":"EXTREME","summary":"s","findings":[]}`)
+	if err != nil || r.Complexity != "" {
+		t.Errorf("unknown rating: complexity %q, err %v; want dropped", r.Complexity, err)
+	}
+}

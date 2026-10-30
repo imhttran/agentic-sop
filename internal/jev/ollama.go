@@ -66,7 +66,7 @@ const maxAnalysisAttempts = 3
 // single definition of validity in evidence.go (Categories), so the categories the
 // model is told are exactly the categories the parser accepts and cannot drift.
 var jevOutputSchema = `Return ONE JSON object and nothing else (no prose, no markdown, no code fences):
-{"status":"PASS|FINDINGS|INCOMPLETE|ERROR","summary":string,"findings":[{"id":string,"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","category":` + strconv.Quote(categoryVocabulary("|")) + `,"path":string,"line":number,"message":string,"evidence":string}]}
+{"status":"PASS|FINDINGS|INCOMPLETE|ERROR","complexity":"LOW|MEDIUM|HIGH","summary":string,"findings":[{"id":string,"severity":"INFO|LOW|MEDIUM|HIGH|CRITICAL","category":` + strconv.Quote(categoryVocabulary("|")) + `,"path":string,"line":number,"message":string,"evidence":string}]}
 Use "PASS" with an empty findings list when there is nothing to report, and "FINDINGS" with at least one finding otherwise. Report only real findings with concrete evidence.`
 
 // categoryVocabulary joins the authoritative category vocabulary (the single
@@ -120,6 +120,7 @@ var jevOutputJSONSchema = json.RawMessage(fmt.Sprintf(`{
   "type": "object",
   "properties": {
     "status": {"type": "string", "enum": ["PASS", "FINDINGS", "INCOMPLETE", "ERROR"]},
+    "complexity": {"type": "string", "enum": ["LOW", "MEDIUM", "HIGH"]},
     "summary": {"type": "string"},
     "findings": {
       "type": "array",
@@ -410,17 +411,25 @@ var earlyPurposeBrief = map[Purpose]string{
 	PurposeTaskTriage: "TASK_TRIAGE: assess this task BEFORE implementation starts. Nothing has been implemented yet; " +
 		"paths marked (new) are expected to be created by the task and are not missing. Report only risks in the task itself " +
 		"(unclear or contradictory requirements, security-sensitive or cross-cutting scope, existing code it may break). " +
-		"Use PASS when the task is clear and safe to start.",
+		"Use PASS when the task is clear and safe to start. " + complexityBrief,
 	PurposePreExecution: "PRE_EXECUTION: assess the planned execution context immediately BEFORE implementation. Nothing has " +
 		"been implemented yet; paths marked (new) are expected to be created and are not missing. Report only risks that " +
-		"should stop or change the work before it starts. Use PASS when it is safe to proceed.",
+		"should stop or change the work before it starts. Use PASS when it is safe to proceed. " + complexityBrief,
 }
+
+// complexityBrief asks an early checkpoint for its typed complexity rating, which
+// the router reads to pick a model class. It defines the levels by how hard the
+// work is to get right, not by its size.
+const complexityBrief = "Also set complexity: LOW for routine work with a direct, well-known solution; MEDIUM for work " +
+	"that needs a non-obvious approach or careful edge-case handling; HIGH for work that is easy to get subtly wrong " +
+	"(intricate algorithms such as dynamic programming or tricky invariants, concurrency, or broad structural change)."
 
 // modelOutput is the JSON shape the adapter expects from the model.
 type modelOutput struct {
-	Status   string         `json:"status"`
-	Summary  string         `json:"summary"`
-	Findings []modelFinding `json:"findings"`
+	Status     string         `json:"status"`
+	Complexity string         `json:"complexity"`
+	Summary    string         `json:"summary"`
+	Findings   []modelFinding `json:"findings"`
 }
 
 type modelFinding struct {
@@ -467,7 +476,13 @@ func parseModelOutput(raw string) (Result, error) {
 		})
 	}
 
-	result := Result{Status: status, Findings: findings, Summary: out.Summary}
+	// An unknown rating is dropped rather than failing the analysis: it is
+	// optional routing evidence, and its absence routes exactly as before.
+	complexity := Complexity(strings.ToUpper(strings.TrimSpace(out.Complexity)))
+	if !complexity.Valid() {
+		complexity = ""
+	}
+	result := Result{Status: status, Findings: findings, Summary: out.Summary, Complexity: complexity}
 	if err := result.Validate(); err != nil {
 		return Result{}, err
 	}
@@ -512,13 +527,18 @@ func structuredEvidenceFor(result Result, requestPurpose Purpose) Evidence {
 		})
 	}
 
+	var complexity Complexity
+	if earlyPurposeBrief[purpose] != "" {
+		complexity = result.Complexity
+	}
 	return Evidence{
-		Version:  EvidenceVersion,
-		Purpose:  purpose,
-		Severity: evidenceOverallSeverity(result.Findings),
-		Status:   evidenceStatus(result.Status),
-		Items:    items,
-		Summary:  result.Summary,
+		Version:    EvidenceVersion,
+		Purpose:    purpose,
+		Severity:   evidenceOverallSeverity(result.Findings),
+		Status:     evidenceStatus(result.Status),
+		Complexity: complexity,
+		Items:      items,
+		Summary:    result.Summary,
 	}
 }
 

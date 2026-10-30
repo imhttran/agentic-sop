@@ -93,6 +93,8 @@ type Result struct {
 	Status   Status
 	Findings []Finding
 	Summary  string
+	// Complexity is the model's typed task rating; only early purposes keep it.
+	Complexity Complexity
 
 	// StructuredEvidence carries the validated early JEV analysis evidence, when
 	// an analyzer computes it. It is validated through the fail-closed contract

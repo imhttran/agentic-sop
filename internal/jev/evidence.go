@@ -200,6 +200,27 @@ type EvidenceItem struct {
 	Evidence string
 }
 
+// Complexity is an early checkpoint's typed rating of how hard the task is to
+// implement correctly. Empty means not stated; it is advisory routing evidence
+// only and never a lifecycle decision.
+type Complexity string
+
+const (
+	ComplexityLow    Complexity = "LOW"
+	ComplexityMedium Complexity = "MEDIUM"
+	ComplexityHigh   Complexity = "HIGH"
+)
+
+// Valid reports whether c is a known rating or unstated.
+func (c Complexity) Valid() bool {
+	switch c {
+	case "", ComplexityLow, ComplexityMedium, ComplexityHigh:
+		return true
+	default:
+		return false
+	}
+}
+
 // earlyEvidence is the structured early JEV analysis result. It is
 // machine-readable data consumed by SOP policy; it is never a lifecycle
 // command. Summary is descriptive only and is explicitly not a decision input.
@@ -214,6 +235,9 @@ type earlyEvidence struct {
 	// configured thresholds, but a bare confidence threshold is not a decision rule
 	// (FR-P3-8). A zero value means "not stated".
 	Confidence float64
+	// Complexity is the early checkpoint's rating of the task (empty when not
+	// stated or not an early purpose).
+	Complexity Complexity `json:",omitempty"`
 	Items      []EvidenceItem
 	Summary    string
 }
@@ -243,6 +267,9 @@ func (e Evidence) Validate() error {
 	}
 	if e.Confidence < 0 || e.Confidence > 1 {
 		return errInvalidConfidence(e.Confidence)
+	}
+	if !e.Complexity.Valid() {
+		return fmt.Errorf("jev: invalid complexity %q", e.Complexity)
 	}
 	for i, item := range e.Items {
 		if !item.Purpose.Valid() {
