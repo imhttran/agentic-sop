@@ -388,6 +388,7 @@ func (a *OllamaAnalyzer) buildPrompt(req Request) string {
 		b.WriteString(value)
 		b.WriteString("\n\n")
 	}
+	writeField("Purpose", earlyPurposeBrief[req.Purpose])
 	writeField("Task", req.Task)
 	writeField("Criteria", req.Criteria)
 	if len(req.ChangedFiles) > 0 {
@@ -399,6 +400,20 @@ func (a *OllamaAnalyzer) buildPrompt(req Request) string {
 	writeField("ValidationResult", req.ValidationResult)
 	writeField("ReviewResult", req.ReviewResult)
 	return truncateRunes(b.String(), promptRunesBound())
+}
+
+// earlyPurposeBrief tells the model an early checkpoint runs before any change
+// exists. Without it the model reads the request as a review of finished work and
+// answers INCOMPLETE, or reports the not-yet-written files as missing, so the
+// outcome reflects the model's temperament rather than the task.
+var earlyPurposeBrief = map[Purpose]string{
+	PurposeTaskTriage: "TASK_TRIAGE: assess this task BEFORE implementation starts. Nothing has been implemented yet; " +
+		"paths marked (new) are expected to be created by the task and are not missing. Report only risks in the task itself " +
+		"(unclear or contradictory requirements, security-sensitive or cross-cutting scope, existing code it may break). " +
+		"Use PASS when the task is clear and safe to start.",
+	PurposePreExecution: "PRE_EXECUTION: assess the planned execution context immediately BEFORE implementation. Nothing has " +
+		"been implemented yet; paths marked (new) are expected to be created and are not missing. Report only risks that " +
+		"should stop or change the work before it starts. Use PASS when it is safe to proceed.",
 }
 
 // modelOutput is the JSON shape the adapter expects from the model.
