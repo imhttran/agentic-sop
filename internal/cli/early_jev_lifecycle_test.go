@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -166,5 +169,16 @@ func TestGraphRunTriageProviderFailureContinues(t *testing.T) {
 	}
 	if a.impl != 1 {
 		t.Errorf("implementation ran %d times, want 1", a.impl)
+	}
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", "T001", "early-jev.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var art runpkg.EarlyArtifact
+	if err := json.Unmarshal(data, &art); err != nil {
+		t.Fatal(err)
+	}
+	if !art.ProviderFailed || !strings.Contains(art.FailureDetail, jev.ErrProviderFailure.Error()) {
+		t.Errorf("artifact failure_detail = %q, want the analyzer error recorded", art.FailureDetail)
 	}
 }

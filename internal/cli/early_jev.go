@@ -103,6 +103,15 @@ func earlyGateLabel(checkpoint runpkg.Checkpoint) string {
 	return "JEV task analysis"
 }
 
+// earlyFailureDetail describes why an early analysis produced no usable result:
+// the analyzer error when there is one, else the non-usable status it returned.
+func earlyFailureDetail(out runpkg.JEVOutcome) string {
+	if out.Error != nil {
+		return boundedDetail(out.Error.Error())
+	}
+	return boundedDetail(fmt.Sprintf("analysis status %s", out.Result.Status))
+}
+
 // buildEarlyJEVInvocation assembles the bounded, read-only request an early
 // checkpoint sends JEV. It reuses runpkg.JEVInvocation (the boundary the quality
 // seam uses) so there is one request shape across the JEV integration, and it
@@ -166,12 +175,14 @@ func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint
 	out := runpkg.RunJEV(ctx, analyzer, inv)
 
 	res := earlyGateResult{Ran: true, Task: taskID, Provider: out.Provider}
+	var failureDetail string
 	switch {
 	case out.FailClosed() || out.Result.Status == jev.StatusError || out.Result.Status == jev.StatusIncomplete:
 		// An infrastructure/provider failure is recorded distinctly and is never a
 		// finding. Policy owns the fallback: the advisory default continues.
 		res.ProviderFailed = true
 		res.Reason = "early JEV analysis could not run; continuing under deterministic SOP policy"
+		failureDetail = earlyFailureDetail(out)
 	case out.Result.StructuredEvidence != nil:
 		ev := *out.Result.StructuredEvidence
 		if err := ev.Validate(); err != nil {
@@ -179,6 +190,7 @@ func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint
 			// never interpreted as a finding.
 			res.ProviderFailed = true
 			res.Reason = "early JEV analysis returned invalid evidence; continuing under deterministic SOP policy"
+			failureDetail = boundedDetail("invalid evidence: " + err.Error())
 		} else {
 			res.Evidence = ev
 			res.Decision = autonomy.DecideEarly(ev, cfg.EarlyJEVFailOn(), cfg.AutonomyPolicy())
@@ -201,6 +213,7 @@ func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint
 			Provider:       out.Provider,
 			Timestamp:      time.Now().UTC().Format(time.RFC3339),
 			ProviderFailed: res.ProviderFailed,
+			FailureDetail:  failureDetail,
 			PolicyDecision: string(res.Decision.Action),
 			PolicyReason:   res.Reason,
 		}
