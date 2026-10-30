@@ -368,7 +368,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 
 	// Optional typed JEV triage (Phase 5.4 12). Reused unchanged: JEV provides
 	// evidence only and never selects the class.
-	tri := runPromptJEV(ctx, cfg, d, wi, rn, true)
+	tri := runPromptJEV(ctx, cfg, d, wi, rn)
 	// Early JEV triage owns a human boundary exactly as it does for a task: a policy
 	// escalation stops the prompt at that boundary rather than running it (for a
 	// mutating prompt, before any repository change).
@@ -497,7 +497,7 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	}
 
 	ctx := taskActivityContext(context.Background(), rn.Dir(), progress, rn.State().ID, wi.Title)
-	tri := runPromptJEV(ctx, cfg, d, wi, rn, false)
+	tri := runPromptJEV(ctx, cfg, d, wi, rn)
 	// Early JEV triage owns a human boundary exactly as it does for a task, and
 	// BEFORE any implementation work, so a policy escalation cannot mutate the
 	// repository (Phase 5.4 6, 8).
@@ -562,9 +562,9 @@ func promptRunDirRel(id string) string {
 // runPromptJEV runs the optional task-triage JEV checkpoint over the prompt's
 // bounded context. It is a strict no-op unless the triage gate is enabled and an
 // analyzer is wired. JEV provides typed evidence only.
-func runPromptJEV(ctx context.Context, cfg config.Config, d deps, wi workitem.WorkItem, rn *runpkg.Run, readOnly bool) earlyGateResult {
+func runPromptJEV(ctx context.Context, cfg config.Config, d deps, wi workitem.WorkItem, rn *runpkg.Run) earlyGateResult {
 	inv := runpkg.JEVInvocation{Purpose: jev.PurposeTaskTriage, Task: wi.Content}
-	return runJEVCheckpoint(ctx, cfg, d, runpkg.CheckpointTaskTriage, inv, wi.ID, rn, readOnly)
+	return runJEVCheckpoint(ctx, cfg, d, runpkg.CheckpointTaskTriage, inv, wi.ID, rn)
 }
 
 // promptRouting computes the prompt's model-class decision, mirroring the task

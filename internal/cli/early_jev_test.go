@@ -123,7 +123,7 @@ func TestEarlyTriageBlockingFindingEscalates(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, earlyJEVTriageConfig)
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryAmbiguity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
@@ -328,5 +328,20 @@ func TestEarlyJEVSeesRepository(t *testing.T) {
 
 	if got := buildEarlyJEVInvocation(runpkg.CheckpointTaskTriage, &taskfile.Spec{Title: "t"}, dir).RepositoryContext; got != "" {
 		t.Errorf("a task with no declared paths gets no repository context, got %q", got)
+	}
+}
+
+// TestBlockingEvidenceKeepsSecurityAndUnclassified pins which early findings may
+// stop work: security-sensitive and unclassified ones; never a code-level note.
+func TestBlockingEvidenceKeepsSecurityAndUnclassified(t *testing.T) {
+	ev := jev.Evidence{Items: []jev.EvidenceItem{
+		{Category: jev.CategoryAmbiguity, Severity: jev.SeverityHigh},
+		{Category: jev.CategoryScope, Severity: jev.SeverityHigh},
+		{Category: jev.CategoryCredentialSensitivity, Severity: jev.SeverityHigh},
+		{Category: "", Severity: jev.SeverityHigh},
+	}}
+	got := blockingEvidence(ev).Items
+	if len(got) != 2 || got[0].Category != jev.CategoryCredentialSensitivity || got[1].Category != "" {
+		t.Fatalf("blocking items = %+v, want the credential and the unclassified finding", got)
 	}
 }

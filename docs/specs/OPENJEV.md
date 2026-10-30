@@ -415,8 +415,11 @@ conflated across checkpoints. Early findings carry a typed category (ambiguity,
 missing context, scope, requirement conflict, dependency concern, security,
 destructive, credential sensitivity, unexpected area, approval-sensitive) and a
 severity; SOP maps that typed pair against `early_jev.fail_on` and MUST NOT infer a
-lifecycle action from free-form summary text. An unclassified category fails closed
-to a human boundary.
+lifecycle action from free-form summary text. Only a security-sensitive finding
+(security, destructive, credential sensitivity, approval-sensitive) or an
+unclassified one, which fails closed, MAY stop work at a human boundary. Any other
+category is advisory before work exists: it MUST NOT require a human, and it raises
+the routed class instead.
 
 Disabling or omitting the gates is a strict no-op: existing SOP behavior is
 unchanged (§6, FR-P3-6). A provider failure or malformed result is recorded as a

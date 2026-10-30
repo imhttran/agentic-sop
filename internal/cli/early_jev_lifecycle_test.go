@@ -110,7 +110,7 @@ func TestGraphRunTriageEscalationStopsAtHumanBoundary(t *testing.T) {
 	writeConfig(t, dir, earlyTriageGraphConfig)
 	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Add widget", Objective: "Add the widget.", AcceptanceCriteria: "widget works", Status: domain.PLANNED, MaxAttempts: 3})
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryAmbiguity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
@@ -187,5 +187,28 @@ func TestGraphRunTriageProviderFailureContinues(t *testing.T) {
 	// Every check this run failed, so the run says so once, with the reason.
 	if !strings.Contains(stderr, "warning: early JEV failed on all 1 checks") || !strings.Contains(stderr, jev.ErrProviderFailure.Error()) {
 		t.Errorf("stderr = %q, want the all-failed early JEV warning with its reason", stderr)
+	}
+}
+
+// TestGraphRunTriageCodeFindingDoesNotStop proves a HIGH early finding that is
+// not security-sensitive (here an ambiguity, which is often the model's diagnosis
+// of the task itself) never parks the task for a human: the task runs, and the
+// finding is left to raise the routed class.
+func TestGraphRunTriageCodeFindingDoesNotStop(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, earlyTriageGraphConfig)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Fix paging", Objective: "Fix paging.", AcceptanceCriteria: "pages are stable", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &earlyCountingAgent{}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryAmbiguity, jev.SeverityHigh)}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run")
+	if code != exitOK || strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Fatalf("a non-security finding must not stop the task: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if a.impl != 1 {
+		t.Errorf("implementation ran %d times, want 1", a.impl)
 	}
 }
