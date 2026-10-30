@@ -15,6 +15,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/router"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -364,7 +365,9 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 	}
 	_ = rn.Write("prompt.md", renderPromptDoc(wi, nil))
 
-	ctx := context.Background()
+	// Every model call this prompt makes (early JEV triage and the answer itself)
+	// reports its token usage here.
+	ctx := perf.WithUsage(context.Background(), &perf.Usage{})
 
 	// Optional typed JEV triage (Phase 5.4 12). Reused unchanged: JEV provides
 	// evidence only and never selects the class.
@@ -411,6 +414,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 				Status:     "failed",
 				Routing:    promptRoutingDoc(tr, sel),
 				ReportPath: promptRunDirRel(wi.ID),
+				Tokens:     perf.UsageFrom(ctx),
 			})
 		}
 		_ = writePromptMetadata(rn, promptResultDoc{
@@ -421,6 +425,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 			Status:     "failed",
 			Routing:    promptRoutingDoc(tr, sel),
 			ReportPath: promptRunDirRel(wi.ID),
+			Tokens:     perf.UsageFrom(ctx),
 		})
 		return failPrompt(rn, stderr, fmt.Errorf("prompt: %s: %w", wi.Capability, err))
 	}
@@ -438,6 +443,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		ReportPath: promptRunDirRel(wi.ID),
 		ResultPath: filepath.Join(promptRunDirRel(wi.ID), "result.md"),
 		Result:     content,
+		Tokens:     perf.UsageFrom(ctx),
 	}
 	_ = writePromptMetadata(rn, doc)
 
@@ -445,6 +451,10 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		return writePromptJSON(stdout, stderr, doc)
 	}
 	fmt.Fprint(stdout, renderPromptResult(wi, tr, sel, content))
+	if len(doc.Tokens) > 0 {
+		sum := perf.TotalTokens(doc.Tokens)
+		fmt.Fprintf(progress, "tokens: %d in, %d out across %d model calls\n", sum.Input, sum.Output, sum.Calls)
+	}
 	return exitOK
 }
 
@@ -532,6 +542,7 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 		Status:     promptStatus(res.gate.Decision),
 		Routing:    promptRoutingDoc(res.routing, sel),
 		ReportPath: promptRunDirRel(wi.ID),
+		Tokens:     perf.UsageFrom(ctx),
 	}
 	_ = writePromptMetadata(rn, doc)
 
@@ -754,6 +765,9 @@ type promptResultDoc struct {
 	ReportPath string                `json:"report_path,omitempty"`
 	ResultPath string                `json:"result_path,omitempty"`
 	Result     string                `json:"result,omitempty"`
+	// Tokens is the prompt's model token usage by model, as the servers reported
+	// it. It is omitted when no call reported usage.
+	Tokens map[string]perf.Tokens `json:"tokens,omitempty"`
 }
 
 // promptRoutingSection is the prompt's routing evidence in the result document. It
