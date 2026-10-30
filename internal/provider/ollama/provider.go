@@ -1,10 +1,17 @@
 // Package ollama adapts a local or cloud Ollama server to the provider
 // interface: it reports reachability (/api/version), the served models
-// (/api/tags), and a model's capabilities (/api/show).
+// (/api/tags), a model's capabilities (/api/show), and a model's locality from
+// the same /api/show evidence.
 //
-// It is read-only and never assumes a discovered model is local: Ollama's model
-// list does not report locality, so ModelInfo.Locality is left empty and the
-// authoritative locality stays the model-routing selection's.
+// It is read-only and it never guesses locality: the runtime itself reports the
+// evidence. A /api/tags entry carries a remote_host field when the model is
+// served by Ollama Cloud, and an entry without one is served by this local
+// server. The same remote_host field in /api/show carries the evidence when a
+// caller asks for one model's locality. A missing or empty remote_host in
+// /api/show stays undetermined — it is never read as local or cloud from the
+// model name, the endpoint host, or an absence of ":cloud" — and a failed
+// request or an absent model reports no locality either, so callers never
+// mistake an assumption for evidence.
 package ollama
 
 import (
@@ -14,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider"
 	"github.com/imhttran/agentic-sop/internal/provider/httpx"
 )
@@ -61,18 +69,21 @@ func (p *Provider) Health(ctx context.Context) provider.HealthResult {
 }
 
 // Models lists GET /api/tags, including each model's reported metadata (family,
-// parameter size, quantization, context length, size). A server that does not
-// answer the list reports ErrDiscoveryUnsupported so absence is never assumed.
+// parameter size, quantization, context length, size) and locality: an entry
+// with a non-empty remote_host is served by Ollama Cloud, and an entry without
+// one is served by this local server. A server that does not answer the list
+// reports ErrDiscoveryUnsupported so absence is never assumed.
 func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 	if p.baseURL == "" {
 		return nil, provider.ErrDiscoveryUnsupported
 	}
 	var out struct {
 		Models []struct {
-			Name    string `json:"name"`
-			Model   string `json:"model"`
-			Size    int64  `json:"size"`
-			Details struct {
+			Name       string `json:"name"`
+			Model      string `json:"model"`
+			Size       int64  `json:"size"`
+			RemoteHost string `json:"remote_host"`
+			Details    struct {
 				Family        string `json:"family"`
 				ParameterSize string `json:"parameter_size"`
 				Quantization  string `json:"quantization_level"`
@@ -94,9 +105,18 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 			continue
 		}
 		seen[name] = true
+		// remote_host is the runtime's own locality evidence: a non-empty value
+		// means Ollama Cloud serves the model, and a listed entry without one is
+		// served by this local server. Nothing else — not the name, not the
+		// endpoint host — is locality evidence.
+		locality := model.LocalityLocal
+		if strings.TrimSpace(m.RemoteHost) != "" {
+			locality = model.LocalityCloud
+		}
 		infos = append(infos, provider.ModelInfo{
 			Name:          name,
 			Provider:      provider.Ollama,
+			Locality:      locality,
 			Capabilities:  streamingCapabilities(),
 			Family:        strings.TrimSpace(m.Details.Family),
 			ParameterSize: strings.TrimSpace(m.Details.ParameterSize),
@@ -143,6 +163,33 @@ func (p *Provider) Capabilities(ctx context.Context, modelName string) (provider
 		}
 	}
 	return caps, nil
+}
+
+// Locality reports a named model's locality from Ollama's /api/show
+// remote_host evidence, implementing provider.LocalityReporter. A non-empty
+// remote_host means Ollama Cloud serves the model. A missing or empty
+// remote_host — and equally a failed request, an unsupported discovery (no
+// endpoint configured), or an absent model — reports the zero model.Locality
+// ("not determined"): it is never read as local or cloud from the model name.
+// It is read-only: it sends no generation request, changes no SOP state, and
+// reports the evidence without printing endpoints or credentials.
+func (p *Provider) Locality(ctx context.Context, modelName string) model.Locality {
+	name := strings.TrimSpace(modelName)
+	if name == "" || p.baseURL == "" {
+		return ""
+	}
+	var out struct {
+		RemoteHost string `json:"remote_host"`
+	}
+	if err := httpx.PostJSON(ctx, p.client, p.baseURL+"/api/show", map[string]string{"model": name}, &out); err != nil {
+		// The model may be unknown or the request may have failed; either way
+		// the locality is undetermined, not an assumption.
+		return ""
+	}
+	if strings.TrimSpace(out.RemoteHost) == "" {
+		return ""
+	}
+	return model.LocalityCloud
 }
 
 // streamingCapabilities is what an Ollama server is known to support regardless

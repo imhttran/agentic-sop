@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"os"
 
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -31,12 +32,12 @@ func loadDotEnv(dir string) error {
 //
 // The returned result is for observability (the startup summary); policy never
 // reads it back.
-func applyModelRouting(cfg *config.Config, cliClass string) (model.Result, error) {
-	res, err := model.Resolve(model.Inputs{
+func applyModelRouting(ctx context.Context, cfg *config.Config, cliClass string) (model.Result, error) {
+	res, err := resolveModelLocality(ctx, model.Inputs{
 		Config:   cfg.Models,
 		Lookup:   os.Getenv,
 		CLIClass: cliClass,
-	})
+	}, runtimeLocalityObserver(*cfg))
 	if err != nil {
 		return model.Result{}, err
 	}

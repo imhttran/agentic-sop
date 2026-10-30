@@ -4,7 +4,11 @@
 // chat-completions vocabulary.
 //
 // The adapter is read-only: it lists models and reports reachability. It never
-// sends a completion and never chooses a model class.
+// sends a completion and never chooses a model class. It also never claims a
+// locality: /v1/models carries no locality evidence, an OpenAI-compatible
+// endpoint may legally be local or remote, and neither the endpoint host nor a
+// model name (with or without a ":cloud" suffix) is evidence. ModelInfo.Locality
+// therefore stays undetermined for every model this adapter lists.
 package openai
 
 import (
@@ -14,7 +18,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider"
 	"github.com/imhttran/agentic-sop/internal/provider/httpx"
 )
@@ -69,7 +72,9 @@ func (p *Provider) Health(ctx context.Context) provider.HealthResult {
 // Models lists the models reported by GET /v1/models. A server that does not
 // answer the list reports the operator-configured model when one was set (a
 // single-model server still has a known identity), or ErrDiscoveryUnsupported
-// otherwise, so absence is never assumed.
+// otherwise, so absence is never assumed. Locality is never reported: the
+// endpoint host and the model names are not locality evidence, so both listings
+// leave ModelInfo.Locality undetermined.
 func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 	if p.baseURL == "" {
 		return p.configuredFallback()
@@ -93,7 +98,6 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 		infos = append(infos, provider.ModelInfo{
 			Name:         name,
 			Provider:     p.id,
-			Locality:     model.LocalityLocal,
 			Capabilities: chatCapabilities(),
 		})
 	}
@@ -104,7 +108,8 @@ func (p *Provider) Models(ctx context.Context) ([]provider.ModelInfo, error) {
 // unavailable, so a single-model server still has a known identity. With no
 // configured model it reports ErrDiscoveryUnsupported, so absence is never
 // assumed. It is not a probe result: it is the configured identity, not a claim
-// that the model is loaded.
+// that the model is loaded. Locality stays undetermined: the configured name and
+// the endpoint host are not locality evidence.
 func (p *Provider) configuredFallback() ([]provider.ModelInfo, error) {
 	if p.configuredModel == "" {
 		return nil, provider.ErrDiscoveryUnsupported
@@ -112,7 +117,6 @@ func (p *Provider) configuredFallback() ([]provider.ModelInfo, error) {
 	return []provider.ModelInfo{{
 		Name:         p.configuredModel,
 		Provider:     p.id,
-		Locality:     model.LocalityLocal,
 		Capabilities: chatCapabilities(),
 	}}, nil
 }

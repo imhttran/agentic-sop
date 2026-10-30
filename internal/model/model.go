@@ -44,6 +44,7 @@
 package model
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sort"
@@ -534,6 +535,10 @@ type Inputs struct {
 	// RoutedReason is the deterministic explanation for RoutedClass. It is one of
 	// the router's fixed reason phrases, never model-generated prose.
 	RoutedReason string
+	// LocalityEvidence is authoritative runtime locality evidence supplied by the
+	// caller, keyed by provider and model. The model package performs no network
+	// I/O: it reads this map only. A nil map means no runtime evidence.
+	LocalityEvidence map[LocalityEvidence]Locality
 }
 
 // Selection is the resolved model selection: the class, the provider and model
@@ -545,7 +550,11 @@ type Selection struct {
 	Provider string   `json:"provider"`
 	Model    string   `json:"model"`
 	Locality Locality `json:"locality"`
-	Source   Source   `json:"source"`
+	// LocalitySource records how the locality was resolved (explicit, runtime,
+	// inferred, or default). It is omitted when empty so older persisted evidence
+	// decodes and re-encodes without the field.
+	LocalitySource LocalitySource `json:"locality_source,omitempty"`
+	Source         Source         `json:"source"`
 	// Fallback reports whether a fallback supplied this selection rather than the
 	// primary model: either the config-completeness fallback class
 	// (ReasonFallbackClass), or a class's configured runtime cloud fallback
@@ -598,12 +607,19 @@ func Resolve(in Inputs) (Result, error) {
 		return Result{}, err
 	}
 
-	primary := entryFor(class, in.Config, env)
+	primary, err := entryForWithEvidence(class, in.Config, env, in.LocalityEvidence)
+	if err != nil {
+		return Result{}, err
+	}
 	if primary.complete() {
-		sel := selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass), reason, false)
+		sel := selectionFor(class, primary, sourceFor(class, in.Config, env, cli, in.RoutedClass, in.LocalityEvidence), reason, false)
 		// The local-first runtime fallback is a CANDIDATE only: it is reported here
 		// and applied by the caller, never by Resolve.
-		if fb, ok := localFallback(class, in.Config, env, primary); ok {
+		fb, ok, err := localFallback(class, in.Config, env, primary, in.LocalityEvidence)
+		if err != nil {
+			return Result{}, err
+		}
+		if ok {
 			return Result{Active: true, Selection: sel, LocalFallback: &fb}, nil
 		}
 		return Result{Active: true, Selection: sel}, nil
@@ -618,13 +634,16 @@ func Resolve(in Inputs) (Result, error) {
 		fallback = in.Config.FallbackClass
 	}
 	if fallback != class {
-		fb := entryFor(fallback, in.Config, env)
+		fb, err := entryForWithEvidence(fallback, in.Config, env, in.LocalityEvidence)
+		if err != nil {
+			return Result{}, err
+		}
 		if fb.complete() {
 			if primary.locality == LocalityLocal && fb.locality == LocalityCloud && !allowCloudFallback(in.Config, env) {
 				return Result{}, fmt.Errorf("model routing: class %q is local but has no model; refusing to fall back to the cloud model %q for class %q (set %s=true to allow)",
 					class, fb.model, fallback, EnvAllowCloudFallbackForLocal)
 			}
-			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, "", ""), ReasonFallbackClass, true)}, nil
+			return Result{Active: true, Selection: selectionFor(fallback, fb, sourceFor(fallback, in.Config, env, "", "", in.LocalityEvidence), ReasonFallbackClass, true)}, nil
 		}
 	}
 
@@ -664,10 +683,11 @@ func selectClass(defaults Route, config, env Route, cli string, routed Class, ro
 // entry is a class's merged routing: per-field, the environment layer over the
 // config layer, falling back to the built-in default when neither names the class.
 type entry struct {
-	provider   string
-	model      string
-	locality   Locality
-	nameSource Source
+	provider       string
+	model          string
+	locality       Locality
+	localitySource LocalitySource
+	nameSource     Source
 }
 
 // complete reports whether an entry fully names a usable model.
@@ -680,18 +700,79 @@ func (e entry) complete() bool {
 // layer mentions falls back to its built-in default (DefaultRoute), so a bare
 // --model-class resolves to a usable model with no configuration; a class a
 // layer does mention is used as written.
-func entryFor(c Class, config, env Route) entry {
+func entryFor(c Class, config, env Route) (entry, error) {
+	return entryForWithEvidence(c, config, env, nil)
+}
+
+// entryForWithEvidence merges the routing layers for a class and resolves its
+// locality through ResolveLocality. A class neither layer mentions takes the
+// built-in default (provider, model, and locality) with source default; a class a
+// layer mentions keeps its written provider/model and resolves its locality from
+// explicit configuration, runtime evidence, inference, or fails with a
+// *LocalityUnknownError. The default is never applied to a class a layer mentions,
+// so a partial class never masquerades as operator configuration. When the
+// primary locality is unresolved and the class also has a configured fallback
+// whose locality is unresolved, the error lists both references.
+func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvidence]Locality) (entry, error) {
 	var e entry
-	if cc := config.classConfig(c); !cc.empty() {
+	cc, ecc := config.classConfig(c), env.classConfig(c)
+	mentioned := primaryMentioned(cc) || primaryMentioned(ecc)
+	if !cc.empty() {
 		applyClassConfig(&e, cc, SourceConfig)
 	}
-	if cc := env.classConfig(c); !cc.empty() {
-		applyClassConfig(&e, cc, SourceEnv)
+	if !ecc.empty() {
+		applyClassConfig(&e, ecc, SourceEnv)
 	}
-	if e.provider == "" && e.model == "" && e.locality == "" {
+	ref := LocalityRef{Class: c, Role: LocalityRolePrimary, Provider: e.provider, Model: e.model}
+	var def Locality
+	if !mentioned {
 		applyClassConfig(&e, DefaultRoute().classConfig(c), SourceDefault)
+		def = e.locality
+		// The default layer set the locality; record its provenance and stop.
+		e.localitySource = LocalitySourceDefault
+		return e, nil
 	}
-	return e
+	res, err := ResolveLocality(ref, e.locality, evidence, false, def)
+	if err != nil {
+		var unknown *LocalityUnknownError
+		if !errors.As(err, &unknown) {
+			return entry{}, err
+		}
+		// Fail closed, but name every unresolved reference for the class: when
+		// the class also has a configured fallback whose locality is unresolved,
+		// one *LocalityUnknownError lists both references.
+		return entry{}, withConfiguredFallbackRefs(c, config, env, e, evidence, err)
+	}
+	e.locality = res.Locality
+	e.localitySource = res.Source
+	return e, nil
+}
+
+// withConfiguredFallbackRefs aggregates the class's configured fallback into an
+// unresolved-primary-locality error. When the primary locality is unresolved and
+// the class also has a configured fallback whose locality is unresolved, one
+// *LocalityUnknownError names both references (roles primary and fallback), so a
+// single resolve failure lists every unresolved reference with its exact
+// settings. A fallback that is not configured, or whose locality resolves,
+// leaves the primary error unchanged; any other fallback resolution failure (a
+// *LocalityConflictError) stays fail-closed as its own error.
+func withConfiguredFallbackRefs(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality, primaryErr error) error {
+	_, _, fbErr := fallbackEntry(c, config, env, primary, evidence)
+	if fbErr == nil {
+		return primaryErr
+	}
+	var fbUnknown *LocalityUnknownError
+	if !errors.As(fbErr, &fbUnknown) {
+		return fbErr
+	}
+	var pUnknown *LocalityUnknownError
+	if !errors.As(primaryErr, &pUnknown) {
+		return primaryErr
+	}
+	refs := make([]LocalityRef, 0, len(pUnknown.Refs)+len(fbUnknown.Refs))
+	refs = append(refs, pUnknown.Refs...)
+	refs = append(refs, fbUnknown.Refs...)
+	return &LocalityUnknownError{Refs: refs}
 }
 
 // applyClassConfig overlays a class config onto an entry, field by field, and
@@ -709,19 +790,28 @@ func applyClassConfig(e *entry, cc ClassConfig, source Source) {
 	}
 }
 
+// primaryMentioned reports whether a layer configures the PRIMARY fields (provider,
+// name, or locality) of a class. A fallback-only configuration does not mention the
+// primary, so the built-in primary default may still apply.
+func primaryMentioned(cc ClassConfig) bool {
+	return strings.TrimSpace(cc.Provider) != "" ||
+		strings.TrimSpace(cc.Name) != "" ||
+		strings.TrimSpace(string(cc.Locality)) != ""
+}
+
 // localFallback returns the class's configured runtime fallback selection, or
 // ok=false when none applies. It applies only to a LOCAL class with a complete
 // fallback model; a cloud class never has one, so a cloud selection is never a
 // candidate for the runtime fallback.
-func localFallback(c Class, config, env Route, primary entry) (Selection, bool) {
+func localFallback(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality) (Selection, bool, error) {
 	if primary.locality != LocalityLocal {
-		return Selection{}, false
+		return Selection{}, false, nil
 	}
-	fb, ok := fallbackEntry(c, config, env, primary)
-	if !ok {
-		return Selection{}, false
+	fb, ok, err := fallbackEntry(c, config, env, primary, evidence)
+	if err != nil || !ok {
+		return Selection{}, false, err
 	}
-	return selectionFor(c, fb, SourceCloudFallback, ReasonLocalFallback, true), true
+	return selectionFor(c, fb, SourceCloudFallback, ReasonLocalFallback, true), true, nil
 }
 
 // fallbackEntry merges a class's fallback config, field by field, from the
@@ -732,30 +822,60 @@ func localFallback(c Class, config, env Route, primary entry) (Selection, bool) 
 //
 // A fallback with no model is not configured, so ok=false. An unset provider
 // inherits the class's primary provider, and an unset locality defaults to cloud.
-func fallbackEntry(c Class, config, env Route, primary entry) (entry, bool) {
+func fallbackEntry(c Class, config, env Route, primary entry, evidence map[LocalityEvidence]Locality) (entry, bool, error) {
 	var e entry
-	if fb := DefaultRoute().classConfig(c).Fallback; fb != nil {
-		applyFallback(&e, *fb)
+	// The built-in fallback is the base layer, but its cloud locality is a DEFAULT,
+	// not an operator-provided explicit value. Keep it aside and clear it before
+	// applying the layers, so a layer that configures only the provider or name
+	// cannot inherit the built-in cloud locality as if it had been written out.
+	var builtinLoc Locality
+	if builtin := DefaultRoute().classConfig(c).Fallback; builtin != nil {
+		applyFallback(&e, *builtin)
+		builtinLoc = e.locality
 	}
+	e.locality = ""
+	// layerMentioned reports whether a config or env layer configured the fallback
+	// at all; a fallback only a layer configures must not inherit the built-in
+	// cloud locality silently.
+	layerMentioned := false
 	if fb := config.classConfig(c).Fallback; fb != nil {
 		applyFallback(&e, *fb)
+		layerMentioned = true
 	}
 	if fb := env.classConfig(c).Fallback; fb != nil {
 		applyFallback(&e, *fb)
+		layerMentioned = true
 	}
 	if e.model == "" {
-		return entry{}, false
+		return entry{}, false, nil
 	}
 	if e.provider == "" {
 		e.provider = primary.provider
 	}
-	if e.locality == "" {
-		e.locality = LocalityCloud
+	ref := LocalityRef{Class: c, Role: LocalityRoleFallback, Provider: e.provider, Model: e.model}
+
+	// A built-in-only fallback keeps its built-in cloud locality with source
+	// default. A fallback a layer configures resolves through ResolveLocality: an
+	// explicit locality wins, otherwise runtime evidence or inference must resolve
+	// it, else it fails rather than receiving the cloud default silently.
+	if !layerMentioned {
+		e.locality = builtinLoc
+		if e.locality == "" {
+			e.locality = LocalityCloud
+		}
+		e.localitySource = LocalitySourceDefault
+		return e, true, nil
 	}
+	res, err := ResolveLocality(ref, e.locality, evidence, false, "")
+	if err != nil {
+		return entry{}, false, err
+	}
+	e.locality = res.Locality
+	e.localitySource = res.Source
 	if !e.complete() {
-		return entry{}, false
+		return entry{}, false, nil
 	}
-	return e, true
+	return e, true, nil
 }
 
 // applyFallback overlays a fallback config onto an entry, field by field.
@@ -773,20 +893,24 @@ func applyFallback(e *entry, f FallbackConfig) {
 
 // selectionFor builds a Selection from a merged entry.
 func selectionFor(c Class, e entry, source Source, reason string, fallback bool) Selection {
-	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, Source: source, Fallback: fallback, Reason: reason}
+	return Selection{Class: c, Provider: e.provider, Model: e.model, Locality: e.locality, LocalitySource: e.localitySource, Source: source, Fallback: fallback, Reason: reason}
 }
 
 // sourceFor names the layer that supplied the selection: the CLI override when it
 // chose the class, the router when it chose the class, otherwise the layer that
 // supplied the model name, otherwise the built-in default.
-func sourceFor(c Class, config, env Route, cli string, routed Class) Source {
+func sourceFor(c Class, config, env Route, cli string, routed Class, evidence map[LocalityEvidence]Locality) Source {
 	if strings.TrimSpace(cli) != "" {
 		return SourceCLI
 	}
 	if routed != "" {
 		return SourceRouter
 	}
-	if s := entryFor(c, config, env).nameSource; s != "" {
+	// Resolve with the same evidence the selection resolved with, so a class whose
+	// locality comes from runtime evidence still attributes the layer that
+	// supplied its model name instead of discarding the resolution error.
+	e, _ := entryForWithEvidence(c, config, env, evidence)
+	if s := e.nameSource; s != "" {
 		return s
 	}
 	return SourceDefault

@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider"
 	"github.com/imhttran/agentic-sop/internal/provider/ollama"
 )
@@ -67,9 +68,14 @@ func TestOllamaModels(t *testing.T) {
 	if infos[0].Name != "qwen3:4b" || infos[1].Name != "glm-5.3-flash:cloud" {
 		t.Fatalf("names = %+v", infos)
 	}
-	// Locality must not be guessed from the model name.
-	if infos[1].Locality != "" {
-		t.Fatalf("locality = %q, want unset (Ollama does not report it)", infos[1].Locality)
+	// The runtime's remote_host field is the only locality evidence: a listed
+	// /api/tags entry without one is served locally, and a ":cloud" name suffix
+	// never overrides the runtime's own report.
+	if infos[1].Locality != model.LocalityLocal {
+		t.Fatalf("locality = %q, want %q (the listed entry has no remote_host)", infos[1].Locality, model.LocalityLocal)
+	}
+	if infos[0].Locality != model.LocalityLocal {
+		t.Fatalf("locality = %q, want %q (the listed entry has no remote_host)", infos[0].Locality, model.LocalityLocal)
 	}
 	// Metadata comes from the /api/tags details and size, and stays zero when the
 	// server does not report it — never fabricated.

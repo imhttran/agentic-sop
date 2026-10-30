@@ -62,7 +62,7 @@ type taskRouting struct {
 //
 // A manual --model-class override wins: it is recorded as a manual_override
 // decision but never re-derived by the router.
-func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult) (taskRouting, bool, error) {
+func routingForTask(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult) (taskRouting, bool, error) {
 	// A recovery-driven escalated attempt outranks both the router and a manual
 	// override: the recovery policy (internal/recovery) already decided this
 	// attempt's class, and escalation is never offered while an override pins the
@@ -125,12 +125,12 @@ func routingForTask(cfg config.Config, d deps, spec *taskfile.Spec, tri, pre ear
 		dec.Class = adapted.Class
 		dec.Reasons = append(dec.Reasons, adapted.Reason+" ("+adapted.Evidence+")")
 	}
-	res, err := model.Resolve(model.Inputs{
+	res, err := resolveModelLocality(ctx, model.Inputs{
 		Config:       cfg.Models,
 		Lookup:       os.Getenv,
 		RoutedClass:  dec.Class,
 		RoutedReason: router.ReasonsText(dec.Reasons),
-	})
+	}, runtimeLocalityObserver(cfg))
 	if err != nil {
 		return taskRouting{}, false, err
 	}
@@ -201,7 +201,7 @@ func routingReasons(reasons []string, sel model.Selection) []string {
 // validated, and guarded by the recovery loop (runAttempts), so this only records
 // the attempt's class and reason. See escalation.go.
 func applyTaskRouting(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, tri, pre earlyGateResult, a agent.Agent, stdout io.Writer) (agent.Agent, *taskRouting, error) {
-	tr, ok, err := routingForTask(cfg, d, spec, tri, pre)
+	tr, ok, err := routingForTask(ctx, cfg, d, spec, tri, pre)
 	if err != nil {
 		return a, nil, err
 	}
@@ -258,6 +258,7 @@ type routingDoc struct {
 	Provider        string                 `json:"provider,omitempty"`
 	Model           string                 `json:"model,omitempty"`
 	Locality        model.Locality         `json:"locality,omitempty"`
+	LocalitySource  model.LocalitySource   `json:"locality_source,omitempty"`
 	ExecutionSource string                 `json:"execution_source,omitempty"`
 	Checkpoints     []string               `json:"checkpoints,omitempty"`
 	Signals         *runpkg.RoutingSignals `json:"signals,omitempty"`
@@ -280,6 +281,7 @@ func routingDocFor(tr *taskRouting) *routingDoc {
 		Provider:        tr.Selection.Provider,
 		Model:           tr.Selection.Model,
 		Locality:        tr.Selection.Locality,
+		LocalitySource:  tr.Selection.LocalitySource,
 		ExecutionSource: executionSourceFor(tr),
 		Checkpoints:     tr.Checkpoints,
 		Signals:         routingSignalsDoc(tr.Signals),
@@ -339,6 +341,7 @@ func writeRoutingDecisionArtifact(rn *runpkg.Run, taskID string, tr *taskRouting
 		Provider:        tr.Selection.Provider,
 		Model:           tr.Selection.Model,
 		Locality:        string(tr.Selection.Locality),
+		LocalitySource:  string(tr.Selection.LocalitySource),
 		ExecutionSource: executionSourceFor(tr),
 		Checkpoints:     tr.Checkpoints,
 		Signals:         routingSignalsDoc(tr.Signals),
@@ -360,6 +363,9 @@ func writeRoutingSummary(w io.Writer, r *routingDoc) {
 	fmt.Fprintf(w, "  %-16s %s\n", "Provider:", r.Provider)
 	fmt.Fprintf(w, "  %-16s %s\n", "Model:", r.Model)
 	fmt.Fprintf(w, "  %-16s %s\n", "Locality:", r.Locality)
+	if r.LocalitySource != "" {
+		fmt.Fprintf(w, "  %-16s %s\n", "Locality source:", r.LocalitySource)
+	}
 	fmt.Fprintf(w, "  %-16s %s\n", "Source:", r.Source)
 	if r.ExecutionSource != "" {
 		fmt.Fprintf(w, "  %-16s %s\n", "Execution source:", r.ExecutionSource)

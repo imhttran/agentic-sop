@@ -79,6 +79,10 @@ type RoutingArtifact struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Locality string `json:"locality,omitempty"`
+	// LocalitySource records how the locality was resolved (explicit, inferred,
+	// runtime, or default). It is omitted when empty so older evidence remains
+	// readable.
+	LocalitySource string `json:"locality_source,omitempty"`
 	// ExecutionSource records where the EXECUTING model came from: "primary" or
 	// "availability-fallback". It distinguishes the routing DECISION (Class, above)
 	// from the actual execution target, so a SMALL decision that ran its SMALL

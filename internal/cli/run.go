@@ -193,7 +193,7 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	routing, err := applyModelRouting(&cfg, d.modelClass)
+	routing, err := applyModelRouting(context.Background(), &cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
@@ -1707,14 +1707,14 @@ func failRun(rn *runpkg.Run, stderr io.Writer, err error) int {
 func loadConfigOrDefault(dir string) (config.Config, error) {
 	loaded, err := config.LoadDir(dir)
 	if err == nil {
-		if _, err := applyModelRouting(loaded, ""); err != nil {
+		if _, err := applyModelRouting(context.Background(), loaded, ""); err != nil {
 			return config.Config{}, err
 		}
 		return *loaded, nil
 	}
 	if errors.Is(err, config.ErrNotFound) {
 		cfg := config.Default()
-		if _, err := applyModelRouting(&cfg, ""); err != nil {
+		if _, err := applyModelRouting(context.Background(), &cfg, ""); err != nil {
 			return config.Config{}, err
 		}
 		// A configless project still honors the documented security environment,
@@ -1925,14 +1925,15 @@ func modelSelectionDoc(routing model.Result) *model.Selection {
 // evidence only: nothing reads it back to drive a decision.
 func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection) {
 	art := runpkg.ModelSelectionArtifact{
-		SchemaVersion: runpkg.ModelSelectionVersion,
-		Class:         string(sel.Class),
-		Provider:      sel.Provider,
-		Model:         sel.Model,
-		Locality:      string(sel.Locality),
-		Source:        string(sel.Source),
-		Fallback:      sel.Fallback,
-		Reason:        sel.Reason,
+		SchemaVersion:  runpkg.ModelSelectionVersion,
+		Class:          string(sel.Class),
+		Provider:       sel.Provider,
+		Model:          sel.Model,
+		Locality:       string(sel.Locality),
+		LocalitySource: string(sel.LocalitySource),
+		Source:         string(sel.Source),
+		Fallback:       sel.Fallback,
+		Reason:         sel.Reason,
 	}
 	// Fail closed on an unsupported version rather than persist an artifact a
 	// consumer cannot interpret. The write itself stays best-effort, like the other
@@ -2123,6 +2124,9 @@ func writeModelSelectionReport(b *strings.Builder, sel *model.Selection) {
 	fmt.Fprintf(b, "- Provider: `%s`\n", sel.Provider)
 	fmt.Fprintf(b, "- Model: `%s`\n", sel.Model)
 	fmt.Fprintf(b, "- Locality: `%s`\n", sel.Locality)
+	if sel.LocalitySource != "" {
+		fmt.Fprintf(b, "- Locality source: `%s`\n", sel.LocalitySource)
+	}
 	fmt.Fprintf(b, "- Source: `%s`\n", sel.Source)
 	fmt.Fprintf(b, "- Reason: %s\n", sel.Reason)
 	if sel.Fallback {
@@ -2144,6 +2148,9 @@ func writeRoutingReport(b *strings.Builder, r *routingDoc) {
 	fmt.Fprintf(b, "- Provider: `%s`\n", r.Provider)
 	fmt.Fprintf(b, "- Model: `%s`\n", r.Model)
 	fmt.Fprintf(b, "- Locality: `%s`\n", r.Locality)
+	if r.LocalitySource != "" {
+		fmt.Fprintf(b, "- Locality source: `%s`\n", r.LocalitySource)
+	}
 	fmt.Fprintf(b, "- Source: `%s`\n", r.Source)
 	if len(r.Reasons) > 0 {
 		fmt.Fprintf(b, "- Reasons: %s\n", router.ReasonsText(r.Reasons))

@@ -39,9 +39,13 @@ type ModelSelectionArtifact struct {
 	Provider      string `json:"provider"`
 	Model         string `json:"model"`
 	Locality      string `json:"locality"`
-	Source        string `json:"source"`
-	Fallback      bool   `json:"fallback"`
-	Reason        string `json:"reason,omitempty"`
+	// LocalitySource records how the locality was resolved (explicit, inferred,
+	// runtime, or default). It is omitted when empty so a historical artifact
+	// without it decodes and re-encodes unchanged.
+	LocalitySource string `json:"locality_source,omitempty"`
+	Source         string `json:"source"`
+	Fallback       bool   `json:"fallback"`
+	Reason         string `json:"reason,omitempty"`
 }
 
 // Validate rejects an unsupported artifact version, failing closed rather than

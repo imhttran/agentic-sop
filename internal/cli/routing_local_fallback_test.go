@@ -124,11 +124,18 @@ func TestRoutingSmallFallsBackToCloudWhenLocalUnavailable(t *testing.T) {
 }
 
 // TestRoutingFallbackOverrideFromEnv proves the fallback model is configurable
-// through the environment, and that the recorded source is cloud-fallback.
+// through the environment, and that the recorded source is cloud-fallback. The
+// fallback locality is set explicitly: a fallback a layer configures without a
+// locality fails closed (it never silently inherits the built-in cloud default),
+// and "other-cloud:latest" carries no reliable :cloud suffix to infer from.
 func TestRoutingFallbackOverrideFromEnv(t *testing.T) {
 	clearModelEnv(t)
 	t.Setenv(model.EnvRoutingEnabled, "true")
 	t.Setenv(model.ClassFallbackEnvKey(model.ClassSmall, model.FallbackFieldName), "other-cloud:latest")
+	// The fallback name is ambiguous (no :cloud suffix and no runtime evidence),
+	// so the operator must state its locality; the built-in cloud default must not
+	// silently stand in for an operator-configured fallback.
+	t.Setenv(model.ClassFallbackEnvKey(model.ClassSmall, model.FallbackFieldLocality), "cloud")
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, preExecRoutingConfig)

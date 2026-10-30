@@ -34,7 +34,7 @@ func runReview(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "review: %v\n", err)
 		return exitError
 	}
-	if _, err := applyModelRouting(&cfg, ""); err != nil {
+	if _, err := applyModelRouting(context.Background(), &cfg, ""); err != nil {
 		fmt.Fprintf(stderr, "review: %v\n", err)
 		return exitError
 	}

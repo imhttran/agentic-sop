@@ -156,6 +156,9 @@ type Execution struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Locality string `json:"locality,omitempty"`
+	// LocalitySource records how the executing locality was resolved (explicit,
+	// inferred, runtime, or default). Empty when the evidence did not record it.
+	LocalitySource string `json:"locality_source,omitempty"`
 	// ExecutionSource records where the executing model came from (primary or
 	// availability-fallback).
 	ExecutionSource string `json:"execution_source,omitempty"`

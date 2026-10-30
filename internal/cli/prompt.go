@@ -231,7 +231,7 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 	d.modelClass = opts.modelClass
-	routing, err := applyModelRouting(&cfg, d.modelClass)
+	routing, err := applyModelRouting(context.Background(), &cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitError
@@ -372,7 +372,7 @@ func runPromptReadOnly(dir string, cfg config.Config, d deps, wi workitem.WorkIt
 		return stopPromptForTriage(rn, wi, tri, opts, progress, stdout, stderr)
 	}
 
-	tr, _, err := promptRouting(cfg, d, tri)
+	tr, _, err := promptRouting(ctx, cfg, d, tri)
 	if err != nil {
 		return failPrompt(rn, stderr, err)
 	}
@@ -570,7 +570,7 @@ func runPromptJEV(ctx context.Context, cfg config.Config, d deps, wi workitem.Wo
 // It is deterministic and never reads the prompt text: only typed JEV evidence
 // participates, and without evidence the router falls back to the safe default
 // (MEDIUM) rather than guessing a class from prose.
-func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting, bool, error) {
+func promptRouting(ctx context.Context, cfg config.Config, d deps, tri earlyGateResult) (*taskRouting, bool, error) {
 	if strings.TrimSpace(d.modelClass) != "" {
 		if d.routing.Active {
 			res, applied := applyLocalFallback(cfg, d, d.routing)
@@ -595,12 +595,12 @@ func promptRouting(cfg config.Config, d deps, tri earlyGateResult) (*taskRouting
 		checkpoints = append(checkpoints, "task_triage")
 	}
 	dec := router.Decide(sig)
-	res, err := model.Resolve(model.Inputs{
+	res, err := resolveModelLocality(ctx, model.Inputs{
 		Config:       cfg.Models,
 		Lookup:       os.Getenv,
 		RoutedClass:  dec.Class,
 		RoutedReason: router.ReasonsText(dec.Reasons),
-	})
+	}, runtimeLocalityObserver(cfg))
 	if err != nil {
 		return nil, false, err
 	}
@@ -760,6 +760,7 @@ type promptRoutingSection struct {
 	Class           string   `json:"class,omitempty"`
 	Provider        string   `json:"provider,omitempty"`
 	Model           string   `json:"model,omitempty"`
+	LocalitySource  string   `json:"locality_source,omitempty"`
 	Source          string   `json:"source,omitempty"`
 	ExecutionSource string   `json:"execution_source,omitempty"`
 	Reasons         []string `json:"reasons,omitempty"`
@@ -769,7 +770,7 @@ type promptRoutingSection struct {
 // document's routing section. It renders the selection even when routing did not
 // apply, so the effective provider/model are always visible.
 func promptRoutingDoc(tr *taskRouting, sel model.Selection) *promptRoutingSection {
-	out := &promptRoutingSection{Provider: sel.Provider, Model: sel.Model}
+	out := &promptRoutingSection{Provider: sel.Provider, Model: sel.Model, LocalitySource: string(sel.LocalitySource)}
 	if tr != nil {
 		out.Class = string(tr.Class)
 		out.Source = string(tr.Source)
@@ -795,6 +796,7 @@ func writePromptRoutingArtifact(rn *runpkg.Run, wi workitem.WorkItem, tr *taskRo
 		Provider:        sel.Provider,
 		Model:           sel.Model,
 		Locality:        string(sel.Locality),
+		LocalitySource:  string(sel.LocalitySource),
 		ExecutionSource: executionSourceFor(tr),
 		Checkpoints:     tr.Checkpoints,
 		Signals:         routingSignalsDoc(tr.Signals),

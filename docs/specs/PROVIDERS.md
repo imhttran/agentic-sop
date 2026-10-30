@@ -115,9 +115,10 @@ independently of the specialized adapters, resolved with the precedence
 `environment > configuration > default` and a built-in default of
 `http://127.0.0.1:8000`. It MUST use `SOP_OPENAI_COMPATIBLE_BASE_URL` (and
 `providers.openai_compatible.endpoint`), never `SOP_MLX_BASE_URL` or
-`SOP_LLAMACPP_BASE_URL`. Locality is configuration, not inference: both
-`provider=openai_compatible, locality=local` and `locality=cloud` are legal, and
-the provider MUST NOT decide locality from the endpoint or the model name.
+`SOP_LLAMACPP_BASE_URL`. Both `provider=openai_compatible, locality=local` and
+`locality=cloud` are legal, but the provider MUST NOT report either: `/v1/models`
+carries no locality evidence, and neither the endpoint host nor the model name
+(including a Claude name) decides it. Its `ModelInfo.Locality` stays undetermined.
 
 **Required.** A text-only execution provider (llama.cpp, MLX, and the generic
 `openai_compatible` transport) MUST declare the text-generation capabilities it
@@ -189,9 +190,14 @@ Capabilities}` plus optional metadata (`Family`, `ParameterSize`, `Quantization`
   MUST NOT override a server that does answer; with no configured model the failure
   stays `ErrDiscoveryUnsupported`.
 - **Required.** `Locality` MUST be populated only when the runtime determines it
-  reliably. Ollama's model list does not report locality, so Ollama leaves it
-  empty; the authoritative locality for a run is the routing selection's, never a
-  provider's guess.
+  reliably. Ollama reports a non-empty `remote_host` for a cloud model in
+  `/api/tags`; a listed entry without one is local. Its per-model `/api/show`
+  reports cloud when `remote_host` is present, and leaves an empty field
+  undetermined rather than guessing. The OpenAI-compatible adapters report no
+  locality at all. A provider MUST NOT infer locality from the endpoint host, the
+  absence of `:cloud`, or an arbitrary model name. The authoritative locality for a
+  run is the routing selection's; provider locality is evidence the resolver may
+  use, never a routing decision.
 - **Implemented.** Optional metadata is populated only when the runtime reports it
   reliably (Ollama fills it from `/api/tags`; the OpenAI-compatible adapters leave
   it unset). A zero value means "not determined", never "absent"; `ModelInfo.Metadata`
@@ -318,7 +324,8 @@ providers:
 
 **Implemented.** `sop providers [--models]` prints each provider's id, health, and
 model count; `--models` also lists discovered models with locality and
-capabilities, where determined.
+capabilities, where determined. A locality line appears only when the runtime
+reports one; the OpenAI-compatible adapters do not fabricate `locality: local`.
 
 **Required.** Inspection MUST be read-only: it MUST NOT create or mutate SOP
 state and MUST NOT print secrets or endpoints.

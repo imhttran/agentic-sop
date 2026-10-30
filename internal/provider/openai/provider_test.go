@@ -7,7 +7,6 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/provider"
 	"github.com/imhttran/agentic-sop/internal/provider/openai"
 )
@@ -41,8 +40,11 @@ func TestOpenAIHealthAndModels(t *testing.T) {
 	if len(infos) != 2 || infos[0].Name != "local-model" {
 		t.Fatalf("models = %+v", infos)
 	}
-	if infos[0].Locality != model.LocalityLocal {
-		t.Fatalf("locality = %q, want local", infos[0].Locality)
+	// The generic OpenAI-compatible adapter never claims a locality: the endpoint
+	// host and the model name are not evidence, so the listing stays undetermined
+	// on both local and remote endpoints.
+	if infos[0].Locality != "" {
+		t.Fatalf("locality = %q, want undetermined", infos[0].Locality)
 	}
 	if !infos[0].Capabilities.Chat.Present() {
 		t.Fatalf("chat capability = %v", infos[0].Capabilities.Chat)

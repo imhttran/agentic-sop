@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -44,7 +45,7 @@ func TestApplyModelRoutingInactiveByDefault(t *testing.T) {
 	cfg := config.Default()
 	before := cfg.Agent
 
-	res, err := applyModelRouting(&cfg, "")
+	res, err := applyModelRouting(context.Background(), &cfg, "")
 	if err != nil {
 		t.Fatalf("applyModelRouting: %v", err)
 	}
@@ -73,7 +74,7 @@ func TestApplyModelRoutingFromEnvironment(t *testing.T) {
 	setClassEnv(t, "medium", "nemotron-3-super:cloud", "cloud")
 
 	cfg := config.Default()
-	res, err := applyModelRouting(&cfg, "")
+	res, err := applyModelRouting(context.Background(), &cfg, "")
 	if err != nil {
 		t.Fatalf("applyModelRouting: %v", err)
 	}
@@ -91,7 +92,7 @@ func TestApplyModelRoutingCLIOverride(t *testing.T) {
 	setClassEnv(t, "large", "large-model", "cloud")
 
 	cfg := config.Default()
-	res, err := applyModelRouting(&cfg, "large")
+	res, err := applyModelRouting(context.Background(), &cfg, "large")
 	if err != nil {
 		t.Fatalf("applyModelRouting: %v", err)
 	}
@@ -104,7 +105,7 @@ func TestApplyModelRoutingInvalidClassIsActionable(t *testing.T) {
 	clearModelEnv(t)
 	t.Setenv("SOP_MODEL_DEFAULT_CLASS", "gigantic")
 	cfg := config.Default()
-	if _, err := applyModelRouting(&cfg, ""); err == nil {
+	if _, err := applyModelRouting(context.Background(), &cfg, ""); err == nil {
 		t.Fatal("expected an error for an unknown model class")
 	}
 }
@@ -202,12 +203,13 @@ func TestRunRecordsModelSelectionEvidence(t *testing.T) {
 	var sel model.Selection
 	readRunJSON(t, filepath.Join(runDir, "model-selection.json"), &sel)
 	want := model.Selection{
-		Class:    model.ClassSmall,
-		Provider: "ollama",
-		Model:    "qwen3:4b",
-		Locality: model.LocalityLocal,
-		Source:   model.SourceCLI,
-		Reason:   model.ReasonCLIClass,
+		Class:          model.ClassSmall,
+		Provider:       "ollama",
+		Model:          "qwen3:4b",
+		Locality:       model.LocalityLocal,
+		LocalitySource: model.LocalitySourceDefault,
+		Source:         model.SourceCLI,
+		Reason:         model.ReasonCLIClass,
 	}
 	if sel != want {
 		t.Fatalf("model-selection.json = %+v, want %+v", sel, want)

@@ -76,7 +76,7 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
-	routing, err := applyModelRouting(&cfg, d.modelClass)
+	routing, err := applyModelRouting(context.Background(), &cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
