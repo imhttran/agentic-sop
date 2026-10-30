@@ -320,6 +320,30 @@ override:
   escalation policy (Phase 5) do not replace it: an operator's explicit class is
   never silently swapped for another.
 
+## Supporting-Stage Classes
+
+Routing and `--model-class` select the model for implementation and fixes. The
+supporting stages choose their model separately:
+
+| Stage | Unpinned behavior |
+| --- | --- |
+| `plan` (task-level plan) | the run-level class (`--model-class`, else the default class). It runs before per-task routing, so it never follows the routed class. |
+| `review` | the run-level class |
+| `jev` (early and quality JEV) | `SOP_OLLAMA_MODEL`, else the Ollama built-in default model, independent of the class table |
+
+An operator MAY pin a stage to a class with `models.stages.<stage>` or
+`SOP_MODEL_STAGE_<STAGE>_CLASS` (the environment wins). A pinned stage:
+
+- MUST resolve through the same routing table as any other class;
+- MUST fail at startup, before any model call, when the class is unknown or, for
+  `jev`, when the class's provider is not `ollama` (JEV runs only on Ollama);
+- MUST NOT change any gate: it selects a model only.
+
+An unpinned stage MUST keep the behavior in the table above, so an existing
+project is unchanged. The model each stage ran on MUST be recorded under
+`stages` in `model-selection.json` (source `stage`, `run`, `ollama-env`, or
+`review-engine`).
+
 ## Failure Semantics
 
 JEV analysis and JEV infrastructure failure are distinct:

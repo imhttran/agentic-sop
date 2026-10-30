@@ -7,7 +7,9 @@ import (
 	"io"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/model"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	"github.com/imhttran/agentic-sop/internal/review"
 )
@@ -35,6 +37,10 @@ func runReview(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 	if _, err := applyModelRouting(context.Background(), &cfg, ""); err != nil {
+		fmt.Fprintf(stderr, "review: %v\n", err)
+		return exitError
+	}
+	if err := applyStageModels(context.Background(), &d, cfg); err != nil {
 		fmt.Fprintf(stderr, "review: %v\n", err)
 		return exitError
 	}
@@ -96,9 +102,16 @@ func reviewProvider(cfg config.Config, d deps) (review.Provider, error) {
 	}
 
 	applyCargoAgentTool(d, cfg)
-	a, err := d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class)
+	// A pinned review class (models.stages.review) wins; otherwise review runs on
+	// the run-level agent, as before.
+	a, err := stageAgent(cfg, d, model.StageReview, agent.Review, nil)
 	if err != nil {
 		return nil, err
+	}
+	if a == nil {
+		if a, err = d.newAgent(cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, cfg.Agent.Class); err != nil {
+			return nil, err
+		}
 	}
 	return review.NewAgentProvider(a), nil
 }

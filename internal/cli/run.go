@@ -210,6 +210,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyStageModels(context.Background(), &d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to the lifecycle so the run records it.
 	d.routing = routing
 	applyCargoAgentTool(d, cfg)
@@ -338,7 +342,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// the selected class/provider/model and why remain inspectable even when the
 	// lifecycle stops early. It is diagnostic: nothing reads it back.
 	if d.routing.Active {
-		writeModelSelectionArtifact(rn, d.routing.Selection)
+		writeModelSelectionArtifact(rn, d.routing.Selection, stageModelDocs(cfg, d))
 	}
 	res, err := runStages(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
 	// Record lifecycle accounting before any early return, so a failed attempt is
@@ -350,7 +354,7 @@ func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agen
 	// artifact records the class, reasons, and typed signals. Both are diagnostic.
 	if res.routing != nil {
 		res.modelSelection = &res.routing.Selection
-		writeModelSelectionArtifact(rn, res.routing.Selection)
+		writeModelSelectionArtifact(rn, res.routing.Selection, stageModelDocs(cfg, d))
 		// Persist the routing decision and surface any contract violation (an
 		// unknown version or source that failed closed at the store boundary) rather
 		// than discarding it. The artifact is diagnostic only, so this never changes
@@ -669,11 +673,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// instead of re-deriving them from task prose and does not promote a repository
 			// discovery target to an external prerequisite. An ad-hoc/no-plan context is
 			// empty and preserves the previous behavior.
+			planAgent, perr := stageAgent(cfg, d, model.StagePlan, agent.Plan, a)
+			if perr != nil {
+				return lifeResult{}, fmt.Errorf("plan: %w", perr)
+			}
 			pctx := loadPlanContext(dir, spec.ID)
 			if pctx.Project == "" {
 				pctx.Project = cfg.Project.Name
 			}
-			plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
+			plan, err = planner.New(planAgent).OnRepair(func(attempt int, cause error) {
 				rec.PlanRepair()
 				rec.AgentCall()
 				fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
@@ -1935,7 +1943,7 @@ func modelSelectionDoc(routing model.Result) *model.Selection {
 // the layer that chose it, whether a fallback was used, and why are all durable. It
 // is written before the lifecycle so it survives a run that stops early. It is
 // evidence only: nothing reads it back to drive a decision.
-func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection) {
+func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection, stages map[string]runpkg.StageModel) {
 	art := runpkg.ModelSelectionArtifact{
 		SchemaVersion:  runpkg.ModelSelectionVersion,
 		Class:          string(sel.Class),
@@ -1946,6 +1954,7 @@ func writeModelSelectionArtifact(rn *runpkg.Run, sel model.Selection) {
 		Source:         string(sel.Source),
 		Fallback:       sel.Fallback,
 		Reason:         sel.Reason,
+		Stages:         stages,
 	}
 	// Fail closed on an unsupported version rather than persist an artifact a
 	// consumer cannot interpret. The write itself stays best-effort, like the other

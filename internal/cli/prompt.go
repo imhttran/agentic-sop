@@ -254,6 +254,10 @@ func runPrompt(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "prompt: %v\n", err)
 		return exitError
 	}
+	if err := applyStageModels(context.Background(), &d, cfg); err != nil {
+		fmt.Fprintf(stderr, "prompt: %v\n", err)
+		return exitError
+	}
 
 	// Prompt progress goes to stderr in machine mode so stdout carries only the
 	// structured result document.
