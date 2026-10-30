@@ -858,8 +858,18 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// strict no-op unless early_jev.gates.task_triage is enabled. A policy
 	// escalation stops through the existing human boundary and introduces no new
 	// task state.
-	tri := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointTaskTriage)
-	sess.noteEarlyJEV(tri)
+	//
+	// Triage judges the task, which does not change between attempts, so a retry
+	// or continue within the same run reuses the first result. Asking again only
+	// invites a different answer to the same question: a retry once re-filed a
+	// data race as a HIGH security finding and parked a task the first triage had
+	// cleared.
+	tri, reused := sess.cachedTriage(task.ID)
+	if !reused {
+		tri = runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointTaskTriage)
+		sess.noteEarlyJEV(tri)
+		sess.cacheTriage(task.ID, tri)
+	}
 	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
 		// Park the run at the existing WAITING_FOR_HUMAN stage before recording the

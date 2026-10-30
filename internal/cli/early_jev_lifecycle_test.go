@@ -212,3 +212,25 @@ func TestGraphRunTriageCodeFindingDoesNotStop(t *testing.T) {
 		t.Errorf("implementation ran %d times, want 1", a.impl)
 	}
 }
+
+// TestGraphRunRetryReusesTriage proves a retry within the same run reuses the
+// task's first triage result instead of asking again, so a changed answer to the
+// same question cannot park a task the first triage cleared.
+func TestGraphRunRetryReusesTriage(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, earlyTriageGraphConfig)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Fix stock", Objective: "Fix stock.", AcceptanceCriteria: "no oversell", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &onceEmptyAgent{fakeCapabilityAgent: &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}}
+	analyzer := &earlyFakeAnalyzer{result: earlyClearResult(jev.PurposeTaskTriage)}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run")
+	if code != exitOK || !strings.Contains(stdout, "Retrying: T001") {
+		t.Fatalf("want T001 retried in-run and completed: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if analyzer.calls != 1 {
+		t.Errorf("triage analyzer calls = %d, want 1 (the retry reuses the first result)", analyzer.calls)
+	}
+}

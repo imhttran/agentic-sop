@@ -35,10 +35,33 @@ type runSession struct {
 	scoped bool
 	// earlyJEV tallies this run's early JEV checks, so a run where every one
 	// failed can say so once instead of only per task.
+	// triage holds each task's early JEV triage result for this run.
+	triage   map[string]earlyGateResult
 	earlyJEV struct {
 		ran, failed int
 		detail      string
 	}
+}
+
+// cachedTriage returns this run's earlier triage result for a task.
+func (s *runSession) cachedTriage(taskID string) (earlyGateResult, bool) {
+	if s == nil {
+		return earlyGateResult{}, false
+	}
+	tri, ok := s.triage[taskID]
+	return tri, ok
+}
+
+// cacheTriage records a task's triage result for the rest of the run. Only a
+// result that actually ran is kept, so a disabled gate stays a strict no-op.
+func (s *runSession) cacheTriage(taskID string, tri earlyGateResult) {
+	if s == nil || !tri.Ran {
+		return
+	}
+	if s.triage == nil {
+		s.triage = map[string]earlyGateResult{}
+	}
+	s.triage[taskID] = tri
 }
 
 // noteEarlyJEV records one early JEV checkpoint result.
