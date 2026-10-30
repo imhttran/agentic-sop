@@ -38,18 +38,22 @@ func TestRunInvocationCompletionEvidence(t *testing.T) {
 		validation      string
 		mutate          string
 		wantPass        bool
+		// deliverable, when set, is declared by the task; "present" also creates it.
+		deliverable string
 	}{
-		{"required mutation absent in dirty tree", true, "true", "", false},
-		{"same-content write is not a mutation", true, "true", "noop", false},
-		{"validated legacy no-change completion", false, "true", "", true},
-		{"no-change validation fails", false, "false", "", false},
-		{"no-change without validation evidence", false, "", "", false},
-		{"actual repository mutation", true, "true", "source", true},
-		{"mutation of pre-existing dirty file", true, "true", "tracked", true},
-		{"deletion of pre-existing dirty file", true, "true", "delete", true},
-		{"fix produces the required mutation", false, "test -f result.txt", "fix", true},
-		{"SOP-owned mutation only", true, "true", "state", false},
-		{"excluded report mutation only", true, "true", "report", false},
+		{"required mutation absent in dirty tree", true, "true", "", false, ""},
+		{"same-content write is not a mutation", true, "true", "noop", false, ""},
+		{"validated legacy no-change completion", false, "true", "", true, ""},
+		{"no-change validation fails", false, "false", "", false, ""},
+		{"no-change without validation evidence", false, "", "", false, ""},
+		{"actual repository mutation", true, "true", "source", true, ""},
+		{"mutation of pre-existing dirty file", true, "true", "tracked", true, ""},
+		{"deletion of pre-existing dirty file", true, "true", "delete", true, ""},
+		{"fix produces the required mutation", false, "test -f result.txt", "fix", true, ""},
+		{"SOP-owned mutation only", true, "true", "state", false, ""},
+		{"excluded report mutation only", true, "true", "report", false, ""},
+		{"no-change claim with a declared deliverable missing", false, "true", "", false, "missing"},
+		{"no-change claim with the declared deliverable present", false, "true", "", true, "present"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			dir := newDirtyRepo(t)
@@ -57,7 +61,14 @@ func TestRunInvocationCompletionEvidence(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			writeFile(t, dir, "TASK.md", runTaskFile)
+			task := runTaskFile
+			if tc.deliverable != "" {
+				task += "\n## Deliverables\n\n- `widget.txt`\n"
+				if tc.deliverable == "present" {
+					writeFile(t, dir, "widget.txt", "done\n")
+				}
+			}
+			writeFile(t, dir, "TASK.md", task)
 			cfg := "project:\n  name: x\nquality:\n  max_fix_cycles: 1\n"
 			if tc.validation != "" {
 				cfg += "validation:\n  build:\n    - " + tc.validation + "\n"

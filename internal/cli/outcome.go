@@ -291,6 +291,22 @@ func deliverableCriteria(spec *taskfile.Spec, dir string) []outcome.Criterion {
 	return criteria
 }
 
+// missingDeliverables returns the declared deliverable paths that do not exist
+// in dir, in declaration order. It applies the same path rule as
+// deliverableCriteria, so the lifecycle and the outcome verdict agree on what a
+// deliverable is.
+func missingDeliverables(spec *taskfile.Spec, dir string) []string {
+	var missing []string
+	for _, d := range spec.Deliverables {
+		for _, p := range deliverablePaths(d) {
+			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p))); err != nil {
+				missing = append(missing, p)
+			}
+		}
+	}
+	return missing
+}
+
 // deriveMappedOutcome is the SOP-003 verdict for a stage that declares an
 // acceptance mapping. The quality gate is recorded as separate validation; each
 // acceptance criterion is met only through its mapped check or an accepting manual

@@ -1187,7 +1187,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// or a vacuously passing empty suite. Explicit ALREADY_SATISFIED still requires
 	// the trusted harness proof above. Missing evidence uses the existing bounded
 	// IMPLEMENT_NO_CHANGES continuation, never an artificial mutation or PASS.
-	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed()
+	// Green validation only proves the existing code builds: a declared
+	// deliverable that does not exist proves the work is not already done, so a
+	// no-change claim against a missing deliverable is never a validated pass.
+	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed() &&
+		len(missingDeliverables(spec, dir)) == 0
 	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied &&
 		len(taskChangeEvidence(rn, reports...)) == 0 && !validatedNoChange {
 		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
