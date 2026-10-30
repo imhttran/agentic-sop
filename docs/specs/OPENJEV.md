@@ -401,6 +401,13 @@ namespace ([../reference/CONFIGURATION.md](../reference/CONFIGURATION.md)).
   immediately before implementation. It is analysis only: it MUST NOT execute or
   mutate anything.
 
+Each early checkpoint states that it runs before implementation and receives
+bounded, read-only repository context: declared paths are marked as new or
+existing, their directories are listed, and existing declared files may contribute
+bounded excerpts. Repository-rooted access excludes symlink escapes. A declared
+file that does not exist yet is therefore pre-implementation context, not evidence
+that implementation failed.
+
 Both preserve the boundary: JEV produces structured evidence; SOP policy
 (`internal/autonomy`) decides; IMPLEMENT/FIX changes code. The three analysis
 purposes (quality, task triage, pre-execution) are distinct so evidence is never
