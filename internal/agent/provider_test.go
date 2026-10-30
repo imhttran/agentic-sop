@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -587,4 +588,36 @@ func TestHarnessFromConfigModel(t *testing.T) {
 		}
 		var _ Harness = h
 	})
+}
+
+// TestTimeoutNamesItsSetting pins that a model call cut off by the client
+// timeout says so and names the setting that raises it, for each identity.
+func TestTimeoutNamesItsSetting(t *testing.T) {
+	release := make(chan struct{})
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { <-release }))
+	defer srv.Close()
+	defer close(release)
+
+	for id, env := range map[string]string{
+		ProviderOpenAICompatible: EnvOpenAICompatibleTimeout,
+		ProviderLlamaCpp:         EnvLlamaCppTimeout,
+		ProviderMLX:              EnvMLXTimeout,
+	} {
+		c, err := NewOpenAICompatible(id, srv.URL, "m", "", 50*time.Millisecond)
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = c.Generate(context.Background(), validRequest(Review))
+		if !errors.Is(err, errTimedOut) || !strings.Contains(err.Error(), env) {
+			t.Errorf("%s timeout error = %v, want errTimedOut naming %s", id, err, env)
+		}
+	}
+
+	o, err := NewOllama(srv.URL, "m", 50*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := o.Generate(context.Background(), validRequest(Review)); !strings.Contains(fmt.Sprint(err), EnvOllamaTimeout) {
+		t.Errorf("ollama timeout error = %v, want it to name %s", err, EnvOllamaTimeout)
+	}
 }
