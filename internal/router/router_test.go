@@ -263,3 +263,24 @@ func contains(xs []string, want string) bool {
 	}
 	return false
 }
+
+// TestStatedComplexityRoutes pins that an early checkpoint's own complexity
+// rating routes a clean PASS: HIGH to large, MEDIUM off small, LOW or unstated
+// unchanged.
+func TestStatedComplexityRoutes(t *testing.T) {
+	task := TaskSignals{AcceptanceCriteria: 1, FilesAffected: 1}
+	for _, tc := range []struct {
+		rating jev.Complexity
+		want   model.Class
+	}{
+		{jev.ComplexityHigh, model.ClassLarge},
+		{jev.ComplexityMedium, model.ClassMedium},
+		{jev.ComplexityLow, model.ClassSmall},
+		{"", model.ClassSmall},
+	} {
+		ev := &jev.Evidence{Version: jev.EvidenceVersion, Purpose: jev.PurposeTaskTriage, Severity: jev.SeverityInfo, Status: jev.EvidencePass, Complexity: tc.rating}
+		if got := Decide(SignalsFrom(ev, task)).Class; got != tc.want {
+			t.Errorf("complexity %q routed to %s, want %s", tc.rating, got, tc.want)
+		}
+	}
+}

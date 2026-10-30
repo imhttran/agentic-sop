@@ -217,6 +217,15 @@ func SignalsFrom(ev *jev.Evidence, task TaskSignals) Signals {
 		}
 	}
 
+	// An early checkpoint's own rating counts alongside its findings, so a
+	// clean PASS can still say the task is hard.
+	switch ev.Complexity {
+	case jev.ComplexityHigh:
+		complexity = max(complexity, 3)
+	case jev.ComplexityMedium:
+		complexity = max(complexity, 2)
+	}
+
 	s.Risk = levelForScore(risk)
 	s.Complexity = levelForScore(complexity)
 	if s.Scope == ScopeCross {

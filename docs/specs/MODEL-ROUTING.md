@@ -267,8 +267,14 @@ The router MUST consume only typed evidence, never free-form prose:
 - the SOP task's structural signals (acceptance-criteria count, dependency count,
   and, when known, file count), and
 - the typed JEV evidence produced by the early checkpoints
-  (`internal/jev` evidence: closed purpose, severity, status, category, and a
-  bounded confidence).
+  (`internal/jev` evidence: closed purpose, severity, status, category, a
+  bounded confidence, and an optional `LOW`/`MEDIUM`/`HIGH` complexity rating).
+
+The complexity signal is the higher of what the findings imply and the
+checkpoint's own rating, so a clean `PASS` can still mark a task as hard: `HIGH`
+routes to `large`, and `MEDIUM` keeps a task off `small`. Only the task-triage
+and pre-execution checkpoints record a rating; an unstated or unknown rating
+routes exactly as before.
 
 The router MUST NOT perform string matching, keyword detection, or topic-word
 analysis on any summary, detail, or message text.
