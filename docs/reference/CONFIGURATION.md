@@ -774,6 +774,10 @@ early_jev:
 - `early_jev.fail_on` names the severities that escalate to a human boundary; it
   defaults to the `quality.fail_on` severities. A finding below every `fail_on`
   severity is advisory and the task continues.
+- A read-only `sop prompt` (review, plan, diagnose, design tests) changes nothing,
+  so only a security-sensitive finding (security, destructive, credential, or
+  approval-sensitive) stops it at that boundary. A bug or an ambiguity in the code
+  under review is what the request is about, so the prompt runs and answers it.
 - The early layer reuses the existing JEV analyzer/provider resolution (the Ollama
   path and its `SOP_OLLAMA_*` settings); no second provider stack is configured.
   See [`../specs/OPENJEV.md`](../specs/OPENJEV.md) for the checkpoint behavior.

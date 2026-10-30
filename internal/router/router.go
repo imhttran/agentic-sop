@@ -184,7 +184,7 @@ func SignalsFrom(ev *jev.Evidence, task TaskSignals) Signals {
 		// the largest class (Phase 3.5 §5: conservative escalation; a security risk
 		// overrides the small-task optimization).
 		itemRisk := sev
-		if securityFamily(item.Category) && itemRisk < 3 {
+		if item.Category.SecuritySensitive() && itemRisk < 3 {
 			itemRisk = 3
 		}
 		if itemRisk > risk {
@@ -336,18 +336,6 @@ func severityScore(s jev.Severity) int {
 		return 0
 	default:
 		return 0
-	}
-}
-
-// securityFamily reports whether a typed category is security-sensitive, so it
-// never routes to the smallest class.
-func securityFamily(c jev.Category) bool {
-	switch c {
-	case jev.CategorySecurity, jev.CategoryDestructive,
-		jev.CategoryCredentialSensitivity, jev.CategoryApprovalSensitive:
-		return true
-	default:
-		return false
 	}
 }
 
