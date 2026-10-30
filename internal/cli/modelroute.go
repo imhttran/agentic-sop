@@ -22,7 +22,7 @@ func loadDotEnv(dir string) error {
 		return err
 	}
 	dotenv.Apply(vars)
-	return nil
+	return config.ValidateAutonomyEnv()
 }
 
 // applyModelRouting resolves the optional model-routing layer and, when it is

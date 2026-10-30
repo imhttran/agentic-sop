@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -117,6 +118,8 @@ func TestRunGraphTransientProviderRetries(t *testing.T) {
 // continuation budget (max_continuations, default 4) eventually blocks it
 // terminally, as a bounded automation failure rather than a human decision.
 func TestRunGraphContinueIsBounded(t *testing.T) {
+	// This test spans runs: each CONTINUE must end its run, as before in-run continues.
+	t.Setenv(config.EnvRunMaxContinues, "0")
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
 		t.Fatal(err)
@@ -280,5 +283,50 @@ func TestRunGraphRetriesWithinTheRun(t *testing.T) {
 	defer st.Close()
 	if got, err := st.Get("S001"); err != nil || got.Status != domain.LOCAL_DONE {
 		t.Errorf("S001 = %+v, %v; want LOCAL_DONE in the same run", got, err)
+	}
+}
+
+// onceUnfinishedAgent stops unfinished (a CONTINUE) on its first implementation
+// call and then behaves like the wrapped agent.
+type onceUnfinishedAgent struct {
+	*fakeCapabilityAgent
+	stopped bool
+}
+
+func (a *onceUnfinishedAgent) Generate(ctx context.Context, r agent.Request) (agent.Response, error) {
+	if r.Capability == agent.Implement && !a.stopped {
+		a.stopped = true
+		return agent.Response{Outcome: &agent.Outcome{Status: agent.OutcomeFailed,
+			Reason: "the Ollama agent IMPLEMENT did not complete after 24 iterations (mutation_observed=true, termination=iteration_limit)"}}, nil
+	}
+	return a.fakeCapabilityAgent.Generate(ctx, r)
+}
+
+// TestRunGraphContinuesWithinTheRun proves a CONTINUE is continued in the same
+// run up to SOP_RUN_MAX_CONTINUES, and that past the limit the run stops on the
+// task and names the setting.
+func TestRunGraphContinuesWithinTheRun(t *testing.T) {
+	setup := func() string {
+		dir := t.TempDir()
+		if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+		writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+		return dir
+	}
+	dir := setup()
+	a := &onceUnfinishedAgent{fakeCapabilityAgent: &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}}
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run")
+	if code != exitOK || !strings.Contains(stdout, "Continuing: S001 (in-run continue 1 of 1)") {
+		t.Fatalf("code=%d, want S001 continued in-run and completed:\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+
+	t.Setenv(config.EnvRunMaxContinues, "0")
+	dir = setup()
+	a = &onceUnfinishedAgent{fakeCapabilityAgent: &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}}
+	code, _, stderr = runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run")
+	if code != exitError || !strings.Contains(stderr, config.EnvRunMaxContinues) {
+		t.Errorf("limit 0: code=%d stderr=%q, want a stop naming %s", code, stderr, config.EnvRunMaxContinues)
 	}
 }

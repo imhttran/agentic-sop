@@ -2,6 +2,8 @@ package config
 
 import (
 	"fmt"
+	"os"
+	"strconv"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/autonomy"
@@ -54,7 +56,48 @@ func (c Config) AutonomyPolicy() autonomy.Policy {
 	if c.Autonomy.MaxContinuations != nil && *c.Autonomy.MaxContinuations > 0 {
 		p.MaxContinuations = *c.Autonomy.MaxContinuations
 	}
+	if n, ok, _ := envCount(EnvMaxContinuations, 1); ok {
+		p.MaxContinuations = n
+	}
 	return p
+}
+
+// Environment overrides for the continuation budgets. They are validated before
+// any task runs (ValidateAutonomyEnv), so a bad value fails early.
+const (
+	// EnvMaxContinuations overrides autonomy.max_continuations: the total
+	// continuations a task may use across runs (at least 1).
+	EnvMaxContinuations = "SOP_AUTONOMY_MAX_CONTINUATIONS"
+	// EnvRunMaxContinues bounds how many of them a task may use within one sop run
+	// before the run stops on it (0 stops at the first, as before).
+	EnvRunMaxContinues = "SOP_RUN_MAX_CONTINUES"
+)
+
+// DefaultRunMaxContinues lets a task continue once within a run: a single
+// continuation clears a one-off stop, while a second in a row usually means the
+// model is stuck and the operator should look.
+const DefaultRunMaxContinues = 1
+
+// RunMaxContinues is how many continuations a task may use within one sop run.
+func (c Config) RunMaxContinues() int {
+	if n, ok, _ := envCount(EnvRunMaxContinues, 0); ok {
+		return n
+	}
+	return DefaultRunMaxContinues
+}
+
+// envCount parses name as an integer of at least min. ok is false when it is
+// unset; err reports a set but invalid value.
+func envCount(name string, min int) (int, bool, error) {
+	v := strings.TrimSpace(os.Getenv(name))
+	if v == "" {
+		return 0, false, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < min {
+		return 0, false, fmt.Errorf("config: %s=%q: want a whole number of at least %d", name, v, min)
+	}
+	return n, true, nil
 }
 
 // AutonomyLevel returns the resolved autonomy level string.
@@ -68,7 +111,17 @@ func (c *Config) validateAutonomy() error {
 	if level := strings.TrimSpace(c.Autonomy.Level); level != "" && !autonomy.Level(strings.ToLower(level)).Valid() {
 		return fmt.Errorf("config: unknown autonomy.level %q (want low, balanced, high)", c.Autonomy.Level)
 	}
-	return nil
+	return ValidateAutonomyEnv()
+}
+
+// ValidateAutonomyEnv rejects a set but invalid continuation override. It runs at
+// config load and again once the project .env is applied, which happens later.
+func ValidateAutonomyEnv() error {
+	if _, _, err := envCount(EnvMaxContinuations, 1); err != nil {
+		return err
+	}
+	_, _, err := envCount(EnvRunMaxContinues, 0)
+	return err
 }
 
 // normalizeLevel lowercases and trims an autonomy level for resolution.

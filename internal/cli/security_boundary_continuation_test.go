@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -80,6 +81,8 @@ func TestRunCTRL008ProductiveDiscoveryContinues(t *testing.T) {
 // max_attempts is 1, so consuming the retry budget would exhaust the task
 // immediately; two continuations still succeed, and the attempt count is untouched.
 func TestRunContinuationUsesContinuationBudgetNotRetryBudget(t *testing.T) {
+	// This test spans runs: each CONTINUE must end its run, as before in-run continues.
+	t.Setenv(config.EnvRunMaxContinues, "0")
 	dir := t.TempDir()
 	initProject(t, dir)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\nautonomy:\n  max_continuations: 2\n")
@@ -159,6 +162,8 @@ func TestRunSecurityDecisionRequiresHuman(t *testing.T) {
 // identical no-progress continuations reach the continuation ceiling and stop as a
 // bounded terminal state, without being mislabeled NEEDS_HUMAN.
 func TestRunIdenticalNoProgressContinuationIsBounded(t *testing.T) {
+	// This test spans runs: each CONTINUE must end its run, as before in-run continues.
+	t.Setenv(config.EnvRunMaxContinues, "0")
 	dir := t.TempDir()
 	initProject(t, dir)
 	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\nautonomy:\n  max_continuations: 2\n")
