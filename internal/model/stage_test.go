@@ -52,3 +52,24 @@ func TestStageDirect(t *testing.T) {
 		}
 	}
 }
+
+// TestSensitiveModel pins the sensitive model settings: set, unset, half set,
+// and an unknown provider.
+func TestSensitiveModel(t *testing.T) {
+	env := func(kv map[string]string) func(string) string { return func(k string) string { return kv[k] } }
+	sel, ok, err := SensitiveModel(env(map[string]string{EnvSensitiveProvider: "ollama", EnvSensitiveName: "mistral-large-4:cloud"}))
+	if err != nil || !ok || sel.Provider != "ollama" || sel.Model != "mistral-large-4:cloud" || sel.Reason != ReasonSensitiveModel {
+		t.Fatalf("sensitive model = %+v, %v, %v", sel, ok, err)
+	}
+	if _, ok, err := SensitiveModel(env(nil)); ok || err != nil {
+		t.Errorf("unset: ok=%v err=%v", ok, err)
+	}
+	for name, kv := range map[string]map[string]string{
+		"half set":         {EnvSensitiveName: "m"},
+		"unknown provider": {EnvSensitiveProvider: "nope", EnvSensitiveName: "m"},
+	} {
+		if _, _, err := SensitiveModel(env(kv)); err == nil {
+			t.Errorf("%s: want an error", name)
+		}
+	}
+}

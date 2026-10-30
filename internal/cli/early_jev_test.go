@@ -332,16 +332,17 @@ func TestEarlyJEVSeesRepository(t *testing.T) {
 }
 
 // TestBlockingEvidenceKeepsSecurityAndUnclassified pins which early findings may
-// stop work: security-sensitive and unclassified ones; never a code-level note.
+// stop work: sensitive and unclassified ones; never a code-level note.
 func TestBlockingEvidenceKeepsSecurityAndUnclassified(t *testing.T) {
 	ev := jev.Evidence{Items: []jev.EvidenceItem{
 		{Category: jev.CategoryAmbiguity, Severity: jev.SeverityHigh},
 		{Category: jev.CategoryScope, Severity: jev.SeverityHigh},
 		{Category: jev.CategoryCredentialSensitivity, Severity: jev.SeverityHigh},
+		{Category: jev.CategoryMedicalData, Severity: jev.SeverityHigh},
 		{Category: "", Severity: jev.SeverityHigh},
 	}}
 	got := blockingEvidence(ev).Items
-	if len(got) != 2 || got[0].Category != jev.CategoryCredentialSensitivity || got[1].Category != "" {
-		t.Fatalf("blocking items = %+v, want the credential and the unclassified finding", got)
+	if len(got) != 3 || got[0].Category != jev.CategoryCredentialSensitivity || got[1].Category != jev.CategoryMedicalData || got[2].Category != "" {
+		t.Fatalf("blocking items = %+v, want the credential, medical, and unclassified findings", got)
 	}
 }
