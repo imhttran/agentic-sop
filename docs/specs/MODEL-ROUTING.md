@@ -345,6 +345,13 @@ An operator MAY pin a stage to a class with `models.stages.<stage>` or
   `jev`, when the class's provider is not `ollama` (JEV runs only on Ollama);
 - MUST NOT change any gate: it selects a model only.
 
+A stage MAY instead be pinned straight to a provider and model
+(`SOP_MODEL_STAGE_<STAGE>_PROVIDER` and `_NAME`), outside the class table, so a
+model that must never implement is never reachable by routing. Such a pin MUST
+name both settings and a known provider, MUST NOT be combined with that stage's
+class pin, and for `plan` or `review` MUST fail at startup when `SOP_AGENT_MODEL` or
+the provider's own model variable would override it with a different model.
+
 An unpinned stage MUST keep the behavior in the table above, so an existing
 project is unchanged. The model each stage ran on MUST be recorded under
 `stages` in `model-selection.json` (source `stage`, `run`, `ollama-env`, or

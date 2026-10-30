@@ -67,6 +67,53 @@ func TestRunPinnedStagesUseTheirClass(t *testing.T) {
 	}
 }
 
+// TestRunStagePinnedToProvider proves a stage can run on a provider and model
+// outside the class table — a local read-only model reviewing — while routing and
+// implementation never see it, and that the artifact records it.
+func TestRunStagePinnedToProvider(t *testing.T) {
+	clearModelEnv(t)
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, stageModelsConfig)
+	t.Setenv(model.StageProviderEnvKey(model.StageReview), "openai_compatible")
+	t.Setenv(model.StageNameEnvKey(model.StageReview), "local-reviewer")
+
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
+	built := map[string]string{}
+	var out, errOut bytes.Buffer
+	d := deps{
+		getwd: func() (string, error) { return dir, nil },
+		newAgent: func(_, provider, name, _ string) (agent.Agent, error) {
+			built[name] = provider
+			return a, nil
+		},
+		readDiff:  func(context.Context, string) (string, error) { return "diff --git a/x b/x\n", nil },
+		commit:    func(context.Context, string, string) error { return nil },
+		newGitHub: func(string) github.Client { return &fakeGitHub{} },
+	}
+	if code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d); code != exitOK {
+		t.Fatalf("code=%d stdout=%s stderr=%s", code, &out, &errOut)
+	}
+	if built["local-reviewer"] != "openai_compatible" || built["small-model"] != "ollama" {
+		t.Fatalf("agents built = %v, want the local reviewer and the small implementer", built)
+	}
+
+	var art runpkg.ModelSelectionArtifact
+	readRunJSON(t, filepath.Join(dir, stateDirName, "runs", "T001", "model-selection.json"), &art)
+	if w := (runpkg.StageModel{Provider: "openai_compatible", Model: "local-reviewer", Source: "stage"}); art.Stages["review"] != w {
+		t.Errorf("stages[review] = %+v, want %+v", art.Stages["review"], w)
+	}
+
+	// A model variable that would override the pin fails at startup instead of
+	// silently running another model under the pinned name.
+	t.Setenv(agent.EnvOpenAICompatibleModel, "other-model")
+	out.Reset()
+	errOut.Reset()
+	if code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d); code == exitOK || !strings.Contains(errOut.String()+out.String(), agent.EnvOpenAICompatibleModel) {
+		t.Errorf("an overriding %s must fail naming it: code=%d stdout=%s stderr=%s", agent.EnvOpenAICompatibleModel, code, &out, &errOut)
+	}
+}
+
 // TestApplyStageModels covers the startup resolution: an unpinned stage is left
 // out, a pinned JEV class swaps the analyzer model, and a JEV class on a provider
 // JEV cannot run on is rejected.
