@@ -14,6 +14,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/jev"
 	"github.com/imhttran/agentic-sop/internal/model"
+	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/provider/ollama"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
@@ -561,5 +562,39 @@ func TestPromptReportInspectsRun(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("report missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// usageAgent answers like fakeCapabilityAgent and reports token usage the way a
+// real model client does.
+type usageAgent struct{ *fakeCapabilityAgent }
+
+func (a usageAgent) Generate(ctx context.Context, r agent.Request) (agent.Response, error) {
+	perf.AddUsage(ctx, "reviewer", 120, 30)
+	return a.fakeCapabilityAgent.Generate(ctx, r)
+}
+
+// TestPromptRecordsTokenUsage proves a read-only prompt records the token usage
+// of its model calls in the result document and prints the total.
+func TestPromptRecordsTokenUsage(t *testing.T) {
+	clearProviderEnv(t)
+	dir := t.TempDir()
+	a := usageAgent{&fakeCapabilityAgent{review: "the review"}}
+
+	code, stdout, stderr := runCLIWithAgent(t, dir, a, "prompt", "--capability", "review", "--json", "review this")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s", code, stderr)
+	}
+	var doc promptResultDoc
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("stdout is not JSON: %v\n%s", err, stdout)
+	}
+	if doc.Tokens["reviewer"] != (perf.Tokens{Calls: 1, Input: 120, Output: 30}) {
+		t.Errorf("tokens = %+v, want the reviewer call", doc.Tokens)
+	}
+
+	code, stdout, _ = runCLIWithAgent(t, t.TempDir(), a, "prompt", "--capability", "review", "review this")
+	if code != exitOK || !strings.Contains(stdout, "tokens: 120 in, 30 out across 1 model calls") {
+		t.Errorf("text output missing the token line:\n%s", stdout)
 	}
 }
