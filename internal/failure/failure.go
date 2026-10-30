@@ -639,12 +639,15 @@ func harnessIncomplete(text string) bool {
 	return matchesAny(text, harnessIncompleteMarkers)
 }
 
-// harnessNoProgressMarkers is the harness's fixed stale-iteration no-progress
-// diagnostic (IMPLEMENT_NO_PROGRESS / FIX_NO_PROGRESS). It is deliberately narrow:
-// only the guard's own wording matches, so ordinary "unfinished work" prose does
-// not become a no-progress stop.
+// harnessNoProgressMarkers is the harness's fixed no-progress diagnostic. It is
+// deliberately narrow: only the harness's own wording matches, so ordinary
+// "unfinished work" prose does not become a no-progress stop. The harness stops
+// for no progress two ways, and both carry termination=no_progress: the
+// stale-iteration guard (IMPLEMENT_NO_PROGRESS / FIX_NO_PROGRESS, "no repository
+// progress") and a model that keeps repeating one non-progressing action.
 var harnessNoProgressMarkers = []string{
 	"no repository progress",
+	"termination=no_progress",
 }
 
 // harnessNoProgress reports whether text carries the harness's no-progress stop.

@@ -897,6 +897,17 @@ func TestHarnessNoProgressIsBoundedRetry(t *testing.T) {
 	}
 }
 
+// TestRepeatedActionStallIsBoundedRetry proves the harness's other no-progress
+// stop, a model repeating one non-progressing action, classifies like the
+// stale-iteration guard instead of falling through to UNKNOWN and a human.
+func TestRepeatedActionStallIsBoundedRetry(t *testing.T) {
+	err := errors.New(`the Ollama agent IMPLEMENT stopped after 6 iterations; the model repeated a non-progressing action (termination=no_progress, model=deepseek-v4.1-flash:1017-cloud, repeated_action="read_file")`)
+	got := Classify(Evidence{Source: "IMPLEMENT", Err: err})
+	if got.Kind != NoProgress || got.Disposition != Retry {
+		t.Fatalf("got %s/%s, want %s/RETRY", got.Kind, got.Disposition, NoProgress)
+	}
+}
+
 // TestSecurityScanFailureIsBlockedNotAutoFixed proves a required security scan
 // failure has an explicit kind and is an operator block: SOP never auto-remediates
 // security findings. Approval boundaries still outrank it.
