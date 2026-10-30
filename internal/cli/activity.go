@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
+	"github.com/imhttran/agentic-sop/internal/perf"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/runtrace"
 )
@@ -125,6 +126,9 @@ func taskActivityContext(ctx context.Context, runDir string, stdout io.Writer, t
 	}
 	rec := activity.New(taskID, sinks)
 	rec.Emit(activity.StageStart, title, "")
+	// Every model call under this task reports its token usage here, whichever
+	// stage makes it (early JEV, plan, implement, fix, review).
+	ctx = perf.WithUsage(ctx, &perf.Usage{})
 	return runtrace.WithCollector(activity.WithRecorder(ctx, rec), collector)
 }
 

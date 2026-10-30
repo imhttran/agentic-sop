@@ -470,6 +470,10 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	defer func() {
 		run.Finish(time.Now())
 		writeRunMetrics(dir, planID, run)
+		if len(run.Tokens) > 0 {
+			sum := perf.TotalTokens(run.Tokens)
+			fmt.Fprintf(stdout, "tokens this run: %d in, %d out across %d model calls (per model: sop report)\n", sum.Input, sum.Output, sum.Calls)
+		}
 	}()
 
 	// The scheduler carries this invocation's automatic-recovery guard: it is

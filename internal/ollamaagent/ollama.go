@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/perf"
 )
 
 // chatMessage is one message in an Ollama chat conversation. ToolCalls is
@@ -60,6 +61,9 @@ var jsonFormatMode = json.RawMessage(`"json"`)
 type ollamaChatResponse struct {
 	Message chatMessage     `json:"message"`
 	Error   json.RawMessage `json:"error"`
+	// PromptEvalCount and EvalCount are Ollama's input and output token counts.
+	PromptEvalCount int `json:"prompt_eval_count"`
+	EvalCount       int `json:"eval_count"`
 }
 
 // errEmptyResponse is returned when the model produces no message content. It is
@@ -238,6 +242,7 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 	if detail := rawErrorMessage(out.Error); detail != "" {
 		return "", nil, fmt.Errorf("ollama: %s", detail)
 	}
+	perf.AddUsage(ctx, c.model, out.PromptEvalCount, out.EvalCount)
 	// A native tool call with empty content is a valid turn, never an empty
 	// response: only content == "" with no tool calls is errEmptyResponse.
 	calls := normalizeToolCalls(out.Message.ToolCalls)
