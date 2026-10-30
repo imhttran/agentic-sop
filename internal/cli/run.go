@@ -559,6 +559,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	var trouting *taskRouting
 	defer func() {
 		res.perf = rec.Task()
+		res.perf.Tokens = perf.UsageFrom(ctx)
 		_ = writeMetrics(rn, res.perf)
 		res.routing = trouting
 	}()

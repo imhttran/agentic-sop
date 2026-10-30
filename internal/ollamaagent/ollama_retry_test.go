@@ -10,6 +10,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/perf"
 )
 
 // These tests cover the bounded, provider-boundary retry in ollamaClient.chat.
@@ -321,5 +323,24 @@ func TestRetryableProviderErrorClassification(t *testing.T) {
 		if got := retryableProviderError(tc.err); got != tc.want {
 			t.Errorf("%s: retryableProviderError = %v, want %v", tc.name, got, tc.want)
 		}
+	}
+}
+
+// TestChatReportsTokenUsage pins that each tool-loop and JEV call reports
+// Ollama's prompt and output token counts into the context's usage.
+func TestChatReportsTokenUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"{}"},"prompt_eval_count":900,"eval_count":40}`))
+	}))
+	defer srv.Close()
+	c := newOllamaClient(Config{BaseURL: srv.URL, Model: "m", Timeout: 2 * time.Second, MaxOutputBytes: 1 << 20})
+	ctx := perf.WithUsage(context.Background(), &perf.Usage{})
+	for i := 0; i < 2; i++ {
+		if _, _, err := c.chat(ctx, []chatMessage{{Role: "user", Content: "hi"}}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if got := perf.UsageFrom(ctx)["m"]; got != (perf.Tokens{Calls: 2, Input: 1800, Output: 80}) {
+		t.Errorf("usage = %+v", got)
 	}
 }

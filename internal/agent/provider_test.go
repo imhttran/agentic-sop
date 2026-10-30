@@ -10,6 +10,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/perf"
 )
 
 func TestRenderPromptIncludesSections(t *testing.T) {
@@ -619,5 +621,31 @@ func TestTimeoutNamesItsSetting(t *testing.T) {
 	}
 	if _, err := o.Generate(context.Background(), validRequest(Review)); !strings.Contains(fmt.Sprint(err), EnvOllamaTimeout) {
 		t.Errorf("ollama timeout error = %v, want it to name %s", err, EnvOllamaTimeout)
+	}
+}
+
+// TestClientsReportTokenUsage pins that the Ollama and OpenAI-compatible clients
+// report the token counts their servers return into the context's usage.
+func TestClientsReportTokenUsage(t *testing.T) {
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"ok"},"prompt_eval_count":120,"eval_count":30}`))
+	}))
+	defer ollama.Close()
+	compat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}],"usage":{"prompt_tokens":70,"completion_tokens":7}}`))
+	}))
+	defer compat.Close()
+
+	ctx := perf.WithUsage(context.Background(), &perf.Usage{})
+	o, _ := NewOllama(ollama.URL, "om", time.Second)
+	c, _ := NewOpenAICompatible(ProviderOpenAICompatible, compat.URL, "cm", "", time.Second)
+	for _, a := range []Agent{o, c} {
+		if _, err := a.Generate(ctx, validRequest(Review)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := perf.UsageFrom(ctx)
+	if got["om"] != (perf.Tokens{Calls: 1, Input: 120, Output: 30}) || got["cm"] != (perf.Tokens{Calls: 1, Input: 70, Output: 7}) {
+		t.Errorf("usage = %+v", got)
 	}
 }

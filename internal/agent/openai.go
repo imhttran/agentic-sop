@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/perf"
 )
 
 // Environment variables configuring the OpenAI-compatible provider used for
@@ -139,10 +141,15 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 			Message chatMessage `json:"message"`
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
+		Usage struct {
+			PromptTokens     int `json:"prompt_tokens"`
+			CompletionTokens int `json:"completion_tokens"`
+		} `json:"usage"`
 	}
 	if err := postJSON(ctx, c.client, c.baseURL+"/v1/chat/completions", c.apiKey, body, &out); err != nil {
 		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, withTimeoutHint(err, c.timeoutEnv()))
 	}
+	perf.AddUsage(ctx, c.model, out.Usage.PromptTokens, out.Usage.CompletionTokens)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("%s %s: %s", c.id, request.Capability, detail)
 	}

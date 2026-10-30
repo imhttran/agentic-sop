@@ -8,6 +8,8 @@ import (
 	"os"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/perf"
 )
 
 // Environment variables configuring the Ollama provider.
@@ -87,12 +89,15 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	}
 
 	var out struct {
-		Message chatMessage     `json:"message"`
-		Error   json.RawMessage `json:"error"`
+		Message         chatMessage     `json:"message"`
+		Error           json.RawMessage `json:"error"`
+		PromptEvalCount int             `json:"prompt_eval_count"`
+		EvalCount       int             `json:"eval_count"`
 	}
 	if err := postJSON(ctx, o.client, o.baseURL+"/api/chat", "", body, &out); err != nil {
 		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, withTimeoutHint(err, EnvOllamaTimeout))
 	}
+	perf.AddUsage(ctx, o.model, out.PromptEvalCount, out.EvalCount)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("ollama %s: %s", request.Capability, detail)
 	}

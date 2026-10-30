@@ -122,6 +122,9 @@ type Task struct {
 	// was assembled (for example a verify-first pass), so an existing report is
 	// unchanged. It is metadata only.
 	Input *Input `json:"input,omitempty"`
+	// Tokens is the task's model token usage by model, as the servers reported
+	// it. It is omitted when no model call reported usage.
+	Tokens map[string]Tokens `json:"tokens,omitempty"`
 }
 
 // Run aggregates the tasks of one sop invocation.
@@ -137,6 +140,8 @@ type Run struct {
 	// sum of assemblies and the largest context/prompt size. It is omitted when no task
 	// assembled model input.
 	Input *Input `json:"input,omitempty"`
+	// Tokens is the run's token usage by model, summed from its tasks.
+	Tokens map[string]Tokens `json:"tokens,omitempty"`
 }
 
 // Recorder accumulates timing and counts for one task lifecycle. Its clock is
@@ -277,6 +282,7 @@ func (r *Run) Add(t Task) {
 	r.Counts = addCounts(r.Counts, t.Counts)
 	r.JEV = addJEV(r.JEV, t.JEV)
 	r.Input = addInput(r.Input, t.Input)
+	r.Tokens = addTokens(r.Tokens, t.Tokens)
 }
 
 // Finish records the run's total wall-clock duration.
@@ -322,6 +328,7 @@ func WriteTask(w io.Writer, t Task) {
 	}
 	WriteJEV(w, t.JEV)
 	WriteInput(w, t.Input)
+	WriteTokens(w, t.Tokens)
 }
 
 // WriteRun renders a run-level performance summary. Percentages are derived from
@@ -352,6 +359,23 @@ func WriteRun(w io.Writer, r Run) {
 	}
 	WriteJEV(w, r.JEV)
 	WriteInput(w, r.Input)
+	WriteTokens(w, r.Tokens)
+}
+
+// WriteTokens renders token usage per model and in total. Nothing is printed when
+// no call reported usage.
+func WriteTokens(w io.Writer, byModel map[string]Tokens) {
+	if len(byModel) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\nTokens (as reported by each server):\n")
+	fmt.Fprintf(w, "  %-36s %6s %12s %10s\n", "model", "calls", "input", "output")
+	for _, m := range sortedModels(byModel) {
+		t := byModel[m]
+		fmt.Fprintf(w, "  %-36s %6d %12d %10d\n", m, t.Calls, t.Input, t.Output)
+	}
+	sum := TotalTokens(byModel)
+	fmt.Fprintf(w, "  %-36s %6d %12d %10d\n", "TOTAL", sum.Calls, sum.Input, sum.Output)
 }
 
 // WriteInput renders a model-input size record. Nothing is printed when no input was
@@ -542,6 +566,10 @@ func (t Task) Line() string {
 	}
 	if t.JEV != nil {
 		line += fmt.Sprintf(", JEV invocations %d (%s)", t.JEV.Invocations, humanMS(t.JEV.TotalMS))
+	}
+	if len(t.Tokens) > 0 {
+		sum := TotalTokens(t.Tokens)
+		line += fmt.Sprintf(" | tokens %d in, %d out", sum.Input, sum.Output)
 	}
 	return line
 }
