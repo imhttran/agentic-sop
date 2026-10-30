@@ -95,6 +95,9 @@ func TestGraphRunTriageClearContinues(t *testing.T) {
 	if !strings.Contains(stdout, "T001 LOCAL_DONE") {
 		t.Errorf("task did not complete: %q", stdout)
 	}
+	if strings.Contains(stderr, "warning: early JEV") {
+		t.Errorf("a working early JEV must not warn: %q", stderr)
+	}
 }
 
 // TestGraphRunTriageEscalationStopsAtHumanBoundary proves that a blocking triage
@@ -180,5 +183,9 @@ func TestGraphRunTriageProviderFailureContinues(t *testing.T) {
 	}
 	if !art.ProviderFailed || !strings.Contains(art.FailureDetail, jev.ErrProviderFailure.Error()) {
 		t.Errorf("artifact failure_detail = %q, want the analyzer error recorded", art.FailureDetail)
+	}
+	// Every check this run failed, so the run says so once, with the reason.
+	if !strings.Contains(stderr, "warning: early JEV failed on all 1 checks") || !strings.Contains(stderr, jev.ErrProviderFailure.Error()) {
+		t.Errorf("stderr = %q, want the all-failed early JEV warning with its reason", stderr)
 	}
 }

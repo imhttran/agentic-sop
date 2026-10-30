@@ -33,6 +33,24 @@ type runSession struct {
 	// scoped enables verification.scoped test selection. Only a plan drive sets
 	// it, because only a drive runs the full-suite gate before completion.
 	scoped bool
+	// earlyJEV tallies this run's early JEV checks, so a run where every one
+	// failed can say so once instead of only per task.
+	earlyJEV struct {
+		ran, failed int
+		detail      string
+	}
+}
+
+// noteEarlyJEV records one early JEV checkpoint result.
+func (s *runSession) noteEarlyJEV(res earlyGateResult) {
+	if s == nil || !res.Ran {
+		return
+	}
+	s.earlyJEV.ran++
+	if res.ProviderFailed {
+		s.earlyJEV.failed++
+		s.earlyJEV.detail = res.FailureDetail
+	}
 }
 
 func newRunSession() *runSession {
