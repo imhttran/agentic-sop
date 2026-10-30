@@ -241,3 +241,44 @@ func readClassification(t *testing.T, dir, runID string) failure.Classification 
 	}
 	return cls
 }
+
+// onceEmptyAgent returns an empty-response failure on its first implementation
+// call and then behaves like the wrapped agent.
+type onceEmptyAgent struct {
+	*fakeCapabilityAgent
+	failed bool
+}
+
+func (a *onceEmptyAgent) Generate(ctx context.Context, r agent.Request) (agent.Response, error) {
+	if r.Capability == agent.Implement && !a.failed {
+		a.failed = true
+		return agent.Response{}, fmt.Errorf("the provider returned an empty response")
+	}
+	return a.fakeCapabilityAgent.Generate(ctx, r)
+}
+
+// TestRunGraphRetriesWithinTheRun proves a RETRY that spent an attempt (here an
+// empty model response) is retried in the same run and completes there, instead
+// of ending the run with the task requeued for a later one.
+func TestRunGraphRetriesWithinTheRun(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "docs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, dir, filepath.Join("docs", "PLAN.md"), autoPlanDoc)
+	writeConfig(t, dir, "project:\n  name: x\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &onceEmptyAgent{fakeCapabilityAgent: &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}}
+
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run")
+	if code != exitOK || !strings.Contains(stdout, "Retrying: S001") {
+		t.Fatalf("code=%d, want the run to retry S001 and complete:\nstdout=%s\nstderr=%s", code, stdout, stderr)
+	}
+	st, err := store.Open(statePath(dir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+	if got, err := st.Get("S001"); err != nil || got.Status != domain.LOCAL_DONE {
+		t.Errorf("S001 = %+v, %v; want LOCAL_DONE in the same run", got, err)
+	}
+}

@@ -519,6 +519,7 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 		switch res.Outcome {
 		case scheduler.ReadyTask:
 			id := res.Task.ID
+			attempt := res.Task.Attempt
 			tasksEntered++
 			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
 			addTaskMetrics(run, dir, res.Task.ID)
@@ -541,6 +542,18 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 				}
 				if stage, ok := runpkg.Load(dir, id); ok && (stage == runpkg.WaitingForHuman || stage == runpkg.WaitingForPlanner) {
 					return code
+				}
+				if retriedInRun(dir, st, id, attempt) {
+					// Recovery requeued the task as a RETRY and spent an attempt on it:
+					// select it again now instead of ending the run, since a fresh
+					// attempt can clear a stalled or empty model response. The attempt
+					// budget bounds this, and an exhausted budget blocks the task. A
+					// requeue that spent nothing (an unchanged repeat, a continuation)
+					// still stops below, so this can never loop without spending budget.
+					fmt.Fprintf(stdout, "Retrying: %s (attempt %d of its budget)\n", id, attempt+1)
+					tasksEntered-- // a retry is the same task, not a new one for --max-tasks
+					maxIterations++
+					continue
 				}
 				if !taskIsBlocked(st, id) {
 					return code
@@ -1223,6 +1236,32 @@ func reportBlockedTasks(stderr io.Writer, ids []string) int {
 	fmt.Fprintf(stderr, "run: %d task(s) blocked and not recovered: %s\n", len(ids), strings.Join(ids, ", "))
 	return exitError
 }
+
+// retriedInRun reports whether a task that just failed was requeued to PLANNED
+// as a RETRY with an attempt spent, so it can be retried within the same run. An
+// unreachable provider (TRANSIENT_PROVIDER) is left for a later run: retrying it
+// at once would only spend the whole attempt budget in seconds.
+func retriedInRun(dir string, st graphStore, id string, attemptBefore int) bool {
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", id, "classification.json"))
+	if err != nil {
+		return false
+	}
+	var cls failure.Classification
+	if json.Unmarshal(data, &cls) != nil || cls.Disposition != failure.Retry || cls.Kind == failure.TransientProvider {
+		return false
+	}
+	tasks, err := st.List()
+	if err != nil {
+		return false
+	}
+	for _, t := range tasks {
+		if t.ID == id {
+			return t.Status == domain.PLANNED && t.Attempt > attemptBefore
+		}
+	}
+	return false
+}
+
 func taskIsBlocked(st graphStore, id string) bool {
 	tasks, err := st.List()
 	if err != nil {
