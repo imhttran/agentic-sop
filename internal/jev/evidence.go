@@ -184,6 +184,18 @@ func Categories() []Category {
 	return cats
 }
 
+// SecuritySensitive reports whether c is a security-family category: security,
+// destructive, credential-sensitive, or approval-sensitive work. It is the single
+// definition shared by routing and the read-only prompt boundary.
+func (c Category) SecuritySensitive() bool {
+	switch c {
+	case CategorySecurity, CategoryDestructive, CategoryCredentialSensitivity, CategoryApprovalSensitive:
+		return true
+	default:
+		return false
+	}
+}
+
 // EvidenceItem is one structured early JEV analysis finding: a validated
 // purpose/severity pair with supporting detail. It is plain data.
 type EvidenceItem struct {

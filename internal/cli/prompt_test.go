@@ -478,6 +478,27 @@ func TestPromptTriageEscalationStopsReadOnly(t *testing.T) {
 	}
 }
 
+// TestPromptReadOnlyAnswersCodeFindings proves a read-only review is not stopped
+// by a finding about the code it was asked to review: only a security-sensitive
+// finding holds a read-only prompt at the human boundary.
+func TestPromptReadOnlyAnswersCodeFindings(t *testing.T) {
+	clearProviderEnv(t)
+	dir := t.TempDir()
+	writeConfig(t, dir, earlyJEVTriageConfig)
+	a := &countingAgent{}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryAmbiguity, jev.SeverityHigh)}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "", a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"prompt", "--capability", "review", "review this buggy function")
+	if code != exitOK || strings.Contains(stdout, "NEEDS_HUMAN") {
+		t.Fatalf("a code finding must not stop a read-only review: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if a.calls != 1 {
+		t.Errorf("the model was called %d times, want 1", a.calls)
+	}
+}
+
 // TestPromptFileOutsideProjectRejected proves prompt input cannot read an arbitrary
 // local file: a path outside the project directory is refused.
 func TestPromptFileOutsideProjectRejected(t *testing.T) {
