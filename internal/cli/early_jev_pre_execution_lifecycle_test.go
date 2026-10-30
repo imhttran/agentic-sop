@@ -117,7 +117,7 @@ func TestGraphRunPreExecutionEscalationStopsAtHumanBoundary(t *testing.T) {
 	writeConfig(t, dir, earlyPreExecGraphConfig)
 	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Add widget", Objective: "Add the widget.", AcceptanceCriteria: "widget works", Status: domain.PLANNED, MaxAttempts: 3})
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposePreExecution, jev.CategorySecurity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposePreExecution, jev.CategorySecurity, jev.SeverityCritical)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },

@@ -110,7 +110,7 @@ func TestGraphRunTriageEscalationStopsAtHumanBoundary(t *testing.T) {
 	writeConfig(t, dir, earlyTriageGraphConfig)
 	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Add widget", Objective: "Add the widget.", AcceptanceCriteria: "widget works", Status: domain.PLANNED, MaxAttempts: 3})
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityCritical)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
@@ -232,5 +232,24 @@ func TestGraphRunRetryReusesTriage(t *testing.T) {
 	}
 	if analyzer.calls != 1 {
 		t.Errorf("triage analyzer calls = %d, want 1 (the retry reuses the first result)", analyzer.calls)
+	}
+}
+
+// TestGraphRunTriageHighSensitiveDoesNotStopByDefault proves the default
+// early_jev.fail_on stops on CRITICAL only: a HIGH security finding is recorded
+// and the task runs (it still raises the routed class).
+func TestGraphRunTriageHighSensitiveDoesNotStopByDefault(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeConfig(t, dir, earlyTriageGraphConfig)
+	seedTask(t, dir, &domain.Task{ID: "T001", Title: "Fix stock", Objective: "Fix stock.", AcceptanceCriteria: "no oversell", Status: domain.PLANNED, MaxAttempts: 3})
+	a := &earlyCountingAgent{}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
+		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
+		"run")
+	if code != exitOK || strings.Contains(stdout, "NEEDS_HUMAN") || a.impl != 1 {
+		t.Fatalf("a HIGH finding must not stop under the default fail_on: code=%d impl=%d stdout=%s stderr=%s", code, a.impl, stdout, stderr)
 	}
 }
