@@ -669,11 +669,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// instead of re-deriving them from task prose and does not promote a repository
 			// discovery target to an external prerequisite. An ad-hoc/no-plan context is
 			// empty and preserves the previous behavior.
+			pctx := loadPlanContext(dir, spec.ID)
+			if pctx.Project == "" {
+				pctx.Project = cfg.Project.Name
+			}
 			plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
 				rec.PlanRepair()
 				rec.AgentCall()
 				fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
-			}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), loadPlanContext(dir, spec.ID))
+			}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), pctx)
 			stop()
 			rec.AgentCall()
 			if err != nil {

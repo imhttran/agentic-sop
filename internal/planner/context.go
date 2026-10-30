@@ -28,6 +28,10 @@ type PlanContext struct {
 	Capabilities []Capability
 	// Requires names the capabilities the task's own compiled stage requires.
 	Requires []string
+	// Project is the project name SOP already knows (the compiled plan's, else the
+	// configured one). A generated plan that omits its project takes this name
+	// instead of spending a repair round on a field SOP can fill itself.
+	Project string
 }
 
 // IsZero reports whether the context carries no authoritative capability
@@ -114,6 +118,9 @@ the compiled capability inventory above does not already provide.`)
 // never removes a stage, reorders a dependency, or alters an id, so task identity,
 // the dependency graph, and lifecycle meaning are untouched.
 func applyPlanContext(plan *Plan, pctx PlanContext) {
+	if strings.TrimSpace(plan.Project) == "" {
+		plan.Project = strings.TrimSpace(pctx.Project)
+	}
 	auth := pctx.index()
 	if len(auth) == 0 {
 		return
