@@ -228,7 +228,12 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-stal
 ## Status
 
 SOP V1 and the subsequent routing, provider, recovery, distribution, approval,
-agentic reliability, and context-efficiency layers are implemented. Optional local decision memory is implemented but disabled by default pending a valid held-out benefit evaluation. See
+agentic reliability, and context-efficiency layers are implemented. Recent
+benchmark-driven hardening adds bounded in-run retry and continuation, per-model
+token accounting, typed complexity and sensitive-task routing, invocation-scoped
+file restoration, and Linux replay isolation from host Unix sockets. Optional
+local decision memory is implemented but disabled by default pending a valid
+held-out benefit evaluation. See
 [Project Status](docs/reference/PROJECT-STATUS.md) for delivery evidence and known
 limitations, [Backlog](docs/plans/BACKLOG.md) for future work, and the
 [performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for measured results
