@@ -44,6 +44,9 @@ func (h *Harness) RunObservedMutation(ctx context.Context, name string, args map
 		p, scopeErr = h.resolveArg(args, "path", true, accessWrite)
 		target = p.abs
 	}
+	if scopeErr == nil && name != ToolRunCommand && name != ToolRestoreFile {
+		h.snapshot(target)
+	}
 	before, beforeErr := h.mutationFingerprint(ctx, target)
 	var result string
 	var err error

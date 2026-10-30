@@ -22,6 +22,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/commandpolicy"
@@ -145,6 +146,51 @@ type Harness struct {
 	roots   []authorizedRoot // primary root first, then authorized external roots
 	cfg     Config
 	auditor Auditor
+
+	// snaps holds each file's content from just before the current invocation
+	// first changed it, keyed by absolute path, so restore_file undoes only this
+	// invocation's edits (see BeginInvocation).
+	snapMu sync.Mutex
+	snaps  map[string]fileSnap
+}
+
+// fileSnap is a file's state before an invocation first changed it.
+type fileSnap struct {
+	exists bool
+	data   []byte
+	mode   os.FileMode
+}
+
+// BeginInvocation starts a new undo scope: restore_file can then return a file
+// only to the content it had when this invocation began. A harness is shared by
+// every task of a run, so the scope must start per invocation; restoring to the
+// last commit instead would discard earlier tasks' uncommitted work.
+func (h *Harness) BeginInvocation() {
+	h.snapMu.Lock()
+	h.snaps = nil
+	h.snapMu.Unlock()
+}
+
+// snapshot records path's current state if this invocation has not changed it yet.
+func (h *Harness) snapshot(path string) {
+	h.snapMu.Lock()
+	defer h.snapMu.Unlock()
+	if _, done := h.snaps[path]; done {
+		return
+	}
+	if h.snaps == nil {
+		h.snaps = map[string]fileSnap{}
+	}
+	info, err := os.Lstat(path)
+	if err != nil || !info.Mode().IsRegular() {
+		h.snaps[path] = fileSnap{}
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return // unreadable: leave it unrecorded, so restore cannot guess
+	}
+	h.snaps[path] = fileSnap{exists: true, data: data, mode: info.Mode().Perm()}
 }
 
 // authorizedRoot is a resolved, authorized execution root.
@@ -370,26 +416,33 @@ func (h *Harness) git(ctx context.Context, args ...string) (string, error) {
 	return h.exec(ctx, append([]string{"git"}, args...))
 }
 
-// restoreFile restores one tracked file to its committed (HEAD) content, so the
-// model can undo a mistaken edit instead of being stuck with an unrecoverable
-// working copy. It is deliberately narrow — a single path, from HEAD, worktree
-// only — so it changes no history, branch, or commit and cannot touch another
-// path. It runs the fixed argv directly rather than through the command policy,
-// which (correctly) refuses the mass-discarding `git restore`/`git checkout -- .`
-// forms; this tool is the scoped, safe subset.
-func (h *Harness) restoreFile(ctx context.Context, args map[string]any) (string, error) {
+// restoreFile returns one file to the content it had when this invocation first
+// changed it (or removes it, when this invocation created it), so the model can
+// undo a mistaken edit. It never reads from Git: in a multi-task run the earlier
+// tasks' work is usually uncommitted, and restoring from HEAD reverted all of it
+// (a later refactor task silently undid three earlier tasks). A file this
+// invocation has not changed is left alone.
+func (h *Harness) restoreFile(_ context.Context, args map[string]any) (string, error) {
 	p, err := h.resolveArg(args, "path", true, accessWrite)
 	if err != nil {
 		return "", err
 	}
-	result, succeeded, err := h.execWithStatus(ctx, h.root, []string{"git", "restore", "--source=HEAD", "--worktree", "--", p.rel})
-	if err != nil {
+	h.snapMu.Lock()
+	snap, ok := h.snaps[p.abs]
+	h.snapMu.Unlock()
+	if !ok {
+		return fmt.Sprintf("%s was not changed by this invocation; nothing to restore", p.rel), nil
+	}
+	if !snap.exists {
+		if err := os.Remove(p.abs); err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("restore_file: %w", err)
+		}
+		return fmt.Sprintf("restored %s: removed, since it did not exist before this invocation", p.rel), nil
+	}
+	if err := os.WriteFile(p.abs, snap.data, snap.mode); err != nil {
 		return "", fmt.Errorf("restore_file: %w", err)
 	}
-	if !succeeded {
-		return "", fmt.Errorf("restore_file: %s", result)
-	}
-	return fmt.Sprintf("restored %s from HEAD", p.rel), nil
+	return fmt.Sprintf("restored %s to its content before this invocation", p.rel), nil
 }
 
 // WorkingTreeChanged reports whether the repository working tree differs from

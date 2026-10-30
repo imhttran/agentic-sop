@@ -26,7 +26,9 @@ func TestPhasedVerifiedMutation(t *testing.T) {
 			{"create", "create_file", map[string]any{"path": "new.txt", "content": ""}, true},
 			{"delete", "delete_file", map[string]any{"path": "a.go"}, true},
 			{"restore unchanged", "restore_file", map[string]any{"path": "a.go"}, false},
-			{"restore dirty", "restore_file", map[string]any{"path": "unrelated.txt"}, true},
+			// Pre-existing dirty work this invocation never changed is not restored:
+			// it may be an earlier task's uncommitted change.
+			{"restore dirty untouched", "restore_file", map[string]any{"path": "unrelated.txt"}, false},
 			{"gofmt unchanged", "run_command", map[string]any{"command": "gofmt -w a.go"}, false},
 			{"gofmt changed", "run_command", map[string]any{"command": "gofmt -w nested/b.go"}, true},
 			{"gofmt list", "run_command", map[string]any{"command": "gofmt -l nested/b.go"}, false},
