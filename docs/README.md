@@ -85,7 +85,7 @@ Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
 - [specs/PROVIDERS.md](specs/PROVIDERS.md) — **the authoritative home for the provider/runtime layer** (Phase 4): provider identity, the registry, health, model discovery, typed capabilities, selection validation, failure behavior, and the read-only `sop providers` surface. The provider layer sits underneath model routing and never chooses a class; the seam is recorded (non-normatively) in [architecture/provider-runtime.md](architecture/provider-runtime.md).
 - [specs/VALIDATION.md](specs/VALIDATION.md) — the deterministic validation runner and its evidence rules.
 - [specs/REVIEW.md](specs/REVIEW.md) — the review pipeline and engines, findings, and blocking severities.
-- [specs/OPENJEV.md](specs/OPENJEV.md) — the OpenJEV (JEV) analysis boundary, configuration, and failure behavior; §18 is the implemented Phase 3 early checkpoints, §17 the proposed/future items.
+- [specs/OPENJEV.md](specs/OPENJEV.md) — the OpenJEV (JEV) analysis boundary, configuration, and failure behavior; §18 defines the implemented early checkpoints, including their bounded pre-implementation repository context, while §17 retains proposed/future items.
 - [specs/QUALITY.md](specs/QUALITY.md) — the deterministic quality gate and the bounded fix loop.
 - [specs/HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) — human gates: when approval is required and what must not bypass it.
 - [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
@@ -148,7 +148,7 @@ single owner. This table is that map.
 
 - [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
 - [reference/validation-handoff.schema.json](reference/validation-handoff.schema.json) — the versioned, portable MCP validation-handoff contract used across coding agents and independent validators.
-- [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, the model-routing classes/precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
+- [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, evidence-bound locality resolution, supporting-stage model classes, routing precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
 - [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
 - [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, severity
   policy, lifecycle placement, and safety boundaries.
