@@ -338,3 +338,24 @@ func mustJSON(s string) string {
 	}
 	return string(b)
 }
+
+// TestKnownProjectFillsOmittedProject proves a generated plan that omits its
+// project takes the name SOP already knows instead of spending repair rounds on
+// it, and that without a known name the omission is still rejected.
+func TestKnownProjectFillsOmittedProject(t *testing.T) {
+	content := `{"summary":"s","stages":[{"id":"S1","title":"t","objective":"o","acceptance_criteria":["a"]}]}`
+	scripted := &scriptedAgent{responses: []string{content}}
+	plan, err := New(scripted).GenerateWithContext(context.Background(), "task", PlanContext{Project: "widget"})
+	if err != nil {
+		t.Fatalf("GenerateWithContext failed: %v", err)
+	}
+	if len(scripted.requests) != 1 || plan.Project != "widget" {
+		t.Fatalf("requests=%d project=%q, want 1 request and project widget", len(scripted.requests), plan.Project)
+	}
+
+	_, err = New(&scriptedAgent{responses: []string{content, content, content}}).
+		GenerateWithContext(context.Background(), "task", PlanContext{})
+	if err == nil || !strings.Contains(err.Error(), "project is empty") {
+		t.Fatalf("err = %v, want project is empty without a known project", err)
+	}
+}

@@ -29,7 +29,7 @@ func loadPlanContext(dir, taskID string) planner.PlanContext {
 	if err := json.Unmarshal(data, &plan); err != nil {
 		return planner.PlanContext{}
 	}
-	ctx := planner.PlanContext{Capabilities: plan.Capabilities}
+	ctx := planner.PlanContext{Capabilities: plan.Capabilities, Project: plan.Project}
 	id := strings.TrimSpace(taskID)
 	for _, stage := range plan.Stages {
 		if stage.ID == id {

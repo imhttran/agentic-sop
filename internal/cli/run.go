@@ -669,11 +669,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			// instead of re-deriving them from task prose and does not promote a repository
 			// discovery target to an external prerequisite. An ad-hoc/no-plan context is
 			// empty and preserves the previous behavior.
+			pctx := loadPlanContext(dir, spec.ID)
+			if pctx.Project == "" {
+				pctx.Project = cfg.Project.Name
+			}
 			plan, err = planner.New(a).OnRepair(func(attempt int, cause error) {
 				rec.PlanRepair()
 				rec.AgentCall()
 				fmt.Fprintf(stdout, "plan: invalid plan returned to the agent for correction (attempt %d): %v\n", attempt, cause)
-			}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), loadPlanContext(dir, spec.ID))
+			}).GenerateWithContext(ctx, d.taskInput(spec.ID, spec.Render()), pctx)
 			stop()
 			rec.AgentCall()
 			if err != nil {
@@ -1187,7 +1191,11 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 	// or a vacuously passing empty suite. Explicit ALREADY_SATISFIED still requires
 	// the trusted harness proof above. Missing evidence uses the existing bounded
 	// IMPLEMENT_NO_CHANGES continuation, never an artificial mutation or PASS.
-	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed()
+	// Green validation only proves the existing code builds: a declared
+	// deliverable that does not exist proves the work is not already done, so a
+	// no-change claim against a missing deliverable is never a validated pass.
+	validatedNoChange := legacyNoChange && len(suite.Results) > 0 && suite.Passed() &&
+		len(missingDeliverables(spec, dir)) == 0
 	if gate.Decision == quality.Pass && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied &&
 		len(taskChangeEvidence(rn, reports...)) == 0 && !validatedNoChange {
 		class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
@@ -1467,7 +1475,11 @@ func emitRunSummary(stdout io.Writer, dir string, cfg config.Config, rn *runpkg.
 	}
 	writeOutcomeSummary(stdout, res.outcome)
 	if res.gate.Decision == quality.Pass {
-		fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
+		if cfg.Human.RequiresApprovalBeforeCommit() {
+			fmt.Fprintln(stdout, "human approval required before commit; completed locally without committing.")
+		} else {
+			fmt.Fprintln(stdout, "completed locally without committing (commit with sop commit).")
+		}
 		return exitOK
 	}
 	return exitError

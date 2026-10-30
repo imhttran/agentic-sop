@@ -83,6 +83,10 @@ type EarlyArtifact struct {
 	// represented as a finding or a PASS (mirrors P3-013). When true, Evidence
 	// MUST be zero-valued: a provider failure carries no evidence payload.
 	ProviderFailed bool `json:"provider_failed"`
+	// FailureDetail is a bounded, diagnostic-only description of why the analysis
+	// failed (the analyzer error or its non-usable status). It is empty unless
+	// ProviderFailed, and it never becomes evidence or policy input.
+	FailureDetail string `json:"failure_detail,omitempty"`
 	// PolicyDecision is an opaque policy outcome recorded verbatim; the record
 	// layer does not interpret it.
 	PolicyDecision string `json:"policy_decision"`

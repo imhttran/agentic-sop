@@ -812,6 +812,22 @@ func (f *fakeCapabilityAgent) Generate(_ context.Context, r agent.Request) (agen
 
 const runTaskFile = "# T001 --- Add widget\n\n## Objective\n\nAdd the widget.\n"
 
+// TestRunPassWithoutApprovalGate proves a pass does not claim a human approval
+// is required when human.approval_before_commit is off.
+func TestRunPassWithoutApprovalGate(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, "project:\n  name: x\nhuman:\n  approval_before_commit: false\nvalidation:\n  build:\n    - \"true\"\n")
+	a := &fakeCapabilityAgent{plan: validPlanJSON, impl: "changed files", review: `{"summary":"clean","findings":[]}`}
+	code, stdout, stderr := runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	if strings.Contains(stdout, "human approval required") || !strings.Contains(stdout, "completed locally without committing") {
+		t.Fatalf("stdout = %q, want the no-gate completion line", stdout)
+	}
+}
+
 func TestRunEndToEndPass(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, dir, "TASK.md", runTaskFile)
