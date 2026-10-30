@@ -80,10 +80,13 @@ func KnownIDs() []ID {
 	return out
 }
 
-// ModelInfo describes one model a provider serves. Locality is left empty when
-// the runtime cannot determine it reliably (for example Ollama's model list does
-// not report local vs cloud); the authoritative locality for a run is the model
-// routing selection's, not a provider's guess.
+// ModelInfo describes one model a provider serves. A non-empty Locality is
+// authoritative runtime evidence the provider read from the runtime itself (for
+// example Ollama's remote_host field): the runtime knows where it serves the
+// model, and the provider reports exactly what the runtime reported. An empty
+// Locality means the provider could not determine locality reliably, and a
+// provider never guesses it from a model name, an endpoint host, or an absence
+// of ":cloud".
 type ModelInfo struct {
 	Name         string
 	Provider     ID

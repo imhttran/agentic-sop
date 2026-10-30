@@ -473,7 +473,7 @@ func configuredAgent(projectDir string) (harness, provider, modelName string, er
 	if errors.Is(err, config.ErrNotFound) {
 		// No configuration file: only the model-routing environment (which a .env
 		// file may supply) can select an agent. Otherwise the environment decides.
-		res, rerr := model.Resolve(model.Inputs{Lookup: os.Getenv})
+		res, rerr := resolveModelLocality(context.Background(), model.Inputs{Lookup: os.Getenv}, runtimeLocalityObserver(config.Config{}))
 		if rerr != nil {
 			return "", "", "", rerr
 		}
@@ -485,7 +485,7 @@ func configuredAgent(projectDir string) (harness, provider, modelName string, er
 	if err != nil {
 		return "", "", "", err
 	}
-	if _, err := applyModelRouting(cfg, ""); err != nil {
+	if _, err := applyModelRouting(context.Background(), cfg, ""); err != nil {
 		return "", "", "", err
 	}
 	return cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, nil

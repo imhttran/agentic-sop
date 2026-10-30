@@ -145,23 +145,64 @@ change. Applying it MUST record the deterministic source `cloud-fallback` and th
 reason `local runtime unavailable; cloud fallback`, so the switch is auditable. A
 class whose locality is not `local` MUST NOT have a fallback candidate.
 
-### Locality is configuration, never inferred
+### Locality resolution and evidence
 
-A model's locality MUST come from configuration. Locality MUST NOT be inferred
-from a model name (a `:cloud` suffix is a naming convention, not a fact about where
-a model runs) and MUST NOT be inferred from the runtime's `/api/tags` model list,
-which does not establish whether a model is local or cloud. `qwen3:4b` is local and
-`nemotron-3-nano:30b-cloud` is cloud solely because configuration says so.
+A model's locality MUST be resolved before it runs. Resolution uses this order,
+highest first:
+
+1. an explicit `models.<class>.locality` / `SOP_MODEL_<CLASS>_LOCALITY` value;
+2. authoritative provider/runtime metadata for that provider and model;
+3. reliable naming inference — for the `ollama` provider only, an explicit
+   `:cloud` suffix on the model name means `cloud`;
+4. the built-in default, and only when no configuration or environment layer
+   mentions the class at all.
+
+Every resolved locality carries a typed source — `explicit`, `runtime`,
+`inferred`, or `default` — so evidence distinguishes operator configuration from
+a built-in default.
+
+A provider may report locality only from authoritative runtime evidence. Ollama's
+`/api/tags` report includes a `remote_host` field: a non-empty value means Ollama
+Cloud serves the model, while a listed entry without one is served by that local
+server. Ollama's `/api/show` exposes the same evidence for one named model; a
+missing or empty field there is undetermined, never a local or cloud guess. The
+generic OpenAI-compatible adapter reports no locality at all. A provider MUST NOT
+derive locality from the endpoint host, from the absence of `:cloud`, or from an
+arbitrary model name (including a Claude name served through a custom provider).
+Endpoint location is not model location: a localhost endpoint can serve a cloud
+model and a remote endpoint can serve a local model.
+
+An explicit value that contradicts reliable evidence MUST fail with an error
+naming the class, provider, model, and the exact setting. When neither explicit
+configuration nor reliable evidence resolves a locality, resolution MUST fail
+with the same actionable reference (`models.<class>.locality` /
+`SOP_MODEL_<CLASS>_LOCALITY`, or the `fallback` equivalents). It MUST NOT guess,
+and it MUST NOT treat a built-in default as if the operator had written it.
+
+Locality inference and runtime evidence MUST NOT create a fallback candidate,
+change the selected class, or authorize a cloud fallback. The
+`allow_cloud_fallback_for_local` and per-class availability fallback rules below
+remain authoritative.
 
 ### Fallback configuration
 
-A fallback field an operator does not set inherits: the provider from the class's
-primary model, and the locality `cloud`. The built-in fallback is the base layer of
-the merge, so naming a local model does not remove the built-in cloud fallback; the
-configuration and environment layers override a fallback field by field. The
-environment variables are `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`,
-`SOP_MODEL_<CLASS>_FALLBACK_NAME`, and `SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`. An
-explicitly configured fallback overrides the built-in Nano fallback, and an
+A fallback field an operator does not set inherits the provider from the class's
+primary model. The built-in fallback is the base layer of the merge, so naming a
+local primary does not remove the built-in cloud fallback; the configuration and
+environment layers override a fallback field by field. The environment variables
+are `SOP_MODEL_<CLASS>_FALLBACK_PROVIDER`, `SOP_MODEL_<CLASS>_FALLBACK_NAME`, and
+`SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`.
+
+The built-in-only fallback keeps its built-in `cloud` locality with source
+`default`. A fallback that a configuration or environment layer configures is a
+layered value: an omitted locality MUST resolve through the same explicit /
+runtime-evidence / naming-inference order as a primary. It MUST NOT silently
+inherit the built-in cloud locality. In particular, naming a non-`:cloud`
+fallback model without a locality and without runtime evidence fails with guidance
+naming `models.<class>.fallback.locality` and
+`SOP_MODEL_<CLASS>_FALLBACK_LOCALITY`.
+
+An explicitly configured fallback overrides the built-in Nano fallback, and an
 explicitly configured SMALL primary remains the primary — the fallback is consulted
 only when that primary cannot be served.
 

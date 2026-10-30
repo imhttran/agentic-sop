@@ -1,6 +1,8 @@
 package model
 
 import (
+	"encoding/json"
+	"errors"
 	"strings"
 	"testing"
 )
@@ -48,7 +50,7 @@ func TestResolveConfigLayerOverridesDefaults(t *testing.T) {
 	if !res.Active {
 		t.Fatal("routing must be active when the config block sets a class")
 	}
-	want := Selection{Class: ClassMedium, Provider: "ollama", Model: "config-medium", Locality: LocalityCloud, Source: SourceConfig, Reason: ReasonBuiltinClass}
+	want := Selection{Class: ClassMedium, Provider: "ollama", Model: "config-medium", Locality: LocalityCloud, LocalitySource: LocalitySourceExplicit, Source: SourceConfig, Reason: ReasonBuiltinClass}
 	if res.Selection != want {
 		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
 	}
@@ -193,7 +195,7 @@ func TestResolveUnconfiguredClassUsesBuiltinDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	want := Selection{Class: ClassLarge, Provider: "ollama", Model: "deepseek-v4.1-flash:cloud", Locality: LocalityCloud, Source: SourceDefault, Reason: ReasonConfigClass}
+	want := Selection{Class: ClassLarge, Provider: "ollama", Model: "deepseek-v4.1-flash:cloud", Locality: LocalityCloud, LocalitySource: LocalitySourceDefault, Source: SourceDefault, Reason: ReasonConfigClass}
 	if res.Selection != want {
 		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
 	}
@@ -205,7 +207,7 @@ func TestResolveCLIClassUsesBuiltinDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	want := Selection{Class: ClassSmall, Provider: "ollama", Model: "qwen3:4b", Locality: LocalityLocal, Source: SourceCLI, Reason: ReasonCLIClass}
+	want := Selection{Class: ClassSmall, Provider: "ollama", Model: "qwen3:4b", Locality: LocalityLocal, LocalitySource: LocalitySourceDefault, Source: SourceCLI, Reason: ReasonCLIClass}
 	if res.Selection != want {
 		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
 	}
@@ -353,12 +355,13 @@ func TestResolveRoutedClass(t *testing.T) {
 		t.Fatal("a routed class must activate the layer")
 	}
 	want := Selection{
-		Class:    ClassSmall,
-		Provider: "ollama",
-		Model:    "qwen3:4b",
-		Locality: LocalityLocal,
-		Source:   SourceRouter,
-		Reason:   "isolated low-risk task",
+		Class:          ClassSmall,
+		Provider:       "ollama",
+		Model:          "qwen3:4b",
+		Locality:       LocalityLocal,
+		LocalitySource: LocalitySourceDefault,
+		Source:         SourceRouter,
+		Reason:         "isolated low-risk task",
 	}
 	if res.Selection != want {
 		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
@@ -447,7 +450,7 @@ func TestResolveSmallLocalFallbackCandidate(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
 	}
-	want := Selection{Class: ClassSmall, Provider: "ollama", Model: "qwen3:4b", Locality: LocalityLocal, Source: SourceRouter}
+	want := Selection{Class: ClassSmall, Provider: "ollama", Model: "qwen3:4b", Locality: LocalityLocal, LocalitySource: LocalitySourceDefault, Source: SourceRouter}
 	if res.Selection != want {
 		t.Fatalf("selection = %+v, want the local primary %+v", res.Selection, want)
 	}
@@ -481,7 +484,10 @@ func TestResolveCloudClassHasNoLocalFallback(t *testing.T) {
 // model, and that an unset fallback provider/locality inherit the primary's
 // provider and default to cloud.
 func TestResolveSmallFallbackOverride(t *testing.T) {
-	env := map[string]string{ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "my-cloud:latest"}
+	env := map[string]string{
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldName):     "my-cloud:latest",
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldLocality): "cloud",
+	}
 	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -497,6 +503,55 @@ func TestResolveSmallFallbackOverride(t *testing.T) {
 	}
 	if res.LocalFallback.Locality != LocalityCloud {
 		t.Fatalf("fallback locality = %q, want cloud (the default)", res.LocalFallback.Locality)
+	}
+}
+
+// TestResolveLayerFallbackWithoutLocalityIsNotSilentlyCloud proves the built-in
+// fallback's cloud locality is a DEFAULT, not an operator-provided explicit value:
+// a layer that names a non-:cloud fallback model without a locality must fail with
+// actionable guidance instead of inheriting cloud.
+func TestResolveLayerFallbackWithoutLocalityIsNotSilentlyCloud(t *testing.T) {
+	env := map[string]string{
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "my-local:latest",
+	}
+	_, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	var unknown *LocalityUnknownError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("error = %v, want *LocalityUnknownError", err)
+	}
+	if len(unknown.Refs) != 1 || unknown.Refs[0].Class != ClassSmall || unknown.Refs[0].Role != LocalityRoleFallback {
+		t.Fatalf("refs = %+v, want the single SMALL fallback reference", unknown.Refs)
+	}
+	for _, want := range []string{
+		"my-local:latest",
+		"models.small.fallback.locality",
+		"SOP_MODEL_SMALL_FALLBACK_LOCALITY",
+	} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("error %q must name %q", err, want)
+		}
+	}
+}
+
+// TestResolveLayerFallbackCloudSuffixIsInferred proves a layer-configured fallback
+// whose model carries the explicit :cloud suffix resolves cloud by inference, so
+// the operator does not have to repeat the locality.
+func TestResolveLayerFallbackCloudSuffixIsInferred(t *testing.T) {
+	env := map[string]string{
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "glm-5.3-flash:cloud",
+	}
+	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.LocalFallback == nil {
+		t.Fatal("the layer-configured fallback must be reported")
+	}
+	if res.LocalFallback.Model != "glm-5.3-flash:cloud" {
+		t.Fatalf("fallback model = %q, want glm-5.3-flash:cloud", res.LocalFallback.Model)
+	}
+	if res.LocalFallback.Locality != LocalityCloud || res.LocalFallback.LocalitySource != LocalitySourceInferred {
+		t.Fatalf("fallback = %+v, want cloud inferred from the :cloud name", *res.LocalFallback)
 	}
 }
 
@@ -525,7 +580,10 @@ func TestResolveExplicitSmallModelIsPrimary(t *testing.T) {
 // replace the class's primary: the class still resolves through the built-in
 // default, and the fallback is reported beside it.
 func TestResolveFallbackOnlyDoesNotFillPrimary(t *testing.T) {
-	env := map[string]string{ClassFallbackEnvKey(ClassSmall, FallbackFieldName): "my-cloud:latest"}
+	env := map[string]string{
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldName):     "my-cloud:latest",
+		ClassFallbackEnvKey(ClassSmall, FallbackFieldLocality): "cloud",
+	}
 	res, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
 	if err != nil {
 		t.Fatalf("Resolve: %v", err)
@@ -555,5 +613,283 @@ func TestResolveInvalidFallbackEnvIsActionable(t *testing.T) {
 	_, err := Resolve(Inputs{Lookup: lookup(env), RoutedClass: ClassSmall})
 	if err == nil || !strings.Contains(err.Error(), ClassFallbackEnvKey(ClassSmall, FallbackFieldLocality)) {
 		t.Fatalf("error = %v, want the offending variable named", err)
+	}
+}
+
+// TestSelectionLocalitySourceJSONEncoding verifies that a Selection encodes the
+// locality source as locality_source and omits it when empty, so an older
+// persisted record decodes and re-encodes without the field.
+func TestSelectionLocalitySourceJSONEncoding(t *testing.T) {
+	sel := Selection{Class: ClassMedium, Provider: "ollama", Model: "nemotron-3-super:cloud", Locality: LocalityCloud, LocalitySource: LocalitySourceInferred, Source: SourceDefault}
+	data, err := json.Marshal(sel)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if !strings.Contains(string(data), `"locality_source":"inferred"`) {
+		t.Fatalf("selection = %s, want locality_source \"inferred\"", data)
+	}
+
+	// A selection whose locality source was never recorded (older evidence)
+	// re-encodes without the field.
+	old := Selection{Class: ClassMedium, Provider: "ollama", Model: "config-medium", Locality: LocalityCloud, Source: SourceConfig}
+	data, err = json.Marshal(old)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(data), "locality_source") {
+		t.Fatalf("an empty locality_source must be omitted: %s", data)
+	}
+
+	// An older record without the field decodes with an empty locality source.
+	var back Selection
+	if err := json.Unmarshal([]byte(`{"class":"small","provider":"ollama","model":"qwen3:4b","locality":"local","source":"cli","fallback":false,"reason":"explicit CLI model class"}`), &back); err != nil {
+		t.Fatalf("unmarshal older evidence: %v", err)
+	}
+	if back.LocalitySource != "" {
+		t.Fatalf("decoded LocalitySource = %q, want empty", back.LocalitySource)
+	}
+}
+
+// TestResolveRuntimeEvidenceSuppliesPrimaryLocality proves Inputs.LocalityEvidence
+// resolves a class the environment mentions but gives no locality, with source
+// runtime: no explicit value exists and the built-in default must not apply.
+func TestResolveRuntimeEvidenceSuppliesPrimaryLocality(t *testing.T) {
+	env := map[string]string{
+		ClassEnvKey(ClassMedium, fieldProvider): "ollama",
+		ClassEnvKey(ClassMedium, fieldName):     "env-medium",
+	}
+	evidence := map[LocalityEvidence]Locality{
+		{Provider: "ollama", Model: "env-medium"}: LocalityLocal,
+	}
+	res, err := Resolve(Inputs{Lookup: lookup(env), LocalityEvidence: evidence})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := Selection{Class: ClassMedium, Provider: "ollama", Model: "env-medium", Locality: LocalityLocal, LocalitySource: LocalitySourceRuntime, Source: SourceEnv, Reason: ReasonBuiltinClass}
+	if res.Selection != want {
+		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
+	}
+	if res.LocalFallback != nil {
+		t.Fatalf("runtime evidence must not create a fallback candidate, got %+v", res.LocalFallback)
+	}
+}
+
+// TestResolveNamingInferenceSuppliesPrimaryLocality proves a mentioned class with
+// a ":cloud" model name and no explicit locality resolves with source inferred and
+// never receives the built-in default.
+func TestResolveNamingInferenceSuppliesPrimaryLocality(t *testing.T) {
+	env := map[string]string{
+		ClassEnvKey(ClassMedium, fieldProvider): "ollama",
+		ClassEnvKey(ClassMedium, fieldName):     "env-inferred:cloud",
+	}
+	res, err := Resolve(Inputs{Lookup: lookup(env)})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := Selection{Class: ClassMedium, Provider: "ollama", Model: "env-inferred:cloud", Locality: LocalityCloud, LocalitySource: LocalitySourceInferred, Source: SourceEnv, Reason: ReasonBuiltinClass}
+	if res.Selection != want {
+		t.Fatalf("selection = %+v, want %+v", res.Selection, want)
+	}
+	if res.LocalFallback != nil {
+		t.Fatalf("an inferred cloud selection must have no fallback candidate, got %+v", res.LocalFallback)
+	}
+}
+
+// TestResolveMentionedClassWithoutLocalityFailsClosed proves a class a layer
+// mentions with no explicit locality, no runtime evidence, and no reliable
+// inference fails with *LocalityUnknownError naming the class, model, and the
+// exact settings, instead of receiving the built-in default.
+func TestResolveMentionedClassWithoutLocalityFailsClosed(t *testing.T) {
+	env := map[string]string{
+		ClassEnvKey(ClassMedium, fieldProvider): "ollama",
+		ClassEnvKey(ClassMedium, fieldName):     "env-medium",
+	}
+	_, err := Resolve(Inputs{Lookup: lookup(env)})
+	var unknown *LocalityUnknownError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("error = %v, want *LocalityUnknownError", err)
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"medium",
+		"primary",
+		"ollama",
+		"env-medium",
+		"models.medium.locality",
+		"SOP_MODEL_MEDIUM_LOCALITY",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error %q must name %q", msg, want)
+		}
+	}
+	if strings.Contains(msg, "nemotron-3-super:cloud") {
+		t.Fatalf("error %q must not substitute the built-in default model", msg)
+	}
+}
+
+// TestResolveRuntimeEvidenceResolvesConfiguredFallback proves a fallback a layer
+// configures without a locality resolves from caller-supplied runtime evidence,
+// and inheritance rules hold: the provider comes from the primary, and the class
+// and the primary selection are unchanged.
+func TestResolveRuntimeEvidenceResolvesConfiguredFallback(t *testing.T) {
+	env := map[string]string{
+		EnvDefaultClass:                                    "large",
+		ClassEnvKey(ClassLarge, fieldProvider):             "ollama",
+		ClassEnvKey(ClassLarge, fieldName):                 "local-large",
+		ClassEnvKey(ClassLarge, fieldLocality):             "local",
+		ClassFallbackEnvKey(ClassLarge, FallbackFieldName): "custom-fb",
+	}
+	evidence := map[LocalityEvidence]Locality{
+		{Provider: "ollama", Model: "custom-fb"}: LocalityCloud,
+	}
+	res, err := Resolve(Inputs{Lookup: lookup(env), LocalityEvidence: evidence})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Model != "local-large" || res.Selection.Locality != LocalityLocal || res.Selection.LocalitySource != LocalitySourceExplicit {
+		t.Fatalf("selection = %+v, want the explicitly configured local primary unchanged", res.Selection)
+	}
+	if res.LocalFallback == nil {
+		t.Fatal("a local primary with a layer-configured fallback must report the candidate")
+	}
+	fb := *res.LocalFallback
+	if fb.Class != ClassLarge || fb.Provider != "ollama" || fb.Model != "custom-fb" {
+		t.Fatalf("fallback = %+v, want class large with the inherited provider", fb)
+	}
+	if fb.Locality != LocalityCloud || fb.LocalitySource != LocalitySourceRuntime {
+		t.Fatalf("fallback locality provenance = (%q, %q), want (cloud, runtime)", fb.Locality, fb.LocalitySource)
+	}
+	if !fb.Fallback || fb.Source != SourceCloudFallback || fb.Reason != ReasonLocalFallback {
+		t.Fatalf("fallback = %+v, want fallback=true with source cloud-fallback", fb)
+	}
+}
+
+// TestResolveAggregatesPrimaryAndFallbackUnknownRefs proves one Resolve failure
+// lists every unresolved reference for the class: when the primary and its
+// configured fallback both lack resolvable locality, a single
+// *LocalityUnknownError names both with roles primary and fallback, their
+// provider and model, and every exact setting to set.
+func TestResolveAggregatesPrimaryAndFallbackUnknownRefs(t *testing.T) {
+	env := map[string]string{
+		EnvDefaultClass:                                    "large",
+		ClassEnvKey(ClassLarge, fieldProvider):             "ollama",
+		ClassEnvKey(ClassLarge, fieldName):                 "env-primary",
+		ClassFallbackEnvKey(ClassLarge, FallbackFieldName): "env-fallback",
+	}
+	_, err := Resolve(Inputs{Lookup: lookup(env)})
+	var unknown *LocalityUnknownError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("error = %v, want *LocalityUnknownError", err)
+	}
+	primaryRef := LocalityRef{Class: ClassLarge, Role: LocalityRolePrimary, Provider: "ollama", Model: "env-primary"}
+	fallbackRef := LocalityRef{Class: ClassLarge, Role: LocalityRoleFallback, Provider: "ollama", Model: "env-fallback"}
+	if len(unknown.Refs) != 2 || unknown.Refs[0] != primaryRef || unknown.Refs[1] != fallbackRef {
+		t.Fatalf("refs = %+v, want [%+v %+v]", unknown.Refs, primaryRef, fallbackRef)
+	}
+	msg := err.Error()
+	for _, want := range []string{
+		"large",
+		"primary",
+		"env-primary",
+		"models.large.locality",
+		"SOP_MODEL_LARGE_LOCALITY",
+		"fallback",
+		"env-fallback",
+		"models.large.fallback.locality",
+		"SOP_MODEL_LARGE_FALLBACK_LOCALITY",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Fatalf("error %q must name %q", msg, want)
+		}
+	}
+}
+
+// TestResolveSingleUnknownRefWhenFallbackResolves proves aggregation only adds
+// references that are themselves unresolved: a configured fallback whose :cloud
+// name infers its locality, and a built-in-only fallback that keeps its cloud
+// default, each leave the primary's one-reference error unchanged.
+func TestResolveSingleUnknownRefWhenFallbackResolves(t *testing.T) {
+	primaryRef := LocalityRef{Class: ClassLarge, Role: LocalityRolePrimary, Provider: "ollama", Model: "env-primary"}
+	inferredFb := map[string]string{
+		EnvDefaultClass:                                    "large",
+		ClassEnvKey(ClassLarge, fieldProvider):             "ollama",
+		ClassEnvKey(ClassLarge, fieldName):                 "env-primary",
+		ClassFallbackEnvKey(ClassLarge, FallbackFieldName): "resolved:cloud",
+	}
+	_, err := Resolve(Inputs{Lookup: lookup(inferredFb)})
+	var unknown *LocalityUnknownError
+	if !errors.As(err, &unknown) {
+		t.Fatalf("error = %v, want *LocalityUnknownError", err)
+	}
+	if len(unknown.Refs) != 1 || unknown.Refs[0] != primaryRef {
+		t.Fatalf("refs = %+v, want only %+v", unknown.Refs, primaryRef)
+	}
+
+	builtinFb := map[string]string{
+		EnvDefaultClass:                        "small",
+		ClassEnvKey(ClassSmall, fieldProvider): "ollama",
+		ClassEnvKey(ClassSmall, fieldName):     "env-primary",
+	}
+	_, err = Resolve(Inputs{Lookup: lookup(builtinFb)})
+	unknown = nil
+	if !errors.As(err, &unknown) {
+		t.Fatalf("error = %v, want *LocalityUnknownError", err)
+	}
+	smallPrimaryRef := LocalityRef{Class: ClassSmall, Role: LocalityRolePrimary, Provider: "ollama", Model: "env-primary"}
+	if len(unknown.Refs) != 1 || unknown.Refs[0] != smallPrimaryRef {
+		t.Fatalf("refs = %+v, want only %+v", unknown.Refs, smallPrimaryRef)
+	}
+}
+
+// TestResolveEnvLocalityOverridesConfigLocality proves the explicit locality
+// layering: an environment locality overrides a configuration locality, and an
+// explicit configuration locality is never replaced by a default.
+func TestResolveEnvLocalityOverridesConfigLocality(t *testing.T) {
+	cfg := Route{Medium: ClassConfig{Provider: "ollama", Name: "config-medium", Locality: LocalityCloud}}
+	env := map[string]string{
+		ClassEnvKey(ClassMedium, fieldProvider): "ollama",
+		ClassEnvKey(ClassMedium, fieldName):     "env-medium",
+		ClassEnvKey(ClassMedium, fieldLocality): "local",
+	}
+	res, err := Resolve(Inputs{Config: cfg, Lookup: lookup(env)})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.Selection.Locality != LocalityLocal || res.Selection.LocalitySource != LocalitySourceExplicit {
+		t.Fatalf("selection = %+v, want the environment locality local with source explicit", res.Selection)
+	}
+
+	// With no environment locality, the explicit configuration locality stays;
+	// it is never replaced by the built-in default.
+	res, err = Resolve(Inputs{Config: cfg, Lookup: lookup(nil)})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	want := Selection{Class: ClassMedium, Provider: "ollama", Model: "config-medium", Locality: LocalityCloud, LocalitySource: LocalitySourceExplicit, Source: SourceConfig, Reason: ReasonBuiltinClass}
+	if res.Selection != want {
+		t.Fatalf("selection = %+v, want the configuration locality kept with source explicit", res.Selection)
+	}
+}
+
+// TestResolveBuiltinFallbackKeepsDefaultCloud proves a built-in-only fallback
+// keeps its built-in cloud locality with locality source default, while the
+// primary keeps its own provenance.
+func TestResolveBuiltinFallbackKeepsDefaultCloud(t *testing.T) {
+	res, err := Resolve(Inputs{Lookup: lookup(nil), RoutedClass: ClassSmall})
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	if res.LocalFallback == nil {
+		t.Fatal("the built-in small fallback must be reported as a candidate")
+	}
+	fb := *res.LocalFallback
+	if fb.Locality != LocalityCloud || fb.LocalitySource != LocalitySourceDefault {
+		t.Fatalf("fallback = %+v, want the built-in cloud locality with source default", fb)
+	}
+	if fb.Source != SourceCloudFallback || !fb.Fallback {
+		t.Fatalf("fallback = %+v, want fallback=true with source cloud-fallback", fb)
+	}
+	if !fb.LocalitySource.Valid() {
+		t.Fatalf("locality source %q must be a typed value", fb.LocalitySource)
 	}
 }

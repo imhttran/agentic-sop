@@ -1277,6 +1277,14 @@ autonomy:
 # unless this block or a SOP_MODEL_* variable is set, so an existing project is
 # unchanged. See docs/reference/CONFIGURATION.md.
 #
+# Locality is resolved, not repeated: explicit locality > authoritative runtime
+# evidence > reliable naming inference > built-in default. The only name
+# inference is an ollama model ending in the exact ":cloud" suffix. A localhost
+# endpoint and the absence of ":cloud" are never locality evidence, and an
+# endpoint's location is not the model's location. An explicit locality that
+# contradicts reliable evidence fails. Omit locality only when resolution is
+# reliable; otherwise set it explicitly.
+#
 # models:
 #   default_class: medium
 #   fallback_class: medium
@@ -1284,10 +1292,12 @@ autonomy:
 #   small:
 #     provider: ollama
 #     name: qwen3:4b
-#     locality: local
+#     locality: local # a non-:cloud local model needs this when unobserved
 #     # Local-first availability fallback: used only when the local runtime is
 #     # healthy but cannot serve the local primary. The class stays SMALL; this
-#     # is NOT quality escalation (SMALL -> MEDIUM -> LARGE).
+#     # is NOT quality escalation (SMALL -> MEDIUM -> LARGE). A layered fallback
+#     # with an ambiguous name states its locality; the built-in-only fallback
+#     # keeps cloud with source default.
 #     fallback:
 #       provider: ollama
 #       name: nemotron-3-nano:30b-cloud
@@ -1295,11 +1305,11 @@ autonomy:
 #   medium:
 #     provider: ollama
 #     name: nemotron-3-super:cloud
-#     locality: cloud
+#     # locality omitted: inferred cloud from the explicit :cloud suffix
 #   large:
 #     provider: ollama
 #     name: deepseek-v4.1-flash:cloud
-#     locality: cloud
+#     # locality omitted: inferred cloud from the explicit :cloud suffix
 
 # Optional provider/runtime inspection endpoints. Each provider keeps its own
 # independent setting; the environment (for example

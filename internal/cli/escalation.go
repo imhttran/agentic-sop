@@ -162,7 +162,7 @@ func runAttempts(ctx context.Context, dir string, cfg config.Config, a agent.Age
 // provider, so the caller stops escalation and keeps the existing recovery path;
 // the selected model therefore always equals the executing model.
 func escalateTo(ctx context.Context, cfg config.Config, d deps, dec recovery.Decision) (agent.Agent, model.Selection, error) {
-	sel, err := resolveClassSelection(cfg, dec.ToClass, dec.Reason)
+	sel, err := resolveClassSelection(ctx, cfg, dec.ToClass, dec.Reason)
 	if err != nil {
 		return nil, model.Selection{}, err
 	}
@@ -326,13 +326,13 @@ func attemptFailureStage(res lifeResult) string {
 // An escalated attempt MUST run the class the ladder selected, so a resolution that
 // yields a different class (the model layer's fallback policy) is rejected: silently
 // accepting it would downgrade, or mislabel, the escalation.
-func resolveClassSelection(cfg config.Config, class model.Class, reason string) (model.Selection, error) {
-	res, err := model.Resolve(model.Inputs{
+func resolveClassSelection(ctx context.Context, cfg config.Config, class model.Class, reason string) (model.Selection, error) {
+	res, err := resolveModelLocality(ctx, model.Inputs{
 		Config:       cfg.Models,
 		Lookup:       os.Getenv,
 		RoutedClass:  class,
 		RoutedReason: reason,
-	})
+	}, runtimeLocalityObserver(cfg))
 	if err != nil {
 		return model.Selection{}, err
 	}
@@ -358,17 +358,18 @@ func recordAttempt(rn *runpkg.Run, d deps, res lifeResult, dec recovery.Decision
 		result = runpkg.AttemptPassed
 	}
 	rec := runpkg.AttemptRecord{
-		Version:      runpkg.AttemptRecordVersion,
-		Attempt:      attempt,
-		Class:        string(attemptClass(d, res)),
-		Provider:     sel.Provider,
-		Model:        sel.Model,
-		Locality:     string(sel.Locality),
-		Reason:       attemptReason(d, res),
-		Result:       result,
-		FailureStage: attemptFailureStage(res),
-		Action:       string(dec.Action),
-		Timestamp:    time.Now().UTC().Format(time.RFC3339),
+		Version:        runpkg.AttemptRecordVersion,
+		Attempt:        attempt,
+		Class:          string(attemptClass(d, res)),
+		Provider:       sel.Provider,
+		Model:          sel.Model,
+		Locality:       string(sel.Locality),
+		LocalitySource: string(sel.LocalitySource),
+		Reason:         attemptReason(d, res),
+		Result:         result,
+		FailureStage:   attemptFailureStage(res),
+		Action:         string(dec.Action),
+		Timestamp:      time.Now().UTC().Format(time.RFC3339),
 	}
 	if err := rn.WriteAttemptRecord(rec); err != nil {
 		fmt.Fprintf(stdout, "warning: attempt record not persisted: %v\n", err)

@@ -58,6 +58,10 @@ type ExecutionTarget struct {
 	// Locality is the executing model's configured locality (authoritative
 	// configuration, never inferred from a model name).
 	Locality Locality `json:"locality"`
+	// LocalitySource records how the executing locality was resolved (explicit,
+	// runtime, inferred, or default). It is omitted when empty so older persisted
+	// evidence decodes and re-encodes without the field.
+	LocalitySource LocalitySource `json:"locality_source,omitempty"`
 	// Source records where the executing model came from (primary or
 	// availability-fallback). It is a typed value, not prose.
 	Source ExecutionSource `json:"execution_source"`
@@ -68,11 +72,12 @@ type ExecutionTarget struct {
 // execution source set to primary and the routing class carried over unchanged.
 func ExecutionTargetForPrimary(sel Selection) ExecutionTarget {
 	return ExecutionTarget{
-		Class:    sel.Class,
-		Provider: sel.Provider,
-		Model:    sel.Model,
-		Locality: sel.Locality,
-		Source:   ExecutionSourcePrimary,
+		Class:          sel.Class,
+		Provider:       sel.Provider,
+		Model:          sel.Model,
+		Locality:       sel.Locality,
+		LocalitySource: sel.LocalitySource,
+		Source:         ExecutionSourcePrimary,
 	}
 }
 
@@ -83,10 +88,11 @@ func ExecutionTargetForPrimary(sel Selection) ExecutionTarget {
 // set to availability-fallback.
 func ExecutionTargetForFallback(routing Selection, fallback Selection) ExecutionTarget {
 	return ExecutionTarget{
-		Class:    routing.Class,
-		Provider: fallback.Provider,
-		Model:    fallback.Model,
-		Locality: fallback.Locality,
-		Source:   ExecutionSourceAvailabilityFallback,
+		Class:          routing.Class,
+		Provider:       fallback.Provider,
+		Model:          fallback.Model,
+		Locality:       fallback.Locality,
+		LocalitySource: fallback.LocalitySource,
+		Source:         ExecutionSourceAvailabilityFallback,
 	}
 }

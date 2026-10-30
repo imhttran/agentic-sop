@@ -107,6 +107,7 @@ func traceExecution(res lifeResult, cfg config.Config) runtrace.Execution {
 			ex.Provider = t.Provider
 			ex.Model = t.Model
 			ex.Locality = string(t.Locality)
+			ex.LocalitySource = string(t.LocalitySource)
 			ex.ExecutionSource = string(t.Source)
 			ex.Fallback = t.Source == model.ExecutionSourceAvailabilityFallback || res.routing.Selection.Fallback
 		} else {
@@ -114,6 +115,7 @@ func traceExecution(res lifeResult, cfg config.Config) runtrace.Execution {
 			ex.Provider = sel.Provider
 			ex.Model = sel.Model
 			ex.Locality = string(sel.Locality)
+			ex.LocalitySource = string(sel.LocalitySource)
 			ex.ExecutionSource = string(model.ExecutionSourcePrimary)
 			ex.Fallback = sel.Fallback
 		}
@@ -124,6 +126,7 @@ func traceExecution(res lifeResult, cfg config.Config) runtrace.Execution {
 		ex.Provider = sel.Provider
 		ex.Model = sel.Model
 		ex.Locality = string(sel.Locality)
+		ex.LocalitySource = string(sel.LocalitySource)
 		ex.ExecutionSource = string(model.ExecutionSourcePrimary)
 		ex.Fallback = sel.Fallback
 		return ex

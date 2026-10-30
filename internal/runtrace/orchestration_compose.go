@@ -42,9 +42,10 @@ type WorkerRun struct {
 	// RoutingSource records what selected the class.
 	RoutingSource string
 	// Provider, Model, and Locality are the resolved EXECUTING target.
-	Provider string
-	Model    string
-	Locality string
+	Provider       string
+	Model          string
+	Locality       string
+	LocalitySource string
 	// Started, Completed, and Timestamp order the worker lifecycle observations.
 	Started   time.Time
 	Completed time.Time
@@ -182,15 +183,16 @@ func ComposeOrchestrationEvents(run OrchestrationRun) []OrchestrationEvent {
 
 		// 4. Provider/model resolved (EXECUTING target node, distinct from class).
 		add(OrchestrationEvent{
-			Kind:         EventProviderResolved,
-			Timestamp:    w.Started,
-			AssignmentID: w.AssignmentID,
-			TaskID:       w.TaskID,
-			WorkerID:     w.WorkerID,
-			Provider:     w.Provider,
-			Model:        w.Model,
-			Locality:     w.Locality,
-			Parents:      []string{workerNode},
+			Kind:           EventProviderResolved,
+			Timestamp:      w.Started,
+			AssignmentID:   w.AssignmentID,
+			TaskID:         w.TaskID,
+			WorkerID:       w.WorkerID,
+			Provider:       w.Provider,
+			Model:          w.Model,
+			Locality:       w.Locality,
+			LocalitySource: w.LocalitySource,
+			Parents:        []string{workerNode},
 		})
 
 		// 5. Worker started.

@@ -94,6 +94,9 @@ type OrchestrationEvent struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Locality string `json:"locality,omitempty"`
+	// LocalitySource records how the executing locality was resolved (explicit,
+	// inferred, runtime, or default). It is guarded as an identifier.
+	LocalitySource string `json:"locality_source,omitempty"`
 
 	// Parents are the IDs of the nodes this event's node depends on (edges into
 	// this node). Children are the IDs of the nodes that depend on it (edges out of
@@ -215,6 +218,7 @@ func sanitizeEvent(e OrchestrationEvent) OrchestrationEvent {
 	e.Provider = sanitizeIdentifier(e.Provider)
 	e.Model = sanitizeIdentifier(e.Model)
 	e.Locality = sanitizeIdentifier(e.Locality)
+	e.LocalitySource = sanitizeIdentifier(e.LocalitySource)
 	e.Status = strings.TrimSpace(e.Status)
 	e.Reason = OneLine(e.Reason)
 	return e

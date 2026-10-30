@@ -470,6 +470,9 @@ func writeModelSelectionSummary(w io.Writer, sel *model.Selection) {
 	fmt.Fprintf(w, "  %-9s %s\n", "Provider:", sel.Provider)
 	fmt.Fprintf(w, "  %-9s %s\n", "Model:", sel.Model)
 	fmt.Fprintf(w, "  %-9s %s\n", "Locality:", sel.Locality)
+	if sel.LocalitySource != "" {
+		fmt.Fprintf(w, "  %-9s %s\n", "Loc. source:", sel.LocalitySource)
+	}
 	fmt.Fprintf(w, "  %-9s %s\n", "Source:", sel.Source)
 	if sel.Reason != "" {
 		fmt.Fprintf(w, "  %-9s %s\n", "Reason:", sel.Reason)

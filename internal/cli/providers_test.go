@@ -92,10 +92,29 @@ func TestProvidersCommandModels(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("code=%d stderr=%s", code, errOut)
 	}
-	for _, want := range []string{"qwen3:4b", "glm-5.3-flash:cloud", "local-model", "capabilities:", "family=qwen3"} {
+	for _, want := range []string{"qwen3:4b", "glm-5.3-flash:cloud", "local-model", "capabilities:", "family=qwen3", "locality: local"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("providers --models output missing %q:\n%s", want, out)
 		}
+	}
+	// A locality line appears only when the runtime reports one: Ollama's
+	// remote_host evidence yields one per /api/tags entry, and the
+	// OpenAI-compatible listings (llamacpp, mlx) stay silent — /v1/models
+	// carries no locality evidence on a local endpoint or a remote one, so the
+	// command must not fabricate locality: local.
+	lines := strings.Split(out, "\n")
+	localityLines := 0
+	for i, line := range lines {
+		if strings.Contains(line, "local-model") && i+1 < len(lines) &&
+			strings.HasPrefix(strings.TrimSpace(lines[i+1]), "locality:") {
+			t.Errorf("OpenAI-compatible listing %q must not print a locality line, got %q", line, lines[i+1])
+		}
+		if strings.HasPrefix(strings.TrimSpace(line), "locality:") {
+			localityLines++
+		}
+	}
+	if localityLines != 2 {
+		t.Errorf("got %d locality lines, want 2 (one per Ollama /api/tags entry; OpenAI-compatible servers report none):\n%s", localityLines, out)
 	}
 }
 

@@ -60,6 +60,10 @@ type AttemptRecord struct {
 	Provider string `json:"provider,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Locality string `json:"locality,omitempty"`
+	// LocalitySource records how the locality was resolved (explicit, inferred,
+	// runtime, or default). It is omitted when empty so older records remain
+	// readable.
+	LocalitySource string `json:"locality_source,omitempty"`
 	// Reason is the deterministic explanation of why this attempt's class was
 	// chosen (a routing reason for the first attempt, the recovery reason for an
 	// escalated one). It is a fixed phrase, never model-generated prose.
