@@ -179,7 +179,9 @@ type Response struct {
 	// provider that reports them lets SOP attribute changes to the task directly
 	// instead of inferring them from the working-tree diff, which may carry
 	// unrelated pre-existing edits. It is nil when the provider cannot report
-	// them, and consumers fall back to the working-tree diff.
+	// them, and consumers fall back to the working-tree diff. A non-nil empty
+	// slice means the provider observed that it changed nothing, so a bare
+	// "completed" from it is never taken as an already-done task.
 	ChangedFiles []string
 }
 

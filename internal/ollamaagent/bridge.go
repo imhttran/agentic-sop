@@ -95,12 +95,12 @@ func (n *NativeAgent) Generate(ctx context.Context, req agent.Request) (agent.Re
 			return agent.Response{
 				Content:      "\"" + err.Error() + "\"",
 				Outcome:      &agent.Outcome{Status: status, Reason: err.Error()},
-				ChangedFiles: ev.mutationPaths(),
+				ChangedFiles: ev.reportedPaths(),
 			}, nil
 		}
 		return agent.Response{}, err
 	}
-	return agent.Response{Content: content, Outcome: agent.ParseOutcome(content), ChangedFiles: ev.mutationPaths(), VerifiedAlreadySatisfied: ev.alreadySatisfied}, nil
+	return agent.Response{Content: content, Outcome: agent.ParseOutcome(content), ChangedFiles: ev.reportedPaths(), VerifiedAlreadySatisfied: ev.alreadySatisfied}, nil
 }
 
 // compile-time assertion: the native agent is a full-capability SOP agent.

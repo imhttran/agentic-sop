@@ -67,6 +67,21 @@ func (m *mutationEvidence) recordPath(path string) {
 	m.paths = append(m.paths, path)
 }
 
+// reportedPaths is the invocation's changed files as reported to SOP: an empty
+// non-nil slice when no mutation was observed (the harness knows it changed
+// nothing), nil when a mutation was observed whose path it cannot name (a
+// formatting command), so SOP falls back to its before/after snapshot, and the
+// recorded paths otherwise.
+func (m *mutationEvidence) reportedPaths() []string {
+	if m == nil {
+		return nil
+	}
+	if !m.observed {
+		return []string{}
+	}
+	return m.mutationPaths()
+}
+
 // mutationPaths returns a copy of the recorded mutation paths, so a caller cannot
 // mutate the accumulator's state through the returned slice.
 func (m *mutationEvidence) mutationPaths() []string {
