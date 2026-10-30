@@ -77,9 +77,9 @@ security:
     concurrency: 1
     process_timeout_seconds: 300
     severity_mode: none
-  verification:
-    scoped:
-      - paths: ["internal/quality/**"]
-        test: ["go test ./internal/quality/..."]
-      - paths: ["internal/config/**"]
-        test: ["go test ./internal/config/..."]
+verification:
+  scoped:
+    - paths: ["internal/quality/**"]
+      test: ["go test ./internal/quality/..."]
+    - paths: ["internal/config/**"]
+      test: ["go test ./internal/config/..."]
