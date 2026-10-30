@@ -81,6 +81,18 @@ func NewOpenAICompatible(id, baseURL, model, apiKey string, timeout time.Duratio
 	}, nil
 }
 
+// timeoutEnv is the setting that bounds this identity's model calls.
+func (c *OpenAICompatible) timeoutEnv() string {
+	switch c.id {
+	case ProviderLlamaCpp:
+		return EnvLlamaCppTimeout
+	case ProviderMLX:
+		return EnvMLXTimeout
+	default:
+		return EnvOpenAICompatibleTimeout
+	}
+}
+
 // NewLlamaCpp returns an OpenAI-compatible provider for the given base URL,
 // model, and optional API key (empty for local servers without auth).
 func NewLlamaCpp(baseURL, model, apiKey string, timeout time.Duration) (*LlamaCpp, error) {
@@ -129,7 +141,7 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 		Error json.RawMessage `json:"error"`
 	}
 	if err := postJSON(ctx, c.client, c.baseURL+"/v1/chat/completions", c.apiKey, body, &out); err != nil {
-		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, err)
+		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, withTimeoutHint(err, c.timeoutEnv()))
 	}
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("%s %s: %s", c.id, request.Capability, detail)

@@ -10,6 +10,8 @@ import (
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/agent"
 )
 
 // chatMessage is one message in an Ollama chat conversation. ToolCalls is
@@ -96,7 +98,7 @@ func (e *ollamaHTTPError) Error() string {
 type ollamaTimeoutError struct{ timeout time.Duration }
 
 func (e *ollamaTimeoutError) Error() string {
-	return fmt.Sprintf("ollama timed out after %s", e.timeout)
+	return fmt.Sprintf("ollama timed out after %s; raise %s to wait longer (for example %s=600s)", e.timeout, agent.EnvOllamaTimeout, agent.EnvOllamaTimeout)
 }
 
 // ollamaTransportError is a failure to reach Ollama (connection refused, reset,

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -395,6 +396,26 @@ func timeoutFromEnv(key string) (time.Duration, error) {
 	return d, nil
 }
 
+// errTimedOut marks a model call that hit the client timeout, so the provider
+// can name the setting that raises it.
+var errTimedOut = errors.New("model did not answer within the timeout")
+
+// isTimeout reports whether err is a client timeout (not a caller cancellation).
+func isTimeout(err error) bool {
+	var ne net.Error
+	return errors.As(err, &ne) && ne.Timeout()
+}
+
+// withTimeoutHint names env on a timed-out call. A slow local model (a large or
+// reasoning model, or one still loading) is the usual cause, and the default
+// timeout gives no clue which setting raises it.
+func withTimeoutHint(err error, env string) error {
+	if !errors.Is(err, errTimedOut) {
+		return err
+	}
+	return fmt.Errorf("%w; raise %s to wait longer (for example %s=600s)", err, env, env)
+}
+
 // postJSON marshals in as JSON, POSTs it to url, and decodes a 2xx body into
 // out. Non-2xx responses become errors that include the status and a bounded
 // body snippet; context cancellation stays distinguishable via errors.Is.
@@ -418,12 +439,18 @@ func postJSON(ctx context.Context, client *http.Client, url, apiKey string, in, 
 		if ctxErr := ctx.Err(); ctxErr != nil {
 			return fmt.Errorf("request canceled: %w", ctxErr)
 		}
+		if isTimeout(err) {
+			return fmt.Errorf("%w after %s", errTimedOut, client.Timeout)
+		}
 		return fmt.Errorf("request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	data, err := io.ReadAll(io.LimitReader(resp.Body, maxResponseBytes))
 	if err != nil {
+		if isTimeout(err) {
+			return fmt.Errorf("%w after %s", errTimedOut, client.Timeout)
+		}
 		return fmt.Errorf("read response: %w", err)
 	}
 

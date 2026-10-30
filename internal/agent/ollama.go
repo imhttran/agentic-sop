@@ -91,7 +91,7 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 		Error   json.RawMessage `json:"error"`
 	}
 	if err := postJSON(ctx, o.client, o.baseURL+"/api/chat", "", body, &out); err != nil {
-		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, err)
+		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, withTimeoutHint(err, EnvOllamaTimeout))
 	}
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("ollama %s: %s", request.Capability, detail)

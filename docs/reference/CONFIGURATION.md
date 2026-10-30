@@ -293,8 +293,12 @@ workflow:
 | `tool`    | `mlx`      | `agent.harness`, `agent.provider`, `agent.model` | `SOP_MLX_BASE_URL`, `SOP_MLX_MODEL`, `SOP_MLX_TIMEOUT`, `SOP_MLX_API_KEY`                     | Yes             |
 | `command` | `command`  | `agent.harness` (optional; defaults to command)  | `SOP_AGENT_COMMAND` (required), `SOP_AGENT_PROVIDER` (optional)                               | No              |
 
-`SOP_OLLAMA_TIMEOUT` is a Go duration (e.g. `300s` / `2m`); `SOP_LLAMACPP_TIMEOUT`
-is in seconds. `SOP_REVIEW_COMMAND` selects the external command used by the
+`SOP_OLLAMA_TIMEOUT`, `SOP_LLAMACPP_TIMEOUT`, `SOP_MLX_TIMEOUT`, and
+`SOP_OPENAI_COMPATIBLE_TIMEOUT` are Go durations (e.g. `300s` / `10m`) that bound one
+model call; each defaults to `120s`. A large or reasoning local model, or one still
+loading on its first call, can need several minutes for one review, so raise the
+setting for that provider (for example `SOP_OPENAI_COMPATIBLE_TIMEOUT=600s`). A
+timed-out call names the setting to raise. `SOP_REVIEW_COMMAND` selects the external command used by the
 `open-code-review` engine. The operator-set diagnostic sinks `SOP_OLLAMA_TRACE_LOG`
 and `SOP_TOOL_AUDIT_LOG` keep the per-turn trace and tool audit; they are not
 SOP's state database.
