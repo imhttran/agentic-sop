@@ -10,29 +10,49 @@ import (
 	"github.com/imhttran/agentic-sop/internal/decisionquality"
 )
 
+// IsolationBackend identifies the OS-level isolation mechanism that assembles replay
+// command arguments.
+type IsolationBackend string
+
+const (
+	// BackendNone means no isolation backend is selected; replay must refuse.
+	BackendNone IsolationBackend = ""
+	// BackendSeatbelt is the macOS sandbox-exec backend, driven by a Seatbelt profile.
+	BackendSeatbelt IsolationBackend = "seatbelt"
+	// BackendBubblewrap is the Linux bubblewrap backend, driven by bwrap arguments.
+	BackendBubblewrap IsolationBackend = "bubblewrap"
+)
+
 // Isolation describes the available replay isolation mechanism.
 type Isolation struct {
 	Tool      string
+	Backend   IsolationBackend
 	Available bool
 	Reason    string
 }
 
 // DetectIsolation reports whether this host can run a replay under OS-level isolation.
-// It never runs anything; it only reports.
+// It never runs anything; it only reports. It is the single selector of the backend.
 func DetectIsolation() Isolation {
-	switch runtime.GOOS {
+	return detectIsolationFor(runtime.GOOS)
+}
+
+// detectIsolationFor is the pure backend selector. It maps one GOOS value to an
+// Isolation so tests can exercise darwin and unsupported hosts on any machine.
+func detectIsolationFor(goos string) Isolation {
+	switch goos {
 	case "darwin":
 		if _, err := exec.LookPath("sandbox-exec"); err == nil {
-			return Isolation{Tool: "sandbox-exec", Available: true}
+			return Isolation{Tool: "sandbox-exec", Backend: BackendSeatbelt, Available: true}
 		}
-		return Isolation{Tool: "sandbox-exec", Reason: "sandbox-exec not found"}
+		return Isolation{Tool: "sandbox-exec", Backend: BackendSeatbelt, Reason: "sandbox-exec not found"}
 	case "linux":
 		if _, err := exec.LookPath("bwrap"); err == nil {
-			return Isolation{Tool: "bwrap", Available: true}
+			return Isolation{Tool: "bwrap", Backend: BackendBubblewrap, Available: true}
 		}
-		return Isolation{Tool: "bwrap", Reason: "bwrap not found"}
+		return Isolation{Tool: "bwrap", Backend: BackendBubblewrap, Reason: "bwrap not found"}
 	default:
-		return Isolation{Tool: "", Reason: "no supported OS-level isolation on " + runtime.GOOS}
+		return Isolation{Tool: "", Backend: BackendNone, Reason: "no supported OS-level isolation on " + goos}
 	}
 }
 
