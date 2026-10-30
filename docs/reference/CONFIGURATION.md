@@ -626,6 +626,26 @@ than running that model under the pinned name. A `jev` pin must use provider
 `ollama`. The normative rules are in
 [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md).
 
+### Sensitive tasks
+
+A task whose early JEV evidence marks it sensitive (a finding of any severity in
+`security`, `credential_sensitivity`, `destructive`, `approval_sensitive`,
+`medical_data`, `financial_data`, or `personal_data`) routes to `large`. To run
+such tasks on a dedicated model instead, name it outside the class table:
+
+```dotenv
+SOP_MODEL_SENSITIVE_PROVIDER=ollama
+SOP_MODEL_SENSITIVE_NAME=mistral-large-4:cloud
+```
+
+Both are required together, the provider must be known, and a bad value fails at
+startup. A HIGH sensitive finding still stops the task for approval first; after
+approval it runs on the sensitive model. Adaptive routing never moves a sensitive
+task below `large`. `routing.json` records the model with the reason
+`sensitive task: configured sensitive model` and `signals.sensitive: true`. The
+model must be able to implement (the native Ollama path can; the read-only
+`openai_compatible` path cannot).
+
 ## Automatic model routing
 
 Automatic (per-task) routing is a separate, opt-in layer on top of the class table.

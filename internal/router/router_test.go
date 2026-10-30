@@ -284,3 +284,19 @@ func TestStatedComplexityRoutes(t *testing.T) {
 		}
 	}
 }
+
+// TestSensitiveFindingFlagsDecision pins that a finding of any severity in a
+// sensitive category routes large and flags the decision, and a code-level note
+// does not.
+func TestSensitiveFindingFlagsDecision(t *testing.T) {
+	task := TaskSignals{AcceptanceCriteria: 1, FilesAffected: 1}
+	for _, c := range []jev.Category{jev.CategoryPersonalData, jev.CategoryMedicalData, jev.CategoryFinancialData, jev.CategorySecurity} {
+		d := Decide(SignalsFrom(findingsEvidence(item(c, jev.SeverityLow)), task))
+		if !d.Sensitive || d.Class != model.ClassLarge {
+			t.Errorf("%s LOW: sensitive=%v class=%s, want sensitive and large", c, d.Sensitive, d.Class)
+		}
+	}
+	if d := Decide(SignalsFrom(findingsEvidence(item(jev.CategoryAmbiguity, jev.SeverityLow)), task)); d.Sensitive {
+		t.Error("an ambiguity finding flagged the decision sensitive")
+	}
+}

@@ -96,18 +96,51 @@ func StageDirect(st Stage, lookup func(string) string) (Selection, bool, error) 
 	if lookup == nil {
 		lookup = os.Getenv
 	}
-	provider := strings.TrimSpace(lookup(StageProviderEnvKey(st)))
-	name := strings.TrimSpace(lookup(StageNameEnvKey(st)))
-	if provider == "" && name == "" {
-		return Selection{}, false, nil
+	sel, ok, err := directPin(StageProviderEnvKey(st), StageNameEnvKey(st), lookup)
+	if err != nil || !ok {
+		return sel, ok, err
 	}
-	switch {
-	case provider == "" || name == "":
-		return Selection{}, false, fmt.Errorf("model routing: set both %s and %s, or neither", StageProviderEnvKey(st), StageNameEnvKey(st))
-	case !knownProviders[provider]:
-		return Selection{}, false, fmt.Errorf("model routing: %s: unknown provider %q (want one of %s)", StageProviderEnvKey(st), provider, strings.Join(KnownProviders(), ", "))
-	case strings.TrimSpace(lookup(StageEnvKey(st))) != "":
+	if strings.TrimSpace(lookup(StageEnvKey(st))) != "" {
 		return Selection{}, false, fmt.Errorf("model routing: stage %s is pinned by both %s and %s; set one", st, StageEnvKey(st), StageProviderEnvKey(st))
+	}
+	return sel, true, nil
+}
+
+// The sensitive model runs a task whose early evidence marks it sensitive
+// (jev.Category.Sensitive): security, credentials, destructive or
+// approval-sensitive operations, medical, financial, or personal data. Unset, such
+// a task runs on the large class as before.
+const (
+	EnvSensitiveProvider = "SOP_MODEL_SENSITIVE_PROVIDER"
+	EnvSensitiveName     = "SOP_MODEL_SENSITIVE_NAME"
+)
+
+// ReasonSensitiveModel: a sensitive task ran on the configured sensitive model.
+const ReasonSensitiveModel = "sensitive task: configured sensitive model"
+
+// SensitiveModel resolves the configured sensitive model, and reports whether one
+// is set. Both settings are required together and the provider must be known.
+func SensitiveModel(lookup func(string) string) (Selection, bool, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	sel, ok, err := directPin(EnvSensitiveProvider, EnvSensitiveName, lookup)
+	sel.Reason = ReasonSensitiveModel
+	return sel, ok, err
+}
+
+// directPin reads a provider and model named straight in two settings, outside
+// the class table.
+func directPin(providerKey, nameKey string, lookup func(string) string) (Selection, bool, error) {
+	provider := strings.TrimSpace(lookup(providerKey))
+	name := strings.TrimSpace(lookup(nameKey))
+	switch {
+	case provider == "" && name == "":
+		return Selection{}, false, nil
+	case provider == "" || name == "":
+		return Selection{}, false, fmt.Errorf("model routing: set both %s and %s, or neither", providerKey, nameKey)
+	case !knownProviders[provider]:
+		return Selection{}, false, fmt.Errorf("model routing: %s: unknown provider %q (want one of %s)", providerKey, provider, strings.Join(KnownProviders(), ", "))
 	}
 	return Selection{Provider: provider, Model: name, Source: SourceEnv, Reason: ReasonStagePin}, true, nil
 }

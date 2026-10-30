@@ -411,11 +411,18 @@ var earlyPurposeBrief = map[Purpose]string{
 	PurposeTaskTriage: "TASK_TRIAGE: assess this task BEFORE implementation starts. Nothing has been implemented yet; " +
 		"paths marked (new) are expected to be created by the task and are not missing. Report only risks in the task itself " +
 		"(unclear or contradictory requirements, security-sensitive or cross-cutting scope, existing code it may break). " +
-		"Use PASS when the task is clear and safe to start. " + complexityBrief,
+		"Use PASS when the task is clear and safe to start. " + sensitiveBrief + complexityBrief,
 	PurposePreExecution: "PRE_EXECUTION: assess the planned execution context immediately BEFORE implementation. Nothing has " +
 		"been implemented yet; paths marked (new) are expected to be created and are not missing. Report only risks that " +
-		"should stop or change the work before it starts. Use PASS when it is safe to proceed. " + complexityBrief,
+		"should stop or change the work before it starts. Use PASS when it is safe to proceed. " + sensitiveBrief + complexityBrief,
 }
+
+// sensitiveBrief asks an early checkpoint to mark sensitive work even when nothing
+// is wrong with it, so the router can send it to the sensitive model. Severity
+// keeps its meaning: HIGH still stops the task for a person to approve.
+const sensitiveBrief = "When the work itself is sensitive, report a finding in the matching category even if nothing is wrong: " +
+	"security, credential_sensitivity, destructive, approval_sensitive, medical_data, financial_data or personal_data. " +
+	"Use LOW or MEDIUM for routine sensitive work, and HIGH only when a person should approve it before work starts. "
 
 // complexityBrief asks an early checkpoint for its typed complexity rating, which
 // the router reads to pick a model class. It defines the levels by how hard the

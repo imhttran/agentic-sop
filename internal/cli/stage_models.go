@@ -61,6 +61,13 @@ func applyStageModels(ctx context.Context, d *deps, cfg config.Config) error {
 		}
 		d.stageModels[st] = sel
 	}
+	// The sensitive model is checked here too, so a bad setting fails at startup
+	// rather than when the first sensitive task arrives.
+	if sel, ok, err := model.SensitiveModel(os.Getenv); err != nil {
+		return err
+	} else if key, v := modelEnvOverride(sel.Provider); ok && v != "" && v != sel.Model {
+		return fmt.Errorf("model routing: the sensitive model is %s, but %s=%s overrides it; unset %s", sel.Model, key, v, key)
+	}
 	if sel, ok := d.stageModels[model.StageJEV]; ok && d.newJEVAnalyzerForModel != nil {
 		build := d.newJEVAnalyzerForModel
 		d.newJEVAnalyzer = func(config.Config) (jev.Analyzer, error) { return build(sel.Model) }

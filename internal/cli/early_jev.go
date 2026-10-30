@@ -419,7 +419,7 @@ func earlyConfidence(ev jev.Evidence) (string, bool) {
 func blockingEvidence(ev jev.Evidence) jev.Evidence {
 	var items []jev.EvidenceItem
 	for _, item := range ev.Items {
-		if item.Category == "" || item.Category.SecuritySensitive() {
+		if item.Category == "" || item.Category.Sensitive() {
 			items = append(items, item)
 		}
 	}

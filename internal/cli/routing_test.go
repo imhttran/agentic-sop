@@ -267,3 +267,29 @@ func TestRoutingArtifactCarriesNoCredential(t *testing.T) {
 		t.Errorf("routing.json appears to carry a credential: %s", data)
 	}
 }
+
+// TestRoutingSensitiveTaskUsesSensitiveModel proves a task early JEV marks
+// sensitive (here a routine personal-data finding) runs on the configured
+// sensitive model, recorded as such, while the class stays large.
+func TestRoutingSensitiveTaskUsesSensitiveModel(t *testing.T) {
+	clearModelEnv(t)
+	t.Setenv(model.EnvRoutingEnabled, "true")
+	t.Setenv(model.EnvSensitiveProvider, "ollama")
+	t.Setenv(model.EnvSensitiveName, "mistral-large-4:cloud")
+	dir := t.TempDir()
+	writeFile(t, dir, "TASK.md", runTaskFile)
+	writeConfig(t, dir, triageRoutingConfig)
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryPersonalData, jev.SeverityLow)}
+
+	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", routingAgent(), fakeJEV(analyzer), "run", "--task", "TASK.md")
+	if code != exitOK {
+		t.Fatalf("code=%d stderr=%s stdout=%s", code, stderr, stdout)
+	}
+	art := readRoutingArtifact(t, dir)
+	if art.Class != "large" || art.Provider != "ollama" || art.Model != "mistral-large-4:cloud" {
+		t.Fatalf("routing = class %q %s/%s, want large on ollama/mistral-large-4:cloud", art.Class, art.Provider, art.Model)
+	}
+	if !strings.Contains(strings.Join(art.Reasons, ";"), model.ReasonSensitiveModel) || art.Signals == nil || !art.Signals.Sensitive {
+		t.Errorf("routing reasons %v / signals %+v, want the sensitive model reason and signal", art.Reasons, art.Signals)
+	}
+}

@@ -148,6 +148,12 @@ const (
 	CategoryUnexpectedArea Category = "unexpected_area"
 	// CategoryApprovalSensitive: the operation crosses an approval boundary.
 	CategoryApprovalSensitive Category = "approval_sensitive"
+	// CategoryMedicalData: the work handles medical or health data.
+	CategoryMedicalData Category = "medical_data"
+	// CategoryFinancialData: the work handles financial data or moves money.
+	CategoryFinancialData Category = "financial_data"
+	// CategoryPersonalData: the work handles personal or identifying data (PII).
+	CategoryPersonalData Category = "personal_data"
 )
 
 // categoryRank is the closed set of known categories. Membership in the map is
@@ -163,6 +169,9 @@ var categoryRank = map[Category]bool{
 	CategoryCredentialSensitivity: true,
 	CategoryUnexpectedArea:        true,
 	CategoryApprovalSensitive:     true,
+	CategoryMedicalData:           true,
+	CategoryFinancialData:         true,
+	CategoryPersonalData:          true,
 }
 
 // Valid reports whether c is a known category. An empty category is treated as
@@ -184,12 +193,15 @@ func Categories() []Category {
 	return cats
 }
 
-// SecuritySensitive reports whether c is a security-family category: security,
-// destructive, credential-sensitive, or approval-sensitive work. It is the single
-// definition shared by routing and the read-only prompt boundary.
-func (c Category) SecuritySensitive() bool {
+// Sensitive reports whether c marks sensitive work: security, destructive,
+// credential-sensitive, or approval-sensitive work, or work on medical, financial,
+// or personal data. It is the single definition shared by routing (which sends
+// sensitive work to the large class, or to the configured sensitive model) and
+// the early human boundary (which a sensitive finding may still require).
+func (c Category) Sensitive() bool {
 	switch c {
-	case CategorySecurity, CategoryDestructive, CategoryCredentialSensitivity, CategoryApprovalSensitive:
+	case CategorySecurity, CategoryDestructive, CategoryCredentialSensitivity, CategoryApprovalSensitive,
+		CategoryMedicalData, CategoryFinancialData, CategoryPersonalData:
 		return true
 	default:
 		return false

@@ -338,7 +338,7 @@ func TestJEVProductionAnalyzerRouterIntegration(t *testing.T) {
 	// securityLowJSON is a schema-valid response whose only finding is a
 	// security-category concern stated at LOW severity. The router must still floor
 	// it to HIGH risk (LARGE), because the security-family categories never route
-	// below the conservative floor (jev.Category.SecuritySensitive).
+	// below the conservative floor (jev.Category.Sensitive).
 	const securityLowJSON = `{"status":"FINDINGS","summary":"security concern","findings":[{"id":"f1","severity":"LOW","category":"security","path":"internal/x.go","line":7,"message":"credential handled","evidence":"log.Println(token)"}]}`
 
 	// nonSecurityLowJSON is the contrast: a LOW-severity finding with no

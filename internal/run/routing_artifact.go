@@ -112,6 +112,8 @@ type RoutingSignals struct {
 	AcceptanceCriteria int     `json:"acceptance_criteria"`
 	Dependencies       int     `json:"dependencies"`
 	FilesAffected      int     `json:"files_affected"`
+	// Sensitive reports that early evidence marked the task sensitive.
+	Sensitive bool `json:"sensitive,omitempty"`
 }
 
 // Validate rejects a malformed routing artifact, failing closed on unknown

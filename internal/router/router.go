@@ -76,6 +76,10 @@ func (s Scope) Valid() bool {
 // never model-generated prose — so a routing decision stays auditable and is
 // never parsed back to drive a decision.
 const (
+	// ReasonSensitive: typed evidence marks sensitive work (security, credentials,
+	// destructive or approval-sensitive operations, medical, financial, or personal
+	// data).
+	ReasonSensitive = "sensitive task"
 	// ReasonRiskHigh: typed evidence indicates high risk.
 	ReasonRiskHigh = "high-risk evidence"
 	// ReasonComplexityHigh: typed evidence indicates high complexity.
@@ -134,6 +138,9 @@ type Signals struct {
 	// RequiresContext reports that additional context is required before the task
 	// can be implemented (missing-context evidence).
 	RequiresContext bool
+	// Sensitive reports a finding of any severity in a sensitive category
+	// (jev.Category.Sensitive).
+	Sensitive bool
 	// Confidence is the analysis confidence, bounded to [0,1], when stated. It is
 	// advisory evidence only and never selects a class by itself.
 	Confidence float64
@@ -184,7 +191,7 @@ func SignalsFrom(ev *jev.Evidence, task TaskSignals) Signals {
 		// the largest class (Phase 3.5 §5: conservative escalation; a security risk
 		// overrides the small-task optimization).
 		itemRisk := sev
-		if item.Category.SecuritySensitive() && itemRisk < 3 {
+		if item.Category.Sensitive() && itemRisk < 3 {
 			itemRisk = 3
 		}
 		if itemRisk > risk {
@@ -209,6 +216,9 @@ func SignalsFrom(ev *jev.Evidence, task TaskSignals) Signals {
 			complexity = itemComplexity
 		}
 
+		if item.Category.Sensitive() {
+			s.Sensitive = true
+		}
 		switch item.Category {
 		case jev.CategoryScope, jev.CategoryUnexpectedArea:
 			s.Scope = ScopeCross
@@ -246,6 +256,7 @@ func (s Signals) Merge(o Signals) Signals {
 	out.Scope = maxScope(s.Scope, o.Scope)
 	out.CrossCutting = s.CrossCutting || o.CrossCutting
 	out.RequiresContext = s.RequiresContext || o.RequiresContext
+	out.Sensitive = s.Sensitive || o.Sensitive
 	if o.Confidence > out.Confidence {
 		out.Confidence = o.Confidence
 	}
@@ -265,6 +276,9 @@ type Decision struct {
 	// Reasons are the deterministic, ordered explanations for the class. They are
 	// fixed phrases, never model-generated prose.
 	Reasons []string
+	// Sensitive reports that the task is sensitive work, so the caller may run it
+	// on the configured sensitive model rather than the class's model.
+	Sensitive bool
 }
 
 // Decide maps routing signals to a model class. It is pure and deterministic.
@@ -283,6 +297,14 @@ type Decision struct {
 //
 // A bare confidence threshold is never a rule: Confidence is not read here.
 func Decide(s Signals) Decision {
+	d := decideClass(s)
+	// Sensitive work already routes LARGE through the risk floor; the flag lets the
+	// caller run it on the configured sensitive model instead.
+	d.Sensitive = s.Sensitive
+	return d
+}
+
+func decideClass(s Signals) Decision {
 	switch {
 	case s.Risk == LevelHigh:
 		return Decision{Class: model.ClassLarge, Reasons: []string{ReasonRiskHigh}}

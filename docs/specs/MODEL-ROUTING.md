@@ -352,6 +352,13 @@ name both settings and a known provider, MUST NOT be combined with that stage's
 class pin, and for `plan` or `review` MUST fail at startup when `SOP_AGENT_MODEL` or
 the provider's own model variable would override it with a different model.
 
+A task whose early evidence carries a finding of any severity in a sensitive
+category (security, credential sensitivity, destructive, approval-sensitive,
+medical data, financial data, personal data) MUST route to `large`, MUST NOT be
+adapted below it, and, when `SOP_MODEL_SENSITIVE_PROVIDER` and `_NAME` are set,
+MUST be implemented on that model. A HIGH sensitive finding MUST still require
+human approval at the early boundary before any work.
+
 An unpinned stage MUST keep the behavior in the table above, so an existing
 project is unchanged. The model each stage ran on MUST be recorded under
 `stages` in `model-selection.json` (source `stage`, `run`, `ollama-env`, or

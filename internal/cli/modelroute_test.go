@@ -140,6 +140,7 @@ func modelRoutingEnvKeys() []string {
 		model.EnvDefaultClass, model.EnvFallbackClass, model.EnvAllowCloudFallbackForLocal,
 		model.EnvRoutingEnabled, model.EnvEscalationEnabled, model.EnvMaxEscalations,
 		model.EnvReplanEnabled, model.EnvMaxReplans,
+		model.EnvSensitiveProvider, model.EnvSensitiveName,
 	}
 	for _, st := range model.Stages {
 		keys = append(keys, model.StageEnvKey(st), model.StageProviderEnvKey(st), model.StageNameEnvKey(st))

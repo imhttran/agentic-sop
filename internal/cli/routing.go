@@ -113,15 +113,35 @@ func routingForTask(ctx context.Context, cfg config.Config, d deps, spec *taskfi
 	}
 
 	dec := router.Decide(sig)
+	// Sensitive work (security, credentials, destructive or approval-sensitive
+	// operations, medical, financial, or personal data) runs on the configured
+	// sensitive model; unset, it stays on the large class the router chose.
+	if dec.Sensitive {
+		sel, ok, err := model.SensitiveModel(os.Getenv)
+		if err != nil {
+			return taskRouting{}, false, err
+		}
+		if ok {
+			return taskRouting{
+				Class:           dec.Class,
+				Source:          runpkg.RoutingSourcePolicy,
+				Reasons:         append(dec.Reasons, model.ReasonSensitiveModel),
+				Selection:       sel,
+				ExecutionTarget: model.ExecutionTargetForPrimary(sel),
+				Signals:         sig,
+				Checkpoints:     checkpoints,
+			}, true, nil
+		}
+	}
 	// CTX-011 adaptive routing: adapt the deterministic router's class using accumulated
 	// evaluation evidence. The harness chooses the class; a model never chooses itself.
 	// With no evidence (or too little) the baseline is unchanged, so this is a no-op until
-	// enough evidence accrues.
+	// enough evidence accrues. Sensitive work is never adapted below the router's class.
 	if adapted := adaptiveroute.Route(adaptiveroute.Input{
 		Baseline:   dec.Class,
 		Capability: agent.Implement,
 		Evidence:   routingEvidence(routingDir(d)),
-	}); adapted.Class != dec.Class {
+	}); !dec.Sensitive && adapted.Class != dec.Class {
 		dec.Class = adapted.Class
 		dec.Reasons = append(dec.Reasons, adapted.Reason+" ("+adapted.Evidence+")")
 	}
@@ -307,6 +327,7 @@ func routingSignalsDoc(s router.Signals) *runpkg.RoutingSignals {
 		AcceptanceCriteria: s.AcceptanceCriteria,
 		Dependencies:       s.Dependencies,
 		FilesAffected:      s.FilesAffected,
+		Sensitive:          s.Sensitive,
 	}
 }
 
