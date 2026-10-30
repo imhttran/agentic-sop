@@ -40,13 +40,28 @@ func (f ReplayFixture) Validate() error {
 	return nil
 }
 
+// replaySandboxPath is the fixed path where the canonical replay directory is bound
+// inside the bubblewrap sandbox. It is independent of the host path.
+const replaySandboxPath = "/replay"
+
+// replaySandboxTmpPath is the writable temp directory inside the replay directory.
+// TMPDIR points here on both backends, so temporary storage stays inside the replay
+// directory and never lands in a host temp root or a private writable mount.
+const replaySandboxTmpPath = replaySandboxPath + "/.tmp"
+
+// sandboxPATH is the toolchain/system search path set inside the sandbox. It puts the
+// Go toolchain (/usr/local/go/bin) first.
+const sandboxPATH = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
 // minimalReplayEnv is the scrubbed child environment: no API keys, tokens, or provider
-// configuration. Both backends reproduce this environment inside the sandbox.
+// configuration. Both backends reproduce this environment inside the sandbox. TMPDIR
+// points at <dir>/.tmp so temporary storage stays inside the replay directory.
 func minimalReplayEnv(dir string) []string {
 	return []string{
-		"PATH=/usr/bin:/bin:/usr/sbin:/sbin",
+		"PATH=" + sandboxPATH,
 		"HOME=" + dir,
-		"TMPDIR=" + dir,
+		"TMPDIR=" + filepath.Join(dir, ".tmp"),
+		"GOTOOLCHAIN=local",
 	}
 }
 
@@ -91,22 +106,28 @@ func seatbeltCommand(dir string, target []string) []string {
 	return append(args, target...)
 }
 
-// bubblewrapCommand builds the Linux bubblewrap arguments. It binds the whole filesystem
-// read-only and makes only the replay directory writable, so ordinary file writes
-// outside the replay directory fail.
+// bubblewrapSystemROPaths are the read-only system and toolchain paths bound into the
+// sandbox view. They are bound with --ro-bind-try because a path may be absent or a
+// symlink (for example /lib64 -> /usr/lib64) on some hosts.
+var bubblewrapSystemROPaths = []string{"/usr", "/bin", "/sbin", "/lib", "/lib64", "/etc", "/sys"}
+
+// bubblewrapCommand builds the Linux bubblewrap arguments for the restricted filesystem
+// view. It does NOT bind the host root. Instead it binds only the read-only system and
+// toolchain paths, mounts a fresh /proc and /dev, makes /dev/shm a read-only tmpfs, and
+// binds the canonical replay directory writable at the fixed sandbox path /replay.
 //
-// It deliberately does NOT use --dev or --proc. --dev mounts a fresh writable tmpfs over
-// /dev, which shadows the read-only host /dev (and /dev/shm) and lets writes there
-// succeed inside a private mount. Host immutability is not the same as confinement: the
-// contract requires the write itself to fail, even when it lands in a private mount.
-// Keeping the host /dev read-only means writes under /dev, including /dev/shm, fail.
+// Host /tmp, /run, /var/run, /home, /root, /opt, /srv, /mnt, and /media are absent from
+// the view. Host Unix sockets in those locations are therefore unreachable, and writes
+// there fail. The replay directory is the only writable filesystem location, and temp
+// storage lives in /replay/.tmp inside it.
 //
-// The replay directory is bound writable by its canonical path after the read-only root,
-// so the writable bind is layered on top of the read-only bind. The command changes into
-// the replay directory, unshares the network and other namespaces, clears the
-// environment and re-adds only the scrubbed variables, then terminates option parsing
-// with -- before the verification command. It returns the bound replay path, the
-// argument list, and an error.
+// Keeping host /dev read-only and giving /dev/shm a read-only remount means writes under
+// /dev and /dev/shm fail instead of landing in a private writable mount.
+//
+// The command changes into /replay, unshares the network and other namespaces, clears
+// the environment and re-adds only the scrubbed variables, then terminates option
+// parsing with -- before the verification command. It returns the canonical replay
+// path, the argument list, and an error.
 //
 // It fails closed: when filepath.EvalSymlinks cannot canonicalize the replay directory it
 // returns an actionable error and no arguments, so the caller never launches a child with
@@ -117,9 +138,17 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 		return "", nil, fmt.Errorf("replay isolation: cannot canonicalize replay directory %q: %w", dir, err)
 	}
 	args = []string{
-		"--ro-bind", "/", "/",
-		"--bind", bound, bound,
-		"--chdir", bound,
+		"--proc", "/proc",
+		"--dev", "/dev",
+		"--tmpfs", "/dev/shm",
+		"--remount-ro", "/dev/shm",
+	}
+	for _, p := range bubblewrapSystemROPaths {
+		args = append(args, "--ro-bind-try", p, p)
+	}
+	args = append(args,
+		"--bind", bound, replaySandboxPath,
+		"--chdir", replaySandboxPath,
 		"--unshare-net",
 		"--unshare-pid",
 		"--unshare-ipc",
@@ -127,11 +156,12 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv", "PATH", "/usr/bin:/bin:/usr/sbin:/sbin",
-		"--setenv", "HOME", bound,
-		"--setenv", "TMPDIR", bound,
+		"--setenv", "PATH", sandboxPATH,
+		"--setenv", "HOME", replaySandboxPath,
+		"--setenv", "TMPDIR", replaySandboxTmpPath,
+		"--setenv", "GOTOOLCHAIN", "local",
 		"--",
-	}
+	)
 	return bound, append(args, target...), nil
 }
 
@@ -168,6 +198,13 @@ func IsolatedReplay(ctx context.Context, parent string, f ReplayFixture, timeout
 		if err := os.WriteFile(target, []byte(content), 0o644); err != nil {
 			return -1, "", err
 		}
+	}
+
+	// Create <replay>/.tmp inside the replay directory before launch, so the
+	// sandbox TMPDIR (/replay/.tmp) exists. Temp storage stays in the replay
+	// directory; it is never a private writable mount outside it.
+	if err := os.MkdirAll(filepath.Join(dir, ".tmp"), 0o700); err != nil {
+		return -1, "", err
 	}
 
 	args, cmdEnv, err := isolationCommand(iso.Backend, dir, f.VerificationCommand)

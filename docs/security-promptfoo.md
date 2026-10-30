@@ -309,6 +309,43 @@ adapter does not route its live `promptfoo eval` process through `evaltarget`;
 the live smoke test is not network-isolated. Do not cite this section as proof
 that a live evaluation had no outbound traffic.
 
+### Replay isolation (dqharness)
+
+`IsolatedReplay` in `internal/dqharness/replay_exec.go` runs a verification
+command under OS-level isolation. On Linux it uses `bubblewrap` (`bwrap`) with a
+restricted filesystem view:
+
+- only these read-only system and toolchain paths are bound, with
+  `--ro-bind-try` so optional or symlinked paths are tolerated: `/usr`, `/bin`,
+  `/sbin`, `/lib`, `/lib64`, `/etc`, `/sys`;
+- `/proc` is a fresh procfs mount (`--proc /proc`) and `/dev` is a fresh devtmpfs
+  mount (`--dev /dev`), so toolchains get a usable `/proc` and `/dev`;
+- `/dev/shm` is a tmpfs remounted read-only (`--tmpfs /dev/shm` followed by
+  `--remount-ro /dev/shm`);
+- the canonical replay directory is bound writable at the fixed sandbox path
+  `/replay` (`--bind <canonical replay dir> /replay`) and the command changes into
+  it (`--chdir /replay`).
+
+Host `/tmp`, `/run`, `/var/run`, `/home`, `/root`, `/opt`, `/srv`, `/mnt`,
+`/media`, and other user-writable locations are absent from this view. Host Unix
+domain sockets in those locations are therefore unreachable from inside the
+sandbox, even though `--unshare-net` only governs TCP/IP. The replay directory is
+the only writable filesystem location.
+
+Writable temp storage is `/replay/.tmp`, created inside the replay directory
+before launch (mode `0700`). `TMPDIR` points there on both backends, so
+`os.CreateTemp` and `go test` keep temporary files inside the replay directory
+and never in a host temp root or a private writable mount outside it. The child
+environment sets `PATH` with `/usr/local/go/bin` first, `HOME=/replay`,
+`TMPDIR=/replay/.tmp`, and `GOTOOLCHAIN=local`, and keeps `--unshare-net`,
+`--unshare-pid`, `--unshare-ipc`, `--unshare-uts`, `--die-with-parent`,
+`--new-session`, and `--clearenv`. A canonicalization failure returns an
+actionable error and never launches a child with a raw path.
+
+On macOS, `IsolatedReplay` uses the Seatbelt (`sandbox-exec`) profile. macOS
+Seatbelt runtime isolation remains command-construction-only: argument and
+profile construction is tested, but no macOS runtime isolation is claimed here.
+
 The S2 target enforces the boundary in `internal/evaltarget`:
 
 - Cases fail closed unless the process was launched through

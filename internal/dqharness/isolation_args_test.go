@@ -72,18 +72,39 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 		t.Fatal("empty bound path")
 	}
 	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--ro-bind / /") {
+		t.Fatalf("bwrap args must not bind the host root read-only: %v", args)
+	}
+	for _, forbidden := range []string{"/run", "/var/run", "/home", "/root", "/opt", "/srv", "/mnt", "/media"} {
+		if strings.Contains(joined, "--bind-try "+forbidden) || strings.Contains(joined, "--bind "+forbidden+" ") {
+			t.Fatalf("bwrap args bind forbidden host path %q: %v", forbidden, args)
+		}
+	}
 	want := []string{
-		"--ro-bind / /",
-		"--bind " + bound + " " + bound,
-		"--chdir " + bound,
+		"--ro-bind-try /usr /usr",
+		"--ro-bind-try /bin /bin",
+		"--ro-bind-try /sbin /sbin",
+		"--ro-bind-try /lib /lib",
+		"--ro-bind-try /lib64 /lib64",
+		"--ro-bind-try /etc /etc",
+		"--ro-bind-try /sys /sys",
+		"--proc /proc",
+		"--dev /dev",
+		"--tmpfs /dev/shm",
+		"--remount-ro /dev/shm",
+		"--bind " + bound + " /replay",
+		"--chdir /replay",
 		"--unshare-net",
 		"--unshare-pid",
 		"--unshare-ipc",
 		"--unshare-uts",
+		"--die-with-parent",
+		"--new-session",
 		"--clearenv",
-		"--setenv PATH /usr/bin:/bin:/usr/sbin:/sbin",
-		"--setenv HOME " + bound,
-		"--setenv TMPDIR " + bound,
+		"--setenv PATH /usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		"--setenv HOME /replay",
+		"--setenv TMPDIR /replay/.tmp",
+		"--setenv GOTOOLCHAIN local",
 	}
 	for _, w := range want {
 		if !strings.Contains(joined, w) {
