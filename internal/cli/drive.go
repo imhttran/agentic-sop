@@ -93,6 +93,10 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	if err := applyStageModels(context.Background(), &d, cfg); err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
 	// Carry the resolved evidence down to each task run so it is recorded.
 	d.routing = routing
 	// The tool-harness agent is built before this point in tests that inject a

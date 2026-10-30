@@ -574,6 +574,37 @@ implementation task to it.
 - With `openai_compatible`, SOP appends `/v1/chat/completions` to the base URL and
   sends the key as a Bearer token. The key is never written to run artifacts.
 
+### Supporting-stage classes
+
+`--model-class` and automatic routing pick the model that implements and fixes a
+task. Task planning, review, and JEV pick theirs separately, and by default they
+do not follow the routed class:
+
+| Stage | Default model |
+| --- | --- |
+| `plan` | the run-level class (`--model-class`, else the default class) |
+| `review` | the run-level class |
+| `jev` | `SOP_OLLAMA_MODEL`, else the Ollama built-in default, whatever the class table says |
+
+With routing on and a `large` default class, that means the large model plans and
+reviews every task even when the router sends the implementation to `small`. Pin a
+stage to a class to make the choice explicit:
+
+```yaml
+models:
+  stages:
+    plan: large
+    review: large
+    jev: small
+```
+
+or `SOP_MODEL_STAGE_PLAN_CLASS`, `SOP_MODEL_STAGE_REVIEW_CLASS`, and
+`SOP_MODEL_STAGE_JEV_CLASS` (the environment wins). Each pinned class resolves
+through the class table above. An unknown class, or a `jev` class whose provider is
+not `ollama`, fails at startup. An unpinned stage keeps its default. Every run
+records the model each stage ran on under `stages` in `model-selection.json`. The
+normative rules are in [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md).
+
 ## Automatic model routing
 
 Automatic (per-task) routing is a separate, opt-in layer on top of the class table.

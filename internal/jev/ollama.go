@@ -253,6 +253,22 @@ func NewOllamaAnalyzerFromEnv() (*OllamaAnalyzer, error) {
 	return NewOllamaAnalyzer(cfg, provider)
 }
 
+// NewOllamaAnalyzerForModel is NewOllamaAnalyzerFromEnv with the analysis model
+// pinned to name, so an operator-selected JEV class wins over SOP_OLLAMA_MODEL
+// and the built-in default.
+func NewOllamaAnalyzerForModel(name string) (*OllamaAnalyzer, error) {
+	cfg, err := ollamaagent.ConfigFromEnv()
+	if err != nil {
+		return nil, providerError(ErrConfigInvalid, err)
+	}
+	cfg.Model = name
+	provider, err := ollamaagent.NewChatProvider(cfg)
+	if err != nil {
+		return nil, providerError(ErrConfigInvalid, err)
+	}
+	return NewOllamaAnalyzer(cfg, provider)
+}
+
 // JEVProvider names the provider behind the adapter for JEV invocation metrics.
 // It is diagnostic metadata only and never feeds a decision.
 func (a *OllamaAnalyzer) JEVProvider() string { return "ollama" }

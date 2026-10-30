@@ -141,6 +141,9 @@ func modelRoutingEnvKeys() []string {
 		model.EnvRoutingEnabled, model.EnvEscalationEnabled, model.EnvMaxEscalations,
 		model.EnvReplanEnabled, model.EnvMaxReplans,
 	}
+	for _, st := range model.Stages {
+		keys = append(keys, model.StageEnvKey(st))
+	}
 	for _, c := range model.Classes {
 		for _, f := range []string{"PROVIDER", "NAME", "LOCALITY"} {
 			keys = append(keys, model.ClassEnvKey(c, f), model.ClassFallbackEnvKey(c, f))

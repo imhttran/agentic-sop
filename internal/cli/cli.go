@@ -74,6 +74,12 @@ type deps struct {
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.
 	newJEVAnalyzer func(cfg config.Config) (jev.Analyzer, error)
+	// newJEVAnalyzerForModel builds the JEV analyzer on a named Ollama model. It
+	// is used only when models.stages.jev pins a class (see applyStageModels).
+	newJEVAnalyzerForModel func(model string) (jev.Analyzer, error)
+	// stageModels holds the resolved selection of each pinned supporting stage
+	// (plan, review, jev). An absent stage keeps its existing selection.
+	stageModels map[model.Stage]model.Selection
 	// newDecisionProvider builds the optional, provider-neutral decision provider
 	// from configuration (SEAM-003). It is consulted only when the external
 	// decision capability is enabled; a nil factory (or a nil provider, or an
@@ -218,6 +224,9 @@ func defaultDeps() deps {
 			// absent/misconfigured provider leaves JEV absent, which the caller
 			// treats as non-fatal (never failing the lifecycle).
 			return jev.NewOllamaAnalyzerFromEnv()
+		},
+		newJEVAnalyzerForModel: func(name string) (jev.Analyzer, error) {
+			return jev.NewOllamaAnalyzerForModel(name)
 		},
 		newDecisionProvider: decisionProviderFromConfig,
 		stdin:               os.Stdin,

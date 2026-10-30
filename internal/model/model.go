@@ -272,10 +272,15 @@ type Route struct {
 	// distinguishable from an explicit 0: an omitted value resolves to
 	// DefaultMaxReplans, while an explicit 0 disables replanning.
 	// SOP_MODEL_MAX_REPLANS overrides it.
-	MaxReplans *int        `yaml:"max_replans"`
-	Small      ClassConfig `yaml:"small"`
-	Medium     ClassConfig `yaml:"medium"`
-	Large      ClassConfig `yaml:"large"`
+	MaxReplans *int `yaml:"max_replans"`
+	// Stages pins the model class of a supporting stage (task planning, review,
+	// early JEV). An omitted stage keeps its existing selection, so an existing
+	// project is unchanged. Like RoutingEnabled it does NOT make the route table
+	// Configured(). SOP_MODEL_STAGE_<STAGE>_CLASS overrides each entry.
+	Stages StageClasses `yaml:"stages"`
+	Small  ClassConfig  `yaml:"small"`
+	Medium ClassConfig  `yaml:"medium"`
+	Large  ClassConfig  `yaml:"large"`
 }
 
 // DefaultRoute is the built-in routing table: the default class, and the
@@ -368,6 +373,11 @@ func (r Route) Validate() error {
 			if provider := strings.TrimSpace(fb.Provider); provider != "" && !knownProviders[provider] {
 				return fmt.Errorf("model routing: unknown %s.fallback.provider %q (want %s)", c, provider, joinProviders())
 			}
+		}
+	}
+	for _, s := range Stages {
+		if c := r.Stages.class(s); c != "" && !c.Valid() {
+			return fmt.Errorf("model routing: unknown stages.%s %q (want %s)", s, c, joinClasses())
 		}
 	}
 	if r.MaxEscalations != nil && *r.MaxEscalations < 0 {

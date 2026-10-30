@@ -46,6 +46,20 @@ type ModelSelectionArtifact struct {
 	Source         string `json:"source"`
 	Fallback       bool   `json:"fallback"`
 	Reason         string `json:"reason,omitempty"`
+	// Stages records the model each supporting stage (plan, review, jev) ran on,
+	// so a run's cost and quality trace to the model behind each stage. It is
+	// omitted when empty, so a historical artifact decodes and re-encodes unchanged.
+	Stages map[string]StageModel `json:"stages,omitempty"`
+}
+
+// StageModel is the model one supporting stage ran on. Source says where it came
+// from: "stage" (models.stages), "run" (the run-level agent), "ollama-env" (the
+// Ollama environment or built-in default), or "review-engine".
+type StageModel struct {
+	Class    string `json:"class,omitempty"`
+	Provider string `json:"provider"`
+	Model    string `json:"model,omitempty"`
+	Source   string `json:"source"`
 }
 
 // Validate rejects an unsupported artifact version, failing closed rather than
