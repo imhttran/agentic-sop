@@ -606,8 +606,25 @@ or `SOP_MODEL_STAGE_PLAN_CLASS`, `SOP_MODEL_STAGE_REVIEW_CLASS`, and
 `SOP_MODEL_STAGE_JEV_CLASS` (the environment wins). Each pinned class resolves
 through the class table above. An unknown class, or a `jev` class whose provider is
 not `ollama`, fails at startup. An unpinned stage keeps its default. Every run
-records the model each stage ran on under `stages` in `model-selection.json`. The
-normative rules are in [`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md).
+records the model each stage ran on under `stages` in `model-selection.json`.
+
+A class is shared with routing, so a model in the class table can be routed an
+implementation task. To give a stage a model that should never implement, such as
+a local read-only reviewer, pin the stage straight to a provider and model instead:
+
+```dotenv
+SOP_MODEL_STAGE_REVIEW_PROVIDER=openai_compatible
+SOP_MODEL_STAGE_REVIEW_NAME=Ternary-Bonsai-2-27B-mlx-2bit
+SOP_OPENAI_COMPATIBLE_TIMEOUT=600s
+```
+
+Both settings are required together, and they conflict with that stage's `_CLASS`
+pin. Because `SOP_AGENT_MODEL` and a provider's own model variable (for example
+`SOP_OPENAI_COMPATIBLE_MODEL`) override the model an agent is built with, a plan or
+review pin fails at startup when one of them is set to a different model, rather
+than running that model under the pinned name. A `jev` pin must use provider
+`ollama`. The normative rules are in
+[`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md).
 
 ## Automatic model routing
 

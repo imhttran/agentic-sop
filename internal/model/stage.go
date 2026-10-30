@@ -70,3 +70,44 @@ func StageClass(config Route, st Stage, lookup func(string) string) (Class, erro
 	}
 	return c, nil
 }
+
+// ReasonStagePin: a stage named its own provider and model.
+const ReasonStagePin = "stage provider/model pin"
+
+// StageProviderEnvKey and StageNameEnvKey name the settings that pin a stage
+// straight to a provider and model (for example SOP_MODEL_STAGE_REVIEW_PROVIDER),
+// bypassing the shared class table. That lets a model that cannot implement, such
+// as a local read-only one, take a supporting stage without being reachable by
+// task routing.
+func StageProviderEnvKey(st Stage) string {
+	return "SOP_MODEL_STAGE_" + strings.ToUpper(string(st)) + "_PROVIDER"
+}
+
+// StageNameEnvKey: see StageProviderEnvKey.
+func StageNameEnvKey(st Stage) string {
+	return "SOP_MODEL_STAGE_" + strings.ToUpper(string(st)) + "_NAME"
+}
+
+// StageDirect resolves a stage pinned straight to a provider and model, and
+// reports whether one is set. Both settings are required together, the provider
+// must be known, and a class pin for the same stage is a conflict rather than a
+// silent precedence.
+func StageDirect(st Stage, lookup func(string) string) (Selection, bool, error) {
+	if lookup == nil {
+		lookup = os.Getenv
+	}
+	provider := strings.TrimSpace(lookup(StageProviderEnvKey(st)))
+	name := strings.TrimSpace(lookup(StageNameEnvKey(st)))
+	if provider == "" && name == "" {
+		return Selection{}, false, nil
+	}
+	switch {
+	case provider == "" || name == "":
+		return Selection{}, false, fmt.Errorf("model routing: set both %s and %s, or neither", StageProviderEnvKey(st), StageNameEnvKey(st))
+	case !knownProviders[provider]:
+		return Selection{}, false, fmt.Errorf("model routing: %s: unknown provider %q (want one of %s)", StageProviderEnvKey(st), provider, strings.Join(KnownProviders(), ", "))
+	case strings.TrimSpace(lookup(StageEnvKey(st))) != "":
+		return Selection{}, false, fmt.Errorf("model routing: stage %s is pinned by both %s and %s; set one", st, StageEnvKey(st), StageProviderEnvKey(st))
+	}
+	return Selection{Provider: provider, Model: name, Source: SourceEnv, Reason: ReasonStagePin}, true, nil
+}
