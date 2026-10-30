@@ -101,6 +101,7 @@ func (h *Harness) Complete(ctx context.Context, req agent.Request) (content stri
 // attribute changes to a task from observed mutations rather than inferring them
 // from the working-tree diff. Behavior is otherwise identical to Complete.
 func (h *Harness) CompleteWithEvidence(ctx context.Context, req agent.Request, ev *mutationEvidence) (content string, reconciled bool, err error) {
+	h.tools.BeginInvocation()
 	mutating := req.Capability == agent.Implement || req.Capability == agent.Fix
 
 	if ev == nil {
@@ -344,6 +345,7 @@ func (h *Harness) Execute(ctx context.Context, req agent.Request) (string, error
 // Complete call), so mutation evidence is scoped to one invocation and never
 // stored on the Harness. A nil ev disables recording (the lifecycle still runs).
 func (h *Harness) ExecuteWithEvidence(ctx context.Context, req agent.Request, ev *mutationEvidence) (string, error) {
+	h.tools.BeginInvocation()
 	if ev == nil {
 		ev = &mutationEvidence{}
 	}

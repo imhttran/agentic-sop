@@ -380,24 +380,51 @@ func TestDeleteFileRemovesFileAndRefusesDirectory(t *testing.T) {
 	}
 }
 
-func TestRestoreFileRecoversCommittedContent(t *testing.T) {
+func TestRestoreFileUndoesOnlyThisInvocation(t *testing.T) {
 	root := t.TempDir()
 	gitInitRepo(t, root)
-	writeRepoFile(t, root, "README.md", "# Real readme\n")
+	writeRepoFile(t, root, "README.md", "# Committed readme\n")
 	runGit(t, root, "add", "README.md")
 	runGit(t, root, "commit", "-q", "-m", "init")
+	// An earlier task's uncommitted work: restore_file must never discard it.
+	writeRepoFile(t, root, "README.md", "# Earlier task's work\n")
 
 	h := newTestHarness(t, root, nil)
 	ctx := context.Background()
+	h.BeginInvocation()
 
-	// A mistaken clobber, then recovery from HEAD.
-	writeRepoFile(t, root, "README.md", "PLACEHOLDER")
+	// A mistaken clobber in this invocation, then undo: back to the earlier
+	// task's content, not the committed one.
+	if _, _, err := h.RunObservedMutation(ctx, ToolWriteFile, map[string]any{"path": "README.md", "content": "PLACEHOLDER"}); err != nil {
+		t.Fatal(err)
+	}
 	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": "README.md"}); err != nil {
 		t.Fatalf("restore_file: %v", err)
 	}
-	got, err := os.ReadFile(filepath.Join(root, "README.md"))
-	if err != nil || string(got) != "# Real readme\n" {
-		t.Errorf("README.md = %q, err=%v, want the committed content", got, err)
+	if got, err := os.ReadFile(filepath.Join(root, "README.md")); err != nil || string(got) != "# Earlier task's work\n" {
+		t.Errorf("README.md = %q, err=%v, want the content from before this invocation", got, err)
+	}
+
+	// A file this invocation created is removed by restore.
+	if _, _, err := h.RunObservedMutation(ctx, ToolCreateFile, map[string]any{"path": "new.go", "content": "package x\n"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": "new.go"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "new.go")); !os.IsNotExist(err) {
+		t.Errorf("new.go still exists after restore: %v", err)
+	}
+
+	// A new invocation starts a new scope: the earlier edit is no longer undoable,
+	// and a file this invocation has not changed is left alone.
+	h.BeginInvocation()
+	writeRepoFile(t, root, "README.md", "# Kept\n")
+	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": "README.md"}); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(root, "README.md")); string(got) != "# Kept\n" {
+		t.Errorf("restore changed a file this invocation never touched: %q", got)
 	}
 
 	if _, err := h.Run(ctx, ToolRestoreFile, map[string]any{"path": ".agent-sdlc/state.db"}); !errors.Is(err, ErrProtectedPath) {
