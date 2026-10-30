@@ -40,6 +40,11 @@ Human approval remains explicit where policy requires it.
   does not require a cloud service. The smallest class is local-first: it runs a
   local model and falls back to a cloud model only when the local runtime cannot
   serve it (see [docs/specs/MODEL-ROUTING.md](docs/specs/MODEL-ROUTING.md)).
+- **Evidence-bound model selection.** Model locality resolves from explicit
+  configuration, authoritative runtime evidence, the narrow Ollama `:cloud`
+  naming rule, or a built-in default. Operators can separately pin the plan,
+  review, and JEV stages to configured model classes; see
+  [model routing](docs/specs/MODEL-ROUTING.md#supporting-stage-classes).
 
 SOP is **not** an unrestricted autonomous coding agent: the orchestrator defines
 boundaries, the agent performs specific work, validation checks it, and only then
