@@ -167,3 +167,38 @@ func TestRunInvocationMutationObservationFailsClosed(t *testing.T) {
 		t.Fatalf("unverified mutation was attributed: %s, %v", data, err)
 	}
 }
+
+// reportsNoneAgent completes with a bare outcome while reporting, as the native
+// tool loop does, that it observed no change at all.
+type reportsNoneAgent struct{ outcomeAgent }
+
+func (a reportsNoneAgent) Generate(ctx context.Context, req agent.Request) (agent.Response, error) {
+	resp, err := a.outcomeAgent.Generate(ctx, req)
+	if req.Capability == agent.Implement || req.Capability == agent.Fix {
+		resp.ChangedFiles = []string{}
+	}
+	return resp, err
+}
+
+// TestRunReportedNoChangeIsNotAPass proves a provider that reports it changed
+// nothing cannot pass through the legacy no-change completion, even when the
+// declared deliverable exists and validation is green: it must prove an
+// already-done task through ALREADY_SATISFIED. A feature was once passed this
+// way with not a line written.
+func TestRunReportedNoChangeIsNotAPass(t *testing.T) {
+	dir := newDirtyRepo(t)
+	writeFile(t, dir, "widget.txt", "existing\n")
+	writeFile(t, dir, "TASK.md", runTaskFile+"\n## Deliverables\n\n- `widget.txt`\n")
+	writeConfig(t, dir, "project:\n  name: x\nquality:\n  max_fix_cycles: 1\nvalidation:\n  build:\n    - \"true\"\n")
+	a := reportsNoneAgent{outcomeAgent{outcome: &agent.Outcome{Status: agent.OutcomeCompleted}}}
+	d := defaultDeps()
+	d.getwd = func() (string, error) { return dir, nil }
+	d.newAgent = func(string, string, string, string) (agent.Agent, error) { return a, nil }
+	var out, errOut bytes.Buffer
+	if code := run([]string{"run", "--task", "TASK.md"}, &out, &errOut, d); code == exitOK {
+		t.Fatalf("a reported no-change completion passed: stdout=%s", &out)
+	}
+	if !strings.Contains(out.String(), "IMPLEMENT_NO_CHANGES") {
+		t.Errorf("want the bounded IMPLEMENT_NO_CHANGES continuation: %s %s", &out, &errOut)
+	}
+}

@@ -141,3 +141,23 @@ func TestCommandMutationNamesNoPath(t *testing.T) {
 		t.Errorf("a run_command mutation named a path: %v", got)
 	}
 }
+
+// TestReportedPathsDistinguishesNoneFromUnknown pins the three answers the tool
+// loop gives SOP: observed nothing (empty, non-nil), a path-less mutation (nil,
+// so SOP uses its snapshot), and named paths.
+func TestReportedPathsDistinguishesNoneFromUnknown(t *testing.T) {
+	if got := (&mutationEvidence{}).reportedPaths(); got == nil || len(got) != 0 {
+		t.Errorf("no mutation = %#v, want an empty non-nil slice", got)
+	}
+	pathless := &mutationEvidence{}
+	pathless.record("run_command")
+	if got := pathless.reportedPaths(); got != nil {
+		t.Errorf("path-less mutation = %#v, want nil", got)
+	}
+	named := &mutationEvidence{}
+	named.record("write_file")
+	named.recordPath("a.go")
+	if got := named.reportedPaths(); len(got) != 1 || got[0] != "a.go" {
+		t.Errorf("named mutation = %#v, want [a.go]", got)
+	}
+}

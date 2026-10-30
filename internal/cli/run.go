@@ -820,8 +820,13 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		_ = rn.Write("diff.patch", diff)
 
 		implMutation = observed
+		// The legacy no-change completion is for providers that cannot report what
+		// they changed. One that reports it changed nothing (a non-nil empty list)
+		// must prove an already-done task through ALREADY_SATISFIED instead: a bare
+		// "completed" with existing files and green tests once passed a feature
+		// that was never written.
 		legacyNoChange = impl.Outcome != nil && impl.Outcome.Status == agent.OutcomeCompleted &&
-			!impl.Outcome.ChangesExpected && impl.Outcome.Completion == ""
+			!impl.Outcome.ChangesExpected && impl.Outcome.Completion == "" && impl.ChangedFiles == nil
 
 		// Structured planner request raised by the executor during implementation: SOP
 		// persists the question and parks THIS run. It is not a human gate.
@@ -928,6 +933,15 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			if ierr := injectCapturedEvidence(dir, reports, rn.Dir()); ierr != nil {
 				return lifeResult{}, fmt.Errorf("captured evidence: %w", ierr)
 			}
+		}
+		// The task required a change and this provider reported none, with no
+		// earlier task evidence and no ALREADY_SATISFIED proof: there is nothing of
+		// the task's own to review, so the bounded no-change verdict applies now,
+		// before review would fail on an empty scope.
+		if suite.Passed() && changeRequired && !verifiedFirst && !implMutation && !alreadySatisfied &&
+			!legacyNoChange && len(taskChangeEvidence(rn, reports...)) == 0 {
+			class := failure.Classify(failure.Evidence{Source: "IMPLEMENT", ChangeRequired: true, MutationObserved: false})
+			return noChangesCompletion(cfg, rn, class), nil
 		}
 		if suite.Passed() && !verifiedFirst && strings.TrimSpace(diff) != "" {
 			// The review input is restricted to the task's OWN change set: the
@@ -1163,7 +1177,7 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			satisfaction = fix.Outcome.Evidence
 		}
 		legacyNoChange = fix.Outcome != nil && fix.Outcome.Status == agent.OutcomeCompleted &&
-			!fix.Outcome.ChangesExpected && fix.Outcome.Completion == ""
+			!fix.Outcome.ChangesExpected && fix.Outcome.Completion == "" && fix.ChangedFiles == nil
 		recordTaskChanges(rn, fix.ChangedFiles, reports...)
 
 		// Re-read the working tree after the fix so the next classification sees what
