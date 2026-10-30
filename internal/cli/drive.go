@@ -182,6 +182,7 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 	sess := newRunSession()
 	sess.scoped = true
 	code := driveGraph(ctx, dir, cfg, a, d, st, prepared.PlanID, sess, maxTasks, stdout, stderr)
+	sess.warnEarlyJEVDown(stderr)
 	if code == exitOK {
 		if final, err := st.List(); err == nil && domain.AllSatisfied(final) {
 			if !finalValidationGate(ctx, dir, cfg, d, sess, stderr) {
@@ -836,6 +837,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// escalation stops through the existing human boundary and introduces no new
 	// task state.
 	tri := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointTaskTriage)
+	sess.noteEarlyJEV(tri)
 	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
 		// Park the run at the existing WAITING_FOR_HUMAN stage before recording the

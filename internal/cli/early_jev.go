@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -11,9 +12,11 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
+	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/jev"
+	"github.com/imhttran/agentic-sop/internal/model"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
@@ -62,6 +65,8 @@ type earlyGateResult struct {
 	// ProviderFailed records that the analysis could not produce a usable result.
 	// It is never a finding.
 	ProviderFailed bool
+	// FailureDetail is the bounded reason a failed analysis gave (empty otherwise).
+	FailureDetail string
 	// Reason explains the disposition (descriptive provenance only).
 	Reason string
 }
@@ -289,6 +294,7 @@ func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint
 		res.Reason = "early JEV analysis produced no structured evidence; continuing under deterministic SOP policy"
 	}
 
+	res.FailureDetail = failureDetail
 	rec.Emit(earlyStage(checkpoint), earlyGateAction(res), earlyGateDetail(res))
 
 	if rn != nil {
@@ -421,4 +427,16 @@ func blockingEvidence(ev jev.Evidence, readOnly bool) jev.Evidence {
 	}
 	ev.Items = items
 	return ev
+}
+
+// warnEarlyJEVDown prints one warning when every early JEV check this run
+// failed. Policy already treats each failure as "no evidence", so routing falls
+// back to its default for every task and the early gates never block; without
+// this the run looks healthy while the JEV model is broken or unreachable.
+func (s *runSession) warnEarlyJEVDown(w io.Writer) {
+	if s == nil || s.earlyJEV.ran == 0 || s.earlyJEV.failed < s.earlyJEV.ran {
+		return
+	}
+	fmt.Fprintf(w, "warning: early JEV failed on all %d checks this run (last: %s); routing and the early gates had no evidence, so every task used the fallback. Check the JEV model (%s or %s).\n",
+		s.earlyJEV.ran, s.earlyJEV.detail, model.StageEnvKey(model.StageJEV), agent.EnvOllamaModel)
 }

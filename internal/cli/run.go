@@ -257,14 +257,17 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	// scheduler store to requeue into, so a policy escalation stops with a clear
 	// human boundary message instead of silently running the task. A disabled gate
 	// is a strict no-op.
+	sess := newRunSession()
+	defer sess.warnEarlyJEVDown(stderr)
 	tri := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointTaskTriage)
+	sess.noteEarlyJEV(tri)
 	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", rn.State().ID, tri.Reason)
 		printParkedHumanGate(stdout, rn.State().ID, string(runpkg.WaitingForHuman), tri.Reason, "sop run --task "+file, false)
 		return exitError
 	}
 
-	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), tri, stdout)
+	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, currentApprovalBoundary(rn, priorStage), tri, stdout)
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)
@@ -703,7 +706,9 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 		// precheck and planning. It is analysis-only and a strict no-op unless
 		// early_jev.gates.pre_execution is enabled. A policy escalation stops the
 		// task at the existing human boundary; the lifecycle itself is unchanged.
-		if pre := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointPreExecution); pre.Escalate {
+		pre := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointPreExecution)
+		sess.noteEarlyJEV(pre)
+		if pre.Escalate {
 			_ = rn.SetStage(runpkg.WaitingForHuman)
 			return lifeResult{
 				gate:           fail(pre.Reason),
