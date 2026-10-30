@@ -442,7 +442,7 @@ func TestPromptTriageEscalationStopsBeforeMutation(t *testing.T) {
 	dir := t.TempDir()
 	writeConfig(t, dir, earlyJEVTriageConfig)
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategoryAmbiguity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },

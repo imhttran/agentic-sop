@@ -230,7 +230,7 @@ func earlyRepositoryContext(spec *taskfile.Spec, dir string) string {
 // rn is the task's run, used only to persist the diagnostic artifact; a nil rn
 // skips persistence and changes nothing else.
 func runEarlyGate(ctx context.Context, cfg config.Config, d deps, dir string, spec *taskfile.Spec, rn *runpkg.Run, checkpoint runpkg.Checkpoint) earlyGateResult {
-	return runJEVCheckpoint(ctx, cfg, d, checkpoint, buildEarlyJEVInvocation(checkpoint, spec, dir), spec.ID, rn, false)
+	return runJEVCheckpoint(ctx, cfg, d, checkpoint, buildEarlyJEVInvocation(checkpoint, spec, dir), spec.ID, rn)
 }
 
 // runJEVCheckpoint runs one early JEV analysis over an arbitrary bounded
@@ -244,11 +244,13 @@ func runEarlyGate(ctx context.Context, cfg config.Config, d deps, dir string, sp
 // is fatal. An infrastructure/provider failure is recorded distinctly and is never
 // a finding (FR-P3-9, FR-P3-10).
 //
-// readOnly marks a request that changes nothing, such as a review prompt. Only a
-// security-sensitive finding can stop it at the human boundary: a bug or an
-// ambiguity in the code under review is the subject of the request, not a reason
-// to withhold the answer. Every finding is still recorded and still informs routing.
-func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint runpkg.Checkpoint, inv runpkg.JEVInvocation, taskID string, rn *runpkg.Run, readOnly bool) earlyGateResult {
+// Only a security-sensitive finding can stop the work at the human boundary. Any
+// other finding (ambiguity, a requirement conflict, scope, missing context) is an
+// advisory model's note made before any work exists, and in practice it is often
+// the diagnosis of the task itself ("the fix must also sort the store"); it raises
+// the routed class instead, and validation, review, and acceptance still gate the
+// result. Every finding is recorded.
+func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint runpkg.Checkpoint, inv runpkg.JEVInvocation, taskID string, rn *runpkg.Run) earlyGateResult {
 	if !earlyGateEnabled(cfg, checkpoint) {
 		return earlyGateResult{}
 	}
@@ -284,7 +286,7 @@ func runJEVCheckpoint(ctx context.Context, cfg config.Config, d deps, checkpoint
 			failureDetail = boundedDetail("invalid evidence: " + err.Error())
 		} else {
 			res.Evidence = ev
-			res.Decision = autonomy.DecideEarly(blockingEvidence(ev, readOnly), cfg.EarlyJEVFailOn(), cfg.AutonomyPolicy())
+			res.Decision = autonomy.DecideEarly(blockingEvidence(ev), cfg.EarlyJEVFailOn(), cfg.AutonomyPolicy())
 			res.Escalate = res.Decision.RequiresHuman
 			res.Reason = res.Decision.Reason
 		}
@@ -412,16 +414,12 @@ func earlyConfidence(ev jev.Evidence) (string, bool) {
 	return fmt.Sprintf("%.2f", ev.Confidence), true
 }
 
-// blockingEvidence is the evidence the early decision may block on. For a
-// read-only request it keeps only security-sensitive findings; otherwise it is ev
-// unchanged.
-func blockingEvidence(ev jev.Evidence, readOnly bool) jev.Evidence {
-	if !readOnly {
-		return ev
-	}
+// blockingEvidence is the evidence the early decision may block on: its
+// security-sensitive findings, plus any unclassified one, which fails closed.
+func blockingEvidence(ev jev.Evidence) jev.Evidence {
 	var items []jev.EvidenceItem
 	for _, item := range ev.Items {
-		if item.Category.SecuritySensitive() {
+		if item.Category == "" || item.Category.SecuritySensitive() {
 			items = append(items, item)
 		}
 	}
