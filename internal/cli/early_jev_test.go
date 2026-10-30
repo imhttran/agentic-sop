@@ -123,7 +123,7 @@ func TestEarlyTriageBlockingFindingEscalates(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, earlyJEVTriageConfig)
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposeTaskTriage, jev.CategorySecurity, jev.SeverityCritical)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },
@@ -227,7 +227,7 @@ func TestEarlyPreExecutionGateEscalates(t *testing.T) {
 	writeFile(t, dir, "TASK.md", runTaskFile)
 	writeConfig(t, dir, earlyJEVPreExecConfig)
 	a := &earlyCountingAgent{}
-	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposePreExecution, jev.CategorySecurity, jev.SeverityHigh)}
+	analyzer := &earlyFakeAnalyzer{result: earlyEvidenceResult(jev.PurposePreExecution, jev.CategorySecurity, jev.SeverityCritical)}
 
 	code, stdout, stderr := runInjectedCLIWithJEV(t, dir, "diff --git a/x b/x\n", a,
 		func(config.Config) (jev.Analyzer, error) { return analyzer, nil },

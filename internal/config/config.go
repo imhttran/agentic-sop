@@ -1087,10 +1087,11 @@ func (c *Config) EarlyJEVFailOn() []string {
 	if len(c.EarlyJEV.FailOn) > 0 {
 		return c.EarlyJEV.FailOn
 	}
-	if len(c.Quality.FailOn) > 0 {
-		return c.Quality.FailOn
-	}
-	return []string{"critical", "high"}
+	// Only CRITICAL by default, independent of quality.fail_on: early findings are
+	// an advisory model's notes before any work exists, and across the real-world
+	// bench every HIGH early stop was a false alarm, each filed under whichever
+	// category still blocked. HIGH findings still raise the routed class.
+	return []string{"critical"}
 }
 
 // JEVActive reports whether JEV is enabled for this configuration. It is the
@@ -1232,11 +1233,11 @@ early_jev:
   gates:
     task_triage: false
     pre_execution: false
-  # fail_on names the early-JEV severities that escalate to a human boundary;
-  # omit it to reuse the quality.fail_on severities above.
+  # fail_on names the early-JEV severities that escalate to a human boundary.
+  # It defaults to critical only (independent of quality.fail_on); a HIGH early
+  # finding still raises the routed class. Add high to stop on HIGH as well.
   fail_on:
     - critical
-    - high
 
 human:
   approval_before_commit: true

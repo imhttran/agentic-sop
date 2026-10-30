@@ -110,10 +110,10 @@ func TestQualityJEVDoesNotEnableEarlyJEV(t *testing.T) {
 	}
 }
 
-// TestEarlyJEVFailOnDefaultsToQualityFailOn proves an omitted early_jev.fail_on
-// reuses the quality gate's blocking severities.
-func TestEarlyJEVFailOnDefaultsToQualityFailOn(t *testing.T) {
-	yaml := "project:\n  name: a\nquality:\n  fail_on:\n    - critical\nearly_jev:\n  enabled: true\n"
+// TestEarlyJEVFailOnDefaultsToCritical proves an omitted early_jev.fail_on blocks
+// on CRITICAL only, whatever the quality gate blocks on.
+func TestEarlyJEVFailOnDefaultsToCritical(t *testing.T) {
+	yaml := "project:\n  name: a\nquality:\n  fail_on:\n    - critical\n    - high\nearly_jev:\n  enabled: true\n"
 	c, err := Parse([]byte(yaml))
 	if err != nil {
 		t.Fatalf("Parse failed: %v", err)
