@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/store"
@@ -119,6 +120,8 @@ func TestRunBudgetContinuationEventuallyCompletes(t *testing.T) {
 // the configured continuation ceiling (max_continuations, default 4) and terminates
 // cleanly as a bounded automation failure rather than looping.
 func TestRunBudgetContinuationIsBounded(t *testing.T) {
+	// This test spans runs: each CONTINUE must end its run, as before in-run continues.
+	t.Setenv(config.EnvRunMaxContinues, "0")
 	dir := budgetGraph(t)
 
 	// Each attempt reports a distinct budget-exhausted reason so it makes

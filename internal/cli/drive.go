@@ -479,6 +479,9 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	// The scheduler carries this invocation's automatic-recovery guard: it is
 	// created here, used only here, and discarded when driveGraph returns.
 	sch := scheduler.New(st)
+	// continues counts each task's in-run continuations against
+	// cfg.RunMaxContinues; the per-task total stays bounded by max_continuations.
+	continues := map[string]int{}
 	completed := 0
 	tasksEntered := 0
 	sawBlock := false
@@ -559,6 +562,21 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 					tasksEntered-- // a retry is the same task, not a new one for --max-tasks
 					maxIterations++
 					continue
+				}
+				if continuedInRun(dir, st, id) {
+					// Recovery requeued productive-but-unfinished work as a CONTINUE.
+					// Continue it now, up to the per-run limit; past it, stop and say
+					// so, since repeated continues in a row usually mean the model is
+					// stuck. The task's own continuation budget still bounds the total.
+					if continues[id] < cfg.RunMaxContinues() {
+						continues[id]++
+						fmt.Fprintf(stdout, "Continuing: %s (in-run continue %d of %d)\n", id, continues[id], cfg.RunMaxContinues())
+						tasksEntered--
+						maxIterations++
+						continue
+					}
+					fmt.Fprintf(stderr, "%s is still unfinished after %d in-run continue(s); stopping here. Run sop run to continue it (%s sets the per-run limit).\n", id, continues[id], config.EnvRunMaxContinues)
+					return code
 				}
 				if !taskIsBlocked(st, id) {
 					return code
@@ -1241,6 +1259,37 @@ func reportBlockedTasks(stderr io.Writer, ids []string) int {
 	}
 	fmt.Fprintf(stderr, "run: %d task(s) blocked and not recovered: %s\n", len(ids), strings.Join(ids, ", "))
 	return exitError
+}
+
+// continuedInRun reports whether a task that just failed was requeued to PLANNED
+// as a CONTINUE (its continuation budget, not its attempt budget, was spent).
+func continuedInRun(dir string, st graphStore, id string) bool {
+	cls, ok := lastClassification(dir, id)
+	return ok && cls.Disposition == failure.Continue && storedStatus(st, id) == domain.PLANNED
+}
+
+// lastClassification reads the failure classification a task's run recorded.
+func lastClassification(dir, id string) (failure.Classification, bool) {
+	data, err := os.ReadFile(filepath.Join(dir, stateDirName, "runs", id, "classification.json"))
+	if err != nil {
+		return failure.Classification{}, false
+	}
+	var cls failure.Classification
+	return cls, json.Unmarshal(data, &cls) == nil
+}
+
+// storedStatus returns a stored task's status, or "" when it cannot be read.
+func storedStatus(st graphStore, id string) domain.TaskStatus {
+	tasks, err := st.List()
+	if err != nil {
+		return ""
+	}
+	for _, t := range tasks {
+		if t.ID == id {
+			return t.Status
+		}
+	}
+	return ""
 }
 
 // retriedInRun reports whether a task that just failed was requeued to PLANNED
