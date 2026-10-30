@@ -129,6 +129,21 @@ before starting the ordinary run. See [../guides/APPROVALS.md](../guides/APPROVA
   successful executed validation, and a known unchanged repository. Reports
   preserve zero mutations and the proof; a model claim alone has no authority.
 
+- **Benchmark-driven routing and recovery hardening is merged** (PRs #163–#180).
+  Deliverable parsing distinguishes repository paths from code symbols; typed early-JEV
+  complexity and sensitivity guide routing; bounded retries and continuations stay in
+  the same run; repeated-action stalls classify as `NO_PROGRESS`; and task/prompt
+  evidence records server-reported model-token usage.
+- **Invocation and replay isolation is merged** (PRs #178 and #181).
+  `restore_file` restores the current invocation's snapshot instead of earlier
+  uncommitted task work. On Linux, isolated replay uses a restricted bubblewrap
+  filesystem view with fresh `/proc` and `/dev`, replay-local temporary storage,
+  and no reachable host Unix sockets in writable host locations.
+- **Reported no-change cannot pass as completed work** (PR #182).
+  A provider that explicitly reports zero mutations must use the verified
+  `ALREADY_SATISFIED` path or enter bounded `IMPLEMENT_NO_CHANGES` recovery;
+  existing deliverables plus unrelated green validation are insufficient.
+
 The authoritative rules for these fixes are in
 [AGENT-PROVIDER.md](../specs/AGENT-PROVIDER.md). This delivery record does not imply
 that the cross-repository closure or performance baseline has passed.
