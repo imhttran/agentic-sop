@@ -151,6 +151,20 @@ func TestBuildPromptIncludesAllFields(t *testing.T) {
 	}
 }
 
+// TestBuildPromptStatesEarlyPurpose pins that an early checkpoint tells the model
+// nothing is implemented yet, and a post-implement review carries no such brief.
+func TestBuildPromptStatesEarlyPurpose(t *testing.T) {
+	a := &OllamaAnalyzer{cfg: testConfig()}
+	for _, p := range []Purpose{PurposeTaskTriage, PurposePreExecution} {
+		if got := a.buildPrompt(Request{Purpose: p, Task: "t"}); !strings.Contains(got, "Nothing has been implemented yet") {
+			t.Errorf("%s prompt does not say nothing is implemented yet:\n%s", p, got)
+		}
+	}
+	if got := a.buildPrompt(Request{Purpose: PurposeQuality, Task: "t"}); strings.Contains(got, "Purpose:") {
+		t.Errorf("a quality review must not carry an early brief:\n%s", got)
+	}
+}
+
 // TestBuildPromptIsBounded asserts oversized input is truncated, not forwarded
 // unbounded.
 func TestBuildPromptIsBounded(t *testing.T) {

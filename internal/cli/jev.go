@@ -346,6 +346,9 @@ func jevRepositoryContext(dir, diff string, taskFiles []string, reports ...strin
 		}
 	}
 	excerpts := taskFileContext(dir, uncovered, reports...)
+	if excerpts != "" {
+		excerpts = "task implementation files (accumulated across the task's invocations):\n\n" + excerpts
+	}
 	switch {
 	case excerpts == "":
 		return diff
@@ -447,7 +450,7 @@ func taskFileContext(dir string, files []string, reports ...string) string {
 	if count == 0 {
 		return ""
 	}
-	return strings.TrimSpace("task implementation files (accumulated across the task's invocations):\n\n" + b.String())
+	return strings.TrimSpace(b.String())
 }
 
 // Confine accumulated report excerpts even if a provider leaves an escaping
