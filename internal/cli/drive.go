@@ -822,7 +822,7 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 	// strict no-op unless early_jev.gates.task_triage is enabled. A policy
 	// escalation stops through the existing human boundary and introduces no new
 	// task state.
-	tri := runEarlyGate(ctx, cfg, d, spec, rn, runpkg.CheckpointTaskTriage)
+	tri := runEarlyGate(ctx, cfg, d, dir, spec, rn, runpkg.CheckpointTaskTriage)
 	if tri.Escalate {
 		fmt.Fprintf(stdout, "%s NEEDS_HUMAN (early JEV triage)\n  %s\n", task.ID, tri.Reason)
 		// Park the run at the existing WAITING_FOR_HUMAN stage before recording the

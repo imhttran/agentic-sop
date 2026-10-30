@@ -2,12 +2,16 @@ package cli
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/jev"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
+	"github.com/imhttran/agentic-sop/internal/taskfile"
 )
 
 // earlyJEVTriageConfig enables the early JEV decision layer with ONLY the task
@@ -280,5 +284,49 @@ func TestEarlyTriageMalformedResultContinuesFailClosed(t *testing.T) {
 	}
 	if a.impl != 1 {
 		t.Errorf("implementation ran %d times, want 1", a.impl)
+	}
+}
+
+// TestEarlyJEVSeesRepository pins that an early checkpoint gets real repository
+// evidence: each declared path marked new or existing, its directory's files, and
+// an excerpt of the declared files already present — not the task text alone.
+func TestEarlyJEVSeesRepository(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "algo"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for name, body := range map[string]string{"algo/lru.go": "package algo\n\nfunc Old() {}\n", "algo/sum.go": "package algo\n"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	spec := &taskfile.Spec{Title: "t", Deliverables: []string{"`algo/lru.go`", "`algo/trap.go`", "`pkg/x.go`"}}
+
+	got := buildEarlyJEVInvocation(runpkg.CheckpointTaskTriage, spec, dir).RepositoryContext
+	for _, want := range []string{
+		"- algo/lru.go (exists)",
+		"- algo/trap.go (new)",
+		"- pkg/x.go (new)",
+		"directory algo/: lru.go, sum.go",
+		"directory pkg/: does not exist yet",
+		"### algo/lru.go\npackage algo\n\nfunc Old() {}",
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("early repository context missing %q:\n%s", want, got)
+		}
+	}
+	if err := os.Symlink(t.TempDir(), filepath.Join(dir, "out")); err != nil {
+		t.Fatal(err)
+	}
+	escape := &taskfile.Spec{Title: "t", Deliverables: []string{"`out/x.go`"}}
+	if got := buildEarlyJEVInvocation(runpkg.CheckpointTaskTriage, escape, dir).RepositoryContext; !strings.Contains(got, "directory out/: does not exist yet") {
+		t.Errorf("a symlink out of the repository must not be listed:\n%s", got)
+	}
+	if strings.Contains(got, "### algo/sum.go") {
+		t.Errorf("an undeclared file must be listed, not excerpted:\n%s", got)
+	}
+
+	if got := buildEarlyJEVInvocation(runpkg.CheckpointTaskTriage, &taskfile.Spec{Title: "t"}, dir).RepositoryContext; got != "" {
+		t.Errorf("a task with no declared paths gets no repository context, got %q", got)
 	}
 }

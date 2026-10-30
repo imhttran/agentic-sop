@@ -3,6 +3,9 @@ package cli
 import (
 	"context"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -116,7 +119,7 @@ func earlyFailureDetail(out runpkg.JEVOutcome) string {
 // checkpoint sends JEV. It reuses runpkg.JEVInvocation (the boundary the quality
 // seam uses) so there is one request shape across the JEV integration, and it
 // carries only task-scoped read-only context: no runtime handle, no persistence.
-func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec) runpkg.JEVInvocation {
+func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec, dir string) runpkg.JEVInvocation {
 	inv := runpkg.JEVInvocation{
 		Purpose:  earlyPurpose(checkpoint),
 		Task:     strings.TrimSpace(spec.Title + "\n\n" + spec.Description),
@@ -132,8 +135,86 @@ func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec) 
 		}
 		ctx.WriteString("requirements:\n- " + strings.Join(spec.Requirements, "\n- "))
 	}
+	if repo := earlyRepositoryContext(spec, dir); repo != "" {
+		if ctx.Len() > 0 {
+			ctx.WriteString("\n\n")
+		}
+		ctx.WriteString(repo)
+	}
 	inv.RepositoryContext = ctx.String()
 	return inv
+}
+
+// maxEarlySiblings bounds how many neighbouring file names are listed per
+// declared directory, so the listing stays a snapshot, not a tree dump.
+const maxEarlySiblings = 40
+
+// earlyRepositoryContext is the read-only repository evidence an early
+// checkpoint sees before any change exists: whether each declared path is new or
+// already present, the files beside it, and bounded excerpts of the declared
+// files that already exist. Without it the analysis judges the task text alone
+// and its risk/scope evidence is a guess. It returns "" when the task declares no
+// repository path.
+func earlyRepositoryContext(spec *taskfile.Spec, dir string) string {
+	var paths, existing []string
+	for _, d := range spec.Deliverables {
+		paths = append(paths, deliverablePaths(d)...)
+	}
+	if len(paths) == 0 {
+		return ""
+	}
+	// Every lookup goes through the repository root, so a symlink cannot reveal
+	// anything outside the working tree.
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return ""
+	}
+	defer root.Close()
+	var b strings.Builder
+	b.WriteString("declared paths:")
+	dirs := map[string]bool{}
+	var order []string
+	for _, p := range paths {
+		state := "new"
+		if safeRepoPath(p) {
+			if info, err := root.Stat(filepath.FromSlash(p)); err == nil && !info.IsDir() {
+				state = "exists"
+				existing = append(existing, p)
+			}
+			if parent := filepath.ToSlash(filepath.Dir(p)); !dirs[parent] {
+				dirs[parent] = true
+				order = append(order, parent)
+			}
+		}
+		fmt.Fprintf(&b, "\n- %s (%s)", p, state)
+	}
+	for _, parent := range order {
+		entries, err := fs.ReadDir(root.FS(), parent)
+		if err != nil {
+			fmt.Fprintf(&b, "\n\ndirectory %s/: does not exist yet", parent)
+			continue
+		}
+		var names []string
+		for _, e := range entries {
+			if strings.HasPrefix(e.Name(), ".") {
+				continue
+			}
+			if len(names) == maxEarlySiblings {
+				names = append(names, "...")
+				break
+			}
+			name := e.Name()
+			if e.IsDir() {
+				name += "/"
+			}
+			names = append(names, name)
+		}
+		fmt.Fprintf(&b, "\n\ndirectory %s/: %s", parent, strings.Join(names, ", "))
+	}
+	if excerpts := taskFileContext(dir, existing, taskReportDeliverables(spec)...); excerpts != "" {
+		b.WriteString("\n\nexisting declared files:\n\n" + excerpts)
+	}
+	return b.String()
 }
 
 // runEarlyGate invokes one early JEV checkpoint when it is enabled, applies
@@ -143,8 +224,8 @@ func buildEarlyJEVInvocation(checkpoint runpkg.Checkpoint, spec *taskfile.Spec) 
 //
 // rn is the task's run, used only to persist the diagnostic artifact; a nil rn
 // skips persistence and changes nothing else.
-func runEarlyGate(ctx context.Context, cfg config.Config, d deps, spec *taskfile.Spec, rn *runpkg.Run, checkpoint runpkg.Checkpoint) earlyGateResult {
-	return runJEVCheckpoint(ctx, cfg, d, checkpoint, buildEarlyJEVInvocation(checkpoint, spec), spec.ID, rn)
+func runEarlyGate(ctx context.Context, cfg config.Config, d deps, dir string, spec *taskfile.Spec, rn *runpkg.Run, checkpoint runpkg.Checkpoint) earlyGateResult {
+	return runJEVCheckpoint(ctx, cfg, d, checkpoint, buildEarlyJEVInvocation(checkpoint, spec, dir), spec.ID, rn)
 }
 
 // runJEVCheckpoint runs one early JEV analysis over an arbitrary bounded
