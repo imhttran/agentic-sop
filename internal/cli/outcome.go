@@ -265,30 +265,93 @@ func deriveOutcomeWith(spec *taskfile.Spec, dir string, gate quality.Result, car
 	return art
 }
 
-// deliverableCriteria returns one required presence criterion per declared
-// deliverable path. A declared deliverable may list more than one path (for example
-// "`a/x.go`, `a/y.go` — prose"), so every path-like token becomes its own required
-// criterion and prose-only deliverables contribute none. This is what keeps a
-// multi-path bullet from collapsing into a single malformed token.
+// deliverableCriteria returns exactly one required presence criterion per declared
+// deliverable LINE that names at least one repository path. The criterion's
+// Description is the original line, so the requirement it carries is preserved. Its
+// Check stats every path the line names and passes only when all of them exist;
+// otherwise it fails with an error that names every missing path and no present one.
+// A prose-only line contributes no criterion. Emitting one criterion per line (not
+// per path) keeps a multi-path bullet from producing duplicate criteria.
 func deliverableCriteria(spec *taskfile.Spec, dir string) []outcome.Criterion {
 	var criteria []outcome.Criterion
 	for _, d := range spec.Deliverables {
-		for _, p := range deliverablePaths(d) {
-			path := p
-			criteria = append(criteria, outcome.Criterion{
-				ID:          fmt.Sprintf("deliverable-%d", len(criteria)+1),
-				Required:    true,
-				Description: d,
-				Check: func() error {
-					if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(path))); err != nil {
-						return fmt.Errorf("deliverable %q not present", path)
-					}
-					return nil
-				},
-			})
+		paths := deliverablePaths(d)
+		if len(paths) == 0 {
+			continue
 		}
+		line := d
+		linePaths := append([]string(nil), paths...)
+		criteria = append(criteria, outcome.Criterion{
+			ID:          fmt.Sprintf("deliverable-%d", len(criteria)+1),
+			Required:    true,
+			Description: line,
+			Check: func() error {
+				return missingPathError(linePaths, dir)
+			},
+		})
 	}
 	return criteria
+}
+
+// missingPathError stats every path and returns nil only when all exist. Otherwise
+// it returns an error naming each missing path (in declaration order) and no present
+// path, so a failure never misreports a satisfied requirement.
+func missingPathError(paths []string, dir string) error {
+	missing := missingPathsIn(paths, dir)
+	if len(missing) == 0 {
+		return nil
+	}
+	if len(missing) == 1 {
+		return fmt.Errorf("deliverable %q not present", missing[0])
+	}
+	quoted := make([]string, len(missing))
+	for i, p := range missing {
+		quoted[i] = fmt.Sprintf("%q", p)
+	}
+	return fmt.Errorf("deliverable paths not present: %s", strings.Join(quoted, ", "))
+}
+
+// missingPathsIn returns the subset of paths that do not exist under dir, in order.
+func missingPathsIn(paths []string, dir string) []string {
+	var missing []string
+	for _, p := range paths {
+		if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(presencePath(p)))); err != nil {
+			missing = append(missing, p)
+		}
+	}
+	return missing
+}
+
+// presencePath strips a trailing line-range or line-number suffix (`:N` or `:N-M`)
+// from a declared path, so a form such as internal/planner/markdown.go:164-166 is
+// checked against the file internal/planner/markdown.go.
+func presencePath(p string) string {
+	i := strings.LastIndexByte(p, ':')
+	if i <= 0 || i == len(p)-1 {
+		return p
+	}
+	suffix := p[i+1:]
+	if isLineRange(suffix) {
+		return p[:i]
+	}
+	return p
+}
+
+// isLineRange reports whether s is a line number or a line span, such as 164 or
+// 164-166.
+func isLineRange(s string) bool {
+	parts := strings.SplitN(s, "-", 2)
+	for _, part := range parts {
+		if part == "" {
+			return false
+		}
+		for _, r := range part {
+			if r < '0' || r > '9' {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // missingDeliverables returns the declared deliverable paths that do not exist
@@ -297,9 +360,15 @@ func deliverableCriteria(spec *taskfile.Spec, dir string) []outcome.Criterion {
 // deliverable is.
 func missingDeliverables(spec *taskfile.Spec, dir string) []string {
 	var missing []string
+	// De-duplicate across lines so a path named on two lines is reported once.
+	seen := map[string]bool{}
 	for _, d := range spec.Deliverables {
 		for _, p := range deliverablePaths(d) {
-			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p))); err != nil {
+			if seen[p] {
+				continue
+			}
+			seen[p] = true
+			if _, err := os.Stat(filepath.Join(dir, filepath.FromSlash(presencePath(p)))); err != nil {
 				missing = append(missing, p)
 			}
 		}
@@ -707,14 +776,19 @@ func deliverablePaths(s string) []string {
 		seen[p] = true
 		out = append(out, p)
 	}
-	for _, span := range backtickSpans(s) {
+	spans := backtickSpans(s)
+	for _, span := range spans {
 		add(span)
 	}
-	if len(out) > 0 {
+	// Backticks are the authoritative quoting: when a line quotes anything, only
+	// the quoted tokens may name a path. This keeps descriptive prose outside the
+	// backticks (a command, a symbol, or a sentence) from contributing a path.
+	if len(spans) > 0 {
 		return out
 	}
-	// No backtick-quoted path: fall back to each comma/semicolon-separated piece's
-	// first field, with surrounding backticks/quotes/punctuation trimmed.
+	// No backtick spans: fall back to each comma/semicolon-separated piece's first
+	// field, with surrounding backticks/quotes/punctuation trimmed. The bare-token
+	// rule below still rejects prose words, commands, symbols, and URLs.
 	for _, piece := range strings.FieldsFunc(s, func(r rune) bool { return r == ',' || r == ';' }) {
 		fields := strings.Fields(strings.TrimSpace(piece))
 		if len(fields) == 0 {
@@ -743,15 +817,152 @@ func backtickSpans(s string) []string {
 	}
 }
 
-// looksLikeDeliverablePath reports whether p is a plausible repository-relative path
-// rather than a command, flag, or prose. It rejects empty, absolute, parent-escaping,
-// and whitespace-bearing tokens (so "go test ./..." is never mistaken for a path) and
-// requires a path separator or a dot.
+// looksLikeDeliverablePath reports whether p names a repository-relative path rather
+// than a command, flag, URL, or descriptive prose. Recognition is syntactic: it never
+// calls os.Stat, so an absent path is still recognized and a missing-file check still
+// fails correctly.
+//
+// Recognized forms:
+//   - a path with a separator: internal/provider/provider.go, docs/reference/
+//   - a line-range suffix on such a path: internal/planner/markdown.go:164-166
+//   - a bare root-level file name: Makefile, LICENSE, go.mod
+//   - a bare file name with an extension: setup.cfg
+//
+// Rejected forms:
+//   - empty, absolute, parent-escaping, and whitespace-bearing tokens (so
+//     "go test ./..." is never a path)
+//   - a URL with a scheme or "://" (https://example.com/x)
+//   - a descriptive code symbol: a dotted identifier with no separator
+//     (ModelInfo.Locality, errors.New, fmt.Errorf)
+//   - a bare token with no extension and no separator (a command or prose word)
 func looksLikeDeliverablePath(p string) bool {
 	if p == "" || strings.HasPrefix(p, "/") || strings.Contains(p, "..") || strings.ContainsAny(p, " \t") {
 		return false
 	}
-	return strings.Contains(p, "/") || strings.Contains(p, ".")
+	// A URL is never a repository path.
+	if strings.Contains(p, "://") || strings.Contains(p, "@") {
+		return false
+	}
+	if i := strings.LastIndexByte(p, ':'); i >= 0 {
+		if !isLineRange(p[i+1:]) {
+			return false
+		}
+	}
+	if strings.Contains(p, "/") {
+		// A separator marks a path. Reject a scheme-less code selector that still
+		// carries a dotted tail without a file extension only when it has no file
+		// part; a path segment may legitimately contain a dot, so a separator wins.
+		return true
+	}
+	// No separator: accept a bare root-level file only when it carries a file
+	// extension (go.mod, setup.cfg). A dotted identifier (ModelInfo.Locality) has a
+	// dotted tail with no separator and is a symbol, not a root-level file; reject
+	// it by requiring the dotted name to contain no uppercase run that marks a
+	// code selector. A bare name with no dot (Makefile, LICENSE) is accepted when it
+	// is a single clean token.
+	if strings.Contains(p, ".") {
+		if looksLikeCodeSelector(p) {
+			return false
+		}
+		return true
+	}
+	return isCleanBareName(p)
+}
+
+// looksLikeCodeSelector reports whether a dotted, separator-free token reads as a
+// code reference such as ModelInfo.Locality or errors.New: a capitalized segment is
+// a type selector, and a lowercase method form such as errors.New or fmt.Errorf is a
+// package-qualified symbol. A file name keeps its dotted name lowercase with a known
+// file extension, so the extension decides.
+func looksLikeCodeSelector(p string) bool {
+	i := strings.LastIndexByte(p, '.')
+	if i <= 0 || i == len(p)-1 {
+		return true
+	}
+	tail := p[i+1:]
+	for _, r := range tail {
+		if r < 'a' || r > 'z' {
+			// An upper-case or non-lowercase tail is a symbol segment (Locality), not
+			// a lowercase file extension.
+			return true
+		}
+	}
+	// A lowercase dotted name is a file only with a known extension; a symbol such as
+	// errors.New has a lowercase tail that is not a file extension.
+	return !isKnownFileExtension(tail)
+}
+
+// isKnownFileExtension reports whether ext (without a leading dot) is a file
+// extension that a bare, separator-free repository file may carry.
+func isKnownFileExtension(ext string) bool {
+	switch ext {
+	case "go", "md", "markdown", "txt", "json", "jsonl", "yaml", "yml", "toml", "cfg", "conf", "ini",
+		"mod", "sum", "work", "sh", "bash", "zsh", "ps1", "bat", "cmd", "mk", "am", "make",
+		"py", "rb", "php", "rs", "js", "mjs", "cjs", "ts", "tsx", "jsx", "vue", "svelte",
+		"java", "kt", "c", "h", "cc", "cpp", "hpp", "swift", "html", "htm", "css", "scss",
+		"sass", "less", "sql", "proto", "xml", "csv", "tsv", "patch", "diff", "lock", "bazel",
+		"nix", "build", "env", "example", "service", "plist":
+		return true
+	}
+	return false
+}
+
+// isCleanBareName reports whether p is a single bare word (no dot, no punctuation)
+// that may name a conventional root-level file such as Makefile or LICENSE.
+// Recognition is syntactic: it never calls os.Stat, so an absent root-level file is
+// still recognized and its missing-file check still fails. It accepts only the
+// conventional root-level file-name set: a general CamelCase word is a code symbol
+// (ModelInfo), not a path, and prose words are never paths.
+func isCleanBareName(p string) bool {
+	if p == "" {
+		return false
+	}
+	for _, r := range p {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '_' || r == '-' {
+			continue
+		}
+		return false
+	}
+	return knownRootFiles[p]
+}
+
+// knownRootFiles lists conventional root-level file names that carry no extension
+// and no mixed case, so the bare-name rule accepts them syntactically. Recognition
+// does not depend on the file existing.
+var knownRootFiles = map[string]bool{
+	"Makefile":      true,
+	"GNUmakefile":   true,
+	"LICENSE":       true,
+	"COPYING":       true,
+	"NOTICE":        true,
+	"CHANGELOG":     true,
+	"AUTHORS":       true,
+	"README":        true,
+	"Dockerfile":    true,
+	"Containerfile": true,
+	"Vagrantfile":   true,
+	"Justfile":      true,
+	"Procfile":      true,
+	"Gemfile":       true,
+	"Rakefile":      true,
+	"Taskfile":      true,
+	"Brewfile":      true,
+	"Podfile":       true,
+	"Fastfile":      true,
+	"Appfile":       true,
+	"Snapfile":      true,
+	"Matchfile":     true,
+	"Pluginfile":    true,
+	"Dangerfile":    true,
+	"Guardfile":     true,
+	"Capfile":       true,
+	"Thorfile":      true,
+	"Berksfile":     true,
+	"Cheffile":      true,
+	"Puppetfile":    true,
+	"Cartfile":      true,
+	"WORKSPACE":     true,
+	"BUILD":         true,
 }
 
 // writeOutcomeArtifact persists the verdict beside the other run artifacts, with
