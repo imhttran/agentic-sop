@@ -111,12 +111,18 @@ func commandMutates(command string) bool {
 // contributes none; only the file-mutating tools do. It reads only the tool's own
 // path argument.
 func mutationPath(name string, args map[string]any) (string, bool) {
+	key := "path"
 	switch name {
-	case toolharness.ToolWriteFile, toolharness.ToolCreateFile,
-		toolharness.ToolDeleteFile, toolharness.ToolRestoreFile:
-		if path, ok := args["path"].(string); ok && strings.TrimSpace(path) != "" {
-			return strings.TrimSpace(path), true
-		}
+	case toolharness.ToolWriteFile, toolharness.ToolCreateFile, toolharness.ToolDeleteFile,
+		toolharness.ToolRestoreFile, toolharness.ToolRewriteFile:
+	case toolharness.ToolCopyFile:
+		// A copy changes its destination; the source is only read.
+		key = "dest"
+	default:
+		return "", false
+	}
+	if path, ok := args[key].(string); ok && strings.TrimSpace(path) != "" {
+		return strings.TrimSpace(path), true
 	}
 	return "", false
 }

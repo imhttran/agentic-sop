@@ -23,6 +23,7 @@ func TestMutationPathNamesFileTools(t *testing.T) {
 		toolharness.ToolCreateFile,
 		toolharness.ToolDeleteFile,
 		toolharness.ToolRestoreFile,
+		toolharness.ToolRewriteFile,
 	} {
 		path, ok := mutationPath(tool, map[string]any{"path": "internal/x.go"})
 		if !ok || path != "internal/x.go" {
@@ -33,6 +34,11 @@ func TestMutationPathNamesFileTools(t *testing.T) {
 		if _, ok := mutationPath(tool, map[string]any{"path": "internal/x.go"}); ok {
 			t.Errorf("mutationPath(%s) named a path; only file-mutating tools may", tool)
 		}
+	}
+	// An in-place edit of an existing file must be attributed like a write: losing it
+	// left the review without the edited file and stuck the task in fix cycles.
+	if path, ok := mutationPath(toolharness.ToolCopyFile, map[string]any{"source": "vendor/a.go", "dest": "internal/a.go"}); !ok || path != "internal/a.go" {
+		t.Errorf("mutationPath(copy_file) = (%q, %v), want the destination internal/a.go", path, ok)
 	}
 	if _, ok := mutationPath(toolharness.ToolWriteFile, map[string]any{"path": "  "}); ok {
 		t.Error("mutationPath accepted a blank path")
