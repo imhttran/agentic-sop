@@ -5,7 +5,9 @@
 Each top-level SOP component's responsibilities, one per section. This is the
 detail behind the component map in [OVERVIEW.md](OVERVIEW.md) §3–§4. Normative
 behavior lives in [`../specs/`](../specs/) and [`../reference/`](../reference/);
-the ownership boundary is [SOP-BOUNDARY.md](SOP-BOUNDARY.md).
+the ownership boundary is [SOP-BOUNDARY.md](SOP-BOUNDARY.md). For a
+package-by-package code map with entry points and non-test importers, see
+[`../reference/PACKAGES.md`](../reference/PACKAGES.md).
 
 ---
 
