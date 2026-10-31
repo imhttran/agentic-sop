@@ -89,12 +89,12 @@ Detailed structure: [docs/architecture/OVERVIEW.md](docs/architecture/OVERVIEW.m
 Install the CLI (clone the repository and `cd` into it first):
 
 ```bash
-./install.sh                  # macOS / Linux
+./install.sh                   # macOS / Linux
 sop version
 ```
 
 ```powershell
-.\install.ps1                 # Windows (PowerShell)
+.\install.ps1                  # Windows (PowerShell)
 sop version
 ```
 
@@ -124,95 +124,40 @@ The unified executable also provides `sop controller serve` for the dashboard an
 and legacy wrappers are covered in the
 [consolidation guide](docs/guides/REPOSITORY-CONSOLIDATION.md).
 
-## Agent Skills
+## Agent Skills and Optional Surfaces
 
 Install the `/sop*` agent commands with `./install.sh --skills zed`,
-`./install.sh --skills claude`, or `./install.sh --all`. Start with
+`./install.sh --skills claude`, or `./install.sh --all`. SOP owns routing,
+validation, and approval for every command. Start with
 [the command examples](docs/guides/GETTING-STARTED.md#install-agent-commands),
 [installation](docs/guides/INSTALLATION.md), or
-[the Claude Code plugin guide](docs/guides/CLAUDE-PLUGIN.md).
-SOP owns routing, validation, and approval for every command. Three RAG-domain
-skills (`/rag-schema`, `/rag-test`, `/rag-ingest`) add a pgvector/RAG checklist on top
-of the read-only capabilities, and `/sop-rag-integrate` advises whether a project needs
-retrieval augmentation at all and plans a scoped integration (or recommends NO-RAG);
-see [docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md).
+[the Claude Code plugin guide](docs/guides/CLAUDE-PLUGIN.md); the RAG skills are in
+[docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md) and the provider-neutral MCP
+validation skill in [docs/guides/MCP-LIVE-VALIDATION.md](docs/guides/MCP-LIVE-VALIDATION.md).
 
-The provider-neutral `/mcp-live-validation` skill prepares pinned MCP candidates,
-produces a versioned cross-agent validation handoff, and preserves approval-gated
-start, rollback, and promotion boundaries; see
-[the MCP live-validation guide](docs/guides/MCP-LIVE-VALIDATION.md).
+An executor publishes progress and completion evidence with `sop result publish`,
+and a planner connected through `sop mcp --planner` reads it and records a bound
+`continue`, `correct`, `revise`, or `escalate` decision, which the executor applies
+with `sop planner continue --apply` before resuming `sop run`. With
+`--start-work` the planner can start the work itself. Planner advice is never human
+approval, and continuation stays interactive. See the
+[CLI reference](docs/reference/CLI.md#setting-up-the-planner) and the
+[planner–executor plan](docs/plans/PLAN-Executore-Integration.md).
 
-## Planner–Executor Coordination
+Optional evaluation tooling sits outside the default execution path:
+[`sop compare`](docs/guides/HIP-COMPARE.md) and the report-only
+[Promptfoo adapter](docs/security-promptfoo.md). Neither can promote a candidate or
+alter deterministic execution governance.
 
-The merged interactive planner baseline lets an executor publish progress,
-blockers, test results, and completion evidence with `sop result publish`. A
-planner connected through `sop mcp --planner` can retrieve task results and
-questions, then record a bound `continue`, `correct`, `revise`, or `escalate`
-decision. The executor applies that decision with
-`sop planner continue --apply` and resumes through `sop run`.
-With `sop mcp --planner --start-work`, the planner can also start work itself:
-`sop_start_work` launches `sop prompt` from prompt text or `sop run` from a project
-PLAN.md in the background, and reports status instead when that work is already
-running, already ran, or is the active plan (see
-[Starting work over MCP](docs/reference/CLI.md#starting-work-over-mcp)).
-`sop-setup-planner [PROJECT_DIR]` (installed with `./install.sh --planner-setup`, or
-`make setup-planner PROJECT=DIR`) sets the planner up for a project in one step; see
-[Setting up the planner](docs/reference/CLI.md#setting-up-the-planner).
-
-Planner decisions are advice, never human approval, and published results are
-evidence, never automatic task completion. Planner continuation remains interactive
-and does not invoke ChatGPT unattended; lifecycle notifications are a separate,
-opt-in delivery surface. PE-1 through
-PE-4 implementation and live acceptance are merged; the merged PE-4 evidence
-records all four tasks as `LOCAL_DONE`. Completing the plan remains a separate
-operator-local SOP lifecycle action and is not inferred from that repository
-evidence. See the
-[planner–executor implementation plan](docs/plans/PLAN-Executore-Integration.md),
-[PE-4 acceptance evidence](docs/reports/evidence/artifacts/pe4-acceptance/README.md),
-and [CLI reference](docs/reference/CLI.md).
-
-Optional evaluation tooling is also available outside the default execution
-path: [`sop compare`](docs/guides/HIP-COMPARE.md) runs bounded
-baseline/candidate comparisons, and the
-[Promptfoo adapter](docs/security-promptfoo.md) performs report-only behavioral
-security evaluations. Neither tool can promote a candidate or alter deterministic
-execution governance.
-
-## Notifications
-
-SOP records a durable event when background work completes, fails, or stops at a
-human decision, and delivers it through one configured channel (`none`, `file`, or
-`webhook`). Delivery is at-least-once with deduplication by a stable event id,
-bounded retries with backoff, and an `EXHAUSTED` terminal state. Availability is
-reported from observed evidence, so configuration alone never claims that
-notifications work; run `sop notify test` and check `sop notify status`.
-
-A delivery failure never changes a task's outcome. No production channel is enabled
-by default. On 2026-10-29, operator-local Mac evidence confirmed three Slack-format
-webhook deliveries (`pending=0`, `exhausted=0`), including terminal notifications for
-two real MCP-started jobs; this is local deployment evidence, not default enablement.
-See [Notifications](docs/guides/NOTIFICATIONS.md).
+Background work records a durable lifecycle event delivered through one configured
+channel (`none`, `file`, or `webhook`); delivery is at-least-once, a delivery failure
+never changes a task's outcome, and no channel is enabled by default. See
+[Notifications](docs/guides/NOTIFICATIONS.md).
 
 ## Basic Workflow
 
 ```text
-PLAN
-  ↓
-SELECT TASK
-  ↓
-PRECHECK
-  ↓
-EXECUTE
-  ↓
-VALIDATE
-  ↓
-REVIEW
-  ↓
-JEV / QUALITY
-  ↓
-HUMAN APPROVAL
-  ↓
-COMPLETE
+PLAN → SELECT TASK → PRECHECK → EXECUTE → VALIDATE → REVIEW → JEV/QUALITY → HUMAN APPROVAL → COMPLETE
 ```
 
 Detailed state transitions and lifecycle rules live in the specifications:
@@ -223,25 +168,20 @@ Detailed state transitions and lifecycle rules live in the specifications:
 After an accepted plan revision, `sop approval invalidate` can resolve a stale
 `PENDING` approval only when SOP can prove the task-specific definition change.
 It records an audited invalidation and never approves, satisfies, completes, or
-waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-stale-pending-evidence).
+waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-gate-whose-evidence-is-obsolete).
 
 ## Status
 
-SOP V1 and the subsequent routing, provider, recovery, distribution, approval,
-agentic reliability, and context-efficiency layers are implemented. Recent
-benchmark-driven hardening adds bounded in-run retry and continuation, per-model
-token accounting, typed complexity and sensitive-task routing, invocation-scoped
-file restoration, and Linux replay isolation from host Unix sockets. Optional
-local decision memory is implemented but disabled by default pending a valid
-held-out benefit evaluation. See
-[Project Status](docs/reference/PROJECT-STATUS.md) for delivery evidence and known
-limitations, [Backlog](docs/plans/BACKLOG.md) for future work, and the
-[performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for measured results
-and their scope. Repository consolidation is complete; its
-[evidence and compatibility boundaries](docs/guides/REPOSITORY-CONSOLIDATION.md)
-do not establish current local machine or CI status. The legacy `sop-controller`
-and `sop-decision-adapters` GitHub remotes are currently archived read-only,
-but archival readiness is not verified; see the
+SOP V1 and the routing, provider, recovery, distribution, approval, agentic
+reliability, and context-efficiency layers are implemented, including recent
+benchmark-driven routing, recovery, and isolation hardening. Optional local
+decision memory is implemented but disabled by default pending a valid held-out
+benefit evaluation. See [Project Status](docs/reference/PROJECT-STATUS.md) for
+delivery evidence and known limitations, [Backlog](docs/plans/BACKLOG.md) for future
+work, and the [performance baseline](docs/reports/PERFORMANCE-BASELINE.md) for
+measured results. Repository consolidation is complete, and its
+[evidence](docs/guides/REPOSITORY-CONSOLIDATION.md) does not establish current local
+machine or CI status; the legacy remotes stay archived read-only pending the
 [legacy transition checklist](docs/guides/LEGACY-REPOSITORY-TRANSITION.md#readiness-checklist).
 
 ## Documentation
@@ -257,7 +197,7 @@ Start at **[docs/README.md](docs/README.md)** for the complete categorized index
 | CLI and configuration         | [Commands](docs/reference/CLI.md), [configuration](docs/reference/CONFIGURATION.md)          |
 | Usage and development         | [Getting started](docs/guides/GETTING-STARTED.md), [development](docs/guides/DEVELOPMENT.md) |
 | Decision-model findings       | [Decision-model findings](docs/reference/DECISION-MODEL-FINDINGS.md)                         |
-| Plans and historical evidence | [Plans](docs/README.md#plans), [history](docs/README.md#historical-documentation)            |
+| Plans and historical evidence | [Plans](docs/plans/README.md), [history](docs/README.md#historical-documentation)            |
 
 ## License
 
