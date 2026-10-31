@@ -90,6 +90,10 @@ Install the CLI (clone the repository and `cd` into it first):
 
 ```bash
 ./install.sh                   # macOS / Linux
+sop version
+```
+
+```powershell
 .\install.ps1                  # Windows (PowerShell)
 sop version
 ```
@@ -164,7 +168,7 @@ Detailed state transitions and lifecycle rules live in the specifications:
 After an accepted plan revision, `sop approval invalidate` can resolve a stale
 `PENDING` approval only when SOP can prove the task-specific definition change.
 It records an audited invalidation and never approves, satisfies, completes, or
-waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-stale-pending-evidence).
+waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-gate-whose-evidence-is-obsolete).
 
 ## Status
 

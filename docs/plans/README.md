@@ -69,6 +69,17 @@ rather than moving to the archive (see
 | [PLAN-SOP-RUN-ACCEPT-001.md](PLAN-SOP-RUN-ACCEPT-001.md) | declared ACTIVE | native deterministic acceptance checks for `sop run` |
 | [PLAN-SOP-Validation-Evidence-Reuse.md](PLAN-SOP-Validation-Evidence-Reuse.md) | IMPLEMENTED | SOP validation evidence reuse |
 | [PLAN-Security-Scanner-Addon.md](PLAN-Security-Scanner-Addon.md) | IMPLEMENTED | the Semgrep CE and Gitleaks security scanner add-on (SEC-001–SEC-005); the path is kept because `internal/planner/security_plan_test.go` compiles this plan |
+| [PLAN-Issue-158-Deliverable-Paths.md](PLAN-Issue-158-Deliverable-Paths.md) | PROPOSED | one outcome criterion per deliverable line and no descriptive symbol treated as a path (issue #158); the header still says PROPOSED although PR #163 merged the fix |
+| [PLAN-Locality-Configuration-Cleanup.md](PLAN-Locality-Configuration-Cleanup.md) | PROPOSED | resolving model locality from explicit configuration or reliable evidence instead of repeating it; the header still says PROPOSED although PR #157 merged the change |
+| [VALIDATION-SCOPED-TESTS.md](VALIDATION-SCOPED-TESTS.md) | design (implemented on `feat/scoped-validation`) | scoped task validation with a final full-suite gate |
+| [S1-PROMPTFOO-INTEGRATION-DECISION.md](S1-PROMPTFOO-INTEGRATION-DECISION.md) | decision record | the selection of one optional Promptfoo adapter and no second workflow runner (stage S1) |
+| [S3-AISEC-ACCEPTANCE.md](S3-AISEC-ACCEPTANCE.md) | VERIFY | verification of the AISEC suite against the current evaltarget (stage S3V) |
+| [S4-ACCEPTANCE.md](S4-ACCEPTANCE.md) | VERIFY | verification of Promptfoo configuration, reporting, and normalization (stage S4V) |
+| [S5-ACCEPTANCE.md](S5-ACCEPTANCE.md) | VERIFY | verification of Promptfoo delivery readiness (stage S5V) |
+| [HIP-001-bootstrap-baseline.md](HIP-001-bootstrap-baseline.md) | BOOTSTRAP NOTE | the isolated environment and baseline record for the Harness Improvement Pilot |
+| [HIP-002-existing-facilities-and-choices.md](HIP-002-existing-facilities-and-choices.md) | INSPECTION NOTE | the existing facilities, integration points, and implementation choices for the pilot |
+| [HIP-005-pilot-selection.md](HIP-005-pilot-selection.md) | recorded 2026-10-23 | the fixed pilot task selection and candidate revision, recorded before any candidate ran |
+| [HIP-008-delivery.md](HIP-008-delivery.md) | delivery record | the pilot's delivery record (PR #114) |
 
 ### Plans under `history/plans/`
 
@@ -92,6 +103,10 @@ non-terminal, so read the file for its authority.
 | [PLAN-SOP-Lifecycle-Consistency-Hardening.md](../history/plans/PLAN-SOP-Lifecycle-Consistency-Hardening.md) | PROPOSED | SOP lifecycle-consistency hardening |
 | [PLAN-Security-Scan-Skill.md](../history/plans/PLAN-Security-Scan-Skill.md) | IMPLEMENTED (archived) | the Go/Rust security-scan skill and cargo-audit adapter; archived under `history/plans/`, while `.agent-sdlc/archive/plan-security-scan-skill/` keeps the original source path |
 | [PLAN-Dependency-Coverage-Fixes.md](../history/plans/PLAN-Dependency-Coverage-Fixes.md) | IMPLEMENTED | Cargo workspace detection, dependency obligation inventory, and empty-analysis rejection |
+| [PLAN-Security-Scanner-Residual-Findings.md](../history/plans/PLAN-Security-Scanner-Residual-Findings.md) | IMPLEMENTED | dependency-layout detection and freshness evidence correctness (PR #74) |
+| [SOP-RAG-Decision-Memory-Plan.md](../history/plans/SOP-RAG-Decision-Memory-Plan.md) | IMPLEMENTED (opt-in, disabled by default) | local SQLite/FTS5 decision-memory capture and bounded advisory retrieval (PR #100); benefit remains unproven |
+| [PROMPT-SOP-Harness-Improvement-Pilot.md](../history/plans/PROMPT-SOP-Harness-Improvement-Pilot.md) | prompt (historical) | the original implementation prompt for the Harness Improvement Pilot |
+| [SOP-Promptfoo-Implementation-Prompt.md](../history/plans/SOP-Promptfoo-Implementation-Prompt.md) | prompt (historical) | the original implementation prompt for the optional Promptfoo security evaluations |
 
 ## Planner spike and retained execution records
 
