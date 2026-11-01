@@ -112,7 +112,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Placement applies only to arm B, the only arm that assembles a SOP context. Arms A, C and D record whether injected text was retrieved, set placement to not applicable, and never raise the placement hard-blocker.
 - If a knowledge-rag citation doesn't split back into the evidence's own `Corpus` and `Source`, the run fails with an error naming the citation.
 
-Each named test must exist. `go test -run <Name>` passes when no test matches, so every named test also has a `git grep` existence check. A missing test fails that check.
+Each named test must exist. `go test -run <Name>` passes when no test matches, so every named test also has a `git grep --untracked` existence check. A missing test fails that check.
 
 ### Dependencies
 
@@ -160,13 +160,13 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `go test -count=1 -run TestArmBUsesSOPContextBuild ./internal/rageval/`
 - `go test -count=1 -run TestInjectionPlacementOnlyArmB ./internal/rageval/`
 - `go test -count=1 -run TestInvalidCitationFailsRun ./internal/rageval/`
-- `git grep -q "func TestArmAMatchesSOPRetrieval(" -- internal/rageval`
-- `git grep -q "func TestNoLocalBM25(" -- internal/rageval`
-- `git grep -q "func TestArmDUsesFullTextRanker(" -- internal/rageval`
-- `git grep -q "func TestCommittedInjectionQuestionsHaveInjectedText(" -- internal/rageval`
-- `git grep -q "func TestArmBUsesSOPContextBuild(" -- internal/rageval`
-- `git grep -q "func TestInjectionPlacementOnlyArmB(" -- internal/rageval`
-- `git grep -q "func TestInvalidCitationFailsRun(" -- internal/rageval`
+- `git grep -q --untracked "func TestArmAMatchesSOPRetrieval" -- internal/rageval`
+- `git grep -q --untracked "func TestNoLocalBM25" -- internal/rageval`
+- `git grep -q --untracked "func TestArmDUsesFullTextRanker" -- internal/rageval`
+- `git grep -q --untracked "func TestCommittedInjectionQuestionsHaveInjectedText" -- internal/rageval`
+- `git grep -q --untracked "func TestArmBUsesSOPContextBuild" -- internal/rageval`
+- `git grep -q --untracked "func TestInjectionPlacementOnlyArmB" -- internal/rageval`
+- `git grep -q --untracked "func TestInvalidCitationFailsRun" -- internal/rageval`
 
 ### Acceptance Mapping
 
