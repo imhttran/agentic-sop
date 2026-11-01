@@ -1,0 +1,249 @@
+# Using SOP from Claude Code
+
+This guide shows how to install the SOP skills so Claude Code exposes the SOP
+commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
+`/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
+`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
+and how each one calls SOP.
+
+The commands are **thin adapters**. Capability aliases call `sop prompt`;
+`/sop-end-to-end` delegates project execution to `sop run`; `/sop-continue`
+reconciles through `sop continue --check` and continues through `sop run`. SOP
+still owns routing, provider selection, validation, the lifecycle, and approval. The
+normative behavior is in
+[`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); the skill contract is in
+[`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md). The Zed integration is
+described in [`ZED-SKILLS.md`](ZED-SKILLS.md); both platforms install the **same**
+canonical skill tree, so the commands and their capabilities are identical.
+
+## How Claude Code discovers skills
+
+A Claude Code **skill** is a folder containing a `SKILL.md`. Claude Code exposes each
+skill as a slash command — named by the folder or its frontmatter `name` — and can
+also load it automatically when its description matches the conversation (unless the
+skill sets `disable-model-invocation: true`). Skills load from several scopes; the two
+this installer uses are:
+
+| Scope    | Path                               | Applies to    |
+| -------- | ---------------------------------- | ------------- |
+| Personal | `~/.claude/skills/<name>/SKILL.md` | every project |
+| Project  | `<project>/.claude/skills/<name>/` | that project  |
+
+Consequences that matter here:
+
+- **Flat layout.** Each command is a _direct child_ of the skills root.
+- **Frontmatter.** Claude Code reads the YAML frontmatter only when the opening `---`
+  is the file's first line; the folder name and `name:` must match.
+- **Symlinked folders work.** A skill folder may be a symlink to a directory
+  elsewhere on disk, which is exactly how the installer keeps the checkout as the
+  single source of truth.
+- **`disable-model-invocation`.** Set on a skill, it keeps the `/command` but removes
+  the skill from Claude's autonomous catalog. `/sop-implement` uses it, so Claude
+  cannot start a repository change on its own.
+- **Live reload.** Claude Code watches `~/.claude/skills/` and the project's
+  `.claude/skills/`; editing a `SKILL.md` takes effect without restarting (run
+  `/reload-skills` after creating a skills directory that did not exist at startup).
+
+## Install the commands
+
+The SOP skills live in this repository's [`skills/`](../../skills) tree, which is the
+single source of truth. Install links them into Claude Code's skills root:
+
+```bash
+git clone https://github.com/imhttran/agentic-sop.git
+cd agentic-sop
+./install.sh --skills claude   # the sop CLI + the SOP skills in ~/.claude/skills
+```
+
+`./install.sh --skills claude` delegates to `scripts/install/install-skills.sh`, which links
+each skill folder into `~/.claude/skills/`, so the commands are available in **every**
+project you open Claude Code in. The skills stay
+live against your checkout: editing a `SKILL.md` takes effect without reinstalling.
+
+Use the script directly for more control:
+
+```bash
+scripts/install/install-claude-skills.sh           # personal scope (same as ./install.sh --skills claude)
+scripts/install/install-skills.sh claude --project # project scope: ./.claude/skills
+scripts/install/install-skills.sh claude --project ~/work/api
+scripts/install/install-skills.sh claude --dry-run # print what would change
+scripts/install/install-skills.sh claude --force   # replace a SOP-named symlink that points elsewhere
+```
+
+Uninstall (also safe and idempotent):
+
+```bash
+scripts/install/install-skills.sh claude --uninstall
+# make uninstall-skills-claude runs the same thing
+```
+
+`./install.sh --skills all` installs every supported agent whose directory is present;
+`./install.sh --skills claude` installs Claude Code specifically. To package the same
+commands as a Claude Code **plugin** instead of (or as well as) personal skills, see
+[CLAUDE-PLUGIN.md](CLAUDE-PLUGIN.md).
+
+## The commands
+
+| Command           | Capability          | Mutates? | Use for                                                  |
+| ----------------- | ------------------- | -------- | -------------------------------------------------------- |
+| `/sop`            | _general entry_     | no\*     | route a general request to the right capability          |
+| `/sop-prompt`     | _CLI default_       | no\*     | an ad-hoc request with no capability chosen              |
+| `/sop-plan`       | `plan`              | no       | plans, designs, approaches, comparisons                  |
+| `/sop-review`     | `review`            | no       | code, architecture, security, design review              |
+| `/sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
+| `/sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change    |
+| `/rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix          |
+| `/rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                      |
+| `/sop-rag-integrate` | `plan`           | no       | assess a project's RAG suitability and plan its integration |
+| `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
+| `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
+| `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
+| `/sop-next-action` | _next safe action_ | **yes**  | report the next safe action (read-only by default); `execute` delegates to `sop run` |
+| `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
+| `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
+| `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
+| `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix |
+
+`/mcp-live-validation` prepares an isolated candidate and, after approval, stops the
+verified baseline and starts the candidate. It never replaces the production binary or
+merges; local tests are not independent validation.
+
+It writes a portable `validation-handoff.json`. See
+[MCP-LIVE-VALIDATION-PROVIDERS.md](MCP-LIVE-VALIDATION-PROVIDERS.md) for ChatGPT, Claude,
+and DeepSeek-compatible harness setup.
+
+\* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
+default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
+`/sop end-to-end` project-execution requests use `/sop-end-to-end` instead.
+
+The `rag-*` commands are RAG-domain skills: they fix the read-only `plan` or
+`design_tests` capability and add a pgvector/RAG checklist. They never mutate
+the repository; see [`RAG-SKILLS.md`](RAG-SKILLS.md). `/sop-rag-integrate` follows the
+same boundary: it fixes `plan`, advises on whether a project needs retrieval
+augmentation at all (including a NO-RAG outcome), and hands implementation to the
+governed `/sop-implement` lifecycle.
+
+Example, from the Claude Code prompt:
+
+```text
+/sop-review review internal/provider for architectural problems
+
+/sop-diagnose explain why the latest provider validation test failed
+
+/sop-plan plan a cache layer for provider model discovery
+
+/sop-test design regression tests for provider fallback prevention
+
+/sop-implement add caching to provider model discovery
+
+/sop end-end docs/plans/PLAN-Example.md
+```
+
+`/sop-implement` handles ad-hoc mutation requests. It enters SOP's governed
+implementation lifecycle (plan → implement → deterministic validation → review →
+quality gate → bounded fix → human approval boundary) exactly as a planned task does,
+and it is hidden from Claude's autonomous catalog so Claude cannot start it on its
+own — you invoke it explicitly.
+
+Claude Code also lets **Claude** invoke a skill automatically when the description
+matches. When it does, the same rules apply: capability aliases must call `sop prompt` and return
+SOP's result, not perform the work itself.
+
+`/sop-end-to-end` also requires explicit operator intent. It performs lightweight
+preflight, invokes `sop run` once, observes its state, and reports genuine human
+boundaries. It adds no lifecycle or retry loop. Its contract is
+[the tracked skill](../../skills/sop-end-to-end/SKILL.md), with deterministic
+scenarios in [the evaluation specification](../testing/SOP-END-TO-END.md).
+
+`/sop-continue` continues an **already-active** plan. Before any execution it
+reconciles the source plan, the compiled plan, and persisted state through
+`sop continue --check` (read-only), and it continues through `sop run` only when
+reconciliation authorizes it. It stops for human review on any semantic change,
+nondeterminism, unsafe state, or pending approval, and never commits or pushes by
+default. Its contract is
+[the tracked skill](../../skills/sop-continue/SKILL.md).
+
+`/sop-browser-test` runs and maintains a project's **persistent Playwright tests** — the
+smoke, mobile-layout, and approval suites — and verifies SOP's state for state-changing
+flows. With `--audit` it reports coverage gaps for a UI change; with `--update` it brings
+the tests in step with changed UI behavior. It fixes no capability and never replaces
+SOP's validation, review, or approval authority.
+
+`/sop-security-scan` runs a **report-only** security scan through SOP for Go, Rust, or
+mixed repositories. It detects languages, manifests, Cargo workspaces, and actual
+lockfiles; selects Gitleaks, Semgrep, and cargo-audit from repository content; triages
+findings against source and dependency evidence; and reports sanitized evidence. Scanner
+execution stays in SOP's adapters. The skill never installs tools, suppresses findings,
+invents owners/expiry dates, enables required mode, or launches fixes. Its contract is
+[the tracked skill](../../skills/sop-security-scan/SKILL.md).
+
+For capability aliases, everything after the command name is prompt data. They place it in SOP's
+`$ARGUMENTS` position and pass it to `sop prompt` as a single argument — it is never
+interpreted as a shell command, a lifecycle transition, or configuration. See
+[Prompt text is untrusted](#prompt-text-is-untrusted).
+
+## Where the work goes
+
+Capability aliases run `sop prompt` in the project Claude Code is open on, so:
+
+- runs are recorded under that project's `.agent-sdlc/runs/prompts/<run-id>/`;
+- inspect one with `sop report prompts/<run-id>`, or `sop report` for the latest run;
+- a blocked run in one project never affects another project.
+
+End-to-end execution uses that project's existing plan/task state and standard
+`.agent-sdlc/runs/` reports. Supplied plan paths are passed as data with proper
+argument escaping.
+
+The provider and model are chosen by SOP (see
+[`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) and
+[`../specs/PROVIDERS.md`](../specs/PROVIDERS.md)). No skill names a provider or a model
+class.
+
+## Prompt text is untrusted
+
+Prompt input stays data. Passing `; rm -rf .` or `$(whoami)` as a request does not
+execute anything — the text is sent to the selected agent, and a repository mutation
+requires an `implement` request through SOP's tool/harness authorization path. No skill
+interprets prompt text as a shell command, an approval, a model class, or a provider.
+
+## When `sop` is not installed
+
+The skills drive the `sop` CLI, so every one of them tells the agent: if `sop` is not
+on `PATH`, stop and report it (install it with `./install.sh`), and do **not** answer
+the request yourself or mutate the repository in SOP's place. Missing SOP fails closed;
+this matters most for `/sop-implement`.
+
+## Safety of the installer
+
+- **No root.** Skills are per-user; the script warns if it is run as root.
+- **Only SOP-owned entries.** It links the SOP commands and never deletes or
+  overwrites an unrelated file or skill.
+- **Idempotent.** Re-running reports `ok` for entries already linked.
+- **Conflicts are refused, not clobbered.** If a SOP name already exists as a real
+  file or directory, the script skips it and tells you; `--force` replaces only a
+  SOP-named _symlink_ that points somewhere else.
+- **Uninstall removes only what it installed** (symlinks pointing into this
+  repository's `skills/`).
+
+If `~/.claude/skills/sop` already exists as a real directory, move it aside before
+installing so the `/sop` command can be linked. Claude Code reserves the folder names
+`synced` and `anthropic-skills`; the SOP skills do not use them.
+
+## Troubleshooting
+
+| Symptom                                | Cause                                                                                                                                  |
+| -------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| A command is missing from the `/` menu | The skill is not installed — run `./install.sh --skills claude`, then `/reload-skills`.                                                |
+| The command runs but fails immediately | `sop` is not on `PATH` — run `./install.sh` and check `sop version`.                                                                   |
+| Claude uses a SOP skill unprompted     | That is the model-invocable default; set `disable-model-invocation` or a `skillOverrides` entry to stop it (as `/sop-implement` does). |
+| "provider cannot IMPLEMENT"            | The selected provider cannot mutate the repository; see [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md).                    |
+
+## See also
+
+- [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) — the normative behavior of `sop prompt`.
+- [`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md) — the canonical skill contract and capability map.
+- [`ZED-SKILLS.md`](ZED-SKILLS.md) — the same commands for Zed.
+- [`../reference/CLI.md`](../reference/CLI.md) — the CLI surface, including `sop prompt`.
+- [`PLAN-Phase-5.4-Unified-Work-Items.md`](../plans/PLAN-Phase-5.4-Unified-Work-Items.md) — where the skills came from.

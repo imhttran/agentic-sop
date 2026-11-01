@@ -1,0 +1,1 @@
+"the Ollama agent IMPLEMENT ALREADY_SATISFIED claim lacked verified acceptance evidence (model=deepseek-v4.1-flash:cloud, repository_mutations=0, iteration=11, termination=no_changes); a retry may succeed"

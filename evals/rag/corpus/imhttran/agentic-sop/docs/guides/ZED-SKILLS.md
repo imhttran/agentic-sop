@@ -1,0 +1,230 @@
+# Using SOP from Zed
+
+This guide shows how to install the SOP skills so Zed's agent exposes the SOP
+commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
+`/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
+`/sop-continue`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
+and how each one calls SOP.
+
+The commands are **thin adapters**. Capability aliases call `sop prompt`;
+`/sop-end-to-end` delegates project execution to `sop run`; `/sop-continue`
+reconciles through `sop continue --check` and continues through `sop run`. SOP
+still owns routing, provider selection, validation, the lifecycle, and approval. The
+normative behavior is in
+[`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md); the skill contract is in
+[`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md). Claude Code exposes the same
+commands from the same skill tree — see [`CLAUDE-SKILLS.md`](CLAUDE-SKILLS.md).
+
+## How Zed discovers skills
+
+A Zed **skill** is a folder containing a `SKILL.md`, and Zed exposes each skill as a
+slash command (and an `@`-mention) named after the folder. Zed loads skills from two
+roots only:
+
+| Scope         | Path                               | Applies to        |
+| ------------- | ---------------------------------- | ----------------- |
+| Global        | `~/.agents/skills/<name>/SKILL.md` | every project     |
+| Project-local | `<project>/.agents/skills/<name>/` | that project only |
+
+Three consequences matter here:
+
+- **Flat layout.** Each skill must be a _direct child_ of the skills root; nested
+  folders are not discovered.
+- **Trust.** Project-local skills load only from a trusted worktree; an untrusted
+  clone's skills are excluded from the catalog and the slash menu until you trust it.
+- **Names.** The folder name and the frontmatter `name:` must match and be lowercase
+  letters, digits, and hyphens.
+
+## Install the commands
+
+The SOP skills live in this repository's [`skills/`](../../skills) tree, which is the
+single source of truth. Install links them into a Zed skills root:
+
+```bash
+git clone https://github.com/imhttran/agentic-sop.git
+cd agentic-sop
+./install.sh --skills zed   # the sop CLI + the SOP skills in ~/.agents/skills
+```
+
+`./install.sh --skills zed` delegates to `scripts/install/install-skills.sh`, which links each
+skill folder into `~/.agents/skills/`, so the commands are available in **every**
+project you open in Zed. The skills stay live against your checkout: editing a
+`SKILL.md` takes effect without reinstalling. (See
+[INSTALLATION.md](INSTALLATION.md) for the installer's options; `make
+install-skills-zed` runs the same thing.)
+
+Use the script directly for more control:
+
+```bash
+scripts/install/install-zed-skills.sh             # global (same as ./install.sh --skills zed)
+scripts/install/install-skills.sh zed --project   # project-local: ./.agents/skills
+scripts/install/install-skills.sh zed --project ~/work/api
+scripts/install/install-skills.sh zed --dry-run   # print what would change
+scripts/install/install-skills.sh zed --force     # replace a SOP-named symlink that points elsewhere
+```
+
+Uninstall (also safe and idempotent):
+
+```bash
+scripts/install/install-skills.sh zed --uninstall
+# make uninstall-skills-zed runs the same thing
+```
+
+## The commands
+
+| Command           | Capability          | Mutates? | Use for                                                  |
+| ----------------- | ------------------- | -------- | -------------------------------------------------------- |
+| `/sop`            | _general entry_     | no\*     | route a general request to the right capability          |
+| `/sop-prompt`     | _CLI default_       | no\*     | an ad-hoc request with no capability chosen              |
+| `/sop-plan`       | `plan`              | no       | plans, designs, approaches, comparisons                  |
+| `/sop-review`     | `review`            | no       | code, architecture, security, design review              |
+| `/sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
+| `/sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
+| `/rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change    |
+| `/rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix          |
+| `/rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                      |
+| `/sop-rag-integrate` | `plan`           | no       | assess a project's RAG suitability and plan its integration |
+| `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
+| `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
+| `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
+| `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
+| `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
+| `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
+| `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix |
+
+`/mcp-live-validation` prepares an isolated candidate and, after approval, stops the
+verified baseline and starts the candidate. It never replaces the production binary or
+merges; local tests are not independent validation.
+
+It writes a portable `validation-handoff.json`. See
+[MCP-LIVE-VALIDATION-PROVIDERS.md](MCP-LIVE-VALIDATION-PROVIDERS.md) for ChatGPT, Claude,
+and DeepSeek-compatible harness setup.
+
+\* `/sop` and `/sop-prompt` fix no capability, so the CLI's conservative read-only
+default (`plan`) applies to ad-hoc prompts. Explicit `/sop end-end` or
+`/sop end-to-end` project-execution requests use `/sop-end-to-end` instead.
+
+The `rag-*` commands are RAG-domain skills: they fix the read-only `plan` or
+`design_tests` capability and add a pgvector/RAG checklist. They never mutate
+the repository; see [`RAG-SKILLS.md`](RAG-SKILLS.md). `/sop-rag-integrate` follows the
+same boundary: it fixes `plan`, advises on whether a project needs retrieval
+augmentation at all (including a NO-RAG outcome), and hands implementation to the
+governed `/sop-implement` lifecycle.
+
+Example, from Zed's agent message editor:
+
+```text
+/sop-review review internal/provider for architectural problems
+
+/sop-diagnose explain why the latest provider validation test failed
+
+/sop-plan plan a cache layer for provider model discovery
+
+/sop-test design regression tests for provider fallback prevention
+
+/sop-implement add caching to provider model discovery
+
+/sop end-end docs/plans/PLAN-Example.md
+```
+
+`/sop-implement` handles ad-hoc mutation requests. It enters SOP's governed
+implementation lifecycle (plan → implement → deterministic validation → review →
+quality gate → bounded fix → human approval boundary) exactly as a planned task does,
+and it is hidden from the agent's autonomous catalog so the agent cannot start it on
+its own — you invoke it explicitly.
+
+`/sop-end-to-end` also requires explicit operator intent. It performs lightweight
+preflight, invokes `sop run` once, observes its state, and reports genuine human
+boundaries. It adds no lifecycle or retry loop. Its contract is
+[the tracked skill](../../skills/sop-end-to-end/SKILL.md), with deterministic
+scenarios in [the evaluation specification](../testing/SOP-END-TO-END.md).
+
+`/sop-continue` continues an **already-active** plan. Before any execution it
+reconciles the source plan, the compiled plan, and persisted state through
+`sop continue --check` (read-only), and it continues through `sop run` only when
+reconciliation authorizes it. It stops for human review on any semantic change,
+nondeterminism, unsafe state, or pending approval, and never commits or pushes by
+default. Its contract is
+[the tracked skill](../../skills/sop-continue/SKILL.md).
+
+`/sop-browser-test` runs and maintains a project's **persistent Playwright tests** — the
+smoke, mobile-layout, and approval suites — and verifies SOP's state for state-changing
+flows. With `--audit` it reports coverage gaps for a UI change; with `--update` it brings
+the tests in step with changed UI behavior. It fixes no capability and never replaces
+SOP's validation, review, or approval authority.
+
+`/sop-security-scan` runs a **report-only** security scan through SOP for Go, Rust, or
+mixed repositories. It detects languages, manifests, Cargo workspaces, and actual
+lockfiles; selects Gitleaks, Semgrep, and cargo-audit from repository content; triages
+findings against source and dependency evidence; and reports sanitized evidence. Scanner
+execution stays in SOP's adapters. The skill never installs tools, suppresses findings,
+invents owners/expiry dates, enables required mode, or launches fixes. Its contract is
+[the tracked skill](../../skills/sop-security-scan/SKILL.md).
+
+For capability aliases, everything after the command name is prompt data, passed
+to SOP as a single argument.
+It is never interpreted as a shell command, a lifecycle transition, or configuration.
+See [Prompt text is untrusted](#prompt-text-is-untrusted).
+
+## Where the work goes
+
+Capability aliases run `sop prompt` in the project Zed is open on, so:
+
+- runs are recorded under that project's `.agent-sdlc/runs/prompts/<run-id>/`;
+- inspect one with `sop report prompts/<run-id>`, or `sop report` for the latest run;
+- a blocked run in one project never affects another project.
+
+End-to-end execution uses that project's existing plan/task state and standard
+`.agent-sdlc/runs/` reports. Named plan paths are quoted arguments, not shell input.
+
+The provider and model are chosen by SOP (see
+[`../specs/MODEL-ROUTING.md`](../specs/MODEL-ROUTING.md) and
+[`../specs/PROVIDERS.md`](../specs/PROVIDERS.md)). No skill names a provider or a model
+class.
+
+## Prompt text is untrusted
+
+Prompt input stays data. Passing `; rm -rf .` or `$(whoami)` as a request does not
+execute anything — the text is sent to the selected agent, and a repository mutation
+requires an `implement` request through SOP's tool/harness authorization path. No skill
+interprets prompt text as a shell command, an approval, a model class, or a provider.
+
+## When `sop` is not installed
+
+The skills drive the `sop` CLI, so every one of them tells the agent: if `sop` is not
+on `PATH`, stop and report it (install it with `./install.sh`), and do **not** answer
+the request yourself or mutate the repository in SOP's place. Missing SOP fails closed;
+this matters most for `/sop-implement`.
+
+## Safety of the installer
+
+- **No root.** Skills are per-user; the script warns if it is run as root.
+- **Only SOP-owned entries.** It links the SOP commands and never deletes or
+  overwrites an unrelated file or skill.
+- **Idempotent.** Re-running reports `ok` for entries already linked.
+- **Conflicts are refused, not clobbered.** If a SOP name already exists as a real
+  file or directory, the script skips it and tells you; `--force` replaces only a
+  SOP-named _symlink_ that points somewhere else.
+- **Uninstall removes only what it installed** (symlinks pointing into this
+  repository's `skills/`).
+
+If `~/.agents/skills/sop` already exists as a real directory (an older nested layout,
+for example), move it aside before installing so the `/sop` command can be linked.
+
+## Troubleshooting
+
+| Symptom                                | Cause                                                                                                               |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| A command is missing from the `/` menu | The skill is not installed, or an untrusted project's project-local skills are excluded.                            |
+| No SOP commands at all                 | `~/.agents/skills/` has no SOP entries — run `./install.sh --skills zed`.                                           |
+| The command runs but fails immediately | `sop` is not on `PATH` — run `./install.sh` and check `sop version`.                                                |
+| "provider cannot IMPLEMENT"            | The selected provider cannot mutate the repository; see [`../specs/AGENT-PROVIDER.md`](../specs/AGENT-PROVIDER.md). |
+
+## See also
+
+- [`../specs/PROMPT-EXECUTION.md`](../specs/PROMPT-EXECUTION.md) — the normative behavior of `sop prompt`.
+- [`../../skills/sop/SKILL.md`](../../skills/sop/SKILL.md) — the canonical skill contract and capability map.
+- [`CLAUDE-SKILLS.md`](CLAUDE-SKILLS.md) — the same commands for Claude Code.
+- [`../reference/CLI.md`](../reference/CLI.md) — the CLI surface, including `sop prompt`.
+- [`PLAN-Phase-5.4-Unified-Work-Items.md`](../plans/PLAN-Phase-5.4-Unified-Work-Items.md) — where the skills came from.
