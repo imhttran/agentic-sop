@@ -1,0 +1,300 @@
+# SOP Documentation
+
+Index of the SOP documentation tree. Each entry has a one-sentence description so
+a human or an AI agent can decide what to read. New here? Start with
+[guides/GETTING-STARTED.md](guides/GETTING-STARTED.md).
+
+## How Documentation Is Organized
+
+```text
+requirements/   What are we building and why?
+architecture/   How is the system structured?
+specs/          How MUST the system behave?
+plans/          What work needs to happen?
+reference/      What are the exact commands, states, and values?
+guides/         How do I use or develop it?
+testing/        How was it verified on a real machine?
+reports/        What was measured or decided at a point in time?
+history/        What happened previously?
+```
+
+Authority flows **requirements → architecture → specs → plans → SOP execution**.
+Specifications define required behavior; plans MUST NOT override them; historical
+documents provide traceability only. The authoritative top-level description of the
+ownership model is [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md).
+
+Where new documentation belongs:
+
+- product intent / requirements → `requirements/` (or a new section of [PRD.md](PRD.md))
+- structure, components, ownership → `architecture/`
+- normative behavior (MUST/SHOULD/MAY) → `specs/`
+- implementation work → `plans/`
+- commands, config, states, values → `reference/`
+- task-oriented instructions → `guides/`
+- completed/superseded artifacts → `history/`
+- clean-room test checklists and their results → `testing/`
+- point-in-time measurement or decision evidence → `reports/`
+
+## Shipped RAG Skills vs. the RAG Retrieval Adapter
+
+Read [RAG-SKILLS.md](guides/RAG-SKILLS.md) for the shipped read-only skills.
+The [consolidation guide](guides/REPOSITORY-CONSOLIDATION.md#shipped-rag-skills-vs-the-rag-retrieval-adapter)
+compares those skills with the optional runtime retrieval adapter; its rollout
+decision is recorded in [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md).
+
+## Getting Started
+
+- [../README.md](../README.md) — project landing page: what SOP is and a minimal quick start.
+- [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP for the first time.
+- [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, inspect.
+
+## Requirements
+
+- [PRD.md](PRD.md) — **the canonical product requirements** (goals, functional requirements, constraints, success criteria).
+- [requirements/PRD-JEV.md](requirements/PRD-JEV.md) — the JEV workstream's product requirements (problem, vision, decision layer).
+- [requirements/PRD-Phase-3-OpenJEV.md](requirements/PRD-Phase-3-OpenJEV.md) — Phase 3 product requirements: the early JEV task-triage and pre-execution checkpoints. **Implemented** (see [history/plans/PLAN-Phase-3-OpenJEV.md](history/plans/PLAN-Phase-3-OpenJEV.md) and [specs/OPENJEV.md](specs/OPENJEV.md) §18); items the PRD records as future work remain **proposed** and are listed in [specs/OPENJEV.md](specs/OPENJEV.md) §17.
+- [requirements/PRD-Phase-4-Provider-Runtime.md](requirements/PRD-Phase-4-Provider-Runtime.md) — Phase 4 product requirements: the provider/runtime abstraction, capability discovery, and opt-in model-availability validation. **Implemented**; rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
+- [requirements/PRD-Security-Scanner-Addon.md](requirements/PRD-Security-Scanner-Addon.md) — the security scanner add-on's original requirements (replaceable adapters, offline scanner data, report-only/required policy). **Implemented**; normative behavior is [specs/SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md).
+
+## Architecture
+
+- [architecture/OVERVIEW.md](architecture/OVERVIEW.md) — the architecture: goal, system context, component map, the
+  state-machine/retry/TDD/review/CI design, data model, and evolution.
+- [architecture/COMPONENTS.md](architecture/COMPONENTS.md) — the top-level components and their responsibilities, one
+  per section (the detail behind OVERVIEW §3–§4).
+- [architecture/SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md) — what SOP owns vs what agents, models, and optional capabilities own; the single-source-of-truth rule.
+- [architecture/model-routing.md](architecture/model-routing.md) — the **non-normative** implementation seam for per-task model routing (how the lifecycle selects the task's model); the authoritative rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
+- [architecture/provider-runtime.md](architecture/provider-runtime.md) — the **non-normative** implementation seam for the provider/runtime layer (registry, inspection, validation); the authoritative rules live in [specs/PROVIDERS.md](specs/PROVIDERS.md).
+- [architecture/execution.md](architecture/execution.md) — the **non-normative** implementation seam showing how tasks, prompts, and the SOP skill share one execution path (WorkItem → capability → JEV → router → provider validation → lifecycle); the authoritative rules live in [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) and [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md).
+- [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
+- [architecture/JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md) — the ratified JEV decision-contract alignment (Gate 3, 2026-10-11): the accepted contract requirements (§13–§19) and the ratified decisions D1–D7 (§20).
+- [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) — **proposed** (unapproved) design for opt-in, read-only RAG knowledge retrieval: the adapter seam, ownership boundaries, and deterministic context-integration rules. It changes no runtime behaviour and awaits the RAG-SOP-001 architecture approval.
+
+## Specifications
+
+Normative behavior (MUST / MUST NOT / SHOULD / SHOULD NOT / MAY).
+
+- [specs/WORKFLOW.md](specs/WORKFLOW.md) — task state vocabulary, legal transitions, remediation, scheduling, and plan handoff.
+- [specs/PLAN-HISTORICALIZATION.md](specs/PLAN-HISTORICALIZATION.md) — the deterministic, model-free transition that moves a completed or explicitly disposed plan into its historical record: readiness, eligibility, dispositions, atomicity, idempotency, and the `/sop-historicalize` skill.
+- [specs/TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md) — the per-task lifecycle stages, TDD rules, and Git naming conventions.
+- [specs/EXECUTION.md](specs/EXECUTION.md) — `sop run`: planning-source discovery, change detection, artifacts, verify-first, parallelism, and objective acceptance checks (the `VERIFIED`/`PARTIAL`/`HOLD` verdict and its evidence).
+- [specs/WORK-ITEMS.md](specs/WORK-ITEMS.md) — the unified execution input (**WorkItem**): how tasks and prompts adapt to it, and what it MUST NOT contain.
+- [specs/PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md) — **the authoritative home for `sop prompt`**: the command surface, default capability, deterministic routing, capability enforcement, read-only vs. governed `implement` execution, provider validation, artifacts, and the structured result. The SOP skill ([skills/sop/SKILL.md](../skills/sop/SKILL.md)) and its per-agent command aliases call this command; installation starts at [guides/INSTALLATION.md](guides/INSTALLATION.md), with [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md), [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md), and [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md).
+- [specs/AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md) — the harness/provider/model boundary, configuration precedence, and structured outcomes.
+- [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) — **the authoritative home for model-routing rules**: the model-class layer (`small`/`medium`/`large`), configuration precedence, the deterministic per-task router, the local-first fallback for a local class, and the routing boundary. The router is **opt-in and OFF by default**, enabled only by `SOP_MODEL_ROUTING_ENABLED=true` (overriding `models.routing_enabled`), with `--model-class` always winning. Every other page links here rather than restating the rules. The implementation seam (non-normative) is recorded in [architecture/model-routing.md](architecture/model-routing.md).
+- [specs/PROVIDERS.md](specs/PROVIDERS.md) — **the authoritative home for the provider/runtime layer** (Phase 4): provider identity, the registry, health, model discovery, typed capabilities, selection validation, failure behavior, and the read-only `sop providers` surface. The provider layer sits underneath model routing and never chooses a class; the seam is recorded (non-normatively) in [architecture/provider-runtime.md](architecture/provider-runtime.md).
+- [specs/VALIDATION.md](specs/VALIDATION.md) — the deterministic validation runner and its evidence rules.
+- [specs/REVIEW.md](specs/REVIEW.md) — the review pipeline and engines, findings, and blocking severities.
+- [specs/OPENJEV.md](specs/OPENJEV.md) — the OpenJEV (JEV) analysis boundary, configuration, and failure behavior; §18 defines the implemented early checkpoints, including their bounded pre-implementation repository context, while §17 retains proposed/future items.
+- [specs/QUALITY.md](specs/QUALITY.md) — the deterministic quality gate and the bounded fix loop.
+- [specs/HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md) — human gates: when approval is required and what must not bypass it.
+- [specs/RECOVERY.md](specs/RECOVERY.md) — bounded retries, resume, and durable recovery.
+- [specs/PROJECT-STATE-LOCK.md](specs/PROJECT-STATE-LOCK.md) — the project-scoped advisory lock that serializes the writers of `.agent-sdlc` state and the task graph: what it guarantees (mutual exclusion), what it does not (JSON/SQLite atomicity, non-participating writers), and which operations take it.
+- [specs/DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md) — **the authoritative home for decision telemetry**: the diagnostic aggregation of SOP's bounded decisions (routing class and source, adaptive adaptation, availability fallback, recovery escalation, gate disposition) reported through `internal/perf`. Diagnostic only: it never influences a decision and is not a second source of truth. Proposed (no implementation yet).
+- [specs/SECURITY.md](specs/SECURITY.md) — repository safety, command policy, secrets, and state ownership.
+- [specs/SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md) — the implemented opt-in security scanner add-on: `security-scan/v1` adapter contract, configurable category/adapter selection, Semgrep CE, Gitleaks, cargo-audit, and OSV-Scanner wrappers, execution/coverage states, policy verdicts, baselines, resume, redaction, and the single quality-gate seam.
+- [specs/RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md) — **proposed** versioned, retrieval-only request/response contract (schema `rag-retrieval/v1`): source metadata, size ceilings, error taxonomy, and fallback/required-evidence rules.
+- [specs/RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md) — **proposed** threat model for RAG retrieval (injection, cross-project leakage, scope, resource, malformed-response) and its fail-closed rules.
+- [specs/RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md) — **proposed** `SOP_RAG_*` configuration and feature-flag design: opt-in, disabled by default, bytes-based budgets, per-project corpus allowlisting.
+- [specs/RAG-EVALUATION.md](specs/RAG-EVALUATION.md) — the **predeclared** evaluation approach and GO/CONDITIONAL/NO-GO criteria for the RAG retrieval adapter versus BM25-only, fixed before results.
+- [specs/RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) — the recorded operator decision report for the RAG retrieval adapter (GO / CONDITIONAL / NO-GO), with per-case evidence, the operational fixture matrix, tradeoffs, and the explicit statement that default enablement is unchanged.
+- [specs/RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md) — the required PostgreSQL integration validation category as a deterministic file-pattern policy for migration/database-sensitive changes, kept strictly separate from retrieval quality; unit-only validation never satisfies it.
+
+## Topic Ownership
+
+Every fact has **one** authoritative home; other documents link to it rather than
+restating it, so adding or changing a command, config key, or state means editing a
+single owner. This table is that map.
+
+| Topic                                                                                     | Authoritative document                                                                 | Supporting material                                                                                                                                                                                                                                                                          |
+| ----------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Product goals                                                                             | [PRD.md](PRD.md)                                                                       | Workstream PRDs under requirements/                                                                                                                                                                                                                                                          |
+| Architecture structure and the state graph                                                | [architecture/OVERVIEW.md](architecture/OVERVIEW.md)                                   | [COMPONENTS.md](architecture/COMPONENTS.md); [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md)                                                                                                                                                                                                 |
+| Code map: packages, binaries, and importers                                               | [PACKAGES.md](reference/PACKAGES.md)                                                   | [COMPONENTS.md](architecture/COMPONENTS.md); [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md)                                                                                                                                                                                                 |
+| Ownership boundaries                                                                      | [SOP-BOUNDARY.md](architecture/SOP-BOUNDARY.md)                                        | Architecture implementation seams                                                                                                                                                                                                                                                            |
+| Commands and flags                                                                        | [CLI.md](reference/CLI.md)                                                             | The specs that own each command's semantics                                                                                                                                                                                                                                                  |
+| Configuration keys and defaults                                                           | [CONFIGURATION.md](reference/CONFIGURATION.md)                                         | The specs that own each block's policy                                                                                                                                                                                                                                                       |
+| Task statuses, transitions, scheduling                                                    | [WORKFLOW.md](specs/WORKFLOW.md)                                                       | OVERVIEW §5–§6 (authoritative graph); [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md)                                                                                                                                                                                             |
+| Per-task lifecycle, TDD rules, Git naming                                                 | [TASK-LIFECYCLE.md](specs/TASK-LIFECYCLE.md)                                           | OVERVIEW §7                                                                                                                                                                                                                                                                                  |
+| Outcomes, verified mutation, already-satisfied proof, discovery progress, harness budgets | [AGENT-PROVIDER.md](specs/AGENT-PROVIDER.md)                                           | Resolved backlog observations in history/                                                                                                                                                                                                                                                    |
+| Prompt execution and work items                                                           | [PROMPT-EXECUTION.md](specs/PROMPT-EXECUTION.md), [WORK-ITEMS.md](specs/WORK-ITEMS.md) | CLI.md                                                                                                                                                                                                                                                                                       |
+| Task execution, execution modes, and objective acceptance checks                          | [EXECUTION.md](specs/EXECUTION.md)                                                     | Setup and usage guides                                                                                                                                                                                                                                                                       |
+| Validation runner and evidence                                                            | [VALIDATION.md](specs/VALIDATION.md)                                                   | CONFIGURATION.md (`validation.*`); [RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md) for the PostgreSQL integration category                                                                                                                                      |
+| Review pipeline and severities                                                            | [REVIEW.md](specs/REVIEW.md)                                                           | QUALITY.md                                                                                                                                                                                                                                                                                   |
+| Quality gate and fix loop                                                                 | [QUALITY.md](specs/QUALITY.md)                                                         | REVIEW.md                                                                                                                                                                                                                                                                                    |
+| Human approval                                                                            | [HUMAN-APPROVAL.md](specs/HUMAN-APPROVAL.md)                                           | [APPROVALS.md](guides/APPROVALS.md)                                                                                                                                                                                                                                                          |
+| Recovery, retry, and resume                                                               | [RECOVERY.md](specs/RECOVERY.md)                                                       | [STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md)                                                                                                                                                                                                                                   |
+| Decision telemetry (routing/escalation/gate decisions)                                    | [DECISION-TELEMETRY.md](specs/DECISION-TELEMETRY.md)                                   | [PERFORMANCE.md](reference/PERFORMANCE.md)                                                                                                                                                                                                                                                   |
+| Security, command policy, secrets                                                         | [SECURITY.md](specs/SECURITY.md)                                                       | OVERVIEW §14                                                                                                                                                                                                                                                                                 |
+| Security scanner add-on (Semgrep CE / Gitleaks / cargo-audit / OSV-Scanner)               | [SECURITY-SCANNER-ADDON.md](specs/SECURITY-SCANNER-ADDON.md)                           | [SECURITY-SCANNER-BASELINE.md](reports/SECURITY-SCANNER-BASELINE.md); [dogfood](reports/SECURITY-SCANNER-DOGFOOD.md); [guide](guides/SECURITY-SCANNER-ADDON.md)                                                                                                                              |
+| Routing and provider rules                                                                | [MODEL-ROUTING.md](specs/MODEL-ROUTING.md), [PROVIDERS.md](specs/PROVIDERS.md)         | Configuration reference and architecture seams                                                                                                                                                                                                                                               |
+| JEV / OpenJEV analysis                                                                    | [OPENJEV.md](specs/OPENJEV.md)                                                         | [JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md); [JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md)                                                                                                                                                                                 |
+| Installation                                                                              | [INSTALLATION.md](guides/INSTALLATION.md)                                              | Platform and agent-specific guides                                                                                                                                                                                                                                                           |
+| Delivery status, merged hardening and limitations                                         | [PROJECT-STATUS.md](reference/PROJECT-STATUS.md)                                       | Historical completion evidence                                                                                                                                                                                                                                                               |
+| Future work                                                                               | [BACKLOG.md](plans/BACKLOG.md)                                                         | Numbered implementation plans                                                                                                                                                                                                                                                                |
+| Performance measurements                                                                  | [PERFORMANCE.md](reference/PERFORMANCE.md)                                             | Closure plan and point-in-time baseline reports                                                                                                                                                                                                                                              |
+| Reliability evaluation                                                                    | [EVALUATION.md](reference/EVALUATION.md)                                               | Run trace (`trace.json`) and progress signals                                                                                                                                                                                                                                                |
+| Decision-model findings (advisory vs deterministic)                                       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                     | [EVALUATION.md](reference/EVALUATION.md); [OPENJEV.md](specs/OPENJEV.md)                                                                                                                                                                                                                     |
+| AI decision-model promotion criteria                                                      | [AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md)       | [DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md)                                                                                                                                                                                                                           |
+| Multi-agent orchestration                                                                 | [architecture/orchestration.md](architecture/orchestration.md)                         | [history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md); adoption record in [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md)                                                                                              |
+| Lifecycle verdict gate and outcome recovery                                               | [LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md)                       | [OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md); [EXECUTION.md](specs/EXECUTION.md) §6b                                                                                                                                                                                   |
+| Validation evidence reuse                                                                 | [EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md)                                       | [VALIDATION.md](specs/VALIDATION.md); [CLI.md](reference/CLI.md)                                                                                                                                                                                                                             |
+| JEV decision contract                                                                     | [JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md)                      | [OPENJEV.md](specs/OPENJEV.md)                                                                                                                                                                                                                                                               |
+| Knowledge retrieval (RAG) integration — opt-in, retrieval-only                            | [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) | [RAG-RETRIEVAL-CONTRACT.md](specs/RAG-RETRIEVAL-CONTRACT.md); [RAG-SECURITY-THREAT-MODEL.md](specs/RAG-SECURITY-THREAT-MODEL.md); [RAG-CONFIGURATION.md](specs/RAG-CONFIGURATION.md); [RAG-EVALUATION.md](specs/RAG-EVALUATION.md); [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md) |
+| Required PostgreSQL integration validation category (database-sensitive changes)          | [RAG-POSTGRES-VALIDATION-POLICY.md](specs/RAG-POSTGRES-VALIDATION-POLICY.md)           | [VALIDATION.md](specs/VALIDATION.md); [QUALITY.md](specs/QUALITY.md)                                                                                                                                                                                                                         |
+| Shipped RAG skills vs. the RAG retrieval adapter                                          | [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md)                                           | [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md); [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md)                                                                                                                                                           |
+| Repository consolidation and legacy transition                                            | [REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md)                      | [LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md); [reports/consolidation/](reports/consolidation/completion.md) — committed merge `a8082b6154dd88fd8ac9fd18af5df5e682a751a6` (parents core/controller/adapter)                                                      |
+
+## Reference
+
+- [reference/CLI.md](reference/CLI.md) — every `sop` command and its flags (including `sop providers`).
+- [reference/PACKAGES.md](reference/PACKAGES.md) — the Go package and binary code map: every `internal/` package and `cmd/` binary, its entry points, non-test importers, and the document that owns its behavior.
+- [reference/validation-handoff.schema.json](reference/validation-handoff.schema.json) — the versioned, portable MCP validation-handoff contract used across coding agents and independent validators.
+- [reference/CONFIGURATION.md](reference/CONFIGURATION.md) — `.agent-sdlc/config.yaml` schema, defaults, and environment overrides (including `early_jev`, evidence-bound locality resolution, supporting-stage model classes, routing precedence, and the `providers:` block, which link to [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md) and [specs/PROVIDERS.md](specs/PROVIDERS.md)).
+- [reference/STATUS-AND-RECOVERY.md](reference/STATUS-AND-RECOVERY.md) — task statuses, `sop status`/`task`/`resume`, and recovery commands.
+- [reference/JEV-OPERATIONS.md](reference/JEV-OPERATIONS.md) — enabling JEV, provider configuration, severity
+  policy, lifecycle placement, and safety boundaries.
+- [reference/JEV-TROUBLESHOOTING.md](reference/JEV-TROUBLESHOOTING.md) — diagnosing JEV: failure behavior, report/artifact
+  locations, the terminology glossary, and JEV015 traceability.
+- [reference/PROJECT-STATUS.md](reference/PROJECT-STATUS.md) — implemented capabilities and known limitations, separated from future work.
+- [reference/TASK-INDEX.md](reference/TASK-INDEX.md) — every preserved task document, including PREJEV decomposed tasks.
+- [reference/PERFORMANCE.md](reference/PERFORMANCE.md) — the performance measurement model and validation/review reuse rules.
+- [reference/EVALUATION.md](reference/EVALUATION.md) — the deterministic evaluation harness: fixture contract, layout, and the failure → regression workflow.
+- [reference/DECISION-MODEL-FINDINGS.md](reference/DECISION-MODEL-FINDINGS.md) — consolidated DME-003/004/005 and JEV shadow-mode findings: what was tested, verified results, architectural conclusions, and remaining investigation.
+- [reference/AI-DECISION-PROMOTION-CRITERIA.md](reference/AI-DECISION-PROMOTION-CRITERIA.md) — proposed criteria for reconsidering AI-assisted failure disposition: separate evaluation scopes, hard safety gates, effectiveness thresholds, staged promotion, and decision outcomes.
+- [reference/LIFECYCLE-VERDICT-GATE.md](reference/LIFECYCLE-VERDICT-GATE.md) — the lifecycle verdict gate (SOP-HARD-01): how the terminal `LOCAL_DONE` transition is tied to the objective-level `VERIFIED` / `PARTIAL` / `HOLD` outcome verdict.
+- [reference/OUTCOME-RECOVERY-WAIVER.md](reference/OUTCOME-RECOVERY-WAIVER.md) — the supported recovery surface (SOP-HARD-04): the read-only `sop verify` and the designated-approver, criterion-scoped `sop outcome --waive`.
+- [reference/EVIDENCE-REUSE.md](reference/EVIDENCE-REUSE.md) — validation evidence reuse (VER-001–VER-004): the portable cross-worktree store and `sop validate --cache`.
+- [reference/E2E-ONE-SHOT-DIAGNOSIS.md](reference/E2E-ONE-SHOT-DIAGNOSIS.md) — the end-to-end one-shot diagnosis: the validation-evidence-reuse and ONESHOT-001 evidence with the recorded baseline.
+
+## Guides
+
+- [guides/HIP-COMPARE.md](guides/HIP-COMPARE.md) — the opt-in, bounded `sop compare` baseline/candidate harness; the recorded pilot promoted no candidate and was inconclusive for effectiveness.
+- [security-promptfoo.md](security-promptfoo.md) — the optional, report-only Promptfoo behavioral-evaluation adapter, its pinned installation, isolation, configuration, normalized evidence and current live-coverage limits. Kept at the `docs/` root for the code reference in [Canonical Locations and Kept Paths](#canonical-locations-and-kept-paths).
+- [guides/INSTALLATION.md](guides/INSTALLATION.md) — **the installation entry point**: `./install.sh` on macOS/Linux, its options, where the binary goes, the agent skills it delegates, safety, and removal.
+- [guides/WINDOWS-INSTALLATION.md](guides/WINDOWS-INSTALLATION.md) — `install.ps1`: the parameters, the binary directory and PATH guidance, how the skills are copied and marked, uninstall, and what the installer never does.
+- [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md) — the native Claude Code plugin package: what it exposes, the official local-install steps, and how it is generated from `skills/`.
+- [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md) — building, testing, and developing SOP.
+- [guides/LESSONS.md](guides/LESSONS.md) — engineering lessons from building SOP V1 (working notes).
+- [guides/SOP-CONTROLLER-DASHBOARD.md](guides/SOP-CONTROLLER-DASHBOARD.md) — run and control a SOP run from a local dashboard (and phone).
+- [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP prompt aliases and `/sop-end-to-end` project entry point for Zed.
+- [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
+- [guides/PROJECT-SETUP.md](guides/PROJECT-SETUP.md) — the explicit setup path: init, PRD, plan, tasks, and inspection.
+- [guides/APPROVALS.md](guides/APPROVALS.md) — see a human approval gate, read it, decide it (interactively or explicitly), and continue a run.
+- [guides/NOTIFICATIONS.md](guides/NOTIFICATIONS.md) — configure job lifecycle notifications (completed, failed, waiting for a human), check availability and delivery status with `sop notify`, and understand the at-least-once delivery and ambiguity limits.
+- [guides/HOW-TO-SETUP-WITH-CLAUDE.md](guides/HOW-TO-SETUP-WITH-CLAUDE.md) — run SOP's SMALL, MEDIUM, and LARGE model classes on Claude, through the Claude Code CLI or the Anthropic API.
+- [guides/CLAUDE-SKILLS.md](guides/CLAUDE-SKILLS.md) — the same `/sop*` prompt and project entry points for Claude Code.
+- [guides/RAG-SKILLS.md](guides/RAG-SKILLS.md) — the `/rag-schema`, `/rag-test`, `/rag-ingest`, and `/sop-rag-integrate` RAG skills, their safety boundaries, and the controller changes needed to enforce database-backed integration tests.
+- [guides/MCP-LIVE-VALIDATION.md](guides/MCP-LIVE-VALIDATION.md) — the `/mcp-live-validation` skill: discover, provision, verify identity, deploy through an approval gate, hand off to independent MCP validation, preserve evidence, roll back, and prepare a PR without merging.
+- [guides/MCP-LIVE-VALIDATION-PROVIDERS.md](guides/MCP-LIVE-VALIDATION-PROVIDERS.md) — provider setup for ChatGPT, Claude, and a tool-enabled coding harness, the capability matrix, and the simulated-vs-live limits of the cross-agent tests.
+- [guides/SECURITY-SCANNER-ADDON.md](guides/SECURITY-SCANNER-ADDON.md) — configure report-only or required scanning, extend the `security-scan/v1` adapter contract, manage reviewed baselines, resume evidence, and roll back the add-on.
+- [guides/REPOSITORY-CONSOLIDATION.md](guides/REPOSITORY-CONSOLIDATION.md) — the unified repository and command surface: the one-module layout, `sop controller serve` / `sop decision`, the controller/adapter source mapping and import rewrites, the preserved legacy wrappers, and the distinction between the shipped RAG skills and the proposed/implemented RAG retrieval adapter.
+- [guides/LEGACY-REPOSITORY-TRANSITION.md](guides/LEGACY-REPOSITORY-TRANSITION.md) — records the observed archived state of the legacy `sop-controller` and `sop-decision-adapters` remotes, the still-unverified readiness gates, and draft deprecation notices; agentic-sop performs no retirement operation.
+- [skills/sop/SKILL.md](../skills/sop/SKILL.md) — the shipped SOP agent skill: a thin client that invokes `sop prompt` (with `examples/` for plan, review, diagnose, and implement). Its one-per-capability aliases live beside it in [skills/](../skills/), installed for Zed and Claude Code by `scripts/install/install-skills.sh` and also packaged as a Claude Code plugin ([integrations/claude/](../integrations/claude)).
+
+## Plans
+
+The [plan index](plans/README.md) lists every implementation and verification plan,
+its declared status, and the retained planner-spike records. Run `sop status` for the
+active plan in your checkout; this index does not record operator-local lifecycle
+state. A plan that SOP has recorded as COMPLETE or SUPERSEDED moves to
+[history/plans/](history/plans/README.md); paths still referenced by SOP stay put, as
+noted in [Canonical Locations and Kept Paths](#canonical-locations-and-kept-paths).
+
+## Testing
+
+- [testing/SOP-END-TO-END.md](testing/SOP-END-TO-END.md) — end-to-end skill assessment, authoritative delegation contract, twelve deterministic scenarios, and host-assistant evaluation limits.
+- [testing/PLANNER-TWO-QUESTION-LIVE.md](testing/PLANNER-TWO-QUESTION-LIVE.md) — the operator runbook for the live two-question planner demo with a model-driven executor, including the agent-led candidate provision/start/rollback workflow; **run 2026-10-18: GO**.
+- [testing/MCP-CANDIDATE-HANDOFF.md](testing/MCP-CANDIDATE-HANDOFF.md) — the handoff contract for a planner MCP candidate: local tests vs live ChatGPT-to-MCP validation, the 10-round/20-call read-only acceptance test, required report fields, and rollback.
+- [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
+
+## Reports
+
+The [report index](reports/README.md) lists every tracked Markdown report, fixture
+write-up, and run transcript by evidence group.
+
+Point-in-time evidence reports produced by a task. They record what was measured or
+decided at a moment in time and are non-normative: the current behavior they concern
+is owned by the documents they link.
+
+- [reports/PERFORMANCE-BASELINE.md](reports/PERFORMANCE-BASELINE.md) — the pre-performance baseline (CLOSE-010): the measured numbers future performance work is compared against. The measurement model is [reference/PERFORMANCE.md](reference/PERFORMANCE.md).
+- [reports/PHASE-9-MULTI-AGENT-ADOPTION.md](reports/PHASE-9-MULTI-AGENT-ADOPTION.md) — the Phase 9 adoption decision (ORCH-012): multi-agent orchestration is verified, and the deterministic gate keeps it **opt-in** — default execution stays single-agent.
+- [reports/pre-performance-closure/](reports/pre-performance-closure/) — the CLOSE-001–CLOSE-011 closure evidence (baselines, telemetry inventory, readiness); the verdict is [CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
+- [reports/planner/SOP-PLANNER-CAP-001-capability-context.md](reports/planner/SOP-PLANNER-CAP-001-capability-context.md) — the per-task planner capability-context fix: the compiled capability inventory is now authoritative at the task-level planning boundary, so a repository discovery target is no longer promoted to an external prerequisite capability.
+- [reports/decision-telemetry/TEL-001-reconciliation.md](reports/decision-telemetry/TEL-001-reconciliation.md) — the Decision Telemetry reconciliation and metric register (TEL-001/TEL-002): what existing telemetry already records, the new decision dimensions with their numerator/denominator/coverage, and the two dimensions (adapter agreement, confidence) that stay UNAVAILABLE because nothing records them.
+- [reports/decision-telemetry/TEL-003-integration.md](reports/decision-telemetry/TEL-003-integration.md) — the TEL-003 decision-adapter integration: the `sop-decision-adapters` shadow harness emits a versioned `shadow-evidence.json` artifact, read read-only by `internal/runmetrics` to compute adapter invocation, agreement, confidence, latency, and invalid/indeterminate/timeout rates with explicit denominators. **Implemented** (both repositories).
+- [reports/decision-telemetry/TEL-006-cli-report.md](reports/decision-telemetry/TEL-006-cli-report.md) — the TEL-006 CLI: the opt-in, read-only `sop report --decisions [--format text\|json]` command over the `internal/runmetrics` aggregator, with sample output, coverage limits, and verification evidence.
+- [reports/decision-telemetry/TEL-008-model-selection.md](reports/decision-telemetry/TEL-008-model-selection.md) — the TEL-008 `Model Selection` percentage summary (SMALL/MEDIUM/LARGE counts and one-decimal percentages, explicit missing coverage) added to the `--decisions` text output; JSON and goldens unchanged.
+- [reports/decision-model-evaluation-2026-10-13.md](reports/decision-model-evaluation-2026-10-13.md) — the 2026-10-13 decision-model evaluation rerun and reconciliation: frozen-versus-rerun results with explicit denominators, findings, reproducibility limits, and the retained DISABLE recommendation; follow-ups are DME-FU-004–DME-FU-007 in [plans/BACKLOG.md](plans/BACKLOG.md).
+- [reports/consolidation/](reports/consolidation/completion.md) — the repository-consolidation evidence (MIG-001–MIG-012): baseline, source map, import rewrites/verification, decision compatibility, CI coverage, documentation, dogfood, performance and the completion report. The controller licensing record is [controller-provenance.md](reports/consolidation/controller-provenance.md); the durable recovery snapshot is [backup-manifest.md](reports/consolidation/backup-manifest.md).
+- [reports/consolidation/closure-evidence.md](reports/consolidation/closure-evidence.md) — the repository-consolidation closure evidence report: the operator-authorized relative link check (`broken links: 0`) and `git diff --check` results, the `go build/test/vet` validation gates, provenance separating local, committed and merged evidence, the external-completion reasons for C5/C7, and the unverified boundaries (archived state, migration CI, legacy retirement, provider limits).
+- [reports/SECURITY-SCANNER-DOGFOOD.md](reports/SECURITY-SCANNER-DOGFOOD.md) — the report-only dogfood run: scanned commit/tree and dirty digest, measured duration, tool availability, the `INDETERMINATE` verdict, and the explicit limitation that no live scanner completed.
+- [reports/SECURITY-SCANNER-BASELINE.md](reports/SECURITY-SCANNER-BASELINE.md) — the first real-project report-only baseline: clean `origin/main` content identity, pinned Semgrep/Gitleaks provenance, declared exclusions, production-versus-fixture separation, source-backed dispositions for 27 findings, coverage gaps, and required-mode readiness.
+- [reports/SECURITY-SCAN-SKILL.md](reports/SECURITY-SCAN-SKILL.md) — the Go/Rust security-scan skill and cargo-audit adapter: detection, auto selection, Semgrep language coverage, pinned advisory-database fixtures, validation results, SOP execution limitations, and remaining gaps.
+- [reports/SOP-EXECUTION-RELIABILITY-REVIEW.md](reports/SOP-EXECUTION-RELIABILITY-REVIEW.md) — the SOP execution-reliability review evidence: direct reliability fixes, the bounded SOP-006 Rust demonstration, and the explicit limits on replaying earlier runs.
+- [reports/SECURITY-DEPENDENCY-COVERAGE.md](reports/SECURITY-DEPENDENCY-COVERAGE.md) — the dependency-coverage follow-up: Cargo workspace/obligation correctness, missing-input and empty-analysis behavior, real-scanner evidence, and the report-only dogfood result.
+
+## Historical Documentation
+
+The [historical plan index](history/plans/README.md) lists each retained plan with
+its original scope and recorded disposition.
+
+Point-in-time or superseded artifacts. Non-normative: they do not define current behavior.
+
+- [history/PLAN-wrapup.md](history/PLAN-wrapup.md) — the original implementation plan.
+- [history/OLLAMA-DOGFOOD.md](history/OLLAMA-DOGFOOD.md) — the Ollama/DeepSeek dogfood test.
+- [history/PHASE-3-DOGFOOD.md](history/PHASE-3-DOGFOOD.md) — the Phase 3 early-JEV dogfood: the deterministic fake-analyzer demonstration and the (not performed) real-provider procedure.
+- [history/PLAN-Model-Routing.md](history/PLAN-Model-Routing.md) — the early, superseded model-routing design (MODELRT001–MODELRT022); the shipped rules live in [specs/MODEL-ROUTING.md](specs/MODEL-ROUTING.md).
+- [history/RESOLVED-BACKLOG.md](history/RESOLVED-BACKLOG.md) — completed backlog observations and superseded agent-provider contracts, preserved as non-normative evidence.
+- [history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md](history/plans/PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md) — Phase 8 (Context & Execution Efficiency): **COMPLETE**; all twelve CTX tasks reached a terminal state and SOP archived the plan via `sop plan complete`.
+- [history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md](history/plans/POST8-001-PHASE-8-LIVE-PATH-INTEGRATION-GOVERNANCE.md) — POST8-001: **COMPLETE** post-Phase-8 governance that validated the merged live-path integration before Phase 9.
+- [history/PREJEV-BASELINE.md](history/PREJEV-BASELINE.md) — read for Pre-JEV Baseline (PREJEV001) evidence and recorded scope.
+- [history/PREJEV004-AHV2009-PROOF.md](history/PREJEV004-AHV2009-PROOF.md) — read for PREJEV004 — AHV2009 End-to-End Proof evidence and recorded scope.
+- [history/PREJEV005-AHV2001-2007-RECONCILE.md](history/PREJEV005-AHV2001-2007-RECONCILE.md) — read for PREJEV005 — Reconcile AHV2001 Through AHV2007 evidence and recorded scope.
+- [history/PREJEV006-AHV2010-2013-RECONCILE.md](history/PREJEV006-AHV2010-2013-RECONCILE.md) — read for PREJEV006 — Complete Remaining Harness V2 Tasks (AHV2010–AHV2013) evidence and recorded scope.
+- [history/PREJEV012-RECONCILE.md](history/PREJEV012-RECONCILE.md) — read for PREJEV012 — Reconciliation State evidence and recorded scope.
+- [history/PREJEV012-REGRESSION-DECOMPOSITION.md](history/PREJEV012-REGRESSION-DECOMPOSITION.md) — read for PREJEV012 — Full Agent Harness Regression Suite (Decomposition) evidence and recorded scope.
+- [history/PREJEV016-RECOVERY-DECOMPOSITION.md](history/PREJEV016-RECOVERY-DECOMPOSITION.md) — read for PREJEV016 — Verify Recovery Paths (Decomposition) evidence and recorded scope.
+- [history/PREJEV017-PERFORMANCE-BASELINE.md](history/PREJEV017-PERFORMANCE-BASELINE.md) — read for PREJEV017 — Pre-JEV Performance Baseline evidence and recorded scope.
+- [history/PREJEV017-PERFORMANCE-DECOMPOSITION.md](history/PREJEV017-PERFORMANCE-DECOMPOSITION.md) — read for PREJEV017 — Capture Pre-JEV Performance Baseline (Decomposition) evidence and recorded scope.
+- [history/PREJEV018-READINESS-GATE.md](history/PREJEV018-READINESS-GATE.md) — read for PREJEV018 — Pre-JEV Readiness Gate (Decomposition) evidence and recorded scope.
+- [history/pre-performance-closure/](history/pre-performance-closure/) — the superseded interim closure reports (CLOSE-002/005/006/007); the final verdict is [reports/pre-performance-closure/CLOSE-011-readiness.md](reports/pre-performance-closure/CLOSE-011-readiness.md).
+- [history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md](history/pre-performance-closure/CLOSE-005-controller-work-verdicts.md) — read for the superseded interim controller-work verdicts.
+- [history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md](history/pre-performance-closure/CLOSE-006-named-plan-dogfood.md) — read for the superseded interim named-plan dogfood record.
+- [history/pre-performance-closure/CLOSE-007-resume-idempotency.md](history/pre-performance-closure/CLOSE-007-resume-idempotency.md) — read for the superseded interim resume and idempotency record.
+- [history/developer-preview/](history/developer-preview/README.md) — the superseded Developer Preview deliverables (SCOPE, QUICKSTART-VERIFICATION, KNOWN-ISSUES, READINESS) with their operator-authored provenance labelled; the readiness verdict is **HOLD**. The superseded plan remains at [history/plans/PLAN-SOP-Developer-Preview.md](history/plans/PLAN-SOP-Developer-Preview.md).
+
+## Canonical Locations and Kept Paths
+
+- **The closure plan's wrap-up reference targets the located historical plan.** [history/plans/PLAN-Pre-Performance-Closure.md](history/plans/PLAN-Pre-Performance-Closure.md) formerly named the absent `docs/plans/PLAN-Wrap-Up.md`; it now points to the located wrap-up plan [history/PLAN-wrapup.md](history/PLAN-wrapup.md). Earlier reconciliation recorded the old path as **NOT LOCATED** in [history/pre-performance-closure/CLOSE-002-status-reconciliation.md](history/pre-performance-closure/CLOSE-002-status-reconciliation.md), CLOSE-005 and CLOSE-006. The correction was reconciled through SOP (`sop reconcile … --accept-changed CLOSE-002 --accept-changed CLOSE-006`), so the recorded plan fingerprint matches the file and no executed task changed state.
+
+To keep SOP working, a few paths are intentionally not under the categories above:
+
+- SOP's recorded active source (`.agent-sdlc/plan.meta.json`) is operational. Never
+  move or reconstruct it as documentation cleanup. A missing recorded source or
+  unresolved approval is a separate SOP lifecycle issue; documentation cleanup
+  does not repair the state database or declare the plan complete.
+- Planner spike evidence remains beside its source plan under `plans/`; its
+  cross-references and recorded execution paths are preserved.
+
+- [PRD.md](PRD.md) and [PLAN.md](PLAN.md) stay at `docs/` because SOP's planner discovers `docs/PRD.md` and `docs/PLAN.md` (`internal/planflow`).
+- [security-promptfoo.md](security-promptfoo.md) stays at `docs/` because
+  `internal/config/security_eval.go` emits it as the Promptfoo `InstallReference`
+  (`docs/security-promptfoo.md#installation`); moving it would break that reference.
+  It is a task-oriented guide, indexed under [Guides](#guides).
+- Historical plans live under [history/plans/](history/plans/README.md). A tracked plan document is moved there once SOP records a COMPLETE or SUPERSEDED disposition for it and no active plan references it; deciding a plan's outcome still belongs to SOP, never to documentation cleanup.
+- [plans/PLAN-Security-Scanner-Addon.md](plans/PLAN-Security-Scanner-Addon.md) is retained because `internal/planner/security_plan_test.go` uses it as a compiled plan fixture. [history/plans/PLAN-Security-Scan-Skill.md](history/plans/PLAN-Security-Scan-Skill.md) moved there once SOP recorded its COMPLETE disposition; the machine archive still records the original `plans/` source path.
+- [history/plans/PLAN-Repository-Consolidation.md](history/plans/PLAN-Repository-Consolidation.md) is retained (HISTORICALIZED — COMPLETE) because the SOP archive `.agent-sdlc/archive/plan-repository-consolidation/` records its source path; the reports under [reports/consolidation/](reports/consolidation/completion.md) are its evidence.
+- [tasks/](tasks/) stays at `docs/tasks/` because plans invoke `sop run --task docs/tasks/...`. These are per-task specifications and recorded evidence; later fixes can supersede their original expectations. [TASK-INDEX.md](reference/TASK-INDEX.md) points to current authority without changing those operational files.
+
+## Checking Documentation Links
+
+Documentation links and heading anchors are checked before publishing. Run the repository link check over `docs/**/*.md`
+and `README.md` and their relative links:
+
+```bash
+scripts/checks/check-doc-links.sh
+```
+
+It prints `broken links: <count>` (for example `broken links: 0`) and exits
+non-zero when any relative link does not resolve. An anchor-aware check can also be run with the doc-reconcile skill's `scripts/link_check.py`.

@@ -52,6 +52,18 @@ relevant evidence identities, spanning:
 - Default rollout is **never automatic**: RAG stays disabled until an explicit operator
   rollout decision.
 
+### 4.1 Numeric thresholds (operator-approved 2026-11-01)
+
+These numbers make §4 testable. They were fixed before any run on the frozen dataset in `evals/rag/`. They don't change during execution.
+
+- The historical-knowledge subset is the `architecture_history`, `design_decision`, `failure_investigation`, and `multi_hop` questions, including their reworded variants.
+- Value: mean recall@5 on that subset is at least 0.10 higher in arm B than in arm A (absolute).
+- Breadth: at least 5 questions in that subset have higher recall@5 in arm B than in arm A.
+- Code regression: at most 1 `code` question has lower recall@5 in arm B than in arm A.
+- Latency: the p95 of the RAG request time per question, as measured by SOP's client, is 500 ms or less.
+- `no_answer` and `injection` questions don't count toward recall. They count toward the §4 hard blockers.
+- Results for the reworded questions are also reported as their own subset. They are informational and add no extra gate.
+
 ## 5. Required validation
 
 - Deterministic unit/contract/negative/failure-injection tests for the adapter (RAG-SOP-002), including: corpus pre-filter correctness (no cross-corpus or NULL-corpus rows at any `top_k`), `content_hash` projection (hashed rows and legacy-NULL rows), `retrieval_method`/`rank` labeling, and `UNAUTHORIZED_SCOPE` rejection.

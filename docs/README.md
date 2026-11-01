@@ -176,6 +176,7 @@ single owner. This table is that map.
 - [guides/CLAUDE-PLUGIN.md](guides/CLAUDE-PLUGIN.md) — the native Claude Code plugin package: what it exposes, the official local-install steps, and how it is generated from `skills/`.
 - [guides/DEVELOPMENT.md](guides/DEVELOPMENT.md) — building, testing, and developing SOP.
 - [guides/LESSONS.md](guides/LESSONS.md) — engineering lessons from building SOP V1 (working notes).
+- [guides/PROMPTING.md](guides/PROMPTING.md) — how to write plans, agent prompts, and procedures: STE-style rules, plan structure, and when a coding agent should stop.
 - [guides/SOP-CONTROLLER-DASHBOARD.md](guides/SOP-CONTROLLER-DASHBOARD.md) — run and control a SOP run from a local dashboard (and phone).
 - [guides/ZED-SKILLS.md](guides/ZED-SKILLS.md) — install the SOP prompt aliases and `/sop-end-to-end` project entry point for Zed.
 - [guides/GETTING-STARTED.md](guides/GETTING-STARTED.md) — install the CLI and run SOP against a project.
