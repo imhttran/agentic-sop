@@ -103,6 +103,13 @@ Use these existing APIs as written. Don't spend discovery on them, and don't rei
 
 Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the document candidates from `CandidatesFromIndex`, and searches with `Query{Terms: retrieval.Tokenize(question)}`. Arm D builds `retrieval.Candidate{ID: "doc:"+path, Source: retrieval.SourceDocument, Path: path, Text: <full file text>}` for each corpus file, then uses the same `New` and `Search`. `Runner` takes arm A's index as a required input built by `repoindex.Build`. It has no fallback that builds candidates by hand, so no copy of the `CandidatesFromIndex` text format exists. A result's evidence identity is `Path`, relative to `evals/rag/corpus`. It equals the `source` in `questions.json`, for example `imhttran/agentic-sop/docs/reference/PACKAGES.md`. Delete `internal/rageval/bm25.go`.
 
+Arm B assembles context through SOP's context package (imported as `sopctx "github.com/imhttran/agentic-sop/internal/context"`), as `internal/cli/run.go` does. Don't merge rankings by hand. Delete `mergeRanks`.
+
+- Items: one task item, `sopctx.Item{Source: sopctx.SourceTask, Identity: <question id>, Reason: "evaluation question", Priority: sopctx.PriorityLifecycle, Text: <question>}`; one item per arm A hit, `sopctx.Item{Source: sopctx.SourceRepository, Identity: <Path>, Reason: "bm25 hit", Priority: sopctx.PriorityRepository, Text: <Path>}`; and the RAG items from `sopctx.KnowledgeItems(evidence []ragclient.Evidence, maxItems, budgetBytes int) []sopctx.Item` with the run's top-k and RAG context budget.
+- Context: `sopctx.Build(items, sopctx.DefaultLimits()) sopctx.Context`. Use `Context.Items()` for the ranked order, `Context.Render()` for the assembled context, and `Context.Bytes()` and `Context.Truncated()` for size and truncation.
+- Arm B's ranked identities are the `Items()` order, keeping only repository and knowledge-rag items. A repository item's identity is its `Identity`. A knowledge-rag item's identity is the evidence `Source`, which is the second `\x00`-separated field of its `Identity`.
+- Injection placement is checked on `Context.Render()`. Injected text must not appear before the task item's text.
+
 ### Dependencies
 
 - RAG-EVAL-001
@@ -115,7 +122,7 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - An integration test (`-tags ragacceptance`) running all four arms on a small seeded corpus against real PostgreSQL/pgvector.
 - No `internal/rageval/bm25.go`, and no other BM25 implementation in `internal/rageval`.
 - The dataset loader fills `InjectedText` for each `injection` question with the `evidence` phrase of its expected entry whose source is under `evals/rag/injection/`. It is that phrase, not the whole planted file. `evals/rag/questions.json` stays unchanged.
-- Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, and `TestCommittedInjectionQuestionsHaveInjectedText`.
+- Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, `TestCommittedInjectionQuestionsHaveInjectedText`, and `TestArmBUsesSOPContextBuild`.
 
 ### Acceptance Criteria
 
@@ -130,6 +137,7 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
 - Every committed `injection` question loads with an `InjectedText` equal to the `evidence` phrase of its planted expected entry, and that phrase appears verbatim in the planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
 - The repository stays gofmt-formatted.
+- Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
 
 ### Acceptance Checks
 
@@ -143,6 +151,7 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - `go test -count=1 -run TestArmDUsesFullTextRanker ./internal/rageval/`
 - `go test -count=1 -run TestCommittedInjectionQuestionsHaveInjectedText ./internal/rageval/`
 - `go test -count=1 ./internal/archtest/`
+- `go test -count=1 -run TestArmBUsesSOPContextBuild ./internal/rageval/`
 
 ### Acceptance Mapping
 
@@ -157,6 +166,7 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - criterion 9: check 8
 - criterion 10: check 9
 - criterion 11: check 10
+- criterion 12: check 11
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
