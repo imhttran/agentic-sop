@@ -101,7 +101,7 @@ Use these existing APIs as written. Don't spend discovery on them, and don't rei
 - `(*retrieval.Index).Search(q retrieval.Query, limit int) []retrieval.Result`. `Query` is `{Terms []string}`. `Result` is `{ID, Source, Path, Score, Reason, Rank}`.
 - `retrieval.Tokenize(s string) []string`.
 
-Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the document candidates from `CandidatesFromIndex`, and searches with `Query{Terms: retrieval.Tokenize(question)}`. Arm D builds `retrieval.Candidate{ID: "doc:"+path, Source: retrieval.SourceDocument, Path: path, Text: <full file text>}` for each corpus file, then uses the same `New` and `Search`. A result's evidence identity is `Path`, relative to `evals/rag/corpus`. It equals the `source` in `questions.json`, for example `imhttran/agentic-sop/docs/reference/PACKAGES.md`. Delete `internal/rageval/bm25.go`.
+Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the document candidates from `CandidatesFromIndex`, and searches with `Query{Terms: retrieval.Tokenize(question)}`. Arm D builds `retrieval.Candidate{ID: "doc:"+path, Source: retrieval.SourceDocument, Path: path, Text: <full file text>}` for each corpus file, then uses the same `New` and `Search`. `Runner` takes arm A's index as a required input built by `repoindex.Build`. It has no fallback that builds candidates by hand, so no copy of the `CandidatesFromIndex` text format exists. A result's evidence identity is `Path`, relative to `evals/rag/corpus`. It equals the `source` in `questions.json`, for example `imhttran/agentic-sop/docs/reference/PACKAGES.md`. Delete `internal/rageval/bm25.go`.
 
 ### Dependencies
 
@@ -114,7 +114,7 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - Unit tests for metric math on hand-computed fixtures.
 - An integration test (`-tags ragacceptance`) running all four arms on a small seeded corpus against real PostgreSQL/pgvector.
 - No `internal/rageval/bm25.go`, and no other BM25 implementation in `internal/rageval`.
-- The dataset loader fills `InjectedText` for each `injection` question from its expected evidence whose source is under `evals/rag/injection/`. `evals/rag/questions.json` stays unchanged.
+- The dataset loader fills `InjectedText` for each `injection` question with the `evidence` phrase of its expected entry whose source is under `evals/rag/injection/`. It is that phrase, not the whole planted file. `evals/rag/questions.json` stays unchanged.
 - Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, and `TestCommittedInjectionQuestionsHaveInjectedText`.
 
 ### Acceptance Criteria
@@ -125,10 +125,10 @@ Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the
 - `no_answer` questions record what each arm returned instead of scoring them as recall.
 - `injection` questions record whether injected text reached the assembled context, and confirm it was never placed above task or policy content.
 - The integration test passes against real PostgreSQL/pgvector.
-- Arm A returns the same ranked identities as `retrieval.CandidatesFromIndex` plus `retrieval.Index.Search` on the same corpus and query (`TestArmAMatchesSOPRetrieval`).
+- Arm A returns the same ranked identities as `retrieval.CandidatesFromIndex` plus `retrieval.Index.Search` on the same corpus and query. The test writes a fixture corpus to a temp directory, builds the expected results by calling `repoindex.Build`, `retrieval.CandidatesFromIndex`, `retrieval.New`, and `Search` directly, and compares them with the runner's arm A rows (`TestArmAMatchesSOPRetrieval`).
 - `internal/rageval` contains no BM25 implementation of its own (`TestNoLocalBM25`).
 - Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
-- Every committed `injection` question loads with a non-empty `InjectedText` that appears verbatim in its planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
+- Every committed `injection` question loads with an `InjectedText` equal to the `evidence` phrase of its planted expected entry, and that phrase appears verbatim in the planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
 - The repository stays gofmt-formatted.
 
 ### Acceptance Checks
