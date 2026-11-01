@@ -93,6 +93,16 @@ None
 
 Add a `run` subcommand. For each question it runs arm A (BM25-only over the indexed corpus), arm B (BM25 plus RAG through the existing `ragclient` and context merge path, so it measures what SOP would actually do), arm C (RAG-only, diagnostic), and arm D (`internal/retrieval` over full document text, diagnostic). It records per-question rows: retrieved identities and ranks, recall@5, precision@5, citation and provenance correctness, context bytes and truncation, latency, fallback reason, and any cross-corpus item. Output is a JSON results file plus a Markdown table, both written under `docs/reports/rag-eval/<timestamp>/` with the git commit, dataset manifest hash, and config recorded in a header.
 
+Use these existing APIs as written. Don't spend discovery on them, and don't reimplement them.
+
+- `repoindex.Build(repoindex.Options{Root: <corpus dir>, StateDir: <temp dir>}) (repoindex.Index, error)`. `Index.Documents` holds `repoindex.Document{Path, Class, ...}`, with `Path` relative to `Root`.
+- `retrieval.CandidatesFromIndex(idx repoindex.Index) []retrieval.Candidate`. A document candidate has `ID "doc:"+Path`, `Source retrieval.SourceDocument`, `Path`, and `Text` set to the path plus its class.
+- `retrieval.New(corpus []retrieval.Candidate) *retrieval.Index`.
+- `(*retrieval.Index).Search(q retrieval.Query, limit int) []retrieval.Result`. `Query` is `{Terms []string}`. `Result` is `{ID, Source, Path, Score, Reason, Rank}`.
+- `retrieval.Tokenize(s string) []string`.
+
+Arm A builds the index over `evals/rag/corpus` with `repoindex.Build`, keeps the document candidates from `CandidatesFromIndex`, and searches with `Query{Terms: retrieval.Tokenize(question)}`. Arm D builds `retrieval.Candidate{ID: "doc:"+path, Source: retrieval.SourceDocument, Path: path, Text: <full file text>}` for each corpus file, then uses the same `New` and `Search`. A result's evidence identity is `Path`, relative to `evals/rag/corpus`. It equals the `source` in `questions.json`, for example `imhttran/agentic-sop/docs/reference/PACKAGES.md`. Delete `internal/rageval/bm25.go`.
+
 ### Dependencies
 
 - RAG-EVAL-001
