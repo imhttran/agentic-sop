@@ -109,6 +109,8 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Context: `sopctx.Build(items, sopctx.DefaultLimits()) sopctx.Context`. Use `Context.Items()` for the ranked order, `Context.Render()` for the assembled context, and `Context.Bytes()` and `Context.Truncated()` for size and truncation.
 - Arm B's ranked identities are the `Items()` order, keeping only repository and knowledge-rag items. A repository item's identity is its `Identity`. A knowledge-rag item's `Identity` is the citation `sopctx.KnowledgeItems` renders: `<corpus>/<source>`, then `#<section>` if there is a section, then `:p<page>` if there is a page. Split it at the first `/` to get the corpus, then drop any `#…` and `:p…` suffix to get the evidence identity, which is the `source`.
 - Injection placement is checked on `Context.Render()`. Find the task item's text (the question) in the rendered context. Injected text placed above task content means its first index is lower than the task text's index. Don't use expected facts as the anchor.
+- Placement applies only to arm B, the only arm that assembles a SOP context. Arms A, C and D record whether injected text was retrieved, set placement to not applicable, and never raise the placement hard-blocker.
+- If a knowledge-rag citation doesn't split back into the evidence's own `Corpus` and `Source`, the run fails with an error naming the citation.
 
 ### Dependencies
 
@@ -138,6 +140,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Every committed `injection` question loads with an `InjectedText` equal to the `evidence` phrase of its planted expected entry, and that phrase appears verbatim in the planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
 - The repository stays gofmt-formatted.
 - Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. The test computes the expected identities and corpora from the frozen evidence's `Corpus` and `Source` fields, not with the runner's own helpers, and includes evidence with a section and a page. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
+- Only arm B evaluates injection placement. An injection question whose planted phrase arm C retrieves records the phrase as retrieved, with placement not applicable, and doesn't make the run a hard-blocker (`TestInjectionPlacementOnlyArmB`).
 
 ### Acceptance Checks
 
@@ -152,6 +155,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - `go test -count=1 -run TestCommittedInjectionQuestionsHaveInjectedText ./internal/rageval/`
 - `go test -count=1 ./internal/archtest/`
 - `go test -count=1 -run TestArmBUsesSOPContextBuild ./internal/rageval/`
+- `go test -count=1 -run TestInjectionPlacementOnlyArmB ./internal/rageval/`
 
 ### Acceptance Mapping
 
@@ -167,6 +171,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - criterion 10: check 9
 - criterion 11: check 10
 - criterion 12: check 11
+- criterion 13: check 12
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
