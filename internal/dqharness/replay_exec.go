@@ -67,14 +67,21 @@ func minimalReplayEnv(dir string) []string {
 
 // isolationCommand builds the sandboxed command line for the detected backend. It returns
 // the full argument list to pass to iso.Tool and the child environment. No backend
-// returns an unsandboxed command: an unknown backend is an error, and the bubblewrap
-// backend returns its canonicalization error so the child is never launched with a raw
-// path.
+// returns an unsandboxed command: an unknown backend is an error, and both the Seatbelt
+// and bubblewrap backends return their canonicalization error so the child is never
+// launched with a raw path.
 func isolationCommand(backend IsolationBackend, dir string, target []string) (args, env []string, err error) {
 	env = minimalReplayEnv(dir)
 	switch backend {
 	case BackendSeatbelt:
-		args = seatbeltCommand(dir, target)
+		// Seatbelt matches the real path, so a replay directory reached through a
+		// symlink (macOS /var -> /private/var) would not be writable. Canonicalize it
+		// the same way bubblewrapCommand does, and fail closed when that fails.
+		bound, cerr := filepath.EvalSymlinks(dir)
+		if cerr != nil {
+			return nil, nil, fmt.Errorf("replay isolation: cannot canonicalize replay directory %q: %w", dir, cerr)
+		}
+		args = seatbeltCommand(bound, target)
 		return args, env, nil
 	case BackendBubblewrap:
 		_, args, err = bubblewrapCommand(dir, target)
