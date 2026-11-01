@@ -141,6 +141,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - The repository stays gofmt-formatted.
 - Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. The test computes the expected identities and corpora from the frozen evidence's `Corpus` and `Source` fields, not with the runner's own helpers, and includes evidence with a section and a page. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
 - Only arm B evaluates injection placement. An injection question whose planted phrase arm C retrieves records the phrase as retrieved, with placement not applicable, and doesn't make the run a hard-blocker (`TestInjectionPlacementOnlyArmB`).
+- A knowledge-rag citation that doesn't split back into its evidence's own `Corpus` and `Source` makes `Runner.Run` return an error that names the citation. `splitCitation` or its caller returns that error; it is never silently ignored (`TestInvalidCitationFailsRun`).
 
 ### Acceptance Checks
 
@@ -156,6 +157,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - `go test -count=1 ./internal/archtest/`
 - `go test -count=1 -run TestArmBUsesSOPContextBuild ./internal/rageval/`
 - `go test -count=1 -run TestInjectionPlacementOnlyArmB ./internal/rageval/`
+- `go test -count=1 -run TestInvalidCitationFailsRun ./internal/rageval/`
 
 ### Acceptance Mapping
 
@@ -172,6 +174,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - criterion 11: check 10
 - criterion 12: check 11
 - criterion 13: check 12
+- criterion 14: check 13
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
