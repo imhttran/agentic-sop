@@ -57,17 +57,18 @@ Add `internal/rageval/` with a loader for `evals/rag/questions.json` and the cor
 
 ### Dependencies
 
-- none (requires H-1 committed)
+None
 
 ### Deliverables
 
 - `internal/rageval/dataset.go` with the loader, schema validation, and manifest hash check.
 - `internal/rageval/dataset_test.go` with tests on small fixture datasets under `internal/rageval/testdata/` (valid, tampered hash, missing field, unknown category, under-minimum counts).
 - `cmd/rag-eval/` with a `validate` subcommand that loads `evals/rag/` and prints counts per category.
+- `TestCommittedDatasetValid` in `internal/rageval/dataset_test.go`, which loads the committed `evals/rag/` and asserts the manifest hashes and the H-1 category minimums.
 
 ### Acceptance Criteria
 
-- `go run ./cmd/rag-eval validate` succeeds on the committed dataset and prints per-category counts that meet the H-1 minimums.
+- The committed dataset loads, its manifest hashes match, and its per-category counts meet the H-1 minimums (`TestCommittedDatasetValid`).
 - Each invalid fixture is rejected with a specific error.
 - `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
 
@@ -76,14 +77,14 @@ Add `internal/rageval/` with a loader for `evals/rag/questions.json` and the cor
 - `go build ./...`
 - `go vet ./...`
 - `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
-- `go run ./cmd/rag-eval validate`
+- `go test -count=1 -run TestCommittedDatasetValid ./internal/rageval/`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
 
 ### Acceptance Mapping
 
-- Integrity check → tampered-hash fixture test
-- Dataset meets minimums → `rag-eval validate` output
-- Human files untouched → the `git diff --quiet` check
+- criterion 1: check 4
+- criterion 2: check 3
+- criterion 3: check 5
 
 ## RAG-EVAL-002 — Three-arm comparison runner
 
@@ -119,9 +120,12 @@ Add a `run` subcommand. For each question it runs arm A (BM25-only over the inde
 
 ### Acceptance Mapping
 
-- Determinism → repeat-run test with frozen RAG responses
-- Isolation → cross-corpus fixture in the integration test
-- Real database evidence → the `ragacceptance` test
+- criterion 1: check 3
+- criterion 2: check 3
+- criterion 3: check 4
+- criterion 4: check 3
+- criterion 5: check 4
+- criterion 6: check 4
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
@@ -152,8 +156,10 @@ Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision repo
 
 ### Acceptance Mapping
 
-- Fallback and fail-closed behavior → per-case tests and `fixtures.md`
-- Governance unchanged → lifecycle state assertions in each fixture
+- criterion 1: check 3
+- criterion 2: check 3
+- criterion 3: check 3
+- criterion 4: manual: docs/reports/rag-eval/fixtures.md records how each unavailable case was produced against real services
 
 ## RAG-EVAL-004 — Full run and decision evidence
 
@@ -184,12 +190,14 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 - `go test -short ./...`
 - `git diff --check`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
-- `grep -q "PENDING OPERATOR" docs/specs/RAG-SOP-004-DECISION.md`
+- `git grep -q "PENDING OPERATOR" -- docs/specs/RAG-SOP-004-DECISION.md`
 
 ### Acceptance Mapping
 
-- Evidence traceability → links from report to run directories
-- Decision stays human → the `PENDING OPERATOR` check
+- criterion 1: manual: each number in RAG-SOP-004-DECISION.md links to a recorded run row
+- criterion 2: manual: the three run directories show identical arm A rows
+- criterion 3: manual: each H-2 threshold and §4 hard blocker is marked met or not met with supporting rows
+- criterion 4: check 5
 
 ## Out of scope
 
