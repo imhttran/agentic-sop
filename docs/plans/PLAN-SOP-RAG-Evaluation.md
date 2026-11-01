@@ -107,8 +107,8 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 
 - Items: one task item, `sopctx.Item{Source: sopctx.SourceTask, Identity: <question id>, Reason: "evaluation question", Priority: sopctx.PriorityLifecycle, Text: <question>}`; one item per arm A hit, `sopctx.Item{Source: sopctx.SourceRepository, Identity: <Path>, Reason: "bm25 hit", Priority: sopctx.PriorityRepository, Text: <Path>}`; and the RAG items from `sopctx.KnowledgeItems(evidence []ragclient.Evidence, maxItems, budgetBytes int) []sopctx.Item` with the run's top-k and RAG context budget.
 - Context: `sopctx.Build(items, sopctx.DefaultLimits()) sopctx.Context`. Use `Context.Items()` for the ranked order, `Context.Render()` for the assembled context, and `Context.Bytes()` and `Context.Truncated()` for size and truncation.
-- Arm B's ranked identities are the `Items()` order, keeping only repository and knowledge-rag items. A repository item's identity is its `Identity`. A knowledge-rag item's identity is the evidence `Source`, which is the second `\x00`-separated field of its `Identity`.
-- Injection placement is checked on `Context.Render()`. Injected text must not appear before the task item's text.
+- Arm B's ranked identities are the `Items()` order, keeping only repository and knowledge-rag items. A repository item's identity is its `Identity`. A knowledge-rag item's `Identity` is the citation `sopctx.KnowledgeItems` renders: `<corpus>/<source>`, then `#<section>` if there is a section, then `:p<page>` if there is a page. Split it at the first `/` to get the corpus, then drop any `#…` and `:p…` suffix to get the evidence identity, which is the `source`.
+- Injection placement is checked on `Context.Render()`. Find the task item's text (the question) in the rendered context. Injected text placed above task content means its first index is lower than the task text's index. Don't use expected facts as the anchor.
 
 ### Dependencies
 
@@ -137,7 +137,7 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
 - Every committed `injection` question loads with an `InjectedText` equal to the `evidence` phrase of its planted expected entry, and that phrase appears verbatim in the planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
 - The repository stays gofmt-formatted.
-- Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
+- Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. The test computes the expected identities and corpora from the frozen evidence's `Corpus` and `Source` fields, not with the runner's own helpers, and includes evidence with a section and a page. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
 
 ### Acceptance Checks
 
