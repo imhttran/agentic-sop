@@ -45,7 +45,10 @@ These apply to every task.
 
 - No task edits `evals/rag/**` or `docs/specs/RAG-EVALUATION.md`. If a task finds a problem in either, it stops and raises a question through the planner.
 - `SOP_RAG_ENABLED` stays `false` by default. Nothing in this plan flips a default or wires the harness into normal task execution.
-- Arm A uses SOP's real BM25 ranker (`internal/retrieval`, CTX-003), not Postgres full-text.
+- Arm A is what SOP runs today. It builds candidates with `retrieval.CandidatesFromIndex` over a `repoindex.Build` of the frozen corpus. It ranks them with `retrieval.Index.Search` on `retrieval.Tokenize(question)`.
+- Arm D is diagnostic. It uses the same `internal/retrieval` ranker over each document's full text. It is reported, and no threshold uses it.
+- No other BM25 or lexical ranker is written. Every lexical arm uses `internal/retrieval`.
+- No scratch, generator, or debug tests are added. Every test asserts behavior.
 - Results are per question. No aggregate claim without the per-question rows behind it.
 - Database-touching runs need real PostgreSQL/pgvector, per `RAG-POSTGRES-VALIDATION-POLICY.md`. Unit tests with fakes cover harness logic only and aren't evidence for the decision.
 - Retrieved text is untrusted. The harness records it as data and never feeds it to a model.
@@ -88,7 +91,7 @@ None
 
 ## RAG-EVAL-002 — Three-arm comparison runner
 
-Add a `run` subcommand. For each question it runs arm A (BM25-only over the indexed corpus), arm B (BM25 plus RAG through the existing `ragclient` and context merge path, so it measures what SOP would actually do), and arm C (RAG-only, diagnostic). It records per-question rows: retrieved identities and ranks, recall@5, precision@5, citation and provenance correctness, context bytes and truncation, latency, fallback reason, and any cross-corpus item. Output is a JSON results file plus a Markdown table, both written under `docs/reports/rag-eval/<timestamp>/` with the git commit, dataset manifest hash, and config recorded in a header.
+Add a `run` subcommand. For each question it runs arm A (BM25-only over the indexed corpus), arm B (BM25 plus RAG through the existing `ragclient` and context merge path, so it measures what SOP would actually do), arm C (RAG-only, diagnostic), and arm D (`internal/retrieval` over full document text, diagnostic). It records per-question rows: retrieved identities and ranks, recall@5, precision@5, citation and provenance correctness, context bytes and truncation, latency, fallback reason, and any cross-corpus item. Output is a JSON results file plus a Markdown table, both written under `docs/reports/rag-eval/<timestamp>/` with the git commit, dataset manifest hash, and config recorded in a header.
 
 ### Dependencies
 
@@ -99,7 +102,10 @@ Add a `run` subcommand. For each question it runs arm A (BM25-only over the inde
 - `internal/rageval/runner.go` and `internal/rageval/metrics.go`.
 - `cmd/rag-eval run` subcommand.
 - Unit tests for metric math on hand-computed fixtures.
-- An integration test (`-tags ragacceptance`) running all three arms on a small seeded corpus against real PostgreSQL/pgvector.
+- An integration test (`-tags ragacceptance`) running all four arms on a small seeded corpus against real PostgreSQL/pgvector.
+- No `internal/rageval/bm25.go`, and no other BM25 implementation in `internal/rageval`.
+- The dataset loader fills `InjectedText` for each `injection` question from its expected evidence whose source is under `evals/rag/injection/`. `evals/rag/questions.json` stays unchanged.
+- Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, and `TestCommittedInjectionQuestionsHaveInjectedText`.
 
 ### Acceptance Criteria
 
@@ -109,6 +115,11 @@ Add a `run` subcommand. For each question it runs arm A (BM25-only over the inde
 - `no_answer` questions record what each arm returned instead of scoring them as recall.
 - `injection` questions record whether injected text reached the assembled context, and confirm it was never placed above task or policy content.
 - The integration test passes against real PostgreSQL/pgvector.
+- Arm A returns the same ranked identities as `retrieval.CandidatesFromIndex` plus `retrieval.Index.Search` on the same corpus and query (`TestArmAMatchesSOPRetrieval`).
+- `internal/rageval` contains no BM25 implementation of its own (`TestNoLocalBM25`).
+- Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
+- Every committed `injection` question loads with a non-empty `InjectedText` that appears verbatim in its planted file (`TestCommittedInjectionQuestionsHaveInjectedText`).
+- The repository stays gofmt-formatted.
 
 ### Acceptance Checks
 
@@ -117,6 +128,11 @@ Add a `run` subcommand. For each question it runs arm A (BM25-only over the inde
 - `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
 - `go test -count=1 -tags ragacceptance ./internal/rageval/...`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
+- `go test -count=1 -run TestArmAMatchesSOPRetrieval ./internal/rageval/`
+- `go test -count=1 -run TestNoLocalBM25 ./internal/rageval/`
+- `go test -count=1 -run TestArmDUsesFullTextRanker ./internal/rageval/`
+- `go test -count=1 -run TestCommittedInjectionQuestionsHaveInjectedText ./internal/rageval/`
+- `go test -count=1 ./internal/archtest/`
 
 ### Acceptance Mapping
 
@@ -126,6 +142,11 @@ Add a `run` subcommand. For each question it runs arm A (BM25-only over the inde
 - criterion 4: check 3
 - criterion 5: check 4
 - criterion 6: check 4
+- criterion 7: check 6
+- criterion 8: check 7
+- criterion 9: check 8
+- criterion 10: check 9
+- criterion 11: check 10
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 

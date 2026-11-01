@@ -149,6 +149,48 @@ func TestSeatbeltArgumentsShape(t *testing.T) {
 	}
 }
 
+// TestSeatbeltCommandUsesCanonicalReplayDir proves the Seatbelt profile allows writes
+// to the real replay path when the caller passes a path through a symlink, as macOS
+// does for t.TempDir() under /var -> /private/var.
+func TestSeatbeltCommandUsesCanonicalReplayDir(t *testing.T) {
+	realDir := t.TempDir()
+	link := filepath.Join(t.TempDir(), "replay-link")
+	if err := os.Symlink(realDir, link); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+	canonical, err := filepath.EvalSymlinks(realDir)
+	if err != nil {
+		t.Fatalf("canonicalize: %v", err)
+	}
+	args, _, err := isolationCommand(BackendSeatbelt, link, []string{"true"})
+	if err != nil {
+		t.Fatalf("isolationCommand: %v", err)
+	}
+	profile := args[1]
+	if want := "(subpath " + `"` + canonical + `"` + ")"; !strings.Contains(profile, want) {
+		t.Fatalf("profile missing canonical allow %q:\n%s", want, profile)
+	}
+	if strings.Contains(profile, `"`+link+`"`) {
+		t.Fatalf("profile allows the symlinked path %q:\n%s", link, profile)
+	}
+}
+
+// TestSeatbeltCommandCanonicalizationFailsClosed proves a replay directory that cannot
+// be canonicalized yields an error and no command.
+func TestSeatbeltCommandCanonicalizationFailsClosed(t *testing.T) {
+	missing := filepath.Join(t.TempDir(), "does", "not", "exist")
+	args, env, err := isolationCommand(BackendSeatbelt, missing, []string{"true"})
+	if err == nil {
+		t.Fatal("isolationCommand must fail when canonicalization fails")
+	}
+	if args != nil || env != nil {
+		t.Fatalf("args=%v env=%v, want nil on failure", args, env)
+	}
+	if msg := err.Error(); !strings.Contains(msg, "canonicalize") || !strings.Contains(msg, missing) {
+		t.Fatalf("error is not actionable: %q", msg)
+	}
+}
+
 func TestIsolationCommandUnknownBackendFailsClosed(t *testing.T) {
 	args, env, err := isolationCommand(IsolationBackend("unknown-backend"), t.TempDir(), []string{"true"})
 	if err == nil {
