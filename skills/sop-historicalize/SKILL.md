@@ -114,6 +114,9 @@ Return a concise, evidence-backed summary:
   count, and that the plan left ACTIVE selection.
 - After: the next active/runnable plan when one exists, or that none is active.
 - Human approval required: any pending gate SOP reported, or none established.
+- Documents: this transition does not move tracked documents. When the plan's
+  file, task specifications, or run copies still sit under `docs/`, suggest
+  `/sop-cleanup docs` to propose moving them. Do not move them here.
 
 ## What the skill must not do
 
