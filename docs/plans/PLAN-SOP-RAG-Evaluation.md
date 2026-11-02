@@ -296,31 +296,77 @@ Update `docs/reports/rag-eval/fixtures.md`: for each case, say whether the failu
 - criterion 5: manual: docs/reports/rag-eval/fixtures.md marks each case scripted or real
 - criterion 6: check 9
 
-## RAG-EVAL-004 — Full run and decision evidence
+## RAG-EVAL-004A — Make `rag-eval run` refuse stubs and record the producer
 
-Run `rag-eval run` on the frozen dataset three times. Check the repeats agree, then write the evidence into the decision report. Update §2–§4 of `docs/specs/RAG-SOP-004-DECISION.md` from Unavailable to Measured where the new records support it, with links to the run directories. Add a draft §5 that compares the results to the H-2 thresholds line by line and states which outcome the evidence supports. Leave the operator decision marked `PENDING OPERATOR`.
+Change `cmd/rag-eval/main.go` and `internal/rageval/report.go` only. The `run` subcommand must never fall back to a stub, and every report must name the real producer it measured.
 
-Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, with the specific misses listed. That's the input for whether the graph plan comes back.
+- In `ragProvider`, when `RAG_EVAL_RAG_EXECUTABLE` is empty, return an error instead of the empty `FrozenProvider`. The `run` subcommand then exits non-zero and writes no report directory.
+- The `run` subcommand also requires the environment variables `RAG_EVAL_PRODUCER_COMMIT` and `RAG_EVAL_EMBED_MODEL`. If either is empty, it exits non-zero and writes no report directory.
+- Add an optional `-excluded` flag naming a file with one corpus source per line, the documents the producer could not ingest.
+- Add a `Producer` field to `rageval.Header` with `Executable`, `Commit`, `EmbedModel`, and `ExcludedSources []string`, filled from the above. `WriteReports` writes it in `results.json` and as header lines in `results.md`.
+- Change the `-corpus` flag default from `rag` to `sop-engineering-kb`.
 
-Arms B and C use the real producer: `cmd/retrieval` from the rag-template-rust repository, configured through `SOP_RAG_EXECUTABLE`, over the frozen `evals/rag/corpus` ingested with the configured embedding model. No scripted or stub producer is used for any recorded run. Each run directory's header records the producer commit, the embedding model, and the ingest manifest hash.
+Add `cmd/rag-eval/main_test.go` with two tests. `TestRunRequiresProducer` sets `RAG_EVAL_RAG_EXECUTABLE` to empty with `t.Setenv`, runs the `run` subcommand's function with `-out` pointing at `t.TempDir()`, and asserts a non-zero result and an empty output directory. `TestHeaderRecordsProducer` writes a report through `rageval.WriteReports` with a `Producer` set, and asserts that `results.json` contains the commit, the embedding model, and every excluded source. If `main` calls `os.Exit` directly, move the subcommand body into a function that returns an exit code so the test can call it.
 
 ### Dependencies
 
-- RAG-EVAL-002
+- RAG-EVAL-002B
 - RAG-EVAL-003
 
 ### Deliverables
 
-- Three recorded run directories under `docs/reports/rag-eval/`.
-- Updated `docs/specs/RAG-SOP-004-DECISION.md` with measured evidence, a threshold-by-threshold comparison, a multi-hop section, and the decision line left as `PENDING OPERATOR`.
+- `cmd/rag-eval/main.go` with the refusal, the required variables, the `-excluded` flag, and the new corpus default.
+- `cmd/rag-eval/main_test.go` with `TestRunRequiresProducer` and `TestHeaderRecordsProducer`.
+- `internal/rageval/report.go` with the `Producer` header field.
+
+### Acceptance Criteria
+
+- `rag-eval run` with no `RAG_EVAL_RAG_EXECUTABLE` exits non-zero and writes no report (`TestRunRequiresProducer`).
+- A written report records the producer commit, embedding model, and excluded sources (`TestHeaderRecordsProducer`).
+- Existing `internal/rageval` tests still pass.
+- `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
+
+### Acceptance Checks
+
+- `go build ./...`
+- `go vet ./...`
+- `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
+- `go test -count=1 -run TestRunRequiresProducer ./cmd/rag-eval/`
+- `go test -count=1 -run TestHeaderRecordsProducer ./cmd/rag-eval/`
+- `git grep -q --untracked "func TestRunRequiresProducer" -- cmd/rag-eval`
+- `git grep -q --untracked "func TestHeaderRecordsProducer" -- cmd/rag-eval`
+- `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
+
+### Acceptance Mapping
+
+- criterion 1: check 4
+- criterion 2: check 5
+- criterion 3: check 3
+- criterion 4: check 8
+
+## RAG-EVAL-004B — Decision evidence from the recorded runs
+
+The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004A, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
+
+Check the three runs agree, then write the evidence into the decision report. Update §2–§4 of `docs/specs/RAG-SOP-004-DECISION.md` from Unavailable to Measured where the records support it, with links to the run directories. Add a draft §5 that compares the results to the §4.1 thresholds line by line and states which outcome the evidence supports. Leave the operator decision marked `PENDING OPERATOR`.
+
+Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, with the specific misses listed. That's the input for whether the graph plan comes back. Include a reworded-question section comparing each reworded question with its original. State that the producer could not ingest the 37 excluded documents (none is expected evidence), and that arm A still indexes them.
+
+### Dependencies
+
+- RAG-EVAL-004A
+
+### Deliverables
+
+- Updated `docs/specs/RAG-SOP-004-DECISION.md` with measured evidence, a threshold-by-threshold comparison, multi-hop and reworded sections, the exclusion note, and the decision line left as `PENDING OPERATOR`.
 
 ### Acceptance Criteria
 
 - Every number in the report links to a recorded run row.
 - The three runs give identical arm A results, and any arm B or C differences are listed and explained.
-- Each H-2 threshold and each §4 hard blocker is marked met or not met, with the supporting rows.
+- Each §4.1 threshold and each §4 hard blocker is marked met or not met, with the supporting rows.
 - The report proposes an outcome but doesn't record an operator decision, and `SOP_RAG_ENABLED` defaults are unchanged.
-- Every recorded run used the real rag-template-rust `cmd/retrieval` producer, and each run header names its commit, embedding model, and ingest manifest hash.
+- Every run used is from the real producer, and the report names its commit, embedding model, and the 37 exclusions.
 
 ### Acceptance Checks
 
@@ -329,14 +375,15 @@ Arms B and C use the real producer: `cmd/retrieval` from the rag-template-rust r
 - `git diff --check`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
 - `git grep -q "PENDING OPERATOR" -- docs/specs/RAG-SOP-004-DECISION.md`
+- `git grep -q --untracked "acd1fb911ac8bdd4f425b61df16a495f4a5047c9" -- docs/reports/rag-eval docs/specs/RAG-SOP-004-DECISION.md`
 
 ### Acceptance Mapping
 
 - criterion 1: manual: each number in RAG-SOP-004-DECISION.md links to a recorded run row
 - criterion 2: manual: the three run directories show identical arm A rows
-- criterion 3: manual: each H-2 threshold and §4 hard blocker is marked met or not met with supporting rows
+- criterion 3: manual: each 4.1 threshold and 4 hard blocker is marked met or not met with supporting rows
 - criterion 4: check 5
-- criterion 5: manual: each run directory header names the rag-template-rust cmd/retrieval commit, embedding model, and ingest manifest hash
+- criterion 5: check 6
 
 ## Out of scope
 
@@ -352,13 +399,19 @@ graph TD
     H1[H-1 dataset, human]
     H2[H-2 thresholds, human]
     E1[RAG-EVAL-001 loader and integrity]
-    E2[RAG-EVAL-002 three-arm runner]
+    E2[RAG-EVAL-002 four-arm runner]
+    E2B[RAG-EVAL-002B harness producer fix]
     E3[RAG-EVAL-003 failure fixtures]
-    E4[RAG-EVAL-004 full run and evidence]
+    E4A[RAG-EVAL-004A refuse stubs, record producer]
+    R[three measurement runs, operator]
+    E4B[RAG-EVAL-004B decision evidence]
     H1 --> E1
-    H2 --> E4
     E1 --> E2
-    E1 --> E3
-    E2 --> E4
-    E3 --> E4
+    E2 --> E2B
+    E2B --> E3
+    E2B --> E4A
+    E3 --> E4A
+    E4A --> R
+    R --> E4B
+    H2 --> E4B
 ```
