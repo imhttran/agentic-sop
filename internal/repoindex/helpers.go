@@ -65,6 +65,9 @@ func walkIndexable(root, stateDir string) ([]string, error) {
 			return nil
 		}
 		if d.IsDir() {
+			if filepath.ToSlash(rel) == "archive" {
+				return filepath.SkipDir
+			}
 			if excluded[d.Name()] {
 				return filepath.SkipDir
 			}
@@ -154,7 +157,7 @@ func classifyAuthority(rel string, class DocumentClass, sop sopMeta) Document {
 		doc.Authority, doc.Lifecycle, doc.AuthoritySource = auth, life, "header"
 		return doc
 	}
-	if strings.HasPrefix(rel, "docs/history/plans/") {
+	if strings.HasPrefix(rel, "docs/history/") {
 		doc.Authority, doc.AuthoritySource = AuthorityHistorical, "path"
 		return doc
 	}
