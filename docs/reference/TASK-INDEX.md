@@ -1,8 +1,9 @@
 # Task Document Index
 
 Read these files for individual task objectives, acceptance criteria, and recorded
-verification. Their existing `docs/tasks/` paths are retained because plans and
-commands depend on them. This index does not declare completion or change SOP state.
+verification. They now live in `docs/history/tasks/`. Older plans and reports still
+mention the former `docs/tasks/` paths as historical records. This index does not
+declare completion or change SOP state.
 For current behavior, start at [the specifications](../README.md#specifications).
 
 Task documents record the contract and evidence at the time of that task; later

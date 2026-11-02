@@ -170,5 +170,5 @@ provider, and model fit together.
 ## The repository's own state
 
 The repository dogfoods SOP: it keeps its own SOP state under `.agent-sdlc/`
-(which ignores itself for Git) and its own work items under `docs/tasks/`. Task
+(which ignores itself for Git) and its finished work items under `docs/history/tasks/`. Task
 specifications, plans, and history live under `docs/`.
