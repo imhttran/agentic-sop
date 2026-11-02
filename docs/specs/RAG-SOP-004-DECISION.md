@@ -222,10 +222,17 @@ C 0.2500 / D 0.2500. Multi-hop misses (recall@5 0.00 for arms A and B in
 
 ## 6. Decision
 
-**Decision: PENDING OPERATOR.**
+**Decision: NO-GO for RAG as currently integrated.** Recorded by Tom Tran, 2026-11-02.
 
-No operator decision is recorded here. The §4.1 rule outcome is stated in §5; the
-operator decision on expanding usage remains **PENDING OPERATOR**.
+- The predeclared §4.1 rule does not give GO. Arm B's recall@5 equals arm A's (value 0,
+  breadth 0), because SOP ranks repository items above RAG items.
+- Post-hoc, outside the rule: RAG adds recall at equal context depth (0.651 against
+  BM25@10 at 0.433). It is the only arm that helps reworded questions (0.417 against
+  0.250). But BM25 over full document text alone scores higher (0.721 at depth 10).
+- `SOP_RAG_ENABLED` stays off by default.
+
+**Next:** index document text in SOP's BM25 and down-rank historical documents. Then
+re-evaluate RAG on top of full-text BM25 with this same frozen dataset.
 
 ## 7. Default enablement
 
