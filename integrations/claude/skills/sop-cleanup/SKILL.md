@@ -6,7 +6,9 @@ description: |-
   evidence, or unrelated changes. Read-only by default: it inspects, classifies,
   and proposes; a human approves every mutation.
   Use for: "/sop-cleanup", "clean the worktree", "post-task cleanup",
-  "post-plan cleanup", "worktree cleanup after a run".
+  "post-plan cleanup", "worktree cleanup after a run". With "docs", it tidies
+  tracked documentation: "/sop-cleanup docs", "tidy the docs", "move run dumps
+  out of docs", "archive old task specs".
 disable-model-invocation: true
 ---
 
@@ -156,6 +158,7 @@ clean tree:
 ```text
 .agent-sdlc/runs/
 .agent-sdlc/archive/
+archive/
 task reports
 classification records
 traces
@@ -183,6 +186,88 @@ is complete (or superseded) as appropriate; no active association remains; a
 repository history convention exists; references are inspected; and historical
 references are **not** blindly rewritten. Never assume that a plan-lifecycle
 command moves tracked documentation.
+
+## DOCUMENTATION TIDY (`/sop-cleanup docs`)
+
+The worktree assessment above covers dirty items after a run. Documentation tidy is
+a separate mode for tracked files that have built up under `docs/`. Its goal is one
+current home for each fact: current documents stay in place, and records of past
+work move to where they read as history. It never deletes anything.
+
+It follows the same stages. The first invocation is read-only: it inspects,
+classifies, and proposes. A move happens only under `/sop-cleanup docs apply`,
+after the operator approves the exact list of moves.
+
+The `internal/worktreecleanup` model does not cover this mode yet. Apply these
+rules as written; do not infer new ones.
+
+### Document kinds
+
+| Kind | What it is | Proposed action |
+| ---- | ---------- | --------------- |
+| `RUN_DUMP` | A raw copy of an SOP run (`task.md`, `plan.md`, `implementation.md`, `fix-N.md`, `report.md`, trace and JSON files) under `docs/`, usually in a `runs/`, attempt, or accidental-run folder | move to `archive/run-artifacts/<same subpath below docs/reports/>` |
+| `COMPLETED_TASK_SPEC` | A task specification under `docs/tasks/` whose work SOP records as complete, or whose plan is historicalized | move to `docs/history/tasks/<same subpath>` |
+| `COMPLETED_PLAN` | As defined above: a finished plan document still under `docs/plans/` | move under `docs/history/` (this repository uses `docs/history/plans/`) |
+| `EXACT_DUPLICATE` | Two or more byte-identical files | propose keeping one, only when no rule below protects the others |
+| `DELIBERATE_COPY` | A file that says it is filed under more than one name, or a copy that differs from its twin | preserve |
+| `CODE_REFERENCED` | Any path that code, tests, scripts, skills, or configuration name | preserve |
+
+Reports that summarize a run (for example `ETOE-010-final-reliability-report.md`)
+are history, not run dumps. They stay under `docs/reports/`.
+
+### Before proposing any move
+
+Check every candidate path. Skip the move, and classify the path
+`CODE_REFERENCED`, when any of these finds it:
+
+```text
+git grep -n -F "<path>" -- '*.go' '*.sh' Makefile scripts skills .github '*.yaml' '*.yml' '*.json' ':!docs' ':!evals'
+```
+
+A folder whose path appears in a test (for example a test that writes artifacts
+into it) is code-referenced even when no file inside it is.
+
+Record the current number of broken relative Markdown links under `docs/` as the
+baseline. Use the repository's link checker if it has one; otherwise count
+`](target)` links whose target does not exist relative to the linking file.
+
+Never propose moving anything under `.agent-sdlc/`, and never move a file that is
+part of an active plan.
+
+### Apply (after approval only)
+
+1. Move each approved path with `git mv`, so its history follows it.
+2. Fix Markdown link targets that pointed at a moved path. Change only the link
+   target, never the surrounding text. Recompute relative paths for files that
+   moved deeper or shallower.
+3. Leave plain-text mentions of old paths in history documents alone. They record
+   what was true when they were written.
+4. When a current document states a layout the move changes (for example "task
+   specs stay at `docs/tasks/`"), propose the corrected sentence and change it
+   only after approval.
+
+### Verify
+
+- The broken-link count is not higher than the baseline.
+- `go build ./...` and `go test ./...` pass, because tests can read document paths.
+- `git status --short` shows only renames and modified Markdown files.
+
+SOP's repository index skips the root `archive/` folder and classifies everything
+under `docs/history/` as historical. Moving a document there takes it out of, or
+lowers it in, retrieval.
+
+### Example
+
+```text
+docs/reports/end-to-end-reliability/ETOE-005-execution-evidence/fail/runs/ -> RUN_DUMP
+  proposed: git mv to archive/run-artifacts/end-to-end-reliability/ETOE-005-execution-evidence/fail/runs/
+docs/tasks/ -> COMPLETED_TASK_SPEC (every listed task LOCAL_DONE or historicalized)
+  proposed: git mv to docs/history/tasks/
+docs/reports/evidence/artifacts/ -> CODE_REFERENCED (internal/cli/decision_adapter_dogfood_live_test.go writes there)
+  proposed: preserve
+docs/reports/clef-readiness/AS-CLEF-009-verification.md -> DELIBERATE_COPY (file states dual filing)
+  proposed: preserve
+```
 
 ## DANGEROUS OPERATIONS
 
