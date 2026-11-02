@@ -4,12 +4,12 @@ Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md). This repor
 
 ## Status summary
 
-| Environment | Status | Reason |
-| --- | --- | --- |
-| macOS | **OUTSTANDING** | Not executed on macOS. Must not be claimed until a macOS run records versions, revision, job IDs, outcomes, and evidence paths. |
-| Linux | **NOT EXECUTED in the ACP-007 invocation** | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results. |
+| Environment | Status                                     | Reason                                                                                                                                                                                                                                               |
+| ----------- | ------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS       | **OUTSTANDING**                            | Scenarios 1, 2, 4 and 5 have not been executed on macOS. Scenario 3 (protocol negotiation) is recorded with a transcript. macOS must not be claimed as passing until the full run records versions, revision, job IDs, outcomes, and evidence paths. |
+| Linux       | **NOT EXECUTED in the ACP-007 invocation** | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results.                           |
 
-No acceptance scenario is claimed as passed by this report.
+Only scenario 3 is recorded as passed; no other scenario is claimed by this report.
 
 ## Bounded acceptance recipe (both platforms)
 
@@ -29,19 +29,21 @@ Evidence path convention: `docs/reports/evidence/ACP-007-ZED-<platform>/<scenari
 
 ## Results (fill at execution time)
 
-| # | Scenario | Platform | Zed version | OS version | SOP revision | Job ID | Outcome | Evidence path |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Agent appears | — | — | — | — | — | NOT EXECUTED | — |
-| 2 | Bounded request completes | — | — | — | — | — | NOT EXECUTED | — |
-| 3 | Protocol negotiation | — | — | — | — | — | NOT EXECUTED | — |
-| 4 | Cancellation | — | — | — | — | — | NOT EXECUTED | — |
-| 5 | Restart discovery | — | — | — | — | — | NOT EXECUTED | — |
+| #   | Scenario                  | Platform | Zed version           | OS version                                 | SOP revision | Job ID           | Outcome                                                                                  | Evidence path                                                         |
+| --- | ------------------------- | -------- | --------------------- | ------------------------------------------ | ------------ | ---------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| 1   | Agent appears             | —        | —                     | —                                          | —            | —                | NOT EXECUTED                                                                             | —                                                                     |
+| 2   | Bounded request completes | —        | —                     | —                                          | —            | —                | NOT EXECUTED                                                                             | —                                                                     |
+| 3   | Protocol negotiation      | macOS    | 1.26.2 (not involved) | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | — (session only) | PASS — `initialize` negotiated v1 with `agentInfo`, `session/new` returned a `sessionId` | `docs/reports/evidence/ACP-007-ZED-darwin/03-protocol-negotiation.md` |
+| 4   | Cancellation              | —        | —                     | —                                          | —            | —                | NOT EXECUTED                                                                             | —                                                                     |
+| 5   | Restart discovery         | —        | —                     | —                                          | —            | —                | NOT EXECUTED                                                                             | —                                                                     |
 
 When a run executes, update each row with the recorded values, set the environment status above, and update `docs/guides/ACP-ZED.md` (verified Zed version and `agent_servers` schema in sections 2 and 9) with any difference found. Record every observed difference from the guide in the guide itself, not only here.
 
+The macOS run header for the recorded scenario (date, host, OS version, Zed version, SOP version, revision) is in `docs/reports/evidence/ACP-007-ZED-darwin/README.md`. The guide's `agent_servers` example stays labelled UNVERIFIED until scenario 1 observes SOP in the Zed agent picker.
+
 ## Known limitations carried by this report
 
-- macOS acceptance is OUTSTANDING; no macOS result exists, and none may be claimed.
+- macOS acceptance is OUTSTANDING; only scenario 3 (protocol negotiation) has a recorded macOS result, and no other scenario may be claimed.
 - The Linux row status is NOT EXECUTED until the recipe runs on a Linux host with Zed installed.
 
 ## Governance link
