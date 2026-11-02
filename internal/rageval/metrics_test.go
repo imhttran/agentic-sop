@@ -47,6 +47,48 @@ func TestRecallAt5Cutoff(t *testing.T) {
 	approx(t, got, 0)
 }
 
+func TestRecallAtK(t *testing.T) {
+	items := []Retrieved{
+		{ID: "a", Rank: 1},
+		{ID: "b", Rank: 2},
+		{ID: "c", Rank: 3},
+		{ID: "d", Rank: 4},
+		{ID: "e", Rank: 5},
+		{ID: "f", Rank: 6},
+		{ID: "g", Rank: 7},
+		{ID: "h", Rank: 8},
+		{ID: "i", Rank: 9},
+		{ID: "j", Rank: 10},
+	}
+	expected := []string{"a", "f", "j"}
+	// Depth 5 sees only a: 1/3. RecallAt5 must equal RecallAtK at depth 5.
+	got5, ok := RecallAtK(expected, items, 5)
+	if !ok {
+		t.Fatal("depth 5: ok = false, want true")
+	}
+	approx(t, got5, 1.0/3.0)
+	gotDef, _ := RecallAt5(expected, items)
+	approx(t, gotDef, got5)
+	// Depth 10 sees a, f and j: 3/3.
+	got10, ok := RecallAtK(expected, items, 10)
+	if !ok {
+		t.Fatal("depth 10: ok = false, want true")
+	}
+	approx(t, got10, 1.0)
+	// Two sections of one document count once, at any depth.
+	sections := []Retrieved{
+		{ID: "a.md#One", Rank: 1},
+		{ID: "a.md#Two", Rank: 2},
+		{ID: "b.md", Rank: 3},
+	}
+	gotDoc, _ := RecallAtK([]string{"a.md", "b.md"}, sections, 5)
+	approx(t, gotDoc, 1.0)
+	// No expected identities: ok is false at any depth.
+	if _, ok := RecallAtK(nil, items, 10); ok {
+		t.Fatal("depth 10: ok = true, want false for no expected identities")
+	}
+}
+
 func TestPrecisionAt5HandComputed(t *testing.T) {
 	items := []Retrieved{
 		{ID: "x", Rank: 1},

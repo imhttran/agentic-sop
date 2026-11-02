@@ -59,24 +59,30 @@ func RankedIDs(items []Retrieved, k int) []string {
 	return ids
 }
 
-// RecallAt5 is the fraction of expected identities found in the first K
-// retrieved identities. With no expected identities there is nothing to
-// recall, so it returns 0 and ok is false.
-func RecallAt5(expected []string, items []Retrieved) (value float64, ok bool) {
+// RecallAtK is the fraction of expected document identities found in the
+// first k retrieved items, at document level. With no expected identities
+// there is nothing to recall, so it returns 0 and ok is false.
+func RecallAtK(expected []string, items []Retrieved, k int) (value float64, ok bool) {
 	if len(expected) == 0 {
 		return 0, false
 	}
 	hit := map[string]bool{}
-	for _, id := range RankedIDs(items, K) {
+	for _, id := range RankedIDs(items, k) {
 		hit[id] = true
 	}
+	want := uniqueSorted(expected)
 	found := 0
-	for _, want := range uniqueSorted(expected) {
-		if hit[want] {
+	for _, id := range want {
+		if hit[id] {
 			found++
 		}
 	}
-	return float64(found) / float64(len(uniqueSorted(expected))), true
+	return float64(found) / float64(len(want)), true
+}
+
+// RecallAt5 is recall at the fixed cutoff K. It is RecallAtK at depth K.
+func RecallAt5(expected []string, items []Retrieved) (value float64, ok bool) {
+	return RecallAtK(expected, items, K)
 }
 
 // PrecisionAt5 is the fraction of the first K retrieved identities that are

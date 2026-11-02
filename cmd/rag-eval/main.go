@@ -43,14 +43,36 @@ func main() {
 		validate(os.Args[2:])
 	case "run":
 		os.Exit(run(os.Args[2:]))
+	case "summarize":
+		os.Exit(summarize(os.Args[2:]))
 	default:
 		usage()
 	}
 }
 
 func usage() {
-	fmt.Fprintf(os.Stderr, "usage:\n  rag-eval validate [--dir evals/rag]\n  rag-eval run [--dir evals/rag] [--corpus sop-engineering-kb] [--top-k 5] [--excluded FILE] [--out docs/reports/rag-eval]\n")
+	fmt.Fprintf(os.Stderr, "usage:\n  rag-eval validate [--dir evals/rag]\n  rag-eval run [--dir evals/rag] [--corpus sop-engineering-kb] [--top-k 5] [--excluded FILE] [--out docs/reports/rag-eval]\n  rag-eval summarize [--dir evals/rag] --runs dir,dir,dir --control dir --out dir\n")
 	os.Exit(2)
+}
+
+// summarize executes the summarize subcommand and returns the process exit
+// code. It only reads files: it never runs a producer, a model, or a database.
+func summarize(args []string) int {
+	fs := flag.NewFlagSet("summarize", flag.ExitOnError)
+	dir := fs.String("dir", "evals/rag", "dataset root holding questions.json and corpus/MANIFEST.sha256")
+	runs := fs.String("runs", "", "comma-separated recorded run directories, each holding results.json")
+	control := fs.String("control", "", "control run directory recorded with -top-k 10, holding results.json")
+	out := fs.String("out", "", "output directory for summary.json and summary.md")
+	fs.Parse(args)
+	if *runs == "" || *control == "" || *out == "" {
+		fmt.Fprintf(os.Stderr, "rag-eval: summarize requires -runs, -control and -out\n")
+		return 2
+	}
+	if _, err := rageval.Summarize(rageval.SummaryConfig{Dir: *dir, Runs: strings.Split(*runs, ","), Control: *control, Out: *out}); err != nil {
+		fmt.Fprintf(os.Stderr, "rag-eval: %v\n", err)
+		return 1
+	}
+	return 0
 }
 
 func validate(args []string) {
