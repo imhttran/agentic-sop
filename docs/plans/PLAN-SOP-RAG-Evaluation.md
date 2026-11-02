@@ -344,7 +344,7 @@ Add `cmd/rag-eval/main_test.go` with two tests. `TestRunRequiresProducer` sets `
 - criterion 3: check 3
 - criterion 4: check 8
 
-## RAG-EVAL-004A2 — Score retrieval at document level
+## RAG-EVAL-004C — Score retrieval at document level
 
 The first measurement runs scored every lexical arm at zero. `expectedIDs` in `internal/rageval/runner.go` builds expected identities as `source#section`. Arms A, B and D return file-level identities (`source` only), so they can never match. Arm C returns the producer's `source#section`, but the producer's section names are its own `##` chunks, not the labeled headings. Recall must compare like with like.
 
@@ -390,7 +390,7 @@ Add `TestRecallIsDocumentLevel` in `internal/rageval/metrics_test.go`. It must s
 
 ## RAG-EVAL-004B — Decision evidence from the recorded runs
 
-The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004A2, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
+The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004C, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
 
 Check the three runs agree, then write the evidence into the decision report. Update §2–§4 of `docs/specs/RAG-SOP-004-DECISION.md` from Unavailable to Measured where the records support it, with links to the run directories. Add a draft §5 that compares the results to the §4.1 thresholds line by line and states which outcome the evidence supports. Leave the operator decision marked `PENDING OPERATOR`.
 
@@ -398,7 +398,7 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 
 ### Dependencies
 
-- RAG-EVAL-004A2
+- RAG-EVAL-004C
 
 ### Deliverables
 
@@ -455,8 +455,8 @@ graph TD
     E2B --> E3
     E2B --> E4A
     E3 --> E4A
-    E4A --> E4A2[RAG-EVAL-004A2 document-level scoring]
-    E4A2 --> R
+    E4A --> E4C[RAG-EVAL-004C document-level scoring]
+    E4C --> R
     R --> E4B
     H2 --> E4B
 ```
