@@ -236,6 +236,13 @@ This is a harness integration test of the `ragclient` wiring against real Postgr
 
 Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision report §4. The cases are cold start, stale index, Ollama unavailable, PostgreSQL unavailable, malformed producer response, cross-repository scope request, permission boundary, and a resumed run. Each fixture runs a real `sop` task path with `SOP_RAG_ENABLED=true`. It records whether SOP fell back to BM25-only with a reason, or failed closed when the task declared required evidence. It also confirms approval and completion state didn't change because of RAG.
 
+`internal/rageval/fixtures_test.go` exists. Fix two bugs in it and change nothing else:
+
+- In `buildSop`, the `go build -o <bin> ./cmd/sop` command runs from the package directory, so `./cmd/sop` is not found. Set that command's `Dir` to `repoRoot(t)`, the helper in `dataset_test.go`.
+- In `operationalCases`, the `unreachable` script contains `printf '%%s' "$req"`. After formatting it reads `printf '%s'`, which trips the "producer script has verbs but no DSN" guard in `runFixtureCase`. Change that line to `echo "$req" | grep -q '"corpus"' || exit 1`.
+
+Then run `go test -count=1 -tags ragacceptance -run Fixture ./internal/rageval/...` with `RAGEVAL_PSQL_DSN` set.
+
 ### Dependencies
 
 - RAG-EVAL-001
