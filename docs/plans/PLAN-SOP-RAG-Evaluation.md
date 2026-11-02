@@ -112,8 +112,6 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Placement applies only to arm B, the only arm that assembles a SOP context. Arms A, C and D record whether injected text was retrieved, set placement to not applicable, and never raise the placement hard-blocker.
 - If a knowledge-rag citation doesn't split back into the evidence's own `Corpus` and `Source`, the run fails with an error naming the citation.
 
-The harness integration test change is in one file, `internal/rageval/ragacceptance_test.go`, function `writeProducer`. Its producer script's SQL currently uses `to_tsvector('simple', text) @@ plainto_tsquery('simple', '$query')`. That requires every query word, so the seeded questions match nothing. Replace that condition with an any-word match: split the query on spaces, and keep a row when its lowercased text contains at least one query word. Change `ORDER BY source` to `ORDER BY embedding <-> '[1,0,0]', source`. Keep the corpus filter as is. Then run `RAGEVAL_PSQL_DSN=... go test -count=1 -tags ragacceptance ./internal/rageval/...` and confirm every seeded question with expected evidence gets evidence.
-
 Each named test must exist. `go test -run <Name>` passes when no test matches, so every named test also has a `git grep --untracked` existence check. A missing test fails that check.
 
 ### Dependencies
@@ -125,7 +123,6 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `internal/rageval/runner.go` and `internal/rageval/metrics.go`.
 - `cmd/rag-eval run` subcommand.
 - Unit tests for metric math on hand-computed fixtures.
-- A harness integration test (`-tags ragacceptance`) that runs all four arms through `ragclient` against a scripted producer backed by real PostgreSQL/pgvector. It reads `RAGEVAL_PSQL_DSN` and fails, not skips, when it is unset. The producer returns rows of the requested corpus that share at least one word with the query (case-insensitive, any word, not all words), ranked by pgvector distance `embedding <-> '[1,0,0]'` and then by source. It tests the harness wiring, not retrieval quality; RAG-EVAL-004 uses the real producer.
 - The dataset loader fills `InjectedText` for each `injection` question with the `evidence` phrase of its expected entry whose source is under `evals/rag/injection/`. It is that phrase, not the whole planted file. `evals/rag/questions.json` stays unchanged.
 - Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, `TestCommittedInjectionQuestionsHaveInjectedText`, and `TestArmBUsesSOPContextBuild`.
 
@@ -136,7 +133,6 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - A cross-corpus item in any arm is flagged in its row and marks the run as a hard-blocker failure.
 - `no_answer` questions record what each arm returned instead of scoring them as recall.
 - `injection` questions record whether injected text reached the assembled context, and confirm it was never placed above task or policy content.
-- The harness integration test passes against real PostgreSQL/pgvector, and every seeded question that has expected evidence gets at least one evidence item from the producer.
 - Arm A returns the same ranked identities as `retrieval.CandidatesFromIndex` plus `retrieval.Index.Search` on the same corpus and query. The test writes a fixture corpus to a temp directory, builds the expected results by calling `repoindex.Build`, `retrieval.CandidatesFromIndex`, `retrieval.New`, and `Search` directly, and compares them with the runner's arm A rows (`TestArmAMatchesSOPRetrieval`).
 - `internal/rageval` contains no BM25 implementation of its own (`TestNoLocalBM25`).
 - Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
@@ -151,7 +147,6 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `go build ./...`
 - `go vet ./...`
 - `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
-- `go test -count=1 -tags ragacceptance ./internal/rageval/...`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
 - `go test -count=1 -run TestArmAMatchesSOPRetrieval ./internal/rageval/`
 - `go test -count=1 -run TestNoLocalBM25 ./internal/rageval/`
@@ -173,10 +168,10 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 
 - criterion 1: check 3
 - criterion 2: check 3
-- criterion 3: check 4
+- criterion 3: check 3
 - criterion 4: check 3
-- criterion 5: check 4
-- criterion 6: check 4
+- criterion 5: check 3
+- criterion 6: check 5
 - criterion 7: check 6
 - criterion 8: check 7
 - criterion 9: check 8
@@ -184,7 +179,39 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - criterion 11: check 10
 - criterion 12: check 11
 - criterion 13: check 12
-- criterion 14: check 13
+
+## RAG-EVAL-002B — Fix the harness producer query
+
+Fix one function in one file: `writeProducer` in `internal/rageval/ragacceptance_test.go`. Change nothing else.
+
+Its producer script's SQL currently filters with `to_tsvector('simple', text) @@ plainto_tsquery('simple', '$query')`. That requires every query word, so the seeded questions match nothing. Replace that condition with an any-word match: split the query on spaces, and keep a row when its lowercased text contains at least one query word. Change `ORDER BY source` to `ORDER BY embedding <-> '[1,0,0]', source`. Keep the corpus filter unchanged.
+
+This is a harness integration test of the `ragclient` wiring against real PostgreSQL/pgvector, not a retrieval-quality test. It reads `RAGEVAL_PSQL_DSN` and fails, not skips, when it is unset. Run it with `RAGEVAL_PSQL_DSN=postgres://rag:rag@127.0.0.1:5434/rag?sslmode=disable` set.
+
+### Dependencies
+
+- RAG-EVAL-002
+
+### Deliverables
+
+- `internal/rageval/ragacceptance_test.go` with the corrected `writeProducer` query.
+
+### Acceptance Criteria
+
+- The harness integration test passes against real PostgreSQL/pgvector, and every seeded question that has expected evidence gets at least one evidence item from the producer.
+- `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
+
+### Acceptance Checks
+
+- `go build ./...`
+- `go vet -tags ragacceptance ./internal/rageval/...`
+- `go test -count=1 -tags ragacceptance ./internal/rageval/...`
+- `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
+
+### Acceptance Mapping
+
+- criterion 1: check 3
+- criterion 2: check 4
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
@@ -193,7 +220,7 @@ Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision repo
 ### Dependencies
 
 - RAG-EVAL-001
-- RAG-EVAL-002
+- RAG-EVAL-002B
 
 ### Deliverables
 
