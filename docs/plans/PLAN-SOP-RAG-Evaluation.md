@@ -388,13 +388,23 @@ Add `TestRecallIsDocumentLevel` in `internal/rageval/metrics_test.go`. It must s
 - criterion 2: check 3
 - criterion 3: check 6
 
-## RAG-EVAL-004B — Decision evidence from the recorded runs
+## RAG-EVAL-004D — Summarize recorded runs, with a post-hoc full-context score
 
-The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004C, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
+Add a deterministic `summarize` subcommand to `cmd/rag-eval`. It reads recorded runs and computes every number the decision report uses, so no number is worked out by hand. It reads only files. It never runs a producer, a model, or a database.
 
-Check the three runs agree, then write the evidence into the decision report. Update §2–§4 of `docs/specs/RAG-SOP-004-DECISION.md` from Unavailable to Measured where the records support it, with links to the run directories. Add a draft §5 that compares the results to the §4.1 thresholds line by line and states which outcome the evidence supports. Leave the operator decision marked `PENDING OPERATOR`.
+Put the computation in a new file, `internal/rageval/summary.go`. Use these existing functions as written: `Load(dir string) (*Dataset, error)` in `dataset.go`, `RankedIDs(items []Retrieved, k int) []string` and `documentID(id string) string` in `metrics.go`, and `expectedIDs(q Question) []string` in `runner.go`.
 
-Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, with the specific misses listed. That's the input for whether the graph plan comes back. Include a reworded-question section comparing each reworded question with its original. State that the producer could not ingest the 37 excluded documents (none is expected evidence), and that arm A still indexes them.
+- Add `func RecallAtK(expected []string, items []Retrieved, k int) (float64, bool)` in `metrics.go`. It works like `RecallAt5`, with depth `k`, and is document level. `RecallAt5` becomes `RecallAtK(expected, items, K)`.
+- The subcommand is `rag-eval summarize -dir evals/rag -runs <dir>,<dir>,<dir> -control <dir> -out <dir>`. Each run directory holds a `results.json` written by `rag-eval run`. Read `rows` from it. Each row has `question_id`, `category`, `arm`, `retrieved` (a list of objects with `ID`, `Rank` and `Corpus`), `recall_at_5` and `latency_ms`. `latency_ms` is a decimal string or `unavailable`.
+- Subsets: `historical` is the categories `architecture_history`, `design_decision`, `failure_investigation` and `multi_hop`. `code` is the `code` category. `multi_hop` is that category alone. `reworded` is every question with a non-empty `RewordedFrom`. Leave out questions with no expected sources.
+- For each run, compute mean `recall_at_5` per arm (A, B, C, D) per subset.
+- §4.1 checks, from the first run: `value` is mean B minus mean A on `historical`; `breadth` is the number of `historical` questions where B's recall@5 is higher than A's; `code_regressions` is the number of `code` questions where B's recall@5 is lower than A's; `latency_p95_ms` is the 95th percentile of arm B's numeric `latency_ms` (nearest rank). Compare each with `docs/specs/RAG-EVALUATION.md` §4.1: value at least 0.10, breadth at least 5, code regressions at most 1, p95 at most 500 ms. Also report `status` from each run's header.
+- `arm_a_identical`: true when every run has the same arm A `(question_id, retrieved IDs in order)` list.
+- Post-hoc full-context score, from the first run: for each arm B row, `RecallAtK(expectedIDs(q), row.retrieved, len(row.retrieved))`. Report its mean per subset, the mean number of distinct documents in arm B's context, and how many `historical` questions improve or regress against arm A's recall@5.
+- Controls, from the `-control` run (recorded with `-top-k 10`): mean `RecallAtK(expectedIDs(q), row.retrieved, 10)` for arms A and D, per subset.
+- Write `summary.json` and `summary.md` into `-out`. Every number names the run directory it came from. The post-hoc section and the controls are headed `POST-HOC: not part of the §4.1 decision rule`.
+
+Add `TestSummarizeFixture` in `internal/rageval/summary_test.go`. It builds two identical primary runs and one control run in `t.TempDir()`, as `results.json` files over questions from the `testdata/valid` dataset, with hand-computed expected values. It asserts the §4.1 numbers, `arm_a_identical`, the post-hoc mean, the control means, and that `summary.md` contains the `POST-HOC` heading. Add `TestRecallAtK` in `metrics_test.go`, covering depth 5, depth 10, and two sections of one document counting once.
 
 ### Dependencies
 
@@ -402,15 +412,73 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 
 ### Deliverables
 
-- Updated `docs/specs/RAG-SOP-004-DECISION.md` with measured evidence, a threshold-by-threshold comparison, multi-hop and reworded sections, the exclusion note, and the decision line left as `PENDING OPERATOR`.
+- `internal/rageval/summary.go` with the summary computation.
+- `RecallAtK` in `internal/rageval/metrics.go`.
+- The `summarize` subcommand in `cmd/rag-eval/main.go`.
+- `TestSummarizeFixture` in `internal/rageval/summary_test.go` and `TestRecallAtK` in `internal/rageval/metrics_test.go`.
 
 ### Acceptance Criteria
 
-- Every number in the report links to a recorded run row.
-- The three runs give identical arm A results, and any arm B or C differences are listed and explained.
-- Each §4.1 threshold and each §4 hard blocker is marked met or not met, with the supporting rows.
-- The report proposes an outcome but doesn't record an operator decision, and `SOP_RAG_ENABLED` defaults are unchanged.
-- Every run used is from the real producer, and the report names its commit, embedding model, and the 37 exclusions.
+- The summary computes the §4.1 checks, `arm_a_identical`, the post-hoc full-context score and the controls exactly as specified (`TestSummarizeFixture`).
+- `RecallAtK` is document level at any depth, and `RecallAt5` equals `RecallAtK` at depth 5 (`TestRecallAtK`).
+- `summary.md` labels the post-hoc section and controls as outside the §4.1 rule.
+- Existing `internal/rageval` and `cmd/rag-eval` tests still pass.
+- `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
+
+### Acceptance Checks
+
+- `go build ./...`
+- `go vet ./...`
+- `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
+- `go test -count=1 -run TestSummarizeFixture ./internal/rageval/`
+- `go test -count=1 -run TestRecallAtK ./internal/rageval/`
+- `git grep -q --untracked "func TestSummarizeFixture" -- internal/rageval`
+- `git grep -q --untracked "func TestRecallAtK" -- internal/rageval`
+- `git grep -q --untracked "POST-HOC: not part of" -- internal/rageval/summary.go`
+- `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
+
+### Acceptance Mapping
+
+- criterion 1: check 4
+- criterion 2: check 5
+- criterion 3: check 8
+- criterion 4: check 3
+- criterion 5: check 9
+
+## RAG-EVAL-004B — Decision evidence from the recorded runs
+
+The operator runs everything this task reads, outside SOP, after RAG-EVAL-004D. Don't run `rag-eval`, `go run`, or the producer yourself. Work only from these committed files:
+
+- the three primary runs under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9`, embedding model `nomic-embed-text`, and `TopK` 5;
+- one control run under `docs/reports/rag-eval/` with the same producer and `TopK` 10;
+- `docs/reports/rag-eval/summary/summary.md` and `summary.json`, written by `rag-eval summarize` from those runs.
+
+If any of these is missing, stop and raise a question. Take every number from `summary.json`. Don't compute numbers yourself.
+
+Update `docs/specs/RAG-SOP-004-DECISION.md`:
+
+- In §2–§4, change Unavailable to Measured where the summary supports it, with links to the run directories and the summary.
+- Add a draft §5 that compares the §4.1 checks line by line, as computed in the summary, and states which outcome the rule gives. Explain why arm B's top five equals arm A's: SOP ranks repository items above RAG items.
+- Add a separate section headed `POST-HOC: not part of the §4.1 decision rule`. Report arm B's full-context score next to the depth-10 controls for arms A and D, the mean number of documents in arm B's context, and the improved and regressed counts. State plainly that this metric was chosen after seeing results, that arm B uses more context slots than arm A's top five, and that the depth-10 controls exist to make the comparison fair.
+- Include multi-hop and reworded-question results from the summary, and list the multi-hop misses by question ID.
+- State that the producer could not ingest the 37 excluded documents (none is expected evidence), and that arms A and D still index them.
+- Leave the operator decision marked `PENDING OPERATOR`. Don't recommend GO or NO-GO beyond what the §4.1 rule gives.
+
+### Dependencies
+
+- RAG-EVAL-004D
+
+### Deliverables
+
+- Updated `docs/specs/RAG-SOP-004-DECISION.md` with measured evidence, the §4.1 comparison, the post-hoc section, multi-hop and reworded results, the exclusion note, and the decision line left as `PENDING OPERATOR`.
+
+### Acceptance Criteria
+
+- Every number in the report matches `summary.json` and links to the summary or a run directory.
+- Each §4.1 threshold and each §4 hard blocker is marked met or not met, with supporting numbers.
+- The post-hoc section is labeled as outside the §4.1 rule, reports the depth-10 controls next to arm B's full-context score, and states that the metric was chosen after seeing results.
+- The report records no operator decision, and `SOP_RAG_ENABLED` defaults are unchanged.
+- The report names the producer commit, the embedding model, and the 37 exclusions.
 
 ### Acceptance Checks
 
@@ -419,15 +487,16 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 - `git diff --check`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
 - `git grep -q "PENDING OPERATOR" -- docs/specs/RAG-SOP-004-DECISION.md`
-- `git grep -q --untracked "acd1fb911ac8bdd4f425b61df16a495f4a5047c9" -- docs/reports/rag-eval docs/specs/RAG-SOP-004-DECISION.md`
+- `git grep -q --untracked "POST-HOC: not part of the" -- docs/specs/RAG-SOP-004-DECISION.md`
+- `git grep -q --untracked "acd1fb911ac8bdd4f425b61df16a495f4a5047c9" -- docs/specs/RAG-SOP-004-DECISION.md`
 
 ### Acceptance Mapping
 
-- criterion 1: manual: each number in RAG-SOP-004-DECISION.md links to a recorded run row
-- criterion 2: manual: the three run directories show identical arm A rows
-- criterion 3: manual: each 4.1 threshold and 4 hard blocker is marked met or not met with supporting rows
+- criterion 1: manual: every number in RAG-SOP-004-DECISION.md matches summary.json
+- criterion 2: manual: each 4.1 threshold and 4 hard blocker is marked met or not met with supporting numbers
+- criterion 3: check 6
 - criterion 4: check 5
-- criterion 5: check 6
+- criterion 5: check 7
 
 ## Out of scope
 
@@ -456,7 +525,8 @@ graph TD
     E2B --> E4A
     E3 --> E4A
     E4A --> E4C[RAG-EVAL-004C document-level scoring]
-    E4C --> R
+    E4C --> E4D[RAG-EVAL-004D summarize runs]
+    E4D --> R
     R --> E4B
     H2 --> E4B
 ```
