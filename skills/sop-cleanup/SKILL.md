@@ -220,7 +220,7 @@ are history, not run dumps. They stay under `docs/reports/`.
 Check every candidate path. Skip the move, and classify the path
 `CODE_REFERENCED`, when any of these finds it:
 
-```bash
+```text
 git grep -n -F "<path>" -- '*.go' '*.sh' Makefile scripts skills .github '*.yaml' '*.yml' '*.json' ':!docs' ':!evals'
 ```
 
