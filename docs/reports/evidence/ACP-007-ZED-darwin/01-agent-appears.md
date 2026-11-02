@@ -1,14 +1,23 @@
 # ACP-007 scenario 1 — Agent appears in Zed (macOS)
 
-Status: **NOT EXECUTED** — the agent picker has not been observed.
+Status: **PASS** — SOP appears in Zed's agent picker
 
-No result may be recorded here without an actual Zed session.
+Recorded 2026-11-02. Observed by the operator in Zed 1.26.2 on macOS 26.6.2.
 
-## Preconditions already met
+## Environment
 
-- `sop` installed from `ba5fbd965902584f04be258d23b05fb7fcb5850a`; `sop --help`
-  lists `acp`.
-- `~/.config/zed/settings.json` contains:
+| Field        | Value                                      |
+| ------------ | ------------------------------------------ |
+| Date         | 2026-11-02 (operator observation)          |
+| Host         | `Hoangs-MacBook-Pro-2.local`               |
+| OS           | macOS 26.6.2 (25G83), Darwin 25.6.0, arm64 |
+| Zed          | 1.26.2 (`/Applications/Zed.app`)           |
+| SOP          | `sop dev`, `/Users/imhttran/go/bin/sop`    |
+| SOP revision | `ba5fbd965902584f04be258d23b05fb7fcb5850a` |
+
+## Configuration as accepted
+
+`~/.config/zed/settings.json`, added verbatim — Zed accepted it with **no change**:
 
 ```json
 "SOP": {
@@ -17,33 +26,43 @@ No result may be recorded here without an actual Zed session.
 },
 ```
 
-- Zed 1.26.2 installed at `/Applications/Zed.app`.
+The absolute `command` path was used deliberately: a GUI-launched Zed may not
+inherit the shell `PATH`.
 
-## Steps to run
+## Observation
 
-1. Restart Zed (or reload settings) so `agent_servers` is read.
-2. Open the Agent Panel and the agent picker.
-3. Confirm SOP is listed.
-4. Record the accepted `agent_servers` schema as the installed Zed interprets it
-   (screenshot, or the settings file path plus the entry as saved).
-5. If the accepted schema differs from guide §2, fix the guide and the schema
-   section of the discovery note as part of this run.
+After restarting Zed, the agent picker in the Agent Panel lists:
 
-## Fields to record
+```
+Zed Agent
+Terminal
+External Agents
+  Claude Agent
+  SOP
++ Add More Agents
+```
 
-| Field | Value |
-| --- | --- |
-| Date / time (UTC) | |
-| Host | |
-| OS version (`sw_vers`) | |
-| Zed version (`zed --version`) | |
-| SOP version / revision | |
-| SOP visible in picker | |
-| `agent_servers` schema accepted | |
-| Differences from guide §2 | |
-| Evidence (screenshot path) | |
+SOP appears under **External Agents** alongside the existing `claude-acp` entry.
 
-## Notes
+## Schema verdict
 
-- This scenario is also the verification the guide currently lacks: the
-  `agent_servers` example is labelled UNVERIFIED until this is recorded.
+- The `agent_servers` shape in `docs/guides/ACP-ZED.md` §2 (`command` + `args`)
+  is **accepted unchanged by Zed 1.26.2**.
+- The supported Zed version for this guide is now known for this host: **1.26.2**.
+- No difference from the guide was observed, so no guide correction beyond
+  removing the UNVERIFIED label was required.
+
+## Evidence
+
+Operator screenshot of the agent picker showing `External Agents → SOP`
+(captured 2026-11-02; attached to the working session).
+
+**Not yet a repository file.** Save it as
+`docs/reports/evidence/ACP-007-ZED-darwin/agent-picker.png` so the evidence path
+this record references points at a real artifact.
+
+## Remaining gap
+
+This scenario establishes reachability only. A **Zed-driven** bounded request
+(scenario 2) has not been run; scenarios 2, 4 and 5 were recorded through an ACP
+v1 stdio client instead. See `02-bounded-request.md`.

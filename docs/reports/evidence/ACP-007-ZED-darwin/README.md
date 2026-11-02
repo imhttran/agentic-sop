@@ -38,18 +38,19 @@ scenario 1 observes SOP in the agent picker.
 
 ## Scenario status
 
-| #   | Scenario                  | Status                             | Evidence                     |
-| --- | ------------------------- | ---------------------------------- | ---------------------------- |
-| 1   | Agent appears             | NOT EXECUTED — picker not observed | `01-agent-appears.md`        |
-| 2   | Bounded request completes | **PASS** — ACP v1 client           | `02-bounded-request.md`      |
-| 3   | Protocol negotiation      | **PASS** — recorded transcript     | `03-protocol-negotiation.md` |
-| 4   | Cancellation              | **PASS** — ACP v1 client           | `04-cancellation.md`         |
-| 5   | Restart discovery         | **PASS** — ACP v1 client           | `05-restart-discovery.md`    |
+| #   | Scenario                  | Status                                     | Evidence                     |
+| --- | ------------------------- | ------------------------------------------ | ---------------------------- |
+| 1   | Agent appears             | **PASS** — SOP listed in Zed 1.26.2 picker | `01-agent-appears.md`        |
+| 2   | Bounded request completes | **PASS** — ACP v1 client                   | `02-bounded-request.md`      |
+| 3   | Protocol negotiation      | **PASS** — recorded transcript             | `03-protocol-negotiation.md` |
+| 4   | Cancellation              | **PASS** — ACP v1 client                   | `04-cancellation.md`         |
+| 5   | Restart discovery         | **PASS** — ACP v1 client                   | `05-restart-discovery.md`    |
 
 Scenarios 2, 4 and 5 were executed with a small ACP v1 client written for this
 run, speaking newline-delimited JSON-RPC to `sop acp` over stdio. They prove
-SOP's ACP surface end to end, **not** Zed's use of it. Only scenario 1 exercises
-Zed, and it remains unexecuted, so no Zed-side acceptance claim is made here.
+SOP's ACP surface end to end, **not** Zed's use of it. Scenario 1 was observed in
+Zed 1.26.2 (SOP listed under External Agents), which verifies the
+`agent_servers` schema but does not yet prove a Zed-driven request.
 
 ## Completing the remaining scenarios
 
@@ -58,10 +59,10 @@ in from expectation, from source reading, or from another platform's run.
 
 ## Client attribution
 
-| Scenario | Client               | Zed involved               |
-| -------- | -------------------- | -------------------------- |
-| 1        | Zed 1.26.2 (planned) | required, not yet observed |
-| 2        | ACP v1 stdio client  | no                         |
-| 3        | ACP v1 stdio client  | no                         |
-| 4        | ACP v1 stdio client  | no                         |
-| 5        | ACP v1 stdio client  | no                         |
+| Scenario | Client              | Zed involved          |
+| -------- | ------------------- | --------------------- |
+| 1        | Zed 1.26.2          | yes — picker observed |
+| 2        | ACP v1 stdio client | no                    |
+| 3        | ACP v1 stdio client | no                    |
+| 4        | ACP v1 stdio client | no                    |
+| 5        | ACP v1 stdio client | no                    |
