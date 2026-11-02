@@ -199,7 +199,11 @@ One more edit, in the same file, function `assertAcceptanceRows`. Its injection 
 - for the arm C row (`ArmRAG`): require `InjectionReached` to be non-nil and `InjectionBelowTask` to be nil;
 - for the arm B row (`ArmHybrid`): require `InjectionReached` and `InjectionBelowTask` to be non-nil, and `*InjectionBelowTask` to be true.
 
-Don't change the runner. These two edits in `ragacceptance_test.go` are the whole task.
+That edit is now in place too.
+
+Last edit, in the same file. `assertRealCrossCorpusBlocker` expects the real backend to return a foreign-corpus item. It never can: the producer filters by the requested corpus, and `ragclient` rejects evidence whose corpus differs from the request. Replace it with `assertRealCorpusIsolation`: keep the same setup (foreign corpus allowlisted, request corpus `acceptanceCorpus`), then require every retrieved item in every row to carry `acceptanceCorpus`, every row's `CrossCorpus` to be empty, and the run status not to be `StatusHardBlocker`. Update its call site. Keep `acceptanceCrossCorpusResult` and its assertions unchanged; that frozen case still proves a leaked item is flagged and hard-blocks.
+
+Don't change the runner. These edits in `ragacceptance_test.go` are the whole task.
 
 This is a harness integration test of the `ragclient` wiring against real PostgreSQL/pgvector, not a retrieval-quality test. It reads `RAGEVAL_PSQL_DSN` and fails, not skips, when it is unset. Run it with `RAGEVAL_PSQL_DSN=postgres://rag:rag@127.0.0.1:5434/rag?sslmode=disable` set.
 
