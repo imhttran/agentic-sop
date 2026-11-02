@@ -124,7 +124,6 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `cmd/rag-eval run` subcommand.
 - Unit tests for metric math on hand-computed fixtures.
 - An integration test (`-tags ragacceptance`) running all four arms on a small seeded corpus against real PostgreSQL/pgvector.
-- No `internal/rageval/bm25.go`, and no other BM25 implementation in `internal/rageval`.
 - The dataset loader fills `InjectedText` for each `injection` question with the `evidence` phrase of its expected entry whose source is under `evals/rag/injection/`. It is that phrase, not the whole planted file. `evals/rag/questions.json` stays unchanged.
 - Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, `TestCommittedInjectionQuestionsHaveInjectedText`, and `TestArmBUsesSOPContextBuild`.
 
@@ -192,6 +191,7 @@ Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision repo
 ### Dependencies
 
 - RAG-EVAL-001
+- RAG-EVAL-002
 
 ### Deliverables
 
