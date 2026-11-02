@@ -1,7 +1,7 @@
 # Plan: SOP ACP integration for Zed
 
 Date: 2026-11-01
-Status: Proposed; implementation in progress (ACP-001 and ACP-002 delivered, ACP-003 through ACP-007 outstanding)
+Status: Implemented and merged in PR #197; ACP-007 macOS Zed acceptance recorded, Linux acceptance not executed
 Repository: https://github.com/imhttran/agentic-sop
 Suggested repository path: docs/plans/PLAN-SOP-ACP-ZED.md
 
