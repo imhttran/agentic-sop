@@ -111,8 +111,8 @@ Cancel a session's foreground work with `session/cancel` (`internal/acp/cancel.g
 
 ## 9. Known limitations
 
-- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A Zed-driven bounded request has not yet been run, so Zed-side operational acceptance remains open.
-- **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2 (SOP in the agent picker) and scenarios 2–5 are recorded on macOS, with 2, 4 and 5 executed through an ACP v1 stdio client. A bounded request submitted from Zed itself is still outstanding; `docs/reports/ACP-007-acceptance.md` carries the status and evidence paths.
+- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A bounded request submitted from Zed itself was not executed; ACP-007 acceptance is closed with that limitation recorded.
+- **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2 (SOP in the agent picker) and scenarios 2–5 are recorded on macOS, with 2, 4 and 5 executed through an ACP v1 stdio client. ACP-007 is closed with the limitation that no bounded request was submitted from Zed itself; `docs/reports/ACP-007-acceptance.md` carries the statuses and recorded values.
 - **Linux acceptance.** Status and evidence paths are recorded in `docs/reports/ACP-007-acceptance.md`; any scenario not yet executed is recorded there as outstanding, never claimed.
 - **No session resumption.** `session/load` is unsupported; conversation history is not restored after restart.
 - **Text prompts only.** Prompt content is bounded text; attachments, model selection UI, and editor-mediated file writes or terminal execution are deferred per the plan.

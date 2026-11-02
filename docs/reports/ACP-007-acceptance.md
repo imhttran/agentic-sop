@@ -4,12 +4,12 @@ Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md). This repor
 
 ## Status summary
 
-| Environment | Status                                      | Reason                                                                                                                                                                                                                                                                                                                                  |
-| ----------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| macOS       | **OUTSTANDING (Zed-driven prompt pending)** | Scenario 1 is verified in Zed 1.26.2: SOP appears under External Agents in the agent picker, and the `agent_servers` schema was accepted unchanged. Scenarios 2–5 have recorded macOS results (2, 4 and 5 via an ACP v1 stdio client; 3 via a terminal transcript). The remaining gap is one bounded request submitted from Zed itself. |
-| Linux       | **NOT EXECUTED in the ACP-007 invocation**  | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results.                                                                                                              |
+| Environment | Status                                                | Reason                                                                                                                                                                                                                                                                                                                                                                       |
+| ----------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS       | **CLOSED — recorded, with one documented limitation** | Scenarios 1–5 have recorded macOS results: scenario 1 was verified in Zed 1.26.2 (SOP listed under External Agents, `agent_servers` schema accepted unchanged); scenarios 2, 4 and 5 ran through an ACP v1 stdio client; scenario 3 used a terminal transcript. No bounded request was submitted from Zed itself; that limitation is recorded here rather than claimed away. |
+| Linux       | **NOT EXECUTED in the ACP-007 invocation**            | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results.                                                                                                                                                   |
 
-All five scenarios have recorded macOS results. Scenario 1 was observed in Zed 1.26.2 (SOP listed under External Agents), verifying the `agent_servers` schema; scenarios 2, 4 and 5 were executed with an ACP v1 stdio client and scenario 3 with a terminal transcript. A bounded request submitted from Zed itself has not been run yet, and no Zed-driven run is claimed.
+ACP-007 acceptance is closed for this cycle on the evidence recorded above: all five scenarios have macOS results and the `agent_servers` schema is verified against Zed 1.26.2. One limitation is carried explicitly — no bounded request was submitted from Zed itself, so no Zed-driven operational pass is claimed.
 
 ## Bounded acceptance recipe (both platforms)
 
@@ -43,7 +43,7 @@ The macOS run was recorded on 2026-11-02 on `Hoangs-MacBook-Pro-2.local`: macOS 
 
 ## Known limitations carried by this report
 
-- macOS acceptance is OUTSTANDING for a Zed-driven request: scenario 1 is verified in Zed 1.26.2 (SOP listed under External Agents, schema accepted unchanged) and scenarios 2–5 have recorded macOS results, with 2, 4 and 5 executed through an ACP v1 stdio client. No bounded request submitted from Zed itself has been run.
+- macOS Zed-driven request: not executed. All five scenarios have recorded macOS results and the `agent_servers` schema is verified against Zed 1.26.2, but no bounded request was submitted from Zed itself. This limitation is accepted for this cycle and is not claimed as a pass.
 - The Linux row status is NOT EXECUTED until the recipe runs on a Linux host with Zed installed.
 
 ## Governance link
