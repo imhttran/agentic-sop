@@ -148,12 +148,15 @@ type workProcessAlive func(pid int) bool
 type workEnv struct {
 	launch workLauncher
 	alive  workProcessAlive
-	now    func() time.Time
+	// stop signals one started job's child (ACP-006 cancellation). Nil uses the
+	// platform implementation; tests inject a fake so no test signals a process.
+	stop workStopper
+	now  func() time.Time
 }
 
 // defaultWorkEnv is the production start-work environment.
 func defaultWorkEnv() workEnv {
-	return workEnv{launch: launchWorkProcess, alive: workPIDAlive, now: time.Now}
+	return workEnv{launch: launchWorkProcess, alive: workPIDAlive, stop: signalWorkStop, now: time.Now}
 }
 
 // mcpStartWorkTools returns the opt-in start-work tools.
@@ -616,7 +619,13 @@ func listWorkJobs(dir string, env workEnv) ([]workJobView, error) {
 		}
 		v := workJobView{workJob: j, Log: relDir(dir, filepath.Join(jobDir, workLogFile)), dir: jobDir}
 		var ex workExit
+		var cancelled workCancel
 		switch {
+		case readJSONFile(filepath.Join(jobDir, workCancelFile), &cancelled):
+			// A confirmed cancellation is authoritative: the exit recorder may
+			// still write exit.json when the stopped child dies, and that exit must
+			// never relabel the job as failed.
+			v.State = workStateCancelled
 		case readJSONFile(filepath.Join(jobDir, workExitFile), &ex):
 			code, ended := ex.ExitCode, ex.EndedAt
 			v.ExitCode, v.EndedAt = &code, &ended
