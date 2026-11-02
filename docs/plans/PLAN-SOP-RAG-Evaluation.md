@@ -112,6 +112,8 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Placement applies only to arm B, the only arm that assembles a SOP context. Arms A, C and D record whether injected text was retrieved, set placement to not applicable, and never raise the placement hard-blocker.
 - If a knowledge-rag citation doesn't split back into the evidence's own `Corpus` and `Source`, the run fails with an error naming the citation.
 
+The harness integration test change is in one file, `internal/rageval/ragacceptance_test.go`, function `writeProducer`. Its producer script's SQL currently uses `to_tsvector('simple', text) @@ plainto_tsquery('simple', '$query')`. That requires every query word, so the seeded questions match nothing. Replace that condition with an any-word match: split the query on spaces, and keep a row when its lowercased text contains at least one query word. Change `ORDER BY source` to `ORDER BY embedding <-> '[1,0,0]', source`. Keep the corpus filter as is. Then run `RAGEVAL_PSQL_DSN=... go test -count=1 -tags ragacceptance ./internal/rageval/...` and confirm every seeded question with expected evidence gets evidence.
+
 Each named test must exist. `go test -run <Name>` passes when no test matches, so every named test also has a `git grep --untracked` existence check. A missing test fails that check.
 
 ### Dependencies
