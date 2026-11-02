@@ -227,3 +227,49 @@ func TestBuildControllerFixture(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildSkipsRootArchive(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "archive/run-artifacts/x.md", "# Archived run\n")
+	write(t, root, "docs/archive/y.md", "# Docs archive\n")
+	write(t, root, "docs/guide.md", "# Guide\n")
+
+	idx := build(t, root)
+
+	for _, f := range idx.Files {
+		if strings.HasPrefix(f.Path, "archive/") {
+			t.Errorf("indexed file under the root archive/ folder: %s", f.Path)
+		}
+	}
+	for _, d := range idx.Documents {
+		if strings.HasPrefix(d.Path, "archive/") {
+			t.Errorf("indexed document under the root archive/ folder: %s", d.Path)
+		}
+	}
+	for _, want := range []string{"docs/archive/y.md", "docs/guide.md"} {
+		if docByPath(idx, want) == nil {
+			t.Errorf("missing document %s", want)
+		}
+	}
+}
+
+func TestBuildHistoryIsHistorical(t *testing.T) {
+	root := t.TempDir()
+	write(t, root, "docs/history/tasks/TASK-1.md", "# Task 1\n")
+	write(t, root, "docs/history/notes.md", "**Authority:** current\n\n# Notes\n")
+
+	idx := build(t, root)
+
+	d := docByPath(idx, "docs/history/tasks/TASK-1.md")
+	if d == nil {
+		t.Error("missing document docs/history/tasks/TASK-1.md")
+	} else if d.Authority != AuthorityHistorical || d.AuthoritySource != "path" {
+		t.Errorf("docs/history/tasks/TASK-1.md = %+v, want authority=%s source=path", *d, AuthorityHistorical)
+	}
+	d = docByPath(idx, "docs/history/notes.md")
+	if d == nil {
+		t.Error("missing document docs/history/notes.md")
+	} else if d.Authority != AuthorityCurrent || d.AuthoritySource != "header" {
+		t.Errorf("docs/history/notes.md = %+v, want authority=%s source=header", *d, AuthorityCurrent)
+	}
+}
