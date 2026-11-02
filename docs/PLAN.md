@@ -4,7 +4,7 @@
 > of which is done. It is kept at `docs/PLAN.md` because SOP discovers that path
 > (`internal/planflow`); active workstreams live under [`docs/plans/`](plans/), and
 > the canonical product requirements are [`docs/PRD.md`](PRD.md). Historical task
-> records live under [`docs/tasks/`](tasks/).
+> records live under [`docs/tasks/`](history/tasks/).
 
 ## Strategy
 
@@ -639,7 +639,7 @@ works with bounded human intervention.
 
 Adopt the forward roadmap in [`PRD-JEV.md`](requirements/PRD-JEV.md) and
 [`PLAN-JEV-Implementation.md`](history/plans/PLAN-JEV-Implementation.md) on top of the V1 core, one task at a time, each with
-a spec under [`docs/tasks/`](tasks/) and tests.
+a spec under [`docs/tasks/`](history/tasks/) and tests.
 
 ## Delivered
 
