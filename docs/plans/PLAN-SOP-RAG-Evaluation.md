@@ -192,7 +192,14 @@ Fix one function in one file: `writeProducer` in `internal/rageval/ragacceptance
 
 Its producer script's SQL currently filters with `to_tsvector('simple', text) @@ plainto_tsquery('simple', '$query')`. That requires every query word, so the seeded questions match nothing. Replace that condition with an any-word match: split the query on spaces, and keep a row when its lowercased text contains at least one query word. Change `ORDER BY source` to `ORDER BY embedding <-> '[1,0,0]', source`. Keep the corpus filter unchanged.
 
-The any-word SQL change is already in place. One bug remains in the same script: the loop line `printf '%%s' "$rows" | while IFS='|' read -r source section text; do` drops the last row, because `$(...)` strips the trailing newline and `read` returns false on a final line with no newline. With a single matching row, the producer returns nothing. Change that `printf '%%s'` to `printf '%%s\n'` (inside the Go format string, so the script runs `printf '%s\n'`). That is the only edit.
+The any-word SQL change is already in place. One bug remains in the same script: the loop line `printf '%%s' "$rows" | while IFS='|' read -r source section text; do` drops the last row, because `$(...)` strips the trailing newline and `read` returns false on a final line with no newline. With a single matching row, the producer returns nothing. Change that `printf '%%s'` to `printf '%%s\n'` (inside the Go format string, so the script runs `printf '%s\n'`). That fix is now in place too.
+
+One more edit, in the same file, function `assertAcceptanceRows`. Its injection block reads the `Q-ACC-INJECT/` row for `ArmRAG` (arm C) and requires `InjectionBelowTask` to be set. That contradicts RAG-EVAL-002: only arm B evaluates placement. Change the block to:
+
+- for the arm C row (`ArmRAG`): require `InjectionReached` to be non-nil and `InjectionBelowTask` to be nil;
+- for the arm B row (`ArmHybrid`): require `InjectionReached` and `InjectionBelowTask` to be non-nil, and `*InjectionBelowTask` to be true.
+
+Don't change the runner. These two edits in `ragacceptance_test.go` are the whole task.
 
 This is a harness integration test of the `ragclient` wiring against real PostgreSQL/pgvector, not a retrieval-quality test. It reads `RAGEVAL_PSQL_DSN` and fails, not skips, when it is unset. Run it with `RAGEVAL_PSQL_DSN=postgres://rag:rag@127.0.0.1:5434/rag?sslmode=disable` set.
 
