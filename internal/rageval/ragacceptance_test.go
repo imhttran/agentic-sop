@@ -212,7 +212,7 @@ func acceptanceArmAIndex(t *testing.T) *retrieval.Index {
 		t.Fatalf("ragacceptance: repoindex.Build: %v", err)
 	}
 	var cands []retrieval.Candidate
-	for _, c := range retrieval.CandidatesFromIndex(idx) {
+	for _, c := range retrieval.CandidatesFromIndex(idx, root) {
 		if c.Source == retrieval.SourceDocument {
 			cands = append(cands, c)
 		}

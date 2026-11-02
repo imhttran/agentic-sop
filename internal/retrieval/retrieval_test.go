@@ -1,6 +1,8 @@
 package retrieval
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 
@@ -107,7 +109,7 @@ func TestCandidatesFromIndex(t *testing.T) {
 		Files:     []repoindex.File{{Path: "config.go"}},
 		Documents: []repoindex.Document{{Path: "docs/README.md", Class: repoindex.ClassDocumentation}},
 	}
-	cs := CandidatesFromIndex(idx)
+	cs := CandidatesFromIndex(idx, t.TempDir())
 	if len(cs) != 3 {
 		t.Fatalf("candidates = %d, want 3", len(cs))
 	}
@@ -116,6 +118,40 @@ func TestCandidatesFromIndex(t *testing.T) {
 	}
 	if !contains(cs[2].Text, "struct") {
 		t.Errorf("symbol text = %q, want the kind", cs[2].Text)
+	}
+}
+
+// TestCandidatesFromIndexFullTextAndHistory proves a Markdown document is retrievable by
+// its body text, and a historical document ranks below a current one even when its body
+// matches more strongly (unweighted, the historical document would rank first).
+func TestCandidatesFromIndexFullTextAndHistory(t *testing.T) {
+	root := t.TempDir()
+	bodies := map[string]string{
+		"docs/GUIDE.md":       "the loader verifies manifest hashes",
+		"docs/history/OLD.md": "the loader verifies manifest hashes, manifest hashes",
+	}
+	for rel, body := range bodies {
+		full := filepath.Join(root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(full, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	idx := repoindex.Index{Documents: []repoindex.Document{
+		{Path: "docs/GUIDE.md", Class: repoindex.ClassDocumentation, Authority: repoindex.AuthorityUnknown},
+		{Path: "docs/history/OLD.md", Class: repoindex.ClassHistory, Authority: repoindex.AuthorityHistorical},
+	}}
+	got := New(CandidatesFromIndex(idx, root)).Search(Query{Terms: []string{"manifest", "hashes"}}, 0)
+	if len(got) != 2 {
+		t.Fatalf("results = %+v, want both documents matched by body text", got)
+	}
+	if got[0].ID != "doc:docs/GUIDE.md" || got[1].ID != "doc:docs/history/OLD.md" {
+		t.Errorf("order = %s, %s; want the current document first", got[0].ID, got[1].ID)
+	}
+	if got[1].Score >= got[0].Score || !contains(got[1].Reason, "weight 0.50") {
+		t.Errorf("historical result = %+v, want a down-weighted score and reason", got[1])
 	}
 }
 
