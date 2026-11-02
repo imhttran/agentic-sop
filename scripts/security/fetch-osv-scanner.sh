@@ -79,7 +79,7 @@ actual="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],
 [ "$actual" = "$expected" ] || die "checksum mismatch for $asset: want $expected, got $actual"
 chmod 0755 "$binary"
 
-reported="$("$binary" --version 2>/dev/null | head -n 1 | tr -d '\r' | awk '{print $NF}')"
+reported="$("$binary" --version 2>/dev/null | sed -n '1p' | tr -d '\r' | awk '{print $NF}')"
 reported="${reported#v}"
 [ "$reported" = "$version" ] || die "provisioned osv-scanner reports version '$reported', want $version"
 
