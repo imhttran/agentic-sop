@@ -123,7 +123,7 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `internal/rageval/runner.go` and `internal/rageval/metrics.go`.
 - `cmd/rag-eval run` subcommand.
 - Unit tests for metric math on hand-computed fixtures.
-- An integration test (`-tags ragacceptance`) running all four arms on a small seeded corpus against real PostgreSQL/pgvector.
+- A harness integration test (`-tags ragacceptance`) that runs all four arms through `ragclient` against a scripted producer backed by real PostgreSQL/pgvector. It reads `RAGEVAL_PSQL_DSN` and fails, not skips, when it is unset. The producer returns rows of the requested corpus that share at least one word with the query (case-insensitive, any word, not all words), ranked by pgvector distance `embedding <-> '[1,0,0]'` and then by source. It tests the harness wiring, not retrieval quality; RAG-EVAL-004 uses the real producer.
 - The dataset loader fills `InjectedText` for each `injection` question with the `evidence` phrase of its expected entry whose source is under `evals/rag/injection/`. It is that phrase, not the whole planted file. `evals/rag/questions.json` stays unchanged.
 - Named tests in `internal/rageval`: `TestArmAMatchesSOPRetrieval`, `TestNoLocalBM25`, `TestArmDUsesFullTextRanker`, `TestCommittedInjectionQuestionsHaveInjectedText`, and `TestArmBUsesSOPContextBuild`.
 
@@ -134,7 +134,7 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - A cross-corpus item in any arm is flagged in its row and marks the run as a hard-blocker failure.
 - `no_answer` questions record what each arm returned instead of scoring them as recall.
 - `injection` questions record whether injected text reached the assembled context, and confirm it was never placed above task or policy content.
-- The integration test passes against real PostgreSQL/pgvector.
+- The harness integration test passes against real PostgreSQL/pgvector, and every seeded question that has expected evidence gets at least one evidence item from the producer.
 - Arm A returns the same ranked identities as `retrieval.CandidatesFromIndex` plus `retrieval.Index.Search` on the same corpus and query. The test writes a fixture corpus to a temp directory, builds the expected results by calling `repoindex.Build`, `retrieval.CandidatesFromIndex`, `retrieval.New`, and `Search` directly, and compares them with the runner's arm A rows (`TestArmAMatchesSOPRetrieval`).
 - `internal/rageval` contains no BM25 implementation of its own (`TestNoLocalBM25`).
 - Arm D ranks with `internal/retrieval` over full document text, and no threshold reads its rows (`TestArmDUsesFullTextRanker`).
@@ -225,6 +225,8 @@ Run `rag-eval run` on the frozen dataset three times. Check the repeats agree, t
 
 Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, with the specific misses listed. That's the input for whether the graph plan comes back.
 
+Arms B and C use the real producer: `cmd/retrieval` from the rag-template-rust repository, configured through `SOP_RAG_EXECUTABLE`, over the frozen `evals/rag/corpus` ingested with the configured embedding model. No scripted or stub producer is used for any recorded run. Each run directory's header records the producer commit, the embedding model, and the ingest manifest hash.
+
 ### Dependencies
 
 - RAG-EVAL-002
@@ -241,6 +243,7 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 - The three runs give identical arm A results, and any arm B or C differences are listed and explained.
 - Each H-2 threshold and each §4 hard blocker is marked met or not met, with the supporting rows.
 - The report proposes an outcome but doesn't record an operator decision, and `SOP_RAG_ENABLED` defaults are unchanged.
+- Every recorded run used the real rag-template-rust `cmd/retrieval` producer, and each run header names its commit, embedding model, and ingest manifest hash.
 
 ### Acceptance Checks
 
@@ -256,6 +259,7 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 - criterion 2: manual: the three run directories show identical arm A rows
 - criterion 3: manual: each H-2 threshold and §4 hard blocker is marked met or not met with supporting rows
 - criterion 4: check 5
+- criterion 5: manual: each run directory header names the rag-template-rust cmd/retrieval commit, embedding model, and ingest manifest hash
 
 ## Out of scope
 
