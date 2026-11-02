@@ -86,7 +86,7 @@ tar -xzf "$archive" -C "$extracted" || die "tarball extraction failed"
 binary="$extracted/cargo-audit-${target}-v${version}/cargo-audit"
 [ -x "$binary" ] || die "unexpected tarball layout (missing cargo-audit binary)"
 
-reported="$("$binary" --version 2>/dev/null | head -n 1 | tr -d '\r' | awk '{print $NF}')"
+reported="$("$binary" --version 2>/dev/null | sed -n '1p' | tr -d '\r' | awk '{print $NF}')"
 reported="${reported#v}"
 [ "$reported" = "$version" ] || die "provisioned cargo-audit reports version '$reported', want $version"
 

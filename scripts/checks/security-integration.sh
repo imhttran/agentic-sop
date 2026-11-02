@@ -91,7 +91,7 @@ if [ -z "$gitleaks_bin" ]; then
   fi
 fi
 
-actual_semgrep="$("$semgrep_bin" --version 2>/dev/null | head -n 1 | tr -d '\r[:space:]')"
+actual_semgrep="$("$semgrep_bin" --version 2>/dev/null | sed -n '1p' | tr -d '\r[:space:]')"
 # A pip-installed Semgrep can report a newer available version from its update
 # check instead of the installed version in some environments. The package
 # metadata is authoritative for the hash-pinned venv this script provisions.
@@ -100,7 +100,7 @@ if [ -x "$semgrep_python" ]; then
   actual_semgrep="$("$semgrep_python" -c 'import importlib.metadata; print(importlib.metadata.version("semgrep"))')"
 fi
 [ "$actual_semgrep" = "$SEMGREP_VERSION" ] || die "Semgrep version is '$actual_semgrep', want $SEMGREP_VERSION"
-actual_gitleaks="$("$gitleaks_bin" version 2>/dev/null | head -n 1 | tr -d '\r[:space:]')"
+actual_gitleaks="$("$gitleaks_bin" version 2>/dev/null | sed -n '1p' | tr -d '\r[:space:]')"
 [ "$actual_gitleaks" = "$GITLEAKS_VERSION" ] || die "Gitleaks version is '$actual_gitleaks', want $GITLEAKS_VERSION"
 
 # Provision the pinned cargo-audit binary as an explicit, checksum-verified step.
@@ -111,7 +111,7 @@ cargo_audit_bin="$cargo_audit_dir/cargo-audit"
 if [ ! -x "$cargo_audit_bin" ]; then
   "$root/scripts/security/fetch-cargo-audit.sh" --dest "$cargo_audit_dir" >/dev/null || die "cargo-audit provisioning failed"
 fi
-actual_cargo_audit="$("$cargo_audit_bin" --version 2>/dev/null | head -n 1 | tr -d '\r' | awk '{print $NF}')"
+actual_cargo_audit="$("$cargo_audit_bin" --version 2>/dev/null | sed -n '1p' | tr -d '\r' | awk '{print $NF}')"
 actual_cargo_audit="${actual_cargo_audit#v}"
 [ "$actual_cargo_audit" = "$cargo_audit_version" ] || die "cargo-audit version is '$actual_cargo_audit', want $cargo_audit_version"
 
@@ -124,7 +124,7 @@ osv_bin="$osv_dir/osv-scanner"
 if [ ! -x "$osv_bin" ]; then
   "$root/scripts/security/fetch-osv-scanner.sh" --dest "$osv_dir" >/dev/null || die "OSV-Scanner provisioning failed"
 fi
-actual_osv="$("$osv_bin" --version 2>/dev/null | head -n 1 | tr -d '\r' | awk '{print $NF}')"
+actual_osv="$("$osv_bin" --version 2>/dev/null | sed -n '1p' | tr -d '\r' | awk '{print $NF}')"
 actual_osv="${actual_osv#v}"
 [ "$actual_osv" = "$osv_version" ] || die "OSV-Scanner version is '$actual_osv', want $osv_version"
 
