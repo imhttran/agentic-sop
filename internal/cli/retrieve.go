@@ -26,7 +26,7 @@ func runRetrieve(args []string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "retrieve: %v\n", err)
 		return exitError
 	}
-	results := retrieval.New(retrieval.CandidatesFromIndex(idx)).Search(retrieval.Query{Terms: args}, 0)
+	results := retrieval.New(retrieval.CandidatesFromIndex(idx, dir)).Search(retrieval.Query{Terms: args}, 0)
 	if len(results) == 0 {
 		fmt.Fprintln(stdout, "no lexical matches")
 		return exitOK

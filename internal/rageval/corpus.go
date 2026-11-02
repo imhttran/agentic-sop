@@ -53,19 +53,41 @@ func CorpusRoot(ds *Dataset) string {
 }
 
 // BuildArmAIndex builds the arm A index exactly as SOP does: repoindex.Build
-// over the corpus directory, its document candidates through
-// retrieval.CandidatesFromIndex, and retrieval.New over those candidates.
-// Non-document candidates are dropped so every arm identity is a corpus path.
+// over each corpus repository (<owner>/<repo> under the corpus directory), its
+// document candidates through retrieval.CandidatesFromIndex, and one
+// retrieval.New over all of them. Building per repository makes
+// repository-relative rules (docs/history/ authority) apply as they do when SOP
+// runs in that repository. Non-document candidates are dropped and every
+// identity is re-prefixed with its repository, so it is a corpus path.
 func BuildArmAIndex(ds *Dataset, stateDir string) (*retrieval.Index, error) {
-	idx, err := repoindex.Build(repoindex.Options{Root: CorpusRoot(ds), StateDir: stateDir})
+	root := CorpusRoot(ds)
+	repos, err := filepath.Glob(filepath.Join(root, "*", "*"))
 	if err != nil {
 		return nil, fmt.Errorf("rageval: build arm A index: %w", err)
 	}
 	var docs []retrieval.Candidate
-	for _, c := range retrieval.CandidatesFromIndex(idx) {
-		if c.Source == retrieval.SourceDocument {
-			docs = append(docs, c)
+	for _, repo := range repos {
+		if fi, err := os.Stat(repo); err != nil || !fi.IsDir() {
+			continue
 		}
+		idx, err := repoindex.Build(repoindex.Options{Root: repo, StateDir: stateDir})
+		if err != nil {
+			return nil, fmt.Errorf("rageval: build arm A index: %w", err)
+		}
+		rel, err := filepath.Rel(root, repo)
+		if err != nil {
+			return nil, fmt.Errorf("rageval: build arm A index: %w", err)
+		}
+		prefix := filepath.ToSlash(rel) + "/"
+		for _, c := range retrieval.CandidatesFromIndex(idx, repo) {
+			if c.Source == retrieval.SourceDocument {
+				c.ID, c.Path = "doc:"+prefix+c.Path, prefix+c.Path
+				docs = append(docs, c)
+			}
+		}
+	}
+	if len(docs) == 0 {
+		return nil, fmt.Errorf("rageval: build arm A index: no documents under %s/<owner>/<repo>", root)
 	}
 	return retrieval.New(docs), nil
 }

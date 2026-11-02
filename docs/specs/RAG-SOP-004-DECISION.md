@@ -234,6 +234,11 @@ C 0.2500 / D 0.2500. Multi-hop misses (recall@5 0.00 for arms A and B in
 **Next:** index document text in SOP's BM25 and down-rank historical documents. Then
 re-evaluate RAG on top of full-text BM25 with this same frozen dataset.
 
+**Follow-up (measured, 2026-11-02):** full-text BM25 with a historical down-weight raised arm A
+historical recall@5 from 0.3846 to 0.5865 (D 0.6346) and code from 0.0909 to 0.5000. Arm B was
+not re-measured because the original embedding database is gone. See
+[`../reports/rag-eval/bm25-full-text/README.md`](../reports/rag-eval/bm25-full-text/README.md).
+
 ## 7. Default enablement
 
 Default behavior is **unchanged**. The adapter stays **disabled by default**

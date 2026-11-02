@@ -121,7 +121,7 @@ func armAIndex(t *testing.T, docs []CorpusDoc) *retrieval.Index {
 		t.Fatalf("repoindex.Build: %v", err)
 	}
 	var cands []retrieval.Candidate
-	for _, c := range retrieval.CandidatesFromIndex(idx) {
+	for _, c := range retrieval.CandidatesFromIndex(idx, root) {
 		if c.Source == retrieval.SourceDocument {
 			cands = append(cands, c)
 		}
@@ -377,7 +377,7 @@ func TestArmAMatchesSOPRetrieval(t *testing.T) {
 		t.Fatalf("repoindex.Build: %v", err)
 	}
 	var cands []retrieval.Candidate
-	for _, c := range retrieval.CandidatesFromIndex(sopIdx) {
+	for _, c := range retrieval.CandidatesFromIndex(sopIdx, root) {
 		if c.Source == retrieval.SourceDocument {
 			cands = append(cands, c)
 		}

@@ -166,7 +166,7 @@ func TestEV003LiveEvaluation(t *testing.T) {
 	}
 	buildMs := time.Since(start).Milliseconds()
 
-	candidates := retrieval.CandidatesFromIndex(idx)
+	candidates := retrieval.CandidatesFromIndex(idx, root)
 	if len(candidates) == 0 {
 		t.Fatal("live candidate corpus is empty; cannot evaluate")
 	}

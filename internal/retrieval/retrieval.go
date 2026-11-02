@@ -10,7 +10,10 @@
 package retrieval
 
 import (
+	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 
@@ -23,6 +26,10 @@ const (
 	K1 = 1.2
 	// B is the BM25 length-normalization weight.
 	B = 0.75
+	// HistoricalWeight scales the score of a document whose repository authority is
+	// historical, so a record of completed work ranks below current evidence for the same
+	// terms without being dropped.
+	HistoricalWeight = 0.5
 )
 
 // Source is the corpus category a candidate comes from.
@@ -45,9 +52,11 @@ type Candidate struct {
 	Source Source
 	// Path is the repository-relative path.
 	Path string
-	// Text is the searchable text: a symbol's name/kind/package/receiver, or a file or
-	// document path and class. It is a compact descriptor, never a source body.
+	// Text is the searchable text: a symbol's name/kind/package/receiver, a file path, or
+	// a document's path, class, and (for Markdown) full text. It is never a Go source body.
 	Text string
+	// Weight scales the candidate's BM25 score. Zero means 1 (no scaling).
+	Weight float64
 }
 
 // Query is one retrieval request: the terms assembled from the execution's evidence
@@ -134,6 +143,9 @@ func (ix *Index) Search(q Query, limit int) []Result {
 			matched = append(matched, term)
 		}
 		if score > 0 {
+			if d.cand.Weight > 0 {
+				score *= d.cand.Weight
+			}
 			sort.Strings(matched)
 			hits = append(hits, scored{cand: d.cand, score: score, matched: matched})
 		}
@@ -151,12 +163,16 @@ func (ix *Index) Search(q Query, limit int) []Result {
 
 	out := make([]Result, 0, len(hits))
 	for i, h := range hits {
+		reason := "lexical match: " + strings.Join(h.matched, ", ")
+		if h.cand.Weight > 0 && h.cand.Weight != 1 {
+			reason += fmt.Sprintf(" (weight %.2f)", h.cand.Weight)
+		}
 		out = append(out, Result{
 			ID:     h.cand.ID,
 			Source: h.cand.Source,
 			Path:   h.cand.Path,
 			Score:  h.score,
-			Reason: "lexical match: " + strings.Join(h.matched, ", "),
+			Reason: reason,
 			Rank:   i + 1,
 		})
 	}
@@ -201,10 +217,12 @@ func Tokenize(s string) []string {
 	return out
 }
 
-// CandidatesFromIndex builds the lexical corpus from a Structural Repository Index: Go
-// symbols, indexed files, and documents. It is deterministic and independent of the
-// index's slice order (the result is sorted by candidate ID).
-func CandidatesFromIndex(idx repoindex.Index) []Candidate {
+// CandidatesFromIndex builds the lexical corpus from a Structural Repository Index built
+// over root: Go symbols, indexed files, and documents. A Markdown document is indexed by
+// its full text read from root; a document with historical authority carries
+// HistoricalWeight. It is deterministic for a given repository state and independent of
+// the index's slice order (the result is sorted by candidate ID).
+func CandidatesFromIndex(idx repoindex.Index, root string) []Candidate {
 	var out []Candidate
 	for _, s := range idx.Symbols {
 		text := s.Name + " " + string(s.Kind) + " " + s.Package
@@ -217,7 +235,18 @@ func CandidatesFromIndex(idx repoindex.Index) []Candidate {
 		out = append(out, Candidate{ID: "file:" + f.Path, Source: SourceFile, Path: f.Path, Text: f.Path})
 	}
 	for _, d := range idx.Documents {
-		out = append(out, Candidate{ID: "doc:" + d.Path, Source: SourceDocument, Path: d.Path, Text: d.Path + " " + string(d.Class)})
+		c := Candidate{ID: "doc:" + d.Path, Source: SourceDocument, Path: d.Path, Text: d.Path + " " + string(d.Class)}
+		// Only Markdown bodies are indexed: config/data documents (go.sum, JSON reports)
+		// are token noise. An unreadable body keeps the path/class descriptor.
+		if strings.HasSuffix(d.Path, ".md") {
+			if body, err := os.ReadFile(filepath.Join(root, filepath.FromSlash(d.Path))); err == nil {
+				c.Text += " " + string(body)
+			}
+		}
+		if d.Authority == repoindex.AuthorityHistorical {
+			c.Weight = HistoricalWeight
+		}
+		out = append(out, c)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out

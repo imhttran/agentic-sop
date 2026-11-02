@@ -1,0 +1,136 @@
+{
+  "runs": [
+    {
+      "Dir": "docs/reports/rag-eval/bm25-full-text/20261102T204448Z",
+      "Status": "pass",
+      "MeanRecallAt5": {
+        "code": {
+          "A": 0.5,
+          "B": 0.5,
+          "C": 0,
+          "D": 0.5
+        },
+        "historical": {
+          "A": 0.5865384615384616,
+          "B": 0.5865384615384616,
+          "C": 0,
+          "D": 0.6346153846153846
+        },
+        "multi_hop": {
+          "A": 0.4642857142857143,
+          "B": 0.4642857142857143,
+          "C": 0,
+          "D": 0.5
+        },
+        "reworded": {
+          "A": 0.25,
+          "B": 0.25,
+          "C": 0,
+          "D": 0.25
+        }
+      }
+    },
+    {
+      "Dir": "docs/reports/rag-eval/bm25-full-text/20261102T204453Z",
+      "Status": "pass",
+      "MeanRecallAt5": {
+        "code": {
+          "A": 0.5,
+          "B": 0.5,
+          "C": 0,
+          "D": 0.5
+        },
+        "historical": {
+          "A": 0.5865384615384616,
+          "B": 0.5865384615384616,
+          "C": 0,
+          "D": 0.6346153846153846
+        },
+        "multi_hop": {
+          "A": 0.4642857142857143,
+          "B": 0.4642857142857143,
+          "C": 0,
+          "D": 0.5
+        },
+        "reworded": {
+          "A": 0.25,
+          "B": 0.25,
+          "C": 0,
+          "D": 0.25
+        }
+      }
+    },
+    {
+      "Dir": "docs/reports/rag-eval/bm25-full-text/20261102T204459Z",
+      "Status": "pass",
+      "MeanRecallAt5": {
+        "code": {
+          "A": 0.5,
+          "B": 0.5,
+          "C": 0,
+          "D": 0.5
+        },
+        "historical": {
+          "A": 0.5865384615384616,
+          "B": 0.5865384615384616,
+          "C": 0,
+          "D": 0.6346153846153846
+        },
+        "multi_hop": {
+          "A": 0.4642857142857143,
+          "B": 0.4642857142857143,
+          "C": 0,
+          "D": 0.5
+        },
+        "reworded": {
+          "A": 0.25,
+          "B": 0.25,
+          "C": 0,
+          "D": 0.25
+        }
+      }
+    }
+  ],
+  "section_4_1": {
+    "RunDir": "docs/reports/rag-eval/bm25-full-text/20261102T204448Z",
+    "Status": "pass",
+    "Value": 0,
+    "Breadth": 0,
+    "CodeRegressions": 0,
+    "LatencyP95MS": 32
+  },
+  "arm_a_identical": true,
+  "post_hoc": {
+    "RunDir": "docs/reports/rag-eval/bm25-full-text/20261102T204448Z",
+    "MeanFullContext": {
+      "code": 0.5,
+      "historical": 0.5865384615384616,
+      "multi_hop": 0.4642857142857143,
+      "reworded": 0.25
+    },
+    "MeanDistinctDocs": 5,
+    "HistoricalImproved": 0,
+    "HistoricalRegressed": 0
+  },
+  "control": {
+    "RunDir": "docs/reports/rag-eval/bm25-full-text/20261102T204504Z",
+    "MeanRecallAt10": {
+      "code": {
+        "A": 0.6818181818181818,
+        "D": 0.6818181818181818
+      },
+      "historical": {
+        "A": 0.6730769230769231,
+        "D": 0.7211538461538461
+      },
+      "multi_hop": {
+        "A": 0.5,
+        "D": 0.5357142857142857
+      },
+      "reworded": {
+        "A": 0.25,
+        "D": 0.25
+      }
+    }
+  }
+}
