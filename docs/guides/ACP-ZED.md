@@ -29,7 +29,7 @@ Zed custom external agents are configured under the `agent_servers` key in the Z
 }
 ```
 
-> **Verified against Zed 1.26.2.** The `agent_servers` schema above was accepted unchanged by Zed 1.26.2 on macOS 26.6.2, and SOP appears under **External Agents** in the agent picker (`docs/reports/evidence/ACP-007-ZED-darwin/01-agent-appears.md`). Treat this as verified for that release; re-check it when you change Zed versions.
+> **Verified against Zed 1.26.2.** The `agent_servers` schema above was accepted unchanged by Zed 1.26.2 on macOS 26.6.2, and SOP appears under **External Agents** in the agent picker. Treat this as verified for that release; re-check it when you change Zed versions.
 
 After configuration, SOP should appear in Zed's agent picker in the Agent Panel. Whether it appears there is part of the bounded acceptance in `docs/reports/ACP-007-acceptance.md`.
 
@@ -111,7 +111,7 @@ Cancel a session's foreground work with `session/cancel` (`internal/acp/cancel.g
 
 ## 9. Known limitations
 
-- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents (`docs/reports/evidence/ACP-007-ZED-darwin/01-agent-appears.md`). A Zed-driven bounded request has not yet been run, so Zed-side operational acceptance remains open.
+- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A Zed-driven bounded request has not yet been run, so Zed-side operational acceptance remains open.
 - **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2 (SOP in the agent picker) and scenarios 2–5 are recorded on macOS, with 2, 4 and 5 executed through an ACP v1 stdio client. A bounded request submitted from Zed itself is still outstanding; `docs/reports/ACP-007-acceptance.md` carries the status and evidence paths.
 - **Linux acceptance.** Status and evidence paths are recorded in `docs/reports/ACP-007-acceptance.md`; any scenario not yet executed is recorded there as outstanding, never claimed.
 - **No session resumption.** `session/load` is unsupported; conversation history is not restored after restart.
