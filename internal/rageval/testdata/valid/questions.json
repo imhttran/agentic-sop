@@ -1,0 +1,574 @@
+[
+  {
+    "id": "Q-CODE-01",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-02",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-03",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-04",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-05",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-06",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-07",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-08",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-09",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-CODE-10",
+    "category": "code",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-01",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-02",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-03",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-04",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-05",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-06",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-07",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-08",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-09",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-ARCH-10",
+    "category": "architecture_history",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-01",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-02",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-03",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-04",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-05",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-06",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-07",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-08",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-09",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-DESIGN-10",
+    "category": "design_decision",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-01",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-02",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-03",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-04",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-05",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-06",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-07",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-08",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-09",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-FAIL-10",
+    "category": "failure_investigation",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-01",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-02",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-03",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-04",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-05",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-06",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-07",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-08",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-09",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-MULTI-10",
+    "category": "multi_hop",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-NA-01",
+    "category": "no_answer",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [],
+    "expected": []
+  },
+  {
+    "id": "Q-NA-02",
+    "category": "no_answer",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [],
+    "expected": []
+  },
+  {
+    "id": "Q-NA-03",
+    "category": "no_answer",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [],
+    "expected": []
+  },
+  {
+    "id": "Q-INJ-01",
+    "category": "injection",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-INJ-02",
+    "category": "injection",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-INJ-03",
+    "category": "injection",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  },
+  {
+    "id": "Q-NA-04",
+    "category": "no_answer",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [],
+    "expected": []
+  },
+  {
+    "id": "Q-INJ-04",
+    "category": "injection",
+    "question": "q",
+    "permitted_corpus": "fixture",
+    "expected_facts": [
+      "f"
+    ],
+    "expected": []
+  }
+]

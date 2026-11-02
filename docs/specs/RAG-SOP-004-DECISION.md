@@ -44,25 +44,34 @@ The policy lives in configuration/files and never consults retrieval-quality out
 
 ## 2. Frozen labeled dataset
 
-**Predeclared only — not yet present.** The evaluation dataset is specified in
-[`RAG-EVALUATION.md`](RAG-EVALUATION.md) and is intended to cover:
+**Measured.** The frozen labeled dataset now exists and was used by the recorded
+`rag-eval` runs. Three primary runs at `TopK` 5 with producer commit
+`acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`
+(corpus `sop-engineering-kb`, all `status: pass`):
 
-1. repository code questions;
-2. architecture/history questions;
-3. design-decision questions;
-4. failure-investigation questions;
-5. **no-answer** cases (no relevant evidence exists);
-6. **injection** cases (retrieved text attempting to impersonate instructions).
+- [`docs/reports/rag-eval/20261102T021652Z`](../reports/rag-eval/20261102T021652Z)
+- [`docs/reports/rag-eval/20261102T021737Z`](../reports/rag-eval/20261102T021737Z)
+- [`docs/reports/rag-eval/20261102T021822Z`](../reports/rag-eval/20261102T021822Z)
 
-Each case is intended to carry **permitted corpus** and **relevant evidence identity**
-labels. At this revision the frozen fixture files (for example under `evals/rag/`) and
-their content hashes are **not present in the repository**, so the comparative
-relevance/recall tables that would depend on them are **Unavailable** — see §3.
+plus one `TopK` 10 control run with the same producer commit:
+
+- [`docs/reports/rag-eval/20261102T160658Z`](../reports/rag-eval/20261102T160658Z)
+
+All aggregate numbers below are transcribed from
+[`docs/reports/rag-eval/summary/summary.json`](../reports/rag-eval/summary/summary.json)
+and [`docs/reports/rag-eval/summary/summary.md`](../reports/rag-eval/summary/summary.md),
+written by `rag-eval summarize` from those runs.
+
+**Exclusions.** The producer could not ingest **37 excluded documents** (listed in the
+header of [`docs/reports/rag-eval/20261102T021652Z/results.md`](../reports/rag-eval/20261102T021652Z/results.md));
+none of them is expected evidence. Arms A (BM25-only) and D still index those documents.
 
 ## 3. Comparative evaluation
 
 Arms: **A — BM25-only** (baseline), **B — BM25 + optional RAG** (candidate),
-**C — RAG-only** (diagnostic only, never a rollout candidate).
+**C — RAG-only** (diagnostic only, never a rollout candidate), **D — SOP's BM25 over
+full document text** (diagnostic only; it uses SOP's own `internal/retrieval` ranker,
+not the producer, and is not a rollout candidate).
 
 ### 3.1 What was measured
 
@@ -85,91 +94,155 @@ Headline per-query results (10 frozen `topicNN` queries, 12-document controlled 
 > `ts_rank_cd`, explicitly **NOT BM25**, so this is *not* the predeclared BM25-vs-RAG
 > comparison. It is a controlled POC only.
 
-### 3.2 Producer verification
+### 3.2 rag-eval comparative runs (Measured)
+
+**Measured.** The predeclared four-arm comparison at `TopK` 5 was run three times
+([run directories in §2](../reports/rag-eval/summary/summary.md)); mean recall@5 per
+subset, identical across all three runs
+([summary](../reports/rag-eval/summary/summary.json)):
+
+| subset | A | B | C | D |
+| --- | --- | --- | --- | --- |
+| historical | 0.3846 | 0.3846 | 0.4679 | 0.6346 |
+| code | 0.0909 | 0.0909 | 0.5000 | 0.5000 |
+| multi_hop | 0.2143 | 0.2143 | 0.3810 | 0.5000 |
+| reworded | 0.2500 | 0.2500 | 0.2500 | 0.2500 |
+
+Arm B's top five equals arm A's because **SOP ranks repository items above RAG items**,
+so the RAG candidates never displace the repository items in arm B's top five.
+
+### 3.3 Producer verification
 
 A separate real-PostgreSQL/pgvector producer verification (authorized corpus, scope
 rejection, unsupported-schema rejection, provenance and isolation) is recorded in
 [`../reports/RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md`](../reports/RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md).
 
-### 3.3 What is not measured (Unavailable)
+### 3.4 What is not measured (Unavailable)
 
-The following predeclared metric areas have **no recorded per-case result in this
-repository** and are therefore **Unavailable**, with the reason:
+The following predeclared metric areas have **no recorded per-case result from the
+rag-eval runs** and are therefore **Unavailable**, with the reason:
 
 | Area | Status | Reason |
 | --- | --- | --- |
-| Grounded relevance/recall vs labelled evidence, per case | Unavailable | Requires the frozen labeled dataset of §2, which is not present. |
-| Citation/provenance correctness rate, per case | Unavailable | Same dataset dependency; only spot checks exist (§3.1, §3.2). |
-| Context budget / truncation events, per configuration | Unavailable | Not recorded per case for a full run. |
+| Citation/provenance correctness rate, per case | Unavailable | Not computed by `rag-eval summarize`; only spot checks exist (§3.1, §3.3). |
+| Context budget / truncation events, per configuration | Partially measured | `truncated` is `false` in every arm B row of the runs; no per-configuration sweep. |
 | Estimated model-token burden, per configuration | Unavailable | Not recorded. |
-| Failure/fallback rate across the full case set | Unavailable | Same dataset dependency. |
-| Isolation incl. NULL-corpus legacy rows at any `top_k` | Partially measured | Spot checks passed (§3.1, §3.2); not a full sweep. |
-| Determinism over frozen inputs+responses | Unavailable | Not recorded. |
+| Failure/fallback rate across the full case set | Unavailable | `fallback` is `unavailable` in every recorded row. |
+| Isolation incl. NULL-corpus legacy rows at any `top_k` | Partially measured | Spot checks passed (§3.1, §3.3); not a full sweep. |
+| Determinism over frozen inputs+responses | Partially measured | The three `TopK` 5 runs are identical per arm and subset (see §3.2); formal determinism is not separately certified. |
 
 No aggregate claim is made where the backing per-case records do not exist. Single
 positive examples are treated as anecdotes, not as success.
 
 ## 4. End-to-end operational fixtures
 
-**Predeclared only — not yet present.** The scenarios to be exercised repeatedly and
-recorded are: resumed runs; cold start; stale index; unavailable Ollama; unavailable
-PostgreSQL; malformed response; cross-repository scope; and permission boundaries
-(predeclared in [`RAG-EVALUATION.md`](RAG-EVALUATION.md)).
+**Measured.** The eight predeclared scenarios are recorded as tests in
+`internal/cli/rag_fixtures_test.go` (build tag `ragacceptance`), delivered and verified
+by RAG-EVAL-003. Each runs SOP's real `run` path in-process through the `internal/cli`
+test harness, with the real `ragclient` executing a producer script; only the agent is
+faked. [`docs/reports/rag-eval/fixtures.md`](../reports/rag-eval/fixtures.md) lists each
+case, how it is produced, and its asserted outcome.
 
-At this revision there are **no recorded end-to-end operational fixture runs** in the
-repository, so no pass/fail claim is made for them. Expected behavior — degrade to
-BM25-only, or fail closed for required evidence — is defined in the predeclared
-criteria but is **not yet demonstrated**. Unit/CLI coverage of runtime BLOCKED/fallback
-behavior exists, but that is not a substitute for the recorded end-to-end matrix.
+- Seven cases use a scripted producer failure (cold start, stale index, embedding
+  provider unavailable, malformed response, cross-repository scope, required evidence,
+  resumed run). "Embedding provider unavailable" stands in for Ollama being down.
+- One case is a real outage: `PostgresUnavailable` runs `psql` against an address with
+  nothing listening.
+- Asserted outcomes: an optional task falls back to BM25-only with telemetry
+  `reason_code` `OPTIONAL_FALLBACK` and `used_in_context` false; the required-evidence
+  task blocks with `REQUIRED_EVIDENCE_MISSING` and the agent is not invoked; no
+  out-of-corpus item reaches the agent's prompt; a resumed run records the same outcome.
 
-## 5. Decision
+Not covered: a real Ollama outage, and a stale index produced by a real re-ingest.
 
-**Decision: NO-GO (for expanding usage now) — insufficient evidence.**
+**§4 hard blockers (from [`RAG-EVALUATION.md`](RAG-EVALUATION.md) §4).** "Not triggered" means
+the blocker did not occur in the recorded evidence:
 
-Rationale, traceable to the evidence above:
+| Hard blocker | Triggered? | Evidence |
+| --- | --- | --- |
+| Governance regression | Not triggered | The full test suite passes on this branch. The fixtures (§4) show fallback and blocking driven by structured state. They don't separately assert approval records. |
+| Cross-scope leak | Not triggered | No row in the four runs has a cross-corpus item. `TestRAGFixtureCrossRepositoryScope` shows an out-of-corpus item is rejected and never reaches the prompt. |
+| RAG changes approval/completion state | Not triggered | The evaluation runs are retrieval-only. RAG items enter the context at the lowest priority, labeled untrusted. No fixture shows a RAG item changing approval or completion state. |
+| Required-evidence silent pass | Not triggered | `TestRAGFixtureRequiredEvidenceBlocks` shows the task blocks with `REQUIRED_EVIDENCE_MISSING` and the agent is not invoked. |
 
-- The only \(\text{measured}\) retrieval comparison (§3.1) showed **no measurable
-  improvement** over the keyword baseline, and the baseline was not even the
-  predeclared BM25 arm. The predeclared pilot value threshold was therefore not met.
-- The frozen labeled dataset (§2) and the recorded end-to-end operational fixture
-  matrix (§4) do **not** exist in the repository, so the per-case evidence the
-  predeclared criteria require to consider a pilot is **Unavailable**.
-- No fabrications are permitted in place of that evidence: absence of evidence is
-  recorded as NO-GO, not as a conditional or successful verdict.
+## 5. Draft §4.1 rule comparison (as computed in the summary)
 
-This decision **may be revisited to CONDITIONAL/GO** only after the missing evidence
-exists: the frozen dataset, the BM25-vs-RAG (and diagnostic RAG-only) per-case
-comparison, and the recorded operational fixture matrix.
+All numbers from [`summary.json`](../reports/rag-eval/summary/summary.json)
+(section_4_1 block, run
+[`docs/reports/rag-eval/20261102T021652Z`](../reports/rag-eval/20261102T021652Z),
+status pass):
 
-### Tradeoffs
+| §4.1 check | Threshold | Measured | Met? |
+| --- | --- | --- | --- |
+| Value (mean recall@5 B − A, historical) | >= 0.10 | 0 | **Not met** |
+| Breadth (historical questions where B > A) | >= 5 | 0 | **Not met** |
+| Code regressions (code questions where B < A) | <= 1 | 0 | **Met** |
+| Latency p95, arm B | <= 500 ms | 306 ms | **Met** |
+| arm_a_identical across runs | true | true | **Met** |
 
-- A possible recall gain on historical/architectural questions where lexical overlap is
-  weak remains **hypothetical** here; it has not been measured, so it is not counted.
-- BM25-only remains the safe, deterministic default; nothing in this report changes that.
+**Rule outcome:** the §4.1 rule requires the value and breadth checks; both are not
+met, so the rule does **not** give GO. This section states only what the predeclared
+rule gives; it makes no GO/NO-GO recommendation beyond that.
 
-### Next steps (to convert NO-GO into an evidence-backed decision)
+**Why arm B's top five equals arm A's:** SOP ranks repository items above RAG items,
+so arm B's top five is identical to arm A's top five (reflected in the identical A/B
+recall@5 columns in §3.2 and `arm_a_identical: true`).
 
-1. Land the frozen labeled dataset (§2) with content hashes and a loader integrity check.
-2. Run the predeclared BM25-only vs BM25+RAG (and diagnostic RAG-only) comparison with
-   per-case rows for relevance/recall, citation correctness, context budget, latency,
-   failure rate, and estimated model-token burden.
-3. Record the end-to-end operational fixture matrix (§4) with reproducible commands and
-   captured outputs.
-4. Re-issue this decision from those records.
+## POST-HOC: not part of the §4.1 decision rule
 
-## 6. Default enablement
+The following metric was **chosen after seeing results** and is not part of the
+predeclared §4.1 decision rule. Arm B uses **more context slots than arm A's top
+five** (mean distinct documents in arm B's context: **8.4627**), so its full-context
+score is reported **next to the depth-10 (`TopK` 10) controls for arms A and D** —
+the depth-10 controls exist to make the comparison fair.
 
-Default behavior is **unchanged**. The adapter stays **disabled by default**; no code
-path enables it automatically, and no change in this report flips a default. Expansion
-of usage requires an explicit operator decision recorded here, and this report records
-**NO-GO**, so no expansion is authorized.
+Arm B full-context mean recall (run
+[`docs/reports/rag-eval/20261102T021652Z`](../reports/rag-eval/20261102T021652Z)),
+with the depth-10 control mean RecallAt10 (run
+[`docs/reports/rag-eval/20261102T160658Z`](../reports/rag-eval/20261102T160658Z)) for
+arms A and D ([summary](../reports/rag-eval/summary/summary.json)):
 
-## 7. Reproducibility
+| subset | B full-context | A @10 (control) | D @10 (control) |
+| --- | --- | --- | --- |
+| historical | 0.6506 | 0.4327 | 0.7212 |
+| code | 0.5909 | 0.1818 | 0.6818 |
+| multi_hop | 0.4881 | 0.3214 | 0.5357 |
+| reworded | 0.4167 | 0.2500 | 0.2500 |
+
+- Mean distinct documents in arm B's context: **8.4627**.
+- Historical questions improved vs arm A recall@5: **17**; regressed: **0**.
+
+### Multi-hop and reworded results (from the summary)
+
+Mean recall@5 at `TopK` 5 (identical across the three primary runs): **multi_hop**
+A 0.2143 / B 0.2143 / C 0.3810 / D 0.5000; **reworded** A 0.2500 / B 0.2500 /
+C 0.2500 / D 0.2500. Multi-hop misses (recall@5 0.00 for arms A and B in
+[`docs/reports/rag-eval/20261102T021652Z/results.md`](../reports/rag-eval/20261102T021652Z/results.md)):
+**RQ-041, RQ-042, RQ-043, RQ-047, RQ-049, RQ-050, RQ-051, RW-010, RW-012**.
+
+## 6. Decision
+
+**Decision: PENDING OPERATOR.**
+
+No operator decision is recorded here. The §4.1 rule outcome is stated in §5; the
+operator decision on expanding usage remains **PENDING OPERATOR**.
+
+## 7. Default enablement
+
+Default behavior is **unchanged**. The adapter stays **disabled by default**
+(`SOP_RAG_ENABLED` defaults are unchanged); no code path enables it automatically, and
+no change in this report flips a default. Expansion of usage requires an explicit
+operator decision recorded here.
+
+## 8. Reproducibility
 
 Reproducible commands and outputs that **exist** are recorded in the linked reports:
 
 - [`../reports/RAG-SOP-004-POC-EVALUATION.md`](../reports/RAG-SOP-004-POC-EVALUATION.md)
 - [`../reports/RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md`](../reports/RAG-SOP-004-PHASE2-PRODUCER-VERIFICATION.md)
+- rag-eval runs and summary: [`../reports/rag-eval/`](../reports/rag-eval/)
+  (primary `TopK` 5 runs `20261102T021652Z`, `20261102T021737Z`, `20261102T021822Z`;
+  `TopK` 10 control `20261102T160658Z`; [`summary`](../reports/rag-eval/summary/))
 
 Any command whose output is not recorded in one of those reports is marked
 **Unavailable** above rather than presented as measured.
