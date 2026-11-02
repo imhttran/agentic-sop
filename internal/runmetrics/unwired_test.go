@@ -38,8 +38,16 @@ func TestNoProductionImportOfRunmetrics(t *testing.T) {
 		}
 		name := d.Name()
 		if d.IsDir() {
+			// Directories the go tool never builds (dot- and underscore-prefixed)
+			// hold tool or SOP state (.git, .agent-sdlc, .claude) and nested
+			// repository checkouts (.worktrees). Their files are not part of this
+			// module's production source, and scanning them would misattribute
+			// another checkout's imports to this module.
+			if strings.HasPrefix(name, ".") || strings.HasPrefix(name, "_") {
+				return filepath.SkipDir
+			}
 			switch name {
-			case ".git", ".agent-sdlc", ".claude", "testdata", "vendor":
+			case "testdata", "vendor":
 				return filepath.SkipDir
 			}
 			return nil

@@ -70,6 +70,10 @@ type deps struct {
 	snapshotRepository func(context.Context, string) (map[string]string, error)
 	commit             func(ctx context.Context, dir, message string) error
 	newGitHub          func(dir string) github.Client
+	// acpWorkEnv builds the start-work seams the ACP prompt-submission bridge
+	// uses. Nil selects the production environment; tests inject a deterministic
+	// launcher so the ACP CLI integration path runs without spawning a child.
+	acpWorkEnv func() workEnv
 	// newJEVAnalyzer builds the optional JEV analyzer from configuration. It is
 	// consulted only when JEV is enabled; a nil factory (or a nil analyzer, or
 	// an error) leaves JEV absent, which is never fatal to the lifecycle.
@@ -340,6 +344,8 @@ func run(args []string, stdout, stderr io.Writer, d deps) int {
 		return runPr(rest, stdout, stderr, d)
 	case "mcp":
 		return runMCP(rest, stdout, stderr, d)
+	case "acp":
+		return runACP(rest, stdout, stderr, d)
 	case "report":
 		return runReport(rest, stdout, stderr, d.getwd)
 	case "eval":
@@ -423,6 +429,7 @@ Commands:
   commit    commit the current changes (needs --yes when the human gate is on)
   pr        push a task branch and open a pull request (needs --yes)
   mcp       serve tools over the Model Context Protocol (stdio; --status-only)
+  acp       serve SOP over the Agent Client Protocol (stdio; initialize, session/new)
   report    print a concise summary of the latest run (--detailed for full evidence)
   retry     requeue a BLOCKED task so the next run retries it (--all for every task)
   approve   record an approval decision on a task's active human approval gate
