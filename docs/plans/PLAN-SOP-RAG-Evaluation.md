@@ -344,9 +344,53 @@ Add `cmd/rag-eval/main_test.go` with two tests. `TestRunRequiresProducer` sets `
 - criterion 3: check 3
 - criterion 4: check 8
 
+## RAG-EVAL-004A2 — Score retrieval at document level
+
+The first measurement runs scored every lexical arm at zero. `expectedIDs` in `internal/rageval/runner.go` builds expected identities as `source#section`. Arms A, B and D return file-level identities (`source` only), so they can never match. Arm C returns the producer's `source#section`, but the producer's section names are its own `##` chunks, not the labeled headings. Recall must compare like with like.
+
+Make recall, precision and citation correctness compare documents, not sections:
+
+- In `expectedIDs`, return each expected `Source` once, without `#section`. Keep the order stable and drop duplicates.
+- Add `func documentID(id string) string` in `internal/rageval/metrics.go` that returns the part before the first `#`, or the whole string when there is none.
+- In `RankedIDs`, map each item's `ID` through `documentID` and keep the first occurrence of each document, so the top five are five distinct documents.
+- Don't change `Retrieved.ID` values or the row's `retrieved` list. Rows still record what each arm returned, sections included.
+
+Add `TestRecallIsDocumentLevel` in `internal/rageval/metrics_test.go`. It must show that an arm returning `a.md` and another returning `a.md#Some Section` both get recall 1.0 against an expected entry with source `a.md` and any section, and that two sections of the same file count as one item in the top five.
+
+### Dependencies
+
+- RAG-EVAL-004A
+
+### Deliverables
+
+- `internal/rageval/metrics.go` with `documentID` and document-level `RankedIDs`.
+- `internal/rageval/runner.go` with document-level `expectedIDs`.
+- `TestRecallIsDocumentLevel` in `internal/rageval/metrics_test.go`.
+
+### Acceptance Criteria
+
+- Recall, precision and citation correctness compare documents, not sections (`TestRecallIsDocumentLevel`).
+- Existing `internal/rageval` and `cmd/rag-eval` tests still pass, updated only where they assumed section-level matching.
+- `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
+
+### Acceptance Checks
+
+- `go build ./...`
+- `go vet ./...`
+- `go test -count=1 ./internal/rageval/... ./cmd/rag-eval/...`
+- `go test -count=1 -run TestRecallIsDocumentLevel ./internal/rageval/`
+- `git grep -q --untracked "func TestRecallIsDocumentLevel" -- internal/rageval`
+- `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
+
+### Acceptance Mapping
+
+- criterion 1: check 4
+- criterion 2: check 3
+- criterion 3: check 6
+
 ## RAG-EVAL-004B — Decision evidence from the recorded runs
 
-The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004A, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
+The operator runs `rag-eval run` three times against the real producer after RAG-EVAL-004A2, outside SOP. Don't run `rag-eval run`, `go run`, or the producer yourself. Work only from the three run directories under `docs/reports/rag-eval/` whose header names producer commit `acd1fb911ac8bdd4f425b61df16a495f4a5047c9` and embedding model `nomic-embed-text`. If fewer than three such directories exist, stop and raise a question.
 
 Check the three runs agree, then write the evidence into the decision report. Update §2–§4 of `docs/specs/RAG-SOP-004-DECISION.md` from Unavailable to Measured where the records support it, with links to the run directories. Add a draft §5 that compares the results to the §4.1 thresholds line by line and states which outcome the evidence supports. Leave the operator decision marked `PENDING OPERATOR`.
 
@@ -354,7 +398,7 @@ Include a multi-hop section showing BM25+RAG recall on `multi_hop` questions, wi
 
 ### Dependencies
 
-- RAG-EVAL-004A
+- RAG-EVAL-004A2
 
 ### Deliverables
 
@@ -411,7 +455,8 @@ graph TD
     E2B --> E3
     E2B --> E4A
     E3 --> E4A
-    E4A --> R
+    E4A --> E4A2[RAG-EVAL-004A2 document-level scoring]
+    E4A2 --> R
     R --> E4B
     H2 --> E4B
 ```
