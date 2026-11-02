@@ -1,5 +1,7 @@
 package rageval
 
+import "strings"
+
 // Retrieval metrics for the three-arm Rag evaluation runner.
 //
 // Every function here is pure and deterministic: it reads its arguments and
@@ -20,8 +22,22 @@ type Retrieved struct {
 	Corpus string
 }
 
-// RankedIDs returns the identities of the first k items, ordered by rank
-// ascending. Ties keep their input order so the result is deterministic.
+// documentID returns the document part of an identity: the part before the
+// first '#', or the whole string when there is no '#'. Retrieval scoring
+// compares documents, not sections, so "a.md" and "a.md#Some Section" are
+// the same document.
+func documentID(id string) string {
+	if i := strings.Index(id, "#"); i >= 0 {
+		return id[:i]
+	}
+	return id
+}
+
+// RankedIDs returns the document identities of the first k items, ordered by
+// rank ascending. Each item's ID is mapped through documentID and only the
+// first occurrence of each document is kept, so the top five are five
+// distinct documents. Ties keep their input order so the result is
+// deterministic.
 func RankedIDs(items []Retrieved, k int) []string {
 	ordered := stableByRank(items)
 	if k > len(ordered) {
@@ -31,8 +47,14 @@ func RankedIDs(items []Retrieved, k int) []string {
 		k = 0
 	}
 	ids := make([]string, 0, k)
+	seen := make(map[string]bool, k)
 	for _, it := range ordered[:k] {
-		ids = append(ids, it.ID)
+		doc := documentID(it.ID)
+		if seen[doc] {
+			continue
+		}
+		seen[doc] = true
+		ids = append(ids, doc)
 	}
 	return ids
 }

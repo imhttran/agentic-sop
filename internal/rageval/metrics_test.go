@@ -104,6 +104,30 @@ func TestCrossCorpus(t *testing.T) {
 	}
 }
 
+func TestRecallIsDocumentLevel(t *testing.T) {
+	// Both a file-level arm and a section-level arm recall the same document.
+	expected := []string{"a.md"}
+	fileLevel := []Retrieved{{ID: "a.md", Rank: 1}}
+	sectionLevel := []Retrieved{{ID: "a.md#Some Section", Rank: 1}}
+	for name, items := range map[string][]Retrieved{"file": fileLevel, "section": sectionLevel} {
+		got, ok := RecallAt5(expected, items)
+		if !ok {
+			t.Fatalf("%s: ok = false, want true", name)
+		}
+		approx(t, got, 1.0)
+	}
+	// Two sections of the same file count as one item in the top five.
+	items := []Retrieved{
+		{ID: "a.md#One", Rank: 1},
+		{ID: "a.md#Two", Rank: 2},
+		{ID: "b.md", Rank: 3},
+	}
+	got := RankedIDs(items, 5)
+	if len(got) != 2 || got[0] != "a.md" || got[1] != "b.md" {
+		t.Fatalf("RankedIDs = %v, want [a.md b.md]: two sections of a.md count as one", got)
+	}
+}
+
 func TestRankedIDsStableOrder(t *testing.T) {
 	items := []Retrieved{
 		{ID: "second", Rank: 2},

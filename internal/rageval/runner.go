@@ -488,19 +488,20 @@ func ragOnly(evidence []Retrieved, k int) []Retrieved {
 	return out
 }
 
-// expectedIDs turns the labelled expected references into retrieval identities
-// of the form source or source#section. The evidence identity of a retrieval
-// result is its corpus-relative Path, which equals the question source, so a
-// lexical hit matches source and expectedIDs uses the same source form. A
-// section suffix is appended only when the expectation names one.
+// expectedIDs turns the labelled expected references into document-level
+// retrieval identities: each expected Source once, without any "#section"
+// suffix. Retrieval scoring compares documents, not sections, so the section
+// of an expectation never forms part of the expected identity. The order is
+// stable and duplicates are dropped.
 func expectedIDs(q Question) []string {
-	var ids []string
+	seen := map[string]bool{}
+	ids := make([]string, 0, len(q.Expected))
 	for _, e := range q.Expected {
-		if e.Section == "" {
-			ids = append(ids, e.Source)
+		if seen[e.Source] {
 			continue
 		}
-		ids = append(ids, e.Source+"#"+e.Section)
+		seen[e.Source] = true
+		ids = append(ids, e.Source)
 	}
 	return ids
 }
