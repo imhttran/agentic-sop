@@ -69,6 +69,7 @@ decision is recorded in [RAG-SOP-004-DECISION.md](specs/RAG-SOP-004-DECISION.md)
 - [architecture/orchestration.md](architecture/orchestration.md) — the **non-normative** Phase 9 orchestration domain model (ORCH-001): the single-lifecycle-authority invariant and the deterministic `SINGLE` / `SEQUENTIAL` / `PARALLEL` mode decision. The Phase 9 rules live in [history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md](history/plans/PHASE-9-MULTI-AGENT-ORCHESTRATION.md).
 - [architecture/JEV-DECISION-CONTRACT.md](architecture/JEV-DECISION-CONTRACT.md) — the ratified JEV decision-contract alignment (Gate 3, 2026-10-11): the accepted contract requirements (§13–§19) and the ratified decisions D1–D7 (§20).
 - [architecture/RAG-RETRIEVAL-INTEGRATION.md](architecture/RAG-RETRIEVAL-INTEGRATION.md) — **proposed** (unapproved) design for opt-in, read-only RAG knowledge retrieval: the adapter seam, ownership boundaries, and deterministic context-integration rules. It changes no runtime behaviour and awaits the RAG-SOP-001 architecture approval.
+- [architecture/RAG-STRATEGY.md](architecture/RAG-STRATEGY.md) — how SOP's RAG works as built (ingestion, hybrid retrieval, SOP context integration, failure behavior) and the first measured evaluation result.
 
 ## Specifications
 
