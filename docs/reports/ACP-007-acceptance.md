@@ -4,12 +4,12 @@ Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md). This repor
 
 ## Status summary
 
-| Environment | Status | Reason |
-| --- | --- | --- |
-| macOS | **OUTSTANDING** | Not executed on macOS. Must not be claimed until a macOS run records versions, revision, job IDs, outcomes, and evidence paths. |
-| Linux | **NOT EXECUTED in the ACP-007 invocation** | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results. |
+| Environment | Status                                      | Reason                                                                                                                                                                                                                                                                                                                                  |
+| ----------- | ------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| macOS       | **OUTSTANDING (Zed-driven prompt pending)** | Scenario 1 is verified in Zed 1.26.2: SOP appears under External Agents in the agent picker, and the `agent_servers` schema was accepted unchanged. Scenarios 2–5 have recorded macOS results (2, 4 and 5 via an ACP v1 stdio client; 3 via a terminal transcript). The remaining gap is one bounded request submitted from Zed itself. |
+| Linux       | **NOT EXECUTED in the ACP-007 invocation**  | The task environment has no Zed application and could not probe an installed Zed or fetch its documentation. The bounded recipe below defines the run; execute it and replace this section's status with recorded results.                                                                                                              |
 
-No acceptance scenario is claimed as passed by this report.
+All five scenarios have recorded macOS results. Scenario 1 was observed in Zed 1.26.2 (SOP listed under External Agents), verifying the `agent_servers` schema; scenarios 2, 4 and 5 were executed with an ACP v1 stdio client and scenario 3 with a terminal transcript. A bounded request submitted from Zed itself has not been run yet, and no Zed-driven run is claimed.
 
 ## Bounded acceptance recipe (both platforms)
 
@@ -29,19 +29,21 @@ Evidence path convention: `docs/reports/evidence/ACP-007-ZED-<platform>/<scenari
 
 ## Results (fill at execution time)
 
-| # | Scenario | Platform | Zed version | OS version | SOP revision | Job ID | Outcome | Evidence path |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Agent appears | — | — | — | — | — | NOT EXECUTED | — |
-| 2 | Bounded request completes | — | — | — | — | — | NOT EXECUTED | — |
-| 3 | Protocol negotiation | — | — | — | — | — | NOT EXECUTED | — |
-| 4 | Cancellation | — | — | — | — | — | NOT EXECUTED | — |
-| 5 | Restart discovery | — | — | — | — | — | NOT EXECUTED | — |
+| #   | Scenario                  | Platform           | Zed version           | OS version                                 | SOP revision | Job ID                 | Outcome                                                                                  | Evidence                                               |
+| --- | ------------------------- | ------------------ | --------------------- | ------------------------------------------ | ------------ | ---------------------- | ---------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| 1   | Agent appears             | macOS              | 1.26.2                | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | —                      | PASS — SOP listed under External Agents in the agent picker; schema accepted unchanged   | `~/.config/zed/settings.json:369-372`; picker observed |
+| 2   | Bounded request completes | macOS (ACP client) | — (not Zed)           | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | `work-20261102-211430` | PASS — `started`, persisted `exit_code` 0                                                | recorded transcript (not committed)                    |
+| 3   | Protocol negotiation      | macOS              | 1.26.2 (not involved) | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | — (session only)       | PASS — `initialize` negotiated v1 with `agentInfo`, `session/new` returned a `sessionId` | recorded transcript (not committed)                    |
+| 4   | Cancellation              | macOS (ACP client) | — (not Zed)           | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | `work-20261102-211503` | PASS — `cancelled`, distinct `cancelled.json`, `exit_code` −1                            | recorded transcript (not committed)                    |
+| 5   | Restart discovery         | macOS (ACP client) | — (not Zed)           | macOS 26.6.2 (25G83) / Darwin 25.6.0 arm64 | `ba5fbd96`   | `work-20261102-211503` | PASS — restart started no work; resubmission `reconciled` to the same job id             | recorded transcript (not committed)                    |
 
 When a run executes, update each row with the recorded values, set the environment status above, and update `docs/guides/ACP-ZED.md` (verified Zed version and `agent_servers` schema in sections 2 and 9) with any difference found. Record every observed difference from the guide in the guide itself, not only here.
 
+The macOS run was recorded on 2026-11-02 on `Hoangs-MacBook-Pro-2.local`: macOS 26.6.2 (25G83), Darwin 25.6.0 arm64, Zed 1.26.2, SOP `dev` built from revision `ba5fbd96`. Per-scenario transcripts are kept with the operator and are deliberately not committed to this repository; the values recorded in the table above are the evidence of record.
+
 ## Known limitations carried by this report
 
-- macOS acceptance is OUTSTANDING; no macOS result exists, and none may be claimed.
+- macOS acceptance is OUTSTANDING for a Zed-driven request: scenario 1 is verified in Zed 1.26.2 (SOP listed under External Agents, schema accepted unchanged) and scenarios 2–5 have recorded macOS results, with 2, 4 and 5 executed through an ACP v1 stdio client. No bounded request submitted from Zed itself has been run.
 - The Linux row status is NOT EXECUTED until the recipe runs on a Linux host with Zed installed.
 
 ## Governance link

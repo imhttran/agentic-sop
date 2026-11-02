@@ -29,7 +29,7 @@ Zed custom external agents are configured under the `agent_servers` key in the Z
 }
 ```
 
-> **UNVERIFIED — read before publishing this example anywhere.** The supported Zed version for this guide is UNKNOWN, and the exact `agent_servers` schema above has not been verified against an installed Zed release. The example follows the shape planned in `docs/plans/PLAN-SOP-ACP-ZED.md` and the Zed external-agents documentation, not a verified release. Verify the schema against the Zed version you run, follow [docs/reports/ACP-007-acceptance.md](../reports/ACP-007-acceptance.md), and update this guide with the verified version before un-labelling the example.
+> **Verified against Zed 1.26.2.** The `agent_servers` schema above was accepted unchanged by Zed 1.26.2 on macOS 26.6.2, and SOP appears under **External Agents** in the agent picker. Treat this as verified for that release; re-check it when you change Zed versions.
 
 After configuration, SOP should appear in Zed's agent picker in the Agent Panel. Whether it appears there is part of the bounded acceptance in `docs/reports/ACP-007-acceptance.md`.
 
@@ -39,11 +39,11 @@ A Zed-launched `sop acp` process runs the governed work as a detached child of t
 
 Provider endpoints are then resolved per call with the documented precedence: environment over configuration over built-in default (`internal/cli/providers.go`, `endpointOr`). The provider environment variables SOP reads are:
 
-| Variable | Provider | Configuration fallback |
-| --- | --- | --- |
-| `SOP_OLLAMA_BASE_URL` | Ollama | `providers.ollama.endpoint` |
+| Variable                | Provider  | Configuration fallback        |
+| ----------------------- | --------- | ----------------------------- |
+| `SOP_OLLAMA_BASE_URL`   | Ollama    | `providers.ollama.endpoint`   |
 | `SOP_LLAMACPP_BASE_URL` | llama.cpp | `providers.llamacpp.endpoint` |
-| `SOP_MLX_BASE_URL` | MLX | `providers.mlx.endpoint` |
+| `SOP_MLX_BASE_URL`      | MLX       | `providers.mlx.endpoint`      |
 
 The llama.cpp model override is read from the agent layer's llama.cpp model environment variable first, then from `agent.model` when llama.cpp is the configured provider (`llamacppConfiguredModel` in `internal/cli/providers.go`).
 
@@ -61,14 +61,14 @@ Zed creates an ACP session with `session/new`, passing the workspace `cwd`. SOP 
 
 Outcome meanings:
 
-| Outcome | Meaning |
-| --- | --- |
-| `started` | One work item started; the job identity is returned |
-| `already_running` | The same work is already running |
-| `busy` | Another job runs, or a plan reconciliation gate applies; nothing started, nothing queued |
+| Outcome            | Meaning                                                                                                                                                         |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `started`          | One work item started; the job identity is returned                                                                                                             |
+| `already_running`  | The same work is already running                                                                                                                                |
+| `busy`             | Another job runs, or a plan reconciliation gate applies; nothing started, nothing queued                                                                        |
 | `task_in_progress` | A task is mid-run, probably driven by a `sop run` outside the editor; recover it from a terminal with `sop resume` and `sop run` if nothing is actually running |
-| `reconciled` | This work already ran or is the active plan; pass the rerun control to start it again |
-| `not_initialized` | The project has no SOP state yet; nothing started. Initialize the project's SOP state first (see `PROJECT-SETUP.md`), then submit again |
+| `reconciled`       | This work already ran or is the active plan; pass the rerun control to start it again                                                                           |
+| `not_initialized`  | The project has no SOP state yet; nothing started. Initialize the project's SOP state first (see `PROJECT-SETUP.md`), then submit again                         |
 
 ## 5. Logs and diagnostics
 
@@ -111,8 +111,8 @@ Cancel a session's foreground work with `session/cancel` (`internal/acp/cancel.g
 
 ## 9. Known limitations
 
-- **Zed version and `agent_servers` schema.** The supported Zed version is UNKNOWN. No configuration example in this guide is verified against an installed Zed release; the example in section 2 is unverified (see section 2 and `docs/reports/ACP-007-discovery.md` section 4). Real-Zed acceptance must verify the schema before the example is un-labelled.
-- **macOS acceptance.** Outstanding. It must be executed on macOS and recorded before any macOS result is claimed. `docs/reports/ACP-007-acceptance.md` records the status; no macOS acceptance run has happened.
+- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A Zed-driven bounded request has not yet been run, so Zed-side operational acceptance remains open.
+- **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2 (SOP in the agent picker) and scenarios 2–5 are recorded on macOS, with 2, 4 and 5 executed through an ACP v1 stdio client. A bounded request submitted from Zed itself is still outstanding; `docs/reports/ACP-007-acceptance.md` carries the status and evidence paths.
 - **Linux acceptance.** Status and evidence paths are recorded in `docs/reports/ACP-007-acceptance.md`; any scenario not yet executed is recorded there as outstanding, never claimed.
 - **No session resumption.** `session/load` is unsupported; conversation history is not restored after restart.
 - **Text prompts only.** Prompt content is bounded text; attachments, model selection UI, and editor-mediated file writes or terminal execution are deferred per the plan.
