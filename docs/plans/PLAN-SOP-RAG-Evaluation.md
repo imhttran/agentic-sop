@@ -234,14 +234,27 @@ This is a harness integration test of the `ragclient` wiring against real Postgr
 
 ## RAG-EVAL-003 — End-to-end failure fixtures
 
-Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision report §4. The cases are cold start, stale index, Ollama unavailable, PostgreSQL unavailable, malformed producer response, cross-repository scope request, permission boundary, and a resumed run. Each fixture runs a real `sop` task path with `SOP_RAG_ENABLED=true`. It records whether SOP fell back to BM25-only with a reason, or failed closed when the task declared required evidence. It also confirms approval and completion state didn't change because of RAG.
+Record the operational matrix from `RAG-EVALUATION.md` §5 and the decision report §4 at the RAG layer of SOP's real run path. Each fixture runs SOP's `run` command in-process through the existing `internal/cli` test harness, with the real `ragclient` executing a producer. Only the agent is faked. The tests prove what SOP does when the producer fails: an optional task falls back to BM25-only and records why, and a task with required evidence blocks.
 
-`internal/rageval/fixtures_test.go` exists. Fix two bugs in it and change nothing else:
+Write the tests in a new file, `internal/cli/rag_fixtures_test.go`, with the build tag `ragacceptance` and `package cli`. Delete `internal/rageval/fixtures_test.go`; it drove the `sop` binary with guessed configuration and is replaced by this file. Use these existing helpers from `internal/cli` as written. Don't reimplement them:
 
-- In `buildSop`, the `go build -o <bin> ./cmd/sop` command runs from the package directory, so `./cmd/sop` is not found. Set that command's `Dir` to `repoRoot(t)`, the helper in `dataset_test.go`.
-- In `operationalCases`, the `unreachable` script contains `printf '%%s' "$req"`. After formatting it reads `printf '%s'`, which trips the "producer script has verbs but no DSN" guard in `runFixtureCase`. Change that line to `echo "$req" | grep -q '"corpus"' || exit 1`.
+- `ragReqEnv(t)` sets `SOP_RAG_ENABLED`, `SOP_RAG_EXECUTABLE`, `SOP_RAG_CORPUS` and `SOP_RAG_ALLOWED_CORPORA` (corpus `kb`). After calling it, point the producer at your script with `t.Setenv(config.EnvRAGExecutable, path)`.
+- Optional-RAG task: `dir := threeStageGraph(t)`, then an agent built exactly as in `TestRAGTelemetryOptionalFallback` in `rag_required_evidence_test.go` (a `ragCapturingAgent` wrapping `fakeCapabilityAgent` with `maxTasksPlanJSON`), then `runInjectedCLI(t, dir, "diff --git a/x b/x\n", a, "run", "--max-tasks", "1")`. Read the outcome with `readRAGTelemetry(t, dir, "S001")`.
+- Required-evidence task: `dir := requiredEvidenceGraph(t)`, `a := newReqAgent()`, then the same `runInjectedCLI` call. A block means `len(a.inputs) == 0` and the output names `REQUIRED_EVIDENCE_MISSING`.
+- Write each producer as a `#!/bin/sh` script in `t.TempDir()` with mode 0755. It reads one request line with `read -r req || true`, then prints one `rag-retrieval/v1` JSON response or exits non-zero.
 
-Then run `go test -count=1 -tags ragacceptance -run Fixture ./internal/rageval/...` with `RAGEVAL_PSQL_DSN` set.
+The eight cases, each its own test named `TestRAGFixture<Case>`:
+
+- `ColdStart`: producer returns status OK with no evidence. Optional task: exit OK, `used_in_context` false.
+- `StaleIndex`: producer returns status ERROR with error_code STALE_INDEX. Optional task: exit OK, telemetry status failed, reason_code OPTIONAL_FALLBACK, `used_in_context` false.
+- `EmbeddingProviderUnavailable`: producer returns status ERROR with error_code UNAVAILABLE, standing in for Ollama being down. Optional task: as `StaleIndex`.
+- `PostgresUnavailable`: the producer really runs `psql` against `postgres://rag:rag@127.0.0.1:1/rag?sslmode=disable`, a port with nothing listening, and exits with psql's status. Optional task: as `StaleIndex`.
+- `MalformedProducerResponse`: producer prints `not json`. Optional task: as `StaleIndex`.
+- `CrossRepositoryScope`: producer returns one evidence item whose corpus is `other`. Optional task: as `StaleIndex`, and no `other` item reaches the agent's prompt.
+- `RequiredEvidenceBlocks`: producer returns status ERROR with error_code UNAVAILABLE. Required-evidence task: blocked, agent not invoked.
+- `ResumedRun`: the `StaleIndex` setup run twice in the same `dir`. Both runs record the same telemetry status and reason_code.
+
+Update `docs/reports/rag-eval/fixtures.md`: for each case, say whether the failure is scripted or real, and give the asserted outcome.
 
 ### Dependencies
 
@@ -250,21 +263,28 @@ Then run `go test -count=1 -tags ragacceptance -run Fixture ./internal/rageval/.
 
 ### Deliverables
 
-- `internal/rageval/fixtures_test.go` (tag `ragacceptance`) with one test per case.
-- `docs/reports/rag-eval/fixtures.md` listing each case, the command, and the captured outcome.
+- `internal/cli/rag_fixtures_test.go` (tag `ragacceptance`) with the eight `TestRAGFixture<Case>` tests.
+- `docs/reports/rag-eval/fixtures.md` listing each case, how it was produced, and its asserted outcome.
 
 ### Acceptance Criteria
 
-- All eight cases are present and each has a captured outcome.
-- Optional-mode failures show BM25-only fallback with a reason, and required-evidence failures show a blocked state. A silent pass is a test failure.
-- No case changes approval or completion state.
-- Tests run against real services, with the unavailable cases produced by stopping or misconfiguring them, not by mocking the client.
+- All eight `TestRAGFixture` tests exist and pass.
+- Optional-task failure cases exit OK with telemetry reason_code OPTIONAL_FALLBACK and `used_in_context` false. A silent pass with retrieved evidence in context fails the test.
+- The required-evidence case blocks with `REQUIRED_EVIDENCE_MISSING`, and the agent is not invoked.
+- `PostgresUnavailable` runs a real `psql` against an unreachable address, not a canned exit code.
+- `docs/reports/rag-eval/fixtures.md` states for each case whether the failure is scripted or real.
+- `evals/rag/` and `docs/specs/RAG-EVALUATION.md` are unchanged.
 
 ### Acceptance Checks
 
 - `go build ./...`
-- `go vet ./...`
-- `go test -count=1 -tags ragacceptance -run Fixture ./internal/rageval/...`
+- `go vet -tags ragacceptance ./internal/cli/... ./internal/rageval/...`
+- `go test -count=1 -tags ragacceptance -run TestRAGFixture ./internal/cli/`
+- `git grep -q --untracked "func TestRAGFixtureColdStart" -- internal/cli`
+- `git grep -q --untracked "func TestRAGFixturePostgresUnavailable" -- internal/cli`
+- `git grep -q --untracked "func TestRAGFixtureRequiredEvidenceBlocks" -- internal/cli`
+- `git grep -q --untracked "func TestRAGFixtureResumedRun" -- internal/cli`
+- `git grep -q --untracked "127.0.0.1:1/rag" -- internal/cli/rag_fixtures_test.go`
 - `git diff --quiet main -- evals/rag docs/specs/RAG-EVALUATION.md`
 
 ### Acceptance Mapping
@@ -272,7 +292,9 @@ Then run `go test -count=1 -tags ragacceptance -run Fixture ./internal/rageval/.
 - criterion 1: check 3
 - criterion 2: check 3
 - criterion 3: check 3
-- criterion 4: manual: docs/reports/rag-eval/fixtures.md records how each unavailable case was produced against real services
+- criterion 4: check 8
+- criterion 5: manual: docs/reports/rag-eval/fixtures.md marks each case scripted or real
+- criterion 6: check 9
 
 ## RAG-EVAL-004 — Full run and decision evidence
 
