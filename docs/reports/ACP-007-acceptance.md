@@ -1,6 +1,6 @@
 # ACP-007 — Real-Zed acceptance record
 
-Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../../plans/PLAN-SOP-ACP-ZED.md). This report records the bounded real-Zed acceptance status. It claims only what was executed. A scenario never claims a result that was not run.
+Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md). This report records the bounded real-Zed acceptance status. It claims only what was executed. A scenario never claims a result that was not run.
 
 ## Status summary
 

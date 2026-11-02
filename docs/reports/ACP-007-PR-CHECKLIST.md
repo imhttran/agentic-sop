@@ -1,6 +1,6 @@
 # ACP-007 — Release PR description and governance checklist
 
-Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../../plans/PLAN-SOP-ACP-ZED.md). This file holds the description for the release PR described in [ACP-007-discovery.md](ACP-007-discovery.md) section 5. The PR is opened through the established PR workflow; this stage does not commit, push, or merge.
+Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md). This file holds the description for the release PR described in [ACP-007-discovery.md](ACP-007-discovery.md) section 5. The PR is opened through the established PR workflow; this stage does not commit, push, or merge.
 
 ## Governance steps
 

@@ -1,6 +1,6 @@
 # ACP-007 — Discovery: ACP boundaries, Zed contract and governance
 
-Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../../plans/PLAN-SOP-ACP-ZED.md).
+Task: ACP-007 of [PLAN-SOP-ACP-ZED.md](../plans/PLAN-SOP-ACP-ZED.md).
 
 This note records what ACP-007 inspected before writing the guide. Facts are labeled: OBSERVED (read from repository files in this invocation), UNVERIFIED (file present, contract not re-read in this invocation), or UNKNOWN with a reason.
 
