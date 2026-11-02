@@ -112,6 +112,8 @@ Arm B assembles context through SOP's context package (imported as `sopctx "gith
 - Placement applies only to arm B, the only arm that assembles a SOP context. Arms A, C and D record whether injected text was retrieved, set placement to not applicable, and never raise the placement hard-blocker.
 - If a knowledge-rag citation doesn't split back into the evidence's own `Corpus` and `Source`, the run fails with an error naming the citation.
 
+The rest of this task is already implemented and passes. The one change left is in `internal/rageval/runner.go`: `Runner.Run` must return an error, not panic or return rows, when `Dataset` is nil or `Provider` is nil. Add `TestRunnerRejectsNilInputs` in `internal/rageval/runner_test.go`. Make that change first; don't re-verify the rest by hand, since validation checks it.
+
 Each named test must exist. `go test -run <Name>` passes when no test matches, so every named test also has a `git grep --untracked` existence check. A missing test fails that check.
 
 ### Dependencies
@@ -141,6 +143,7 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - Arm B's ranked identities, assembled context, bytes, and truncation equal what `sopctx.KnowledgeItems` plus `sopctx.Build` produce for the same arm A hits and frozen evidence, built directly in the test. The test computes the expected identities and corpora from the frozen evidence's `Corpus` and `Source` fields, not with the runner's own helpers, and includes evidence with a section and a page. `internal/rageval` holds no `mergeRanks` (`TestArmBUsesSOPContextBuild`).
 - Only arm B evaluates injection placement. An injection question whose planted phrase arm C retrieves records the phrase as retrieved, with placement not applicable, and doesn't make the run a hard-blocker (`TestInjectionPlacementOnlyArmB`).
 - A knowledge-rag citation that doesn't split back into its evidence's own `Corpus` and `Source` makes `Runner.Run` return an error that names the citation. `splitCitation` or its caller returns that error; it is never silently ignored (`TestInvalidCitationFailsRun`).
+- `Runner.Run` returns an error naming the missing input when `Dataset` or `Provider` is nil (`TestRunnerRejectsNilInputs`).
 
 ### Acceptance Checks
 
@@ -163,6 +166,8 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - `git grep -q --untracked "func TestArmBUsesSOPContextBuild" -- internal/rageval`
 - `git grep -q --untracked "func TestInjectionPlacementOnlyArmB" -- internal/rageval`
 - `git grep -q --untracked "func TestInvalidCitationFailsRun" -- internal/rageval`
+- `go test -count=1 -run TestRunnerRejectsNilInputs ./internal/rageval/`
+- `git grep -q --untracked "func TestRunnerRejectsNilInputs" -- internal/rageval`
 
 ### Acceptance Mapping
 
@@ -179,6 +184,7 @@ Each named test must exist. `go test -run <Name>` passes when no test matches, s
 - criterion 11: check 10
 - criterion 12: check 11
 - criterion 13: check 12
+- criterion 14: check 20
 
 ## RAG-EVAL-002B — Fix the harness producer query
 
