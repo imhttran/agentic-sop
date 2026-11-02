@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -106,16 +107,21 @@ func TestInitializeNegotiatesPinnedVersion(t *testing.T) {
 			if got.Error != nil {
 				t.Fatalf("unexpected error: %+v", got.Error)
 			}
+			// protocolVersion decodes as a number: a string here is a response
+			// the client rejects, so decoding into json.Number fails the test.
 			var result struct {
-				ProtocolVersion   string         `json:"protocolVersion"`
+				ProtocolVersion   json.Number    `json:"protocolVersion"`
 				AgentCapabilities map[string]any `json:"agentCapabilities"`
 				AgentInfo         map[string]any `json:"agentInfo"`
 			}
 			if err := json.Unmarshal(got.Result, &result); err != nil {
 				t.Fatalf("decode result: %v", err)
 			}
-			if result.ProtocolVersion != ProtocolVersion {
-				t.Errorf("protocolVersion = %q, want %q", result.ProtocolVersion, ProtocolVersion)
+			if got := result.ProtocolVersion.String(); got != "1" {
+				t.Errorf("protocolVersion = %q, want numeric %d", got, ProtocolVersionNumber)
+			}
+			if result.ProtocolVersion != json.Number(fmt.Sprint(ProtocolVersionNumber)) {
+				t.Errorf("protocolVersion = %s, want %d", result.ProtocolVersion, ProtocolVersionNumber)
 			}
 			if v, ok := result.AgentCapabilities[CapabilityLoadSession]; !ok || v != false {
 				t.Errorf("agentCapabilities[%s] = %v, want advertised false", CapabilityLoadSession, v)

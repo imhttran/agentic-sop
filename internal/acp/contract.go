@@ -27,7 +27,9 @@
 //	              naming the supported version. On success the server replies
 //	              with {protocolVersion, agentCapabilities, agentInfo{name,
 //	              version}} and marks the session initialized; agentCapabilities
-//	              is derived solely from the contract constants below.
+//	              is derived solely from the contract constants below. The
+//	              response's protocolVersion is the numeric revision
+//	              (ProtocolVersionNumber), the wire form ACP clients validate.
 //	session/new   Params {cwd, mcpServers:[{name, command, args, env}]} in,
 //	              result {sessionId} out. Params are decoded strictly: an
 //	              unknown field or malformed argument is rejected with
@@ -86,8 +88,10 @@
 // Planning inspected ACP documentation only: v1 is the released protocol and
 // v2 is a draft. No ACP Go library exists in the module graph, so the version
 // and the message shapes above are pinned here in code rather than imported
-// from an unverified dependency. ProtocolVersion is the single exported
-// version constant; the numeric alias lives in negotiateVersion.
+// from an unverified dependency. Two exported constants spell the pinned
+// revision: ProtocolVersionNumber is the numeric revision used in the
+// initialize response, and ProtocolVersion is the string alias accepted on
+// input and used in error messages.
 //
 // Bounds
 //
@@ -105,9 +109,18 @@ package acp
 // ServerName identifies SOP in the initialize handshake.
 const ServerName = "sop"
 
-// ProtocolVersion is the pinned ACP protocol revision this build speaks. It is
-// the single exported version constant: negotiation, advertisement, and tests
-// derive from it, never from a second copy of the value.
+// ProtocolVersionNumber is the pinned ACP protocol revision as a number. The
+// initialize response sends this numeric wire form, which ACP clients (for
+// example Zed 1.26.2) validate against a numeric protocol revision. The string
+// alias ProtocolVersion ("v1") remains accepted on input, so a client may
+// declare either spelling and the server accepts both.
+const ProtocolVersionNumber = 1
+
+// ProtocolVersion is the string alias of the pinned ACP protocol revision this
+// build speaks. It is the accepted string spelling on input and the value named
+// in version-unsupported error messages. The initialize response carries the
+// numeric ProtocolVersionNumber instead; derive both from this pinned revision,
+// never from a second copy of the value.
 const ProtocolVersion = "v1"
 
 // Method names on the pinned ACP surface.
