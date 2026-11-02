@@ -54,12 +54,18 @@ SOP appears under **External Agents** alongside the existing `claude-acp` entry.
 
 ## Evidence
 
-Operator screenshot of the agent picker showing `External Agents → SOP`
-(captured 2026-11-02; attached to the working session).
+The acceptance recipe allows a screenshot **or** the settings file path for the
+schema. Recorded here as the settings path, so this file does not depend on an
+image artifact:
 
-**Not yet a repository file.** Save it as
-`docs/reports/evidence/ACP-007-ZED-darwin/agent-picker.png` so the evidence path
-this record references points at a real artifact.
+- `~/.config/zed/settings.json`, lines 369–372, containing the `SOP` entry shown
+  above. The file was re-validated after the edit and the entry resolves to
+  `{"command": "/Users/imhttran/go/bin/sop", "args": ["acp"]}`.
+- Picker observation: `External Agents` → `SOP` in the Agent Panel, from a
+  screenshot captured 2026-11-02 and attached to the working session.
+
+The screenshot is optional supporting material. If it is saved later, place it at
+`docs/reports/evidence/ACP-007-ZED-darwin/agent-picker.png` and reference it here.
 
 ## Remaining gap
 
