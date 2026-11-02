@@ -28,8 +28,11 @@ func newProtocolWriter(out io.Writer) *protocolWriter {
 func (w *protocolWriter) WriteFrame(frame []byte) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	buf := make([]byte, 0, len(frame)+1)
-	buf = append(buf, frame...)
+	// Copy the frame and its terminator into one buffer whose capacity is grown
+	// by append (no len(frame)+1 arithmetic, which a static analyzer must treat
+	// as a possible allocation overflow), then emit it in a single write.
+	buf := make([]byte, len(frame))
+	copy(buf, frame)
 	buf = append(buf, '\n')
 	_, err := w.out.Write(buf)
 	return err
