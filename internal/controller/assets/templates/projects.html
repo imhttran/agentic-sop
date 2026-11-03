@@ -30,6 +30,12 @@
                         <span class="badge s-attention"
                             >{{.NeedsAttention}} needs attention</span
                         >
+                        {{end}} {{if not .ApprovalsReported}}
+                        <span
+                            class="badge s-unavailable"
+                            title="SOP did not report an approval listing; gates are not counted"
+                            >approvals unavailable</span
+                        >
                         {{end}}
                         <span class="badge s-running"
                             >{{.Running}} running</span
