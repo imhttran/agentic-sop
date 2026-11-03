@@ -62,6 +62,9 @@ security:
   timeout_seconds: 300
   stale_advisory_database: deny
   osv_database_path: .agent-sdlc/osv-db
+  # Reviewed, expiring baseline: each entry records why a reported finding is
+  # not actionable. Entries stop suppressing when they expire.
+  baseline: .agent-sdlc/security-baseline.json
   # Declared scope boundary: versioned test fixtures and snapshot references are
   # not shipped dependency surface. The dependency fixtures include deliberately
   # seeded vulnerable crates, so scanning them would only reproduce test data.
