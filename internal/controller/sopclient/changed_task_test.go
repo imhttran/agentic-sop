@@ -295,7 +295,7 @@ func TestChangedTasksIsPureRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	beforeSrc, _ := c.PlanSource(pid)
+	beforeSrc, _, _ := c.PlanSource(pid)
 
 	if _, err := c.ChangedTasks(ctx, pid); err != nil {
 		t.Fatal(err)
@@ -305,7 +305,7 @@ func TestChangedTasksIsPureRead(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	afterSrc, _ := c.PlanSource(pid)
+	afterSrc, _, _ := c.PlanSource(pid)
 
 	if !reflect.DeepEqual(beforeProj.Tasks, afterProj.Tasks) {
 		t.Fatalf("listing mutated task state/graph:\nbefore=%+v\nafter =%+v", beforeProj.Tasks, afterProj.Tasks)

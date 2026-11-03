@@ -144,7 +144,7 @@ func TestReadOperationsReportSOPValues(t *testing.T) {
 	ctx := context.Background()
 
 	// GetPlan
-	if src, ok := c.PlanSource(pid); !ok || src != "docs/PLAN.md" {
+	if src, ok, err := c.PlanSource(pid); err != nil || !ok || src != "docs/PLAN.md" {
 		t.Errorf("GetPlan -> PlanSource = %q,%v, want docs/PLAN.md,true", src, ok)
 	}
 
@@ -283,7 +283,7 @@ func TestBoundaryDoesNotMutateSOPPersistence(t *testing.T) {
 	_, _ = c.Projects(ctx)
 	_, _ = c.Project(ctx, pid)
 	_, _ = c.Task(ctx, pid, "t2")
-	_, _ = c.PlanSource(pid)
+	_, _, _ = c.PlanSource(pid)
 	_, _ = c.Approvals(ctx, pid)
 	_ = c.PendingApprovals(ctx)
 	_ = c.Run(ctx, pid)

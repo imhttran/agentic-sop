@@ -356,7 +356,17 @@ func (h *Handlers) command(w http.ResponseWriter, r *http.Request) {
 	case "retry-all":
 		fn = func(ctx context.Context) (string, error) { return "", h.sop.RetryAll(ctx, project) }
 	case "reconcile":
-		plan, ok := h.sop.PlanSource(project)
+		plan, ok, err := h.sop.PlanSource(project)
+		if err != nil {
+			// A plan.meta.json that cannot be read is not "no plan": say so rather than
+			// telling the operator there is nothing to reconcile.
+			h.render(w, http.StatusInternalServerError, "error.html", errorPage{
+				baseData: h.base(r, ""),
+				Status:   http.StatusInternalServerError,
+				Message:  "SOP's plan metadata could not be read: " + err.Error(),
+			})
+			return
+		}
 		if !ok {
 			h.render(w, http.StatusConflict, "error.html", errorPage{
 				baseData: h.base(r, ""),

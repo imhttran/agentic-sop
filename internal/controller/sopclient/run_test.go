@@ -220,7 +220,7 @@ func TestRunMetaAndPlanSource(t *testing.T) {
 	if len(tasks) != 1 || tasks[0].Stage != "VALIDATING" || tasks[0].Recovery != DispositionContinue {
 		t.Fatalf("run meta = %+v, want stage VALIDATING recovery CONTINUE", tasks)
 	}
-	if src, ok := st.PlanSource(); !ok || src != "docs/PLAN.md" {
+	if src, ok, err := st.PlanSource(); err != nil || !ok || src != "docs/PLAN.md" {
 		t.Fatalf("PlanSource = %q,%v, want docs/PLAN.md,true", src, ok)
 	}
 }

@@ -100,7 +100,10 @@ func (c *Client) AcceptChangedTasks(ctx context.Context, projectID string, taskI
 	if !ok {
 		return projectNotFound(projectID)
 	}
-	planPath, ok := c.PlanSource(projectID)
+	planPath, ok, err := c.PlanSource(projectID)
+	if err != nil {
+		return err
+	}
 	if !ok {
 		return ErrNoActivePlan
 	}

@@ -28,6 +28,9 @@ type PlanGate struct {
 	FinalGate string
 	// InProgress: an active plan whose final gate is not a completed value.
 	InProgress bool
+	// Error is set when plan.meta.json exists but cannot be read or parsed. The
+	// plan is then unknown, not absent: Recorded stays false and this says why.
+	Error string
 }
 
 // StatusLevel is a status value plus whether SOP persisted evidence for it.
