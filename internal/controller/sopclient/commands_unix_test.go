@@ -47,13 +47,26 @@ func killingSop(t *testing.T) (bin, pidFile string) {
 // told the operator the run timed out.
 func TestExecTimeoutKillsGrandchildren(t *testing.T) {
 	bin, pidFile := killingSop(t)
-	cmd := NewCommander(bin, 200*time.Millisecond)
+	// The timeout must outlast the fake `sop` recording its grandchild, or under
+	// load the kill can land before there is a grandchild to observe.
+	cmd := NewCommander(bin, 2*time.Second)
 
-	_, err := cmd.Exec(context.Background(), t.TempDir(), "run")
-	if !errors.Is(err, context.DeadlineExceeded) {
-		t.Fatalf("err = %v, want errors.Is(err, context.DeadlineExceeded)", err)
+	done := make(chan error, 1)
+	go func() {
+		_, err := cmd.Exec(context.Background(), t.TempDir(), "run")
+		done <- err
+	}()
+
+	pid := readPID(t, pidFile) // the tree is up before the timeout fires
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.DeadlineExceeded) {
+			t.Fatalf("err = %v, want errors.Is(err, context.DeadlineExceeded)", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("Exec did not return after its timeout")
 	}
-	assertDead(t, readPID(t, pidFile))
+	assertDead(t, pid)
 }
 
 // Explicit cancellation takes the same path as a timeout: the caller's context
