@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -155,15 +156,23 @@ func DiscoverProjects(workspaces []string, maxDepth int) ([]Project, []Diagnosti
 // considerProject returns (project, true, "") for a project, ("", false, "") for
 // an ordinary directory, and ("", false, reason) for an unusable one.
 func considerProject(dir string) (Project, bool, string) {
-	if _, err := os.Stat(filepath.Join(dir, ".agent-sdlc", "config.yaml")); err != nil {
-		return Project{}, false, ""
+	cfgPath := filepath.Join(dir, ".agent-sdlc", "config.yaml")
+	if _, err := os.Stat(cfgPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return Project{}, false, ""
+		}
+		return Project{}, false, "SOP config could not be read: " + err.Error()
 	}
 	cfg, err := ReadProjectConfig(dir)
 	if err != nil {
 		return Project{}, false, "invalid SOP config: " + err.Error()
 	}
-	if _, err := os.Stat(filepath.Join(dir, ".agent-sdlc", "state.db")); err != nil {
-		return Project{}, false, "SOP config present but no initialized state.db"
+	statePath := filepath.Join(dir, ".agent-sdlc", "state.db")
+	if _, err := os.Stat(statePath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return Project{}, false, "SOP config present but no initialized state.db"
+		}
+		return Project{}, false, "SOP state could not be read: " + err.Error()
 	}
 	id := cfg.Name
 	if id == "" {
