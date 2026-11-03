@@ -45,6 +45,11 @@ const (
 	Grace             = 10 * time.Second
 )
 
+// HeartbeatEvery is how often a held lease refreshes its record: well inside
+// HeartbeatLimit, so a healthy run longer than the limit never looks stale where
+// pid liveness cannot be probed (Windows, or a holder on another host).
+const HeartbeatEvery = HeartbeatLimit / 5
+
 // Mode is the configured strength of the lease: off changes no behaviour, advisory
 // records contention without blocking, required refuses a competing execution.
 type Mode string
@@ -147,6 +152,7 @@ type Held struct {
 	f        *os.File
 	released bool
 	relErr   error
+	stop     chan struct{}
 	mu       sync.Mutex
 }
 
@@ -254,6 +260,50 @@ func (h *Held) Heartbeat(now time.Time) error {
 	return writeRecord(h.f, h.owner)
 }
 
+// WatchHeartbeat refreshes the lease every interval until Release or until a
+// heartbeat fails, whichever comes first. It is the caller's job to invoke it on a
+// lease it holds; an interval that is not positive disables it. onError, when set,
+// receives the one heartbeat failure that stopped the watch, so a caller can report
+// a lost lease without cancelling the execution. The returned channel is closed
+// when the watch stops.
+func (h *Held) WatchHeartbeat(interval time.Duration, onError func(error)) <-chan struct{} {
+	done := make(chan struct{})
+	if h == nil || interval <= 0 {
+		close(done)
+		return done
+	}
+
+	h.mu.Lock()
+	if h.released || h.stop != nil {
+		h.mu.Unlock()
+		close(done)
+		return done
+	}
+	stop := make(chan struct{})
+	h.stop = stop
+	h.mu.Unlock()
+
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-stop:
+				return
+			case now := <-ticker.C:
+				if err := h.Heartbeat(now); err != nil {
+					if onError != nil {
+						onError(err)
+					}
+					return
+				}
+			}
+		}
+	}()
+	return done
+}
+
 // holdsPathLocked reports whether the path still names the inode this execution
 // created. A recovery that removed or replaced the lease must not be heartbeated
 // silently: the execution no longer holds the project.
@@ -278,7 +328,8 @@ func (h *Held) holdsPathLocked() error {
 // Release drops the lease. It is idempotent and safe on a nil receiver. The file is
 // removed only if it still names the inode this execution created, so a release can
 // never delete a lease someone else took after ours was recovered; that also lets a
-// holder clean up its own partial record after a failed heartbeat write.
+// holder clean up its own partial record after a failed heartbeat write. Any
+// WatchHeartbeat watcher is stopped.
 func (h *Held) Release() error {
 	if h == nil {
 		return nil
@@ -289,6 +340,10 @@ func (h *Held) Release() error {
 		return h.relErr
 	}
 	h.released = true
+	if h.stop != nil {
+		close(h.stop)
+		h.stop = nil
+	}
 	var errs []error
 	if h.f != nil {
 		heldInfo, statErr := h.f.Stat()

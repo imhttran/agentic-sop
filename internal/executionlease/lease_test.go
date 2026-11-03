@@ -118,6 +118,65 @@ func TestHeartbeatRefreshesTheRecord(t *testing.T) {
 	}
 }
 
+// A held lease refreshes its own record while it is held, and the refresh stops on
+// release, so a healthy run longer than the heartbeat limit never looks stale.
+func TestWatchHeartbeatRefreshesUntilRelease(t *testing.T) {
+	root := newProject(t)
+
+	held, err := Acquire(root, Owner{Kind: KindRun})
+	if err != nil {
+		t.Fatal(err)
+	}
+	started := held.Owner().HeartbeatAt
+
+	done := held.WatchHeartbeat(5*time.Millisecond, func(err error) {
+		t.Errorf("heartbeat: %v", err)
+	})
+
+	refreshed := waitForHeartbeat(t, root, started)
+	if !refreshed.After(started) {
+		t.Fatalf("heartbeat did not advance: %s (started %s)", refreshed, started)
+	}
+
+	if err := held.Release(); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("heartbeat watch did not stop on Release")
+	}
+
+	// Nothing is refreshed after release: the record is gone and the owner the watch
+	// last published does not move again.
+	if state, err := Read(root); err != nil || state.Present {
+		t.Fatalf("lease present after release: state=%+v err=%v", state, err)
+	}
+	last := held.Owner().HeartbeatAt
+	time.Sleep(20 * time.Millisecond)
+	if again := held.Owner().HeartbeatAt; !again.Equal(last) {
+		t.Fatalf("heartbeat kept advancing after release: %s -> %s", last, again)
+	}
+}
+
+// waitForHeartbeat polls the lease until its record's HeartbeatAt passes after.
+func waitForHeartbeat(t *testing.T, root string, after time.Time) time.Time {
+	t.Helper()
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		state, err := Read(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !state.Owner.HeartbeatAt.IsZero() && state.Owner.HeartbeatAt.After(after) {
+			return state.Owner.HeartbeatAt
+		}
+		time.Sleep(time.Millisecond)
+	}
+	t.Fatal("lease heartbeat did not advance")
+	return time.Time{}
+}
+
 // A lease held by a dead pid on this host is reported stale, and a live one is not.
 func TestStaleByPIDOnThisHost(t *testing.T) {
 	now := time.Now()
