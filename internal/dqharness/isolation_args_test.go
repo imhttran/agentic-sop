@@ -305,3 +305,36 @@ func TestIsolatedReplayDeniesPrivateMountWrite(t *testing.T) {
 		t.Fatal("a file landed on the host /dev/shm")
 	}
 }
+
+// Only a real Go tree is bound into the sandbox: a `go` wrapper outside one (for
+// example ~/bin/go) must not turn its grandparent, such as $HOME, into a bind.
+func TestGoRootOfRequiresGoTree(t *testing.T) {
+	write := func(path string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, nil, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	home := t.TempDir()
+	write(filepath.Join(home, "bin", "go"))
+	if got := goRootOf(filepath.Join(home, "bin", "go")); got != "" {
+		t.Fatalf("goRootOf(wrapper) = %q, want \"\" (no Go tree there)", got)
+	}
+
+	tree, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	write(filepath.Join(tree, "bin", "go"))
+	write(filepath.Join(tree, "VERSION"))
+	if err := os.MkdirAll(filepath.Join(tree, "src", "runtime"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if got := goRootOf(filepath.Join(tree, "bin", "go")); got != tree {
+		t.Fatalf("goRootOf(real tree) = %q, want %q", got, tree)
+	}
+}

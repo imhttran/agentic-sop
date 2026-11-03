@@ -62,11 +62,28 @@ func hostGOROOT() string {
 	if err != nil {
 		return ""
 	}
+	return goRootOf(goBin)
+}
+
+// goRootOf returns the GOROOT that goBin lives in, or "" when goBin is not
+// <GOROOT>/bin/go of a real Go tree. The tree is bound into the sandbox, so a
+// wrapper such as ~/bin/go must never turn its grandparent ($HOME) into a bind.
+func goRootOf(goBin string) string {
 	real, err := filepath.EvalSymlinks(goBin)
 	if err != nil {
 		return ""
 	}
-	return filepath.Dir(filepath.Dir(real)) // <GOROOT>/bin/go
+	root := filepath.Dir(filepath.Dir(real))
+	if !filepath.IsAbs(root) || root == "/" || filepath.Base(filepath.Dir(real)) != "bin" {
+		return ""
+	}
+	if info, err := os.Stat(filepath.Join(root, "src", "runtime")); err != nil || !info.IsDir() {
+		return ""
+	}
+	if _, err := os.Stat(filepath.Join(root, "VERSION")); err != nil {
+		return ""
+	}
+	return root
 }
 
 // sandboxPATH puts the host Go toolchain's bin first, then the system paths.
