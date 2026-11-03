@@ -30,6 +30,8 @@ SOP recorded the same validation for ACP-007 (`go build ./...`, `go test ./...`,
 
 PR #197 runs the repository's `fmt, vet, build, test` job. On run `41517465111`, `gofmt`, `vet`, `build`, and `test` passed; the `documentation links` step failed on relative links in the ACP-007 reports, which is corrected in a follow-up commit (the links now resolve from `docs/reports/`).
 
+The same job now also runs the ACP stdio smoke (`make acp-smoke`, added in PR #205). It passed on run `41558842274` (job `125664254691`, step `ACP stdio smoke`), exercising negotiation, ordering, capability refusal, malformed-frame recovery, a governed start, and a confirmed cancellation against the real stdio endpoint. The recorded Linux result is in [ACP-007-acceptance.md](ACP-007-acceptance.md).
+
 ## Notes
 
 - Commit `79acbfc` was also verified in a clean worktree: `go build ./...`, `go vet ./...`, and the `internal/acp`, `internal/archtest`, and `internal/cli` suites passed.
