@@ -22,6 +22,10 @@ import (
 //   - measured: a future live result (numeric metrics + execution evidence);
 //   - untested: a configuration not exercised (reason required; no metrics).
 
+// adapterDogfoodEvidencePath is read by the jev213_acceptance build-tagged test,
+// which staticcheck's default build context does not load.
+//
+//lint:ignore U1000 referenced only by the jev213_acceptance build-tagged test
 const adapterDogfoodEvidencePath = "docs/reports/evidence/JEV-WAVE3-ADAPTER-DOGFOOD.json"
 
 var requiredAdapterDogfoodConfigs = []string{"connector-offline", "julia-live", "nimble-live"}

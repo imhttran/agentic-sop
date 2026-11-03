@@ -464,15 +464,6 @@ func (r SatisfactionRejection) String() string {
 	return strings.Join(parts, " ")
 }
 
-// verifySatisfied is the boolean acceptance predicate: it accepts only an explicit
-// claim with complete, read-backed criterion coverage, all required validation
-// executed (or explicitly waived) and an unchanged repository fingerprint. It never
-// consults a model claim. verifySatisfiedDetailed returns the structured reason.
-func (h *Harness) verifySatisfied(ctx context.Context, req agent.Request, st *executionState, p *satisfactionProof, final map[string]any) bool {
-	ok, _ := h.verifySatisfiedDetailed(ctx, req, st, p, final)
-	return ok
-}
-
 // verifySatisfiedDetailed is verifySatisfied with a machine-readable rejection reason.
 // The acceptance conditions are identical; only the diagnostic differs.
 func (h *Harness) verifySatisfiedDetailed(ctx context.Context, req agent.Request, st *executionState, p *satisfactionProof, final map[string]any) (bool, SatisfactionRejection) {

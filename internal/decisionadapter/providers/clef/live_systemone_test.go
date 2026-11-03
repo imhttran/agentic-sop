@@ -63,9 +63,6 @@ const liveRepeatCount = 5
 // than as success.
 const liveShortTimeout = 1 * time.Nanosecond
 
-// liveSample is one record of a single live call outcome.
-const liveSample = "sample"
-
 // liveResults is the machine-readable artifact describing one live run.
 type liveResults struct {
 	BackendURL          string            `json:"backend_url"`

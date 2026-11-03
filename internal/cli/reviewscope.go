@@ -58,12 +58,6 @@ func (s reviewScope) contains(path string) bool {
 	return s.set[strings.TrimSpace(path)]
 }
 
-// pathsText renders the scope as a newline-joined, deterministic list for the
-// review request header. It is empty for an empty scope.
-func (s reviewScope) pathsText() string {
-	return strings.Join(s.paths, "\n")
-}
-
 // scopedReviewDiff builds the review input for one task from the task's own
 // change set: the invocation-scoped changed files (rn.ChangedFiles(), recorded
 // by recordTaskChanges from invocationChanges) unioned with the declared task

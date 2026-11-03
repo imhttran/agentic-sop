@@ -705,15 +705,6 @@ func (e entry) complete() bool {
 	return e.provider != "" && e.model != "" && e.locality != ""
 }
 
-// entryFor merges the routing layers for a class. The config and environment
-// entries merge field by field (the environment winning). A class that neither
-// layer mentions falls back to its built-in default (DefaultRoute), so a bare
-// --model-class resolves to a usable model with no configuration; a class a
-// layer does mention is used as written.
-func entryFor(c Class, config, env Route) (entry, error) {
-	return entryForWithEvidence(c, config, env, nil)
-}
-
 // entryForWithEvidence merges the routing layers for a class and resolves its
 // locality through ResolveLocality. A class neither layer mentions takes the
 // built-in default (provider, model, and locality) with source default; a class a
@@ -734,15 +725,13 @@ func entryForWithEvidence(c Class, config, env Route, evidence map[LocalityEvide
 		applyClassConfig(&e, ecc, SourceEnv)
 	}
 	ref := LocalityRef{Class: c, Role: LocalityRolePrimary, Provider: e.provider, Model: e.model}
-	var def Locality
 	if !mentioned {
 		applyClassConfig(&e, DefaultRoute().classConfig(c), SourceDefault)
-		def = e.locality
 		// The default layer set the locality; record its provenance and stop.
 		e.localitySource = LocalitySourceDefault
 		return e, nil
 	}
-	res, err := ResolveLocality(ref, e.locality, evidence, false, def)
+	res, err := ResolveLocality(ref, e.locality, evidence, false, Locality(""))
 	if err != nil {
 		var unknown *LocalityUnknownError
 		if !errors.As(err, &unknown) {

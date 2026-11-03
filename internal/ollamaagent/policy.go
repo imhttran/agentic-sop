@@ -253,10 +253,6 @@ func implementIterations(b budget.Budget) int { return b.ImplementIterations }
 // fixIterations is the effective FIX iteration ceiling.
 func fixIterations(b budget.Budget) int { return b.FixIterations }
 
-// staleIterations is the effective consecutive-stale-turn bound (the no-progress
-// guard), read from the canonical budget.
-func staleIterations(b budget.Budget) int { return b.StaleIterations }
-
 // discoveryTurns resolves the task-scoped discovery allowance for a mutating
 // capability whose hard iteration ceiling is n. The value comes from the canonical
 // budget (the operator's per-task allowance, resolved from

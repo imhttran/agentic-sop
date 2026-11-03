@@ -1,6 +1,7 @@
 package decision
 
 import (
+	"context"
 	"errors"
 	"math"
 	"reflect"
@@ -98,7 +99,7 @@ func TestAllowedChoiceNilPermitsAnyKnownChoice(t *testing.T) {
 // provider returns evidence that passes the SOP-owned validator.
 func TestDeterministicProviderSatisfiesContract(t *testing.T) {
 	p := DeterministicProvider{}
-	d, err := p.Decide(nil, Request{UseCase: "k", Subject: "small change", Signals: map[string]float64{"files": 1}})
+	d, err := p.Decide(context.TODO(), Request{UseCase: "k", Subject: "small change", Signals: map[string]float64{"files": 1}})
 	if err != nil {
 		t.Fatalf("deterministic provider errored: %v", err)
 	}

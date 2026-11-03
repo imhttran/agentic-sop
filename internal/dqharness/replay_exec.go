@@ -49,16 +49,49 @@ const replaySandboxPath = "/replay"
 // directory and never lands in a host temp root or a private writable mount.
 const replaySandboxTmpPath = replaySandboxPath + "/.tmp"
 
-// sandboxPATH is the toolchain/system search path set inside the sandbox. It puts the
-// Go toolchain (/usr/local/go/bin) first.
-const sandboxPATH = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+// systemSandboxPATH is the base toolchain/system search path set inside the sandbox.
+// sandboxPATH prepends the detected host Go toolchain bin directory.
+const systemSandboxPATH = "/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+// goToolchainRoot returns the host Go installation root visible to the sandbox. It
+// locates the host go binary on PATH and asks it for its own GOROOT, so a host whose Go
+// is not at /usr/local/go (for example the GitHub Actions toolcache) still works. It
+// returns "" when no usable toolchain is found.
+func goToolchainRoot() string {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	out, err := exec.Command(goBin, "env", "GOROOT").Output()
+	if err != nil {
+		return ""
+	}
+	root := strings.TrimSpace(string(out))
+	if root == "" {
+		return ""
+	}
+	if info, err := os.Stat(filepath.Join(root, "bin", "go")); err != nil || info.IsDir() {
+		return ""
+	}
+	return root
+}
+
+// sandboxPATH returns the toolchain/system search path set inside the sandbox. It puts
+// the detected Go toolchain first, so a host whose Go is not at /usr/local/go/bin (for
+// example the GitHub Actions toolcache) still resolves go.
+func sandboxPATH() string {
+	if root := goToolchainRoot(); root != "" {
+		return filepath.Join(root, "bin") + ":" + systemSandboxPATH
+	}
+	return systemSandboxPATH
+}
 
 // minimalReplayEnv is the scrubbed child environment: no API keys, tokens, or provider
 // configuration. Both backends reproduce this environment inside the sandbox. TMPDIR
 // points at <dir>/.tmp so temporary storage stays inside the replay directory.
 func minimalReplayEnv(dir string) []string {
 	return []string{
-		"PATH=" + sandboxPATH,
+		"PATH=" + sandboxPATH(),
 		"HOME=" + dir,
 		"TMPDIR=" + filepath.Join(dir, ".tmp"),
 		"GOTOOLCHAIN=local",
@@ -123,10 +156,12 @@ var bubblewrapSystemROPaths = []string{"/usr", "/bin", "/sbin", "/lib", "/lib64"
 // toolchain paths, mounts a fresh /proc and /dev, makes /dev/shm a read-only tmpfs, and
 // binds the canonical replay directory writable at the fixed sandbox path /replay.
 //
-// Host /tmp, /run, /var/run, /home, /root, /opt, /srv, /mnt, and /media are absent from
-// the view. Host Unix sockets in those locations are therefore unreachable, and writes
-// there fail. The replay directory is the only writable filesystem location, and temp
-// storage lives in /replay/.tmp inside it.
+// Host /tmp, /run, /var/run, /home, /root, /srv, /mnt, and /media are absent from
+// the view. /opt is absent except for the detected Go toolchain root, which is bound
+// read-only when it lives outside the system paths. Host Unix sockets in those
+// locations are therefore unreachable, and writes there fail. The replay directory is
+// the only writable filesystem location, and temp storage lives in /replay/.tmp inside
+// it.
 //
 // Keeping host /dev read-only and giving /dev/shm a read-only remount means writes under
 // /dev and /dev/shm fail instead of landing in a private writable mount.
@@ -153,6 +188,9 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 	for _, p := range bubblewrapSystemROPaths {
 		args = append(args, "--ro-bind-try", p, p)
 	}
+	if root := goToolchainRoot(); root != "" && !coveredBySystemROPath(root) {
+		args = append(args, "--ro-bind-try", root, root)
+	}
 	args = append(args,
 		"--bind", bound, replaySandboxPath,
 		"--chdir", replaySandboxPath,
@@ -163,13 +201,24 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv", "PATH", sandboxPATH,
+		"--setenv", "PATH", sandboxPATH(),
 		"--setenv", "HOME", replaySandboxPath,
 		"--setenv", "TMPDIR", replaySandboxTmpPath,
 		"--setenv", "GOTOOLCHAIN", "local",
 		"--",
 	)
 	return bound, append(args, target...), nil
+}
+
+// coveredBySystemROPath reports whether path is already visible through one of the
+// read-only system binds, so the toolchain bind is not duplicated.
+func coveredBySystemROPath(path string) bool {
+	for _, p := range bubblewrapSystemROPaths {
+		if path == p || strings.HasPrefix(path, p+string(filepath.Separator)) {
+			return true
+		}
+	}
+	return false
 }
 
 // IsolatedReplay runs one fixture under OS-level isolation and returns the verification
