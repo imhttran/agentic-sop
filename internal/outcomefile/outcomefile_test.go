@@ -307,3 +307,22 @@ func TestInterruptedTemporaryFileIsNeverSelected(t *testing.T) {
 		t.Fatalf("records=%d rejected=%v; the temporary file must be ignored", len(records), rejected)
 	}
 }
+
+// The typed markers this package persists are decided per kind, so evidence keeps
+// the vocabulary it has always used while the shapes come from internal/redact.
+func TestRedactKeepsTypedMarkers(t *testing.T) {
+	cases := map[string]string{
+		"bearer abcdefghijklmnop":        "bearer <redacted>",
+		"sk-abcdefghijklmnop":            "<redacted-key>",
+		"ghp_abcdefghijklmnopqrstuvwx":   "<redacted-token>",
+		"AKIAIOSFODNN7EXAMPLE":           "<redacted-access-key>",
+		`{"api_key": "x1y2z3"}`:          `{"api_key": "<redacted>"}`,
+		"api_key: supersecretvalue":      "api_key: <redacted>",
+		"reason: token budget exhausted": "reason: token budget exhausted",
+	}
+	for in, want := range cases {
+		if got := Redact(in); got != want {
+			t.Errorf("Redact(%q) = %q, want %q", in, got, want)
+		}
+	}
+}

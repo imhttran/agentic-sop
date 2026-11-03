@@ -22,10 +22,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/retrievalboundary"
 )
 
@@ -396,28 +396,28 @@ func GateWithSources(records []OutcomeRecord, sourceExists func(string) bool) []
 	return out
 }
 
-// Redaction patterns. They cover the credential shapes most likely to appear in captured
-// evidence: provider API keys, GitHub tokens, AWS access keys, bearer tokens and
-// key=value secrets. Redaction is deterministic and idempotent.
-var redactionRules = []struct {
-	re   *regexp.Regexp
-	repl string
-}{
-	{regexp.MustCompile(`(?i)\b(bearer)\s+[A-Za-z0-9._\-+/=]{8,}`), `$1 <redacted>`},
-	{regexp.MustCompile(`\b(sk|rk)-[A-Za-z0-9_\-]{12,}`), `<redacted-key>`},
-	{regexp.MustCompile(`\bgh[pousr]_[A-Za-z0-9]{16,}`), `<redacted-token>`},
-	{regexp.MustCompile(`\bgithub_pat_[A-Za-z0-9_]{16,}`), `<redacted-token>`},
-	{regexp.MustCompile(`\bAKIA[0-9A-Z]{16}\b`), `<redacted-access-key>`},
-	{regexp.MustCompile(`(?i)\b(api[_-]?key|token|secret|password|passwd)\s*[:=]\s*"?[^\s",}]{4,}"?`), `$1=<redacted>`},
-}
-
 // Redact removes credential-shaped substrings from free-form evidence. It is applied to
 // every free-form field this package writes from ingested evidence.
+//
+// The shapes are decided by internal/redact; this package keeps its own typed markers,
+// because they are written into persisted outcome documents. Redaction is deterministic
+// and idempotent.
 func Redact(s string) string {
-	for _, r := range redactionRules {
-		s = r.re.ReplaceAllString(s, r.repl)
+	return redact.ShapesValues(s, evidenceMarker)
+}
+
+// evidenceMarker renders the marker this package has always persisted per kind.
+func evidenceMarker(k redact.Kind) string {
+	switch k {
+	case redact.KindKey:
+		return "<redacted-key>"
+	case redact.KindToken:
+		return "<redacted-token>"
+	case redact.KindAccessKey:
+		return "<redacted-access-key>"
+	default:
+		return "<redacted>"
 	}
-	return s
 }
 
 // Run report and counts shapes read by IngestRun. They are the persisted SOP run

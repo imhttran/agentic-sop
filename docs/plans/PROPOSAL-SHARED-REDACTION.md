@@ -1,7 +1,7 @@
 # Proposal: one credential detector, per-surface markers
 
-Status: **PROPOSAL — P1 implemented (`internal/redact`), P2 and P3 not started.**
-This document records the target design; the phases below say what has landed.
+Status: **PROPOSAL — P1 and P2 implemented; P3 not started.** This document
+records the target design; the phases below say what has landed.
 
 Related: the diagnostics redaction that exposed the divergence
 (`internal/controller/sopclient`, PR #221 and its follow-up), and
@@ -146,8 +146,38 @@ Each phase is independently shippable.
 | Phase | Scope | Risk | State |
 | --- | --- | --- | --- |
 | P1 | `internal/redact` + shared corpus; adopt in `acp`, `sopclient`, `ollamaagent` (nothing persisted) | low | **implemented** |
-| P2 | `outcomefile`, `hipcompare` — persisted artifacts; adapters must reproduce today's markers byte for byte | medium, golden tests | not started |
+| P2 | `outcomefile`, `hipcompare` — persisted artifacts; adapters must reproduce today's markers | medium, golden tests | **implemented** |
 | P3 | `handoff`, `security` — `EnvSecrets` + `Values`; retires `redactCapsule`, `redactList` duplication | medium | not started |
+
+### What P2 changed in practice
+
+- `outcomefile.Redact` and `hipcompare.redactText` are `redact.ShapesValues` calls.
+  `outcomefile` renders its typed markers per kind (`<redacted-key>`,
+  `<redacted-token>`, `<redacted-access-key>`, `<redacted>`), which required one
+  addition to the shared detector: `KindKey` separates provider API keys (`sk-`,
+  `rk-`, `pk-`) from tokens (`ghp_`, `github_pat_`, `xox[bap]-`).
+- `hipcompare` keeps its curated environment-variable list for the arm executor's
+  env scrubber. That is a narrower question than "does this text look like a
+  credential": `redact.IsSecretName` matches `AUTH` as a segment, which would
+  scrub `SSH_AUTH_SOCK` from an agent's environment.
+- Both artifacts now redact shapes their own patterns never saw: JSON bodies,
+  provider prose, `sk-`/`ghp_`/`AKIA` values and bearer tokens without a key name.
+  Verified by running the same corpus through the previous and the current
+  implementations.
+
+Deliberate rendering changes, all of which keep the marker vocabulary:
+
+| Case | Before | After |
+| --- | --- | --- |
+| `api_key: value` | `api_key=<redacted>` | `api_key: <redacted>` |
+| `api_key="value"` | `api_key=<redacted>` | `api_key="<redacted>"` |
+| `bearer <token>` (hipcompare) | `<redacted>` | `bearer <redacted>` |
+| `Incorrect API key provided: sk-…` (outcomefile) | `<redacted-key>` | `<redacted>` |
+
+The first two keep the artifact's own separator and quoting instead of
+normalising it; the third keeps the scheme word for context; the fourth is a
+token that reaches the detector as an assignment value, so it is classified as
+one.
 
 ### What P1 changed in practice
 
