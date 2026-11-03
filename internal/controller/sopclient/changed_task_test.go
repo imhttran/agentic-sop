@@ -414,3 +414,21 @@ func TestChangedTasksAvailabilityOnProjectSummary(t *testing.T) {
 		}
 	})
 }
+
+// A task-store read failure while enriching the changed listing is an error, not
+// a blank title.
+func TestChangedTasksSurfacesTaskStoreReadFailure(t *testing.T) {
+	root := newProject(t)
+	writePlan(t, root, "docs/PLAN.md")
+	seed(t, root, `DROP TABLE tasks`)
+	bin, _ := fakeListingSop(t, listingDocJSON("t1"))
+	c, err := New([]string{root}, bin, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	if _, err := c.ChangedTasks(context.Background(), config.ProjectID(root)); err == nil {
+		t.Fatal("ChangedTasks err = nil after a task-store read failure; a blank title must not hide a DB error")
+	}
+}

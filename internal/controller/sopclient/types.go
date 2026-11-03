@@ -244,6 +244,10 @@ type TaskDetail struct {
 	// Checkpoint is SOP's latest bounded-progress line. Partial progress is never
 	// task completion.
 	Checkpoint CheckpointProgress
+	// CheckpointError is set when checkpoint evidence exists but could not be read
+	// or parsed. Non-empty means damaged, not absent; the stale cache is not
+	// replayed in that case.
+	CheckpointError string
 
 	// Approval is SOP's gate for this task from the approval listing.
 	Approval Approval

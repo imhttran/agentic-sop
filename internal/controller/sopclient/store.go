@@ -242,7 +242,15 @@ func (s *Store) Task(ctx context.Context, id string, approvals ApprovalsListing)
 	d.Report = s.ReportRef(id)
 
 	// CTRL010: the merge keeps a transient empty re-read from regressing progress.
-	d.Checkpoint = s.mergeCheckpoint(id, s.Checkpoint(id))
+	// A read error is damage, not an empty re-read, so it is reported and the stale
+	// cached value is not replayed.
+	cp, cpErr := s.Checkpoint(id)
+	d.CheckpointError = oneLine(cpErr)
+	if cpErr == nil {
+		d.Checkpoint = s.mergeCheckpoint(id, cp)
+	} else {
+		d.Checkpoint = cp
+	}
 
 	d.Approval = s.approval(d, approvals)
 	// Mirror the gate onto the embedded summary so list and detail agree.
