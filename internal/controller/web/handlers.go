@@ -79,6 +79,8 @@ type taskPage struct {
 	ProjectID string
 	Task      sopclient.TaskDetail
 	Events    []sopclient.ActivityView
+	// Skipped is how many activity lines could not be parsed (see TaskDetail).
+	Skipped int
 	// Approval mirrors Task.Approval so the approval partial can render from this page.
 	Approval sopclient.Approval
 }
@@ -93,6 +95,9 @@ type errorPage struct {
 type activityData struct {
 	baseData
 	Events []sopclient.ActivityView
+	// Skipped is how many activity lines could not be parsed. The project-wide
+	// window does not report it; the task view does.
+	Skipped int
 }
 
 // cmdStatusData is the shared shape for command_status.html.
@@ -223,7 +228,7 @@ func (h *Handlers) projectActivity(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, err)
 		return
 	}
-	h.render(w, http.StatusOK, "activity.html", activityData{h.base(r, ""), win.Events})
+	h.render(w, http.StatusOK, "activity.html", activityData{baseData: h.base(r, ""), Events: win.Events})
 }
 
 func (h *Handlers) task(w http.ResponseWriter, r *http.Request) {
@@ -238,6 +243,7 @@ func (h *Handlers) task(w http.ResponseWriter, r *http.Request) {
 		ProjectID: projectID,
 		Task:      detail,
 		Events:    h.taskActivityViews(r.Context(), projectID, taskID, detail),
+		Skipped:   detail.ActivitySkipped,
 		Approval:  detail.Approval,
 	})
 }
@@ -264,7 +270,11 @@ func (h *Handlers) taskActivity(w http.ResponseWriter, r *http.Request) {
 		h.renderError(w, r, err)
 		return
 	}
-	h.render(w, http.StatusOK, "activity.html", activityData{h.base(r, ""), h.taskActivityViews(r.Context(), projectID, taskID, detail)})
+	h.render(w, http.StatusOK, "activity.html", activityData{
+		baseData: h.base(r, ""),
+		Events:   h.taskActivityViews(r.Context(), projectID, taskID, detail),
+		Skipped:  detail.ActivitySkipped,
+	})
 }
 
 // taskRecovery renders the recovery panel fragment (classification + actions).

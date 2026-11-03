@@ -27,7 +27,7 @@ type checkpointDoc struct {
 func (s *Store) Checkpoint(taskID string) CheckpointProgress {
 	path := filepath.Join(s.runDir(taskID), checkpointArtifact)
 	var doc checkpointDoc
-	if readJSON(path, &doc) {
+	if found, _ := readJSON(path, &doc); found {
 		return doc.progress("")
 	}
 	if cp, ok := s.checkpointFromActivity(taskID); ok {
