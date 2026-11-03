@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"log"
@@ -129,12 +130,15 @@ func (h *Handlers) baseForProject(project string) baseData {
 }
 
 func (h *Handlers) render(w http.ResponseWriter, status int, name string, data any) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	w.WriteHeader(status)
-	if err := h.views.Render(w, name, data); err != nil {
+	var buf bytes.Buffer
+	if err := h.views.Render(&buf, name, data); err != nil {
 		log.Printf("[render] %s: %v", name, err)
 		http.Error(w, "template error", http.StatusInternalServerError)
+		return
 	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.WriteHeader(status)
+	_, _ = buf.WriteTo(w)
 }
 
 func (h *Handlers) notFound(w http.ResponseWriter, r *http.Request, msg string) {
