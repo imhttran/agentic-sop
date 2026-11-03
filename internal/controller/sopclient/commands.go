@@ -10,11 +10,54 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // execWaitDelay bounds how long Exec waits on the output pipes once the command has
 // exited or been cancelled.
 const execWaitDelay = 5 * time.Second
+
+// maxCommandDiagnostic bounds the SOP output a CommandError keeps, so a runaway
+// command cannot bloat memory or the UI just because it failed.
+const maxCommandDiagnostic = 4000
+
+// CommandError is a SOP command that ran and exited non-zero: SOP refused the
+// operation. It keeps the verb, the exit status and SOP's own diagnostic, so a
+// mutating verb can report why it was refused instead of only "exit status 1".
+type CommandError struct {
+	Verb     string
+	ExitCode int
+	// Output is the tail of the command's combined stdout and stderr, bounded by
+	// maxCommandDiagnostic.
+	Output string
+	Err    error
+}
+
+// Error renders the command, its exit status, and SOP's own diagnostic.
+func (e *CommandError) Error() string {
+	msg := fmt.Sprintf("sop %s: %v", e.Verb, e.Err)
+	if out := strings.TrimSpace(e.Output); out != "" {
+		msg += ": " + out
+	}
+	return msg
+}
+
+// Unwrap returns the underlying *exec.ExitError, so errors.As still identifies a
+// refusal (sopRefused) now that the error carries SOP's output too.
+func (e *CommandError) Unwrap() error { return e.Err }
+
+// tailExcerpt returns the last n bytes of s on a rune boundary, marked when it had
+// to cut, because a diagnostic keeps what SOP said last.
+func tailExcerpt(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	cut := len(s) - n
+	for cut < len(s) && !utf8.RuneStart(s[cut]) {
+		cut++
+	}
+	return "…" + s[cut:]
+}
 
 // Commander runs SOP CLI verbs against a project root (FR-8).
 type Commander struct {
@@ -40,6 +83,9 @@ func NewCommander(bin string, timeout time.Duration) *Commander {
 // When ctx is cancelled or the timeout elapses, the whole process tree the command
 // started is killed (see configureCancellation), so no orphaned agent, git or
 // validation command keeps changing the repo after Exec has reported failure.
+//
+// A command that ran and exited non-zero returns *CommandError, carrying SOP's exit
+// status and diagnostic; a failure to spawn SOP at all stays a plain wrapped error.
 func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -72,6 +118,18 @@ func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) 
 	case ctxErr != nil:
 		return out, fmt.Errorf("sop %s: %w", verb, ctxErr)
 	case err != nil:
+		// SOP ran and refused. Keep its exit status and its own diagnostic: the
+		// buffered output is otherwise dropped by the mutating verbs, which return
+		// only an error.
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) {
+			return out, &CommandError{
+				Verb:     verb,
+				ExitCode: exitErr.ExitCode(),
+				Output:   tailExcerpt(strings.TrimSpace(out), maxCommandDiagnostic),
+				Err:      err,
+			}
+		}
 		return out, fmt.Errorf("sop %s: %w", verb, err)
 	}
 	return out, nil
