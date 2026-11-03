@@ -304,48 +304,63 @@ func decisionPackageDir(t *testing.T) string {
 	return filepath.Join(root, "decision")
 }
 
+// parseDecisionPackageFiles parses every .go file in the public decision package,
+// keyed by path. It replaces the deprecated parser.ParseDir, which does not
+// consider build tags; these tests only inspect the package's own files.
+func parseDecisionPackageFiles(t *testing.T, fset *token.FileSet, mode parser.Mode) map[string]*ast.File {
+	t.Helper()
+	paths, err := filepath.Glob(filepath.Join(decisionPackageDir(t), "*.go"))
+	if err != nil {
+		t.Fatalf("glob decision package: %v", err)
+	}
+	files := make(map[string]*ast.File, len(paths))
+	for _, path := range paths {
+		file, err := parser.ParseFile(fset, path, nil, mode)
+		if err != nil {
+			t.Fatalf("parse %s: %v", path, err)
+		}
+		files[path] = file
+	}
+	return files
+}
+
 // TestDecisionPackageIsProviderNeutral asserts the public decision package
 // contains no Clef-specific identifier or branch. It parses the decision
 // package sources and rejects any Clef-specific token in identifiers or
 // literals: the neutral layer must not know that Clef exists.
 func TestDecisionPackageIsProviderNeutral(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, decisionPackageDir(t), nil, parser.ParseComments)
-	if err != nil {
-		t.Fatalf("parse decision package: %v", err)
-	}
-	if len(pkgs) == 0 {
+	files := parseDecisionPackageFiles(t, fset, parser.ParseComments)
+	if len(files) == 0 {
 		t.Fatal("no decision package parsed")
 	}
 
 	checked := 0
-	for _, pkg := range pkgs {
-		for name, file := range pkg.Files {
-			if strings.HasSuffix(name, "_test.go") {
-				continue // neutrality contract is over the package itself
-			}
-			checked++
-			for _, id := range clefIdentifiers {
-				found := ""
-				ast.Inspect(file, func(n ast.Node) bool {
-					if found != "" {
-						return false
-					}
-					switch v := n.(type) {
-					case *ast.Ident:
-						if strings.Contains(v.Name, id) {
-							found = v.Name
-						}
-					case *ast.BasicLit:
-						if strings.Contains(v.Value, id) {
-							found = v.Value
-						}
-					}
-					return true
-				})
+	for name, file := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue // neutrality contract is over the package itself
+		}
+		checked++
+		for _, id := range clefIdentifiers {
+			found := ""
+			ast.Inspect(file, func(n ast.Node) bool {
 				if found != "" {
-					t.Errorf("decision file %s contains Clef-specific token %q in %q", filepath.Base(name), id, found)
+					return false
 				}
+				switch v := n.(type) {
+				case *ast.Ident:
+					if strings.Contains(v.Name, id) {
+						found = v.Name
+					}
+				case *ast.BasicLit:
+					if strings.Contains(v.Value, id) {
+						found = v.Value
+					}
+				}
+				return true
+			})
+			if found != "" {
+				t.Errorf("decision file %s contains Clef-specific token %q in %q", filepath.Base(name), id, found)
 			}
 		}
 	}
@@ -359,32 +374,27 @@ func TestDecisionPackageIsProviderNeutral(t *testing.T) {
 // package must be provider-neutral.
 func TestDecisionPackageHasNoProviderSpecificType(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, decisionPackageDir(t), nil, 0)
-	if err != nil {
-		t.Fatalf("parse decision package: %v", err)
-	}
+	files := parseDecisionPackageFiles(t, fset, 0)
 
 	checked := 0
-	for _, pkg := range pkgs {
-		for name, file := range pkg.Files {
-			if strings.HasSuffix(name, "_test.go") {
+	for name, file := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.TYPE {
 				continue
 			}
-			for _, decl := range file.Decls {
-				gd, ok := decl.(*ast.GenDecl)
-				if !ok || gd.Tok != token.TYPE {
+			for _, spec := range gd.Specs {
+				ts, ok := spec.(*ast.TypeSpec)
+				if !ok {
 					continue
 				}
-				for _, spec := range gd.Specs {
-					ts, ok := spec.(*ast.TypeSpec)
-					if !ok {
-						continue
-					}
-					checked++
-					for _, id := range clefIdentifiers {
-						if strings.Contains(ts.Name.Name, id) {
-							t.Errorf("decision package declares provider-specific type %q", ts.Name.Name)
-						}
+				checked++
+				for _, id := range clefIdentifiers {
+					if strings.Contains(ts.Name.Name, id) {
+						t.Errorf("decision package declares provider-specific type %q", ts.Name.Name)
 					}
 				}
 			}
@@ -400,33 +410,28 @@ func TestDecisionPackageHasNoProviderSpecificType(t *testing.T) {
 // Clef identifier.
 func TestDecisionPackageHasNoClefBranch(t *testing.T) {
 	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, decisionPackageDir(t), nil, 0)
-	if err != nil {
-		t.Fatalf("parse decision package: %v", err)
-	}
+	files := parseDecisionPackageFiles(t, fset, 0)
 
 	checked := 0
-	for _, pkg := range pkgs {
-		for name, file := range pkg.Files {
-			if strings.HasSuffix(name, "_test.go") {
-				continue
-			}
-			checked++
-			for _, id := range clefIdentifiers {
-				ast.Inspect(file, func(n ast.Node) bool {
-					switch v := n.(type) {
-					case *ast.SelectorExpr:
-						if strings.Contains(v.Sel.Name, id) {
-							t.Errorf("decision file %s has Clef branch selector %q", filepath.Base(name), v.Sel.Name)
-						}
-					case *ast.Ident:
-						if strings.Contains(v.Name, id) {
-							t.Errorf("decision file %s has Clef branch identifier %q", filepath.Base(name), v.Name)
-						}
+	for name, file := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+		checked++
+		for _, id := range clefIdentifiers {
+			ast.Inspect(file, func(n ast.Node) bool {
+				switch v := n.(type) {
+				case *ast.SelectorExpr:
+					if strings.Contains(v.Sel.Name, id) {
+						t.Errorf("decision file %s has Clef branch selector %q", filepath.Base(name), v.Sel.Name)
 					}
-					return true
-				})
-			}
+				case *ast.Ident:
+					if strings.Contains(v.Name, id) {
+						t.Errorf("decision file %s has Clef branch identifier %q", filepath.Base(name), v.Name)
+					}
+				}
+				return true
+			})
 		}
 	}
 	if checked == 0 {

@@ -7,7 +7,6 @@ package cli
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -118,10 +117,4 @@ func recordLifecycleCounts(dir string, rn *runpkg.Run, taskID string, res lifeRe
 		}
 	}
 	return nil
-}
-
-// countsPath is exported to tests through this small helper so a test can inspect
-// the artifact without restating the layout.
-func countsPath(projectDir, taskID string) string {
-	return filepath.Join(projectDir, stateDirName, "runs", taskID, "counts.json")
 }

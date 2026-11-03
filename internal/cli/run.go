@@ -2053,7 +2053,10 @@ type runReportDoc struct {
 // buildRunReport renders the human-readable report.
 func buildRunReport(spec *taskfile.Spec, cfg config.Config, res lifeResult) string {
 	var b strings.Builder
-	heading := strings.TrimSpace(strings.Trim(strings.Join([]string{spec.ID, spec.Title}, " — "), " — "))
+	heading := strings.TrimSpace(spec.ID)
+	if title := strings.TrimSpace(spec.Title); title != "" {
+		heading += " — " + title
+	}
 	fmt.Fprintf(&b, "# Run: %s\n\n", heading)
 	fmt.Fprintf(&b, "- Provider: `%s`\n", cfg.Agent.Provider)
 	fmt.Fprintf(&b, "- Review engine: `%s`\n", cfg.Review.Engine)

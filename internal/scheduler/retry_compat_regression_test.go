@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -108,7 +109,7 @@ func TestRetryCompatExplicitAndAutomaticShareOrdering(t *testing.T) {
 
 	s := New(store)
 	// The requeued T001 is runnable work and is selected before recovery of T003.
-	res, err := s.Next(nil)
+	res, err := s.Next(context.TODO())
 	if err != nil {
 		t.Fatalf("Next: %v", err)
 	}
@@ -118,7 +119,7 @@ func TestRetryCompatExplicitAndAutomaticShareOrdering(t *testing.T) {
 
 	// Complete T001, then automatic recovery picks the next blocked task.
 	find(t, store.tasks, "T001").Status = domain.LOCAL_DONE
-	res, err = s.Next(nil)
+	res, err = s.Next(context.TODO())
 	if err != nil {
 		t.Fatalf("Next: %v", err)
 	}

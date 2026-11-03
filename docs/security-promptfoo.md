@@ -343,8 +343,8 @@ Writable temp storage is `/replay/.tmp`, created inside the replay directory
 before launch (mode `0700`). `TMPDIR` points there on both backends, so
 `os.CreateTemp` and `go test` keep temporary files inside the replay directory
 and never in a host temp root or a private writable mount outside it. The child
-environment sets `PATH` with the host Go toolchain's `bin` directory (then
-`/usr/local/go/bin`) first, `HOME=/replay`,
+environment sets `PATH` with the host Go toolchain's `bin` directory first, then
+the system path, `HOME=/replay`,
 `TMPDIR=/replay/.tmp`, and `GOTOOLCHAIN=local`, and keeps `--unshare-net`,
 `--unshare-pid`, `--unshare-ipc`, `--unshare-uts`, `--die-with-parent`,
 `--new-session`, and `--clearenv`. A canonicalization failure returns an

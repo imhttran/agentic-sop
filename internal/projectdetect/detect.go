@@ -326,8 +326,6 @@ type manifestFiles struct {
 	nextDirs map[string]bool
 }
 
-func (m manifestFiles) has(name string) bool { return m.set[name] }
-
 // selectManifest picks the manifest that owns a language. A root manifest always
 // wins; otherwise the shallowest nested manifest is used, with a deterministic
 // lexicographic tie-break.

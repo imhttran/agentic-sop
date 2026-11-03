@@ -656,13 +656,6 @@ func (m *MemoryStore) FenceAndMutate(id string, generation int, worker string, m
 	return mutate()
 }
 
-// reserveNextIDLocked returns the next monotonic record ordinal. Callers hold the
-// mutex.
-func (m *MemoryStore) reserveNextIDLocked() int {
-	m.nextID++
-	return m.nextID
-}
-
 // restoreNextIDLocked raises nextID so it is strictly greater than every numeric
 // suffix already present. It is how a reloaded store avoids reissuing an id that
 // already exists on disk (the collision the review flagged). Callers hold the

@@ -1,6 +1,7 @@
 package run
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -229,7 +230,7 @@ func TestWriteEarlyJEVArtifactProviderFailureIsDistinct(t *testing.T) {
 	}
 
 	fake := jev.NewProviderFailureFake()
-	if _, err := fake.Analyze(nil, jev.Request{}); err == nil {
+	if _, err := fake.Analyze(context.TODO(), jev.Request{}); err == nil {
 		t.Fatal("provider-failure fake did not fail")
 	}
 

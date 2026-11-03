@@ -230,23 +230,6 @@ func localRuntimeProbe(cfg config.Config, sel model.Selection) (bool, string) {
 	return false, av.Reason
 }
 
-// localRuntimeUnreachable reports whether the local class's runtime is itself
-// unreachable (as opposed to healthy-but-model-absent). It is used so the CLI can
-// surface the existing provider/runtime-unavailable error rather than pretend a
-// cloud model fixes a down endpoint.
-func localRuntimeUnreachable(cfg config.Config, sel model.Selection) bool {
-	if sel.Provider == string(provider.Command) {
-		return false
-	}
-	reg, err := newProviderRegistry(cfg)
-	if err != nil {
-		return false
-	}
-	ctx, cancel := context.WithTimeout(context.Background(), providerProbeTimeout)
-	defer cancel()
-	return provider.ResolveAvailability(ctx, reg, sel).RuntimeUnreachable
-}
-
 // localUnavailableProbe returns the closure that reports whether a local
 // selection's runtime is HEALTHY but cannot serve it, or nil when no probe is
 // wired. A nil closure means "no observation", so the local model is kept - an

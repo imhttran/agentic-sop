@@ -42,48 +42,6 @@ func TestIsolationBackendSelection(t *testing.T) {
 	}
 }
 
-// TestToolchainBind covers the one deliberate exception to the system-path list: a Go
-// installation outside those paths is bound read-only so replay can run "go test" on a
-// host that installs Go under /opt or a version-manager prefix.
-func TestToolchainBind(t *testing.T) {
-	tests := []struct {
-		name     string
-		goBin    string
-		wantBin  string
-		wantRoot string
-		wantBind bool
-	}{
-		{"none", "", "", "", false},
-		{"standard install", "/usr/local/go/bin/go", "/usr/local/go/bin", "/usr/local/go", false},
-		{"system bin", "/usr/bin/go", "/usr/bin", "/usr", false},
-		{"ci tool cache", "/opt/hostedtoolcache/go/1.27.1/x64/bin/go", "/opt/hostedtoolcache/go/1.27.1/x64/bin", "/opt/hostedtoolcache/go/1.27.1/x64", true},
-		{"root is not bound", "/go/bin/go", "/go/bin", "/go", true},
-		{"root would be the host root", "/go", "/", "/", false},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			bin, root, bind := toolchainFor(tc.goBin)
-			if bin != tc.wantBin || root != tc.wantRoot || bind != tc.wantBind {
-				t.Fatalf("toolchainFor(%q) = (%q, %q, %v), want (%q, %q, %v)",
-					tc.goBin, bin, root, bind, tc.wantBin, tc.wantRoot, tc.wantBind)
-			}
-		})
-	}
-}
-
-func TestSandboxPathFor(t *testing.T) {
-	if got := sandboxPathFor(""); got != sandboxPATH {
-		t.Fatalf("sandboxPathFor(\"\") = %q, want %q", got, sandboxPATH)
-	}
-	if got := sandboxPathFor("/usr/local/go/bin"); got != sandboxPATH {
-		t.Fatalf("already-present bin dir changed PATH: %q", got)
-	}
-	want := "/opt/toolchain/bin:" + sandboxPATH
-	if got := sandboxPathFor("/opt/toolchain/bin"); got != want {
-		t.Fatalf("sandboxPathFor = %q, want %q", got, want)
-	}
-}
-
 func TestBubblewrapArgumentsExcludeSeatbelt(t *testing.T) {
 	dir := t.TempDir()
 	_, args, err := bubblewrapCommand(dir, []string{"true"})
@@ -122,7 +80,6 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 			t.Fatalf("bwrap args bind forbidden host path %q: %v", forbidden, args)
 		}
 	}
-	binDir, toolchainRoot, bindToolchain := toolchainFor(hostGoBin())
 	want := []string{
 		"--ro-bind-try /usr /usr",
 		"--ro-bind-try /bin /bin",
@@ -144,19 +101,19 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv PATH " + sandboxPathFor(binDir),
+		"--setenv PATH " + sandboxPATH(),
 		"--setenv HOME /replay",
 		"--setenv TMPDIR /replay/.tmp",
 		"--setenv GOTOOLCHAIN local",
 	}
-	if bindToolchain {
-		// The host Go toolchain is outside the system paths, so its GOROOT is bound
-		// read-only at its own path and its bin directory is prepended to PATH.
-		want = append(want, "--ro-bind "+toolchainRoot+" "+toolchainRoot)
-	}
 	for _, w := range want {
 		if !strings.Contains(joined, w) {
 			t.Fatalf("bwrap args missing %q: %v", w, args)
+		}
+	}
+	if root := goToolchainRoot(); root != "" && !coveredBySystemROPath(root) {
+		if bind := "--ro-bind-try " + root + " " + root; !strings.Contains(joined, bind) {
+			t.Fatalf("bwrap args missing the Go toolchain bind %q: %v", bind, args)
 		}
 	}
 	sep := -1
