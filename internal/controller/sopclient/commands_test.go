@@ -367,14 +367,14 @@ func TestSanitizeDiagnostic(t *testing.T) {
 		{"keeps a bare token budget line", "reason: token budget exhausted", "reason: token budget exhausted"},
 		{"keeps a plain url", "GET https://example.com/v1/status -> 200", "GET https://example.com/v1/status -> 200"},
 		{"keeps a file path", "reading internal/controller/sopclient/commands.go", "reading internal/controller/sopclient/commands.go"},
-		{"redacts an api key assignment", "api_key=sk-live-123", "[redacted]"},
+		{"redacts an api key assignment", "api_key=sk-live-123", "[redacted]"}, //gitleaks:allow: synthetic redaction fixture, not a credential
 		{"redacts an authorization header", "Authorization: Bearer abcdefghijkl", "[redacted]"},
 		{"redacts only the secret line", "reason: ok\npassword: hunter2", "reason: ok\n[redacted]"},
 		{"redacts a pem header line", "-----BEGIN RSA PRIVATE KEY-----", "[redacted]"},
 		// The shapes a provider error actually arrives in: a JSON body and prose.
 		{"redacts a json api key", `{"api_key": "sk-live-123"}`, "[redacted]"},
-		{"redacts a provider api key message", "Incorrect API key provided: sk-proj-abc123", "[redacted]"},
-		{"redacts a secret key assignment", "SECRET_KEY=abc123", "[redacted]"},
+		{"redacts a provider api key message", "Incorrect API key provided: sk-proj-abc123", "[redacted]"}, //gitleaks:allow: synthetic redaction fixture, not a credential
+		{"redacts a secret key assignment", "SECRET_KEY=abc123", "[redacted]"},                             //gitleaks:allow: synthetic redaction fixture, not a credential
 		{"redacts credentials in a url", "DATABASE_URL=postgres://user:s3cret@db:5432/app", "[redacted]"},
 		// Values that appear without a name, recognised by their own shape.
 		{"redacts an unnamed provider key", "using sk-proj-AbC123456789 for this call", "[redacted]"},

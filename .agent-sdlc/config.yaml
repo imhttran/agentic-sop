@@ -60,6 +60,36 @@ security:
   mode: report-only
   scope: workspace
   timeout_seconds: 300
+  stale_advisory_database: deny
+  osv_database_path: .agent-sdlc/osv-db
+  # Declared scope boundary: versioned test fixtures and snapshot references are
+  # not shipped dependency surface. The dependency fixtures include deliberately
+  # seeded vulnerable crates, so scanning them would only reproduce test data.
+  exclude:
+    - .git
+    - .agent-sdlc
+    - .run/reference
+    - internal/security/testdata
+    - testdata
+  adapters:
+    - id: gitleaks
+      category: secrets
+      protocol: builtin
+      command: [gitleaks]
+      version: "8.30.1"
+    - id: semgrep
+      category: sast
+      protocol: builtin
+      command: [semgrep]
+      rules: .agent-sdlc/security-rules
+      languages: [go, rust]
+      version: "1.183.0"
+    - id: osv-scanner
+      category: dependencies
+      protocol: builtin
+      command: [osv-scanner]
+      languages: [go, rust]
+      version: "2.7.0"
   evaluation:
     enabled: true
     profile: local
