@@ -113,7 +113,10 @@ func (c *Client) TaskActivityView(ctx context.Context, projectID, taskID string)
 	}
 	seq := 0
 	for _, id := range ids {
-		events := st.activity(id)
+		events, _, err := st.readActivity(id)
+		if err != nil {
+			return nil, err
+		}
 		if id == taskID {
 			out := make([]ActivityView, 0, len(events))
 			for i, e := range events {
@@ -139,7 +142,10 @@ func (s *Store) activityViews(ctx context.Context, projectID string) ([]Activity
 	var out []ActivityView
 	seq := 0
 	for _, id := range ids {
-		events := s.activity(id)
+		events, _, err := s.readActivity(id)
+		if err != nil {
+			return nil, err
+		}
 		for i, e := range events {
 			out = append(out, ActivityView{
 				ActivityEvent: e,
