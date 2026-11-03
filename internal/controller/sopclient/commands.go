@@ -12,6 +12,10 @@ import (
 	"time"
 )
 
+// execWaitDelay bounds how long Exec waits on the output pipes once the command has
+// exited or been cancelled.
+const execWaitDelay = 5 * time.Second
+
 // Commander runs SOP CLI verbs against a project root (FR-8).
 type Commander struct {
 	bin     string
@@ -32,6 +36,10 @@ func NewCommander(bin string, timeout time.Duration) *Commander {
 // Exec runs `sop <verb> [args...]` in dir and returns its combined output. It
 // defaults SOP_ACTIVITY=on (observer-only) so runs persist activity.jsonl; that
 // is the only environment the controller adds.
+//
+// When ctx is cancelled or the timeout elapses, the whole process tree the command
+// started is killed (see configureCancellation), so no orphaned agent, git or
+// validation command keeps changing the repo after Exec has reported failure.
 func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(ctx, c.timeout)
 	defer cancel()
@@ -39,6 +47,11 @@ func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) 
 	cmd := exec.CommandContext(ctx, c.bin, append([]string{verb}, args...)...)
 	cmd.Dir = dir
 	cmd.Env = activityEnv(os.Environ())
+	// Bound the wait for the output pipes after the command exits or is killed: a
+	// descendant that survived the kill and still holds stdout open would otherwise
+	// block Run until it exits on its own.
+	cmd.WaitDelay = execWaitDelay
+	configureCancellation(cmd)
 	var buf bytes.Buffer
 	// Tee the child output into the buffered result and, when a live sink is attached
 	// to the context, into it too, so the dashboard shows progress while a long
