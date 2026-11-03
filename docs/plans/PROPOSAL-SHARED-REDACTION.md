@@ -1,7 +1,7 @@
 # Proposal: one credential detector, per-surface markers
 
-Status: **PROPOSAL — not approved, not implemented.** No redaction behaviour is
-changed by this document.
+Status: **PROPOSAL — P1 implemented (`internal/redact`), P2 and P3 not started.**
+This document records the target design; the phases below say what has landed.
 
 Related: the diagnostics redaction that exposed the divergence
 (`internal/controller/sopclient`, PR #221 and its follow-up), and
@@ -33,7 +33,9 @@ Ten mechanisms across seventeen non-test files, with fourteen credential regexes
 ## Why it matters
 
 The detectors are not supersets of one another, so the same credential is caught
-or missed depending on which surface prints it:
+or missed depending on which surface prints it. Column numbers follow the table
+above; mechanism 10 redacts structured URLs rather than free text, so it has no
+column.
 
 | Shape | 1/2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
@@ -68,7 +70,7 @@ secret on one surface and not another.
 | --- | --- | --- |
 | `outcomefile` | value only, key kept, per rule kind | `<redacted-token>`, `<redacted-access-key>`, `<redacted-key>`, `<redacted>` |
 | `hipcompare` | value only, key kept | `<redacted>` |
-| `acp` diagnostics | value only, key kept; token shapes whole | `[redacted]` |
+| `acp` diagnostics | value only, key kept; token shapes whole | `[REDACTED]` |
 | `sopclient` diagnostics | whole line | `[redacted]` |
 | `handoff` | value replacement | `[redacted]` |
 | `ollamaagent` | `KEY=***` | `***` |
@@ -141,11 +143,29 @@ renderers over one detector, not separate detectors.
 
 Each phase is independently shippable.
 
-| Phase | Scope | Risk |
-| --- | --- | --- |
-| P1 | `internal/redact` + shared corpus; adopt in `acp`, `sopclient`, `ollamaagent` (nothing persisted) | low |
-| P2 | `outcomefile`, `hipcompare` — persisted artifacts; adapters must reproduce today's markers byte for byte | medium, golden tests |
-| P3 | `handoff`, `security` — `EnvSecrets` + `Values`; retires `redactCapsule`, `redactList` duplication | medium |
+| Phase | Scope | Risk | State |
+| --- | --- | --- | --- |
+| P1 | `internal/redact` + shared corpus; adopt in `acp`, `sopclient`, `ollamaagent` (nothing persisted) | low | **implemented** |
+| P2 | `outcomefile`, `hipcompare` — persisted artifacts; adapters must reproduce today's markers byte for byte | medium, golden tests | not started |
+| P3 | `handoff`, `security` — `EnvSecrets` + `Values`; retires `redactCapsule`, `redactList` duplication | medium | not started |
+
+### What P1 changed in practice
+
+- `internal/redact` owns the shapes; `sopclient.SanitizeDiagnostic` is now
+  `redact.Line` with `[redacted]`, and the ACP's `redactLine` is
+  `redact.ShapesValues` with `[REDACTED]`. Both keep their public behaviour and
+  their tests.
+- `ollamaagent` uses `redact.IsSecretName`, so a variable one surface treats as a
+  secret is a secret on every surface. The old list matched `AUTH` as a substring,
+  which also caught `GIT_AUTHOR_DATE`; segment matching fixes that.
+- The ACP kept one rule of its own: `[A-Za-z0-9_-]{32,}`. Redacting a long opaque
+  blob is right for a transport diagnostic, but it is not a credential shape —
+  applying it everywhere would redact commit SHAs. It is documented in
+  `internal/acp/diagnostics.go` as ACP-only.
+- Matching is span-based: the first rule to claim a span wins, so text a rule has
+  already replaced is never re-examined. That fixed a real leak in the ACP: its
+  key rule ran before the bearer rule, so `Authorization: Bearer <token>` redacted
+  the word "Bearer" and left the token.
 
 ## Tests
 

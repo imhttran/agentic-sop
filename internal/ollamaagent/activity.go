@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/activity"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -104,13 +105,6 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
-// sensitiveKeys are substrings that mark a KEY=VALUE assignment as carrying a
-// secret, so its value is masked before it can reach the activity stream.
-var sensitiveKeys = []string{
-	"TOKEN", "SECRET", "PASSWORD", "PASSWD", "APIKEY", "API_KEY",
-	"ACCESS_KEY", "PRIVATE_KEY", "CREDENTIAL", "AUTH", "SESSION",
-}
-
 // redactCommand renders a command for activity: a single bounded line with the
 // value of any obviously sensitive KEY=VALUE assignment masked, so a command can
 // never leak a token through the stream. It is a display-only summary.
@@ -122,24 +116,12 @@ func redactCommand(command string) string {
 	parts := strings.Fields(command)
 	for i, part := range parts {
 		if eq := strings.IndexByte(part, '='); eq > 0 {
-			key := strings.ToUpper(part[:eq])
-			if containsSensitiveKey(key) {
+			if redact.IsSecretName(part[:eq]) {
 				parts[i] = part[:eq+1] + "***"
 			}
 		}
 	}
 	return truncateActivity(strings.Join(parts, " "), maxActivityDetail)
-}
-
-func containsSensitiveKey(key string) bool {
-	// Normalize separators so --api-key, api.key, and API_KEY all match.
-	key = strings.NewReplacer("-", "_", ".", "_").Replace(key)
-	for _, s := range sensitiveKeys {
-		if strings.Contains(key, s) {
-			return true
-		}
-	}
-	return false
 }
 
 // oneLine collapses s to its first non-empty trimmed line.
