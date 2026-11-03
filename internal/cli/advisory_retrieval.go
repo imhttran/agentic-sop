@@ -61,17 +61,6 @@ const (
 	AdvisoryKindCandidateRemedy AdvisoryItemKind = "candidate_remedy"
 )
 
-// Advisory evidence markers. A record declares its status and compatibility as
-// explicit, structured `key=value` tokens in its citation, which is the only
-// per-record metadata the bounded boundary carries. Markers are parsed, never
-// substring-matched inside arbitrary text, so prose that merely contains
-// "status=verified" cannot promote a record to a candidate remedy.
-const (
-	advisoryMarkerVerified   = "status=verified"
-	advisoryMarkerCorrection = "correction=verified"
-	advisoryMarkerCompat     = "compat="
-)
-
 // AdvisoryItem is one mapped advisory result with its source reference and
 // compatibility limit. It is read-only: it carries no approval authority.
 type AdvisoryItem struct {
@@ -111,10 +100,6 @@ type AdvisoryResult struct {
 // shared retrievalboundary.Retriever interface so any backend (the local
 // SQLite/FTS backend or a producer-backed client) can serve it.
 type AdvisoryRetriever = retrievalboundary.Retriever
-
-// advisoryRetrievalFunc is the per-attempt injectable seam used by tests. It
-// returns the raw bounded result; policy mapping happens in mapAdvisoryResult.
-type advisoryRetrievalFunc func(ctx context.Context, q retrievalboundary.ScopedQuery) (retrievalboundary.Result, error)
 
 // openAdvisoryRetriever builds the local bounded retriever: the SQLite FTS index plus the
 // authoritative outcome snapshot used for drift exclusion. The caller closes it.
@@ -417,20 +402,6 @@ func citationMarkers(ev retrievalboundary.Evidence) map[string]string {
 	return out
 }
 
-// isVerifiedCorrection reports whether an outcome-corpus evidence record is a
-// verified correction record. Both the record status and the correction marker
-// must be explicit, structured tokens.
-func isVerifiedCorrection(ev retrievalboundary.Evidence) bool {
-	if strings.TrimSpace(ev.ContentHash) == "" {
-		return false
-	}
-	m := citationMarkers(ev)
-	if m["status"] != "verified" {
-		return false
-	}
-	return m["correction"] == "verified"
-}
-
 // recordCompatibility reads the record's own explicit compatibility marker and
 // reports whether the record carried one.
 func recordCompatibility(ev retrievalboundary.Evidence) (string, bool) {
@@ -544,49 +515,4 @@ func advisoryCitations(items []AdvisoryItem) []string {
 		}
 	}
 	return out
-}
-
-// advisoryRequiredSatisfied reports whether the advisory result satisfies the
-// task's declared required evidence. It returns the missing identities (sorted)
-// and a structured error. It never consults approvals.
-func advisoryRequiredSatisfied(required []string, res AdvisoryResult) ([]string, error) {
-	missing := make([]string, 0, len(required))
-	for _, req := range required {
-		kind, id, _ := strings.Cut(req, ":")
-		switch kind {
-		case "corpus":
-			if !advisoryHasCorpus(res.Items, id) {
-				missing = append(missing, req)
-			}
-		case "source":
-			if !advisoryHasSourcePrefix(res.Items, id) {
-				missing = append(missing, req)
-			}
-		default:
-			missing = append(missing, req)
-		}
-	}
-	if len(missing) > 0 {
-		sort.Strings(missing)
-		return missing, errors.New("required advisory evidence not satisfied")
-	}
-	return nil, nil
-}
-
-func advisoryHasCorpus(items []AdvisoryItem, corpus string) bool {
-	for _, it := range items {
-		if string(it.Corpus) == corpus {
-			return true
-		}
-	}
-	return false
-}
-
-func advisoryHasSourcePrefix(items []AdvisoryItem, prefix string) bool {
-	for _, it := range items {
-		if strings.HasPrefix(it.SourceRef, prefix) {
-			return true
-		}
-	}
-	return false
 }

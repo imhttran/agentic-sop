@@ -565,18 +565,6 @@ func deriveGatedOutcome(cfg config.Config, spec *taskfile.Spec, dir string, gate
 // must never be authorized as an acceptance check.
 var rejectedGoFlagForms = []string{"exec", "toolexec", "vettool", "o", "overlay", "modfile"}
 
-// authorizeAcceptanceCommand tokenizes an operator-declared acceptance command and
-// validates it against the command policy and the hardened form rules, returning the
-// exact argument vector that will execute. It reuses toolharness.SplitCommand, which
-// rejects shell syntax (command chaining, pipelines, redirection, command
-// substitution, environment expansion, and globs) and unterminated quotes, so
-// authorization validates the same structure that runs — never a shell. A
-// classification error, a non-SAFE class, or a rejected dangerous form is returned
-// before execution, so an unauthorized command never runs.
-func authorizeAcceptanceCommand(command string) ([]string, error) {
-	return authorizeAcceptanceCommandWith(command, false, "")
-}
-
 // authorizeAcceptanceCommandWith is authorizeAcceptanceCommand with an explicit
 // acceptance-check Cargo permission and repository root. When the permission is
 // OFF (the default) a Cargo command is never authorized; when it is ON the Cargo

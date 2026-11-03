@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
@@ -19,7 +20,7 @@ func drive(t *testing.T, store *fakeStore, s *Scheduler, execute func(task *doma
 	t.Helper()
 	var history []Result
 	for i := 0; i < 100; i++ {
-		res, err := s.Next(nil)
+		res, err := s.Next(context.TODO())
 		if err != nil {
 			t.Fatalf("Next returned error: %v", err)
 		}

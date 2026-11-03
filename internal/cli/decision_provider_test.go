@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -37,7 +38,7 @@ func TestDecisionProviderDeterministic(t *testing.T) {
 	if p == nil || p.Name() != "deterministic" {
 		t.Fatalf("provider=%v, want the in-process deterministic provider", p)
 	}
-	d, err := p.Decide(nil, decision.Request{UseCase: "k", Subject: "small change"})
+	d, err := p.Decide(context.TODO(), decision.Request{UseCase: "k", Subject: "small change"})
 	if err != nil || decision.Validate(d) != nil {
 		t.Fatalf("deterministic provider must satisfy the contract: d=%+v err=%v", d, err)
 	}

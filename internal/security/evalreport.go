@@ -22,15 +22,6 @@ const (
 	EvalCaseSkipped EvalCaseStatus = "skipped"
 )
 
-// isKnownEvalCaseStatus reports whether s is one of the four allowed statuses.
-func isKnownEvalCaseStatus(s EvalCaseStatus) bool {
-	switch s {
-	case EvalCasePassed, EvalCaseFailed, EvalCaseError, EvalCaseSkipped:
-		return true
-	}
-	return false
-}
-
 // EvalUnavailable is the explicit marker for a required field that could not be
 // populated. It never means empty or clean.
 const EvalUnavailable = "UNAVAILABLE"
