@@ -48,7 +48,7 @@ func decisions(base baseData, project sopclient.ProjectDetail, changed sopclient
 		Project:           project,
 		ChangedTasksError: changedErr,
 		// An unreported listing is an absence, never "no gates".
-		GatesUnread: !project.ApprovalsReported,
+		GatesUnread: !project.Summary.ApprovalsReported,
 	}
 
 	// A task appears only when SOP's approval listing reports an applicable gate.

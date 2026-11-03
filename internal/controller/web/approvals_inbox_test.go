@@ -123,6 +123,20 @@ func TestProjectsListShowsAttentionBadge(t *testing.T) {
 	if !strings.Contains(body, "needs attention") {
 		t.Fatalf("attention badge missing from projects list: %q", body)
 	}
+	if strings.Contains(body, "approvals unavailable") {
+		t.Errorf("a read listing was flagged unavailable: %q", body)
+	}
+}
+
+// An unread listing undercounts NeedsAttention, so the projects list must say
+// the gates were not counted rather than look like nothing needs a human.
+func TestProjectsListSurfacesUnreadListing(t *testing.T) {
+	srv, _ := unreadApprovalsServer(t)
+	_, body := get(t, srv.URL+"/projects")
+
+	if !strings.Contains(body, "approvals unavailable") {
+		t.Fatalf("unread approval absence missing from projects list: %q", body)
+	}
 }
 
 // The inbox gate list refreshes itself when a decision finishes, so a decided

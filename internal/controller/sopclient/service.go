@@ -89,15 +89,12 @@ func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) 
 		return ProjectDetail{}, err
 	}
 	plan, _ := st.PlanSource()
-	// ApprovalsReported carries whether SOP reported a listing (possibly empty) or the
-	// read failed, so a consumer can show an absence rather than "no gates".
 	return ProjectDetail{
-		Summary:           sum,
-		Tasks:             tasks,
-		PlanSource:        plan,
-		Plan:              st.Plan(),
-		PlanPerformance:   st.PlanPerformance(),
-		ApprovalsReported: approvals.Reported,
+		Summary:         sum,
+		Tasks:           tasks,
+		PlanSource:      plan,
+		Plan:            st.Plan(),
+		PlanPerformance: st.PlanPerformance(),
 	}, nil
 }
 

@@ -76,6 +76,11 @@ type ProjectSummary struct {
 	// NeedsAttention counts tasks with an applicable gate plus pending
 	// changed-executed tasks.
 	NeedsAttention int
+	// ApprovalsReported is true when SOP returned an approval listing (possibly
+	// empty). It is false when the listing could not be read, which is an ABSENCE:
+	// a reader MUST NOT render it as "no gates", and NeedsAttention then omits
+	// gates (docs/specs/HUMAN-APPROVAL.md).
+	ApprovalsReported bool
 }
 
 // PercentComplete is completed/total as an integer percentage.
@@ -112,11 +117,6 @@ type ProjectDetail struct {
 	Plan PlanGate
 	// PlanPerformance is SOP's plan-level aggregate (diagnostic only).
 	PlanPerformance PlanPerformance
-	// ApprovalsReported is true when SOP returned an approval listing (possibly
-	// empty). It is false when the listing could not be read, which is an ABSENCE:
-	// a reader MUST NOT render it as "no gates"
-	// (docs/specs/HUMAN-APPROVAL.md).
-	ApprovalsReported bool
 }
 
 // ActiveTask returns the task SOP groups as RUNNING with an in-flight stage.
