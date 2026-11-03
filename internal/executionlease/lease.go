@@ -482,27 +482,23 @@ func ReleaseStale(dir string, expect Owner) error {
 		return fmt.Errorf("execution lease claim %s: %w", claim, err)
 	}
 	removeClaim := func() { _ = os.Remove(claim) }
+	defer removeClaim()
 
 	state, err := readStateFile(claim)
 	if err != nil {
-		removeClaim()
 		return err
 	}
 	if !state.Present {
-		removeClaim()
 		return nil
 	}
 	if state.Unparsable {
 		if expect.Kind != "" {
-			removeClaim()
 			return ErrLeaseChanged
 		}
 	} else if !state.Owner.Same(expect) {
-		removeClaim()
 		return ErrLeaseChanged
 	}
 	if !state.Stale(time.Now(), Hostname(), Grace, HeartbeatLimit) {
-		removeClaim()
 		return ErrLeaseNotStale
 	}
 
@@ -518,21 +514,16 @@ func ReleaseStale(dir string, expect Owner) error {
 	pathInfo, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			removeClaim()
 			return nil
 		}
-		removeClaim()
 		return fmt.Errorf("execution lease at %s: %w", path, err)
 	}
 	if !os.SameFile(claimInfo, pathInfo) {
-		removeClaim()
 		return ErrLeaseChanged
 	}
 	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		removeClaim()
 		return fmt.Errorf("execution lease remove %s: %w", path, err)
 	}
-	removeClaim()
 	return nil
 }
 

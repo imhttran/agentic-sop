@@ -83,6 +83,17 @@ than acted on), together with the `execution.lease` setting, which defaults to
 `off`. **`sop run` acquires it** when a project sets `execution.lease: required`
 (or records contention under `advisory`), so CLI-first is now detectable.
 
+Heartbeat and resume-release are now wired. While a run holds the lease it refreshes
+the record at about `HeartbeatLimit/5`, so a healthy run longer than the limit is
+not mistaken for stale where pid liveness cannot be checked (Windows) or the holder
+is on another host. If a heartbeat fails, the run reports it on stderr and
+continues; it does not cancel the execution. `sop resume` reports a held lease and
+releases one that is stale — the proposal's crash/stale acceptance case: kill the
+owner, the lease is not stolen automatically, `sop resume` reports and releases it,
+and the next start succeeds. Resume never releases a live lease, and it handles a
+stale lock whatever `execution.lease` is set to, because a stale lock is stale
+either way.
+
 The gap is not closed: the setting is off by default, `sop prompt` does not acquire
 a lease, and the MCP and ACP starts neither acquire one nor consult a held one — an
 ACP/MCP start still cannot see a running `sop run`, and a `sop run` cannot see an
