@@ -19,6 +19,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	sopctx "github.com/imhttran/agentic-sop/internal/context"
 	"github.com/imhttran/agentic-sop/internal/decisionmemory"
+	"github.com/imhttran/agentic-sop/internal/executionlease"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/model"
@@ -193,6 +194,14 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// One execution per project: the lease is held for this task's lifetime and the
+	// holder is named when execution.lease is required and another execution has it.
+	lease, err := executionLease(cfg, dir, executionlease.Owner{Kind: executionlease.KindRun, TaskID: spec.ID}, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	defer lease.Release()
 	routing, err := applyModelRouting(context.Background(), &cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)

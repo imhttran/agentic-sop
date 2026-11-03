@@ -16,6 +16,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/autonomy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/executionlease"
 	"github.com/imhttran/agentic-sop/internal/failure"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planflow"
@@ -76,6 +77,14 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
+	// One execution per project, held across the whole graph run, so an ACP or MCP
+	// start cannot drive the same project while this invocation is executing.
+	lease, err := executionLease(cfg, dir, executionlease.Owner{Kind: executionlease.KindRun}, stderr)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	defer lease.Release()
 	routing, err := applyModelRouting(context.Background(), &cfg, d.modelClass)
 	if err != nil {
 		fmt.Fprintf(stderr, "run: %v\n", err)
