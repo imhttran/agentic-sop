@@ -30,19 +30,25 @@ func StatePath(root string) string {
 	return filepath.Join(root, ".agent-sdlc", "state.db")
 }
 
-// OpenStore opens the SOP state database read-only.
+// OpenStore opens the SOP state database read-only. A missing database keeps the
+// "is this an initialized SOP project?" message; any other failure is wrapped with
+// the path and its cause, so a permission or I/O error is not mistaken for an
+// uninitialized project.
 func OpenStore(root string) (*Store, error) {
 	path := StatePath(root)
 	if _, err := os.Stat(path); err != nil {
-		return nil, fmt.Errorf("no SOP state at %s (is this an initialized SOP project?)", path)
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("no SOP state at %s (is this an initialized SOP project?)", path)
+		}
+		return nil, fmt.Errorf("SOP state at %s: %w", path, err)
 	}
 	db, err := sql.Open("sqlite", "file:"+path+"?mode=ro&_pragma=busy_timeout(5000)")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("open SOP state at %s: %w", path, err)
 	}
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, err
+		return nil, fmt.Errorf("open SOP state at %s: %w", path, err)
 	}
 	return &Store{root: root, db: db}, nil
 }
