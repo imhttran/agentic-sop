@@ -301,6 +301,10 @@ func TestCancel(t *testing.T) {
 			"missing sessionId": `{}`,
 			"unknown field":     `{"sessionId":"sess_x","bogus":true}`,
 			"wrong type":        `{"sessionId":42}`,
+			// session/cancel names the session only. An identity field is not
+			// accepted silently: strict decoding rejects it before any stop, so
+			// a client that tries to cancel a specific job learns the shape.
+			"jobId is not accepted": `{"sessionId":"sess_x","jobId":"work-20260101-000000"}`,
 		}
 		for name, params := range cases {
 			t.Run(name, func(t *testing.T) {
