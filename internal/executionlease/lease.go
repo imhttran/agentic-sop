@@ -120,9 +120,15 @@ func (o Owner) Describe() string {
 type BusyError struct {
 	Owner Owner
 	Stale bool
+	// Recovering is true when an explicit stale-lease recovery is in progress and
+	// this start backed out rather than race it.
+	Recovering bool
 }
 
 func (e *BusyError) Error() string {
+	if e.Recovering {
+		return "project is executing: a lease recovery is in progress; retry after it completes"
+	}
 	stale := ""
 	if e.Stale {
 		stale = " [stale: no live owner; `sop resume` reports and releases it]"
@@ -136,12 +142,12 @@ func (e *BusyError) Error() string {
 // Held is a held lease. Release is idempotent, so a deferred release after an
 // explicit one is safe.
 type Held struct {
-	dir   string
-	path  string
-	owner Owner
-	f     *os.File
-	once  sync.Once
-	mu    sync.Mutex
+	path     string
+	owner    Owner
+	f        *os.File
+	released bool
+	relErr   error
+	mu       sync.Mutex
 }
 
 func leasePath(dir string) string { return filepath.Join(dir, config.DirName, FileName) }
@@ -151,46 +157,73 @@ func leasePath(dir string) string { return filepath.Join(dir, config.DirName, Fi
 // must learn it is second, not queue behind a run that may take hours.
 //
 // The record is written before Acquire returns, so a reader that sees the file also
-// sees who holds it.
+// sees who holds it. A start that races an explicit stale-lease recovery backs out
+// (BusyError.Recovering) rather than create a second lease during the recovery.
 func Acquire(dir string, owner Owner) (*Held, error) {
+	if strings.TrimSpace(owner.Kind) == "" {
+		return nil, errors.New("executionlease: owner kind is required")
+	}
 	path := leasePath(dir)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return nil, err
 	}
-	f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
-	if err != nil {
-		if !errors.Is(err, os.ErrExist) {
+
+	for attempt := 0; attempt < 3; attempt++ {
+		f, err := os.OpenFile(path, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+		if err != nil {
+			if !errors.Is(err, os.ErrExist) {
+				return nil, err
+			}
+			state, readErr := Read(dir)
+			if readErr != nil {
+				return nil, readErr
+			}
+			if !state.Present {
+				// The holder released between the failed create and the read.
+				continue
+			}
+			return nil, &BusyError{Owner: state.Owner, Stale: state.Stale(time.Now(), Hostname(), Grace, HeartbeatLimit)}
+		}
+
+		if owner.Owner == "" {
+			owner.Owner = "sop"
+		}
+		if owner.Host == "" {
+			owner.Host = Hostname()
+		}
+		if owner.PID == 0 {
+			owner.PID = os.Getpid()
+		}
+		now := time.Now().UTC()
+		if owner.StartedAt.IsZero() {
+			owner.StartedAt = now
+		}
+		if owner.HeartbeatAt.IsZero() {
+			owner.HeartbeatAt = now
+		}
+		if err := writeRecord(f, owner); err != nil {
+			_ = f.Close()
+			_ = os.Remove(path)
 			return nil, err
 		}
-		state, readErr := Read(dir)
-		if readErr != nil {
-			return nil, readErr
-		}
-		return nil, &BusyError{Owner: state.Owner, Stale: state.Stale(time.Now(), Hostname(), Grace, HeartbeatLimit)}
-	}
 
-	if owner.Owner == "" {
-		owner.Owner = "sop"
+		// A recovery claim means an explicit release of an older lease is in
+		// progress. Back out rather than race it: the recovery may restore a lease
+		// it found live, and two holders must never coexist.
+		recovering, claimErr := claimsInProgress(dir, now, Grace)
+		if claimErr != nil {
+			_ = f.Close()
+			_ = os.Remove(path)
+			return nil, claimErr
+		}
+		if recovering {
+			_ = f.Close()
+			_ = os.Remove(path)
+			return nil, &BusyError{Recovering: true}
+		}
+		return &Held{path: path, owner: owner, f: f}, nil
 	}
-	if owner.Host == "" {
-		owner.Host, _ = os.Hostname()
-	}
-	if owner.PID == 0 {
-		owner.PID = os.Getpid()
-	}
-	now := time.Now().UTC()
-	if owner.StartedAt.IsZero() {
-		owner.StartedAt = now
-	}
-	if owner.HeartbeatAt.IsZero() {
-		owner.HeartbeatAt = now
-	}
-	if err := writeRecord(f, owner); err != nil {
-		_ = f.Close()
-		_ = os.Remove(path)
-		return nil, err
-	}
-	return &Held{dir: dir, path: path, owner: owner, f: f}, nil
+	return nil, errors.New("executionlease: the lease kept changing; retry")
 }
 
 // Owner returns the record this lease holds.
@@ -214,30 +247,74 @@ func (h *Held) Heartbeat(now time.Time) error {
 	if h.f == nil {
 		return nil
 	}
+	if err := h.holdsPathLocked(); err != nil {
+		return err
+	}
 	h.owner.HeartbeatAt = now.UTC()
 	return writeRecord(h.f, h.owner)
 }
 
-// Release drops the lease. It is idempotent and safe on a nil receiver. The file is
-// removed only if it still describes this execution, so a release can never delete
-// a lease someone else took after ours was recovered.
-func (h *Held) Release() {
-	if h == nil {
-		return
+// holdsPathLocked reports whether the path still names the inode this execution
+// created. A recovery that removed or replaced the lease must not be heartbeated
+// silently: the execution no longer holds the project.
+func (h *Held) holdsPathLocked() error {
+	heldInfo, err := h.f.Stat()
+	if err != nil {
+		return fmt.Errorf("execution lease: stat held file: %w", err)
 	}
-	h.once.Do(func() {
-		h.mu.Lock()
-		defer h.mu.Unlock()
-		if h.f != nil {
-			_ = h.f.Close()
-			h.f = nil
+	pathInfo, err := os.Stat(h.path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return ErrLeaseLost
 		}
-		if state, err := Read(h.dir); err == nil {
-			if state.Present && state.Owner.Same(h.owner) {
-				_ = os.Remove(h.path)
+		return fmt.Errorf("execution lease at %s: %w", h.path, err)
+	}
+	if !os.SameFile(heldInfo, pathInfo) {
+		return ErrLeaseLost
+	}
+	return nil
+}
+
+// Release drops the lease. It is idempotent and safe on a nil receiver. The file is
+// removed only if it still names the inode this execution created, so a release can
+// never delete a lease someone else took after ours was recovered; that also lets a
+// holder clean up its own partial record after a failed heartbeat write.
+func (h *Held) Release() error {
+	if h == nil {
+		return nil
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.released {
+		return h.relErr
+	}
+	h.released = true
+	var errs []error
+	if h.f != nil {
+		heldInfo, statErr := h.f.Stat()
+		if statErr != nil {
+			errs = append(errs, fmt.Errorf("execution lease: stat held file: %w", statErr))
+		}
+		if closeErr := h.f.Close(); closeErr != nil {
+			errs = append(errs, fmt.Errorf("execution lease: close: %w", closeErr))
+		}
+		h.f = nil
+		if heldInfo != nil {
+			pathInfo, pathErr := os.Stat(h.path)
+			switch {
+			case errors.Is(pathErr, os.ErrNotExist):
+				// Already released or recovered.
+			case pathErr != nil:
+				errs = append(errs, fmt.Errorf("execution lease at %s: %w", h.path, pathErr))
+			case os.SameFile(heldInfo, pathInfo):
+				if rmErr := os.Remove(h.path); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+					errs = append(errs, fmt.Errorf("execution lease remove %s: %w", h.path, rmErr))
+				}
 			}
 		}
-	})
+	}
+	h.relErr = errors.Join(errs...)
+	return h.relErr
 }
 
 // State is what a read found on disk.
@@ -256,7 +333,16 @@ type State struct {
 
 // Read inspects the project's lease file. A missing file is not an error.
 func Read(dir string) (State, error) {
-	path := leasePath(dir)
+	return readStateFile(leasePath(dir))
+}
+
+// maxRecordBytes bounds a lease record; a larger file is treated as unparsable
+// (held during grace) rather than read into memory.
+const maxRecordBytes = 64 << 10
+
+// readStateFile inspects one lease record; the recovery claim is read through the
+// same parser. A missing file is not an error.
+func readStateFile(path string) (State, error) {
 	info, err := os.Stat(path)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -265,8 +351,15 @@ func Read(dir string) (State, error) {
 		return State{}, fmt.Errorf("execution lease at %s: %w", path, err)
 	}
 	state := State{Present: true, Modified: info.ModTime()}
+	if info.Size() > maxRecordBytes {
+		state.Unparsable = true
+		return state, nil
+	}
 	raw, err := os.ReadFile(path)
 	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return State{}, nil
+		}
 		return State{}, fmt.Errorf("execution lease at %s: %w", path, err)
 	}
 	var owner Owner
@@ -279,9 +372,9 @@ func Read(dir string) (State, error) {
 }
 
 // Stale reports whether the lease looks abandoned. A lease held on this host by a
-// live pid is not stale; on another host only the heartbeat can say. A record that
-// cannot be parsed is given Grace, because a holder writes it immediately after
-// creating the file.
+// live pid is not stale; where pid liveness cannot be probed (Windows) or the lease
+// is held elsewhere, only the heartbeat can say. A record that cannot be parsed is
+// given Grace, because a holder writes it immediately after creating the file.
 //
 // Staleness is a report, never an action: nothing here releases a lease.
 func (s State) Stale(now time.Time, hostname string, grace, heartbeatLimit time.Duration) bool {
@@ -292,7 +385,11 @@ func (s State) Stale(now time.Time, hostname string, grace, heartbeatLimit time.
 		return now.Sub(s.Modified) > grace
 	}
 	if s.Owner.Host != "" && s.Owner.Host == hostname && s.Owner.PID > 0 {
-		return !alive(s.Owner.PID)
+		if live, known := alive(s.Owner.PID); known {
+			return !live
+		}
+		// Liveness cannot be probed on this platform (Windows): the heartbeat is the
+		// only signal, so fall through to it.
 	}
 	if s.Owner.HeartbeatAt.IsZero() {
 		return now.Sub(s.Modified) > heartbeatLimit
@@ -300,28 +397,114 @@ func (s State) Stale(now time.Time, hostname string, grace, heartbeatLimit time.
 	return now.Sub(s.Owner.HeartbeatAt) > heartbeatLimit
 }
 
-// ErrLeaseChanged reports that the lease on disk is no longer the one the caller
-// inspected, so a stale release would have released someone else's execution.
-var ErrLeaseChanged = errors.New("execution lease changed since it was inspected")
+var (
+	// ErrLeaseChanged reports that the lease on disk is no longer the one the caller
+	// inspected, so a stale release would have released someone else's execution.
+	ErrLeaseChanged = errors.New("execution lease changed since it was inspected")
+	// ErrLeaseNotStale reports that the lease still has a live owner (a running pid
+	// or a fresh heartbeat), so an explicit recovery must leave it alone.
+	ErrLeaseNotStale = errors.New("execution lease is not stale")
+	// ErrLeaseLost reports that the path no longer names the inode this holder
+	// created; the execution no longer holds the project.
+	ErrLeaseLost = errors.New("execution lease was lost")
+)
 
-// ReleaseStale removes an abandoned lease after an operator has inspected it. It
-// refuses when the lease no longer matches expect, so a start that raced the
-// recovery cannot be undone.
+// ReleaseStale removes an inspected stale lease. It first links the lease to a
+// private claim (the lease path stays in place), re-reads that inode, and removes the
+// path only if the captured record is still the expected owner and still stale. A
+// start that races the recovery backs out while the claim is fresh (Acquire), so a
+// release cannot delete, or restore over, a lease taken in the meantime.
+//
+// Pass the zero Owner to release an unparsable record that is stale by mtime; a
+// zero Owner never matches a parsed record.
 func ReleaseStale(dir string, expect Owner) error {
-	state, err := Read(dir)
+	path := leasePath(dir)
+	claim := fmt.Sprintf("%s.recover.%d.%d", path, os.Getpid(), time.Now().UnixNano())
+	if err := os.Link(path, claim); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("execution lease claim %s: %w", claim, err)
+	}
+	removeClaim := func() { _ = os.Remove(claim) }
+
+	state, err := readStateFile(claim)
 	if err != nil {
+		removeClaim()
 		return err
 	}
 	if !state.Present {
+		removeClaim()
 		return nil
 	}
-	if state.Unparsable || !state.Owner.Same(expect) {
+	if state.Unparsable {
+		if expect.Kind != "" {
+			removeClaim()
+			return ErrLeaseChanged
+		}
+	} else if !state.Owner.Same(expect) {
+		removeClaim()
 		return ErrLeaseChanged
 	}
-	if err := os.Remove(leasePath(dir)); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return err
+	if !state.Stale(time.Now(), Hostname(), Grace, HeartbeatLimit) {
+		removeClaim()
+		return ErrLeaseNotStale
 	}
+
+	// The path must still name the inode we claimed. If it does not, a recovery or a
+	// start moved on and this release must not touch it.
+	claimInfo, err := os.Stat(claim)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("execution lease claim %s: %w", claim, err)
+	}
+	pathInfo, err := os.Stat(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			removeClaim()
+			return nil
+		}
+		removeClaim()
+		return fmt.Errorf("execution lease at %s: %w", path, err)
+	}
+	if !os.SameFile(claimInfo, pathInfo) {
+		removeClaim()
+		return ErrLeaseChanged
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		removeClaim()
+		return fmt.Errorf("execution lease remove %s: %w", path, err)
+	}
+	removeClaim()
 	return nil
+}
+
+// claimsInProgress reports whether a lease recovery is in progress (a claim younger
+// than grace). Older claims are a crashed recovery's hard link; removing a link
+// never affects the lease path, so they are cleaned up and ignored.
+func claimsInProgress(dir string, now time.Time, grace time.Duration) (bool, error) {
+	claims, err := filepath.Glob(filepath.Join(dir, config.DirName, FileName+".recover.*"))
+	if err != nil {
+		return false, err
+	}
+	fresh := false
+	for _, claim := range claims {
+		info, statErr := os.Stat(claim)
+		if statErr != nil {
+			if errors.Is(statErr, os.ErrNotExist) {
+				continue
+			}
+			return false, fmt.Errorf("execution lease claim %s: %w", claim, statErr)
+		}
+		if now.Sub(info.ModTime()) <= grace {
+			fresh = true
+			continue
+		}
+		_ = os.Remove(claim)
+	}
+	return fresh, nil
 }
 
 // Hostname is the local host name as recorded in a lease.
