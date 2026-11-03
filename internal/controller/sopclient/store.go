@@ -180,13 +180,19 @@ func (s *Store) Task(ctx context.Context, id string, approvals ApprovalsListing)
 	}
 	d.UpdatedAt = parseTime(updated)
 
-	if deps, err := s.dependencyMap(ctx); err == nil {
-		d.Dependencies = deps[id]
-		if statuses, err := s.statusMap(ctx); err == nil {
-			for _, dep := range d.Dependencies {
-				if st, ok := statuses[dep]; !ok || !IsTerminal(st) {
-					d.BlockedBy = append(d.BlockedBy, dep)
-				}
+	deps, err := s.dependencyMap(ctx)
+	if err != nil {
+		return d, err
+	}
+	d.Dependencies = deps[id]
+	if len(d.Dependencies) > 0 {
+		statuses, err := s.statusMap(ctx)
+		if err != nil {
+			return d, err
+		}
+		for _, dep := range d.Dependencies {
+			if st, ok := statuses[dep]; !ok || !IsTerminal(st) {
+				d.BlockedBy = append(d.BlockedBy, dep)
 			}
 		}
 	}

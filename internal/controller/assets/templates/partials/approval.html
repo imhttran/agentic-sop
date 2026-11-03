@@ -98,9 +98,13 @@ as a conflict. The actor/note fields are forwarded as `--by` / `--note`. */ -}}
 {{else}}
 <p class="muted">
     Approval: <span class="badge s-unavailable">{{unavailable}}</span>
-    <span class="small"
+    {{if $a.Reported}}<span class="small"
         >SOP reports no human approval boundary for this task; no approval
         action is offered.</span
-    >
+    >{{else}}<span class="small"
+        >SOP did not report an approval listing for this project; this is an
+        absence, not "no gate". Check the SOP CLI (<code>SOP_BIN</code>) and the
+        project state.</span
+    >{{end}}
 </p>
 {{end}}

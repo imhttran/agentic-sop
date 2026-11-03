@@ -1,7 +1,6 @@
 package sopclient
 
 import (
-	"bufio"
 	"bytes"
 	"encoding/json"
 	"os"
@@ -271,20 +270,22 @@ func toClassification(c classificationDoc) *Classification {
 // maxActivityEvents keeps the most recent events; activity.jsonl grows across retries.
 const maxActivityEvents = 200
 
+// maxActivityLine bounds one activity line. A larger line is a dump; it is
+// skipped so it cannot hide the events after it.
+const maxActivityLine = 1024 * 1024
+
 // activity returns the task's events in activity.jsonl append order (oldest
-// first), capped to maxActivityEvents, skipping malformed lines. Detail goes
-// through sanitizeDetail.
+// first), capped to maxActivityEvents, skipping malformed or oversized lines.
+// Detail goes through sanitizeDetail.
 func (s *Store) activity(taskID string) []ActivityEvent {
 	raw, ok := s.runFile(taskID, "activity.jsonl")
 	if !ok {
 		return nil
 	}
 	var out []ActivityEvent
-	sc := bufio.NewScanner(bytes.NewReader(raw))
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := bytes.TrimSpace(sc.Bytes())
-		if len(line) == 0 {
+	for _, line := range bytes.Split(raw, []byte("\n")) {
+		line = bytes.TrimSpace(line)
+		if len(line) == 0 || len(line) > maxActivityLine {
 			continue
 		}
 		var e activityDoc

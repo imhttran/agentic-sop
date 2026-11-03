@@ -324,3 +324,24 @@ func TestTaskNotFound(t *testing.T) {
 		t.Fatalf("err = %v, want ErrTaskNotFound", err)
 	}
 }
+
+// A failed dependency read must not look like "no dependencies": Store.Task
+// returns the error instead of leaving BlockedBy empty and implying eligibility.
+func TestTaskDependencyReadFailureIsError(t *testing.T) {
+	root := newProject(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, root,
+		`INSERT INTO tasks VALUES ('t1','T','o','a','PLANNED','',0,3,'`+now+`','`+now+`')`,
+		`DROP TABLE task_dependencies`,
+	)
+
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	if _, err := st.Task(context.Background(), "t1", ApprovalsListing{}); err == nil {
+		t.Fatal("Task err = nil after a dependency read failure; an empty BlockedBy must not imply eligibility")
+	}
+}

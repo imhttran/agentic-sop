@@ -73,3 +73,29 @@ func TestClientProjectionsConsumeSopApprovalsListing(t *testing.T) {
 		t.Errorf("sop argv = %v, want an `approvals --json` invocation", got)
 	}
 }
+
+// A failed `sop approvals --json` is an absence, not "no gates": the task detail
+// still renders, but Approval.Reported is false so the reader cannot conflate the
+// two.
+func TestClientTaskReportsUnreadApprovalsListing(t *testing.T) {
+	root := newProject(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, root, `INSERT INTO tasks VALUES ('t1','T','o','a','PLANNED','',0,3,'`+now+`','`+now+`')`)
+
+	c, err := New([]string{root}, fakeFailingSop(t), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	detail, err := c.Task(context.Background(), config.ProjectID(root), "t1")
+	if err != nil {
+		t.Fatalf("Task: %v", err)
+	}
+	if detail.Approval.Reported {
+		t.Error("Approval.Reported = true after a failed `sop approvals --json`; an unread listing is an absence, never `no gates`")
+	}
+	if detail.Approval.Present {
+		t.Error("Approval.Present = true from a listing SOP did not report")
+	}
+}

@@ -159,3 +159,42 @@ func rejectingSop(t *testing.T, message string) string {
 	}
 	return bin
 }
+
+// A timeout is an infrastructure failure, not an SOP refusal: it must not be
+// classified as a DecisionRejection, and it must stay identifiable as a timeout.
+func TestDecisionTimeoutIsNotRejection(t *testing.T) {
+	root := newProject(t)
+	c, err := New([]string{root}, slowSop(t, "5"), 100*time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	err = c.ApproveTask(context.Background(), config.ProjectID(root), "t2", DecisionOptions{})
+	if err == nil {
+		t.Fatal("err = nil, want a timeout")
+	}
+	if errors.Is(err, ErrDecisionRejected) {
+		t.Fatalf("timeout classified as ErrDecisionRejected: %v", err)
+	}
+	var rej *DecisionRejection
+	if errors.As(err, &rej) {
+		t.Fatalf("timeout typed as *DecisionRejection: %+v", rej)
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want errors.Is(err, context.DeadlineExceeded)", err)
+	}
+}
+
+// slowSop writes an executable "sop" that blocks, so an Exec timeout can be
+// exercised. exec replaces the shell, so the killed process is the sleeper.
+func slowSop(t *testing.T, seconds string) string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "sop")
+	script := "#!/bin/sh\nexec sleep " + seconds + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
+}
