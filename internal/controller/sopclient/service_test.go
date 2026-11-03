@@ -71,6 +71,11 @@ func TestProjectNotFoundNamesProject(t *testing.T) {
 		{"Task", func() error { _, err := c.Task(ctx, "nope", "t1"); return err }},
 		{"ChangedTasks", func() error { _, err := c.ChangedTasks(ctx, "nope"); return err }},
 		{"Run", func() error { return c.Run(ctx, "nope") }},
+		{"ApproveTask", func() error { return c.ApproveTask(ctx, "nope", "t1", DecisionOptions{}) }},
+		{"DeclineTask", func() error { return c.DeclineTask(ctx, "nope", "t1", DecisionOptions{}) }},
+		{"AcceptChangedTask", func() error { return c.AcceptChangedTask(ctx, "nope", "t1") }},
+		{"ActivityWindow", func() error { _, err := c.ActivityWindow(ctx, "nope", "", 10); return err }},
+		{"TaskActivityView", func() error { _, err := c.TaskActivityView(ctx, "nope", "t1"); return err }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

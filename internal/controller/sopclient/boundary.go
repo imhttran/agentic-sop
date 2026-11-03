@@ -98,7 +98,7 @@ func (c *Client) AcceptChangedTask(ctx context.Context, projectID, taskID string
 func (c *Client) AcceptChangedTasks(ctx context.Context, projectID string, taskIDs []string) error {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return ErrProjectNotFound
+		return projectNotFound(projectID)
 	}
 	planPath, ok := c.PlanSource(projectID)
 	if !ok {

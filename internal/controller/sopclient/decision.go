@@ -13,7 +13,7 @@ import (
 func (c *Client) decide(ctx context.Context, projectID, verb, taskID string, opts DecisionOptions) error {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return ErrProjectNotFound
+		return projectNotFound(projectID)
 	}
 	out, err := c.cmd.Exec(ctx, st.root, verb, decisionArgs(taskID, opts)...)
 	if sopRefused(err) {

@@ -59,7 +59,7 @@ type ActivityWindow struct {
 func (c *Client) ActivityWindow(ctx context.Context, projectID, after string, limit int) (ActivityWindow, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return ActivityWindow{}, ErrProjectNotFound
+		return ActivityWindow{}, projectNotFound(projectID)
 	}
 	if limit <= 0 {
 		limit = DefaultActivityWindow
@@ -105,7 +105,7 @@ func (c *Client) ActivityWindow(ctx context.Context, projectID, after string, li
 func (c *Client) TaskActivityView(ctx context.Context, projectID, taskID string) ([]ActivityView, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return nil, ErrProjectNotFound
+		return nil, projectNotFound(projectID)
 	}
 	ids, err := st.taskIDs(ctx)
 	if err != nil {
