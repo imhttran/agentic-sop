@@ -334,3 +334,23 @@ func TestExecTimeoutWrapsDeadlineExceeded(t *testing.T) {
 		t.Fatalf("err = %v, want the timeout message kept", err)
 	}
 }
+
+// A failing progress sink is advisory only: it must not turn a successful SOP
+// command into a reported failure.
+func TestExecIgnoresProgressSinkFailure(t *testing.T) {
+	bin, _ := fakeListingSop(t, "ok")
+	cmd := NewCommander(bin, time.Minute)
+
+	out, err := cmd.Exec(WithProgress(context.Background(), failingWriter{}), t.TempDir(), "run")
+	if err != nil {
+		t.Fatalf("err = %v, want nil (a disconnected progress sink is not a command failure)", err)
+	}
+	if out != "ok" {
+		t.Fatalf("out = %q, want the buffered command output", out)
+	}
+}
+
+// failingWriter models a progress client that has gone away.
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("client gone") }

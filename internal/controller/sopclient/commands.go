@@ -105,7 +105,7 @@ func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) 
 	// value, so os/exec serializes the writes (no concurrent Write).
 	var w io.Writer = &buf
 	if sink := progressFrom(ctx); sink != nil {
-		w = io.MultiWriter(&buf, sink)
+		w = io.MultiWriter(&buf, bestEffortWriter{sink})
 	}
 	cmd.Stdout = w
 	cmd.Stderr = w
@@ -142,6 +142,16 @@ func activityEnv(env []string) []string {
 		}
 	}
 	return append(env, "SOP_ACTIVITY=on")
+}
+
+// bestEffortWriter forwards progress to an advisory sink and drops its errors.
+// The live stream is display-only: a client disconnecting mid-run must not turn
+// a command SOP completed successfully into a reported failure.
+type bestEffortWriter struct{ w io.Writer }
+
+func (b bestEffortWriter) Write(p []byte) (int, error) {
+	_, _ = b.w.Write(p)
+	return len(p), nil
 }
 
 // progressKey carries an optional live-output sink in the context.
