@@ -1,9 +1,11 @@
 # Proposal: shared execution exclusion across CLI, MCP, and ACP
 
-Status: **PROPOSAL — step 1 of §7 landed, nothing enforced.** The lease primitive
-and its configuration gate exist (`internal/executionlease`, `execution.lease`),
-with the gate off by default; no interface acquires a lease yet, so execution
-exclusion is unchanged and the gap stays open. Steps 2-4 remain unapproved.
+Status: **PROPOSAL — steps 1 and 2 (CLI) landed, off by default.** The lease
+primitive, its configuration gate and the CLI's `sop run` acquisition exist
+(`internal/executionlease`, `execution.lease: off | advisory | required`). The gate
+is off by default, so execution is unchanged unless a project asks for it, and the
+MCP and ACP interfaces do not acquire a lease yet: the gap stays open. Step 3 and
+the rest of step 2 remain.
 
 Related: [`ACP-EXECUTION-EXCLUSION-GAP.md`](ACP-EXECUTION-EXCLUSION-GAP.md)
 records the requirement this proposal would satisfy.

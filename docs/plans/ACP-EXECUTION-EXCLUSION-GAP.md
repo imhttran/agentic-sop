@@ -80,10 +80,14 @@ and respected by every interface. See
 The lease primitive now exists (`internal/executionlease`: an exclusive owner
 record, a heartbeat for the cross-host case, and staleness that is reported rather
 than acted on), together with the `execution.lease` setting, which defaults to
-`off`. **No interface acquires it yet**, so nothing in this document has changed:
-the CLI still takes no execution lock and an ACP/MCP start still cannot see a
-running `sop run`. This gap stays open until the wiring lands and this document is
-updated with the evidence.
+`off`. **`sop run` acquires it** when a project sets `execution.lease: required`
+(or records contention under `advisory`), so CLI-first is now detectable.
+
+The gap is not closed: the setting is off by default, `sop prompt` does not acquire
+a lease, and the MCP and ACP starts neither acquire one nor consult a held one — an
+ACP/MCP start still cannot see a running `sop run`, and a `sop run` cannot see an
+ACP-started child. This document stays open until the remaining wiring lands and is
+evidenced by the deterministic tests below.
 
 ## Evidence to cite
 
