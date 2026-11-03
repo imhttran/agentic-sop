@@ -101,3 +101,23 @@ func TestBoundOutputKeepsTail(t *testing.T) {
 		t.Errorf("boundOutput must mark truncation: %q", got)
 	}
 }
+
+// A secret in streamed output is redacted before it reaches the status fragment.
+func TestLiveWriterRedactsDiagnosticSecrets(t *testing.T) {
+	cr := NewCommandRunner(time.Second)
+	st := &CommandState{}
+	w := &liveWriter{cr: cr, st: st}
+
+	if _, err := w.Write([]byte("api_key=sk-live-123\nreason: retry")); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(st.Output, "sk-live-123") {
+		t.Fatalf("streamed output leaked a credential: %q", st.Output)
+	}
+	if !strings.Contains(st.Output, "[redacted]") {
+		t.Errorf("streamed output does not mark the redaction: %q", st.Output)
+	}
+	if !strings.Contains(st.Output, "reason: retry") {
+		t.Errorf("streamed output dropped the diagnostic: %q", st.Output)
+	}
+}

@@ -354,3 +354,39 @@ func TestExecIgnoresProgressSinkFailure(t *testing.T) {
 type failingWriter struct{}
 
 func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("client gone") }
+
+// SanitizeDiagnostic keeps multi-line diagnostics but redacts a line that looks
+// like it carries a credential.
+func TestSanitizeDiagnostic(t *testing.T) {
+	cases := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{"keeps a plain diagnostic", "sop validate: exit status 1\nreason: build failed", "sop validate: exit status 1\nreason: build failed"},
+		{"keeps a bare token budget line", "reason: token budget exhausted", "reason: token budget exhausted"},
+		{"redacts an api key assignment", "api_key=sk-live-123", "[redacted]"},
+		{"redacts an authorization header", "Authorization: Bearer abcdefghijkl", "[redacted]"},
+		{"redacts only the secret line", "reason: ok\npassword: hunter2", "reason: ok\n[redacted]"},
+		{"redacts a pem header line", "-----BEGIN RSA PRIVATE KEY-----", "[redacted]"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := SanitizeDiagnostic(tc.in); got != tc.want {
+				t.Errorf("SanitizeDiagnostic(%q) = %q, want %q", tc.in, got, tc.want)
+			}
+		})
+	}
+}
+
+// CommandError renders SOP's diagnostic with credential lines redacted.
+func TestCommandErrorRedactsDiagnostic(t *testing.T) {
+	ce := &CommandError{Verb: "run", ExitCode: 1, Output: "api_key=sk-live-123\nreason: retry budget exhausted", Err: errors.New("exit status 1")}
+	msg := ce.Error()
+	if strings.Contains(msg, "sk-live-123") {
+		t.Fatalf("CommandError leaked a credential: %q", msg)
+	}
+	if !strings.Contains(msg, "reason: retry budget exhausted") {
+		t.Errorf("CommandError dropped the diagnostic: %q", msg)
+	}
+}

@@ -32,7 +32,7 @@ func sopRefused(err error) bool {
 // decisionMessage prefers SOP's own output, else the command error.
 func decisionMessage(out string, err error) string {
 	if msg := strings.TrimSpace(out); msg != "" {
-		return msg
+		return SanitizeDiagnostic(msg)
 	}
 	if err != nil {
 		return err.Error()

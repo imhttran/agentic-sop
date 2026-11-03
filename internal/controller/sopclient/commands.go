@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -36,7 +37,7 @@ type CommandError struct {
 // Error renders the command, its exit status, and SOP's own diagnostic.
 func (e *CommandError) Error() string {
 	msg := fmt.Sprintf("sop %s: %v", e.Verb, e.Err)
-	if out := strings.TrimSpace(e.Output); out != "" {
+	if out := SanitizeDiagnostic(strings.TrimSpace(e.Output)); out != "" {
 		msg += ": " + out
 	}
 	return msg
@@ -45,6 +46,24 @@ func (e *CommandError) Error() string {
 // Unwrap returns the underlying *exec.ExitError, so errors.As still identifies a
 // refusal (sopRefused) now that the error carries SOP's output too.
 func (e *CommandError) Unwrap() error { return e.Err }
+
+// diagnosticSecretRe matches a credential-shaped assignment or header. It
+// requires a delimiter or a long bearer value, so a diagnostic line such as
+// "token budget exhausted" is kept.
+var diagnosticSecretRe = regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?key|private[_-]?key|secret|token|password|passwd)\s*[:=]|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/=-]{8,}|-----begin [^-]{0,40}private key-----`)
+
+// SanitizeDiagnostic redacts lines of SOP command output that look like they
+// carry a credential. Unlike sanitizeDetail it is line-based: a multi-line
+// diagnostic is what an operator needs, so only the offending line is replaced.
+func SanitizeDiagnostic(s string) string {
+	lines := strings.Split(s, "\n")
+	for i, line := range lines {
+		if diagnosticSecretRe.MatchString(line) {
+			lines[i] = redacted
+		}
+	}
+	return strings.Join(lines, "\n")
+}
 
 // tailExcerpt returns the last n bytes of s on a rune boundary, marked when it had
 // to cut, because a diagnostic keeps what SOP said last.

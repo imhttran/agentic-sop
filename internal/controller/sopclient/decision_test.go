@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -197,4 +198,26 @@ func slowSop(t *testing.T, seconds string) string {
 		t.Fatal(err)
 	}
 	return bin
+}
+
+// A rejection carries SOP's message with credential-shaped lines redacted.
+func TestDecisionRejectionRedactsDiagnostic(t *testing.T) {
+	root := newProject(t)
+	c, err := New([]string{root}, rejectingSop(t, "api_key=sk-live-123"), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	err = c.ApproveTask(context.Background(), config.ProjectID(root), "t2", DecisionOptions{})
+	var rej *DecisionRejection
+	if !errors.As(err, &rej) {
+		t.Fatalf("err = %v, want *DecisionRejection", err)
+	}
+	if strings.Contains(rej.Message, "sk-live-123") {
+		t.Fatalf("rejection message leaked a credential: %q", rej.Message)
+	}
+	if !strings.Contains(rej.Message, "[redacted]") {
+		t.Errorf("rejection message does not mark the redaction: %q", rej.Message)
+	}
 }
