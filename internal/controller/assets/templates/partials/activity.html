@@ -1,4 +1,9 @@
-{{if .Events}}
+{{if .Error}}
+<div class="empty-state" role="status">
+    <p class="muted">Activity: <span class="badge s-unavailable">{{unavailable}}</span></p>
+    <p class="muted small">SOP's activity artifact could not be read: {{.Error}}</p>
+</div>
+{{else if .Events}}
 <ol class="timeline">
     {{range .Events}}
     <li class="tl-item" data-cursor="{{.Cursor}}" data-seq="{{.Seq}}">

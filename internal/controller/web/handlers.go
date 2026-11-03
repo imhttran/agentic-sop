@@ -81,6 +81,8 @@ type taskPage struct {
 	Events    []sopclient.ActivityView
 	// Skipped is how many activity lines could not be parsed (see TaskDetail).
 	Skipped int
+	// Error is set when the activity artifact exists but could not be read.
+	Error string
 	// Approval mirrors Task.Approval so the approval partial can render from this page.
 	Approval sopclient.Approval
 }
@@ -98,6 +100,9 @@ type activityData struct {
 	// Skipped is how many activity lines could not be parsed. The project-wide
 	// window does not report it; the task view does.
 	Skipped int
+	// Error is set when the activity artifact exists but could not be read. It is
+	// damage, not an empty history.
+	Error string
 }
 
 // cmdStatusData is the shared shape for command_status.html.
@@ -225,7 +230,12 @@ func (h *Handlers) projectTasks(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) projectActivity(w http.ResponseWriter, r *http.Request) {
 	win, err := h.sop.ActivityWindow(r.Context(), r.PathValue("project"), "", 50)
 	if err != nil {
-		h.renderError(w, r, err)
+		if errors.Is(err, sopclient.ErrProjectNotFound) {
+			h.renderError(w, r, err)
+			return
+		}
+		// A damaged activity artifact is a read failure, not an empty history.
+		h.render(w, http.StatusOK, "activity.html", activityData{baseData: h.base(r, ""), Error: err.Error()})
 		return
 	}
 	h.render(w, http.StatusOK, "activity.html", activityData{baseData: h.base(r, ""), Events: win.Events})
@@ -244,6 +254,7 @@ func (h *Handlers) task(w http.ResponseWriter, r *http.Request) {
 		Task:      detail,
 		Events:    h.taskActivityViews(r.Context(), projectID, taskID, detail),
 		Skipped:   detail.ActivitySkipped,
+		Error:     detail.ActivityError,
 		Approval:  detail.Approval,
 	})
 }
@@ -274,6 +285,7 @@ func (h *Handlers) taskActivity(w http.ResponseWriter, r *http.Request) {
 		baseData: h.base(r, ""),
 		Events:   h.taskActivityViews(r.Context(), projectID, taskID, detail),
 		Skipped:  detail.ActivitySkipped,
+		Error:    detail.ActivityError,
 	})
 }
 
