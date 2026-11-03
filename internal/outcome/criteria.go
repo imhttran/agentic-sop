@@ -243,17 +243,6 @@ func mappingCheck(m CriterionMapping, checks map[string]CheckResult, decisions [
 	return func() error { return fmt.Errorf("incompletely mapped: unknown evidence kind %q", m.Kind) }
 }
 
-// latestDecision returns the most recent decision recorded for a criterion, so a
-// later rejection overrides an earlier acceptance.
-func latestDecision(criterionID string, decisions []AcceptanceDecision) (AcceptanceDecision, bool) {
-	for i := len(decisions) - 1; i >= 0; i-- {
-		if decisions[i].CriterionID == criterionID {
-			return decisions[i], true
-		}
-	}
-	return AcceptanceDecision{}, false
-}
-
 // latestBoundDecision returns the most recent decision that is bound to this exact
 // mapping. A decision for an earlier description, manual-evidence text, or attempt
 // is ignored (it cannot satisfy the current criterion) unless a recorded recovery

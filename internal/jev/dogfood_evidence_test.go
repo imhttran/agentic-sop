@@ -22,8 +22,11 @@ import (
 // the live evidence artifact is missing. Synthetic fixtures are used ONLY for
 // these validator/negative tests and are never represented as live evidence.
 
-// dogfoodEvidencePath is the JEV-207 machine-readable evidence artifact,
-// relative to the repository root.
+// dogfoodEvidencePath is the JEV-207 machine-readable evidence artifact, relative
+// to the repository root. It is read by the jev207_acceptance build-tagged test,
+// which staticcheck's default build context does not load.
+//
+//lint:ignore U1000 referenced only by the jev207_acceptance build-tagged test
 const dogfoodEvidencePath = "docs/reports/evidence/JEV-WAVE2-DOGFOOD.json"
 
 // requiredDogfoodScenarios is the closed set of scenarios JEV-207 must evidence.

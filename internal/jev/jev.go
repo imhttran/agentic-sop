@@ -38,7 +38,6 @@ package jev
 
 import (
 	"context"
-	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/review"
 )
@@ -168,19 +167,4 @@ type Request struct {
 // replaceable and optional.
 type Analyzer interface {
 	Analyze(ctx context.Context, req Request) (Result, error)
-}
-
-// contextText renders the request into bounded prompt text. It is a helper for
-// adapters and keeps the boundary's read-only, snapshot nature explicit.
-func (r Request) contextText() string {
-	parts := []string{}
-	for _, p := range []string{r.Task, r.Criteria, r.RepositoryContext, r.ValidationResult, r.ReviewResult} {
-		if strings.TrimSpace(p) != "" {
-			parts = append(parts, p)
-		}
-	}
-	if len(r.ChangedFiles) > 0 {
-		parts = append(parts, "changed files:\n"+strings.Join(r.ChangedFiles, "\n"))
-	}
-	return strings.Join(parts, "\n\n")
 }

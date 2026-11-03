@@ -14,10 +14,6 @@ import (
 	"github.com/imhttran/agentic-sop/internal/projectlock"
 )
 
-// definitionDoc is a one-stage plan whose single stage carries every field the
-// definition digest covers, so a test can vary one field at a time.
-const definitionDoc = "# Implementation Plan\n\n## Project\n\nWidget\n\n## Summary\n\nAdd a widget.\n\n## S001 — Application skeleton\n\nCreate it.\n\n### Deliverables\n\n- cmd/main.go\n\n### Acceptance Criteria\n\n- starts\n\n### Acceptance Checks\n\n- go build ./...\n"
-
 func writeDefinitionPlan(t *testing.T, dir string) {
 	t.Helper()
 	if err := writePlan(filepath.Join(dir, config.DirName, planFileName), &planner.Plan{

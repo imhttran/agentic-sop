@@ -29,6 +29,13 @@ func executionLease(cfg config.Config, dir string, owner executionlease.Owner, s
 
 	held, err := executionlease.Acquire(dir, owner)
 	if err == nil {
+		// Refresh the record while the execution runs, so a healthy run longer than
+		// HeartbeatLimit is not mistaken for stale where pid liveness cannot be
+		// checked. A lost lease is reported, not acted on: cancelling the run is a
+		// separate decision.
+		held.WatchHeartbeat(executionlease.HeartbeatEvery, func(err error) {
+			fmt.Fprintf(stderr, "run: execution lease heartbeat failed (%s): %v\n", held.Owner().Describe(), err)
+		})
 		return held, nil
 	}
 	var busy *executionlease.BusyError

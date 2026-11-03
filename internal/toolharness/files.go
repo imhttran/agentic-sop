@@ -346,13 +346,6 @@ func (h *Harness) resolveArg(args map[string]any, key string, required bool, acc
 	return h.resolveIn(root, raw, access)
 }
 
-// resolve canonicalizes raw against the repository root and enforces the
-// boundary: no escapes above the root (including via symlinks), and the state
-// database is refused for every access class.
-func (h *Harness) resolve(raw string, access accessClass) (resolvedPath, error) {
-	return h.resolveIn(h.roots[0], raw, access)
-}
-
 // resolveIn canonicalizes raw against the selected authorized root and enforces
 // that root's boundary: no escapes above the root (including through symlinks),
 // SOP's state database is refused for every access class, and a write into a
@@ -392,9 +385,6 @@ func (h *Harness) isProtectedPath(rel string) bool {
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return rel == stateDBRel
 }
-
-// rel renders p relative to the primary repository root.
-func (h *Harness) rel(p string) string { return relFrom(h.root, p) }
 
 // relFrom renders p relative to base, slash-separated.
 func relFrom(base, p string) string {

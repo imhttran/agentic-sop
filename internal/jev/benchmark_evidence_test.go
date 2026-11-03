@@ -20,6 +20,10 @@ import (
 // rates, which would be invented from one sample); at sample_size >= 2 the
 // multi-sample metrics are required.
 
+// benchmarkEvidencePath is read by the jev208_acceptance build-tagged test,
+// which staticcheck's default build context does not load.
+//
+//lint:ignore U1000 referenced only by the jev208_acceptance build-tagged test
 const benchmarkEvidencePath = "docs/reports/evidence/JEV-WAVE2-BENCHMARK.json"
 
 var requiredBenchmarkConfigs = []string{"deterministic", "jev-assisted", "julia", "nimble"}

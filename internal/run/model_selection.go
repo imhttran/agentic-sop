@@ -26,9 +26,6 @@ import (
 // ModelSelectionVersion is the schema version of the model-selection artifact.
 const ModelSelectionVersion = 1
 
-// modelSelectionFileName is the artifact holding the model-selection evidence.
-const modelSelectionFileName = "model-selection.json"
-
 // ModelSelectionArtifact is the persisted, versioned model-selection evidence for
 // one run. It mirrors the non-secret fields of model.Selection plus a schema
 // version, so the persisted shape stays byte-compatible with historical records

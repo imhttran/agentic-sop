@@ -1,6 +1,7 @@
 package scheduler
 
 import (
+	"context"
 	"go/parser"
 	"go/token"
 	"os"
@@ -99,7 +100,7 @@ func TestGuardrailRepeatedRunsAreDeterministic(t *testing.T) {
 		s := New(store)
 		var got []Outcome
 		for i := 0; i < 6; i++ {
-			res, err := s.Next(nil)
+			res, err := s.Next(context.TODO())
 			if err != nil {
 				t.Fatalf("Next: %v", err)
 			}

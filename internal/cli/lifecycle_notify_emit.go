@@ -24,12 +24,6 @@ var errNoLifecycleStore = errors.New("lifecycle notify: no project to record the
 // install an isolated in-memory sink with setLifecycleSink.
 var lifecycleSink EventSink
 
-// lifecycleEmitter returns the emitter over the process-wide sink. A nil sink is
-// passed through so Emit reports that no sink is configured.
-func lifecycleEmitter() *LifecycleEmitter {
-	return NewLifecycleEmitter(lifecycleSink)
-}
-
 // setLifecycleSink replaces the process-wide sink and returns the previous one.
 // Tests use it to install an isolated sink; production leaves it nil so emit
 // falls back to the durable outbox.

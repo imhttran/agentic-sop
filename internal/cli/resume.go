@@ -2,10 +2,13 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/executionlease"
 	"github.com/imhttran/agentic-sop/internal/git"
 	"github.com/imhttran/agentic-sop/internal/github"
 	"github.com/imhttran/agentic-sop/internal/resume"
@@ -43,6 +46,14 @@ func runResume(args []string, stdout, stderr io.Writer, d deps) int {
 		return exitError
 	}
 
+	// A crashed run under execution.lease: required leaves its lease behind. Resume
+	// reports the holder and releases it only when it is stale; a live execution is
+	// never released.
+	if err := reportStaleExecutionLease(dir, stderr); err != nil {
+		fmt.Fprintf(stderr, "resume: %v\n", err)
+		return exitError
+	}
+
 	resumer := resume.New(st, resources)
 	var decision resume.Decision
 	if len(args) == 1 {
@@ -65,6 +76,51 @@ func runResume(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 	fmt.Fprintf(stdout, "%s %s\n", decision.TaskID, decision.Action)
 	return exitOK
+}
+
+// reportStaleExecutionLease reports the project's execution lease and releases it
+// when its owner is gone. It runs whatever execution.lease is set to: a stale lock is
+// stale either way, and leaving it would refuse every later start after a crash.
+//
+// A lease that is not stale is only reported, so resume can never release an
+// execution that is still running. ErrLeaseChanged and ErrLeaseNotStale mean a
+// recovery or a new execution moved first; that is reported and resume carries on.
+func reportStaleExecutionLease(dir string, stderr io.Writer) error {
+	state, err := executionlease.Read(dir)
+	if err != nil || !state.Present {
+		return err
+	}
+
+	// The inspection and the release use the same clock inputs, so a lease can only
+	// become less stale in between; ReleaseStale re-checks under the claim.
+	stale := state.Stale(time.Now(), executionlease.Hostname(), executionlease.Grace, executionlease.HeartbeatLimit)
+	if !stale {
+		if state.Unparsable {
+			fmt.Fprintln(stderr, "resume: execution lease: a lease record is being written")
+		} else {
+			fmt.Fprintf(stderr, "resume: execution lease held by %s\n", state.Owner.Describe())
+		}
+		return nil
+	}
+
+	expect := state.Owner
+	holder := state.Owner.Describe()
+	if state.Unparsable {
+		expect = executionlease.Owner{}
+		holder = "an unreadable lease record"
+	}
+	fmt.Fprintf(stderr, "resume: execution lease is stale, releasing it: %s\n", holder)
+
+	err = executionlease.ReleaseStale(dir, expect)
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, executionlease.ErrLeaseChanged) || errors.Is(err, executionlease.ErrLeaseNotStale) {
+		// Someone else released or replaced it first; that is not a failure.
+		fmt.Fprintf(stderr, "resume: execution lease: %v\n", err)
+		return nil
+	}
+	return err
 }
 
 // branchLocator reports whether a branch exists locally (implemented by the Git

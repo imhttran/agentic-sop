@@ -20,6 +20,32 @@ func reportSpec(t *testing.T) *taskfile.Spec {
 	return spec
 }
 
+// TestBuildRunReportHeadingPreservesDashes is the regression for the SA1024
+// cutset: an empty title must not add a separator, and an em dash at either edge
+// of the ID or title must be preserved rather than stripped.
+func TestBuildRunReportHeadingPreservesDashes(t *testing.T) {
+	cases := []struct {
+		name  string
+		id    string
+		title string
+		want  string
+	}{
+		{"empty title", "T001", "", "# Run: T001"},
+		{"id and title dashes", "—T001—", "—Add widget—", "# Run: —T001— — —Add widget—"},
+		{"leading id dash", "—T001", "Add widget", "# Run: —T001 — Add widget"},
+		{"trailing title dash", "T001", "Add widget—", "# Run: T001 — Add widget—"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			out := buildRunReport(&taskfile.Spec{ID: tc.id, Title: tc.title}, config.Default(), lifeResult{})
+			got := strings.SplitN(out, "\n", 2)[0]
+			if got != tc.want {
+				t.Errorf("heading = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
 // TestBuildRunReportEmptySuiteConfiguredNotRun is the regression for the
 // misleading branch: when checks ARE configured but the lifecycle stopped
 // before validation ran (no results), the report must say NOT RUN rather than
