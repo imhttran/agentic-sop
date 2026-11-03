@@ -57,7 +57,7 @@ func (s *Store) ProjectID() string {
 // SOP listings.
 func (s *Store) Summary(ctx context.Context, changedTasks ChangedTasks, approvals ApprovalsListing) (ProjectSummary, error) {
 	name, branch := s.projectMeta()
-	p := ProjectSummary{ID: s.ProjectID(), Name: name, Branch: branch, ApprovalsReported: approvals.Reported}
+	p := ProjectSummary{ID: s.ProjectID(), Name: name, Branch: branch, ApprovalsReported: approvals.Reported, ChangedTasksReported: changedTasks.Reported}
 
 	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM tasks GROUP BY status`)
 	if err != nil {

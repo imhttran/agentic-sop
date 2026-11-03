@@ -334,3 +334,83 @@ func TestListingSourceNamesSOPVerb(t *testing.T) {
 		t.Fatalf("listingSource = %q, want it to name the SOP listing verb", listingSource)
 	}
 }
+
+// The project summary distinguishes a failed changed-task listing from a project
+// that simply has no active plan: the first is a failure, the second a
+// legitimate absence.
+func TestChangedTasksAvailabilityOnProjectSummary(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("failed listing is signalled", func(t *testing.T) {
+		root := newProject(t)
+		writePlan(t, root, "docs/PLAN.md")
+		c, err := New([]string{root}, fakeFailingSop(t), time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+		pid := config.ProjectID(root)
+
+		proj, err := c.Project(ctx, pid)
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if proj.Summary.ChangedTasksReported {
+			t.Error("ChangedTasksReported = true after a failed listing")
+		}
+		if proj.Summary.ChangedTasksError == "" {
+			t.Error("ChangedTasksError empty after a failed listing; a failing SOP must not look quiet")
+		}
+
+		list, err := c.Projects(ctx)
+		if err != nil {
+			t.Fatalf("Projects: %v", err)
+		}
+		if len(list) != 1 || list[0].ChangedTasksError == "" {
+			t.Fatalf("Projects = %+v, want the failed listing signalled", list)
+		}
+	})
+
+	t.Run("no active plan is an absence", func(t *testing.T) {
+		root := newProject(t)
+		bin, _ := fakeSop(t)
+		c, err := New([]string{root}, bin, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+
+		proj, err := c.Project(ctx, config.ProjectID(root))
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if proj.Summary.ChangedTasksReported {
+			t.Error("ChangedTasksReported = true without an active plan")
+		}
+		if proj.Summary.ChangedTasksError != "" {
+			t.Errorf("ChangedTasksError = %q without an active plan, want empty (an absence, not a failure)", proj.Summary.ChangedTasksError)
+		}
+	})
+
+	t.Run("reported empty listing", func(t *testing.T) {
+		root := newProject(t)
+		writePlan(t, root, "docs/PLAN.md")
+		bin, _ := fakeListingSop(t, listingDocJSON())
+		c, err := New([]string{root}, bin, time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer c.Close()
+
+		proj, err := c.Project(ctx, config.ProjectID(root))
+		if err != nil {
+			t.Fatalf("Project: %v", err)
+		}
+		if !proj.Summary.ChangedTasksReported {
+			t.Error("ChangedTasksReported = false for a reported (empty) listing")
+		}
+		if proj.Summary.ChangedTasksError != "" {
+			t.Errorf("ChangedTasksError = %q for a reported listing, want empty", proj.Summary.ChangedTasksError)
+		}
+	})
+}

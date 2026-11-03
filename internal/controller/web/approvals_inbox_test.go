@@ -139,6 +139,17 @@ func TestProjectsListSurfacesUnreadListing(t *testing.T) {
 	}
 }
 
+// A failed changed-task listing undercounts NeedsAttention, so the projects list
+// must say the listing was not read rather than look quiet.
+func TestProjectsListSurfacesUnreadChangedTasks(t *testing.T) {
+	srv, _ := unreadApprovalsServer(t)
+	_, body := get(t, srv.URL+"/projects")
+
+	if !strings.Contains(body, "changed tasks unavailable") {
+		t.Fatalf("unread changed-task absence missing from projects list: %q", body)
+	}
+}
+
 // The inbox gate list refreshes itself when a decision finishes, so a decided
 // gate does not linger on screen as a stale card.
 func TestApprovalsInboxWiresListRefresh(t *testing.T) {
@@ -195,9 +206,11 @@ func TestDecisionStatusSignalsInboxRefresh(t *testing.T) {
 	t.Fatal("a finished decision did not signal the inbox to refresh (no HX-Trigger: approvalsChanged)")
 }
 
-// unreadApprovalsServer builds a project whose `sop approvals --json` fails (a
-// binary that exits non-zero and no persisted listing), so the approval read is
-// unreported rather than an empty success.
+// unreadApprovalsServer builds a project whose `sop approvals --json` and
+// changed-task listing both fail (a binary that exits non-zero and no persisted
+// listing), so both reads are unreported rather than empty successes. The plan
+// metadata makes the changed-task read attempt a listing instead of returning
+// ErrNoActivePlan.
 func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
@@ -207,6 +220,10 @@ func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "config.yaml"),
 		[]byte("project:\n  name: \"demo\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "plan.meta.json"),
+		[]byte(`{"source":"docs/PLAN.md"}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "state.db"))
