@@ -80,6 +80,25 @@ func TestDashboardCommandsResolveToBoundary(t *testing.T) {
 	}
 }
 
+// TestTaskCommandRejectsFlagShapedTaskID proves a task path segment cannot reach
+// sop as an argument. Every task command is built from the URL segment, so a
+// segment such as "--all" would otherwise arrive at `sop retry` as a flag and
+// requeue every blocked task instead of the one the dashboard asked for.
+func TestTaskCommandRejectsFlagShapedTaskID(t *testing.T) {
+	srv, id, _ := newRunServer(t, "PLANNED", nil)
+	for _, verb := range []string{"retry", "retry-force", "report"} {
+		path := "/projects/" + id + "/tasks/--all/commands/" + verb
+		if code := postWithCSRF(t, srv, path); code != http.StatusNotFound {
+			t.Errorf("POST %s = %d, want 404 for a flag-shaped task id", path, code)
+		}
+	}
+	// The same routes still accept a real task id from the same fixture.
+	path := "/projects/" + id + "/tasks/x1/commands/retry"
+	if code := postWithCSRF(t, srv, path); code == http.StatusNotFound || code == http.StatusBadRequest {
+		t.Errorf("POST %s = %d; a real task id must still be accepted", path, code)
+	}
+}
+
 // TestDashboardHasNoUndocumentedCommandRoute asserts the generic project-command
 // route serves neither approve (it has its own task-scoped route) nor cancel
 // (SOP has no cancellation operation).
