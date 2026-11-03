@@ -1,0 +1,269 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "fingerprint": "semgrep:9952a3919291b6d23c9f0e26c006c713e82d2941b012817c52cfd08494d048a6",
+      "rule_id": "dangerous-exec-command",
+      "path": "cmd/deceleval-recovery/main.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:e8a0b7e0647ce66aaef103f0705ab4a036ab69bc4f02ec9aeae0f0e1f35316dd",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/agent/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:1c1fe97130f651dc92e5172e21b0f333f6da5e7d16d114fa328cfbc7eff86180",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/cli/mcp_start_work.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:78d6fce54bcddcec7fecce1d57b85a0bca44d0d35bb59a1827d44268d0de3725",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/cli/outcome.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:5563796c1214fb26964a0d642a8909497351ea201805222c85433596a7d335f3",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/controller/sopclient/commands.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:ed35ea69cd80565c80aa98cbfce38048f406b6ca53dc418b7f66da28c174bb1c",
+      "rule_id": "no-direct-write-to-responsewriter",
+      "path": "internal/controller/web/activity_stream.go",
+      "reason": "False positive: SSE frames are built from json.Marshal; a direct write is required to stream and flush.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d73921570c813840a256358055a600521028f2f3fb25bbda1983ea84ecf48f93",
+      "rule_id": "no-direct-write-to-responsewriter",
+      "path": "internal/controller/web/activity_stream.go",
+      "reason": "False positive: SSE frames are built from json.Marshal; a direct write is required to stream and flush.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:14545322bdf592751e75a660d082789ce677cce3f3a9463eb049b94cb4bd8f87",
+      "rule_id": "no-direct-write-to-responsewriter",
+      "path": "internal/controller/web/activity_stream.go",
+      "reason": "False positive: SSE frames are built from json.Marshal; a direct write is required to stream and flush.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d321aad1f3f02c3307c6e4125ab4b205590ee302420dfe2635d1bd107d962260",
+      "rule_id": "cookie-missing-secure",
+      "path": "internal/controller/web/middleware.go",
+      "reason": "False positive: Secure is set conditionally by isHTTPS(r); the rule only excludes a literal Secure: true.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:3794160fd5d1cfd6558c5d8070c8b4b6e960ebc8437b90f5f6f564fc9448ad6f",
+      "rule_id": "open-redirect",
+      "path": "internal/controller/web/session.go",
+      "reason": "False positive: the redirect uses a constant prefix or safeNext(), which requires a same-origin path.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:7062e10b4027dad7a9c8e360396fc006dae32c6741a2d2828f0f35a669af24fc",
+      "rule_id": "cookie-missing-secure",
+      "path": "internal/controller/web/session.go",
+      "reason": "False positive: Secure is set conditionally by isHTTPS(r); the rule only excludes a literal Secure: true.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:8c7ea0832b5b328365264cc20af672bf0652f9e5e062f2570079339c1cff8109",
+      "rule_id": "cookie-missing-secure",
+      "path": "internal/controller/web/session.go",
+      "reason": "False positive: Secure is set conditionally by isHTTPS(r); the rule only excludes a literal Secure: true.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:9676162027ee3fe09209d4bcd3642d261c7feba303596b79390dd78d950cac5c",
+      "rule_id": "open-redirect",
+      "path": "internal/controller/web/session.go",
+      "reason": "False positive: the redirect uses a constant prefix or safeNext(), which requires a same-origin path.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:f8e2ac73eaa4f07410dc9d147a4a7b740111ffbabf6bc2e40c29bf49dcd87c76",
+      "rule_id": "open-redirect",
+      "path": "internal/controller/web/session.go",
+      "reason": "False positive: the redirect uses a constant prefix or safeNext(), which requires a same-origin path.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:bce81695879c635bb1894f6dfa12b0e3ec4a306aa5cd935750d1cb8018c8048d",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decision/command/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d3dbea35b4123879c95a9662e31d0255ce8f995cb85905d3d4c7c9f1a7ced0b9",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decision/commandprofile/connector.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:6729fe4fb47be499f4319a74b8d363df19ffbf5884ae8b3e81587af075f34412",
+      "rule_id": "use-of-unsafe-block",
+      "path": "internal/decision/commandprofile/procattr_windows.go",
+      "reason": "Not actionable: Windows Job Object FFI with a locally constructed struct (ISSUE-52).",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:32790093df31893d3f1141398cccfd1d11bc2b62c93f88cbc548c06f4c3c4391",
+      "rule_id": "use-of-unsafe-block",
+      "path": "internal/decision/commandprofile/procattr_windows.go",
+      "reason": "Not actionable: Windows Job Object FFI with a locally constructed struct (ISSUE-52).",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:5e4ca22cffafe0022e8a379bf3923e1c9a0356aaf8981b5b7f985ac9c7f9b17f",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decisionadapter/providers/julia/runner.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:c4621add634185098bd2ffd2fb4e6bad3782f5bb20df069eea93dce282c94dbb",
+      "rule_id": "math-random-used",
+      "path": "internal/decisionquality/paired.go",
+      "reason": "False positive: math/rand is used for seeded bootstrap resampling, not for security decisions.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:dfd17358d313f17a0b7d29f6165dbae892ad87254f44ff94578ce3d9d8aeb7a4",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dqharness/replay_exec.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:b00af356b9298f88cdd9cfba3655a8fe6395651d5c20e5a3a75f57cc1735a48d",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/evaltarget/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:cd2dacdbe1fe084913193ef4582be496d3552ea84c2250f543e70663821f916e",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/github/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:6e0e49455f2627426687c1e0cc00e8d12401df91f700f1b849826940d1bb14d1",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/handoff/caveman/caveman.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:5d918d1490e4e6cec109a5b2cc278df1fec6a39db70d536df0921d76fdeddf8a",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/hipcompare/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:819e8d960cbaa81049fb4ba0a730ba8a716de4e39b3e1e437c7b3da85e027e37",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/hipcompare/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:e71af4f30c73fb23c487d0760fbc361af1b5a6b84849abaa3185362cea0a5aa2",
+      "rule_id": "string-formatted-query",
+      "path": "internal/memindex/index.go",
+      "reason": "False positive: the query interpolates a package constant int into a PRAGMA.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:ecc01dc3634cb18e2c81bba972ca62940d1ab3345e44ea4e39b0dfb16fc459e4",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/ragclient/exec.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:f9f6b86b583ac0c7c48c655215c73cab10f601eaa10af2bb56fe49b4a402e00a",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/review/ocr.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:3a4ff6470671bf5266071b3fff6989f9e1faca8bf956d2951bf9c4c4e2b2ce0e",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/security/exec.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:e8591ffdfd21a6a73e1b5ea81b2bd7c5f98fd0ef66d4f87191809a6aec85a0c9",
+      "rule_id": "string-formatted-query",
+      "path": "internal/store/handoff.go",
+      "reason": "Not actionable: columns are a constant list and values are bound with placeholders (ISSUE-52).",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:331eef7a50809fae26080144035531412b17956e61bfbe9813288f25ead3a55e",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/testrunner/command.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:df4e9848d6aa031ce1d4a27e7262d449ba8bec5573f4ef0b86efc7a9102326d7",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/harness.go",
+      "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    }
+  ]
+}
