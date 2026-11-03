@@ -284,7 +284,10 @@ func TestActivitySkipsOversizedLine(t *testing.T) {
 	}
 	defer st.Close()
 
-	events := st.activity("t1")
+	events, _, err := st.readActivity("t1")
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(events) != 1 || events[0].Detail != "after" {
 		t.Fatalf("activity = %+v, want the event after the oversized line", events)
 	}

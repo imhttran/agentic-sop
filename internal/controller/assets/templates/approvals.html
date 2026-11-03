@@ -170,6 +170,7 @@
                                     >{{unavailable}}</span
                                 >
                             </div>
+                            {{if .Error}}<p class="muted small">{{.Error}}</p>{{end}}
                         </li>
                         {{end}}{{end}}
                     </ul>

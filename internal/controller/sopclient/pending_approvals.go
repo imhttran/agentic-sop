@@ -19,6 +19,8 @@ type ProjectApprovals struct {
 	// `sop approvals --json` failed or was unparsable). Reported=false is an
 	// absence, never "no gates"; the two must not be conflated.
 	Reported bool
+	// Error carries the underlying read failure when Reported is false.
+	Error string
 	// Entries are SOP's applicable gates, in SOP's order. Resolved/stale gates
 	// are omitted: SOP must affirmatively report the gate open.
 	Entries []ApprovalEntry
@@ -42,6 +44,7 @@ func (c *Client) PendingApprovals(ctx context.Context) []ProjectApprovals {
 
 		listing, err := c.Approvals(ctx, id)
 		if err != nil || !listing.Reported {
+			pa.Error = oneLine(err)
 			// An unread/absent listing is an absence, not "no gates".
 			out = append(out, pa)
 			continue

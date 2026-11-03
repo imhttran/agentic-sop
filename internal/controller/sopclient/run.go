@@ -344,14 +344,6 @@ func (s *Store) readActivity(taskID string) (events []ActivityEvent, skipped int
 	return events, skipped, nil
 }
 
-// activity returns only the events, for the read paths (activity windows, the
-// checkpoint line) that have nowhere to report a skipped line or a read failure.
-// Store.Task uses readActivity so the task view can report both.
-func (s *Store) activity(taskID string) []ActivityEvent {
-	events, _, _ := s.readActivity(taskID)
-	return events
-}
-
 // planMetaFile reads .agent-sdlc/plan.meta.json. found is false when SOP recorded
 // no metadata; a file that exists but cannot be read or parsed is an error, so a
 // broken plan record is never presented as "no active plan".

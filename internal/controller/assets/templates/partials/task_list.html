@@ -48,7 +48,7 @@
                 {{end}}
             </td>
             <td data-label="Stage">
-                {{if .Stage}}<span class="badge {{stageClass .Stage}}"
+                {{if .RunUnreadable}}<span class="badge s-unavailable" title="SOP's run record could not be read">{{unavailable}}</span>{{else if .Stage}}<span class="badge {{stageClass .Stage}}"
                     >{{.Stage}}</span
                 >{{else}}<span class="muted">—</span>{{end}}
             </td>
@@ -65,7 +65,7 @@
                 {{.Attempt}}/{{.MaxAttempts}}
             </td>
             <td class="muted small" data-label="Updated">
-                {{since .UpdatedAt}}
+                {{if .UpdatedAtError}}<span class="badge s-unavailable" title="{{.UpdatedAtError}}">{{unavailable}}</span>{{else}}{{since .UpdatedAt}}{{end}}
             </td>
         </tr>
         {{end}}

@@ -4,7 +4,7 @@
         <span class="badge {{statusClass .Handoff.Status}}"
             >{{.Handoff.Status}}</span
         >
-        <span class="muted small">{{since .Handoff.CreatedAt}}</span>
+        {{if .Handoff.CreatedAtError}}<span class="badge s-unavailable" title="{{.Handoff.CreatedAtError}}">{{unavailable}}</span>{{else}}<span class="muted small">{{since .Handoff.CreatedAt}}</span>{{end}}
     </div>
     {{if .Handoff.CompressionError}}
     <p class="error-text">Compression error: {{.Handoff.CompressionError}}</p>
