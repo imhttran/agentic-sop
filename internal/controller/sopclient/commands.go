@@ -8,10 +8,11 @@ import (
 	"io"
 	"os"
 	"os/exec"
-	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // execWaitDelay bounds how long Exec waits on the output pipes once the command has
@@ -50,35 +51,14 @@ func (e *CommandError) Error() string {
 // refusal (sopRefused) now that the error carries SOP's output too.
 func (e *CommandError) Unwrap() error { return e.Err }
 
-// diagnosticSecretRe matches a credential-shaped assignment, header or value. It
-// requires a delimiter, a key-shaped value or a password in a URL, so a diagnostic
-// line such as "token budget exhausted" is kept.
-//
-// The forms matter: a provider error echoes a credential as `api_key=…`, as
-// `"api_key": "…"` inside a JSON body, and as prose such as
-// "Incorrect API key provided: sk-…". All three are matched, as are values that
-// appear without a name (provider key prefixes, AWS key ids).
-var diagnosticSecretRe = regexp.MustCompile(`(?i)` +
-	`(?:api[_\s-]?key|access[_-]?key|private[_-]?key|secret(?:[_-]?key)?|token|password|passwd)\s*"?\s*[:=]` +
-	`|authorization\s*[:=]` +
-	`|bearer\s+[A-Za-z0-9._~+/=-]{8,}` +
-	`|-----begin [^-]{0,40}private key-----` +
-	`|://[^/\s:@]+:[^/\s@]+@` +
-	`|\b(?:sk|xox[bap]|ghp|gho|ghs|github_pat)[-_][A-Za-z0-9_-]{8,}` +
-	`|\bAKIA[0-9A-Z]{16}\b`,
-)
-
 // SanitizeDiagnostic redacts lines of SOP command output that look like they
 // carry a credential. Unlike sanitizeDetail it is line-based: a multi-line
 // diagnostic is what an operator needs, so only the offending line is replaced.
+//
+// The credential shapes themselves are owned by internal/redact, so a shape one
+// surface learns is a shape every surface knows.
 func SanitizeDiagnostic(s string) string {
-	lines := strings.Split(s, "\n")
-	for i, line := range lines {
-		if diagnosticSecretRe.MatchString(line) {
-			lines[i] = redacted
-		}
-	}
-	return strings.Join(lines, "\n")
+	return redact.Line(s, redacted)
 }
 
 // tailExcerpt returns the last n bytes of s on a rune boundary, marked when it had
