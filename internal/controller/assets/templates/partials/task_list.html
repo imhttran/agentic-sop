@@ -1,4 +1,15 @@
-{{$pid := .Project.Summary.ID}} {{if .Project.Tasks}}
+{{$pid := .Project.Summary.ID}} {{if .Project.Summary.ChangedTasksError}}
+<p class="muted small">
+    <span
+        class="badge s-unavailable"
+        title="SOP did not report a changed-task listing: {{.Project.Summary.ChangedTasksError}}"
+        >changed tasks unavailable</span
+    >
+    <span class="small"
+        >Pending changed-executed tasks are not reflected in the counts.</span
+    >
+</p>
+{{end}} {{if .Project.Tasks}}
 <table class="tasks">
     <thead>
         <tr>
