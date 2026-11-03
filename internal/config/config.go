@@ -149,6 +149,10 @@ type Config struct {
 	// the SOP_MODEL_* environment (which a .env file may supply) by
 	// internal/model; an omitted block leaves the agent selection unchanged.
 	Models model.Route `yaml:"models"`
+	// Execution is the optional project execution-lease configuration
+	// (docs/plans/PROPOSAL-SHARED-EXECUTION-EXCLUSION.md). An omitted block leaves
+	// execution unchanged: the lease is off and nothing acquires it.
+	Execution ExecutionConfig `yaml:"execution"`
 	// RAG is the opt-in, disabled-by-default RAG knowledge-retrieval configuration
 	// (RAG-SOP-003). An omitted block leaves existing behavior unchanged; the
 	// SOP_RAG_* environment overrides it, resolved by RAGConfig.Resolved.
@@ -554,6 +558,18 @@ func parseEnvArgv(name, v string) ([]string, error) {
 }
 
 // Features toggles optional capabilities.
+// ExecutionConfig configures the project execution lease that keeps one execution
+// per project across the CLI, MCP and ACP interfaces.
+type ExecutionConfig struct {
+	// Lease is off (the default), advisory, or required. It is parsed by
+	// internal/executionlease, so this package only carries the configured value and
+	// rejects a value no mode understands.
+	Lease string `yaml:"lease"`
+}
+
+// ExecutionLeaseModes are the accepted execution.lease values, "" meaning off.
+var ExecutionLeaseModes = map[string]bool{"": true, "off": true, "advisory": true, "required": true}
+
 type Features struct {
 	JevDecisions bool `yaml:"jev_decisions"`
 }
@@ -888,6 +904,9 @@ func (c *Config) Validate() error {
 	if !supportedHarnesses[strings.TrimSpace(c.Agent.Harness)] {
 		return fmt.Errorf("config: unknown agent.harness %q (want %s)",
 			c.Agent.Harness, strings.Join(sortedKeys(supportedHarnesses), ", "))
+	}
+	if lease := strings.ToLower(strings.TrimSpace(c.Execution.Lease)); !ExecutionLeaseModes[lease] {
+		return fmt.Errorf("config: unknown execution.lease %q (want off, advisory, required)", c.Execution.Lease)
 	}
 	if !supportedProviders[strings.TrimSpace(c.Agent.Provider)] {
 		return fmt.Errorf("config: unknown agent.provider %q (want %s)",

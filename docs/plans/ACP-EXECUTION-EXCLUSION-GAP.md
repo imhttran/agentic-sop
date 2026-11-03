@@ -76,7 +76,14 @@ probe-only form does not remove an exclusion that existed.
 A single project-scoped **execution lease** held for the lifetime of an execution
 and respected by every interface. See
 [`PROPOSAL-SHARED-EXECUTION-EXCLUSION.md`](PROPOSAL-SHARED-EXECUTION-EXCLUSION.md).
-Until that proposal is approved and implemented, this gap stays open.
+
+The lease primitive now exists (`internal/executionlease`: an exclusive owner
+record, a heartbeat for the cross-host case, and staleness that is reported rather
+than acted on), together with the `execution.lease` setting, which defaults to
+`off`. **No interface acquires it yet**, so nothing in this document has changed:
+the CLI still takes no execution lock and an ACP/MCP start still cannot see a
+running `sop run`. This gap stays open until the wiring lands and this document is
+updated with the evidence.
 
 ## Evidence to cite
 
