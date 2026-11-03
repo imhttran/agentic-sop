@@ -29,12 +29,15 @@ type CommandError struct {
 	Verb     string
 	ExitCode int
 	// Output is the tail of the command's combined stdout and stderr, bounded by
-	// maxCommandDiagnostic.
+	// maxCommandDiagnostic and already redacted by SanitizeDiagnostic, so no consumer
+	// of this field can surface a credential.
 	Output string
 	Err    error
 }
 
-// Error renders the command, its exit status, and SOP's own diagnostic.
+// Error renders the command, its exit status, and SOP's own diagnostic. Output is
+// already redacted by Exec; sanitizing again keeps a CommandError built by hand
+// from rendering a credential, and the sanitizer is idempotent.
 func (e *CommandError) Error() string {
 	msg := fmt.Sprintf("sop %s: %v", e.Verb, e.Err)
 	if out := SanitizeDiagnostic(strings.TrimSpace(e.Output)); out != "" {
@@ -47,10 +50,23 @@ func (e *CommandError) Error() string {
 // refusal (sopRefused) now that the error carries SOP's output too.
 func (e *CommandError) Unwrap() error { return e.Err }
 
-// diagnosticSecretRe matches a credential-shaped assignment or header. It
-// requires a delimiter or a long bearer value, so a diagnostic line such as
-// "token budget exhausted" is kept.
-var diagnosticSecretRe = regexp.MustCompile(`(?i)(?:api[_-]?key|access[_-]?key|private[_-]?key|secret|token|password|passwd)\s*[:=]|authorization\s*[:=]|bearer\s+[A-Za-z0-9._~+/=-]{8,}|-----begin [^-]{0,40}private key-----`)
+// diagnosticSecretRe matches a credential-shaped assignment, header or value. It
+// requires a delimiter, a key-shaped value or a password in a URL, so a diagnostic
+// line such as "token budget exhausted" is kept.
+//
+// The forms matter: a provider error echoes a credential as `api_key=…`, as
+// `"api_key": "…"` inside a JSON body, and as prose such as
+// "Incorrect API key provided: sk-…". All three are matched, as are values that
+// appear without a name (provider key prefixes, AWS key ids).
+var diagnosticSecretRe = regexp.MustCompile(`(?i)` +
+	`(?:api[_\s-]?key|access[_-]?key|private[_-]?key|secret(?:[_-]?key)?|token|password|passwd)\s*"?\s*[:=]` +
+	`|authorization\s*[:=]` +
+	`|bearer\s+[A-Za-z0-9._~+/=-]{8,}` +
+	`|-----begin [^-]{0,40}private key-----` +
+	`|://[^/\s:@]+:[^/\s@]+@` +
+	`|\b(?:sk|xox[bap]|ghp|gho|ghs|github_pat)[-_][A-Za-z0-9_-]{8,}` +
+	`|\bAKIA[0-9A-Z]{16}\b`,
+)
 
 // SanitizeDiagnostic redacts lines of SOP command output that look like they
 // carry a credential. Unlike sanitizeDetail it is line-based: a multi-line
@@ -145,8 +161,10 @@ func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) 
 			return out, &CommandError{
 				Verb:     verb,
 				ExitCode: exitErr.ExitCode(),
-				Output:   tailExcerpt(strings.TrimSpace(out), maxCommandDiagnostic),
-				Err:      err,
+				// Redact before bounding: truncation keeps the tail, and sanitizing first
+				// keeps a cut from exposing a bare credential value.
+				Output: tailExcerpt(strings.TrimSpace(SanitizeDiagnostic(out)), maxCommandDiagnostic),
+				Err:    err,
 			}
 		}
 		return out, fmt.Errorf("sop %s: %w", verb, err)

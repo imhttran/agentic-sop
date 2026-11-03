@@ -365,10 +365,21 @@ func TestSanitizeDiagnostic(t *testing.T) {
 	}{
 		{"keeps a plain diagnostic", "sop validate: exit status 1\nreason: build failed", "sop validate: exit status 1\nreason: build failed"},
 		{"keeps a bare token budget line", "reason: token budget exhausted", "reason: token budget exhausted"},
+		{"keeps a plain url", "GET https://example.com/v1/status -> 200", "GET https://example.com/v1/status -> 200"},
+		{"keeps a file path", "reading internal/controller/sopclient/commands.go", "reading internal/controller/sopclient/commands.go"},
 		{"redacts an api key assignment", "api_key=sk-live-123", "[redacted]"},
 		{"redacts an authorization header", "Authorization: Bearer abcdefghijkl", "[redacted]"},
 		{"redacts only the secret line", "reason: ok\npassword: hunter2", "reason: ok\n[redacted]"},
 		{"redacts a pem header line", "-----BEGIN RSA PRIVATE KEY-----", "[redacted]"},
+		// The shapes a provider error actually arrives in: a JSON body and prose.
+		{"redacts a json api key", `{"api_key": "sk-live-123"}`, "[redacted]"},
+		{"redacts a provider api key message", "Incorrect API key provided: sk-proj-abc123", "[redacted]"},
+		{"redacts a secret key assignment", "SECRET_KEY=abc123", "[redacted]"},
+		{"redacts credentials in a url", "DATABASE_URL=postgres://user:s3cret@db:5432/app", "[redacted]"},
+		// Values that appear without a name, recognised by their own shape.
+		{"redacts an unnamed provider key", "using sk-proj-AbC123456789 for this call", "[redacted]"},
+		{"redacts an aws key id", "AKIAIOSFODNN7EXAMPLE", "[redacted]"},
+		{"redacts a github token", "ghp_abcdefghijklmnopqrstuvwxyz0123456789", "[redacted]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -379,7 +390,45 @@ func TestSanitizeDiagnostic(t *testing.T) {
 	}
 }
 
-// CommandError renders SOP's diagnostic with credential lines redacted.
+// CommandError redacts SOP's diagnostic when it is built, so the exported Output
+// field is safe for any consumer, not only for Error().
+func TestCommandErrorRedactsOutputAtConstruction(t *testing.T) {
+	cmd := NewCommander(refusingSop(t, "api_key=sk-live-123", 1), time.Minute)
+
+	_, err := cmd.Exec(context.Background(), t.TempDir(), "run")
+	var cmdErr *CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("err = %v (%T), want *CommandError", err, err)
+	}
+	if strings.Contains(cmdErr.Output, "sk-live-123") {
+		t.Fatalf("CommandError.Output leaked a credential: %q", cmdErr.Output)
+	}
+	if strings.Contains(err.Error(), "sk-live-123") {
+		t.Fatalf("CommandError.Error() leaked a credential: %q", err)
+	}
+}
+
+// The tail excerpt keeps what SOP said last, and redacting before bounding means a
+// cut that lands inside a credential cannot leave its value behind.
+func TestCommandErrorRedactsBeforeBounding(t *testing.T) {
+	// Padding sized so the bound cuts inside the secret line: keeping the tail first
+	// would expose the part after the cut, with no key left to recognise.
+	padding := strings.Repeat("x", 3985)
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "sop")
+	script := "#!/bin/sh\nprintf '%s' 'api_key=head-secret-123\n" + padding + "' 1>&2\nexit 1\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := NewCommander(bin, time.Minute).Exec(context.Background(), t.TempDir(), "run")
+	if err == nil {
+		t.Fatal("err = nil, want a refusal")
+	}
+	if strings.Contains(err.Error(), "secret-123") {
+		t.Fatalf("truncation exposed a credential: %q", err)
+	}
+}
 func TestCommandErrorRedactsDiagnostic(t *testing.T) {
 	ce := &CommandError{Verb: "run", ExitCode: 1, Output: "api_key=sk-live-123\nreason: retry budget exhausted", Err: errors.New("exit status 1")}
 	msg := ce.Error()

@@ -103,21 +103,102 @@ func TestBoundOutputKeepsTail(t *testing.T) {
 }
 
 // A secret in streamed output is redacted before it reaches the status fragment.
+// The reader sees the state through Status, which folds in the line still arriving.
 func TestLiveWriterRedactsDiagnosticSecrets(t *testing.T) {
 	cr := NewCommandRunner(time.Second)
 	st := &CommandState{}
+	cr.states[cr.key("p", "run")] = st
 	w := &liveWriter{cr: cr, st: st}
 
 	if _, err := w.Write([]byte("api_key=sk-live-123\nreason: retry")); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(st.Output, "sk-live-123") {
-		t.Fatalf("streamed output leaked a credential: %q", st.Output)
+	view, ok := cr.Status("p", "run")
+	if !ok {
+		t.Fatal("Status = not found")
 	}
-	if !strings.Contains(st.Output, "[redacted]") {
-		t.Errorf("streamed output does not mark the redaction: %q", st.Output)
+	if strings.Contains(view.Output, "sk-live-123") {
+		t.Fatalf("streamed output leaked a credential: %q", view.Output)
 	}
-	if !strings.Contains(st.Output, "reason: retry") {
-		t.Errorf("streamed output dropped the diagnostic: %q", st.Output)
+	if !strings.Contains(view.Output, "[redacted]") {
+		t.Errorf("streamed output does not mark the redaction: %q", view.Output)
+	}
+	if !strings.Contains(view.Output, "reason: retry") {
+		t.Errorf("streamed output dropped the diagnostic: %q", view.Output)
+	}
+}
+
+// A credential split across two writes must not leak its tail. Redacting the line
+// as it arrives would replace the key before the value finished, leaving the rest
+// of the value unrecognisable to the redactor.
+func TestLiveWriterKeepsSplitSecretRedacted(t *testing.T) {
+	cr := NewCommandRunner(time.Second)
+	st := &CommandState{}
+	cr.states[cr.key("p", "run")] = st
+	w := &liveWriter{cr: cr, st: st}
+
+	for _, chunk := range []string{"api_key=sk-li", "ve-123\n", "reason: ok\n"} {
+		if _, err := w.Write([]byte(chunk)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	view, ok := cr.Status("p", "run")
+	if !ok {
+		t.Fatal("Status = not found")
+	}
+	if strings.Contains(view.Output, "ve-123") || strings.Contains(view.Output, "sk-li") {
+		t.Fatalf("split credential leaked: %q", view.Output)
+	}
+	if !strings.Contains(view.Output, "[redacted]") {
+		t.Errorf("split credential was not marked redacted: %q", view.Output)
+	}
+	if !strings.Contains(view.Output, "reason: ok") {
+		t.Errorf("readable diagnostic dropped: %q", view.Output)
+	}
+}
+
+// The in-flight line is redacted too, not just the complete ones.
+func TestStatusRedactsInFlightLine(t *testing.T) {
+	cr := NewCommandRunner(time.Second)
+	st := &CommandState{}
+	cr.states[cr.key("p", "run")] = st
+	w := &liveWriter{cr: cr, st: st}
+
+	if _, err := w.Write([]byte("api_key=sk-live-123")); err != nil { // no newline yet
+		t.Fatal(err)
+	}
+	view, ok := cr.Status("p", "run")
+	if !ok {
+		t.Fatal("Status = not found")
+	}
+	if strings.Contains(view.Output, "sk-live-123") {
+		t.Fatalf("in-flight line leaked a credential: %q", view.Output)
+	}
+}
+
+// A stream with no line breaks must not grow the retained state without bound, and
+// the retained head is still redacted.
+func TestLiveWriterBoundsAnUnbrokenStream(t *testing.T) {
+	cr := NewCommandRunner(time.Second)
+	st := &CommandState{}
+	cr.states[cr.key("p", "run")] = st
+	w := &liveWriter{cr: cr, st: st}
+
+	chunk := "api_key=sk-live-123" + strings.Repeat("y", 3*maxOutput)
+	if _, err := w.Write([]byte(chunk)); err != nil {
+		t.Fatal(err)
+	}
+	if len(st.partial) > maxOutput {
+		t.Fatalf("in-flight line kept %d bytes, want it bounded by %d", len(st.partial), maxOutput)
+	}
+	view, ok := cr.Status("p", "run")
+	if !ok {
+		t.Fatal("Status = not found")
+	}
+	if strings.Contains(view.Output, "sk-live-123") {
+		t.Fatalf("over-long line leaked a credential: %q", view.Output)
+	}
+	if len(view.Output) > maxOutput+len("… (earlier output truncated)\n") {
+		t.Fatalf("retained output = %d bytes, want it bounded", len(view.Output))
 	}
 }

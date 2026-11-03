@@ -3,6 +3,7 @@ package web
 import (
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"time"
 
@@ -11,10 +12,14 @@ import (
 
 // CommandState is the latest result of a SOP command triggered from the UI.
 type CommandState struct {
-	Verb    string
-	State   string // running | done | error
-	Output  string
-	Error   string
+	Verb   string
+	State  string // running | done | error
+	Output string
+	Error  string
+	// partial is the in-flight line (no newline yet). It is kept raw and redacted
+	// only when rendered, so a credential split across two writes is still
+	// recognisable; Status folds it into the Output a reader sees.
+	partial string
 	Started time.Time
 	// Conflict is set only for a typed DecisionRejection or ReconcileRejection:
 	// SOP refused, so the fragment shows an actionable conflict, not an error.
@@ -71,6 +76,9 @@ func (cr *CommandRunner) Start(project, verb string, fn func(ctx context.Context
 		cr.mu.Lock()
 		defer cr.mu.Unlock()
 		st.Output = boundOutput(sopclient.SanitizeDiagnostic(out), maxOutput)
+		// The command has finished: its whole output is available, so it is redacted
+		// as a unit (before bounding) and no in-flight line remains.
+		st.partial = ""
 		if err != nil {
 			// A non-zero exit that SOP reports as an open human gate is a boundary, not
 			// a failure: surface it as "blocked". This reads SOP state; it invents no
@@ -95,7 +103,9 @@ func (cr *CommandRunner) Start(project, verb string, fn func(ctx context.Context
 	return true, nil
 }
 
-// Status returns the last known status for a project/verb, if any.
+// Status returns the last known status for a project/verb, if any. The in-flight
+// line is redacted here rather than as it arrives, so a credential that spans two
+// writes is still whole when the redactor sees it.
 func (cr *CommandRunner) Status(project, verb string) (CommandState, bool) {
 	cr.mu.Lock()
 	defer cr.mu.Unlock()
@@ -103,7 +113,11 @@ func (cr *CommandRunner) Status(project, verb string) (CommandState, bool) {
 	if !ok {
 		return CommandState{}, false
 	}
-	return *st, true
+	out := *st
+	if st.partial != "" {
+		out.Output = boundOutput(st.Output+sopclient.SanitizeDiagnostic(st.partial), maxOutput)
+	}
+	return out, true
 }
 
 // maxOutput bounds retained output so a runaway command can't bloat memory or the UI.
@@ -123,12 +137,36 @@ func boundOutput(s string, n int) string {
 type liveWriter struct {
 	cr *CommandRunner
 	st *CommandState
+	// skipRest drops the remainder of an over-long line once its head has been
+	// retained, so a stream with no line breaks cannot grow the state without bound.
+	skipRest bool
 }
 
 func (w *liveWriter) Write(p []byte) (int, error) {
 	w.cr.mu.Lock()
 	defer w.cr.mu.Unlock()
-	w.st.Output = boundOutput(sopclient.SanitizeDiagnostic(w.st.Output+string(p)), maxOutput)
+	// Redact complete lines into the retained output and hold the unfinished one.
+	// Redacting a partial line would replace the key with "[redacted]" before its
+	// value arrived, leaving the rest of the value unrecognisable to the next write.
+	data := w.st.partial + string(p)
+	if w.skipRest {
+		if i := strings.IndexByte(data, '\n'); i >= 0 {
+			data, w.skipRest = data[i+1:], false
+		} else {
+			data = ""
+		}
+	}
+	if i := strings.LastIndexByte(data, '\n'); i >= 0 {
+		w.st.Output = boundOutput(w.st.Output+sopclient.SanitizeDiagnostic(data[:i+1]), maxOutput)
+		data = data[i+1:]
+	}
+	if len(data) > maxOutput {
+		// A line this long never ends in practice. Keep its head, where a credential's
+		// key sits, and drop the rest of the line rather than retaining it unbounded.
+		data = data[:maxOutput]
+		w.skipRest = true
+	}
+	w.st.partial = data
 	return len(p), nil
 }
 
