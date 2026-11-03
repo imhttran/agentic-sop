@@ -209,6 +209,18 @@ type TaskDetail struct {
 	ValidationStatus StatusLevel
 	// ReviewStatus is the aggregate review result over Review.
 	ReviewStatus StatusLevel
+
+	// RunError, ValidationError, ReviewError and ActivityError name an artifact
+	// that exists but could not be read or parsed. Non-empty means the evidence is
+	// damaged, not absent: a view must report the failure rather than render the
+	// corresponding status as "never ran".
+	RunError        string
+	ValidationError string
+	ReviewError     string
+	ActivityError   string
+	// ActivitySkipped counts activity.jsonl lines SOP wrote that were malformed or
+	// oversized and therefore skipped; the rest of the history is still shown.
+	ActivitySkipped int
 	// QualityStatus is the JEV/quality status SOP persisted, or StatusUnknown.
 	QualityStatus StatusLevel
 	// RunStatus is the current run's stage/decision; Present is false without

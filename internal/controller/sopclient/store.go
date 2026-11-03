@@ -146,7 +146,7 @@ func (s *Store) Tasks(ctx context.Context, approvals ApprovalsListing) ([]TaskSu
 				t.BlockedBy = append(t.BlockedBy, dep)
 			}
 		}
-		ri := s.runInfo(id)
+		ri, _ := s.runInfo(id) // the list shows absence; the detail view names the damage
 		t.Stage = ri.Stage
 		if ri.Classification != nil {
 			t.Recovery = ri.Classification.Disposition
@@ -208,8 +208,11 @@ func (s *Store) Task(ctx context.Context, id string, approvals ApprovalsListing)
 	if h, err := s.handoff(ctx, id); err == nil {
 		d.Handoff = h
 	}
-	d.Run = s.runInfo(id)
-	d.Activity = s.activity(id)
+	var runErr, activityErr error
+	d.Run, runErr = s.runInfo(id)
+	d.RunError = oneLine(runErr)
+	d.Activity, d.ActivitySkipped, activityErr = s.readActivity(id)
+	d.ActivityError = oneLine(activityErr)
 	d.Stage, d.Recovery = d.Run.Stage, ""
 	if d.Run.Classification != nil {
 		d.Recovery = d.Run.Classification.Disposition
@@ -217,8 +220,11 @@ func (s *Store) Task(ctx context.Context, id string, approvals ApprovalsListing)
 	if d.LatestFailure == "" && d.Run.Classification != nil {
 		d.LatestFailure = d.Run.Classification.Reason
 	}
-	d.Validation = s.readValidation(id)
-	d.Review = s.readReview(id)
+	var validationErr, reviewErr error
+	d.Validation, validationErr = s.readValidation(id)
+	d.ValidationError = oneLine(validationErr)
+	d.Review, reviewErr = s.readReview(id)
+	d.ReviewError = oneLine(reviewErr)
 
 	d.RunStatus = d.Run.Status()
 	d.ValidationStatus = aggregateValidation(d.Validation)

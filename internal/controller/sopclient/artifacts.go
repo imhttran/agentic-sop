@@ -1,7 +1,9 @@
 package sopclient
 
 import (
-	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 )
@@ -34,22 +36,26 @@ type reviewJSON struct {
 	} `json:"Findings"`
 }
 
-func (s *Store) runFile(taskID, name string) ([]byte, bool) {
-	raw, err := os.ReadFile(filepath.Join(s.root, ".agent-sdlc", "runs", taskID, name))
+// runFile reads one run artifact. found is false when it does not exist, so a
+// missing file stays distinct from an unreadable one.
+func (s *Store) runFile(taskID, name string) (raw []byte, found bool, err error) {
+	raw, err = os.ReadFile(filepath.Join(s.root, ".agent-sdlc", "runs", taskID, name))
 	if err != nil {
-		return nil, false
+		if errors.Is(err, fs.ErrNotExist) {
+			return nil, false, nil
+		}
+		return nil, false, fmt.Errorf("%s: %w", name, err)
 	}
-	return raw, true
+	return raw, true, nil
 }
 
-func (s *Store) readValidation(taskID string) []ValidationCheck {
-	raw, ok := s.runFile(taskID, "validation.json")
-	if !ok {
-		return nil
-	}
+// readValidation decodes SOP's validation artifact. A missing artifact is no checks
+// and no error; a corrupt one is an error, never "validation never ran".
+func (s *Store) readValidation(taskID string) ([]ValidationCheck, error) {
 	var v validationJSON
-	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil
+	found, err := readJSON(filepath.Join(s.runDir(taskID), "validation.json"), &v)
+	if err != nil || !found {
+		return nil, err
 	}
 	out := make([]ValidationCheck, 0, len(v.Results))
 	for _, r := range v.Results {
@@ -61,17 +67,16 @@ func (s *Store) readValidation(taskID string) []ValidationCheck {
 			Stderr:   r.Stderr,
 		})
 	}
-	return out
+	return out, nil
 }
 
-func (s *Store) readReview(taskID string) Review {
-	raw, ok := s.runFile(taskID, "review.json")
-	if !ok {
-		return Review{}
-	}
+// readReview decodes SOP's review artifact, with the same absence/damage split as
+// readValidation.
+func (s *Store) readReview(taskID string) (Review, error) {
 	var r reviewJSON
-	if err := json.Unmarshal(raw, &r); err != nil {
-		return Review{}
+	found, err := readJSON(filepath.Join(s.runDir(taskID), "review.json"), &r)
+	if err != nil || !found {
+		return Review{}, err
 	}
 	rev := Review{Summary: r.Summary}
 	for _, f := range r.Findings {
@@ -82,7 +87,7 @@ func (s *Store) readReview(taskID string) Review {
 			Location: firstNonEmpty(f.Location, f.File),
 		})
 	}
-	return rev
+	return rev, nil
 }
 
 func firstNonEmpty(vals ...string) string {
