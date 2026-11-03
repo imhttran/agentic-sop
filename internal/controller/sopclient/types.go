@@ -81,6 +81,14 @@ type ProjectSummary struct {
 	// a reader MUST NOT render it as "no gates", and NeedsAttention then omits
 	// gates (docs/specs/HUMAN-APPROVAL.md).
 	ApprovalsReported bool
+	// ChangedTasksReported is true when SOP returned a changed-executed-task
+	// listing (possibly empty). It is false when there is no active plan or the
+	// listing could not be read; ChangedTasksError distinguishes the latter.
+	ChangedTasksReported bool
+	// ChangedTasksError is set only when the changed-task listing read failed. No
+	// active plan is a legitimate absence, not an error, and NeedsAttention then
+	// omits pending changed tasks.
+	ChangedTasksError string
 }
 
 // PercentComplete is completed/total as an integer percentage.

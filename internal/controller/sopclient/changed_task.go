@@ -25,6 +25,16 @@ var ErrNoExplicitTaskIDs = errors.New("no explicitly selected task ids to accept
 // ErrNoActivePlan: SOP records no active plan, so there is nothing to reconcile.
 var ErrNoActivePlan = errors.New("no active plan recorded by SOP")
 
+// changedTasksError returns "" for a legitimate absence and SOP's failure
+// otherwise. No active plan is not an error: there is nothing to reconcile, so a
+// reader must not render it as "could not read the listing".
+func changedTasksError(err error) string {
+	if err == nil || errors.Is(err, ErrNoActivePlan) {
+		return ""
+	}
+	return err.Error()
+}
+
 // ChangedExecutedTask is one SOP-reported changed executed task.
 type ChangedExecutedTask struct {
 	TaskID string

@@ -61,13 +61,14 @@ func (c *Client) Root(id string) (string, bool) {
 func (c *Client) Projects(ctx context.Context) ([]ProjectSummary, error) {
 	out := make([]ProjectSummary, 0, len(c.order))
 	for _, id := range c.order {
-		changed, _ := c.ChangedTasks(ctx, id)
+		changed, changedErr := c.ChangedTasks(ctx, id)
 		// A failed listing read is an absence (no gate), never a fabricated one.
 		approvals, _ := c.Approvals(ctx, id)
 		s, err := c.stores[id].Summary(ctx, changed, approvals)
 		if err != nil {
 			return nil, err
 		}
+		s.ChangedTasksError = changedTasksError(changedErr)
 		out = append(out, s)
 	}
 	return out, nil
@@ -78,12 +79,13 @@ func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) 
 	if !ok {
 		return ProjectDetail{}, ErrProjectNotFound
 	}
-	changed, _ := c.ChangedTasks(ctx, id)
+	changed, changedErr := c.ChangedTasks(ctx, id)
 	approvals, _ := c.Approvals(ctx, id)
 	sum, err := st.Summary(ctx, changed, approvals)
 	if err != nil {
 		return ProjectDetail{}, err
 	}
+	sum.ChangedTasksError = changedTasksError(changedErr)
 	tasks, err := st.Tasks(ctx, approvals)
 	if err != nil {
 		return ProjectDetail{}, err

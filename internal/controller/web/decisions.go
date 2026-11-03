@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"github.com/imhttran/agentic-sop/internal/controller/sopclient"
@@ -89,7 +90,7 @@ func (h *Handlers) projectDecisions(w http.ResponseWriter, r *http.Request) {
 // success. Shared by the project page and decisions route.
 func (h *Handlers) readChangedTasks(ctx context.Context, detail sopclient.ProjectDetail) (sopclient.ChangedTasks, string) {
 	changed, err := h.sop.ChangedTasks(ctx, detail.Summary.ID)
-	if err != nil {
+	if err != nil && !errors.Is(err, sopclient.ErrNoActivePlan) {
 		return sopclient.ChangedTasks{}, err.Error()
 	}
 	return changed, ""
