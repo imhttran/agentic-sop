@@ -14,6 +14,7 @@ import (
 
 	assets "github.com/imhttran/agentic-sop/internal/controller/assets"
 
+	"github.com/imhttran/agentic-sop/internal/controller/config"
 	"github.com/imhttran/agentic-sop/internal/controller/sopclient"
 
 	_ "modernc.org/sqlite"
@@ -90,7 +91,7 @@ func TestApprovalsInboxOffersCopyDetails(t *testing.T) {
 // A failed `sop approvals --json` is shown as an unread listing, never as "no
 // gates": a failing SOP must be distinguishable from a quiet one.
 func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {
-	srv := unreadApprovalsServer(t)
+	srv, _ := unreadApprovalsServer(t)
 	_, body := get(t, srv.URL+"/approvals")
 
 	if !strings.Contains(body, "Could not be read") {
@@ -98,6 +99,19 @@ func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {
 	}
 	if strings.Contains(body, "SOP reports no applicable approval gate") {
 		t.Errorf("an unread listing was rendered as 'no gates': %q", body)
+	}
+}
+
+// The task page shows an unread approval listing as an absence, never "no gate".
+func TestTaskPageSurfacesUnreadListing(t *testing.T) {
+	srv, id := unreadApprovalsServer(t)
+	_, body := get(t, srv.URL+"/projects/"+id+"/tasks/x1")
+
+	if !strings.Contains(body, "SOP did not report an approval listing") {
+		t.Fatalf("unread approval absence missing from task page: %q", body)
+	}
+	if strings.Contains(body, "SOP reports no human approval boundary") {
+		t.Errorf("an unread listing was rendered as 'no gate': %q", body)
 	}
 }
 
@@ -170,7 +184,7 @@ func TestDecisionStatusSignalsInboxRefresh(t *testing.T) {
 // unreadApprovalsServer builds a project whose `sop approvals --json` fails (a
 // binary that exits non-zero and no persisted listing), so the approval read is
 // unreported rather than an empty success.
-func unreadApprovalsServer(t *testing.T) *httptest.Server {
+func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, ".agent-sdlc")
@@ -185,8 +199,14 @@ func unreadApprovalsServer(t *testing.T) *httptest.Server {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := db.Exec(testSchema); err != nil {
-		t.Fatal(err)
+	now := time.Now().UTC().Format(time.RFC3339)
+	for _, stmt := range []string{
+		testSchema,
+		`INSERT INTO tasks VALUES ('x1','Task X','objective','criteria','BLOCKED','REVIEW_UNRESOLVED',2,3,'` + now + `','` + now + `')`,
+	} {
+		if _, err := db.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
 	}
 	db.Close()
 
@@ -209,5 +229,5 @@ func unreadApprovalsServer(t *testing.T) *httptest.Server {
 	}
 	srv := httptest.NewServer(NewServer(Options{SOP: sop, Views: views, StaticFS: staticFS, Poll: time.Second, CommandTimeout: time.Minute}))
 	t.Cleanup(srv.Close)
-	return srv
+	return srv, config.ProjectID(root)
 }

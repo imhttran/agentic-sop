@@ -2,6 +2,7 @@ package sopclient
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -204,4 +205,21 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// Exec wraps a timeout so callers can classify it with errors.Is, and keeps the
+// human-readable timeout message.
+func TestExecTimeoutWrapsDeadlineExceeded(t *testing.T) {
+	cmd := NewCommander(slowSop(t, "5"), 100*time.Millisecond)
+
+	_, err := cmd.Exec(context.Background(), t.TempDir(), "run")
+	if err == nil {
+		t.Fatal("err = nil, want a timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want errors.Is(err, context.DeadlineExceeded)", err)
+	}
+	if !strings.Contains(err.Error(), "timed out") {
+		t.Fatalf("err = %v, want the timeout message kept", err)
+	}
 }

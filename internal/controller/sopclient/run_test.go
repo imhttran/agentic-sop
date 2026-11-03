@@ -269,3 +269,23 @@ func TestModelSelectionReadVerbatim(t *testing.T) {
 		t.Fatalf("ModelSelection.Present = true without a record: %+v", d2.Run.ModelSelection)
 	}
 }
+
+// An oversized line must be skipped, not end the read: activity events after it
+// still appear.
+func TestActivitySkipsOversizedLine(t *testing.T) {
+	root := newProject(t)
+	huge := `{"detail":"` + strings.Repeat("x", maxActivityLine+1) + `"}`
+	writeArtifact(t, root, "t1", "activity.jsonl",
+		huge+"\n"+`{"stage":"IMPLEMENTING","action":"inspect","detail":"after","timestamp":"2026-01-01T00:00:00Z"}`+"\n")
+
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	events := st.activity("t1")
+	if len(events) != 1 || events[0].Detail != "after" {
+		t.Fatalf("activity = %+v, want the event after the oversized line", events)
+	}
+}

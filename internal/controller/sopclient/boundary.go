@@ -123,10 +123,10 @@ func (c *Client) AcceptChangedTasks(ctx context.Context, projectID string, taskI
 	}
 
 	out, err := c.cmd.Exec(ctx, st.root, "reconcile", acceptChangedArgs(planPath, ids)...)
-	if err != nil {
+	if sopRefused(err) {
 		return &ReconcileRejection{Verb: "reconcile", TaskIDs: ids, Message: decisionMessage(out, err), Err: err}
 	}
-	return nil
+	return err
 }
 
 func acceptChangedArgs(planPath string, ids []string) []string {

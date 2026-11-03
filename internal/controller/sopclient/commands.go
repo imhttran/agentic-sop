@@ -3,6 +3,7 @@ package sopclient
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -52,10 +53,12 @@ func (c *Commander) Exec(ctx context.Context, dir, verb string, args ...string) 
 
 	err := cmd.Run()
 	out := buf.String()
-	if ctx.Err() == context.DeadlineExceeded {
-		return out, fmt.Errorf("sop %s timed out after %s", verb, c.timeout)
-	}
-	if err != nil {
+	switch ctxErr := ctx.Err(); {
+	case errors.Is(ctxErr, context.DeadlineExceeded):
+		return out, fmt.Errorf("sop %s timed out after %s: %w", verb, c.timeout, ctxErr)
+	case ctxErr != nil:
+		return out, fmt.Errorf("sop %s: %w", verb, ctxErr)
+	case err != nil:
 		return out, fmt.Errorf("sop %s: %w", verb, err)
 	}
 	return out, nil

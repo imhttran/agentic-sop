@@ -7,7 +7,11 @@ package sopclient
 type Approval struct {
 	// Present is true when SOP reports an applicable gate for this task. Key
 	// absence checks off Present: Target and Stage are filled either way.
-	Present     bool
+	Present bool
+	// Reported is false when SOP's listing could not be read. An unread listing
+	// is an ABSENCE: a reader MUST NOT render !Present as "no gate"
+	// (docs/specs/HUMAN-APPROVAL.md).
+	Reported    bool
 	Kind        string
 	Target      string
 	Evidence    string // SOP's `reason`, display-only
@@ -23,7 +27,7 @@ type Approval struct {
 
 func (s *Store) approval(task TaskDetail, listing ApprovalsListing) Approval {
 	plan := s.Plan()
-	a := Approval{Target: task.ID, Stage: task.Stage, FinalGate: plan.FinalGate, FinalGateRecorded: plan.Recorded}
+	a := Approval{Reported: listing.Reported, Target: task.ID, Stage: task.Stage, FinalGate: plan.FinalGate, FinalGateRecorded: plan.Recorded}
 	entry, present := listing.Lookup(task.ID)
 	if !present {
 		return a
