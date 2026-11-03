@@ -16,8 +16,17 @@
                 <a class="card" href="/projects/{{.ID}}">
                     <div class="card-head">
                         <h2>{{.Name}}</h2>
+                        {{if .StateError}}
+                        <span class="pill state-unavailable">unavailable</span>
+                        {{else}}
                         <span class="pill state-{{.State}}">{{.State}}</span>
+                        {{end}}
                     </div>
+                    {{if .StateError}}
+                    <p class="muted small">
+                        SOP state could not be read: {{.StateError}}
+                    </p>
+                    {{else}}
                     <div class="progress">
                         <span style="width: {{.PercentComplete}}%"></span>
                     </div>
@@ -63,6 +72,7 @@
                             >{{.FixRequired}} fix required</span
                         >
                     </div>
+                    {{end}}
                     {{if .Branch}}
                     <div class="muted small">branch {{.Branch}}</div>
                     {{end}}

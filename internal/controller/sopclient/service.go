@@ -68,6 +68,8 @@ func (c *Client) Root(id string) (string, bool) {
 	return st.root, true
 }
 
+// Projects returns one summary per project. A project whose state cannot be read
+// is returned with StateError set instead of failing the whole list.
 func (c *Client) Projects(ctx context.Context) ([]ProjectSummary, error) {
 	out := make([]ProjectSummary, 0, len(c.order))
 	for _, id := range c.order {
@@ -75,10 +77,15 @@ func (c *Client) Projects(ctx context.Context) ([]ProjectSummary, error) {
 		// A failed listing read is an absence (no gate), never a fabricated one.
 		approvals, _ := c.Approvals(ctx, id)
 		s, err := c.stores[id].Summary(ctx, changed, approvals)
-		if err != nil {
-			return nil, fmt.Errorf("project %q: %w", id, err)
-		}
 		s.ChangedTasksError = changedTasksError(changedErr)
+		if err != nil {
+			// One unreadable project must not blank the whole dashboard: keep the
+			// partial summary identifiable and report the failure on it.
+			s.StateError = oneLine(fmt.Errorf("project %q: %w", id, err))
+			if s.Name == "" {
+				s.Name = id
+			}
+		}
 		out = append(out, s)
 	}
 	return out, nil
