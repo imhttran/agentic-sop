@@ -60,6 +60,11 @@ type Server struct {
 	// session/update frames (progress.go); nil means the server emits no
 	// progress — a missing seam never fabricates a frame.
 	progress *ProgressSource
+	// done is closed once Serve stops (stopStreams, follow.go), so a background
+	// progress stream ends with the connection instead of writing to a protocol
+	// stream nobody reads. doneOnce makes that close idempotent.
+	done     chan struct{}
+	doneOnce sync.Once
 	// submissions records one definitive result per session and submission
 	// key, so a resent submission is replayed instead of starting duplicate
 	// work. It is keyed sessionID\x00submissionKey; submissionOrder bounds it.
@@ -99,6 +104,7 @@ func NewServer(version string, stdout, stderr io.Writer, opts ...ServerOption) *
 		diag:        newDiagnostics(stderr),
 		events:      newEventBuffer(EventBufferBound),
 		sessions:    map[string]*Session{},
+		done:        make(chan struct{}),
 		submissions: map[string]SubmissionResult{},
 	}
 	for _, opt := range opts {
@@ -124,6 +130,9 @@ func NewServer(version string, stdout, stderr io.Writer, opts ...ServerOption) *
 // which the CLI maps to exit code 0.
 func (s *Server) Serve(ctx context.Context, in io.Reader) error {
 	br := bufio.NewReader(in)
+	// A live progress stream outlives individual requests, so shutdown ends it
+	// before the connection does.
+	defer s.stopStreams()
 	for {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -288,7 +297,7 @@ func (s *Server) dispatch(req *Request) (any, *Error) {
 			// reason); the SOP outcome of the started work travels only in the
 			// session/update frames queued below, never in this response.
 			s.stampPromptStopReason(result)
-			s.emitProgressFor(req, result)
+			s.streamPromptProgress(req, result)
 		}
 		return result, rerr
 	case MethodSessionCancel:

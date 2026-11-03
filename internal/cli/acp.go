@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -162,6 +163,14 @@ func acpSubmission(env workEnv) *acp.PromptSubmission {
 // A job id with no record reports found=false: no record, no frame, no invented
 // state. A read error propagates; the ACP side records a diagnostic and emits
 // no frame, and the prompt response itself is unaffected.
+//
+// Output supplies the job's persisted output excerpt through the same record
+// read, using the excerpt shape sop_work_status already returns (tailFile over
+// output.log, bounded to workLogTailLines lines and 16 KiB). It exists so the
+// answer the prompt started — a plan, a review, a diagnosis — reaches the editor
+// when the job ends, instead of staying only in the job's own log. The ACP side
+// bounds the excerpt again and treats an empty read as "no evidence", so a
+// failed or empty read emits no frame rather than an empty one.
 func acpProgress(env workEnv) *acp.ProgressSource {
 	return &acp.ProgressSource{
 		Progress: func(projectDir, jobID string) (acp.ProgressSnapshot, bool, error) {
@@ -180,6 +189,19 @@ func acpProgress(env workEnv) *acp.ProgressSource {
 				}, true, nil
 			}
 			return acp.ProgressSnapshot{}, false, nil
+		},
+		Output: func(projectDir, jobID string) (string, error) {
+			jobs, err := listWorkJobs(projectDir, env)
+			if err != nil {
+				return "", err
+			}
+			for _, j := range jobs {
+				if j.ID != jobID {
+					continue
+				}
+				return tailFile(filepath.Join(j.dir, workLogFile), workLogTailLines), nil
+			}
+			return "", nil
 		},
 	}
 }

@@ -77,6 +77,17 @@
 // The buffered delivery coalesces intermediate progress within
 // EventBufferBound and preserves terminal outcomes (delivery.go).
 //
+// The turn's answer does not stop at the first snapshot (follow.go). A started
+// job keeps streaming after the response: each persisted state change is one
+// session/update frame, and the terminal state is followed by one output frame
+// carrying the job's persisted output excerpt, which the host supplies through
+// ProgressSource.Output. A prompt turn that started no streamable work answers
+// with one notice frame repeating its own outcome instead of silence, and a job
+// that is already terminal when the prompt returns is answered immediately with
+// no stream at all. Every stream is bounded by FollowBound, stops at the
+// terminal state, and ends with the connection; the output frame is evidence,
+// carrying exactly the excerpt the host returned.
+//
 // session/load is a valid ACP method whose loadSession capability this build
 // does not advertise (AgentCapabilities pins it to false). It is rejected with
 // CodeCapabilityUnsupported and a message naming the supported surface instead

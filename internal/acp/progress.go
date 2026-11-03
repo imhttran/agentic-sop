@@ -160,6 +160,13 @@ type ProgressSource struct {
 	// is emitted. An error is recorded as a diagnostic and no frame is
 	// emitted: progress streaming never fails a prompt response.
 	Progress func(projectDir, jobID string) (ProgressSnapshot, bool, error)
+	// Output optionally returns the persisted output excerpt for the job jobID
+	// in projectDir: the part of the job's own output log that answers the
+	// operator's prompt. The server bounds it again (MaxOutputChunkBytes), so a
+	// host may return whatever excerpt it already keeps. A missing function
+	// means no output frame is ever emitted; an error or an empty excerpt emits
+	// no frame, because an output frame is evidence and never a placeholder.
+	Output func(projectDir, jobID string) (string, error)
 }
 
 // WithProgress wires the host's persisted-progress source. Without it the
@@ -186,48 +193,6 @@ func (s *Server) stampPromptStopReason(result any) {
 		return
 	}
 	res["stopReason"] = StopReasonEndTurn
-}
-
-// emitProgressFor reads the configured ProgressSource for the started work a
-// session/prompt result identifies and queues the matching session/update
-// frame for delivery. Responses without a job id (busy, not started, task in
-// progress) and missing sources emit nothing: a frame without real persisted
-// evidence behind it would fabricate progress.
-func (s *Server) emitProgressFor(req *Request, result any) {
-	if s.missingProgress() {
-		return
-	}
-	res, ok := result.(map[string]any)
-	if !ok {
-		return
-	}
-	jobID, ok := res["jobId"].(string)
-	if !ok || strings.TrimSpace(jobID) == "" {
-		return
-	}
-	sess := s.getSession(peekSessionID(req.Params))
-	if sess == nil {
-		return
-	}
-	snap, found, err := s.progress.Progress(sess.ProjectDir, jobID)
-	if err != nil {
-		s.diag.Printf("read SOP progress for job %s in project %s: %v; no session/update frame emitted", shorten(jobID, 64), shorten(sess.ProjectID, 64), err)
-		return
-	}
-	if !found {
-		return
-	}
-	frame, outcome, err := buildProgressFrame(sess.ID, snap)
-	if err != nil {
-		s.diag.Printf("build session/update for job %s: %v; no frame emitted", shorten(jobID, 64), err)
-		return
-	}
-	// EnqueueProgress and EnqueueOutcome diagnose their own overflow.
-	if outcome {
-		_ = s.EnqueueOutcome(frame)
-	} else {
-		_ = s.EnqueueProgress(frame)
-	}
 }
 
 // peekSessionID reads the sessionId member of request params leniently: the

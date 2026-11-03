@@ -81,6 +81,16 @@ Each governed job keeps its records under `.agent-sdlc/runs/mcp-work/<job-id>/` 
 
 Job ids look like `work-YYYYMMDD-HHMMSS(-N)`. Inspect jobs through the MCP `sop_work_status` tool, the `sop status` CLI surface, or the files directly. `output.log` is evidence; treat it as append-only.
 
+### What the editor shows
+
+Each prompt turn produces at least one message in the panel, and a running job keeps producing them:
+
+- A started or already-running job: one `session/update` frame per persisted state change, then, at the terminal state, one more frame carrying the job's persisted output excerpt (the same tail `sop_work_status` returns). That excerpt is the answer the prompt started — a plan, a review, a diagnosis — so it reaches the panel instead of staying only in `output.log`.
+- A prompt whose job is already terminal (a resubmitted identical prompt): answered immediately from that job's record, with the same output excerpt, and no stream.
+- A turn that started no streamable work (`busy`, `task_in_progress`, an unchanged approval blocker): one notice frame repeating the result's own outcome and message. A dead-looking turn is a bug, not a policy.
+
+Progress frames never assert completion: `verified` is the only state that reads as complete, and a frame that carries it does so only because the persisted record said so. A stream that outlives `FollowBound` (one hour) stops with a diagnostic; the persisted record stays authoritative and can be read again.
+
 Protocol diagnostics for the ACP stream itself go to the stderr of the `sop acp` process, prefixed `acp: `, with credential-shaped values redacted (`internal/acp/diagnostics.go`). stdout never carries diagnostics; it is protocol-only. Where Zed exposes that stderr is a Zed-side behavior and is part of what acceptance records; until then, run `sop acp` from a terminal against the same project when you need to see diagnostics directly.
 
 ## 6. Blockers
@@ -88,7 +98,7 @@ Protocol diagnostics for the ACP stream itself go to the stderr of the `sop acp`
 SOP reports structured outcomes on `session/update` as payload fields; they never change the protocol stop reasons. A blocker means SOP stopped governed work at a gate — a human approval gate, a plan reconciliation gate, a verification failure, or a busy project — and persisted that state.
 
 - Approval blockers: execution stops at the gate and stays pending. An ACP/UI permission grant is not an SOP approval. Resolve approvals through the SOP approval interface (`docs/guides/APPROVALS.md`), then submit again; the adapter re-reads authoritative state and follows the existing continuation path.
-- An unchanged blocker stops without consuming retries. Repeated prompts against it cannot consume retry budget.
+- An unchanged blocker stops without consuming retries. Repeated prompts against it cannot consume retry budget. An unchanged blocker still answers the turn with a notice frame, so a prompt that hits it does not look like a dead agent.
 - Busy-style outcomes (`busy`, `task_in_progress`, `already_running`) are listed in section 4. They block a new start, not an existing execution.
 
 A prompt response's stop reason describes the prompt turn only. `end_turn` ends a finished turn; `cancelled` marks a turn stopped by cancellation. Only persisted SOP outcomes decide whether work succeeded, and the progress frames carry those outcomes as fields.
