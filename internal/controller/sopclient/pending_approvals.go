@@ -34,7 +34,7 @@ func (c *Client) PendingApprovals(ctx context.Context) []ProjectApprovals {
 	out := make([]ProjectApprovals, 0, len(c.order))
 	for _, id := range c.order {
 		st := c.stores[id]
-		name, _ := st.projectMeta()
+		name, _, _ := st.projectMeta() // display name only; the summary reports a config error
 		if name == "" {
 			name = id
 		}

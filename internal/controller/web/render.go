@@ -31,6 +31,7 @@ func NewViews(fsys fs.FS) (*Views, error) {
 		"since":                  since,
 		"evidenceState":          evidenceState,
 		"unavailable":            unavailable,
+		"unreadable":             unreadable,
 		"absentLiteral":          absentLiteral,
 		"hasRetries":             hasRetries,
 		"retryCount":             retryCount,
@@ -147,8 +148,16 @@ func levelClass(level string) string {
 // notRunLabel is the CTRL008 wording for absent data; never a success word.
 const notRunLabel = "not run"
 
+// unreadableLabel is the CTRL008 wording for evidence that exists but could not be
+// read. Unlike notRunLabel it does not claim SOP persisted nothing.
+const unreadableLabel = "unreadable"
+
 // unavailable renders notRunLabel for a field SOP did not persist.
 func unavailable() string { return notRunLabel }
+
+// unreadable renders the label for a field SOP persisted but the controller could
+// not read.
+func unreadable() string { return unreadableLabel }
 
 // absentLiteral exposes sopclient.StatusUnknown to templates.
 func absentLiteral() string { return sopclient.StatusUnknown }

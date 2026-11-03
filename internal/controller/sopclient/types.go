@@ -89,6 +89,10 @@ type ProjectSummary struct {
 	// active plan is a legitimate absence, not an error, and NeedsAttention then
 	// omits pending changed tasks.
 	ChangedTasksError string
+	// ConfigError is set when .agent-sdlc/config.yaml exists but cannot be read or
+	// used. Name then falls back to the project id, and this records why, so a real
+	// misconfiguration is not mistaken for a project that declares no name.
+	ConfigError string
 }
 
 // PercentComplete is completed/total as an integer percentage.
