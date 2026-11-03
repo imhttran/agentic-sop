@@ -20,8 +20,10 @@ import (
 //   - a transport response never labels unfinished work complete: the prompt
 //     response carries only a protocol stop reason, and a running job's frame
 //     never asserts completion;
-//   - a server without a progress source, a source with no record, and busy
-//     or errored submissions emit no frames and never fabricate outcomes;
+//   - a server without a progress source emits no frames at all, and a
+//     submission with no persisted record or a busy project answers with one
+//     notice frame that repeats the result's own outcome instead of fabricating
+//     progress (follow.go);
 //   - the same snapshot builds byte-identical frames;
 //   - a slow client cannot grow the buffer past EventBufferBound, intermediate
 //     frames coalesce, and the terminal outcome survives coalescing and is
@@ -444,7 +446,7 @@ func TestProgress(t *testing.T) {
 		}
 	})
 
-	t.Run("a missing seam, a missing record, and busy outcomes emit no frames", func(t *testing.T) {
+	t.Run("a missing seam, a missing record, and busy outcomes never fabricate progress", func(t *testing.T) {
 		t.Run("no progress source", func(t *testing.T) {
 			fb := &fakeBridge{start: SubmissionResult{Outcome: WorkOutcomeStarted, JobID: "job-1"}}
 			fix := newProgressFixture(t, fb, nil)
@@ -458,21 +460,42 @@ func TestProgress(t *testing.T) {
 			fb := &fakeBridge{start: SubmissionResult{Outcome: WorkOutcomeStarted, JobID: "job-1"}}
 			fix := newProgressFixture(t, fb, fp.source())
 			sess := fix.openSession(t.TempDir())
-			if frames := fix.prompt(sess, "explain", nil); len(frames) != 1 {
-				t.Fatalf("wrote %d frames with no persisted record, want exactly the response", len(frames))
+			frames := fix.prompt(sess, "explain", nil)
+			if len(frames) != 2 {
+				t.Fatalf("wrote %d frames with no persisted record, want the response and one notice", len(frames))
+			}
+			notice := decodeSOP(t, frames[1])
+			if got, _ := notice["notice"].(string); got != NoticePromptOutcome {
+				t.Errorf("notice = %q, want %q", got, NoticePromptOutcome)
+			}
+			if _, ok := notice["state"]; ok {
+				t.Errorf("notice carries a progress state (%v): a missing record must not become progress", notice)
+			}
+			if text := updateText(t, frames[1]); !strings.Contains(text, "no persisted job record for job-1") {
+				t.Errorf("notice text = %q, want it to name the missing record", text)
 			}
 			if fp.reads != 1 {
 				t.Errorf("ProgressSource reads = %d, want 1", fp.reads)
 			}
 		})
-		t.Run("busy project holds no fabricated frame", func(t *testing.T) {
+		t.Run("busy project answers with its outcome, not a fabricated frame", func(t *testing.T) {
 			fp := &fakeProgress{snaps: map[string]ProgressSnapshot{}}
 			fb := &fakeBridge{lockErr: ErrProjectBusy}
 			fix := newProgressFixture(t, fb, fp.source())
 			sess := fix.openSession(t.TempDir())
 			frames := fix.prompt(sess, "explain", nil)
-			if len(frames) != 1 {
-				t.Fatalf("wrote %d frames for a busy project, want exactly the response", len(frames))
+			if len(frames) != 2 {
+				t.Fatalf("wrote %d frames for a busy project, want the response and one notice", len(frames))
+			}
+			notice := decodeSOP(t, frames[1])
+			if _, ok := notice["state"]; ok {
+				t.Errorf("busy notice carries a progress state (%v): a busy project is not work state", notice)
+			}
+			if _, ok := notice["jobId"]; ok {
+				t.Errorf("busy notice carries a job identity (%v): nothing started, so none exists", notice)
+			}
+			if text := updateText(t, frames[1]); !strings.Contains(text, "nothing was started or queued") {
+				t.Errorf("notice text = %q, want the busy result's own message", text)
 			}
 			result := frames[0]["result"].(map[string]any)
 			if got, _ := result["outcome"].(string); got != WorkOutcomeBusy {

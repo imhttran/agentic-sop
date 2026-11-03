@@ -85,6 +85,12 @@ type Session struct {
 	// reconciled (ACP-006). session/cancel stops exactly this job; empty means the
 	// session has no foreground governed work to cancel.
 	ActiveJobID string
+	// streaming records the jobs this session has a live follow stream for
+	// (follow.go), so a repeated prompt for running work re-uses that answer
+	// instead of starting a second stream. It is in-memory session state under
+	// the server mutex, bounded by the jobs the session submitted, and dies with
+	// the session; it is never persisted and never restored across a restart.
+	streaming map[string]bool
 }
 
 // setSessionJob records the started job a session's foreground work belongs to.
