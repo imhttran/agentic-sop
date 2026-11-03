@@ -1,4 +1,4 @@
-# Plan: SOP Trunk-Based Development and Optional Worktrunk Integration
+# Plan: SOP Trunk-Based Development
 
 Date: 2026-11-02
 Status: Draft for repository inspection and implementation planning
@@ -8,13 +8,13 @@ Target repository: https://github.com/imhttran/agentic-sop
 
 Keep `main` releasable through small, frequently merged PRs. Make the compliant workflow easy for coding agents while preserving SOP approvals, verification, lifecycle state, and existing worktrees.
 
-Enforce repository rules through GitHub and execution rules through SOP. Add Worktrunk as an optional worktree adapter after the enforcement path works with plain Git.
+Enforce repository rules through GitHub and execution rules through SOP.
 
 ## Evidence and assumptions
 
 - This plan follows the agreed direction in the discussion. It does not record completed implementation or approved governance changes.
 - Current repository rules, configuration keys, worktree abstractions, lifecycle transitions, and project-lock behavior have not been inspected for this plan.
-- Worktrunk documentation describes worktree creation/navigation, setup hooks, PR workflows, and a combined local merge workflow.
+- As of 2026-11-02, ruleset PullRequestRequire on the default branch already blocks deletion and force pushes, requires a PR and CodeQL, and requires all six ci.yml jobs to pass (required_status_checks, non-strict).
 - Task IDs below are proposed planning identifiers. They are not existing SOP task records.
 - All proposed policy settings must be mapped onto existing configuration conventions during inspection. Do not invent a parallel configuration subsystem.
 
@@ -26,7 +26,7 @@ Before editing repository files:
 
 1. Read repository instructions and inspect active SOP plans, gates, locks, worktrees, and local changes without modifying them.
 2. Fetch `origin` and record the current `origin/main` SHA. If fetching fails, stop and report the blocker instead of choosing an unverified base.
-3. Create a uniquely named branch and new sibling worktree from that explicit SHA using the existing supported Git/SOP workflow. Worktrunk is not a prerequisite for bootstrapping this plan.
+3. Create a uniquely named branch and new sibling worktree from that explicit SHA using the existing supported Git/SOP workflow.
 4. Verify the new worktree path, branch, HEAD, and clean status. Report these values before implementation.
 5. Initialize or register this plan through the supported SOP lifecycle. Do not copy runtime databases, approvals, locks, or verification evidence from another worktree. If an active-plan or project lock prevents registration, report the blocker without resetting or historicalizing unrelated work.
 6. Perform implementation, tests, commits, and PR creation from the dedicated worktree. Preserve all existing worktrees and user changes.
@@ -43,10 +43,9 @@ Acceptance: implementation evidence identifies the dedicated worktree path, bran
 2. Define a trunk-based development policy and independently mergeable task boundaries.
 3. Add SOP preflight, integration evidence, and branch-health reporting where missing.
 4. Prepare and apply authorized GitHub protections.
-5. Pilot optional Worktrunk support on macOS and Linux.
-6. Document recovery, preservation, and rollout.
+5. Document recovery, preservation, and rollout.
 
-Excluded: replacing SOP orchestration; bypassing approvals; automatic merge authority; bulk branch deletion; migration of active plans; mandatory Worktrunk installation; automatic Slack delivery setup; building a new worktree manager.
+Excluded: replacing SOP orchestration; bypassing approvals; automatic merge authority; bulk branch deletion; migration of active plans; third-party worktree managers (plain Git and SOP's existing worktree code — `internal/git`, `internal/cli/isolation.go` — already cover them; revisit only for a concrete gap); automatic Slack delivery setup; building a new worktree manager.
 
 ## Operating policy
 
@@ -70,11 +69,10 @@ Branch age and PR size are advisory initially. Never delete, reset, merge, or bl
 | --- | --- |
 | GitHub | Remote protection, required checks, configured reviews, merge authorization |
 | SOP | Task boundaries, preflight, approvals, evidence, recovery, lifecycle, safe cleanup |
-| Worktrunk | Optional worktree creation, navigation, inspection, and approved setup hooks |
 | Agent | Implement the assigned increment and submit it through SOP and PR gates |
 | Repository owner | Approve protection and exception policy changes when required |
 
-Local SOP checks cannot prevent a user from invoking Git directly. Remote protections must enforce merge restrictions independently of SOP and Worktrunk.
+Local SOP checks cannot prevent a user from invoking Git directly. Remote protections must enforce merge restrictions independently of SOP.
 
 ## Implementation tasks
 
@@ -127,6 +125,8 @@ Acceptance: tests cover changed head, changed base/integration result, missing r
 
 Dependencies: TBD-001 and TBD-004.
 
+As of 2026-11-02, PR-required, no-force-push, no-deletion, CodeQL, and required CI checks are already enforced on the default branch; what remains is review settings and the strict up-to-date policy decision.
+
 Prepare a concrete settings diff before applying governance changes. Require PRs and the actual required CI checks. Configure eligible review requirements, stale-review handling, resolved conversations where appropriate, and restrictions on force pushes and deletion. Inspect bypass permissions and document any explicit emergency path. Do not grant agents administrator or bypass access.
 
 Apply only settings authorized by the repository owner under the existing governance process. Check API responses and read back resulting configuration. Never claim settings are enforced merely because a policy document or local test exists.
@@ -141,21 +141,9 @@ Report work-start age, divergence from observed trunk, PR state, verification fr
 
 Acceptance: reports identify aging work without deleting or modifying it. Recommendations distinguish splitting scope, updating the base, waiting for review, and abandoning work by an authorized decision. No scheduled job or outbound notification is created as part of this task.
 
-### TBD-007 — Pilot optional Worktrunk adapter
-
-Dependencies: TBD-003 through TBD-005.
-
-Verify the installed Worktrunk version and command behavior before implementing. Reuse an existing adapter boundary if present; add only the smallest abstraction needed. Plain Git remains the default fallback when Worktrunk is unavailable. Do not silently fall back after a partially successful mutation: inspect and reconcile the created state first.
-
-Limit the pilot to create, inspect, and switch operations. Preserve explicit base SHA selection, path conventions, repository identity, and SOP locking. Keep local merge automation outside the SOP PR path. Cleanup remains behind SOP checks even if Worktrunk performs the final removal.
-
-Hooks may set up dependencies and local development resources. Review hook commands and their approval behavior. Exclude SOP runtime state and secrets from blanket ignored-file copying. Do not share writable databases or assume worktrees isolate ports, services, containers, or credentials. Allocate those resources explicitly where needed. Treat cache-copy optimization as optional and filesystem-dependent.
-
-Acceptance: one representative increment works through both plain Git and Worktrunk paths. Verify on macOS and Linux with supported versions. Tests or targeted integration checks cover hook failure, partial creation, path collisions, missing executable, and state isolation. Worktrunk cannot skip an SOP or remote merge gate.
-
 ### TBD-008 — Validate rollout and document recovery
 
-Dependencies: TBD-006 and TBD-007; the core policy may ship before the optional pilot.
+Dependencies: TBD-006.
 
 Run a small pilot on new work only. Record branch lifetime, time waiting for review, integration failures, setup friction, and recovery incidents. Treat these as evaluation signals rather than productivity scores. Preserve active plans and historical worktrees.
 
@@ -166,7 +154,6 @@ Acceptance:
 - Remote merge evidence reconciles into SOP without manufacturing approval or test evidence.
 - Cleanup preserves unpushed commits, user files, and required run evidence.
 - A failed setup and a stale-verification scenario produce actionable recovery guidance.
-- The operator can disable Worktrunk and continue with plain Git.
 
 ## Verification strategy
 
@@ -181,26 +168,20 @@ Evidence should include commit SHA, commands/check identities, results, timestam
 | Mandatory reviews block a solo maintainer | Confirm eligible reviewer arrangement before enabling |
 | Frequent trunk updates cause redundant validation | Verify at integration boundary; retain safe cache behavior |
 | Worktree state shares locks or project identity incorrectly | Inspect current semantics before adapter changes |
-| Hooks copy secrets or stale approvals | Explicit setup allowlist; isolated runtime state |
-| Worktrunk removes evidence with the worktree | SOP preservation checks before removal |
 | CI queue or ruleset features are unavailable | Document supported alternative and remaining limitation |
 | Age warnings encourage premature merges | Advisory thresholds; completion and quality gates remain authoritative |
 | Automation fails after a partial mutation | Reconcile actual state; do not blindly retry |
 
 ## Rollout and rollback
 
-Ship documentation and core enforcement in small PRs, followed by advisory reporting and the optional Worktrunk pilot. Keep one plan of record with explicit increment-to-PR mapping. Adapt task boundaries after inspection rather than opening one long-lived branch for this entire plan.
+Ship documentation and core enforcement in small PRs, followed by advisory reporting. Keep one plan of record with explicit increment-to-PR mapping. Adapt task boundaries after inspection rather than opening one long-lived branch for this entire plan.
 
-Rollback optional adapter behavior to plain Git without deleting worktrees. Preserve evidence and existing plans. Changes to remote protections require the same governance as enabling them; operational problems do not authorize silent weakening of protections.
+Preserve evidence and existing plans. Changes to remote protections require the same governance as enabling them; operational problems do not authorize silent weakening of protections.
 
 ## Definition of done
 
-The documented trunk workflow is enforced remotely where supported, SOP records and verifies the relevant revisions, new work uses isolated worktrees, small increments can merge independently, and safe cleanup follows remote merge confirmation. Worktrunk remains optional. All unresolved capability gaps and policy exceptions are reported explicitly.
+The documented trunk workflow is enforced remotely where supported, SOP records and verifies the relevant revisions, new work uses isolated worktrees, small increments can merge independently, and safe cleanup follows remote merge confirmation. All unresolved capability gaps and policy exceptions are reported explicitly.
 
 ## References
 
-- Worktrunk overview and PR workflow: https://worktrunk.dev/
-- Worktrunk hooks and command approval behavior: https://worktrunk.dev/faq/
 - Repository to inspect: https://github.com/imhttran/agentic-sop
-
-Worktrunk references were reviewed during the preceding discussion. Implementation must verify current GitHub capabilities and exact Worktrunk command semantics before making configuration changes.
