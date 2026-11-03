@@ -352,23 +352,37 @@ func (s *Store) activity(taskID string) []ActivityEvent {
 	return events
 }
 
-// PlanSource returns the plan path SOP recorded in plan.meta.json. A metadata file
-// that cannot be read or parsed reads as no active plan; the plan gate carries the
-// same limit.
-func (s *Store) PlanSource() (string, bool) {
-	var meta planMeta
-	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
-		return "", false
+// planMetaFile reads .agent-sdlc/plan.meta.json. found is false when SOP recorded
+// no metadata; a file that exists but cannot be read or parsed is an error, so a
+// broken plan record is never presented as "no active plan".
+func (s *Store) planMetaFile() (meta planMeta, found bool, err error) {
+	n, err := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta)
+	if err != nil {
+		return planMeta{}, false, err
 	}
-	src := strings.TrimSpace(meta.Source)
-	return src, src != ""
+	return meta, n, nil
 }
 
-// Plan returns the active plan and final gate; without readable metadata,
-// Recorded is false and FinalGate is StatusUnknown.
+// PlanSource returns the plan path SOP recorded in plan.meta.json. No metadata, or
+// metadata that records no source, is an absence; a damaged file is an error.
+func (s *Store) PlanSource() (string, bool, error) {
+	meta, found, err := s.planMetaFile()
+	if err != nil || !found {
+		return "", false, err
+	}
+	src := strings.TrimSpace(meta.Source)
+	return src, src != "", nil
+}
+
+// Plan returns the active plan and final gate. Without readable metadata,
+// Recorded is false; Error names the damaged file so a view can tell a broken
+// plan record from a project that has no plan.
 func (s *Store) Plan() PlanGate {
-	var meta planMeta
-	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
+	meta, found, err := s.planMetaFile()
+	if err != nil {
+		return PlanGate{FinalGate: StatusUnknown, Error: oneLine(err)}
+	}
+	if !found {
 		return PlanGate{FinalGate: StatusUnknown}
 	}
 	src := strings.TrimSpace(meta.Source)

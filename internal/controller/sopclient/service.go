@@ -100,7 +100,7 @@ func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) 
 	if err != nil {
 		return ProjectDetail{}, err
 	}
-	plan, _ := st.PlanSource()
+	plan, _, _ := st.PlanSource() // a damaged file is reported through Plan.Error
 	return ProjectDetail{
 		Summary:         sum,
 		Tasks:           tasks,
@@ -119,11 +119,12 @@ func (c *Client) Task(ctx context.Context, projectID, taskID string) (TaskDetail
 	return st.Task(ctx, taskID, approvals)
 }
 
-// PlanSource returns the active plan path SOP recorded for a project, if any.
-func (c *Client) PlanSource(projectID string) (string, bool) {
+// PlanSource returns the active plan path SOP recorded for a project, if any. A
+// plan.meta.json that cannot be read is an error, never an absence.
+func (c *Client) PlanSource(projectID string) (string, bool, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return "", false
+		return "", false, projectNotFound(projectID)
 	}
 	return st.PlanSource()
 }
@@ -136,7 +137,10 @@ func (c *Client) ChangedTasks(ctx context.Context, projectID string) (ChangedTas
 	if !ok {
 		return ChangedTasks{}, projectNotFound(projectID)
 	}
-	planPath, ok := st.PlanSource()
+	planPath, ok, err := st.PlanSource()
+	if err != nil {
+		return ChangedTasks{}, err
+	}
 	if !ok {
 		return ChangedTasks{}, ErrNoActivePlan
 	}
