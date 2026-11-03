@@ -46,9 +46,11 @@
 //
 // session/cancel (ACP-006) cancels the session's foreground governed work
 // through the host-supplied cancel seam (PromptSubmission.Cancel in
-// prompt.go, handler in cancel.go). Params are {sessionId} plus one optional
-// jobId or submissionKey identity; the response carries outcome cancelled,
-// the job id, stopReason cancelled, and the documented stop bound
+// prompt.go, handler in cancel.go). Params are exactly {sessionId}; the shape is
+// decoded strictly, so an unknown field (for example jobId or submissionKey) is
+// rejected as invalid params rather than reinterpreted. The response carries
+// outcome cancelled, the job id, stopReason cancelled, and the documented stop
+// bound
 // (CancelStopBound). A server whose bridge lacks the seam rejects
 // session/cancel with CodeCapabilityUnsupported instead of claiming
 // cancellation support. Cancellation is recorded distinctly from failure and
