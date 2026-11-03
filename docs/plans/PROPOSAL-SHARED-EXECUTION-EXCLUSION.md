@@ -1,7 +1,9 @@
 # Proposal: shared execution exclusion across CLI, MCP, and ACP
 
-Status: **PROPOSAL — not approved, not implemented.** No global CLI execution
-semantics are changed by this document or by the ACP change set.
+Status: **PROPOSAL — step 1 of §7 landed, nothing enforced.** The lease primitive
+and its configuration gate exist (`internal/executionlease`, `execution.lease`),
+with the gate off by default; no interface acquires a lease yet, so execution
+exclusion is unchanged and the gap stays open. Steps 2-4 remain unapproved.
 
 Related: [`ACP-EXECUTION-EXCLUSION-GAP.md`](ACP-EXECUTION-EXCLUSION-GAP.md)
 records the requirement this proposal would satisfy.
