@@ -7,7 +7,14 @@
        persisted no aggregate it shows an explicit absence, never a 0s
        measurement, and it never determines which task runs next. */ -}}
 {{$p := .}}
-{{if $p.Present}}
+{{if $p.Error}}
+<p class="muted">
+  Plan performance: <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small"
+    >SOP's plan performance record could not be read: {{$p.Error}}</span
+  >
+</p>
+{{else if $p.Present}}
 <dl class="facts">
   <div><dt>Plan</dt><dd><code>{{$p.PlanID}}</code></dd></div>
   <div><dt>Tasks measured</dt><dd>{{$p.Tasks}}</dd></div>

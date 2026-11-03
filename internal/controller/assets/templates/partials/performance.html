@@ -8,7 +8,14 @@
        read as a real measurement. Nothing here changes a task's status or next
        step. */ -}}
 {{$p := .}}
-{{if $p.Present}}
+{{if $p.Error}}
+<p class="muted">
+  Performance metrics: <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small"
+    >SOP's performance record could not be read: {{$p.Error}}</span
+  >
+</p>
+{{else if $p.Present}}
 <dl class="facts">
   <div><dt>Total</dt><dd>{{$p.Total}}</dd></div>
   {{if $p.Plan}}<div><dt>Planning</dt><dd>{{$p.Plan}}</dd></div>{{end}}
