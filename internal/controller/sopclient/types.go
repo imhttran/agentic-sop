@@ -93,6 +93,10 @@ type ProjectSummary struct {
 	// used. Name then falls back to the project id, and this records why, so a real
 	// misconfiguration is not mistaken for a project that declares no name.
 	ConfigError string
+	// StateError is set when SOP's task state could not be read for this project.
+	// Counts are then zero and MUST NOT be rendered as "no tasks": the projects
+	// list shows the project as unavailable instead.
+	StateError string
 }
 
 // PercentComplete is completed/total as an integer percentage.

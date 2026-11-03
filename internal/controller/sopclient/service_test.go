@@ -92,7 +92,7 @@ func TestProjectNotFoundNamesProject(t *testing.T) {
 
 // A per-project summary failure is attributed to the project instead of aborting
 // the list anonymously.
-func TestProjectsErrorNamesProject(t *testing.T) {
+func TestProjectsErrorStaysOnSummary(t *testing.T) {
 	root := newProject(t)
 	seed(t, root, `DROP TABLE tasks`)
 	bin, _ := fakeSop(t)
@@ -102,11 +102,67 @@ func TestProjectsErrorNamesProject(t *testing.T) {
 	}
 	defer c.Close()
 
-	_, err = c.Projects(context.Background())
-	if err == nil {
-		t.Fatal("err = nil, want the summary read to fail")
+	list, err := c.Projects(context.Background())
+	if err != nil {
+		t.Fatalf("Projects err = %v, want nil (a per-project failure must not abort the list)", err)
 	}
-	if !strings.Contains(err.Error(), config.ProjectID(root)) {
-		t.Errorf("err = %v, want the failing project id", err)
+	if len(list) != 1 {
+		t.Fatalf("Projects returned %d summaries, want 1", len(list))
+	}
+	if list[0].StateError == "" {
+		t.Fatal("StateError empty; a failed read must be reported on the summary")
+	}
+	if !strings.Contains(list[0].StateError, config.ProjectID(root)) {
+		t.Errorf("StateError = %q, want the failing project id", list[0].StateError)
+	}
+	if list[0].Name == "" {
+		t.Error("Name empty; the failed project must stay identifiable")
+	}
+}
+
+// One unreadable project must not hide the healthy ones.
+func TestProjectsKeepsHealthyProjectsWhenOneFails(t *testing.T) {
+	bad := t.TempDir()
+	initProjectAt(t, bad, "bad")
+	seed(t, bad, `DROP TABLE tasks`)
+	good := t.TempDir()
+	initProjectAt(t, good, "good")
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, good, `INSERT INTO tasks VALUES ('t1','T','o','a','PLANNED','',0,3,'`+now+`','`+now+`')`)
+
+	bin, _ := fakeSop(t)
+	c, err := New([]string{bad, good}, bin, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	list, err := c.Projects(context.Background())
+	if err != nil {
+		t.Fatalf("Projects: %v", err)
+	}
+	if len(list) != 2 {
+		t.Fatalf("Projects returned %d summaries, want 2", len(list))
+	}
+	seen := map[string]ProjectSummary{}
+	for _, s := range list {
+		seen[s.ID] = s
+	}
+	badSum, ok := seen[config.ProjectID(bad)]
+	if !ok {
+		t.Fatal("failed project missing from the list")
+	}
+	if badSum.StateError == "" {
+		t.Error("StateError empty for the unreadable project")
+	}
+	goodSum, ok := seen[config.ProjectID(good)]
+	if !ok {
+		t.Fatal("healthy project missing from the list")
+	}
+	if goodSum.StateError != "" {
+		t.Errorf("StateError = %q for the healthy project, want empty", goodSum.StateError)
+	}
+	if goodSum.Total != 1 {
+		t.Errorf("healthy project Total = %d, want 1", goodSum.Total)
 	}
 }
