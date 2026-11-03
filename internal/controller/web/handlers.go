@@ -466,7 +466,7 @@ func (h *Handlers) acceptChangedTaskStatus(w http.ResponseWriter, r *http.Reques
 
 // retry requeues a single task through SOP (FR-8).
 func (h *Handlers) retry(w http.ResponseWriter, r *http.Request) {
-	h.taskCommand(w, r, "retry", func(ctx context.Context, project, taskID string) (string, error) {
+	h.taskCommandForTask(w, r, "retry", func(ctx context.Context, project, taskID string) (string, error) {
 		return "", h.sop.Retry(ctx, project, taskID)
 	})
 }
@@ -477,7 +477,7 @@ func (h *Handlers) retryStatus(w http.ResponseWriter, r *http.Request) {
 
 // retryForce requeues a task whose retry budget is spent (`sop retry --force`).
 func (h *Handlers) retryForce(w http.ResponseWriter, r *http.Request) {
-	h.taskCommand(w, r, "retry-force", func(ctx context.Context, project, taskID string) (string, error) {
+	h.taskCommandForTask(w, r, "retry-force", func(ctx context.Context, project, taskID string) (string, error) {
 		return "", h.sop.RetryForce(ctx, project, taskID)
 	})
 }
@@ -488,7 +488,7 @@ func (h *Handlers) retryForceStatus(w http.ResponseWriter, r *http.Request) {
 
 // reportTask returns SOP's concise summary of one task's latest run.
 func (h *Handlers) reportTask(w http.ResponseWriter, r *http.Request) {
-	h.taskCommand(w, r, "report", h.sop.ReportTask)
+	h.taskCommandForTask(w, r, "report", h.sop.ReportTask)
 }
 
 func (h *Handlers) reportTaskStatus(w http.ResponseWriter, r *http.Request) {
@@ -513,6 +513,23 @@ func (h *Handlers) taskCommand(w http.ResponseWriter, r *http.Request, verb stri
 		return fn(ctx, project, taskID)
 	})
 	h.renderTaskCommand(w, r, project, taskID, key, taskCommandURL(project, taskID, verb))
+}
+
+// taskCommandForTask is taskCommand for commands that hand the task id to sop as
+// a bare argument and validate it no further. The id must therefore name a real
+// task: without the read, a flag-shaped segment such as "--all" arrives as a
+// flag and drives a different operand than the dashboard rendered.
+func (h *Handlers) taskCommandForTask(w http.ResponseWriter, r *http.Request, verb string, fn func(ctx context.Context, project, taskID string) (string, error)) {
+	project, taskID := r.PathValue("project"), r.PathValue("task")
+	if _, ok := h.sop.Root(project); !ok {
+		h.notFound(w, r, "Project not found")
+		return
+	}
+	if _, err := h.sop.Task(r.Context(), project, taskID); err != nil {
+		h.renderError(w, r, err)
+		return
+	}
+	h.taskCommand(w, r, verb, fn)
 }
 
 // taskCommandStatus: an unknown project is a 404.
