@@ -101,10 +101,18 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv PATH /usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		"--setenv PATH " + sandboxPATH(hostGOROOT()),
 		"--setenv HOME /replay",
 		"--setenv TMPDIR /replay/.tmp",
 		"--setenv GOTOOLCHAIN local",
+	}
+	// The host toolchain may live outside the system paths (setup-go, Homebrew), so it
+	// is bound read-only and put first on PATH.
+	if goroot := hostGOROOT(); goroot != "" {
+		want = append(want, "--ro-bind-try "+goroot+" "+goroot)
+		if !strings.HasPrefix(sandboxPATH(goroot), filepath.Join(goroot, "bin")+":") {
+			t.Fatalf("sandbox PATH does not start with the host toolchain: %q", sandboxPATH(goroot))
+		}
 	}
 	for _, w := range want {
 		if !strings.Contains(joined, w) {

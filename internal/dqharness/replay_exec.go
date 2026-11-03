@@ -49,16 +49,40 @@ const replaySandboxPath = "/replay"
 // directory and never lands in a host temp root or a private writable mount.
 const replaySandboxTmpPath = replaySandboxPath + "/.tmp"
 
-// sandboxPATH is the toolchain/system search path set inside the sandbox. It puts the
-// Go toolchain (/usr/local/go/bin) first.
-const sandboxPATH = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+// systemPATH is the system search path set inside the sandbox, after the host's Go
+// toolchain (see sandboxPATH).
+const systemPATH = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+
+// hostGOROOT is the root of the Go toolchain on the host PATH, or "" when there is
+// none. The sandbox must run that same toolchain, and it often lives outside the system
+// paths: actions/setup-go installs under /opt/hostedtoolcache, Homebrew under
+// /opt/homebrew.
+func hostGOROOT() string {
+	goBin, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	real, err := filepath.EvalSymlinks(goBin)
+	if err != nil {
+		return ""
+	}
+	return filepath.Dir(filepath.Dir(real)) // <GOROOT>/bin/go
+}
+
+// sandboxPATH puts the host Go toolchain's bin first, then the system paths.
+func sandboxPATH(goroot string) string {
+	if goroot == "" {
+		return systemPATH
+	}
+	return filepath.Join(goroot, "bin") + ":" + systemPATH
+}
 
 // minimalReplayEnv is the scrubbed child environment: no API keys, tokens, or provider
 // configuration. Both backends reproduce this environment inside the sandbox. TMPDIR
 // points at <dir>/.tmp so temporary storage stays inside the replay directory.
 func minimalReplayEnv(dir string) []string {
 	return []string{
-		"PATH=" + sandboxPATH,
+		"PATH=" + sandboxPATH(hostGOROOT()),
 		"HOME=" + dir,
 		"TMPDIR=" + filepath.Join(dir, ".tmp"),
 		"GOTOOLCHAIN=local",
@@ -153,6 +177,12 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 	for _, p := range bubblewrapSystemROPaths {
 		args = append(args, "--ro-bind-try", p, p)
 	}
+	// Only the toolchain's own tree is bound, read-only, so the rest of /opt stays
+	// out of view.
+	goroot := hostGOROOT()
+	if goroot != "" {
+		args = append(args, "--ro-bind-try", goroot, goroot)
+	}
 	args = append(args,
 		"--bind", bound, replaySandboxPath,
 		"--chdir", replaySandboxPath,
@@ -163,7 +193,7 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv", "PATH", sandboxPATH,
+		"--setenv", "PATH", sandboxPATH(goroot),
 		"--setenv", "HOME", replaySandboxPath,
 		"--setenv", "TMPDIR", replaySandboxTmpPath,
 		"--setenv", "GOTOOLCHAIN", "local",
