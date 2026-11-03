@@ -5,9 +5,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // ResultsFileName is the machine-readable comparison result. It is written beside
@@ -63,13 +64,6 @@ func redactAll(in []string) []string {
 	return out
 }
 
-var credentialPatterns = []*regexp.Regexp{
-	// key=value or key: value where the key names a credential.
-	regexp.MustCompile(`(?i)(api[_-]?key|token|secret|password|passwd|authorization|credential|access[_-]?key|private[_-]?key)\s*[:=]\s*\S+`),
-	// A bearer token following a space or start marker.
-	regexp.MustCompile(`(?i)\bbearer\s+[A-Za-z0-9._\-]+`),
-}
-
 // credentialEnvNames maps clearly-secret variable name prefixes to true. Only
 // these names are treated as credentials, so innocuous values such as SOP_LOG or
 // AWS_REGION are never mistaken for a secret and corrupted in an artifact.
@@ -81,24 +75,18 @@ var credentialEnvPrefixes = []string{
 	"API_KEY", "SECRET", "PASSWORD", "ACCESS_KEY",
 }
 
-// redactText removes explicit credential-looking values and any environment value
-// supplied by a clearly-secret variable name from s.
+// redactText removes credential-shaped values, and any environment value supplied by a
+// clearly-secret variable name, from s. The shapes are decided by internal/redact, so a
+// shape one surface learns is a shape this artifact redacts too.
+//
+// The environment list stays local: it selects which variables to scrub from an
+// experimental agent's own environment (isSecretEnvName), which is a narrower question
+// than "does this text look like a credential".
 func redactText(s string) string {
 	if s == "" {
 		return s
 	}
-	for _, re := range credentialPatterns {
-		s = re.ReplaceAllStringFunc(s, func(m string) string {
-			// Keep the key, replace only the value.
-			for i, c := range m {
-				if c == '=' || c == ':' {
-					key := strings.TrimSpace(m[:i])
-					return key + "=<redacted>"
-				}
-			}
-			return "<redacted>"
-		})
-	}
+	s = redact.ShapesValues(s, redact.Fixed("<redacted>"))
 	for _, envValue := range credentialEnvValues() {
 		s = strings.ReplaceAll(s, envValue, "<redacted>")
 	}
@@ -106,9 +94,10 @@ func redactText(s string) string {
 }
 
 // isSecretEnvName reports whether name is a clearly-secret environment variable.
-// It is the single source of truth shared by the artifact redactor and the arm
-// executor's environment scrubber, so a credential never reaches an artifact or an
-// experimental agent.
+// It is the source of truth for the arm executor's environment scrubber, so a
+// credential is never handed to an experimental agent. Artifact text is redacted by
+// shape instead (internal/redact), which also catches a credential whose name this
+// list does not know.
 func isSecretEnvName(name string) bool {
 	upper := strings.ToUpper(name)
 	for _, p := range credentialEnvPrefixes {

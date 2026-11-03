@@ -529,3 +529,27 @@ func TestCommandExecutorRejectsDisallowedInstruction(t *testing.T) {
 		t.Fatalf("error = %v, want DisallowedEditError", err)
 	}
 }
+
+// Credential shapes the shared detector knows are redacted from comparison
+// artifacts, including the ones this package's own patterns could not see.
+func TestRedactTextRedactsCredentialShapes(t *testing.T) {
+	for _, in := range []string{
+		"bearer abcdefghijklmnop",
+		"api_key=supersecretvalue",
+		`{"api_key": "supersecretvalue"}`,
+		"Incorrect API key provided: sk-proj-abc123def",
+		"ghp_abcdefghijklmnopqrstuvwx",
+		"sk-abcdefghijklmnop",
+		"AKIAIOSFODNN7EXAMPLE",
+	} {
+		got := redactText(in)
+		for _, leaked := range []string{"supersecretvalue", "sk-proj-abc123def", "ghp_abcdefghijklmnopqrstuvwx", "sk-abcdefghijklmnop", "AKIAIOSFODNN7EXAMPLE", "abcdefghijklmnop"} {
+			if strings.Contains(got, leaked) {
+				t.Errorf("redactText(%q) = %q, leaked %q", in, got, leaked)
+			}
+		}
+		if !strings.Contains(got, "<redacted>") {
+			t.Errorf("redactText(%q) = %q, want a marker", in, got)
+		}
+	}
+}

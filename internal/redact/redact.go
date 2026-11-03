@@ -22,7 +22,9 @@ const (
 	KindAssignment Kind = "assignment"
 	// KindBearer is a Bearer authorization value.
 	KindBearer Kind = "bearer"
-	// KindToken is a credential with a recognisable provider prefix.
+	// KindKey is a provider API key with a recognisable prefix (sk-, rk-, pk-).
+	KindKey Kind = "key"
+	// KindToken is a credential token with a recognisable prefix (ghp_, github_pat_, xox[bap]-).
 	KindToken Kind = "token"
 	// KindAccessKey is an AWS-style access key id.
 	KindAccessKey Kind = "access-key"
@@ -60,7 +62,7 @@ type rule struct {
 var rules = []rule{
 	{regexp.MustCompile("(?i)\\b(api[\\s_-]?key|access[_-]?key|private[_-]?key|secret(?:[_-]?key)?|token|password|passwd|credential|authorization)[a-z0-9 _-]*[\"']?\\s*[:=]\\s*[\"']?([^\\s\"',;}\\[\\]`]+)"), KindAssignment, 2},
 	{regexp.MustCompile(`(?i)\bbearer\s+([A-Za-z0-9._~+/=-]{8,})`), KindBearer, 1},
-	{regexp.MustCompile(`(?i)\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}`), KindToken, 0},
+	{regexp.MustCompile(`(?i)\b(?:sk|rk|pk)-[A-Za-z0-9_-]{8,}`), KindKey, 0},
 	{regexp.MustCompile(`(?i)\bgh[pousr]_[A-Za-z0-9]{16,}`), KindToken, 0},
 	{regexp.MustCompile(`(?i)\bgithub_pat_[A-Za-z0-9_]{16,}`), KindToken, 0},
 	{regexp.MustCompile(`(?i)\bxox[abprs]-[A-Za-z0-9-]{10,}`), KindToken, 0},

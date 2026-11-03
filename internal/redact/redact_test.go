@@ -50,14 +50,14 @@ func TestShapesReplacesWholeMatch(t *testing.T) {
 func TestMarkerPerKind(t *testing.T) {
 	byKind := func(k Kind) string {
 		switch k {
-		case KindToken, KindAccessKey:
+		case KindKey, KindToken, KindAccessKey:
 			return "<" + string(k) + ">"
 		default:
 			return m
 		}
 	}
 	got := ShapesValues("grep AKIAIOSFODNN7EXAMPLE --key sk-live-123", byKind)
-	want := "grep <access-key> --key <token>"
+	want := "grep <access-key> --key <key>"
 	if got != want {
 		t.Errorf("ShapesValues with per-kind markers = %q, want %q", got, want)
 	}
