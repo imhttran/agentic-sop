@@ -133,15 +133,16 @@ func EnvSecrets(env []string) []string {
 // secretNameMarkers mark an environment variable or assignment key as naming a
 // credential. One vocabulary for every surface: a name that is secret here is
 // secret everywhere.
+//
+// These match as substrings, not whole segments, and that is deliberate: the cost
+// of over-redacting a harmless value (GIT_AUTHOR_DATE, MONKEY) is a little lost
+// context, while the cost of missing one is a leaked credential. A name this list
+// has never seen is the case it has to survive.
 var secretNameMarkers = []string{
 	"TOKEN", "SECRET", "PASSWORD", "PASSWD", "APIKEY", "API_KEY",
 	"ACCESS_KEY", "PRIVATE_KEY", "CREDENTIAL", "SESSION", "AUTHORIZATION",
+	"AUTH", "KEY",
 }
-
-// secretNameSegments match as whole underscore-separated segments, so AUTH covers
-// SOP_AUTH and AUTH_TOKEN without also matching GIT_AUTHOR_DATE, and KEY covers
-// SOP_KEY without matching MONKEY.
-var secretNameSegments = []string{"AUTH", "KEY"}
 
 // IsSecretName reports whether name names a credential. Separators are
 // normalised, so --api-key, api.key and API_KEY all match.
@@ -150,13 +151,6 @@ func IsSecretName(name string) bool {
 	for _, marker := range secretNameMarkers {
 		if strings.Contains(normalized, marker) {
 			return true
-		}
-	}
-	for _, segment := range strings.Split(normalized, "_") {
-		for _, want := range secretNameSegments {
-			if segment == want {
-				return true
-			}
 		}
 	}
 	return false

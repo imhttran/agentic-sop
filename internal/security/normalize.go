@@ -6,9 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"sort"
 	"strings"
 	"unicode"
+
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 const (
@@ -183,17 +184,11 @@ func redactValue(v any) any {
 
 // RedactValues removes exact known secret strings from untrusted text. It is a
 // second line of defense behind provider-side redaction; it never logs or
-// persists the values it replaces.
+// persists the values it replaces. The replacement itself is shared with the other
+// redactors (internal/redact), so longest-first ordering and blank handling are the
+// same everywhere.
 func RedactValues(text string, values []string) string {
-	sorted := append([]string(nil), values...)
-	sort.Slice(sorted, func(i, j int) bool { return len(sorted[i]) > len(sorted[j]) })
-	for _, value := range sorted {
-		if strings.TrimSpace(value) == "" {
-			continue
-		}
-		text = strings.ReplaceAll(text, value, "[REDACTED]")
-	}
-	return text
+	return redact.Values(text, values, redact.Fixed("[REDACTED]"))
 }
 
 // StringSet converts a slice to a deterministic set.

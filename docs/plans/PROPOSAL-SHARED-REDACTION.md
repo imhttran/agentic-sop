@@ -1,7 +1,7 @@
 # Proposal: one credential detector, per-surface markers
 
-Status: **PROPOSAL — P1 and P2 implemented; P3 not started.** This document
-records the target design; the phases below say what has landed.
+Status: **PROPOSAL — all three phases implemented.** This document records the
+target design; the phases below say what landed.
 
 Related: the diagnostics redaction that exposed the divergence
 (`internal/controller/sopclient`, PR #221 and its follow-up), and
@@ -147,7 +147,7 @@ Each phase is independently shippable.
 | --- | --- | --- | --- |
 | P1 | `internal/redact` + shared corpus; adopt in `acp`, `sopclient`, `ollamaagent` (nothing persisted) | low | **implemented** |
 | P2 | `outcomefile`, `hipcompare` — persisted artifacts; adapters must reproduce today's markers | medium, golden tests | **implemented** |
-| P3 | `handoff`, `security` — `EnvSecrets` + `Values`; retires `redactCapsule`, `redactList` duplication | medium | not started |
+| P3 | `handoff`, `security` — `EnvSecrets` + `Values`; one name vocabulary | medium | **implemented** |
 
 ### What P2 changed in practice
 
@@ -179,6 +179,26 @@ normalising it; the third keeps the scheme word for context; the fourth is a
 token that reaches the detector as an assignment value, so it is classified as
 one.
 
+### What P3 changed in practice
+
+- `handoff.Redact` is `redact.Values` over `redact.EnvSecrets`, and
+  `security.RedactValues` is `redact.Values`. Both keep `[redacted]`/`[REDACTED]`
+  respectively, so capsules and scan text are unchanged apart from what is now
+  caught.
+- The handoff name vocabulary (`secretMarkers`, `sensitiveName`) is gone; there is
+  one list. Running one env corpus through the previous and the current
+  implementation: everything redacted before is still redacted, and
+  `SESSION_ID=<value>` is now redacted too (the old list had no `SESSION` marker).
+- **Name matching fails safe.** P1's segment matching stopped `GIT_AUTHOR_DATE`
+  from being redacted, but it also stopped matching a name like `MYKEY`, where the
+  marker is not its own segment. A redactor that misses a credential to save a
+  date is the wrong trade, so markers match as substrings again. Over-redacting
+  `GIT_AUTHOR_DATE` costs a little context in a capsule; missing `MYKEY` costs the
+  credential.
+- `SSH_AUTH_SOCK`'s *value* is redacted from capsule text (as it was before P1).
+  That is deliberate and different from the arm executor's env scrubber, which
+  still uses hipcompare's narrower list so an agent keeps a working ssh agent.
+
 ### What P1 changed in practice
 
 - `internal/redact` owns the shapes; `sopclient.SanitizeDiagnostic` is now
@@ -186,8 +206,10 @@ one.
   `redact.ShapesValues` with `[REDACTED]`. Both keep their public behaviour and
   their tests.
 - `ollamaagent` uses `redact.IsSecretName`, so a variable one surface treats as a
-  secret is a secret on every surface. The old list matched `AUTH` as a substring,
-  which also caught `GIT_AUTHOR_DATE`; segment matching fixes that.
+  secret is a secret on every surface. P1 first matched names per underscore
+  segment, to stop `GIT_AUTHOR_DATE` being redacted; P3 reversed that (see below):
+  the narrowing also stopped matching names such as `MYKEY`, and a redactor must
+  fail safe.
 - The ACP kept one rule of its own: `[A-Za-z0-9_-]{32,}`. Redacting a long opaque
   blob is right for a transport diagnostic, but it is not a credential shape —
   applying it everywhere would redact commit SHAs. It is documented in

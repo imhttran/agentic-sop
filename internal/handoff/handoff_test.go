@@ -358,3 +358,18 @@ func TestManagerBoundsAndRedactsCompressionError(t *testing.T) {
 		t.Errorf("compression error not bounded: len=%d", len(record.CompressionError))
 	}
 }
+
+// The handoff vocabulary is the shared one: a session variable is redacted, and a
+// marker that is not its own underscore segment (MYKEY) is still caught.
+func TestRedactUsesSharedSecretNames(t *testing.T) {
+	env := []string{"SESSION_ID=sess-12345", "MYKEY=value-67890", "PATH=/usr/bin"}
+	got := Redact("session sess-12345 key value-67890 path /usr/bin", env)
+	for _, leaked := range []string{"sess-12345", "value-67890"} {
+		if strings.Contains(got, leaked) {
+			t.Errorf("Redact leaked %q: %q", leaked, got)
+		}
+	}
+	if !strings.Contains(got, "/usr/bin") {
+		t.Errorf("Redact removed a non-secret value: %q", got)
+	}
+}
