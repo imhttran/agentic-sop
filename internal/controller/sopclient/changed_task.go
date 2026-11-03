@@ -6,6 +6,7 @@ package sopclient
 // plan or edits state.db. Title/Stage are enriched from SOP's task store.
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"strings"
@@ -110,8 +111,9 @@ func decodeListing(data []byte) (listingDoc, bool) {
 }
 
 // changedTasksFromListing keeps the changed_executed ids in SOP's order; an id
-// the task store doesn't know keeps an empty title.
-func (s *Store) changedTasksFromListing(doc listingDoc) ChangedTasks {
+// the task store doesn't know keeps an empty title. A task-store read failure is
+// an error, never a blank title.
+func (s *Store) changedTasksFromListing(doc listingDoc) (ChangedTasks, error) {
 	out := ChangedTasks{Reported: true, Source: listingSource}
 	for _, rawID := range doc.ChangedExecuted {
 		id := strings.TrimSpace(rawID)
@@ -119,22 +121,30 @@ func (s *Store) changedTasksFromListing(doc listingDoc) ChangedTasks {
 			continue
 		}
 		task := ChangedExecutedTask{TaskID: id}
-		if title, ok := s.taskTitle(id); ok {
+		title, ok, err := s.taskTitle(id)
+		if err != nil {
+			return ChangedTasks{}, err
+		}
+		if ok {
 			task.Title = sanitizeDetail(title)
 		}
 		ri, _ := s.runInfo(id) // the listing carries no place to report a damaged artifact
 		task.Stage = strings.TrimSpace(ri.Stage)
 		out.Tasks = append(out.Tasks, task)
 	}
-	return out
+	return out, nil
 }
 
-// taskTitle returns ok=false when SOP has no row for the id.
-func (s *Store) taskTitle(taskID string) (string, bool) {
+// taskTitle returns ok=false when SOP has no row for the id; any other read
+// failure is an error, never an unknown task.
+func (s *Store) taskTitle(taskID string) (string, bool, error) {
 	var title string
 	err := s.db.QueryRow(`SELECT title FROM tasks WHERE id = ?`, taskID).Scan(&title)
-	if err != nil {
-		return "", false
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", false, nil
 	}
-	return title, true
+	if err != nil {
+		return "", false, err
+	}
+	return title, true, nil
 }

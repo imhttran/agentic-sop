@@ -152,7 +152,11 @@ func (c *Client) ChangedTasks(ctx context.Context, projectID string) (ChangedTas
 	if !ok {
 		return ChangedTasks{}, fmt.Errorf("sop reconcile --list-changed --json: unparsable SOP changed-task listing")
 	}
-	return st.changedTasksFromListing(doc), nil
+	tasks, err := st.changedTasksFromListing(doc)
+	if err != nil {
+		return ChangedTasks{}, err
+	}
+	return tasks, nil
 }
 
 // ErrApprovalsUnavailable: `sop approvals --json` failed or was unparsable.

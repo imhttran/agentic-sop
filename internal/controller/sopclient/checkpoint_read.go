@@ -23,17 +23,26 @@ type checkpointDoc struct {
 }
 
 // Checkpoint prefers checkpoint.json, else the latest activity entry carrying a
-// bounded-progress line, else an absent record.
-func (s *Store) Checkpoint(taskID string) CheckpointProgress {
+// bounded-progress line, else an absent record. A file that exists but cannot be
+// read or parsed is an error, never an absent checkpoint.
+func (s *Store) Checkpoint(taskID string) (CheckpointProgress, error) {
 	path := filepath.Join(s.runDir(taskID), checkpointArtifact)
 	var doc checkpointDoc
-	if found, _ := readJSON(path, &doc); found {
-		return doc.progress("")
+	found, err := readJSON(path, &doc)
+	if err != nil {
+		return CheckpointProgress{}, err
 	}
-	if cp, ok := s.checkpointFromActivity(taskID); ok {
-		return cp
+	if found {
+		return doc.progress(""), nil
 	}
-	return CheckpointProgress{}
+	cp, ok, err := s.checkpointFromActivity(taskID)
+	if err != nil {
+		return CheckpointProgress{}, err
+	}
+	if ok {
+		return cp, nil
+	}
+	return CheckpointProgress{}, nil
 }
 
 // progress marks a counter present only when SOP recorded it. fallbackSource
@@ -52,15 +61,18 @@ func (d checkpointDoc) progress(fallbackSource string) CheckpointProgress {
 }
 
 // checkpointFromActivity returns the newest activity entry that states a
-// bounded-progress line.
-func (s *Store) checkpointFromActivity(taskID string) (CheckpointProgress, bool) {
-	events := s.activity(taskID)
+// bounded-progress line. A read failure is an error, never an absent fallback.
+func (s *Store) checkpointFromActivity(taskID string) (CheckpointProgress, bool, error) {
+	events, _, err := s.readActivity(taskID)
+	if err != nil {
+		return CheckpointProgress{}, false, err
+	}
 	for i := len(events) - 1; i >= 0; i-- {
 		if cp, ok := checkpointFromDetail(taskID, events[i]); ok {
-			return cp, true
+			return cp, true, nil
 		}
 	}
-	return CheckpointProgress{}, false
+	return CheckpointProgress{}, false, nil
 }
 
 // deref returns the pointed-to int and whether SOP reported it.

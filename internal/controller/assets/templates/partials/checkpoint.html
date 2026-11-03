@@ -10,7 +10,14 @@
        remains an SOP lifecycle decision (sop run / sop resume): this panel adds
        no control that decides or simulates it. */ -}}
 {{$cp := .Checkpoint}}
-{{if $cp.Present}}
+{{if .CheckpointError}}
+<p class="muted">
+  Checkpoint: <span class="badge s-unavailable">{{unavailable}}</span>
+  <span class="small"
+    >SOP's checkpoint evidence could not be read: {{.CheckpointError}}</span
+  >
+</p>
+{{else if $cp.Present}}
 <dl class="facts checkpoint-facts">
   {{if $cp.Label}}
   <div>
