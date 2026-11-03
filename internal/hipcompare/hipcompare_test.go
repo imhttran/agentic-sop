@@ -537,13 +537,13 @@ func TestRedactTextRedactsCredentialShapes(t *testing.T) {
 		"bearer abcdefghijklmnop",
 		"api_key=supersecretvalue",
 		`{"api_key": "supersecretvalue"}`,
-		"Incorrect API key provided: sk-proj-abc123def",
+		"Incorrect API key provided: sk-proj-abc123def", //gitleaks:allow: synthetic redaction fixture, not a credential
 		"ghp_abcdefghijklmnopqrstuvwx",
 		"sk-abcdefghijklmnop",
 		"AKIAIOSFODNN7EXAMPLE",
 	} {
 		got := redactText(in)
-		for _, leaked := range []string{"supersecretvalue", "sk-proj-abc123def", "ghp_abcdefghijklmnopqrstuvwx", "sk-abcdefghijklmnop", "AKIAIOSFODNN7EXAMPLE", "abcdefghijklmnop"} {
+		for _, leaked := range []string{"supersecretvalue", "sk-proj-abc123def", "ghp_abcdefghijklmnopqrstuvwx", "sk-abcdefghijklmnop", "AKIAIOSFODNN7EXAMPLE", "abcdefghijklmnop"} { //gitleaks:allow: synthetic redaction fixture, not a credential
 			if strings.Contains(got, leaked) {
 				t.Errorf("redactText(%q) = %q, leaked %q", in, got, leaked)
 			}

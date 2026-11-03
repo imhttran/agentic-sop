@@ -15,8 +15,8 @@ func TestShapesValues(t *testing.T) {
 		{"env assignment", "api_key=sk-live-123", "api_key=[REDACTED]"},
 		{"colon assignment", "token: abc123def", "token: [REDACTED]"},
 		{"json body", `{"api_key": "sk-live-123"}`, `{"api_key": "[REDACTED]"}`},
-		{"provider prose", "Incorrect API key provided: sk-proj-abc123", "Incorrect API key provided: [REDACTED]"},
-		{"secret key", "SECRET_KEY=abc123", "SECRET_KEY=[REDACTED]"},
+		{"provider prose", "Incorrect API key provided: sk-proj-abc123", "Incorrect API key provided: [REDACTED]"}, //gitleaks:allow: synthetic redaction fixture, not a credential
+		{"secret key", "SECRET_KEY=abc123", "SECRET_KEY=[REDACTED]"},                                               //gitleaks:allow: synthetic redaction fixture, not a credential
 		// The key is not a credential name, so the URL rule redacts the password.
 		{"url credentials", "DATABASE_URL=postgres://user:s3cret@db:5432/app", "DATABASE_URL=postgres://user:[REDACTED]@db:5432/app"},
 		{"bearer keeps context", "Authorization: Bearer abcdefghijkl", "Authorization: Bearer [REDACTED]"},
@@ -95,11 +95,11 @@ func TestValues(t *testing.T) {
 func TestEnvSecrets(t *testing.T) {
 	env := []string{
 		"PATH=/usr/bin",
-		"OPENAI_API_KEY=sk-live-123456",
+		"OPENAI_API_KEY=sk-live-123456", //gitleaks:allow: synthetic env fixture, not a credential
 		"GITHUB_TOKEN=ghp_abcdefghijklmnop",
 		"SOP_SHORT=ab",
 		"HOME=/home/operator",
-		"OPENAI_API_KEY_DUP=sk-live-123456",
+		"OPENAI_API_KEY_DUP=sk-live-123456", //gitleaks:allow: synthetic env fixture, not a credential
 	}
 	got := EnvSecrets(env)
 	want := []string{"ghp_abcdefghijklmnop", "sk-live-123456"}
