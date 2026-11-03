@@ -129,6 +129,9 @@ func TestProjectsListShowsAttentionBadge(t *testing.T) {
 	if strings.Contains(body, "approvals unavailable") {
 		t.Errorf("a read listing was flagged unavailable: %q", body)
 	}
+	if strings.Contains(body, "changed tasks unavailable") {
+		t.Errorf("a read changed-task listing was flagged unavailable: %q", body)
+	}
 }
 
 // An unread listing undercounts NeedsAttention, so the projects list must say
@@ -151,6 +154,38 @@ func TestProjectsListSurfacesUnreadChangedTasks(t *testing.T) {
 	if !strings.Contains(body, "changed tasks unavailable") {
 		t.Fatalf("unread changed-task absence missing from projects list: %q", body)
 	}
+}
+
+// The polled task fragment carries the same absence indication, so a failing
+// changed-task read stays visible across polls instead of looking like a quiet
+// project. A successfully read listing renders no badge.
+func TestProjectTasksChangedTasksAvailability(t *testing.T) {
+	t.Run("unread listing is signalled", func(t *testing.T) {
+		srv, id := unreadApprovalsServer(t)
+		_, body := get(t, srv.URL+"/projects/"+id+"/tasks")
+
+		if !strings.Contains(body, "changed tasks unavailable") {
+			t.Fatalf("unread changed-task absence missing from task fragment: %q", body)
+		}
+	})
+
+	t.Run("reported listing is quiet", func(t *testing.T) {
+		srv, id := reportedChangedTasksServer(t)
+		_, body := get(t, srv.URL+"/projects/"+id+"/tasks")
+
+		if strings.Contains(body, "changed tasks unavailable") {
+			t.Fatalf("a reported changed-task listing was flagged unavailable: %q", body)
+		}
+	})
+
+	t.Run("project attention count is flagged", func(t *testing.T) {
+		srv, id := unreadApprovalsServer(t)
+		_, body := get(t, srv.URL+"/projects/"+id)
+
+		if !strings.Contains(body, "changed tasks unavailable") {
+			t.Fatalf("unread changed-task absence missing from the project counts: %q", body)
+		}
+	})
 }
 
 // The inbox gate list refreshes itself when a decision finishes, so a decided
@@ -215,6 +250,12 @@ func TestDecisionStatusSignalsInboxRefresh(t *testing.T) {
 // metadata makes the changed-task read attempt a listing instead of returning
 // ErrNoActivePlan.
 func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
+	return scriptedSopServer(t, "#!/bin/sh\nexit 1\n")
+}
+
+// scriptedSopServer builds a one-task project (x1) with an empty approvals.json,
+// served through a fake `sop` running script.
+func scriptedSopServer(t *testing.T, script string) (*httptest.Server, string) {
 	t.Helper()
 	root := t.TempDir()
 	dir := filepath.Join(root, ".agent-sdlc")
@@ -227,6 +268,10 @@ func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	}
 	if err := os.WriteFile(filepath.Join(dir, "plan.meta.json"),
 		[]byte(`{"source":"docs/PLAN.md"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "approvals.json"),
+		[]byte(`{"approvals":[]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	db, err := sql.Open("sqlite", "file:"+filepath.Join(dir, "state.db"))
@@ -245,7 +290,7 @@ func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	db.Close()
 
 	bin := filepath.Join(t.TempDir(), "sop")
-	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	sop, err := sopclient.New([]string{root}, bin, time.Minute)
@@ -264,4 +309,15 @@ func unreadApprovalsServer(t *testing.T) (*httptest.Server, string) {
 	srv := httptest.NewServer(NewServer(Options{SOP: sop, Views: views, StaticFS: staticFS, Poll: time.Second, CommandTimeout: time.Minute}))
 	t.Cleanup(srv.Close)
 	return srv, config.ProjectID(root)
+}
+
+// reportedChangedTasksServer builds a project whose `sop approvals --json` and
+// changed-task listing both succeed (the latter as SOP's envelope with no
+// changed ids), so a read listing is distinguishable from an unread one.
+func reportedChangedTasksServer(t *testing.T) (*httptest.Server, string) {
+	return scriptedSopServer(t, `#!/bin/sh
+if [ "$1" = approvals ]; then cat .agent-sdlc/approvals.json 2>/dev/null; exit 0; fi
+if [ "$1" = reconcile ]; then printf '%s' '{"version":1,"changed_executed":[]}'; exit 0; fi
+exit 0
+`)
 }

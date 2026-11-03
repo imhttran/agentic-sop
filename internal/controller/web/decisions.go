@@ -87,7 +87,10 @@ func (h *Handlers) projectDecisions(w http.ResponseWriter, r *http.Request) {
 }
 
 // readChangedTasks returns the listing, or an error string instead of an empty
-// success. Shared by the project page and decisions route.
+// success. Shared by the project page and decisions route. The panel renders each
+// pending changed task (id, title, stage, change summary), which ProjectSummary's
+// ChangedTasksReported flag cannot carry, so the decisions route still needs this
+// read even though Project already consulted the listing.
 func (h *Handlers) readChangedTasks(ctx context.Context, detail sopclient.ProjectDetail) (sopclient.ChangedTasks, string) {
 	changed, err := h.sop.ChangedTasks(ctx, detail.Summary.ID)
 	if err != nil && !errors.Is(err, sopclient.ErrNoActivePlan) {
