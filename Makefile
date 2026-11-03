@@ -55,6 +55,14 @@ setup-planner:
 test-mcp-portability:
 	./scripts/checks/test-validation-handoff-portability.sh
 
+# End-to-end smoke of the ACP stdio endpoint: builds sop, drives initialize,
+# session/new, session/prompt, and session/cancel the way an ACP client does, and
+# asserts the persisted job record and a distinct cancellation. A blocking command
+# harness keeps the child alive, so no model provider or network is needed.
+# Requires go and python3.
+acp-smoke:
+	./scripts/checks/acp-linux-smoke.sh
+
 # Fast suite: same tests, with TMPDIR on RAM-backed storage when available. The
 # wrapper creates and cleans up a private per-invocation directory, falls back to
 # the system temp dir on macOS/other platforms, and propagates the test exit
