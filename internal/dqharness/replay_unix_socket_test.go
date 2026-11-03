@@ -78,11 +78,16 @@ func TestIsolatedReplayUnixSocket(t *testing.T) {
 
 	accepted := make(chan struct{}, 16)
 	go func() {
+		buf := make([]byte, 1)
 		for {
 			conn, err := ln.Accept()
 			if err != nil {
 				return
 			}
+			// Read the client's byte before closing, so a successful connection is not
+			// reported as a broken pipe when the listener closes first.
+			_ = conn.SetReadDeadline(time.Now().Add(time.Second))
+			_, _ = conn.Read(buf)
 			_ = conn.Close()
 			accepted <- struct{}{}
 		}
