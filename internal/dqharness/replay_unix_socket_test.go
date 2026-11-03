@@ -3,6 +3,7 @@ package dqharness
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -83,6 +84,9 @@ func TestIsolatedReplayUnixSocket(t *testing.T) {
 			if err != nil {
 				return
 			}
+			// Drain the client's byte before closing. Closing immediately after Accept
+			// races the client's sendall and can surface as EPIPE/BrokenPipe on Linux.
+			_, _ = io.Copy(io.Discard, conn)
 			_ = conn.Close()
 			accepted <- struct{}{}
 		}

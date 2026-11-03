@@ -101,7 +101,7 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv PATH /usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+		"--setenv PATH " + sandboxPATH(),
 		"--setenv HOME /replay",
 		"--setenv TMPDIR /replay/.tmp",
 		"--setenv GOTOOLCHAIN local",
@@ -109,6 +109,11 @@ func TestBubblewrapArgumentsShape(t *testing.T) {
 	for _, w := range want {
 		if !strings.Contains(joined, w) {
 			t.Fatalf("bwrap args missing %q: %v", w, args)
+		}
+	}
+	if root := goToolchainRoot(); root != "" && !coveredBySystemROPath(root) {
+		if bind := "--ro-bind-try " + root + " " + root; !strings.Contains(joined, bind) {
+			t.Fatalf("bwrap args missing the Go toolchain bind %q: %v", bind, args)
 		}
 	}
 	sep := -1
