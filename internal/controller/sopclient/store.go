@@ -3,7 +3,9 @@ package sopclient
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"time"
@@ -56,8 +58,9 @@ func (s *Store) ProjectID() string {
 // pending changed tasks when SOP reported a changed set. The caller supplies both
 // SOP listings.
 func (s *Store) Summary(ctx context.Context, changedTasks ChangedTasks, approvals ApprovalsListing) (ProjectSummary, error) {
-	name, branch := s.projectMeta()
+	name, branch, metaErr := s.projectMeta()
 	p := ProjectSummary{ID: s.ProjectID(), Name: name, Branch: branch, ApprovalsReported: approvals.Reported, ChangedTasksReported: changedTasks.Reported}
+	p.ConfigError = oneLine(metaErr)
 
 	rows, err := s.db.QueryContext(ctx, `SELECT status, COUNT(*) FROM tasks GROUP BY status`)
 	if err != nil {
@@ -339,13 +342,18 @@ func (s *Store) dependencyMap(ctx context.Context) (map[string][]string, error) 
 	return m, rows.Err()
 }
 
-// projectMeta reads the project name and branch from .agent-sdlc/config.yaml.
-func (s *Store) projectMeta() (name, branch string) {
+// projectMeta reads the project name and branch from .agent-sdlc/config.yaml. A
+// missing file is a legitimate absence; an unreadable or unusable one is returned
+// so the summary can report it instead of quietly presenting the id as the name.
+func (s *Store) projectMeta() (name, branch string, err error) {
 	cfg, err := config.ReadProjectConfig(s.root)
 	if err != nil {
-		return "", ""
+		if errors.Is(err, fs.ErrNotExist) {
+			return "", "", nil
+		}
+		return "", "", fmt.Errorf("config.yaml: %w", err)
 	}
-	return cfg.Name, cfg.Branch
+	return cfg.Name, cfg.Branch, nil
 }
 
 func parseTime(s string) time.Time {

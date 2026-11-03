@@ -387,11 +387,16 @@ func (s *Store) Plan() PlanGate {
 
 const reportArtifact = "report.json"
 
-// ReportRef locates the task's report artifact; missing is Present=false with no path.
+// ReportRef locates the task's report artifact. Missing is Present=false with no
+// path and no error; any other stat failure is recorded in Error, so an artifact
+// that exists but cannot be reached is never reported as absent.
 func (s *Store) ReportRef(taskID string) ReportRef {
 	ref := ReportRef{TaskID: taskID}
 	path := filepath.Join(s.runDir(taskID), reportArtifact)
 	if _, err := os.Stat(path); err != nil {
+		if !errors.Is(err, fs.ErrNotExist) {
+			ref.Error = fmt.Sprintf("%s: %v", reportArtifact, err)
+		}
 		return ref
 	}
 	ref.Present = true
@@ -407,4 +412,8 @@ type ReportRef struct {
 	// Path is absolute, or "" when absent.
 	Path string
 	Name string
+	// Error is set when the artifact could not be reached (for example a
+	// permission or path error). Present is false in that case, but the artifact
+	// is not absent, so a reader must not present the missing link as "no report".
+	Error string
 }

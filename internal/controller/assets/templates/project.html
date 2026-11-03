@@ -64,6 +64,12 @@
                     <span class="badge {{levelClass .Project.Plan.FinalGate}}"
                         >plan gate {{.Project.Plan.FinalGate}}</span
                     >
+                    {{end}} {{if .Project.Summary.ConfigError}}
+                    <span
+                        class="badge s-unavailable"
+                        title="SOP's project config could not be read: {{.Project.Summary.ConfigError}}"
+                        >config unavailable</span
+                    >
                     {{end}} {{$active := activeTask .Project}}{{if $active}}
                     <a
                         class="badge s-running"

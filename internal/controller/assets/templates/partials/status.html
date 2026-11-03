@@ -12,7 +12,7 @@
         {{if .RunStatus.Active}}<span class="muted small">active</span>{{end}}
         {{if .RunStatus.Blocked}}<span class="muted small">blocked</span>{{end}}
       {{else if .RunError}}
-        <span class="badge s-unavailable">{{unavailable}}</span>
+        <span class="badge s-unavailable">{{unreadable}}</span>
         <span class="muted small">the run record could not be read</span>
       {{else}}
         <span class="badge s-planned">{{absentLiteral}}</span>
@@ -21,11 +21,11 @@
   </div>
   <div>
     <dt>Validation</dt>
-    <dd>{{if .ValidationStatus.Present}}<span class="badge {{levelClass .ValidationStatus.Level}}">{{.ValidationStatus.Level}}</span>{{else if .ValidationError}}<span class="badge s-unavailable">{{unavailable}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
+    <dd>{{if .ValidationStatus.Present}}<span class="badge {{levelClass .ValidationStatus.Level}}">{{.ValidationStatus.Level}}</span>{{else if .ValidationError}}<span class="badge s-unavailable">{{unreadable}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
   </div>
   <div>
     <dt>Review</dt>
-    <dd>{{if .ReviewStatus.Present}}<span class="badge {{levelClass .ReviewStatus.Level}}">{{.ReviewStatus.Level}}</span>{{else if .ReviewError}}<span class="badge s-unavailable">{{unavailable}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
+    <dd>{{if .ReviewStatus.Present}}<span class="badge {{levelClass .ReviewStatus.Level}}">{{.ReviewStatus.Level}}</span>{{else if .ReviewError}}<span class="badge s-unavailable">{{unreadable}}</span>{{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}</dd>
   </div>
   <div>
     <dt>Quality / JEV</dt>
@@ -37,12 +37,13 @@
     <dt>Report</dt>
     <dd>
       {{if .Report.Present}}<span class="badge s-completed">recorded</span>
+      {{else if .Report.Error}}<span class="badge s-unavailable">{{unreadable}}</span>
       {{else}}<span class="badge s-planned">{{absentLiteral}}</span>{{end}}
     </dd>
   </div>
 </dl>
 <p class="muted small">An absence (UNKNOWN / not run) means SOP persisted no evidence for that step; it is not a pass.</p>
-{{if or .RunError .ValidationError .ReviewError .ActivityError}}
+{{if or .RunError .ValidationError .ReviewError .ActivityError .Report.Error}}
 <div class="error-text" role="alert">
   <strong>SOP evidence could not be read</strong>
   <ul class="small">
@@ -50,6 +51,7 @@
     {{if .ValidationError}}<li>validation: {{.ValidationError}}</li>{{end}}
     {{if .ReviewError}}<li>review: {{.ReviewError}}</li>{{end}}
     {{if .ActivityError}}<li>activity: {{.ActivityError}}</li>{{end}}
+    {{if .Report.Error}}<li>report: {{.Report.Error}}</li>{{end}}
   </ul>
   <p class="small">Damaged evidence is not absence: none of the statuses above is a pass.</p>
 </div>
