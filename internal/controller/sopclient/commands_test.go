@@ -5,9 +5,11 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/imhttran/agentic-sop/internal/controller/config"
 )
@@ -31,6 +33,19 @@ func fakeSop(t *testing.T) (bin string, args func() []string) {
 		}
 		return strings.Fields(string(raw))
 	}
+}
+
+// refusingSop writes an executable "sop" that prints message to stderr and exits
+// with code, so a refused mutating verb can be exercised without a real SOP.
+func refusingSop(t *testing.T, message string, code int) string {
+	t.Helper()
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "sop")
+	script := "#!/bin/sh\necho \"" + message + "\" 1>&2\nexit " + strconv.Itoa(code) + "\n"
+	if err := os.WriteFile(bin, []byte(script), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return bin
 }
 
 // fakeListingSop writes an executable "sop" that records its argv and emits the
@@ -205,6 +220,102 @@ func contains(list []string, want string) bool {
 		}
 	}
 	return false
+}
+
+// A command that ran and exited non-zero must report SOP's exit status and its
+// own diagnostic: "exit status 1" alone tells an operator nothing about why a
+// mutating verb was refused.
+func TestExecKeepsRefusalExitStatusAndDiagnostic(t *testing.T) {
+	cmd := NewCommander(refusingSop(t, "sop: task t1 is not BLOCKED", 3), time.Minute)
+
+	_, err := cmd.Exec(context.Background(), t.TempDir(), "retry", "t1")
+	if err == nil {
+		t.Fatal("err = nil, want a refusal")
+	}
+	var cmdErr *CommandError
+	if !errors.As(err, &cmdErr) {
+		t.Fatalf("err = %v (%T), want *CommandError", err, err)
+	}
+	if cmdErr.Verb != "retry" || cmdErr.ExitCode != 3 {
+		t.Fatalf("CommandError = %+v, want verb retry and exit code 3", cmdErr)
+	}
+	if !strings.Contains(cmdErr.Output, "not BLOCKED") {
+		t.Fatalf("Output = %q, want SOP's diagnostic kept", cmdErr.Output)
+	}
+	for _, want := range []string{"sop retry", "exit status 3", "not BLOCKED"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("err = %q, want it to contain %q", err, want)
+		}
+	}
+	// A refusal must stay identifiable as one: the rejection types in decision.go
+	// and boundary.go are gated on errors.As(*exec.ExitError).
+	if !sopRefused(err) {
+		t.Fatalf("sopRefused(%v) = false, want true", err)
+	}
+}
+
+// The mutating verbs that return only an error must still surface SOP's reason,
+// which is the user-visible half of losing the command output.
+func TestMutatingVerbSurfacesSopDiagnostic(t *testing.T) {
+	root := newProject(t)
+	c, err := New([]string{root}, refusingSop(t, "sop: provider credentials are not configured", 1), time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	err = c.Run(context.Background(), config.ProjectID(root))
+	if err == nil {
+		t.Fatal("err = nil, want SOP's refusal")
+	}
+	if !strings.Contains(err.Error(), "provider credentials are not configured") {
+		t.Fatalf("err = %q, want SOP's own diagnostic included", err)
+	}
+}
+
+// A timeout or cancellation never reached SOP, so it stays a plain wrapped context
+// error rather than a CommandError. The messages must not change.
+func TestTimeoutAndCancelAreNotCommandErrors(t *testing.T) {
+	timedOut := NewCommander(slowSop(t, "5"), 100*time.Millisecond)
+	_, err := timedOut.Exec(context.Background(), t.TempDir(), "run")
+	if !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("err = %v, want errors.Is(err, context.DeadlineExceeded)", err)
+	}
+	var cmdErr *CommandError
+	if errors.As(err, &cmdErr) {
+		t.Fatalf("timeout typed as *CommandError: %+v", cmdErr)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	cancelled := NewCommander(refusingSop(t, "unused", 1), time.Minute)
+	_, err = cancelled.Exec(ctx, t.TempDir(), "run")
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want errors.Is(err, context.Canceled)", err)
+	}
+	if errors.As(err, &cmdErr) {
+		t.Fatalf("cancellation typed as *CommandError: %+v", cmdErr)
+	}
+}
+
+// A runaway command must not carry its whole output into an error the controller
+// keeps; the tail is what matters, and the cut must not split a rune.
+func TestCommandErrorBoundsDiagnostic(t *testing.T) {
+	// Offset 16 lands on the continuation byte of "é", forcing a mid-rune cut.
+	out := "a" + strings.Repeat("é", 3000)
+	cmdErr := &CommandError{Verb: "run", ExitCode: 1, Output: tailExcerpt(out, 5), Err: errors.New("exit status 1")}
+
+	if len(cmdErr.Output) > 5+len("…") {
+		t.Fatalf("Output kept %d bytes, want at most 5 plus the marker", len(cmdErr.Output))
+	}
+	if !utf8.ValidString(cmdErr.Output) {
+		t.Fatalf("Output = %q, want a rune-boundary cut", cmdErr.Output)
+	}
+
+	long := &CommandError{Verb: "run", ExitCode: 1, Output: tailExcerpt(out, maxCommandDiagnostic), Err: errors.New("exit status 1")}
+	if len(long.Error()) > maxCommandDiagnostic+100 {
+		t.Fatalf("Error() kept %d bytes, want it bounded by maxCommandDiagnostic", len(long.Error()))
+	}
 }
 
 // Exec wraps a timeout so callers can classify it with errors.Is, and keeps the
