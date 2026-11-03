@@ -318,6 +318,12 @@ restricted filesystem view:
 - only these read-only system and toolchain paths are bound, with
   `--ro-bind-try` so optional or symlinked paths are tolerated: `/usr`, `/bin`,
   `/sbin`, `/lib`, `/lib64`, `/etc`, `/sys`;
+- the host's Go toolchain is the one deliberate exception: when the `go` found on
+  the host `PATH` is installed outside those paths (for example a CI tool cache
+  under `/opt`, or a version-manager prefix), its GOROOT is bound read-only at the
+  same path and its `bin` directory is prepended to `PATH`. Nothing else under
+  that prefix is bound, and a standard `/usr/local/go` install needs no extra
+  bind;
 - `/proc` is a fresh procfs mount (`--proc /proc`) and `/dev` is a fresh devtmpfs
   mount (`--dev /dev`), so toolchains get a usable `/proc` and `/dev`;
 - `/dev/shm` is a tmpfs remounted read-only (`--tmpfs /dev/shm` followed by
@@ -327,7 +333,8 @@ restricted filesystem view:
   it (`--chdir /replay`).
 
 Host `/tmp`, `/run`, `/var/run`, `/home`, `/root`, `/opt`, `/srv`, `/mnt`,
-`/media`, and other user-writable locations are absent from this view. Host Unix
+`/media`, and other user-writable locations are absent from this view, except for
+the read-only Go toolchain root described above. Host Unix
 domain sockets in those locations are therefore unreachable from inside the
 sandbox, even though `--unshare-net` only governs TCP/IP. The replay directory is
 the only writable filesystem location.
@@ -336,7 +343,8 @@ Writable temp storage is `/replay/.tmp`, created inside the replay directory
 before launch (mode `0700`). `TMPDIR` points there on both backends, so
 `os.CreateTemp` and `go test` keep temporary files inside the replay directory
 and never in a host temp root or a private writable mount outside it. The child
-environment sets `PATH` with `/usr/local/go/bin` first, `HOME=/replay`,
+environment sets `PATH` with the host Go toolchain's `bin` directory first, then
+the system path, `HOME=/replay`,
 `TMPDIR=/replay/.tmp`, and `GOTOOLCHAIN=local`, and keeps `--unshare-net`,
 `--unshare-pid`, `--unshare-ipc`, `--unshare-uts`, `--die-with-parent`,
 `--new-session`, and `--clearenv`. A canonicalization failure returns an
