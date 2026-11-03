@@ -53,12 +53,61 @@ const replaySandboxTmpPath = replaySandboxPath + "/.tmp"
 // Go toolchain (/usr/local/go/bin) first.
 const sandboxPATH = "/usr/local/go/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
 
+// hostGoBin returns the resolved Go binary found on the host PATH, or the empty
+// string when the host has none. Resolving symlinks matters on Linux distributions
+// and version managers that point at the real installation.
+func hostGoBin() string {
+	path, err := exec.LookPath("go")
+	if err != nil {
+		return ""
+	}
+	if resolved, err := filepath.EvalSymlinks(path); err == nil {
+		return resolved
+	}
+	return path
+}
+
+// toolchainFor maps a Go binary path to its bin directory (for PATH) and its
+// toolchain root (GOROOT). bind reports whether the root is outside the read-only
+// system paths the bubblewrap sandbox already binds, so the caller must bind it.
+func toolchainFor(goBin string) (binDir, root string, bind bool) {
+	if goBin == "" {
+		return "", "", false
+	}
+	binDir = filepath.Dir(goBin)
+	root = filepath.Dir(binDir)
+	if root == "" || root == "/" || root == "." || root == binDir {
+		return binDir, root, false
+	}
+	for _, p := range bubblewrapSystemROPaths {
+		if root == p || strings.HasPrefix(root, p+"/") {
+			return binDir, root, false
+		}
+	}
+	return binDir, root, true
+}
+
+// sandboxPathFor puts the host toolchain's bin directory first without duplicating a
+// directory the standard sandbox PATH already contains.
+func sandboxPathFor(binDir string) string {
+	if binDir == "" {
+		return sandboxPATH
+	}
+	for _, p := range strings.Split(sandboxPATH, ":") {
+		if p == binDir {
+			return sandboxPATH
+		}
+	}
+	return binDir + ":" + sandboxPATH
+}
+
 // minimalReplayEnv is the scrubbed child environment: no API keys, tokens, or provider
 // configuration. Both backends reproduce this environment inside the sandbox. TMPDIR
 // points at <dir>/.tmp so temporary storage stays inside the replay directory.
 func minimalReplayEnv(dir string) []string {
+	binDir, _, _ := toolchainFor(hostGoBin())
 	return []string{
-		"PATH=" + sandboxPATH,
+		"PATH=" + sandboxPathFor(binDir),
 		"HOME=" + dir,
 		"TMPDIR=" + filepath.Join(dir, ".tmp"),
 		"GOTOOLCHAIN=local",
@@ -139,6 +188,12 @@ var bubblewrapSystemROPaths = []string{"/usr", "/bin", "/sbin", "/lib", "/lib64"
 // It fails closed: when filepath.EvalSymlinks cannot canonicalize the replay directory it
 // returns an actionable error and no arguments, so the caller never launches a child with
 // a raw, uncanonicalized path.
+//
+// The Go toolchain is the one deliberate exception to the system-path list: when the
+// host's `go` is installed outside those paths (for example a CI tool cache under
+// /opt), its GOROOT is bound read-only at the same path and prepended to PATH. Without
+// that, a Go verification command would fail inside the sandbox just because the host
+// chose a different installation prefix. Nothing else under that prefix is bound.
 func bubblewrapCommand(dir string, target []string) (bound string, args []string, err error) {
 	bound, err = filepath.EvalSymlinks(dir)
 	if err != nil {
@@ -153,6 +208,10 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 	for _, p := range bubblewrapSystemROPaths {
 		args = append(args, "--ro-bind-try", p, p)
 	}
+	binDir, root, bindToolchain := toolchainFor(hostGoBin())
+	if bindToolchain {
+		args = append(args, "--ro-bind", root, root)
+	}
 	args = append(args,
 		"--bind", bound, replaySandboxPath,
 		"--chdir", replaySandboxPath,
@@ -163,7 +222,7 @@ func bubblewrapCommand(dir string, target []string) (bound string, args []string
 		"--die-with-parent",
 		"--new-session",
 		"--clearenv",
-		"--setenv", "PATH", sandboxPATH,
+		"--setenv", "PATH", sandboxPathFor(binDir),
 		"--setenv", "HOME", replaySandboxPath,
 		"--setenv", "TMPDIR", replaySandboxTmpPath,
 		"--setenv", "GOTOOLCHAIN", "local",
