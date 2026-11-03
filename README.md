@@ -119,10 +119,11 @@ sop prompt --capability review "Review internal/provider for architectural issue
 
 Details: [docs/specs/PROMPT-EXECUTION.md](docs/specs/PROMPT-EXECUTION.md).
 
-The unified executable also provides `sop controller serve` for the dashboard and
-`sop decision decide|shadow` for advisory decisions. Setup, optional requirements,
-and legacy wrappers are covered in the
-[consolidation guide](docs/guides/REPOSITORY-CONSOLIDATION.md).
+The unified executable also provides `sop controller serve` for the dashboard,
+`sop decision decide|shadow` for advisory decisions, and `sop acp` for governed
+Zed integration. Setup, optional requirements, and legacy wrappers are covered in
+the [consolidation guide](docs/guides/REPOSITORY-CONSOLIDATION.md); ACP setup,
+operation, and current limitations are in the [Zed ACP guide](docs/guides/ACP-ZED.md).
 
 ## Agent Skills and Optional Surfaces
 

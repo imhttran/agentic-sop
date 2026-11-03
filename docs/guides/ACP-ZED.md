@@ -47,7 +47,7 @@ Provider endpoints are then resolved per call with the documented precedence: en
 
 The llama.cpp model override is read from the agent layer's llama.cpp model environment variable first, then from `agent.model` when llama.cpp is the configured provider (`llamacppConfiguredModel` in `internal/cli/providers.go`).
 
-Because precedence puts the environment first, a Zed session uses whatever endpoint the launching environment supplies. If providers are unreachable from the editor, check what Zed inherited: a GUI-launched Zed may see a different environment from a terminal-launched one. This difference is a known risk, recorded in the plan; it is not yet covered by a verified acceptance run (see Known limitations).
+Because precedence puts the environment first, a Zed session uses whatever endpoint the launching environment supplies. If providers are unreachable from the editor, check what Zed inherited: a GUI-launched Zed may see a different environment from a terminal-launched one. The macOS Zed run (job `work-20261102-221453`) confirms a GUI-launched session reached the configured provider, but an environment difference remains a first thing to check.
 
 ## 4. Project selection
 
@@ -111,12 +111,12 @@ Cancel a session's foreground work with `session/cancel` (`internal/acp/cancel.g
 
 ## 9. Known limitations
 
-- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A bounded request submitted from Zed itself was not executed; ACP-007 acceptance is closed with that limitation recorded.
-- **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2 (SOP in the agent picker) and scenarios 2–5 are recorded on macOS, with 2, 4 and 5 executed through an ACP v1 stdio client. ACP-007 is closed with the limitation that no bounded request was submitted from Zed itself; `docs/reports/ACP-007-acceptance.md` carries the statuses and recorded values.
+- **Zed version and `agent_servers` schema.** Verified against Zed 1.26.2 on macOS 26.6.2: the section 2 example is accepted unchanged and SOP appears under External Agents. A bounded request was submitted from Zed 1.26.2 and completed (ACP-007 scenario 2). The `initialize` response must carry the numeric protocol revision; Zed rejects the string form.
+- **macOS acceptance.** Scenario 1 is verified in Zed 1.26.2, scenario 2 was submitted from Zed and completed, and scenarios 3–5 are recorded on macOS, with 4 and 5 executed through an ACP v1 stdio client. `docs/reports/ACP-007-acceptance.md` carries the statuses and recorded values.
 - **Linux acceptance.** Status and evidence paths are recorded in `docs/reports/ACP-007-acceptance.md`; any scenario not yet executed is recorded there as outstanding, never claimed.
 - **No session resumption.** `session/load` is unsupported; conversation history is not restored after restart.
 - **Text prompts only.** Prompt content is bounded text; attachments, model selection UI, and editor-mediated file writes or terminal execution are deferred per the plan.
-- **GUI-launched Zed environment.** The provider environment a GUI-launched Zed supplies may differ from a terminal environment (section 3); this is documented but not yet verified by a real-Zed run.
+- **GUI-launched Zed environment.** The provider environment a GUI-launched Zed supplies may differ from a terminal environment (section 3); this is documented, and the macOS Zed run (job `work-20261102-221453`) reached the configured Ollama provider and completed from a GUI-launched session.
 
 ## References
 

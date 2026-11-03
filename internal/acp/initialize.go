@@ -35,8 +35,11 @@ func (s *Server) handleInitialize(req *Request) (any, *Error) {
 		return nil, rerr
 	}
 	s.setInitialized()
+	// The response carries the numeric revision (ProtocolVersionNumber):
+	// ACP clients validate this field against a number, and the string alias
+	// "v1" is accepted only on input.
 	return map[string]any{
-		"protocolVersion":   ProtocolVersion,
+		"protocolVersion":   ProtocolVersionNumber,
 		"agentCapabilities": AgentCapabilities(),
 		"agentInfo":         map[string]any{"name": ServerName, "version": s.version},
 	}, nil
