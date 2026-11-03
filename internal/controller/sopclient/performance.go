@@ -194,10 +194,11 @@ func (p Performance) hasAny() bool {
 }
 
 // Performance reads the task's metrics.json, falling back to report.json's
-// "performance" field (SOP's own read order). Missing or malformed is absent.
+// "performance" field (SOP's own read order). Missing or malformed is absent: this
+// is a diagnostic record, so a damaged one never changes a status.
 func (s *Store) Performance(taskID string) Performance {
 	var doc taskMetricsDoc
-	if readJSON(filepath.Join(s.runDir(taskID), metricsFileName), &doc) {
+	if found, _ := readJSON(filepath.Join(s.runDir(taskID), metricsFileName), &doc); found {
 		if p, ok := performanceFromTaskDoc(doc); ok {
 			return p
 		}
@@ -205,7 +206,7 @@ func (s *Store) Performance(taskID string) Performance {
 	var rep struct {
 		Performance taskMetricsDoc `json:"performance"`
 	}
-	if readJSON(filepath.Join(s.runDir(taskID), reportArtifact), &rep) {
+	if found, _ := readJSON(filepath.Join(s.runDir(taskID), reportArtifact), &rep); found {
 		if p, ok := performanceFromTaskDoc(rep.Performance); ok {
 			return p
 		}
@@ -217,7 +218,7 @@ func (s *Store) Performance(taskID string) Performance {
 // no aggregate is absent.
 func (s *Store) PlanPerformance() PlanPerformance {
 	var meta planMeta
-	if !readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta) {
+	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
 		return PlanPerformance{}
 	}
 	planID := strings.TrimSpace(meta.PlanID)
@@ -225,7 +226,7 @@ func (s *Store) PlanPerformance() PlanPerformance {
 		return PlanPerformance{}
 	}
 	var doc runMetricsDoc
-	if !readJSON(filepath.Join(s.root, ".agent-sdlc", "runs", planID, metricsFileName), &doc) {
+	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "runs", planID, metricsFileName), &doc); !found {
 		return PlanPerformance{}
 	}
 	return planPerformanceFromRunDoc(planID, doc)

@@ -3,6 +3,9 @@ package sopclient
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -186,29 +189,56 @@ func (s *Store) runDir(taskID string) string {
 	return filepath.Join(s.root, ".agent-sdlc", "runs", taskID)
 }
 
-// readJSON decodes a JSON file into v, reporting whether it existed and parsed.
-func readJSON(path string, v any) bool {
+// readJSON decodes a JSON file into v. found is false when the file does not
+// exist, so absence stays distinguishable from damage: a file that exists but
+// cannot be read or parsed returns an error naming it, never a silent zero value.
+func readJSON(path string, v any) (found bool, err error) {
 	raw, err := os.ReadFile(path)
 	if err != nil {
-		return false
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return false, fmt.Errorf("%s: %w", filepath.Base(path), err)
 	}
-	return json.Unmarshal(raw, v) == nil
+	if err := json.Unmarshal(raw, v); err != nil {
+		return true, fmt.Errorf("%s: %w", filepath.Base(path), err)
+	}
+	return true, nil
 }
 
-// runInfo assembles the latest run's record; a task that never ran is a zero RunInfo.
-func (s *Store) runInfo(taskID string) RunInfo {
+// oneLine flattens a joined error into one message, because a template renders it
+// as a single line of text.
+func oneLine(err error) string {
+	if err == nil {
+		return ""
+	}
+	return strings.ReplaceAll(err.Error(), "\n", "; ")
+}
+
+// runInfo assembles the latest run's record; a task that never ran is a zero
+// RunInfo. An artifact that exists but cannot be read or parsed is returned as an
+// error (one per artifact, joined) so a caller can report it instead of presenting
+// the run as one that never happened.
+func (s *Store) runInfo(taskID string) (RunInfo, error) {
 	var ri RunInfo
+	var errs []error
 	dir := s.runDir(taskID)
 
 	var st stateDoc
-	if readJSON(filepath.Join(dir, "state.json"), &st) {
+	switch found, err := readJSON(filepath.Join(dir, "state.json"), &st); {
+	case err != nil:
+		errs = append(errs, err)
+	case found:
 		ri.Present = true
 		ri.Stage = st.Stage
 		ri.UpdatedAt = st.UpdatedAt
 	}
 
 	var rep reportDoc
-	if readJSON(filepath.Join(dir, "report.json"), &rep) {
+	switch found, err := readJSON(filepath.Join(dir, "report.json"), &rep); {
+	case err != nil:
+		errs = append(errs, err)
+	case found:
 		ri.Present = true
 		if ri.Stage == "" {
 			ri.Stage = rep.Stage
@@ -250,12 +280,15 @@ func (s *Store) runInfo(taskID string) RunInfo {
 	// report.json exists (infrastructure errors).
 	if ri.Classification == nil {
 		var cls classificationDoc
-		if readJSON(filepath.Join(dir, "classification.json"), &cls) && cls.Disposition != "" {
+		switch found, err := readJSON(filepath.Join(dir, "classification.json"), &cls); {
+		case err != nil:
+			errs = append(errs, err)
+		case found && cls.Disposition != "":
 			ri.Present = true
 			ri.Classification = toClassification(cls)
 		}
 	}
-	return ri
+	return ri, errors.Join(errs...)
 }
 
 func toClassification(c classificationDoc) *Classification {
@@ -274,25 +307,30 @@ const maxActivityEvents = 200
 // skipped so it cannot hide the events after it.
 const maxActivityLine = 1024 * 1024
 
-// activity returns the task's events in activity.jsonl append order (oldest
-// first), capped to maxActivityEvents, skipping malformed or oversized lines.
-// Detail goes through sanitizeDetail.
-func (s *Store) activity(taskID string) []ActivityEvent {
-	raw, ok := s.runFile(taskID, "activity.jsonl")
-	if !ok {
-		return nil
+// readActivity returns the task's events in activity.jsonl append order (oldest
+// first), capped to maxActivityEvents, plus how many lines were skipped as malformed
+// or oversized. A missing artifact is no events and no error; an existing one that
+// cannot be read is an error, never an empty history.
+func (s *Store) readActivity(taskID string) (events []ActivityEvent, skipped int, err error) {
+	raw, found, err := s.runFile(taskID, "activity.jsonl")
+	if err != nil || !found {
+		return nil, 0, err
 	}
-	var out []ActivityEvent
 	for _, line := range bytes.Split(raw, []byte("\n")) {
 		line = bytes.TrimSpace(line)
-		if len(line) == 0 || len(line) > maxActivityLine {
+		if len(line) == 0 {
+			continue
+		}
+		if len(line) > maxActivityLine {
+			skipped++
 			continue
 		}
 		var e activityDoc
 		if json.Unmarshal(line, &e) != nil {
-			continue // skip a malformed line rather than fail the whole view
+			skipped++ // skip a malformed line rather than fail the whole view
+			continue
 		}
-		out = append(out, ActivityEvent{
+		events = append(events, ActivityEvent{
 			TaskID:    taskID,
 			Stage:     e.Stage,
 			Action:    e.Action,
@@ -300,27 +338,37 @@ func (s *Store) activity(taskID string) []ActivityEvent {
 			Timestamp: e.Timestamp,
 		})
 	}
-	if len(out) > maxActivityEvents {
-		out = out[len(out)-maxActivityEvents:]
+	if len(events) > maxActivityEvents {
+		events = events[len(events)-maxActivityEvents:]
 	}
-	return out
+	return events, skipped, nil
 }
 
-// PlanSource returns the plan path SOP recorded in plan.meta.json.
+// activity returns only the events, for the read paths (activity windows, the
+// checkpoint line) that have nowhere to report a skipped line or a read failure.
+// Store.Task uses readActivity so the task view can report both.
+func (s *Store) activity(taskID string) []ActivityEvent {
+	events, _, _ := s.readActivity(taskID)
+	return events
+}
+
+// PlanSource returns the plan path SOP recorded in plan.meta.json. A metadata file
+// that cannot be read or parsed reads as no active plan; the plan gate carries the
+// same limit.
 func (s *Store) PlanSource() (string, bool) {
 	var meta planMeta
-	if !readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta) {
+	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
 		return "", false
 	}
 	src := strings.TrimSpace(meta.Source)
 	return src, src != ""
 }
 
-// Plan returns the active plan and final gate; without metadata, Recorded is
-// false and FinalGate is StatusUnknown.
+// Plan returns the active plan and final gate; without readable metadata,
+// Recorded is false and FinalGate is StatusUnknown.
 func (s *Store) Plan() PlanGate {
 	var meta planMeta
-	if !readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta) {
+	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
 		return PlanGate{FinalGate: StatusUnknown}
 	}
 	src := strings.TrimSpace(meta.Source)

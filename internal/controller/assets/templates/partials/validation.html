@@ -6,6 +6,8 @@
 <dl class="facts">
   <div><dt>Result</dt><dd><span class="badge {{levelClass .ValidationStatus.Level}}">{{.ValidationStatus.Level}}</span></dd></div>
 </dl>
+{{else if .ValidationError}}
+<p class="error-text" role="alert">Validation evidence could not be read: {{.ValidationError}} — SOP persisted validation evidence, so this is not a pass and not an absence.</p>
 {{else}}
 <p class="muted">Validation: <span class="badge s-planned">{{absentLiteral}}</span> — SOP persisted no validation evidence; this is not a pass.</p>
 {{end}}

@@ -16,9 +16,12 @@
     </li>
     {{end}}
 </ol>
-{{else}}
+{{else if not .Skipped}}
 <div class="empty-state" role="status">
     <p class="muted">No activity recorded.</p>
     <p class="muted small">SOP persists structured activity only while a run executes, so an older run or a run with activity capture off has no activity artifact. Missing activity is not evidence that a run succeeded — see the command status and the recorded stage above.</p>
 </div>
+{{end}}
+{{if .Skipped}}
+<p class="muted small">SOP wrote {{.Skipped}} activity line{{if ne .Skipped 1}}s{{end}} that could not be parsed; they are left out above and the rest of the history is unaffected.</p>
 {{end}}

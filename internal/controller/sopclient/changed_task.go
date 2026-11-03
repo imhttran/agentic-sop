@@ -122,7 +122,8 @@ func (s *Store) changedTasksFromListing(doc listingDoc) ChangedTasks {
 		if title, ok := s.taskTitle(id); ok {
 			task.Title = sanitizeDetail(title)
 		}
-		task.Stage = strings.TrimSpace(s.runInfo(id).Stage)
+		ri, _ := s.runInfo(id) // the listing carries no place to report a damaged artifact
+		task.Stage = strings.TrimSpace(ri.Stage)
 		out.Tasks = append(out.Tasks, task)
 	}
 	return out

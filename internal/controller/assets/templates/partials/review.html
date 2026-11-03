@@ -38,6 +38,8 @@
   {{end}}
 </ul>
 <p class="muted small">Findings shown above; SOP did not persist an aggregate review verdict.</p>
+{{else if .ReviewError}}
+<p class="error-text" role="alert">Review evidence could not be read: {{.ReviewError}} — SOP persisted review evidence, so this is not a pass and not an absence.</p>
 {{else}}
 <p class="muted">
   Review: <span class="badge s-unavailable">{{unavailable}}</span>
