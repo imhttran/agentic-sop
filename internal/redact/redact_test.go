@@ -109,8 +109,9 @@ func TestEnvSecrets(t *testing.T) {
 }
 
 func TestIsSecretName(t *testing.T) {
-	secret := []string{"OPENAI_API_KEY", "SOP_TOKEN", "AWS_SECRET_ACCESS_KEY", "DB_PASSWORD", "--api-key", "api.key", "SESSION_ID", "AUTHORIZATION"}
-	notSecret := []string{"PATH", "HOME", "AWS_REGION", "SOP_LOG", "GIT_AUTHOR_DATE"}
+	secret := []string{"OPENAI_API_KEY", "SOP_TOKEN", "AWS_SECRET_ACCESS_KEY", "DB_PASSWORD", "--api-key", "api.key", "SESSION_ID", "AUTHORIZATION", "SSH_AUTH_SOCK", "MYKEY"}
+	// Over-redacting these is the accepted cost of never missing, say, MYKEY.
+	notSecret := []string{"PATH", "HOME", "AWS_REGION", "SOP_LOG", "BRANCH_NAME"}
 	for _, name := range secret {
 		if !IsSecretName(name) {
 			t.Errorf("IsSecretName(%q) = false, want true", name)

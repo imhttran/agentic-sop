@@ -1,23 +1,13 @@
 package handoff
 
-import "strings"
+import "github.com/imhttran/agentic-sop/internal/redact"
 
-// secretMarkers identify environment variable names whose values are secrets and
-// must never reach a compressor.
-var secretMarkers = []string{"KEY", "TOKEN", "SECRET", "PASSWORD", "PASSWD", "CREDENTIAL", "AUTH"}
-
-// Redact replaces occurrences of secret environment values in content. Only
-// values of variables whose names look sensitive are redacted, and very short
-// values are left alone to avoid destroying unrelated text.
+// Redact replaces occurrences of secret environment values in content. Which
+// variables count as secret is decided by internal/redact, so a handoff capsule and
+// a command diagnostic agree on what a credential is; very short values are left
+// alone to avoid destroying unrelated text.
 func Redact(content string, env []string) string {
-	for _, kv := range env {
-		name, value, ok := strings.Cut(kv, "=")
-		if !ok || len(value) < 4 || !sensitiveName(name) {
-			continue
-		}
-		content = strings.ReplaceAll(content, value, "[redacted]")
-	}
-	return content
+	return redact.Values(content, redact.EnvSecrets(env), redact.Fixed("[redacted]"))
 }
 
 // RedactAll applies Redact to every artifact's content. It returns the input
@@ -54,14 +44,4 @@ func redactList(items []string, env []string) {
 	for i := range items {
 		items[i] = Redact(items[i], env)
 	}
-}
-
-func sensitiveName(name string) bool {
-	upper := strings.ToUpper(strings.TrimSpace(name))
-	for _, marker := range secretMarkers {
-		if strings.Contains(upper, marker) {
-			return true
-		}
-	}
-	return false
 }
