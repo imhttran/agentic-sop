@@ -34,6 +34,9 @@ const metricsFileName = "metrics.json"
 type Performance struct {
 	// Present is true when the record carries at least one measurement or count.
 	Present bool
+	// Error is set when a performance artifact exists but could not be read or
+	// parsed. Non-empty means damaged, not absent, and no measurement is shown.
+	Error string
 
 	Total time.Duration
 
@@ -81,9 +84,12 @@ func (p Performance) Shares() []CategoryShare {
 // .agent-sdlc/runs/<plan-id>/metrics.json.
 type PlanPerformance struct {
 	Present bool
-	PlanID  string // plan.meta.json "plan_id"
-	Tasks   int    // task records folded into the aggregate
-	Total   time.Duration
+	// Error is set when the plan metadata or aggregate exists but could not be
+	// read or parsed. Non-empty means damaged, not absent.
+	Error  string
+	PlanID string // plan.meta.json "plan_id"
+	Tasks  int    // task records folded into the aggregate
+	Total  time.Duration
 	// Category totals summed over the task records (agent = plan+implement+fix).
 	Agent      time.Duration
 	Validation time.Duration
@@ -194,11 +200,16 @@ func (p Performance) hasAny() bool {
 }
 
 // Performance reads the task's metrics.json, falling back to report.json's
-// "performance" field (SOP's own read order). Missing or malformed is absent: this
-// is a diagnostic record, so a damaged one never changes a status.
+// "performance" field (SOP's own read order). Missing is absent; damage is an
+// Error, never a silent zero. This is a diagnostic record, so it never changes a
+// status.
 func (s *Store) Performance(taskID string) Performance {
 	var doc taskMetricsDoc
-	if found, _ := readJSON(filepath.Join(s.runDir(taskID), metricsFileName), &doc); found {
+	found, err := readJSON(filepath.Join(s.runDir(taskID), metricsFileName), &doc)
+	if err != nil {
+		return Performance{Error: oneLine(err)}
+	}
+	if found {
 		if p, ok := performanceFromTaskDoc(doc); ok {
 			return p
 		}
@@ -206,7 +217,11 @@ func (s *Store) Performance(taskID string) Performance {
 	var rep struct {
 		Performance taskMetricsDoc `json:"performance"`
 	}
-	if found, _ := readJSON(filepath.Join(s.runDir(taskID), reportArtifact), &rep); found {
+	found, err = readJSON(filepath.Join(s.runDir(taskID), reportArtifact), &rep)
+	if err != nil {
+		return Performance{Error: oneLine(err)}
+	}
+	if found {
 		if p, ok := performanceFromTaskDoc(rep.Performance); ok {
 			return p
 		}
@@ -215,10 +230,13 @@ func (s *Store) Performance(taskID string) Performance {
 }
 
 // PlanPerformance reads the aggregate for plan.meta.json's plan_id; no plan or
-// no aggregate is absent.
+// no aggregate is absent. Damaged metadata or aggregate is an Error.
 func (s *Store) PlanPerformance() PlanPerformance {
-	var meta planMeta
-	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "plan.meta.json"), &meta); !found {
+	meta, found, err := s.planMetaFile()
+	if err != nil {
+		return PlanPerformance{Error: oneLine(err)}
+	}
+	if !found {
 		return PlanPerformance{}
 	}
 	planID := strings.TrimSpace(meta.PlanID)
@@ -226,7 +244,11 @@ func (s *Store) PlanPerformance() PlanPerformance {
 		return PlanPerformance{}
 	}
 	var doc runMetricsDoc
-	if found, _ := readJSON(filepath.Join(s.root, ".agent-sdlc", "runs", planID, metricsFileName), &doc); !found {
+	found, err = readJSON(filepath.Join(s.root, ".agent-sdlc", "runs", planID, metricsFileName), &doc)
+	if err != nil {
+		return PlanPerformance{Error: oneLine(err)}
+	}
+	if !found {
 		return PlanPerformance{}
 	}
 	return planPerformanceFromRunDoc(planID, doc)

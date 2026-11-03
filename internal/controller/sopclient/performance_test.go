@@ -99,8 +99,8 @@ func TestPerformanceMissingIsAbsent(t *testing.T) {
 	}
 }
 
-// A malformed metrics artifact must not crash the reader; it degrades to absent.
-func TestPerformanceMalformedIsAbsent(t *testing.T) {
+// A malformed metrics artifact is reported as damage, never as an absent zero.
+func TestPerformanceMalformedIsReported(t *testing.T) {
 	root := newProject(t)
 	writeArtifact(t, root, "t1", "metrics.json", "{ this is not json")
 	st := openPerfStore(t, root)
@@ -108,6 +108,51 @@ func TestPerformanceMalformedIsAbsent(t *testing.T) {
 	got := st.Performance("t1")
 	if got.Present {
 		t.Fatalf("Present = true, want false for a malformed metrics artifact: %+v", got)
+	}
+	if got.Error == "" {
+		t.Fatal("Error empty for a malformed metrics artifact; damage must not look like absence")
+	}
+}
+
+// A malformed report.json fallback is reported as damage, not absence.
+func TestPerformanceReportMalformedIsReported(t *testing.T) {
+	root := newProject(t)
+	writeArtifact(t, root, "t1", "report.json", "{ not json")
+	st := openPerfStore(t, root)
+
+	got := st.Performance("t1")
+	if got.Present {
+		t.Fatalf("Present = true for a malformed report: %+v", got)
+	}
+	if got.Error == "" {
+		t.Fatal("Error empty for a malformed report; damage must not look like absence")
+	}
+}
+
+// A malformed plan aggregate is reported as damage, not absence.
+func TestPlanPerformanceMalformedIsReported(t *testing.T) {
+	root := newProject(t)
+	writePlanMeta(t, root, "p")
+	writeArtifact(t, root, "p", "metrics.json", "{ not json")
+	st := openPerfStore(t, root)
+
+	got := st.PlanPerformance()
+	if got.Present {
+		t.Fatalf("Present = true for a malformed plan aggregate: %+v", got)
+	}
+	if got.Error == "" {
+		t.Fatal("Error empty for a malformed plan aggregate; damage must not look like absence")
+	}
+}
+
+// No plan metadata stays an absence, not an error.
+func TestPlanPerformanceMissingIsAbsent(t *testing.T) {
+	root := newProject(t)
+	st := openPerfStore(t, root)
+
+	got := st.PlanPerformance()
+	if got.Present || got.Error != "" {
+		t.Fatalf("PlanPerformance = %+v, want an absent record with no error", got)
 	}
 }
 

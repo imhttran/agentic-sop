@@ -103,3 +103,32 @@ func TestProjectPageRendersUnavailablePlanPerformance(t *testing.T) {
 		t.Errorf("project page should state plan performance is unavailable")
 	}
 }
+
+// A damaged task performance record renders as unreadable, not as an absence.
+func TestTaskPageRendersDamagedPerformance(t *testing.T) {
+	srv, id, root := newTestServerRoot(t, "sop")
+	writeRun(t, root, "t1", "metrics.json", "{ not json")
+
+	code, body := get(t, srv.URL+"/projects/"+id+"/tasks/t1")
+	if code != 200 {
+		t.Fatalf("task page = %d, want 200", code)
+	}
+	if !strings.Contains(body, "SOP's performance record could not be read") {
+		t.Errorf("task page should report damaged performance evidence")
+	}
+}
+
+// A damaged plan aggregate renders as unreadable, not as an absence.
+func TestProjectPageRendersDamagedPlanPerformance(t *testing.T) {
+	srv, id, root := newTestServerRoot(t, "sop")
+	writePlanMeta(t, root, "plan-x")
+	writeRun(t, root, "plan-x", "metrics.json", "{ not json")
+
+	code, body := get(t, srv.URL+"/projects/"+id)
+	if code != 200 {
+		t.Fatalf("project page = %d, want 200", code)
+	}
+	if !strings.Contains(body, "SOP's plan performance record could not be read") {
+		t.Errorf("project page should report damaged plan performance evidence")
+	}
+}
