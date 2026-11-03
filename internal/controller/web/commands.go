@@ -70,7 +70,7 @@ func (cr *CommandRunner) Start(project, verb string, fn func(ctx context.Context
 
 		cr.mu.Lock()
 		defer cr.mu.Unlock()
-		st.Output = boundOutput(out, maxOutput)
+		st.Output = boundOutput(sopclient.SanitizeDiagnostic(out), maxOutput)
 		if err != nil {
 			// A non-zero exit that SOP reports as an open human gate is a boundary, not
 			// a failure: surface it as "blocked". This reads SOP state; it invents no
@@ -128,7 +128,7 @@ type liveWriter struct {
 func (w *liveWriter) Write(p []byte) (int, error) {
 	w.cr.mu.Lock()
 	defer w.cr.mu.Unlock()
-	w.st.Output = boundOutput(w.st.Output+string(p), maxOutput)
+	w.st.Output = boundOutput(sopclient.SanitizeDiagnostic(w.st.Output+string(p)), maxOutput)
 	return len(p), nil
 }
 
