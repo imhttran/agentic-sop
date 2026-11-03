@@ -229,10 +229,17 @@ func (c *Client) RunReport(ctx context.Context, projectID string) (string, error
 	return c.exec(ctx, projectID, "report")
 }
 
+// exec runs one SOP verb for a project and attributes any failure to that project,
+// so a multi-project failure says which project it came from. The cause stays
+// wrapped, so errors.Is/As still reach a timeout or a *CommandError.
 func (c *Client) exec(ctx context.Context, projectID, verb string, args ...string) (string, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
 		return "", projectNotFound(projectID)
 	}
-	return c.cmd.Exec(ctx, st.root, verb, args...)
+	out, err := c.cmd.Exec(ctx, st.root, verb, args...)
+	if err != nil {
+		return out, fmt.Errorf("project %q: %w", projectID, err)
+	}
+	return out, nil
 }
