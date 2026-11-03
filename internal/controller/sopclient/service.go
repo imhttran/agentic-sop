@@ -12,6 +12,12 @@ var (
 	ErrProjectNotFound = errors.New("project not found")
 )
 
+// projectNotFound names the missing project while keeping the sentinel
+// matchable with errors.Is.
+func projectNotFound(id string) error {
+	return fmt.Errorf("project %q: %w", id, ErrProjectNotFound)
+}
+
 // Client is the concrete SOP boundary over one or more project roots.
 type Client struct {
 	stores  map[string]*Store
@@ -26,11 +32,15 @@ func New(roots []string, sopBin string, timeout time.Duration) (*Client, error) 
 	for _, root := range roots {
 		st, err := OpenStore(root)
 		if err != nil {
-			return nil, err
+			return nil, errors.Join(err, c.Close())
 		}
 		id := st.ProjectID()
 		if _, dup := c.stores[id]; dup {
-			return nil, fmt.Errorf("duplicate project id %q (project roots need distinct directory names)", id)
+			return nil, errors.Join(
+				fmt.Errorf("duplicate project id %q (project roots need distinct directory names)", id),
+				st.Close(),
+				c.Close(),
+			)
 		}
 		c.stores[id] = st
 		c.order = append(c.order, id)
@@ -40,13 +50,13 @@ func New(roots []string, sopBin string, timeout time.Duration) (*Client, error) 
 
 // Close releases the underlying state databases.
 func (c *Client) Close() error {
-	var err error
+	var errs []error
 	for _, st := range c.stores {
-		if e := st.Close(); e != nil && err == nil {
-			err = e
+		if err := st.Close(); err != nil {
+			errs = append(errs, err)
 		}
 	}
-	return err
+	return errors.Join(errs...)
 }
 
 // Root returns the filesystem root for a project id.
@@ -66,7 +76,7 @@ func (c *Client) Projects(ctx context.Context) ([]ProjectSummary, error) {
 		approvals, _ := c.Approvals(ctx, id)
 		s, err := c.stores[id].Summary(ctx, changed, approvals)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("project %q: %w", id, err)
 		}
 		s.ChangedTasksError = changedTasksError(changedErr)
 		out = append(out, s)
@@ -77,7 +87,7 @@ func (c *Client) Projects(ctx context.Context) ([]ProjectSummary, error) {
 func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) {
 	st, ok := c.stores[id]
 	if !ok {
-		return ProjectDetail{}, ErrProjectNotFound
+		return ProjectDetail{}, projectNotFound(id)
 	}
 	changed, changedErr := c.ChangedTasks(ctx, id)
 	approvals, _ := c.Approvals(ctx, id)
@@ -103,7 +113,7 @@ func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) 
 func (c *Client) Task(ctx context.Context, projectID, taskID string) (TaskDetail, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return TaskDetail{}, ErrProjectNotFound
+		return TaskDetail{}, projectNotFound(projectID)
 	}
 	approvals, _ := c.Approvals(ctx, projectID)
 	return st.Task(ctx, taskID, approvals)
@@ -124,7 +134,7 @@ func (c *Client) PlanSource(projectID string) (string, bool) {
 func (c *Client) ChangedTasks(ctx context.Context, projectID string) (ChangedTasks, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return ChangedTasks{}, ErrProjectNotFound
+		return ChangedTasks{}, projectNotFound(projectID)
 	}
 	planPath, ok := st.PlanSource()
 	if !ok {
@@ -155,7 +165,7 @@ func (c *Client) Approvals(ctx context.Context, projectID string) (ApprovalsList
 		return ApprovalsListing{}, err
 	}
 	if err != nil {
-		return ApprovalsListing{}, fmt.Errorf("%w: sop approvals --json: %v", ErrApprovalsUnavailable, err)
+		return ApprovalsListing{}, fmt.Errorf("%w: sop approvals --json: %w", ErrApprovalsUnavailable, err)
 	}
 	listing, ok := decodeApprovals([]byte(out))
 	if !ok {
@@ -222,7 +232,7 @@ func (c *Client) RunReport(ctx context.Context, projectID string) (string, error
 func (c *Client) exec(ctx context.Context, projectID, verb string, args ...string) (string, error) {
 	st, ok := c.stores[projectID]
 	if !ok {
-		return "", ErrProjectNotFound
+		return "", projectNotFound(projectID)
 	}
 	return c.cmd.Exec(ctx, st.root, verb, args...)
 }
