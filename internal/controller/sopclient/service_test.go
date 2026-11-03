@@ -166,3 +166,23 @@ func TestProjectsKeepsHealthyProjectsWhenOneFails(t *testing.T) {
 		t.Errorf("healthy project Total = %d, want 1", goodSum.Total)
 	}
 }
+
+// A failed project read names the project, matching Projects.
+func TestProjectErrorNamesProject(t *testing.T) {
+	root := newProject(t)
+	seed(t, root, `DROP TABLE tasks`)
+	bin, _ := fakeSop(t)
+	c, err := New([]string{root}, bin, time.Minute)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	_, err = c.Project(context.Background(), config.ProjectID(root))
+	if err == nil {
+		t.Fatal("Project err = nil after a summary read failure")
+	}
+	if !strings.Contains(err.Error(), config.ProjectID(root)) {
+		t.Errorf("err = %v, want the failing project id", err)
+	}
+}

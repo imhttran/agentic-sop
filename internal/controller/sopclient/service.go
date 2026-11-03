@@ -100,12 +100,12 @@ func (c *Client) Project(ctx context.Context, id string) (ProjectDetail, error) 
 	approvals, _ := c.Approvals(ctx, id)
 	sum, err := st.Summary(ctx, changed, approvals)
 	if err != nil {
-		return ProjectDetail{}, err
+		return ProjectDetail{}, fmt.Errorf("project %q: %w", id, err)
 	}
 	sum.ChangedTasksError = changedTasksError(changedErr)
 	tasks, err := st.Tasks(ctx, approvals)
 	if err != nil {
-		return ProjectDetail{}, err
+		return ProjectDetail{}, fmt.Errorf("project %q: %w", id, err)
 	}
 	plan, _, _ := st.PlanSource() // a damaged file is reported through Plan.Error
 	return ProjectDetail{

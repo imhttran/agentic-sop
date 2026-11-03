@@ -164,12 +164,16 @@ type TaskSummary struct {
 	Attempt       int
 	MaxAttempts   int
 	UpdatedAt     time.Time
+	// UpdatedAtError is set when SOP's updated_at value could not be parsed.
+	UpdatedAtError string
 	// Dependencies are task ids this task depends on.
 	Dependencies []string
 	// BlockedBy is the subset of dependencies not yet COMPLETED.
 	BlockedBy []string
 	// Stage is the latest run's lifecycle stage, or "" when the task has not run.
 	Stage string
+	// RunUnreadable is true when a run artifact exists but could not be read.
+	RunUnreadable bool
 	// Recovery is SOP's recovery disposition for the latest failure, or "".
 	Recovery string
 	// FixCycles is the latest run's auto-fix cycle count.
@@ -285,6 +289,8 @@ type Attempt struct {
 	Reason    string
 	Duration  time.Duration
 	Timestamp time.Time
+	// TimestampError is set when SOP's timestamp could not be parsed.
+	TimestampError string
 }
 
 // ValidationCheck is one build/test/lint result (FR-6 CI view).
@@ -316,4 +322,6 @@ type Handoff struct {
 	Content          string
 	CompressionError string
 	CreatedAt        time.Time
+	// CreatedAtError is set when SOP's created_at value could not be parsed.
+	CreatedAtError string
 }

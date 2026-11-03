@@ -140,7 +140,10 @@ func (s *Store) Tasks(ctx context.Context, approvals ApprovalsListing) ([]TaskSu
 		if err := rows.Scan(&t.ID, &t.Title, &t.Status, &t.BlockedReason, &t.Attempt, &t.MaxAttempts, &updated); err != nil {
 			return nil, err
 		}
-		t.UpdatedAt = parseTime(updated)
+		t.UpdatedAt, err = parseTime(updated)
+		if err != nil {
+			t.UpdatedAtError = oneLine(err)
+		}
 		byID[t.ID] = &t
 		order = append(order, t.ID)
 	}
@@ -155,7 +158,8 @@ func (s *Store) Tasks(ctx context.Context, approvals ApprovalsListing) ([]TaskSu
 				t.BlockedBy = append(t.BlockedBy, dep)
 			}
 		}
-		ri, _ := s.runInfo(id) // the list shows absence; the detail view names the damage
+		ri, riErr := s.runInfo(id)
+		t.RunUnreadable = riErr != nil
 		t.Stage = ri.Stage
 		if ri.Classification != nil {
 			t.Recovery = ri.Classification.Disposition
@@ -187,7 +191,10 @@ func (s *Store) Task(ctx context.Context, id string, approvals ApprovalsListing)
 	if err != nil {
 		return d, err
 	}
-	d.UpdatedAt = parseTime(updated)
+	d.UpdatedAt, err = parseTime(updated)
+	if err != nil {
+		d.UpdatedAtError = oneLine(err)
+	}
 
 	deps, err := s.dependencyMap(ctx)
 	if err != nil {
@@ -281,7 +288,10 @@ func (s *Store) attempts(ctx context.Context, id string) ([]Attempt, error) {
 			return nil, err
 		}
 		a.Duration = time.Duration(dur)
-		a.Timestamp = parseTime(ts)
+		a.Timestamp, err = parseTime(ts)
+		if err != nil {
+			a.TimestampError = oneLine(err)
+		}
 		out = append(out, a)
 	}
 	return out, rows.Err()
@@ -300,7 +310,10 @@ func (s *Store) handoff(ctx context.Context, id string) (*Handoff, error) {
 	if err != nil {
 		return nil, err
 	}
-	h.CreatedAt = parseTime(created)
+	h.CreatedAt, err = parseTime(created)
+	if err != nil {
+		h.CreatedAtError = oneLine(err)
+	}
 	return &h, nil
 }
 
@@ -370,11 +383,11 @@ func (s *Store) projectMeta() (name, branch string, err error) {
 	return cfg.Name, cfg.Branch, nil
 }
 
-func parseTime(s string) time.Time {
+func parseTime(s string) (time.Time, error) {
 	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05"} {
 		if t, err := time.Parse(layout, s); err == nil {
-			return t
+			return t, nil
 		}
 	}
-	return time.Time{}
+	return time.Time{}, fmt.Errorf("unparsable timestamp %q", s)
 }

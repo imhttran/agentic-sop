@@ -56,7 +56,7 @@ func TestInactivityDoesNotInferFailure(t *testing.T) {
 
 	// The read layer reports absence as absence: no activity events, not an
 	// error and not a synthesized event.
-	if events := st.activity("quiet"); len(events) != 0 {
+	if events, _, _ := st.readActivity("quiet"); len(events) != 0 {
 		t.Fatalf("activity('quiet') = %d events, want 0", len(events))
 	}
 }

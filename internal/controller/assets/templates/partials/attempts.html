@@ -7,7 +7,7 @@
       <div class="tl-head">
         <span class="badge {{statusClass .Status}}">{{.Status}}</span>
         <span class="muted small">attempt {{.Number}}</span>
-        <time class="muted small">{{since .Timestamp}}</time>
+        {{if .TimestampError}}<span class="badge s-unavailable" title="{{.TimestampError}}">{{unavailable}}</span>{{else}}<time class="muted small">{{since .Timestamp}}</time>{{end}}
       </div>
       {{if .Reason}}<div class="tl-text">{{.Reason}}</div>{{end}}
     </div>

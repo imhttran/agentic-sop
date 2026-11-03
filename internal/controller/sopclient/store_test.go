@@ -345,3 +345,57 @@ func TestTaskDependencyReadFailureIsError(t *testing.T) {
 		t.Fatal("Task err = nil after a dependency read failure; an empty BlockedBy must not imply eligibility")
 	}
 }
+
+// An unparsable updated_at is reported on the row, not silently rendered as an
+// unknown time.
+func TestTasksReportsUnparsableUpdatedAt(t *testing.T) {
+	root := newProject(t)
+	seed(t, root, `INSERT INTO tasks VALUES ('t1','T','o','a','PLANNED','',0,3,'not-a-time','not-a-time')`)
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	tasks, err := st.Tasks(context.Background(), ApprovalsListing{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 {
+		t.Fatalf("tasks = %d, want 1", len(tasks))
+	}
+	if tasks[0].UpdatedAtError == "" {
+		t.Fatal("UpdatedAtError empty; an unparsable timestamp must not look like an unknown time")
+	}
+}
+
+// A damaged run record is flagged on the task-list row.
+func TestTasksReportsUnreadableRunRecord(t *testing.T) {
+	root := newProject(t)
+	now := time.Now().UTC().Format(time.RFC3339)
+	seed(t, root, `INSERT INTO tasks VALUES ('t1','T','o','a','PLANNED','',0,3,'`+now+`','`+now+`')`)
+	writeArtifact(t, root, "t1", "state.json", "{ not json")
+
+	st, err := OpenStore(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer st.Close()
+
+	tasks, err := st.Tasks(context.Background(), ApprovalsListing{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tasks) != 1 || !tasks[0].RunUnreadable {
+		t.Fatalf("tasks = %+v, want RunUnreadable for a damaged run record", tasks)
+	}
+}
+
+func TestParseTimeReportsUnparsable(t *testing.T) {
+	if _, err := parseTime("not-a-time"); err == nil {
+		t.Fatal("parseTime err = nil for an unparsable value")
+	}
+	if got, err := parseTime("2026-01-02T03:04:05Z"); err != nil || got.IsZero() {
+		t.Fatalf("parseTime = (%v, %v), want a parsed time", got, err)
+	}
+}

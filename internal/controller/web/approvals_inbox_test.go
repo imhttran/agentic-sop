@@ -100,6 +100,9 @@ func TestApprovalsInboxSurfacesUnreadListing(t *testing.T) {
 	if strings.Contains(body, "SOP reports no applicable approval gate") {
 		t.Errorf("an unread listing was rendered as 'no gates': %q", body)
 	}
+	if !strings.Contains(body, "SOP did not report an approval listing") {
+		t.Errorf("unread section should include the read failure detail: %q", body)
+	}
 }
 
 // The task page shows an unread approval listing as an absence, never "no gate".

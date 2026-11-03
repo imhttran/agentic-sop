@@ -56,6 +56,9 @@ func TestClientPendingApprovalsUnreadIsNotQuiet(t *testing.T) {
 	if got[0].Reported {
 		t.Error("Reported = true for a failed listing; a failing SOP must not look like no gates")
 	}
+	if got[0].Error == "" {
+		t.Error("Error empty for a failed listing; the underlying failure must be available")
+	}
 	if len(got[0].Entries) != 0 {
 		t.Errorf("entries = %+v, want none for an unread listing", got[0].Entries)
 	}
