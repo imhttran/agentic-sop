@@ -3,6 +3,8 @@ package web
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"log"
 	"net/http"
 	"strconv"
 	"time"
@@ -94,7 +96,13 @@ func (h *Handlers) activityWindow(w http.ResponseWriter, r *http.Request) {
 	project := r.PathValue("project")
 	win, err := h.sop.ActivityWindow(r.Context(), project, resumeCursor(r), activityLimit(r))
 	if err != nil {
-		h.renderError(w, r, err)
+		// This is a JSON endpoint: never answer a JSON client with the HTML error
+		// page. An unknown project is a 404; a read failure is a server error.
+		if errors.Is(err, sopclient.ErrProjectNotFound) {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "project not found"})
+			return
+		}
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	out := struct {
@@ -123,6 +131,9 @@ func (h *Handlers) activityWindow(w http.ResponseWriter, r *http.Request) {
 func (h *Handlers) projectAttention(ctx context.Context, project string) []attentionPayload {
 	detail, err := h.sop.Project(ctx, project)
 	if err != nil {
+		// Attention is best-effort: a failed project read yields no gates, but log
+		// it so a failing SOP is not mistaken for a quiet one.
+		log.Printf("[attention] project %s: %v", project, err)
 		return nil
 	}
 	changed, changedErr := h.readChangedTasks(ctx, detail)
