@@ -69,7 +69,10 @@ func TestOperatorAcceptanceACC010EachDeliverableVerifiedIndividually(t *testing.
 		"b/w.go": "package b\n\n// W is a value.\nconst W = 4\n",
 	})
 	spec := &taskfile.Spec{ID: stage.ID, Title: stage.Title, Deliverables: stage.Deliverables,
-		AcceptanceCriteria: stage.AcceptanceCriteria, AcceptanceChecks: stage.AcceptanceChecks}
+		AcceptanceCriteria: stage.AcceptanceCriteria, AcceptanceChecks: stage.AcceptanceChecks,
+		// One criterion and one check in this fixture; bind them so the SOP-003
+		// mapping contract can verify "both files exist" from the check result.
+		AcceptanceMapping: []string{"criterion 1: check 1"}}
 	res := deriveOutcome(spec, dir, accOpPassGate())
 	if res == nil || res.Status != outcome.Verified {
 		t.Fatalf("outcome = %+v, want VERIFIED with every deliverable present", res)
