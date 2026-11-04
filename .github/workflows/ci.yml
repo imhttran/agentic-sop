@@ -109,6 +109,25 @@ jobs:
             -run 'TestJEVDogfoodEvidence|TestJEVBenchmarkEvidence|TestAdapterDogfoodEvidence' \
             ./internal/jev/ ./internal/decision/commandprofile/
 
+  # The RUN-ACCEPT-001 operator acceptance checks. They sit behind the `acceptance`
+  # build tag, so the ordinary suite never runs them and they can drift unnoticed
+  # (six did, until the fixtures were re-baselined). They need no network, model
+  # provider, or database. The `ragacceptance` and `promptfoo_live` tags are left
+  # out on purpose: they require a live PostgreSQL/pgvector backend or live access.
+  operator-acceptance:
+    name: tagged operator acceptance checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: operator acceptance checks
+        run: |
+          go test -tags acceptance -count=1 -run TestOperatorAcceptance \
+            ./internal/cli/ ./internal/planner/ ./internal/planflow/ ./internal/archtest/
+
   # The distribution layer: the packaged Claude Code plugin must be current, and the
   # installer must work from a clean checkout with no agent configuration to touch. The
   # install itself is exercised for real (against a temporary HOME) by the Go tests in
