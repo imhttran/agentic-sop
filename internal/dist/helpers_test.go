@@ -37,15 +37,6 @@ func read(t *testing.T, path string) string {
 	return string(data)
 }
 
-func containsString(haystack []string, needle string) bool {
-	for _, s := range haystack {
-		if s == needle {
-			return true
-		}
-	}
-	return false
-}
-
 func isDirEmpty(t *testing.T, dir string) bool {
 	t.Helper()
 	entries, err := os.ReadDir(dir)

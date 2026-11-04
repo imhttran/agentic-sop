@@ -118,9 +118,6 @@ func TestCommandRunnerFailingCommand(t *testing.T) {
 	if !errors.Is(err, errRunnerUnavailable) {
 		t.Fatalf("error = %v, want errRunnerUnavailable", err)
 	}
-	if !isRunnerUnavailable(err) {
-		t.Error("isRunnerUnavailable() = false, want true")
-	}
 }
 
 func TestCommandRunnerGarbageOutput(t *testing.T) {
@@ -131,9 +128,6 @@ func TestCommandRunnerGarbageOutput(t *testing.T) {
 	_, err := r.Run(context.Background(), Inputs{})
 	if !errors.Is(err, errRunnerMalformed) {
 		t.Fatalf("error = %v, want errRunnerMalformed", err)
-	}
-	if !isRunnerMalformed(err) {
-		t.Error("isRunnerMalformed() = false, want true")
 	}
 }
 

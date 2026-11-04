@@ -43,6 +43,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/bootstrap"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/projectlock"
 	"github.com/imhttran/agentic-sop/internal/taskbuilder"
@@ -455,7 +456,7 @@ func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, meta
 		if err != nil {
 			return "", err
 		}
-		if err := atomicWrite(file.dst, data); err != nil {
+		if err := durablefs.WriteFile(file.dst, data); err != nil {
 			return "", err
 		}
 	}
@@ -464,7 +465,7 @@ func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, meta
 	if err != nil {
 		return "", fmt.Errorf("planflow: encode archived tasks: %w", err)
 	}
-	if err := atomicWrite(filepath.Join(root, archivedTasksFile), append(data, '\n')); err != nil {
+	if err := durablefs.WriteFile(filepath.Join(root, archivedTasksFile), append(data, '\n')); err != nil {
 		return "", err
 	}
 
@@ -478,7 +479,7 @@ func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, meta
 	if err != nil {
 		return "", fmt.Errorf("planflow: encode plan lifecycle: %w", err)
 	}
-	if err := atomicWrite(filepath.Join(root, lifecycleFile), append(lifeDoc, '\n')); err != nil {
+	if err := durablefs.WriteFile(filepath.Join(root, lifecycleFile), append(lifeDoc, '\n')); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -1675,7 +1676,7 @@ func writeGeneratedPlanDoc(dir, prdPath string, plan *planner.Plan) string {
 		id = "plan"
 	}
 	target := filepath.Join(dir, ReportsDir, id+".md")
-	if err := atomicWrite(target, []byte(plan.RenderMarkdown())); err != nil {
+	if err := durablefs.WriteFile(target, []byte(plan.RenderMarkdown())); err != nil {
 		return ""
 	}
 	return relOf(dir, target)
@@ -1768,7 +1769,7 @@ func writePlan(path string, plan *planner.Plan) error {
 	if err != nil {
 		return fmt.Errorf("planflow: encode plan: %w", err)
 	}
-	return atomicWrite(path, append(data, '\n'))
+	return durablefs.WriteFile(path, append(data, '\n'))
 }
 
 // writeMetadata records plan.json's provenance atomically.
@@ -1777,7 +1778,7 @@ func writeMetadata(path string, meta Metadata) error {
 	if err != nil {
 		return fmt.Errorf("planflow: encode metadata: %w", err)
 	}
-	return atomicWrite(path, append(data, '\n'))
+	return durablefs.WriteFile(path, append(data, '\n'))
 }
 
 // readMetadata reads provenance, returning the zero value when it is absent or
@@ -1816,27 +1817,4 @@ func relOf(base, target string) string {
 func fileExists(path string) bool {
 	info, err := os.Stat(path)
 	return err == nil && !info.IsDir()
-}
-
-// atomicWrite writes content to path via a temporary file and rename, so a
-// failure never leaves a truncated file.
-func atomicWrite(path string, content []byte) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(filepath.Dir(path), ".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-
-	if _, err := tmp.Write(content); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, path)
 }

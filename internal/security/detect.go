@@ -1220,7 +1220,7 @@ func executableResolvable(command []string) bool {
 		return false
 	}
 	name := strings.TrimSpace(command[0])
-	if isAbsPath(name) || strings.ContainsAny(name, "/\\") {
+	if filepath.IsAbs(name) || strings.ContainsAny(name, "/\\") {
 		info, err := os.Stat(name)
 		return err == nil && !info.IsDir()
 	}

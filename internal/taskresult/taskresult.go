@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 )
 
 // ContractVersion identifies the publication record shape.
@@ -198,8 +199,8 @@ func Publish(projectDir string, in PublishInput) (PublishResult, error) {
 	if err != nil {
 		return PublishResult{}, fmt.Errorf("taskresult: %w", err)
 	}
-	if err := writeAtomic(path, append(data, '\n')); err != nil {
-		return PublishResult{}, err
+	if err := durablefs.WriteFile(path, append(data, '\n')); err != nil {
+		return PublishResult{}, fmt.Errorf("taskresult: %w", err)
 	}
 	return PublishResult{Outcome: OutcomeAccepted, Publication: &pub}, nil
 }
@@ -281,31 +282,4 @@ func read(path string) (*Publication, error) {
 		return nil, fmt.Errorf("taskresult: %s: %w", filepath.Base(path), ErrInvalid)
 	}
 	return &p, nil
-}
-
-// writeAtomic writes data to path via a temporary file in the same directory and
-// a rename, so a reader never observes a partial record.
-func writeAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".result-*.tmp")
-	if err != nil {
-		return fmt.Errorf("taskresult: %w", err)
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return fmt.Errorf("taskresult: %w", err)
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return fmt.Errorf("taskresult: %w", err)
-	}
-	if err := tmp.Close(); err != nil {
-		return fmt.Errorf("taskresult: %w", err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		return fmt.Errorf("taskresult: %w", err)
-	}
-	return nil
 }

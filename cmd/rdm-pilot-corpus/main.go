@@ -14,8 +14,10 @@ import (
 	"flag"
 	"fmt"
 	"hash/fnv"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -125,7 +127,7 @@ func main() {
 		Cases:       heldout,
 	})
 	fmt.Printf("tuning=%d heldout=%d\n", len(tuning), len(heldout))
-	for _, r := range sortedKeys(excluded) {
+	for _, r := range slices.Sorted(maps.Keys(excluded)) {
 		fmt.Printf("excluded %-28s %d\n", r, excluded[r])
 	}
 }
@@ -224,15 +226,6 @@ func inTuning(id string, pct int) bool {
 	h := fnv.New32a()
 	_, _ = h.Write([]byte(key))
 	return int(h.Sum32()%100) < pct
-}
-
-func sortedKeys(m map[string]int) []string {
-	out := make([]string, 0, len(m))
-	for k := range m {
-		out = append(out, k)
-	}
-	sort.Strings(out)
-	return out
 }
 
 func write(path string, c corpus) {

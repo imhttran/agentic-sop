@@ -21,6 +21,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 )
 
 // SharedEnv is the environment variable naming the opt-in shared cross-worktree
@@ -199,43 +201,7 @@ func (s SharedStore) Store(local *Cache, id Identity, res Result) (Entry, error)
 	if err != nil {
 		return entry, err
 	}
-	return entry, atomicWrite(s.Path, append(data, '\n'))
-}
-
-// atomicWrite writes data to path atomically: it writes a temp file in the same
-// directory, fsyncs it, and renames it over the destination (an atomic replace on
-// POSIX filesystems). A concurrent reader therefore never observes a truncated or
-// partial document, and a concurrent writer never loses entries written under the
-// advisory lock.
-func atomicWrite(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(dir, "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		_ = tmp.Close()
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
-		return err
-	}
-	return nil
+	return entry, durablefs.WriteFile(s.Path, append(data, '\n'))
 }
 
 // lookupOK is a nil-safe Cache.Lookup, so a nil local cache is a miss rather

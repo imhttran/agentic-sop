@@ -50,7 +50,7 @@ func (a *gitleaksAdapter) currentProvenance(req Request) (Provenance, error) {
 		return prov, nil
 	}
 	rules := a.rules
-	if !isAbsPath(rules) {
+	if !filepath.IsAbs(rules) {
 		rules = joinPath(req.WorkspaceRoot, rules)
 	}
 	identity, err := rulesIdentity(rules)
@@ -128,7 +128,7 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	)
 	if strings.TrimSpace(a.rules) != "" {
 		rules := a.rules
-		if !isAbsPath(rules) {
+		if !filepath.IsAbs(rules) {
 			rules = joinPath(req.WorkspaceRoot, rules)
 		}
 		argv = append(argv, "--config", rules)

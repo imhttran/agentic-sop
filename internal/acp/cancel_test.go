@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -546,7 +547,7 @@ func TestCancel(t *testing.T) {
 // implements it, and a server built without the seam refuses the method with the
 // capability reason instead of a generic not-found.
 func TestCancelIsNotAdvertisedWithoutASeam(t *testing.T) {
-	if !containsString(SupportedMethods, MethodSessionCancel) {
+	if !slices.Contains(SupportedMethods, MethodSessionCancel) {
 		t.Fatalf("SupportedMethods %v does not include %q", SupportedMethods, MethodSessionCancel)
 	}
 	b := &cancelBridge{}
@@ -559,13 +560,4 @@ func TestCancelIsNotAdvertisedWithoutASeam(t *testing.T) {
 	if !strings.Contains(got.Error.Message, "cancel") {
 		t.Errorf("message %q does not name cancellation", got.Error.Message)
 	}
-}
-
-func containsString(list []string, want string) bool {
-	for _, v := range list {
-		if v == want {
-			return true
-		}
-	}
-	return false
 }

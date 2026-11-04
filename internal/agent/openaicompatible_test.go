@@ -1,6 +1,7 @@
 package agent_test
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
@@ -43,7 +44,7 @@ func TestOpenAICompatibleIdentitySynchronization(t *testing.T) {
 	if agent.ProviderOpenAICompatible != id {
 		t.Fatalf("agent provider %q != canonical %q", agent.ProviderOpenAICompatible, id)
 	}
-	if !containsString(model.KnownProviders(), id) {
+	if !slices.Contains(model.KnownProviders(), id) {
 		t.Fatalf("model router providers %v must contain %q", model.KnownProviders(), id)
 	}
 
@@ -209,13 +210,4 @@ func TestOpenAICompatibleCloudLocalityIsLegal(t *testing.T) {
 	if res.Selection.Locality != model.LocalityCloud {
 		t.Fatalf("locality = %q, want %q", res.Selection.Locality, model.LocalityCloud)
 	}
-}
-
-func containsString(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
 }

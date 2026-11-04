@@ -143,14 +143,6 @@ var (
 	errRunnerMalformed = errors.New("julia: runner produced malformed output")
 )
 
-// isRunnerUnavailable reports whether err is classified as an unavailable
-// runner.
-func isRunnerUnavailable(err error) bool { return errors.Is(err, errRunnerUnavailable) }
-
-// isRunnerMalformed reports whether err is classified as malformed runner
-// output.
-func isRunnerMalformed(err error) bool { return errors.Is(err, errRunnerMalformed) }
-
 // CommandRunner is the production Runner backed by an external inference
 // command. It marshals Inputs to the command's stdin as JSON and decodes Outputs
 // from the command's stdout as JSON.
