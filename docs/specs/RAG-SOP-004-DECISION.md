@@ -1,7 +1,7 @@
 # RAG Retrieval — Evaluation and Rollout Decision (RAG-SOP-004)
 
 **Type:** Operator decision report.
-**Status:** Recorded — awaiting explicit operator rollout decision.
+**Status:** Recorded — NO-GO on 2026-11-02; RAG remains disabled by default.
 **Plan:** [`docs/plans/PLAN-RAG-SOP-Integration.md`](../plans/PLAN-RAG-SOP-Integration.md).
 **Predeclared criteria:** [`docs/specs/RAG-EVALUATION.md`](RAG-EVALUATION.md).
 

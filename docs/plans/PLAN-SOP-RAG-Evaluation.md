@@ -1,7 +1,7 @@
 # Implementation Plan
 
 **Plan ID:** `plan-sop-rag-evaluation`
-**Status:** DRAFT — under review, not started.
+**Status:** EVALUATION COMPLETE — NO-GO recorded on 2026-11-02; RAG remains disabled by default.
 **Baseline:** `agentic-sop/main` at `5b427dcd`.
 **Finishes:** RAG-SOP-004 in `PLAN-RAG-SOP-Integration.md`. The current decision in `docs/specs/RAG-SOP-004-DECISION.md` is NO-GO for lack of evidence. This plan produces that evidence.
 **Criteria:** `docs/specs/RAG-EVALUATION.md` (predeclared, operator-approved 2026-10-15).
@@ -12,7 +12,7 @@ agentic-sop
 
 ## Summary
 
-RAG retrieval is merged into SOP (PR #11) and off by default. It has never been measured the way `RAG-EVALUATION.md` requires. The only run compared hybrid retrieval against Postgres full-text on a 12-document toy corpus. That wasn't BM25, and it showed no difference.
+RAG retrieval is merged into SOP (PR #11) and remains off by default. This plan was executed in PR #195 against the frozen corpus and predeclared criteria; the evidence and Tom Tran's 2026-11-02 **NO-GO for RAG as currently integrated** are recorded in `docs/specs/RAG-SOP-004-DECISION.md`. The original task definitions below remain at this recorded source path for traceability.
 
 This plan builds the missing pieces. A harness runs SOP's real BM25 ranker against BM25+RAG (and RAG-only as a diagnostic) on a frozen, labeled set of real SOP questions. It records per-question results and the end-to-end failure fixtures, and drafts the evidence section of the decision report.
 
