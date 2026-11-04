@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -77,7 +78,7 @@ func TestPromptImplementGuardsFinalRoutedAgent(t *testing.T) {
 	if !strings.Contains(stdout, "PASS") {
 		t.Errorf("governed lifecycle should pass the gate: %q", stdout)
 	}
-	if !containsString(providers, "ollama") {
+	if !slices.Contains(providers, "ollama") {
 		t.Errorf("the routed provider must be built, got %v", providers)
 	}
 	if len(routed.inputs) != 1 {
@@ -218,13 +219,4 @@ func TestPromptProjectsAreIsolated(t *testing.T) {
 	if strings.Contains(promptOf(pa[0]), "project B") {
 		t.Error("project A must not see project B's work")
 	}
-}
-
-func containsString(xs []string, want string) bool {
-	for _, x := range xs {
-		if x == want {
-			return true
-		}
-	}
-	return false
 }

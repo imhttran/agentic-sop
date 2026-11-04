@@ -335,7 +335,7 @@ func (a *osvAdapter) resolveDatabases(req Request, inputs []osvInput) ([]osvData
 		return nil, "", fmt.Errorf("OSV database path is not configured; implicit download and the live OSV API are disabled")
 	}
 	root := raw
-	if !isAbsPath(root) {
+	if !filepath.IsAbs(root) {
 		root = filepath.Join(req.WorkspaceRoot, filepath.FromSlash(root))
 	}
 	info, err := os.Stat(root)

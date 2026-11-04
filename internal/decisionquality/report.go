@@ -74,7 +74,7 @@ func RenderReport(in ReportInput) string {
 	row("evidence token budget", fmt.Sprint(in.RunA.EvidenceTokens), fmt.Sprint(in.RunB.EvidenceTokens))
 
 	fmt.Fprintf(&b, "\n## Results\n\n| Metric | Arm A | Arm B |\n| --- | --- | --- |\n")
-	rowf := func(name string, a, bb interface{}) { fmt.Fprintf(&b, "| %s | %v | %v |\n", name, a, bb) }
+	rowf := func(name string, a, bb any) { fmt.Fprintf(&b, "| %s | %v | %v |\n", name, a, bb) }
 	rowf("independent cases", in.A.CaseCount, in.B.CaseCount)
 	rowf("repeat records", in.A.RepeatCount, in.B.RepeatCount)
 	rowf("classification accuracy (%)", fmt.Sprintf("%.2f", in.A.Primary), fmt.Sprintf("%.2f", in.B.Primary))
@@ -132,7 +132,7 @@ func RenderReport(in ReportInput) string {
 	fmt.Fprintf(&b, "- 95%% bootstrap interval (case-clustered): [%.2f, %.2f] pp\n", in.Paired.LowerPP, in.Paired.UpperPP)
 
 	fmt.Fprintf(&b, "\n## Frozen gate\n\n| Check | Value | Pass |\n| --- | --- | --- |\n")
-	gateRow := func(name string, v interface{}, ok bool) { fmt.Fprintf(&b, "| %s | %v | %v |\n", name, v, ok) }
+	gateRow := func(name string, v any, ok bool) { fmt.Fprintf(&b, "| %s | %v | %v |\n", name, v, ok) }
 	gateRow("classification accuracy gain >= threshold", fmt.Sprintf("%.2f pp (>= %.2f)", in.Paired.MeanDiffPP, in.Gate.ThresholdPP), in.Paired.MeanDiffPP >= in.Gate.ThresholdPP)
 	if in.SafetyAvailable {
 		gateRow("zero safety violations", in.B.ApprovalBypasses+in.B.CrossCorpusDisclosures+in.B.RequiredEvidenceBypasses, in.Gate.ZeroSafetyViolations)

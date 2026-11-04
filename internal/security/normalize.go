@@ -200,8 +200,6 @@ func StringSet(values []string) map[string]bool {
 	return out
 }
 
-func isAbsPath(p string) bool { return filepath.IsAbs(p) }
-
 func joinPath(root, p string) string {
 	if filepath.IsAbs(p) {
 		return filepath.Clean(p)

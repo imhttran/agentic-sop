@@ -147,7 +147,7 @@ func (f *FileStore) persist() error {
 	if err != nil {
 		return err
 	}
-	return atomicWriteFile(f.path, append(data, '\n'))
+	return durablefs.WriteFile(f.path, append(data, '\n'))
 }
 
 // Atomic runs fn as one atomic transaction: it holds the intra-process mutex and
@@ -494,14 +494,6 @@ func loadInto(m *MemoryStore, path string) error {
 		}
 	}
 	return nil
-}
-
-// atomicWriteFile writes data to path atomically: a temp file in the same directory
-// is written, fsynced, renamed over the destination, and the directory is fsynced, so
-// a crash cannot leave a truncated document and the most recent write is durable. It
-// delegates to the shared durable-write primitive.
-func atomicWriteFile(path string, data []byte) error {
-	return durablefs.WriteFile(path, data)
 }
 
 // --- MemoryStore helpers used by FileStore (load/export) ---

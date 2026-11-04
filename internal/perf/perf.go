@@ -432,24 +432,22 @@ func taskRows(t Task) []row {
 			rows = append(rows, row{name, ms})
 		}
 	}
-	add(upper(StagePlan), t.StagesMS[StagePlan])
-	add(upper(StageImplement), t.StagesMS[StageImplement])
+	add(strings.ToUpper(StagePlan), t.StagesMS[StagePlan])
+	add(strings.ToUpper(StageImplement), t.StagesMS[StageImplement])
 	if len(t.ValidationMS) > 0 {
-		add(upper(CategoryBuild), t.ValidationMS[CategoryBuild])
-		add(upper(CategoryTest), t.ValidationMS[CategoryTest])
-		add(upper(CategoryLint), t.ValidationMS[CategoryLint])
+		add(strings.ToUpper(CategoryBuild), t.ValidationMS[CategoryBuild])
+		add(strings.ToUpper(CategoryTest), t.ValidationMS[CategoryTest])
+		add(strings.ToUpper(CategoryLint), t.ValidationMS[CategoryLint])
 	} else {
-		add(upper(StageValidation), t.StagesMS[StageValidation])
+		add(strings.ToUpper(StageValidation), t.StagesMS[StageValidation])
 	}
-	add(upper(StageReview), t.StagesMS[StageReview])
-	add(upper(StageFix), t.StagesMS[StageFix])
+	add(strings.ToUpper(StageReview), t.StagesMS[StageReview])
+	add(strings.ToUpper(StageFix), t.StagesMS[StageFix])
 	if len(rows) == 0 {
-		rows = append(rows, row{upper(StageValidation), 0})
+		rows = append(rows, row{strings.ToUpper(StageValidation), 0})
 	}
 	return rows
 }
-
-func upper(name string) string { return strings.ToUpper(name) }
 
 // humanMS renders milliseconds compactly: "820ms", "2.1s", "1m 42s".
 func humanMS(ms int64) string {

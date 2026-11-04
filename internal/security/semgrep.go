@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
@@ -51,7 +52,7 @@ func (a *semgrepAdapter) currentProvenance(req Request) (Provenance, error) {
 		return prov, nil
 	}
 	rules := a.rules
-	if !isAbsPath(rules) {
+	if !filepath.IsAbs(rules) {
 		rules = joinPath(req.WorkspaceRoot, rules)
 	}
 	identity, err := rulesIdentity(rules)
@@ -108,7 +109,7 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		return finish(exec, nil)
 	}
 	rules := a.rules
-	if !isAbsPath(rules) {
+	if !filepath.IsAbs(rules) {
 		rules = joinPath(req.WorkspaceRoot, rules)
 	}
 	identity, err := rulesIdentity(rules)

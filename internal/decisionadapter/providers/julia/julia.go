@@ -18,6 +18,7 @@ package julia
 
 import (
 	"context"
+	"errors"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/decision"
@@ -121,10 +122,10 @@ func classifyRunnerError(err error) decision.ErrorKind {
 	if err == nil {
 		return decision.KindProviderFailure
 	}
-	if isRunnerMalformed(err) {
+	if errors.Is(err, errRunnerMalformed) {
 		return decision.KindMalformedResponse
 	}
-	if isRunnerUnavailable(err) {
+	if errors.Is(err, errRunnerUnavailable) {
 		return decision.KindUnavailable
 	}
 	return decision.KindProviderFailure

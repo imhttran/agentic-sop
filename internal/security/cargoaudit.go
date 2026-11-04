@@ -183,7 +183,7 @@ func (a *cargoAuditAdapter) resolveDatabasePath(req Request) (string, error) {
 		return "", fmt.Errorf("advisory database path is not configured; implicit fetch and update are disabled")
 	}
 	dir := raw
-	if !isAbsPath(dir) {
+	if !filepath.IsAbs(dir) {
 		dir = joinPath(req.WorkspaceRoot, dir)
 	}
 	info, err := os.Stat(dir)

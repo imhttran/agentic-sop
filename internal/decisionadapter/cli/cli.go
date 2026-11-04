@@ -15,8 +15,9 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
-	"sort"
+	"slices"
 	"strings"
 	"time"
 
@@ -214,7 +215,7 @@ func printResult(w io.Writer, result decision.DecisionResult, asJSON bool) {
 		fmt.Fprintf(w, "model:    %s\n", result.Model)
 	}
 	fmt.Fprintln(w, "answers:")
-	for _, id := range sortedKeys(result.Answers) {
+	for _, id := range slices.Sorted(maps.Keys(result.Answers)) {
 		answer := result.Answers[id]
 		fmt.Fprintf(w, "  %s:\n", id)
 		fmt.Fprintf(w, "    type:        %s\n", answer.Type)
@@ -244,15 +245,6 @@ func splitChoices(raw string) []string {
 		}
 	}
 	return choices
-}
-
-func sortedKeys(m map[string]decision.Answer) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-	return keys
 }
 
 func runShadow(args []string, stdout, stderr io.Writer) int {

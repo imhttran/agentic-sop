@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -345,7 +346,7 @@ func TestInstallerDelegatesSkillInstallation(t *testing.T) {
 				}
 			}
 			for _, other := range []string{".agents/skills", ".claude/skills"} {
-				if containsString(tc.roots, other) {
+				if slices.Contains(tc.roots, other) {
 					continue
 				}
 				if _, err := os.Stat(filepath.Join(home, other)); err == nil && !isDirEmpty(t, filepath.Join(home, other)) {
