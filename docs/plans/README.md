@@ -72,7 +72,7 @@ rather than moving to the archive (see
 | [PLAN-SOP-AUTONOMY-001-UPDATED.md](PLAN-SOP-AUTONOMY-001-UPDATED.md) | PROPOSED UPDATE | a proposed update to the SOP autonomy plan |
 | [PLAN-SOP-Acceptance-Verification-Hardening.md](PLAN-SOP-Acceptance-Verification-Hardening.md) | IMPLEMENTED | SOP acceptance-verification hardening (SOP-HARD) |
 | [PLAN-SOP-E2E-Reliability-Hardening.md](PLAN-SOP-E2E-Reliability-Hardening.md) | PROPOSED | SOP E2E reliability hardening |
-| [PLAN-SOP-RAG-Evaluation.md](PLAN-SOP-RAG-Evaluation.md) | DRAFT — not started | frozen-corpus BM25 versus RAG evaluation, failure fixtures, measured decision evidence, and a human-owned GO/CONDITIONAL/NO-GO decision |
+| [PLAN-SOP-RAG-Evaluation.md](PLAN-SOP-RAG-Evaluation.md) | EVALUATION COMPLETE — NO-GO | frozen-corpus BM25 versus RAG evaluation and measured decision evidence; Tom Tran recorded NO-GO on 2026-11-02 and RAG remains disabled by default |
 | [PLAN-SOP-RUN-ACCEPT-001.md](PLAN-SOP-RUN-ACCEPT-001.md) | declared ACTIVE | native deterministic acceptance checks for `sop run` |
 | [PLAN-SOP-Validation-Evidence-Reuse.md](PLAN-SOP-Validation-Evidence-Reuse.md) | IMPLEMENTED | SOP validation evidence reuse |
 | [PLAN-Security-Scanner-Addon.md](PLAN-Security-Scanner-Addon.md) | IMPLEMENTED | the Semgrep CE and Gitleaks security scanner add-on (SEC-001–SEC-005); the path is kept because `internal/planner/security_plan_test.go` compiles this plan |
