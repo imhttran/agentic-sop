@@ -57,6 +57,7 @@ func accOpOutcome(t *testing.T, dir string, checks ...string) *outcomeArtifact {
 		Title:              "operator acceptance",
 		AcceptanceCriteria: []string{"free-text criterion"},
 		AcceptanceChecks:   checks,
+		AcceptanceMapping:  []string{"criterion 1: check 1"},
 	}
 	res := deriveOutcome(spec, dir, accOpPassGate())
 	if res == nil {
