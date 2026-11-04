@@ -1,6 +1,6 @@
 # PLAN — Issue 158: One Outcome Criterion Per Deliverable Line
 
-**Status:** PROPOSED
+**Status:** IMPLEMENTED (PR #163).
 **Rule:** A deliverable line names one requirement. SOP must create exactly one outcome criterion for that line, check every required repository path the line declares, and never treat a descriptive code symbol as a path. A missing required file still fails.
 
 ## Project
