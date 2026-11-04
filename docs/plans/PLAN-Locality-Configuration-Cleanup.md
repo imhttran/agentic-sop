@@ -1,6 +1,6 @@
 # PLAN — Locality Configuration Cleanup
 
-**Status:** PROPOSED
+**Status:** IMPLEMENTED (PR #157).
 **Rule:** Locality is resolved, not repeated. A user configures the provider and model; SOP resolves locality from explicit configuration or reliable evidence, keeps it internal for routing, fallback, and reporting, and fails with actionable guidance when the evidence is insufficient. Locality inference never authorizes a new cloud fallback.
 
 ## Project

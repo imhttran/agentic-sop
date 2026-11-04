@@ -1,7 +1,7 @@
 # PLAN — RAG Knowledge Retrieval Integration for Agentic SOP
 
 **Plan ID:** `plan-rag-sop-integration`
-**Status:** PROPOSED — approval required before implementation
+**Status:** IMPLEMENTED — RAG retrieval merged (PR #11), disabled by default. RAG-SOP-004 evaluation complete; NO-GO recorded on 2026-11-02.
 **Target repository:** `imhttran/agentic-sop`
 **Supporting repository:** `imhttran/rag-template`
 **Baseline inspected:** `agentic-sop/main` at `a8082b6`; `rag-template/main` (2026-10-14 review)

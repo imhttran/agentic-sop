@@ -1,6 +1,6 @@
 # PLAN — TEL-009: Telemetry Reporting Corrections
 
-**Status:** IMPLEMENTED (uncommitted). Reporting and evidence changes only; no
+**Status:** IMPLEMENTED. Reporting and evidence changes only; no
 routing, JEV, approval, or execution behavior changed.
 
 **Baseline:** the completed read-only audit across 219 runs under
