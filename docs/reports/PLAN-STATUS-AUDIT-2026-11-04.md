@@ -92,10 +92,10 @@ and cannot be verified; add an '### Acceptance Mapping' section ...
 The cause is not a missing ACC task. A later contract (`planner.AcceptanceMapping`
 in `internal/planner/plan.go`, enforced by `internal/planner/lint.go` and
 `internal/outcome/criteria.go`, introduced in `ca8f0ea0`) requires an explicit
-`### Acceptance Mapping` binding free-text criteria to checks or manual evidence.
-The RUN-ACCEPT fixtures predate that contract: they declare free-text criteria and
-passing checks, but no mapping, so a passing check no longer yields `VERIFIED` on
-its own.
+`### Acceptance Mapping` that binds free-text criteria to checks or manual
+evidence. The RUN-ACCEPT fixtures predate that contract: they declare free-text
+criteria and passing checks, but no mapping, so a passing check no longer yields
+`VERIFIED` on its own.
 
 Consequently:
 
