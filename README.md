@@ -143,7 +143,7 @@ with `sop planner continue --apply` before resuming `sop run`. With
 `--start-work` the planner can start the work itself. Planner advice is never human
 approval, and continuation stays interactive. See the
 [CLI reference](docs/reference/CLI.md#setting-up-the-planner) and the
-[planner–executor plan](docs/plans/PLAN-Executore-Integration.md).
+[planner–executor plan](docs/history/plans/PLAN-Executore-Integration.md).
 
 Optional evaluation tooling sits outside the default execution path:
 [`sop compare`](docs/guides/HIP-COMPARE.md) and the report-only
