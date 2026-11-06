@@ -46,12 +46,17 @@ const (
 	// recovery, or memory evidence, and it can never become an instruction or a
 	// governance setting.
 	SourceKnowledgeRAG Source = "knowledge-rag"
+	// SourceRetrieval is advisory code retrieval: BM25-ranked pointers (symbol and file
+	// identities) into the repository, never file contents. It carries
+	// PriorityGeneric and is not a file item, so it never consumes the file ceiling;
+	// "retrieval" sorts after "memory", so curated decisions keep precedence.
+	SourceRetrieval Source = "retrieval"
 )
 
 // Valid reports whether s is a known source.
 func (s Source) Valid() bool {
 	switch s {
-	case SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory, SourceKnowledgeRAG:
+	case SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory, SourceKnowledgeRAG, SourceRetrieval:
 		return true
 	}
 	return false
@@ -246,7 +251,7 @@ type SourceCount struct {
 }
 
 // sourceOrder is the canonical, stable order of sources in a summary.
-var sourceOrder = []Source{SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory}
+var sourceOrder = []Source{SourceTask, SourceRepository, SourceExecution, SourceRecovery, SourceMemory, SourceRetrieval}
 
 // Sources returns the per-source counts in the canonical source order. Only sources
 // that contributed an item are returned, so the summary is deterministic.
@@ -285,7 +290,8 @@ func (c Context) Render() string {
 }
 
 // Inputs is the already-known evidence the Context Engine organizes. Every field is
-// evidence the harness already holds; the Context Engine performs no retrieval.
+// evidence the harness already holds; the Context Engine itself performs no retrieval
+// (Retrieved is ranked by the caller).
 type Inputs struct {
 	// TaskID and Task are the task's identity and its rendered specification.
 	TaskID string
@@ -312,6 +318,10 @@ type Inputs struct {
 	// lifecycle, execution, recovery, or memory evidence. A nil slice leaves the
 	// built context byte-identical to before.
 	Knowledge []Item
+	// Retrieved is optional advisory code retrieval (BM25 hits over the structural
+	// repository index, SourceRetrieval). A nil slice leaves the built context
+	// byte-identical to before.
+	Retrieved []Item
 }
 
 // FromInputs assembles the canonical items from already-known evidence and returns
@@ -370,5 +380,6 @@ func FromInputs(in Inputs, lim Limits) Context {
 	items = append(items, in.Recovery...)
 	items = append(items, in.Memory...)
 	items = append(items, in.Knowledge...)
+	items = append(items, in.Retrieved...)
 	return Build(items, lim)
 }

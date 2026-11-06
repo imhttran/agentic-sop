@@ -317,6 +317,10 @@ type ContextEfficiency struct {
 	// full history. It reuses internal/handoff; OFF by default, so an existing run is
 	// unchanged. A capsule is a derived summary, never workflow truth.
 	Handoff bool `yaml:"handoff"`
+	// CodeRetrieval includes the top BM25 hits from the structural repository index
+	// (symbols and file paths) as advisory execution context for implement/fix attempts.
+	// OFF by default; see docs/plans/PLAN-Code-Retrieval-Context-Seam.md.
+	CodeRetrieval bool `yaml:"code_retrieval"`
 }
 
 // Review selects the review engine and whether it delegates semantic review.
