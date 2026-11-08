@@ -173,6 +173,19 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 
 ## Status
 
+### Current delivery notes (2026-11-08)
+
+- PR #259 is merged: opt-in, default-off BM25 code-pointer context is available for
+  IMPLEMENT. The live E2 A/B remains unrun pending model-budget approval, and the
+  advertised FIX-path integration still needs correction.
+- PR #260 is merged: the security shift-left work adds a required-mode readiness
+  probe at the existing pre-IMPLEMENT seam, keeps the single quality gate, leaves
+  project policy report-only, and moves Promptfoo out of routine scans. PR #261 is
+  the active follow-up for verified security gaps.
+- These capabilities do not change governance authority: deterministic Go remains
+  authoritative, and adapter availability does not authorize promotion or enablement.
+
+
 SOP V1 and the routing, provider, recovery, distribution, approval, agentic
 reliability, and context-efficiency layers are implemented, including recent
 benchmark-driven routing, recovery, and isolation hardening. Optional local
