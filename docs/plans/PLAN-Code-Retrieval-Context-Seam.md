@@ -1,6 +1,6 @@
 # PLAN — Code Retrieval Context Seam (EV Option A)
 
-Status: approved 2026-11-06 (Option A). Steps 1–4 implemented; step 5 awaits model-budget approval.
+Status: IMPLEMENTED / MERGED via PR #259 (`17697102`) on 2026-11-08. Steps 1–4 are merged; step 5 awaits model-budget approval. Post-merge limitation: retrieval is wired to IMPLEMENT but not FIX, despite the original implement/fix scope.
 
 This is the "separate plan" that
 [EV-005 §2.3](../reports/ev-context-run/EV-005-acceptance-criteria.md) asks for before
