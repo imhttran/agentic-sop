@@ -94,7 +94,13 @@ security:
       languages: [go, rust]
       version: "2.7.0"
   evaluation:
-    enabled: true
+    # Kept out of the routine scan path: an enabled evaluation adds ~121 s to
+    # every task's quality-stage scan (SEC-LEFT-001 artifact: 121006 ms of
+    # 126423 ms) while contributing no verdict (report_only, severity_mode none).
+    # Enable this block temporarily for a dedicated evaluation session; see
+    # docs/security-promptfoo.md. Required coverage is unaffected because
+    # evaluation is not a required category.
+    enabled: false
     profile: local
     target: "ollama:chat:qwen3.5:4b"
     target_provider: "ollama:chat:qwen3.5:4b"

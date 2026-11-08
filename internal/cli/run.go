@@ -741,6 +741,33 @@ func runStages(ctx context.Context, dir string, cfg config.Config, a agent.Agent
 			}
 		}
 
+		// Optional early security-readiness probe (SEC-LEFT-003). It runs at the
+		// existing pre-execution seam, before the implementation agent, and only
+		// when the add-on is active. It is a read-only inspection that reuses the
+		// same detection, selection, and capability classification `sop security
+		// inspect` uses; it builds no adapter and runs no scanner. A required gate
+		// that cannot be satisfied fails closed through the existing failure
+		// classifier (SecurityScanFailure / Block); report-only and advisory
+		// configurations emit diagnostics only and never block. A disabled add-on
+		// is a strict no-op, so ordinary tasks are unchanged.
+		if readiness := runSecurityReadiness(cfg, dir, stdout); readinessBlocks(readiness) {
+			cls := failure.Classify(failure.Evidence{
+				Source:          "SECURITY",
+				SecurityFailed:  true,
+				SecurityVerdict: "NOT_READY",
+				SecurityReason:  readinessReason(readiness),
+			})
+			decision := decideAutonomy(cfg, cls)
+			_ = rn.SetStage(runpkg.Failed)
+			ar.Emit(activity.StageFailed, string(cls.Disposition), readinessReason(readiness))
+			return lifeResult{
+				gate:           fail(readinessReason(readiness)),
+				stage:          runpkg.Failed,
+				classification: cls,
+				decision:       decision,
+			}, nil
+		}
+
 		_ = rn.SetStage(runpkg.Implementing)
 		ar.Emit(activity.StageImplement, "implementing", "")
 		// The canonical context the harness supplies to the agent, built from evidence
