@@ -235,3 +235,14 @@ capability ids **CTX-002** (structural index), **CTX-003** (BM25 retrieval),
 Required validations (`go build ./...`, `go test ./...`, `go vet ./...`) are reported
 as run clean; this task adds only a Markdown report, so the working tree shows only the
 expected report artifact on top of the preserved pre-existing user-owned changes.
+
+## 9. Outcome (recorded 2026-11-06)
+
+**E1 = GO.** Applying §1.3 to the pinned EV-003 numbers: Δp@5 = +0.111 (≥ +0.050),
+ΔMRR = +0.255 (≥ +0.100), Δr@5 = +0.370 (≥ −0.020), Δbytes = −8 (≤ +24),
+`index_build_ms` = 128 (≤ 256), `search_ms` = 50 (≤ 100). Every GO predicate holds.
+
+**§2.3 decision: Option A.** The human architecture owner approved a minimal, opt-in,
+off-by-default retrieval seam under the separate plan
+[PLAN-Code-Retrieval-Context-Seam.md](../../plans/PLAN-Code-Retrieval-Context-Seam.md).
+E2 still requires the §4 model-budget approval before any live A/B run.

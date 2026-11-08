@@ -252,6 +252,14 @@ func CandidatesFromIndex(idx repoindex.Index, root string) []Candidate {
 	return out
 }
 
+// CodeCandidatesFromIndex is CandidatesFromIndex without document candidates: symbols and
+// file paths only, so it reads nothing from disk. Full Markdown bodies outrank code for
+// task-phrased queries, so code retrieval ranks over this corpus.
+func CodeCandidatesFromIndex(idx repoindex.Index) []Candidate {
+	idx.Documents = nil
+	return CandidatesFromIndex(idx, "")
+}
+
 // QueryFromEvidence assembles retrieval terms from the execution's evidence: the task id,
 // the acceptance criteria, and any failure evidence. It is the deterministic input the plan
 // specifies (task, plan, acceptance criteria, failure evidence).

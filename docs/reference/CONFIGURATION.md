@@ -945,6 +945,7 @@ block leaves existing behavior unchanged.
 context:
   decision_memory: false
   handoff: false # include a dependency task's handoff capsule (RBV-011)
+  code_retrieval: false # include BM25-ranked code pointers for each attempt
 ```
 
 `context.decision_memory` includes durable engineering decisions recorded for the
@@ -958,6 +959,15 @@ execution context, so context is compressed between tasks instead of replaying
 full history (see [../specs/EXECUTION.md](../specs/EXECUTION.md)). A capsule is a
 derived summary, never workflow truth; it carries the lowest context priority, and
 a task only ever receives its own dependencies' capsules. Off by default.
+
+`context.code_retrieval` ranks the repository's Go symbols and file paths against
+the task's title, acceptance criteria and failure output with the built-in BM25
+ranker (the same one `sop retrieve` uses) and adds the top 5 as one advisory context
+item. It lists pointers, never file contents; it never consumes the context's file
+ceiling and ranks below decision memory. Each attempt writes `code-retrieval.json`
+in the run directory with the status, hit count and duration. Any failure adds
+nothing and never blocks the attempt. Off by default; see
+[../plans/PLAN-Code-Retrieval-Context-Seam.md](../plans/PLAN-Code-Retrieval-Context-Seam.md).
 
 The verification cache (`sop validate --cache`) and the prompt result cache
 (`sop prompt --cache`) are enabled per invocation, not in configuration.

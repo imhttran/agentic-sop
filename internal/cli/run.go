@@ -2430,6 +2430,7 @@ func implementContext(ctx context.Context, spec *taskfile.Spec, plan *planner.Pl
 		Recovery:     recovery,
 		Memory:       memory,
 		Knowledge:    knowledge,
+		Retrieved:    codeRetrievalItems(cfg, spec, failureCtx, rn, d),
 	}, sopctx.DefaultLimits()), knowledgeCitations(knowledge), advisoryCitations(advisory.Items)
 }
 
