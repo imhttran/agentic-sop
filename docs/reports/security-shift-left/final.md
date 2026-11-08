@@ -1,8 +1,13 @@
 # SEC-LEFT-006 — Final reconciliation, verification and handoff
 
 Status: reconciliation and verification report. It records what was implemented,
-what was removed as speculative, what was measured, and what was not run. No PR
-is claimed.
+what was removed as speculative, what was measured, and what was not run. The
+original handoff below predates publication.
+
+> Post-merge reconciliation (2026-11-08): this work was committed and merged by
+> PR #260 at `9cc4bf29ce7adedf93213ae9b21b4df3c9567a7a`. Statements below that no
+> PR or commit existed are preserved as point-in-time handoff evidence, not current
+> repository status.
 
 ## Scope
 
