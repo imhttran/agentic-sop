@@ -2,7 +2,7 @@
 
 **Plan ID:** `plan-sop-security-shift-left`  
 **Repository:** `https://github.com/imhttran/agentic-sop`  
-**Status:** PROPOSED — not executed  
+**Status:** IMPLEMENTED / MERGED via PR #260 (`9cc4bf29`) on 2026-11-08. The execution evidence is preserved in `docs/reports/security-shift-left/final.md`; local SOP lifecycle state is not inferred from this repository status.  
 **Scope:** Audit and improve existing SOP security readiness, early feedback, enforcement, AI-agent evaluation, and execution isolation.  
 **Execution:** New, isolated Git worktree and branch based on current `origin/main`.
 
