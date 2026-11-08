@@ -264,6 +264,190 @@
       "reason": "By design: the CLI orchestrates subprocesses. argv is a constant, operator configuration, or a validated payload, and dynamic data is passed on stdin. Triaged 2026-11-03.",
       "owner": "imhttran",
       "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:82f8cbd035e31b4adffe1f201507e29781b9626f8acb040142ad16ee46216576",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/cli/outcome.go",
+      "reason": "False positive, reviewed: acceptance checks execute only after commandpolicy.Classify returns SAFE and rejectDangerousForm rejects injection flags; argv is operator/task-defined, no shell is invoked, and output is redacted. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:646030f7bae4ee14cc2e73d33132185357a410680765da8cd26af4ff44dd9672",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/cli/security_integration_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:2a0c308fff65f585f0c87f70dd8cc18e5cfac74b3aae96f8081cd5f561594877",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/controller/web/activity_isolation_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d08a5b11bcb6fcfe0d5d9392b5838974435ef6ab0475fe2edf94647cb33e3ca8",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decision/commandprofile/connector_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:11fb9bdc2aa5607323d07d686df44459f31e57e5e91c0745e3d21a8fb779672d",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/decisionadapter/providers/julia/runner.go",
+      "reason": "False positive, reviewed: the adapter command is operator-configured argv with no shell; model input is JSON on stdin and the child environment is scrubbed by childEnv(). Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:9d2c56df8e0cf756aa641c7dfb0f994233532e3bf28e38115b67c232544a910c",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:dfb5a41e147db8e1f06ce68a644f3dc7b041438cb682e81b388792bac43a2f68",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:15d3468a59632f5e1885a803ba895f555f3a02593613e805fa85b3319d17ad26",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_windows_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:3d0b4685d096087b3b59ab23541c5e5f9dcd48f23fc93ed8d570486d15a9ae7a",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_windows_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:8d96015da9bb46c6ab5e6aa227b43989bfb723a9f68f330a27cb435c008e4d17",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_windows_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:96c2e71d40648d498bbac6bcaa7f9a08231eae5655ca11c427fbc33c75a54361",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_windows_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:e7e2004595afb68157dc5b550c0618c680f74252ecb443a7b4ddd6cdbf54b950",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dist/install_windows_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:90576e4e8d83cebe41710b35562e65f7d78cccbd10cccf1bc41c38c47f66c8ef",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/dqharness/replay_exec.go",
+      "reason": "False positive, reviewed: this is the sandbox launcher. It executes only the detected bwrap/sandbox-exec backend with an argv built by isolationCommand, uses a scrubbed environment, and fails closed when isolation is unavailable. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:a88ec564a5cc7c03305f1564e87c3603301621f83bdcef160145a70865ccf67a",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/projectdetect/exec_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:095dbc1e0b93a34d33731af8de20e0507b66a0de5290cd8ac28d132b801ccdb0",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/projectlock/lock_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:33d5b001c8fb68fc1ccbe4c9fa0c00da8d65c51bb4e03fe7208d5fc845be98ab",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/question/atomic_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:5c2bcef653cbc3f55129d8989f9a7db8ed1a39dfaab3b6a28c36bbf192bbc832",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/rageval/ragacceptance_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:15463d4514fdc179b3802cdeace17427bd3c223f8c52f0a353fce9f954afd7f1",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/security/integration_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:b320f0fa98c26b04a6b038147f28f974d7cc18fa398c5e49a32592de66444aee",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/security/integration_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:cc82e3fddd89b24940d41d6e1a2ae05fe6060ce667ac8438d489b7d7170c897d",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/security/integration_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:b3e531be8cb9a677dfb2276bd87f3d0b9a6167adca74bd8028ae6d7b1b012665",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/testfast/testfast_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:d44ed3ba4e2bfde9b9b9f45c247f14ab716a3064027264c6c23cf79c623055d8",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/testfast/testfast_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
+    },
+    {
+      "fingerprint": "semgrep:4e5da4d6d0084bfed3bd97702df35aced7457bbd2f987e1771ece46e29c1cae6",
+      "rule_id": "dangerous-exec-command",
+      "path": "internal/toolharness/import_sequence_test.go",
+      "reason": "False positive, reviewed: test-only harness. argv is a test-controlled literal, a freshly built test binary, or a re-exec of the test process (os.Args[0]); there is no shell interpolation of external input and no production path. Triaged 2026-11-08.",
+      "owner": "imhttran",
+      "expires_at": "2027-06-30T00:00:00Z"
     }
   ]
 }
