@@ -256,3 +256,12 @@ resolved.
 - Semgrep skip class, OSV absence, and required-mode projection recorded with verbatim
   captured output.
 - No source, configuration, or baseline file was modified by this stage.
+
+## Post-baseline update (2026-11-08)
+
+This section is a point-in-time baseline. After it was written, the operator
+authorized OSV provisioning and the database was fetched into the git-ignored
+`.agent-sdlc/osv-db`. A subsequent `sop security scan --report-only` returned
+`PASS` with coverage `COMPLETE`: gitleaks, semgrep, and osv-scanner all
+`COMPLETED` / `COMPLETE`, with 0 dependency findings. Details and database
+identity are in `final.md` and `SEC-H-004-dependency-coverage-readiness.md`.

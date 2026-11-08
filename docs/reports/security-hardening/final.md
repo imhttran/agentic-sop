@@ -38,14 +38,16 @@ All commands ran in this worktree on the SEC-H-007 host (macOS, arm64).
 | 2 | `go build ./...` | exit 0. |
 | 3 | `go vet ./...` | exit 0. |
 | 4 | `go test ./...` | exit 0; every package `ok` or `[no test files]`; no failure to diagnose. |
-| 5 | `sop security scan --report-only` (final scan, operator-executed) | exit 0; verdict `INDETERMINATE`; coverage `UNKNOWN`; 7156 ms; findings 67, suppressed 53, blocking 0; artifact `.agent-sdlc/runs/security-20261108T173004Z/security/scan.json`. |
+| 5 | `sop security scan --report-only` (final, after authorized OSV provisioning) | exit 0; verdict `PASS`; coverage `COMPLETE`; 8768 ms; findings 67, suppressed 53, blocking 0; osv-scanner `COMPLETED`; artifact `.agent-sdlc/runs/security-20261108T231311Z/security/scan.json`. |
 
 The final report-only scan was executed by the operator through the existing
-scanner: verdict `INDETERMINATE`, coverage `UNKNOWN`, 7156 ms, findings 67,
-suppressed 53, unsuppressed 14 (all MEDIUM, non-blocking), blocking 0. Artifact:
-`.agent-sdlc/runs/security-20261108T173004Z/security/scan.{md,json}`. The verdict is
-driven by `osv-scanner FAILED` (dependency prerequisite), not by the adjudicated
-findings. Required mode is not enabled.
+scanner after authorized OSV provisioning: verdict `PASS`, coverage `COMPLETE`,
+8768 ms, findings 67, suppressed 53, unsuppressed 14 (all MEDIUM, non-blocking),
+blocking 0, `execution_failures: 0`. Artifact:
+`.agent-sdlc/runs/security-20261108T231311Z/security/scan.{md,json}`. The required
+simulation (`sop security scan --required`) also returned `PASS` / `COMPLETE`
+(9131 ms), while its readiness projection stays `false` because no required
+categories are configured. Required mode is not enabled.
 
 ## Findings
 
@@ -66,13 +68,25 @@ findings. Required mode is not enabled.
 - SAST (`semgrep`): `COMPLETE` after the repository `.semgrepignore`. Source:
   `exec-findings.md`.
 - Secrets (`gitleaks`): `COMPLETE`. Source: `baseline.md`.
-- Dependencies (`osv-scanner`): **FAILED / UNKNOWN**. The adapter is `FAILED` because
-  the offline OSV advisory database is absent (`.agent-sdlc/osv-db` missing). No
-  vulnerability claim is made from OSV data. Source:
-  `SEC-H-004-dependency-coverage-readiness.md`.
-- No PASS security verdict is claimed. Required mode stays disabled because dependency
-  coverage is incomplete; required mode does not convert incomplete coverage into a
-  pass. Source: `required-mode-readiness.md`.
+- Dependencies (`osv-scanner`): **COMPLETE**. The adapter is `COMPLETED`, scanned
+  the Go lockfile against the offline database, and reported 0 dependency findings.
+- Report-only verdict: **PASS**, coverage **COMPLETE**. Required mode stays disabled;
+  its readiness projection is `false` only because `required_categories` is empty
+  (see `required-mode-readiness.md`).
+
+### OSV database provenance (authorized provisioning)
+
+- Provisioned after explicit operator authorization with
+  `scripts/security/fetch-osv-databases.sh --dest .agent-sdlc/osv-db`.
+- Layout: `.agent-sdlc/osv-db/osv-scalibr/{Go,crates.io}/all.zip` for osv-scanner
+  `2.7.0`.
+- Integrity: recomputed SHA-256 and size match the recorded metadata for both
+  archives; the zip integrity check passed.
+- Go: `sha256 f283a685…15ce`, 12828976 bytes, acquired `2026-11-08T23:13:06Z`.
+- crates.io: `sha256 7384f489…c9b2`, 3800039 bytes, acquired `2026-11-08T23:13:07Z`.
+- Freshness: both archives are new; the adapter's stale threshold is 90 days and
+  `stale_advisory_database: deny`.
+- The database is git-ignored and is not part of the commit set.
 
 ## Performance
 
@@ -81,14 +95,15 @@ Measured values are single-run measurements; variance is UNVERIFIED. Source:
 
 | Metric | Baseline | Measured | Status |
 | --- | --- | --- | --- |
-| Security scan wall-clock | 126423 ms (SEC-LEFT-001, Promptfoo enabled) | 7156 ms and 7044 ms (two final report-only runs, test-inclusive) | MEASURED, spread 112 ms |
+| Security scan wall-clock | 126423 ms (SEC-LEFT-001, Promptfoo enabled) | 8768 ms (report-only) and 9131 ms (required simulation), OSV executing | MEASURED, single run each |
 | Scan before the test-file coverage override | 126423 ms | 5917 ms (semgrep `PARTIAL`) | MEASURED |
 | Promptfoo share | 121006 ms (95.7%) | 0 (disabled) | MEASURED (adapter absent) |
+| osv-scanner | 14 ms (FAILED) | 1552 ms (`COMPLETED`, coverage `COMPLETE`, 0 findings) | MEASURED |
 | Readiness probe | n/a | 30–40 ms over 3 runs | MEASURED, spread 0.01 s |
 
-The test-file coverage override adds ~1.2–1.8 s (743 additional Go files) while
-removing the last SAST coverage gap. The fixed routine security cost is therefore
-about 7.2 s per task, which is under 5% of any task longer than about 2.5 minutes.
+Scanning the 743 in-scope test files adds ~1.2–1.8 s, and executing OSV adds
+~1.5 s. The fixed routine security cost is about 8–9 s per task, which is under 5%
+of any task longer than about three minutes.
 
 The aggregate `<5%` overhead claim is UNVERIFIED because repeat-run variance and the
 workload mix were not measured. Required coverage and fail-closed enforcement take
@@ -106,7 +121,7 @@ remains the only verdict authority and blocking stays disabled. Source:
 
 | Gap | Status | Owning layer | Notes |
 | --- | --- | --- | --- |
-| osv-scanner dependency adapter | PARTIAL / UNKNOWN | Security add-on dependency adapter | Offline OSV database absent. Provisioning requires explicit operator authorization: `scripts/security/fetch-osv-databases.sh --dest .agent-sdlc/osv-db`. Not run. |
+| Required-mode enablement | Not enabled | Security policy owner | Coverage is complete; the readiness projection is `false` only because `required_categories` is empty. Enabling blocking is a policy decision and was not made. |
 | Linux Bubblewrap (`bwrap`) runtime isolation | NOT_RUN | Host OS runtime / execution environment | `bwrap` absent on this macOS host; Linux-only confinement tests skip. macOS Seatbelt results are cited instead. |
 | Live-adversarial AISEC observer | NOT_RUN | evaltarget / AISEC integration owners | Requires an evaltarget-routed live path whose observer reads back a model tool decision. No fixture run is presented as live evidence. |
 | Advisory Promptfoo evaluation | Disabled in the routine path | Security add-on evaluator config | `security.evaluation.enabled: false`. Not enabled in this plan. |

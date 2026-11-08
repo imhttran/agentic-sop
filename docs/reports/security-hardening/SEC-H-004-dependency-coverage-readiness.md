@@ -111,3 +111,31 @@ coverage flips to COMPLETE and the gate can pass.
 
 None identified for the covered behaviors. No download was performed. No test
 was added; the plan's scope was verification of existing tests.
+
+## Follow-up — authorized provisioning executed
+
+The operator subsequently authorized the download. Executed in this worktree:
+
+```sh
+scripts/security/fetch-osv-databases.sh --dest .agent-sdlc/osv-db
+```
+
+Acquired (OSV v2.7 layout `osv-scalibr/<ecosystem>/all.zip`):
+
+| Ecosystem | SHA-256 | Size | Acquired (UTC) |
+| --- | --- | --- | --- |
+| Go | `f283a685c89d47740426435b66b93254f865023643eec83a98d85578cf5915ce` | 12828976 | 2026-11-08T23:13:06Z |
+| crates.io | `7384f489966ad92b017089f0b3b6967372d13e0f4b2c20b42b7d57dab1c8b243` | 3800039 | 2026-11-08T23:13:07Z |
+
+Verification:
+
+- Integrity: recomputed SHA-256 and size match each `all.zip.metadata.json`; the
+  zip integrity check passed for both archives.
+- Freshness: both archives are newly acquired; the adapter threshold is 90 days and
+  `stale_advisory_database: deny`.
+- Scanner compatibility: osv-scanner `2.7.0` read the layout; the adapter reported
+  `COMPLETED`, coverage `COMPLETE`, 1552 ms, and 0 dependency findings.
+- Scan: `sop security scan --report-only` -> `PASS`, coverage `COMPLETE`
+  (8768 ms), no unsuppressed blocking findings.
+- The database is git-ignored (`.gitignore: .agent-sdlc/osv-db/`) and was not
+  committed.

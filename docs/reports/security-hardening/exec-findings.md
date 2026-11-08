@@ -9,7 +9,8 @@ Status: evidence record. No production code changed in SEC-H-002 or SEC-H-003.
 - Change: repository `.semgrepignore` containing only `:include .gitignore`.
   This overrides the scanner default without adding `security.exclude` scope.
 - After: semgrep `COMPLETE`; coverage `sast: covered`, `secrets: covered`.
-  `dependencies` remains `failed` because the OSV database is absent (SEC-H-004).
+  `dependencies` was `failed` at that point because the OSV database was absent;
+  it became `covered` after authorized provisioning (see `final.md`).
 - Scan duration: 7332 ms test-inclusive versus 5917 ms before (+1.4 s), inside the
   `<5%` target for multi-minute tasks.
 
@@ -68,8 +69,9 @@ Fingerprints were copied from the scan artifact; none was computed or guessed.
 ## Verification
 
 - Post-change scan `security-20261108T172156Z`: findings 67, suppressed 53, unsuppressed 14, blocking 0.
-- Verdict `INDETERMINATE`, coverage `UNKNOWN`: driven by `osv-scanner FAILED`
-  (dependency prerequisite), not by the exec findings.
+- Verdict `INDETERMINATE`, coverage `UNKNOWN` at this stage: driven by
+  `osv-scanner FAILED` (dependency prerequisite), not by the exec findings. After
+  authorized OSV provisioning the verdict is `PASS` / `COMPLETE` (see `final.md`).
 - No severity, coverage, or scope setting changed. No unrelated finding changed
   suppression state; the suppression is exact-fingerprint.
 

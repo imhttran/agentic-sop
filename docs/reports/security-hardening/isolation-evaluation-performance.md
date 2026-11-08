@@ -148,11 +148,11 @@ Baseline artifact: `docs/reports/security-hardening/baseline.md` and the
 
 | Metric | Baseline (before) field | Measured (after) value | Spread | Status |
 | --- | --- | --- | --- | --- |
-| Security scan wall-clock | `126423 ms` (`metrics.duration_ms`, SEC-LEFT-001 `scan.json`) | `7156 ms` (final report-only scan, test-inclusive; `5917 ms` before the test-file coverage override) | UNVERIFIED — single run, variance not captured | MEASURED (single run) |
+| Security scan wall-clock | `126423 ms` (`metrics.duration_ms`, SEC-LEFT-001 `scan.json`) | `8768 ms` (final report-only scan, test-inclusive, OSV executing; `5917 ms` before the test-file coverage override) | UNVERIFIED — single run, variance not captured | MEASURED (single run) |
 | Promptfoo share | `121006 ms` (95.7%, `metrics.adapter_duration_ms.promptfoo`) | `0` (disabled via `security.evaluation.enabled: false`) | n/a | MEASURED (adapter absent) |
-| Semgrep | `3324 ms` | included in `7156 ms` | UNVERIFIED | MEASURED (single run) |
-| gitleaks | `1830 ms` | included in `7156 ms` | UNVERIFIED | MEASURED (single run) |
-| osv-scanner | `14 ms` (FAILED, DB absent) | NOT_RUN — osv-scanner adapter PARTIAL, no offline OSV database | UNVERIFIED | NOT_RUN |
+| Semgrep | `3324 ms` | included in `8768 ms` | UNVERIFIED | MEASURED (single run) |
+| gitleaks | `1830 ms` | included in `8768 ms` | UNVERIFIED | MEASURED (single run) |
+| osv-scanner | `14 ms` (FAILED, DB absent) | `1552 ms` (`COMPLETED`, coverage `COMPLETE`, 0 findings) | UNVERIFIED | MEASURED (single run) |
 | Readiness probe (`sop security inspect` proxy) | n/a | `0.04 s`, `0.03 s`, `0.03 s` (3 runs) | 0.01 s | MEASURED (3 runs) |
 
 Repeat runs: the readiness probe has 3 captured runs (spread 0.01 s). The
@@ -164,11 +164,11 @@ marked NOT_RUN, not timed as if executed.
 
 | Metric | Baseline | Measured | Spread | Overhead | Verdict |
 | --- | --- | --- | --- | --- | --- |
-| Routine security scan | 126.4 s | 7.156 s | UNVERIFIED | Absolute drop of ~119.2 s per task; +1.2-1.8 s from scanning 743 test files | MEASURED (single run) |
+| Routine security scan | 126.4 s | 8.768 s | UNVERIFIED | Absolute drop of ~117.7 s per task; +1.2-1.8 s from test files and ~1.5 s from OSV | MEASURED (single run) |
 | Readiness probe | n/a | 30–40 ms | 0.01 s (3 runs) | ~0.04 s per task | MEASURED |
 
 Overhead relative to the <5% target: for tasks longer than about two minutes,
-the ~7.2 s scan plus the ~0.04 s probe are under 5%. For very short tasks the
+the ~8.8 s scan plus the ~0.04 s probe are under 5%. For very short tasks the
 fixed cost exceeds 5%. The aggregate claim is **UNVERIFIED** because variance
 across repeat scan runs and the workload mix were not measured, and environment
 equality with the baseline run is not demonstrated. Required coverage and
