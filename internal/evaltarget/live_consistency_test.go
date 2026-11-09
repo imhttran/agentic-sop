@@ -30,4 +30,7 @@ func TestLiveEndpointMatchesIsolationRule(t *testing.T) {
 	if port != u.Port() {
 		t.Fatalf("isolation port %q does not match live endpoint port %q", port, u.Port())
 	}
+	if u.Host != LiveEndpointDialAddress {
+		t.Fatalf("live proxy address %q does not match live endpoint host %q", LiveEndpointDialAddress, u.Host)
+	}
 }
