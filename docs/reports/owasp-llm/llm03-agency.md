@@ -139,47 +139,56 @@ policy. The outer `sh -c` string is trusted configuration.
 
 ### 3. Verification commands
 
-Entry: `internal/verify/verify.go`. Verification runs the acceptance commands via
-the same controlled `run_command` path (`commandpolicy.Classify` requires
-`Safe` for `go build`, `go test`, `go vet`). The targeted `go test -run`
-selection is additionally guarded by `toolharness.noTestsMatched`, which appends
-`noTestMatchDiagnostic` when the selection matched no tests, so a zero exit
-cannot be read as a pass.
+`internal/verify` is the pure, model-free verification risk tier
+(`verify.Tier`). It performs no I/O and is not a command sink. The two
+verification execution paths are:
 
-- `internal/testrunner` (`testrunner.execute` in `internal/testrunner/command.go`)
-  runs `exec.CommandContext(ctx, "sh", "-c", command)`. The package documents
-  the trust decision: verification commands are trusted project configuration,
-  commonly need shell syntax, and "the command string is never built from
-  untrusted input". The child environment is `buildEnv(env)`: `os.Environ()`
-  with any overrides applied last, so the full inherited environment reaches the
-  shell. Filesystem reach is `cmd.Dir` (the project directory) plus whatever the
-  shell itself can reach; there is no path confinement on this sink.
-- Policy call on the testrunner sink: **none in-process.** Trust is delegated to
-  the caller that supplies the command string. No `commandpolicy.Classify` runs
-  inside `internal/testrunner`.
-- `internal/testfast` and `internal/verifcache` are support packages for
-  verification. `internal/testfast` is identified by
-  `internal/testfast/testfast_test.go`; `internal/verifcache` by search. Their
-  command construction was not re-traced line-by-line here.
-- `internal/cli` exposes verification to MCP through `mcpValidate`
-  (`internal/cli/mcp.go`), which calls `validate.Run(ctx, dir, cfg.Validation)`
-  with the configured `cfg.Validation` command set (trusted repository config),
-  and reports status lines. The `sop_validate` tool is not registered in
-  `--status-only` or `--planner` mode.
-- Policy call (harness path): `commandpolicy.Classify` inside `checkCommandIn`.
-- Approval authority: SOP workflow decides which acceptance commands to run;
-  the harness enforces the `Safe` class. `internal/testrunner` has no approval
-  step; its caller owns the choice.
-- Credentials/environment: inherited process env, no credentials.
-- Filesystem reach: repository root; path args confined by `resolveIn` on the
-  harness path, unconfined on the `testrunner` shell path.
+- **Configured validation** (`build`, `test`, `lint` from
+  `.agent-sdlc/config.yaml`): `cli.timedValidation` / `cli.sessionValidation`
+  (`internal/cli/run.go`) -> `validate.Run(ctx, dir, cfg.Validation)`
+  (`internal/validate/validate.go`) -> `testrunner.New(dir).RunAll(ctx, Checks(v))`
+  -> `testrunner.Runner.Run` -> `testrunner.execute`
+  (`internal/testrunner/command.go`: `exec.CommandContext(ctx, "sh", "-c",
+  command)`).
+  - Command source: `config.Validation` is trusted repository/operator
+    configuration. `validate.Checks` only maps configured build/test/
+    integration/lint entries into ordered checks; it accepts no request data.
+    The other `validate.Run` callers are `cli.task`, `cli.mcpValidate`
+    (`internal/cli/mcp.go`), and the `sop validate` command
+    (`internal/cli/validate.go`); each supplies `cfg.Validation` or an
+    operator-provided `config.Validation`.
+  - Policy call on the `testrunner` sink: **none in-process.** No
+    `commandpolicy.Classify` runs inside `internal/testrunner`; trust is
+    delegated to the caller that supplies the command string. The shell itself
+    is not confined.
+  - Environment: `testrunner.buildEnv(env)` starts from `os.Environ()` and
+    applies overrides last, so the full inherited environment reaches the shell.
+  - Filesystem reach: `cmd.Dir` (the project directory) plus whatever the shell
+    can reach; no path confinement on this sink.
+- **Operator-declared acceptance checks** (the plan's `### Acceptance Checks`):
+  `cli.deriveOutcome` / `cli.deriveMappedOutcome` (`internal/cli/outcome.go`) ->
+  `authorizeAcceptanceCommandWith` (`toolharness.SplitCommand`, dangerous-form
+  rejection, `commandpolicy.Classify` requiring `Safe`, or `CargoClassify`) ->
+  `runAcceptanceCheck` -> `runAcceptanceArgv` ->
+  `exec.CommandContext(argv[0], argv[1:]...)`.
+  - Command source: the operator-authored plan, validated into an exact argv
+    vector and classified `Safe` before execution.
+  - Policy call: `commandpolicy.Classify` / `CargoClassify` in
+    `authorizeAcceptanceCommandWith`.
+  - Isolation: argv-only, no shell; no OS isolation.
+  - A `go test` check is judged from `go test -json` events, so exit 0 with no
+    executed passing test is not met.
+- `internal/testfast` and `internal/verifcache` are verification support
+  packages; their command construction was not re-traced line-by-line here.
+- Approval authority: the SOP workflow decides which validation/acceptance
+  commands run. `internal/testrunner` has no approval step; its caller owns the
+  choice. Acceptance checks are operator-declared plan data.
+- Credentials/environment: inherited process env; no credential is added by SOP.
 - OS isolation: none on either path.
-- Gap / UNVERIFIED: the precise call site that invokes `internal/testrunner`
-  was not located by search in this pass (`search_files` for `testrunner.` in
-  `internal/` returned no matches, consistent with the package being imported
-  through an alias or wrapper). The scheduler-to-`internal/verify` chain was not
-  followed line-by-line. The trust claim for `testrunner` callers is therefore
-  read from the package doc, not proven per caller.
+- Remaining UNVERIFIED: the scheduler-to-`internal/verify`/`internal/validate`
+  call chain was not followed line-by-line (package-boundary reasoning only).
+  The trust statements above are per caller (`cfg.Validation` /
+  operator-authored argv), not a claim that every possible caller is safe.
 
 ### 4. Git and GitHub operations
 
@@ -277,16 +286,28 @@ Reach of each registered handler:
   validation, review, or the quality gate. `sop_answer_submit` and
   `sop_decision_submit` record state only.
 - `sop_start_work` is the one MCP handler that launches a subprocess:
-  `cli.startWork` → `env.launch` → `cli.launchWorkProcess` →
-  `exec.Command(exe, args...)` with `exe = os.Executable()`, `cmd.Dir = dir`,
+  `cli.startWork` (`internal/cli/mcp_start_work.go`) → `env.launch` →
+  `cli.launchWorkProcess` → `exec.Command(exe, args...)` with
+  `exe = os.Executable()`, `cmd.Dir = dir`,
   `cmd.Env = append(os.Environ(), JobEnvDir, JobEnvID, JobEnvProject)`, and a
-  detached process attribute (`detachedProcAttr()`). The child runs the same
-  `sop prompt --capability … --file …` or `sop run <plan>` an operator would
-  type. `startWork` confines the client-supplied `plan_path` through
-  `planflow.ResolvePlanPath` + `resolvePromptFile` before reading it, bounds
-  prompt size (`maxWorkPromptBytes`), refuses duplicate or concurrent jobs
-  (`acquireWorkLock`, `listWorkJobs`, mid-run task check), and never approves a
-  gate. OS isolation: none (policy-only).
+  detached process attribute (`detachedProcAttr()`). No shell is used.
+  - Argv builder: `startWork`'s `switch job.Kind` block sets
+    `job.Args = []string{"prompt", "--capability", job.Capability, "--file",
+    promptPath}` for prompt work, or `job.Args = []string{"run", job.Source}`
+    for plan work.
+  - Per-argument provenance: the verbs and flags (`prompt`, `--capability`,
+    `--file`, `run`) are literal; `job.Capability` is
+    `promptCapabilityName(parsePromptCapability(...))`, a validated enum;
+    `promptPath` is a server-generated path under the job directory (the
+    request prompt is written to that file, never passed on argv);
+    `job.Source` is `planflow.SourceRel(dir, resolved)` after
+    `planflow.ResolvePlanPath` + `resolvePromptFile` confine the
+    client-supplied `plan_path`. Request data never appears literally in the
+    child argv: the prompt becomes a file, the capability is an enum, and the
+    plan path is confined before it becomes a relative source.
+  - Other bounds: prompt size (`maxWorkPromptBytes`), duplicate/concurrent job
+    refusal (`acquireWorkLock`, `listWorkJobs`, mid-run task check), and no
+    approval action. OS isolation: none (policy-only).
 
 Untrusted-input note: MCP `tools/*` requests are untrusted client/request data.
 They are gated by the fixed registered-tool set; arguments are confined only
@@ -296,13 +317,14 @@ not claim that every handler performs a `commandpolicy` check.
 
 ### 6. Replay entry points (recovery, resume, eval, runtrace, cmd/deceleval-*)
 
-- `internal/recovery` and `internal/resume` restore and continue the SOP workflow.
-  They do not run child commands themselves; a resumed workflow re-enters the
-  tool harness (entry point 1) and the configured agent command (entry point 2).
-  This is read from the package boundaries; **UNVERIFIED**: the precise
-  statement-by-statement path from `internal/recovery` / `internal/resume` to a
-  command sink was not traced line-by-line in this pass, and the presence of any
-  direct `exec.Command` inside those packages was not excluded.
+- `internal/recovery` and `internal/resume` restore and continue the SOP
+  workflow. **UNVERIFIED (package-boundary reasoning only):** the
+  statement-by-statement path from either package to a command sink was not
+  traced line-by-line, so they are not described as sink-free or sandboxed. A
+  search of both packages found no `os/exec` import or `exec.Command` site, and
+  a resumed workflow is expected to re-enter the tool harness (entry point 1)
+  and the configured agent command (entry point 2); that expectation is not a
+  proof.
 - `internal/runtrace` records trace data. **UNVERIFIED**: it was not inspected in
   this pass, so whether it opens any process sink or writes outside the trace
   store is unproven. `internal/eval` is likewise **UNVERIFIED** for the same
@@ -497,8 +519,12 @@ the missing tests are consistent with the missing trace.
    packages were not traced line-by-line in this pass, so none of them is
    described as sandboxed.
 6. The `internal/testrunner` shell sink is policy-free by design and trusts the
-   caller that supplies the command string. Its callers were not located by
-   search in this pass, so per-caller trust is UNVERIFIED.
+   caller that supplies the command string. Its callers are `validate.Run`
+   (from `cli.timedValidation` / `cli.sessionValidation`, `cli.task`,
+   `cli.mcpValidate`, and `sop validate`), and each supplies `cfg.Validation` or
+   an operator-provided `config.Validation`; the acceptance path instead uses
+   `internal/cli/outcome.go`'s argv-only `commandpolicy` gate. No caller builds
+   the string from model or request data on the inspected paths.
 
 ## Remaining gaps
 
@@ -510,9 +536,12 @@ the missing tests are consistent with the missing trace.
 2. `internal/commitgate` and `internal/mergegate` are not inspected, so commit
    and merge approval argument ownership is unproven. Follow-up: inspect both
    gates and record which layer owns the branch name and `gh` arguments.
-3. The caller that invokes `internal/testrunner` was not located by search.
-   Follow-up: locate the import site and record whether it passes only
-   repository-configured command strings.
+3. The scheduler-to-`internal/validate` chain was not followed line-by-line.
+   The `testrunner` callers themselves are traced (`validate.Run` ←
+   `cli.timedValidation`/`sessionValidation`, `cli.task`, `cli.mcpValidate`,
+   `sop validate`) and pass configured command strings. Follow-up: trace the
+   scheduler entry into `internal/validate` and add a focused test that asserts
+   the caller supplies `config.Validation`.
 4. `agent.openai` / `agent.openaicompatible` / `agent.mlx` credential variable
    handling is UNVERIFIED. Follow-up: read the provider constructors and record
    the exact env keys.
