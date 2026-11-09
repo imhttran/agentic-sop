@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 )
 
@@ -34,10 +35,15 @@ func (StrictDecisionObserver) Observe(raw string) (ToolDecision, error) {
 		return ToolDecision{}, fmt.Errorf("live: malformed decision output: %w", err)
 	}
 	// A top-level decoder reports More only inside an open array or object, so
-	// decode one more value to detect trailing top-level data.
+	// decode one more value. Only io.EOF means the decision was the whole output;
+	// a second value or any other decode error (for example a syntax error after
+	// valid JSON) is malformed input.
 	var extra json.RawMessage
-	if err := dec.Decode(&extra); err == nil {
+	switch err := dec.Decode(&extra); {
+	case err == nil:
 		return ToolDecision{}, errors.New("live: malformed decision output: trailing data after the decision")
+	case !errors.Is(err, io.EOF):
+		return ToolDecision{}, fmt.Errorf("live: malformed decision output: trailing data: %w", err)
 	}
 	if env.Decision == nil {
 		return ToolDecision{}, errors.New("live: malformed decision output: no decision member")

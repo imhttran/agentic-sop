@@ -156,11 +156,13 @@ func (d LocalDecider) Decide(ctx context.Context) (string, error) {
 	}
 	client := d.Client
 	if client == nil {
-		client = &http.Client{
-			Timeout:       LiveMaxProcessLifetime,
-			CheckRedirect: noRedirect,
-		}
+		client = &http.Client{Timeout: LiveMaxProcessLifetime}
 	}
+	// Enforce the no-redirect policy for every client, including one supplied by
+	// a caller. The shallow copy preserves the caller's transport and timeout.
+	enforced := *client
+	enforced.CheckRedirect = noRedirect
+	client = &enforced
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, LiveEndpointURL, bytes.NewReader(body))
 	if err != nil {
 		return "", err

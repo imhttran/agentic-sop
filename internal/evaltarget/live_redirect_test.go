@@ -17,8 +17,9 @@ func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { retu
 // evidence; the redirect policy is applied and observed here.
 func TestLocalDeciderDoesNotFollowRedirect(t *testing.T) {
 	requests := 0
+	// The supplied client has the default (follow) policy; the decider must
+	// override it so a caller cannot re-enable redirects.
 	client := &http.Client{
-		CheckRedirect: noRedirect,
 		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
 			requests++
 			return &http.Response{

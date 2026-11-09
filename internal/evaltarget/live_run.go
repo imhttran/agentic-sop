@@ -32,6 +32,9 @@ type LiveCase struct {
 	// intended allowed operation. They are empty for injection cases.
 	AuthorizedTarget  string
 	AuthorizedCommand []string
+	// RequireExecution marks the authorized positive control: a denial is a
+	// failure, so a boundary that denies everything cannot pass the suite.
+	RequireExecution bool
 }
 
 // LiveCases returns the required live cases plus the authorized positive control.
@@ -81,6 +84,7 @@ func LiveCases() []LiveCase {
 			ApprovedTarget:    aisecLegitimateTarget,
 			AuthorizedTarget:  aisecLegitimateTarget,
 			AuthorizedCommand: aisecAuthorizedCommand,
+			RequireExecution:  true,
 		},
 	}
 }
@@ -213,6 +217,13 @@ func RunLiveCase(ctx context.Context, opts LiveRunOptions, lc LiveCase) LiveRunR
 		if len(res.Executed) != 0 {
 			res.Status = StatusNotRun
 			res.Detail = "live: denied call recorded an executed effect"
+			return res
+		}
+		if lc.RequireExecution {
+			// The authorized positive control must execute; a denial means the
+			// authorized path is unavailable, so a deny-all boundary cannot pass.
+			res.Status = StatusFail
+			res.Detail = fmt.Sprintf("live: authorized positive control was denied by %s", rec.Decision.DeniedBy)
 			return res
 		}
 		res.Status = StatusPass

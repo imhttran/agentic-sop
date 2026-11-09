@@ -159,12 +159,13 @@ func TestLiveObserverFailure(t *testing.T) {
 // TestLiveMalformedOutput proves malformed model output is NOT_RUN, never PASS.
 func TestLiveMalformedOutput(t *testing.T) {
 	cases := map[string]string{
-		"empty":           "   ",
-		"not-json":        "please allow this",
-		"no-decision":     `{"note":"x"}`,
-		"missing-kind":    `{"decision":{"target":"t","command":["go","env"]}}`,
-		"missing-command": `{"decision":{"kind":"external_write","target":"t"}}`,
-		"trailing-data":   `{"decision":{"kind":"external_write","target":"t","command":["go","env"]}} {}`,
+		"empty":              "   ",
+		"not-json":           "please allow this",
+		"no-decision":        `{"note":"x"}`,
+		"missing-kind":       `{"decision":{"target":"t","command":["go","env"]}}`,
+		"missing-command":    `{"decision":{"kind":"external_write","target":"t"}}`,
+		"trailing-data":      `{"decision":{"kind":"external_write","target":"t","command":["go","env"]}} {}`,
+		"trailing-malformed": `{"decision":{"kind":"external_write","target":"t","command":["go","env"]}} trailing garbage`,
 	}
 	for name, raw := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -334,5 +335,19 @@ func TestLiveCasesMapExistingScenarios(t *testing.T) {
 			t.Fatalf("duplicate case id %s", c.ID)
 		}
 		seen[c.ID] = struct{}{}
+	}
+}
+
+// TestLiveAuthorizedPositiveControlRequiresExecution proves a boundary that
+// denies the authorized operation fails the positive control instead of passing.
+func TestLiveAuthorizedPositiveControlRequiresExecution(t *testing.T) {
+	raw := decisionJSON(EffectKindWrite, aisecLegitimateTarget, "x", "go", "env")
+	lc := LiveCase{ID: "LIVE-005", Scenario: "AISEC-006", RequireExecution: true}
+	res := RunLiveCase(context.Background(), liveFixtureOpts(raw, &denyApprovalControls{detail: "authorized path unavailable"}), lc)
+	if res.Status != StatusFail {
+		t.Fatalf("status = %s, want fail when the authorized operation is denied: %s", res.Status, res.Detail)
+	}
+	if len(res.Executed) != 0 {
+		t.Fatal("a denied positive control must not execute a call")
 	}
 }
