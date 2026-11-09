@@ -14,6 +14,8 @@
 #   SOP_SECURITY_SEMGREP_BIN     use an existing pinned Semgrep binary
 #   SOP_SECURITY_GITLEAKS_BIN    use an existing pinned Gitleaks binary
 #   SOP_SECURITY_PYTHON          Python 3 executable (default: python3)
+#   SOP_SECURITY_DOWNLOAD_CACHE  reuse pinned downloads from this directory; each
+#                                file is re-checked against its committed SHA-256
 
 set -euo pipefail
 
@@ -63,29 +65,20 @@ gitleaks_bin="${SOP_SECURITY_GITLEAKS_BIN:-}"
 if [ -z "$gitleaks_bin" ]; then
   gitleaks_bin="$tools_dir/gitleaks-$GITLEAKS_VERSION/gitleaks"
   if [ ! -x "$gitleaks_bin" ]; then
-    require_cmd curl
     require_cmd tar
-    require_cmd "$python_bin"
-    case "$(uname -s)" in
-      Linux) os=linux ;;
-      Darwin) os=darwin ;;
-      *) die "unsupported operating system: $(uname -s)" ;;
+    require_cmd python3
+    # Pinned from the v8.30.1 release's gitleaks_8.30.1_checksums.txt; bump with GITLEAKS_VERSION.
+    case "$(uname -s)/$(uname -m)" in
+      Linux/x86_64|Linux/amd64) asset=linux_x64 expected=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb ;;
+      Linux/arm64|Linux/aarch64) asset=linux_arm64 expected=e4a487ee7ccd7d3a7f7ec08657610aa3606637dab924210b3aee62570fb4b080 ;;
+      Darwin/x86_64) asset=darwin_x64 expected=dfe101a4db2255fc85120ac7f3d25e4342c3c20cf749f2c20a18081af1952709 ;;
+      Darwin/arm64) asset=darwin_arm64 expected=b40ab0ae55c505963e365f271a8d3846efbc170aa17f2607f13df610a9aeb6a5 ;;
+      *) die "no pinned Gitleaks asset for $(uname -s)/$(uname -m)" ;;
     esac
-    case "$(uname -m)" in
-      x86_64|amd64) arch=x64 ;;
-      arm64|aarch64) arch=arm64 ;;
-      *) die "unsupported architecture: $(uname -m)" ;;
-    esac
+    asset="gitleaks_${GITLEAKS_VERSION}_${asset}.tar.gz"
     mkdir -p "$tools_dir"
-    archive="$tools_dir/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
-    curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz" -o "$archive"
-    checksums="$tools_dir/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
-    curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o "$checksums"
-    asset="gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
-    expected="$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums")"
-    [ -n "$expected" ] || die "no published checksum for $asset"
-    actual="$("$python_bin" -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1], "rb").read()).hexdigest())' "$archive")"
-    [ "$expected" = "$actual" ] || die "checksum mismatch for $asset: want $expected, got $actual"
+    archive="$tools_dir/$asset"
+    "$root/scripts/security/fetch-pinned.sh" "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${asset}" "$expected" "$archive"
     mkdir -p "$tools_dir/gitleaks-$GITLEAKS_VERSION"
     tar -xzf "$archive" -C "$tools_dir/gitleaks-$GITLEAKS_VERSION"
   fi
