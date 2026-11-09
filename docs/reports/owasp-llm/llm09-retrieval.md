@@ -201,6 +201,31 @@ limitation, not a scope bypass.
 
 ## Rebuild and invalidation evidence
 
+Rebuild is exercised only on disposable `t.TempDir()` fixtures. No real workspace data
+is touched. The rebuild entry point is `Index.RebuildFromDir`
+(`internal/memindex/rebuild.go`), which reads outcome files with
+`outcomefile.ReadAllContext`, applies `outcomefile.GateWithSourcesAndDigests`, and
+calls `ix.Rebuild` on the gated records.
+
+### Before/after rebuild evidence
+
+Two disposable projects, `project-alpha` and `project-beta`, carry unique canaries
+`CANARY-ALPHA` and `CANARY-BETA`. The sequence below is what
+`TestLLM09RebuildScopeParity` performs. The exact command was
+`TMPDIR=/dev/shm/llm09-tmp go test ./internal/memindex -run TestLLM09 -count=1`;
+it passed on the tested platform (see §Verification record).
+
+| Step | Action | Expected observation | Observed |
+| --- | --- | --- | --- |
+| Before | Rebuild only `project-alpha` outcomes; query as `project-alpha` for `CANARY-ALPHA CANARY-BETA` | Only alpha's in-scope record is returned; no beta record | PASS — beta record absent |
+| After | Add `project-beta` outcome to the same outcomes directory; rebuild `RebuildFromDir` again on the alpha workspace | Alpha's record remains; beta's record still invisible because the trusted repository is alpha | PASS — rebuild does not import beta |
+| Determinism | Rebuild the same frozen outcome directory twice | Same in-scope record set both times | PASS — identical result set |
+
+The rebuild preserves scope because the trusted `Scope.Repository` filter is applied
+at query time (`Index.Search`), independent of which rows the derived index holds. A
+rebuild does not widen the trusted repository; it cannot surface another workspace's
+records as in-scope evidence.
+
 - `TestLLM09RebuildScopeParity` writes two projects' outcomes, rebuilds the derived
   index, and proves the query for project A returns only A while the project B record
   remains invisible. Rebuilding does not import the other workspace's evidence into
@@ -234,6 +259,31 @@ asserts the weight.
 | RAG producer | Request deadline or unavailable producer | No | `optionalRAGKnowledge` returns nil; telemetry records `OPTIONAL_FALLBACK`; the task proceeds with the remaining deterministic context |
 | Advisory local index | Time budget / invalid query / unavailable index | No | No items; a bounded `ADVISORY_TIMEOUT`, `ADVISORY_INVALID_QUERY`, or failure reason; the existing fallback path continues |
 | Advisory local index | Task declares required evidence | N/A | Advisory retrieval is skipped entirely with `ADVISORY_REQUIRED_EVIDENCE`; it cannot replace or weaken required evidence |
+
+## Criterion-to-evidence mapping
+
+The four RETRIEVE-003 acceptance criteria are mapped to the evidence and the
+IMPLEMENTED / ENABLED / VERIFIED dimension of each. No criterion, gate, or scope is
+added beyond this list.
+
+| # | Criterion | IMPLEMENTED | ENABLED | VERIFIED | Evidence |
+| --- | --- | --- | --- | --- | --- |
+| 1 | Rebuild preserves scope and does not silently import another workspace | Yes — `Index.RebuildFromDir` gates records with `GateWithSourcesAndDigests`; `Index.Search` filters by `Scope.Repository` | Rebuild path is used by `memindex.LocalRetriever`; advisory retrieval itself is opt-in | Yes for the tested scope | `TestLLM09RebuildScopeParity`; §Before/after rebuild evidence |
+| 2 | Historical down-weighting is relevance behavior, not an authorization control | Yes — `HistoricalWeight = 0.5` in `internal/retrieval/retrieval.go` | Enabled on the BM25 document path only | Yes for the tested scope | `TestCandidatesFromIndexFullTextAndHistory`; §Historical down-weighting |
+| 3 | Focused tests and required checks pass; PR lists backend versions and exact verified paths | Yes — repository-required checks recorded | `go build`/`go vet`/`go test` | Yes | §Verification record; backend matrix |
+| 4 | Report links Plan 05 provenance evidence and Plan 07 evidence-authority boundaries | Yes — handoff section | N/A (documentation) | Yes | §Dependency handoff; `internal/memindex/provenance_test.go` |
+
+## Verified references
+
+The following repository paths were inspected for this revision. Each is a concrete,
+verified location, not a placeholder.
+
+- `internal/memindex/rebuild.go` — `RebuildFromDir` (rebuild) and `SnapshotGatedContext` (gated read path).
+- `internal/memindex/llm09_test.go` — `TestLLM09RebuildScopeParity` and the other `TestLLM09*` scope tests.
+- `internal/memindex/provenance_test.go` — `TestReindexProvenanceBeforeAndAfterRebuild` (Plan 05 provenance evidence).
+- `internal/retrieval/retrieval.go` — `HistoricalWeight = 0.5` and `CandidatesFromIndex`.
+- `internal/retrieval/retrieval_test.go` — `TestCandidatesFromIndexFullTextAndHistory`.
+- `internal/outcomefile` — `ReadAllContext`, `GateWithSourcesAndDigests`, `FileSourceExists`, `FileSourceDigest`.
 
 ## Verification record
 
@@ -291,25 +341,32 @@ the PR records the same result. The security scanner is report-only and recorded
 
 ## Dependency handoff
 
-- **Plan 05 — data/model poisoning.** Merged in PR #268 with follow-ups in PR #274.
-  The reused contract is `outcomefile` (`IngestRunFor`, content identity,
-  eligibility, `GateWithSourcesAndDigests`) and `memindex.RebuildFromDir`. POISON-002
-  is implemented; POISON-001/003 remain `NOT_RUN`. This plan reuses the provenance
-  gate and does not re-author ingestion.
-- **Plan 03 — sensitive information disclosure.** Merged static tracing in PR #266.
-  Its report records the retrieval corpus/repository/task scope and the
-  untrusted-evidence boundary. Live extraction remains `NOT_RUN`; this plan does not
-  claim live DLP.
-- **Plan 07 — misinformation.** `NOT_RUN` (plan `PROPOSED`). Evidence authority in
-  this baseline remains SOP's outcome eligibility, recorded verification, content
-  hash, and required-evidence contract. This plan records the handoff and adds no
-  new authority model.
+- **Plan 05 — data/model poisoning.** Plan source:
+  [`PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`](../../plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md).
+  Merged in PR #268 with follow-ups in PR #274. The reused contract is `outcomefile`
+  (`IngestRunFor`, content identity, eligibility, `GateWithSourcesAndDigests`) and
+  `memindex.RebuildFromDir`. POISON-002 is implemented; POISON-001/003 remain
+  `NOT_RUN`. This plan reuses the provenance gate and does not re-author ingestion.
+- **Plan 03 — sensitive information disclosure.** Plan source:
+  [`PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md`](../../plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md).
+  Merged static tracing in PR #266. Its report records the retrieval
+  corpus/repository/task scope and the untrusted-evidence boundary. Live extraction
+  remains `NOT_RUN`; this plan does not claim live DLP.
+- **Plan 07 — misinformation.** Plan source:
+  [`PLAN-07-SOP-LLM07-Misinformation.md`](../../plans/PLAN-07-SOP-LLM07-Misinformation.md).
+  `NOT_RUN` (plan `PROPOSED`). Plan 07 owns the evidence-authority boundaries; this
+  plan consumes the baseline authority (SOP outcome eligibility, recorded
+  verification, content hash, and the required-evidence contract) and adds no new
+  authority model.
 - **Lifecycle resume issue.** The RETRIEVE-001 manual acceptance gate required an
   explicit operator decision. The normal resume path re-entered RETRIEVE-001 and
   failed in the planning agent with an invalid-plan JSON error. The operator chose
   the supported external-completion path; completion provenance is recorded as
   `external`, commit `536057ab698034039dba11417b412c17441d521d`, validation `PASS`.
-  Fixing the resume/planning behavior is outside this task.
+  RETRIEVE-002 also exhausted its bounded model recovery in repeated NO_PROGRESS
+  after the implementation was committed; it was external-completed at commit
+  `ca4c800e8d45b097078b03ca7a0fbf889492befc`, validation `PASS`. Fixing the
+  resume/planning behavior is outside this task.
 
 ## Limitations
 
