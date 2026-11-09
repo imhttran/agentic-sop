@@ -157,6 +157,18 @@ func FromAgentResponse(a WorkAssignment, r agent.Response) WorkResult {
 		Progress:           Progress{Complete: false},
 	}
 
+	// A provider-reported truncation makes the payload incomplete whatever shape
+	// it happens to have. It is an explicit failure, never a completion, so a
+	// partial response cannot establish task success.
+	if r.Truncated {
+		result.Status = agent.OutcomeFailed
+		result.Diagnostics = append(result.Diagnostics, Diagnostic{
+			Code:    "output_truncated",
+			Message: "the provider stopped at its output-token limit; the response is incomplete",
+		})
+		return result
+	}
+
 	if r.Outcome != nil {
 		result.Status = r.Outcome.Status
 		result.Findings = oneLine(r.Outcome.Summary)

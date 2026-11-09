@@ -86,6 +86,15 @@ func (n *NativeAgent) Generate(ctx context.Context, req agent.Request) (agent.Re
 	if err != nil {
 		h.FlushAudit(n.diag)
 		h.FlushTrace(n.diag)
+		// A provider-reported truncation is preserved on the Response and the
+		// structured outcome. The model's content (when any) is incomplete, so it
+		// can never become a successful completion; the caller's existing bounded
+		// classification decides what happens next.
+		var truncated *agent.TruncationError
+		isTruncated := errors.As(err, &truncated)
+		if isTruncated && truncated.Capability == "" {
+			truncated.Capability = req.Capability
+		}
 		if wantsOutcome(req.Capability) {
 			status := agent.OutcomeFailed
 			var incomplete *changeIncompleteError
@@ -96,9 +105,10 @@ func (n *NativeAgent) Generate(ctx context.Context, req agent.Request) (agent.Re
 				Content:      "\"" + err.Error() + "\"",
 				Outcome:      &agent.Outcome{Status: status, Reason: err.Error()},
 				ChangedFiles: ev.reportedPaths(),
+				Truncated:    isTruncated,
 			}, nil
 		}
-		return agent.Response{}, err
+		return agent.Response{Truncated: isTruncated}, err
 	}
 	return agent.Response{Content: content, Outcome: agent.ParseOutcome(content), ChangedFiles: ev.reportedPaths(), VerifiedAlreadySatisfied: ev.alreadySatisfied}, nil
 }

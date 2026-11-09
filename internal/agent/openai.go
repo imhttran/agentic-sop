@@ -145,7 +145,8 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 
 	var out struct {
 		Choices []struct {
-			Message chatMessage `json:"message"`
+			Message      chatMessage `json:"message"`
+			FinishReason string      `json:"finish_reason"`
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
 		Usage struct {
@@ -171,7 +172,16 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 	if len(out.Choices) == 0 {
 		return Response{}, fmt.Errorf("%s %s returned no choices", c.id, request.Capability)
 	}
-	return requireNonEmpty(c.id, request.Capability, out.Choices[0].Message.Content)
+	choice := out.Choices[0]
+	if OutputTokenLimited(choice.FinishReason) {
+		return Response{}, &TruncationError{
+			Provider:   c.id,
+			Capability: request.Capability,
+			Limit:      c.maxOutputTokens,
+			Reason:     choice.FinishReason,
+		}
+	}
+	return requireNonEmpty(c.id, request.Capability, choice.Message.Content)
 }
 
 // Capabilities declares the text-generation capabilities the OpenAI-compatible

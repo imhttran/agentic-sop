@@ -99,6 +99,7 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	var out struct {
 		Message         chatMessage     `json:"message"`
 		Error           json.RawMessage `json:"error"`
+		DoneReason      string          `json:"done_reason"`
 		PromptEvalCount *int            `json:"prompt_eval_count"`
 		EvalCount       *int            `json:"eval_count"`
 	}
@@ -116,6 +117,14 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	perf.AddUsageWithReport(ctx, o.model, input, output, reported)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("ollama %s: %s", request.Capability, detail)
+	}
+	if OutputTokenLimited(out.DoneReason) {
+		return Response{}, &TruncationError{
+			Provider:   ProviderOllama,
+			Capability: request.Capability,
+			Limit:      o.maxOutputTokens,
+			Reason:     out.DoneReason,
+		}
 	}
 	return requireNonEmpty("ollama", request.Capability, out.Message.Content)
 }
