@@ -53,7 +53,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/sop-semgrep-rules.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 archive="$work/rules.tar.gz"
-curl -fsSL --max-time 180 "$archive_url" -o "$archive" || die "download failed: $archive_url"
+curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 180 "$archive_url" -o "$archive" || die "download failed: $archive_url"
 actual_tar="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$archive")"
 [ "$actual_tar" = "$expected_tar" ] || die "tarball checksum mismatch: want $expected_tar, got $actual_tar"
 

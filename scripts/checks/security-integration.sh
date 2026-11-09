@@ -78,9 +78,9 @@ if [ -z "$gitleaks_bin" ]; then
     esac
     mkdir -p "$tools_dir"
     archive="$tools_dir/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
-    curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz" -o "$archive"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz" -o "$archive"
     checksums="$tools_dir/gitleaks_${GITLEAKS_VERSION}_checksums.txt"
-    curl -fsSL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o "$checksums"
+    curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_checksums.txt" -o "$checksums"
     asset="gitleaks_${GITLEAKS_VERSION}_${os}_${arch}.tar.gz"
     expected="$(awk -v asset="$asset" '$2 == asset { print $1 }' "$checksums")"
     [ -n "$expected" ] || die "no published checksum for $asset"
