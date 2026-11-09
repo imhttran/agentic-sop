@@ -696,9 +696,11 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 }
 
 // successCorroborated reports whether the report's own required criteria and validation
-// results agree with a claimed success. Every required criterion must be met, every
-// recorded criterion must be well-formed, and at least one validation result must be
-// recorded and passing. Anything else leaves the claim uncorroborated.
+// results agree with a claimed success. At least one required criterion must be declared
+// and every required criterion must be met, and at least one validation result must be
+// recorded and passing. An empty or optional-only criteria set cannot corroborate a
+// success, because the outcome verifier itself treats a report with no required criterion
+// as PARTIAL. Anything else leaves the claim uncorroborated.
 func successCorroborated(rep runReport) bool {
 	if len(rep.Validation) == 0 {
 		return false
@@ -708,12 +710,17 @@ func successCorroborated(rep runReport) bool {
 			return false
 		}
 	}
+	required := 0
 	for _, c := range rep.Outcome.Criteria {
-		if c.Required && !c.Met {
+		if !c.Required {
+			continue
+		}
+		required++
+		if !c.Met {
 			return false
 		}
 	}
-	return true
+	return required > 0
 }
 
 // mutableLifecycleArtifacts names run files SOP rewrites after outcome capture. They

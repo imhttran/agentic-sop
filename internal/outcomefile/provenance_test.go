@@ -101,6 +101,10 @@ func TestIngestProvenanceTamperedSuccessIsNotVerified(t *testing.T) {
 		{"failing validation exit", func(r *provenanceReport) { r.Validation[0].ExitCode = 1 }},
 		{"failing validation status", func(r *provenanceReport) { r.Validation[0].Status = "FAIL" }},
 		{"no validation recorded", func(r *provenanceReport) { r.Validation = nil }},
+		{"no required criterion", func(r *provenanceReport) { r.Criteria = nil }},
+		{"optional criteria only", func(r *provenanceReport) {
+			r.Criteria = []provenanceCriterion{{ID: "criterion-1", Required: false, Met: true}}
+		}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
