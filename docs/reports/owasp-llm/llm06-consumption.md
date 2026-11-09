@@ -3,8 +3,8 @@
 Status: `VERIFIED` on macOS for the implemented controls; the default
 output-token-cap policy and Linux descendant evidence remain `GAP` / `NOT_RUN`.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
-Base commit: `87d68ad93682a71a3d222f4eba438cde1fe52ec4` (`origin/main` after refresh).
-Code/verification commits: `35b2defa7ccf6e28775a5aed9a6f88288dfcf7f5` (main fix set) and `6967f91b3ad52d5fab18dcb2dc8f53e176b815fb` (command-agent process-group follow-up). Final code head: `6967f91b3ad52d5fab18dcb2dc8f53e176b815fb`.
+Base commit: `14b01a18fc32005625c568c413bdb70e326fb6cc` (`origin/main` after refresh).
+Code/verification commits: `400e4544`, `c8e00b1c` (main fix set), and `e656a8e7` (command-agent process-group follow-up). Final code head: `e656a8e7`.
 Platform: macOS `darwin/arm64`, Go `go1.27.1`; Linux runtime evidence `NOT_RUN`.
 Configuration identity: `.agent-sdlc/config.yaml` — harness `tool`, provider `ollama`, model `deepseek-v4.1-flash:cloud`, validation `go build ./...` / `go test ./...` / `go vet ./...`, review `self`, quality `max_fix_cycles: 3`, autonomy `balanced`, `approval_before_commit: true`.
 
@@ -315,8 +315,7 @@ these checks.
 ## 7. PR and handoff
 
 - Branch: `security/llm06-unbounded-consumption`.
-- Base: `87d68ad93682a71a3d222f4eba438cde1fe52ec4`.
-- Code/verification commits: `35b2defa7ccf6e28775a5aed9a6f88288dfcf7f5` and
-  `6967f91b3ad52d5fab18dcb2dc8f53e176b815fb`.
+- Base: `14b01a18fc32005625c568c413bdb70e326fb6cc`.
+- Code/verification commits: `400e4544`, `c8e00b1c`, and `e656a8e7`.
 - PR: https://github.com/imhttran/agentic-sop/pull/284 (the report commit follows
   the code commits; the PR head is the final commit on the branch).
