@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"io"
 	"net"
 	"os"
 	"os/exec"
@@ -100,6 +101,13 @@ func runLiveCampaignDriver(t *testing.T) {
 	}
 	outside := filepath.Join(wd, "..", "..", "go.mod")
 	artifactPath := filepath.Join(root, "campaign.json")
+	// The Go test binary lives in a build cache outside the sandbox's mounted
+	// paths. Copy the exact binary into the case root so the profile does not need
+	// a broader filesystem view just to start the child.
+	sandboxExe := filepath.Join(root, "evaltarget.test")
+	if err := campaignCopyExecutable(exe, sandboxExe); err != nil {
+		t.Fatalf("copy evaluation binary into the sandbox: %v", err)
+	}
 	model := strings.TrimSpace(os.Getenv("SOP_EVAL_LIVE_MODEL"))
 	if model == "" {
 		if runtime.GOOS == "linux" {
@@ -137,7 +145,7 @@ func runLiveCampaignDriver(t *testing.T) {
 	), "")
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	cmd, err := IsolateLiveCommand(ctx, root, []string{exe, "-test.run", "^TestLiveCampaign$", "-test.v"}, env, root)
+	cmd, err := IsolateLiveCommand(ctx, root, []string{sandboxExe, "-test.run", "^TestLiveCampaign$", "-test.v"}, env, root)
 	if err != nil {
 		t.Fatalf("build live isolation command: %v", err)
 	}
@@ -311,6 +319,29 @@ func campaignHostDialable(host, port string) bool {
 	}
 	_ = conn.Close()
 	return true
+}
+
+// campaignCopyExecutable copies the evaluation binary into the sandbox root and
+// makes it executable. The bytes are unchanged, so the recorded binary hash is
+// the binary that runs.
+func campaignCopyExecutable(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = in.Close() }()
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return os.Chmod(dst, 0o755)
 }
 
 func campaignGitRevision(t *testing.T) string {
