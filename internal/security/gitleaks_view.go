@@ -2,6 +2,7 @@ package security
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -22,15 +23,80 @@ type gitleaksView struct {
 	skippedOther    int
 }
 
-// stageGitleaksView walks root, skips excluded paths, and hard-links every
-// in-scope regular file into dir at the same relative path. A cross-device or
-// unsupported hard link falls back to a byte copy. Symbolic links and other
-// non-regular entries are not followed and are counted as skipped coverage.
-func stageGitleaksView(root, dir string, matcher ExcludeMatcher) (gitleaksView, error) {
+// gitleaksSource is the repository source set Gitleaks may read. When scoped is
+// true, files is the Git snapshot: tracked files plus untracked files that are
+// not ignored. Ignored local files are absent. When scoped is false, the
+// workspace is not a Git checkout and the adapter falls back to walking it.
+type gitleaksSource struct {
+	files  []string
+	scoped bool
+}
+
+// stageGitleaksView stages a filtered source view for one Gitleaks invocation.
+// A scoped source is staged from its exact file list, so ignored local files and
+// nested worktree checkouts are never linked into the view. An unscoped source
+// falls back to walking the workspace.
+func stageGitleaksView(root, dir string, matcher ExcludeMatcher, source gitleaksSource) (gitleaksView, error) {
 	view := gitleaksView{dir: dir}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return view, err
 	}
+	if source.scoped {
+		return stageGitleaksFiles(root, dir, matcher, source.files, view)
+	}
+	return stageGitleaksWalk(root, dir, matcher, view)
+}
+
+// stageGitleaksFiles stages exactly the repository-source paths Git reported.
+// A tracked file is staged even when an ignore rule matches it, so a committed
+// .env remains a secret-scan target. An ignored untracked file is not reported
+// by the snapshot and is never read.
+func stageGitleaksFiles(root, dir string, matcher ExcludeMatcher, files []string, view gitleaksView) (gitleaksView, error) {
+	for _, raw := range files {
+		rel, _ := NormalizePath(raw)
+		if rel == "" || !SafeRelativePath(rel) {
+			view.skippedOther++
+			continue
+		}
+		if matcher.Excluded(rel) {
+			view.excludedFiles++
+			continue
+		}
+		source := filepath.Join(root, filepath.FromSlash(rel))
+		info, err := os.Lstat(source)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				// A tracked file deleted from the working tree has no content to scan.
+				continue
+			}
+			return view, err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			view.skippedSymlinks++
+			continue
+		}
+		if !info.Mode().IsRegular() {
+			view.skippedOther++
+			continue
+		}
+		target := filepath.Join(dir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(target), 0o755); err != nil {
+			return view, err
+		}
+		if err := os.Link(source, target); err == nil {
+			continue
+		}
+		if err := copyStagedFile(source, target, info.Mode().Perm()); err != nil {
+			return view, err
+		}
+	}
+	return view, nil
+}
+
+// stageGitleaksWalk stages every regular file under root that is inside the
+// declared scope. It is the fallback for a workspace without Git metadata, where
+// ignore rules and a source snapshot are unavailable.
+func stageGitleaksWalk(root, dir string, matcher ExcludeMatcher, view gitleaksView) (gitleaksView, error) {
 	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr

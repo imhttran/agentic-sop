@@ -44,6 +44,25 @@ func semgrepAdapterWithRules(t *testing.T, rules, report string, called *bool) A
 	return adapter
 }
 
+func TestSemgrepSourceLanguagesExcludeNestedWorktrees(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "main.go"), "package main\n")
+	writeFile(t, filepath.Join(root, "internal", "foo", "foo_test.go"), "package foo\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "main.go"), "package main\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "lib.rs"), "pub fn f() {}\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "Cargo.toml"), "[package]\nname = \"nested\"\nversion = \"0.1.0\"\n")
+
+	req := requestFor(t, root)
+	req.Scope.Excluded = []string{".worktrees"}
+	detected, err := detectSourceLanguages(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(detected) != 1 || detected[0] != LanguageGo {
+		t.Fatalf("detected = %v, want only the root Go source (including its test file)", detected)
+	}
+}
+
 func TestSemgrepRustOnlyRejectsGoRules(t *testing.T) {
 	root := rustWorkspace(t)
 	rules, err := filepath.Abs(filepath.Join("testdata", "real", "rules.yaml"))

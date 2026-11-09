@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -287,6 +288,32 @@ func TestGitleaksSkipNoticesForcePartial(t *testing.T) {
 	}
 }
 
+func TestSemgrepAdapterRetainsGoTestFileAttribution(t *testing.T) {
+	root := tempWorkspace(t)
+	writeFile(t, filepath.Join(root, "internal", "foo", "foo_test.go"), "package foo\n")
+	rules := goRules(t, root)
+	report := []byte(`{"version":"1.99.0","results":[{"check_id":"test-go-rule","path":"internal/foo/foo_test.go","start":{"line":7,"col":3},"end":{"line":7,"col":10},"extra":{"message":"test finding","severity":"WARNING","fingerprint":"fixture"}}],"errors":[]}`)
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "semgrep", Category: "sast", Protocol: "builtin",
+		Command: []string{"semgrep"}, Rules: rules, Version: "1.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(context.Context, string, []string, []byte, int) ([]byte, []byte, int, error) {
+		return report, []byte(semgrepCoverageSummaryNoSkip), 1, nil
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Status != StatusCompleted || exec.Coverage != CoverageComplete {
+		t.Fatalf("status/coverage = %s/%s, want COMPLETED/COMPLETE (%v)", exec.Status, exec.Coverage, exec.Diagnostics)
+	}
+	if len(exec.Findings) != 1 || exec.Findings[0].Path != "internal/foo/foo_test.go" {
+		t.Fatalf("findings = %+v, want the Go test file path", exec.Findings)
+	}
+}
+
 func TestSemgrepAdapterDeclaredExcludesStayComplete(t *testing.T) {
 	root := tempWorkspace(t)
 	rules := goRules(t, root)
@@ -404,6 +431,90 @@ func TestGitleaksAdapterStagesOnlyIncludedFiles(t *testing.T) {
 	}
 	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "outside the declared scope were not staged") {
 		t.Errorf("diagnostics = %v, want staged-view accounting", exec.Diagnostics)
+	}
+}
+
+func TestGitleaksAdapterRepositorySourceScopeExcludesIgnoredLocalFiles(t *testing.T) {
+	root := gitWorkspace(t)
+	writeFile(t, filepath.Join(root, ".gitignore"), ".env\n.worktrees/\n")
+	writeFile(t, filepath.Join(root, "tracked.go"), "package main\n")
+	writeFile(t, filepath.Join(root, "untracked.go"), "package main\n")
+	writeFile(t, filepath.Join(root, ".env"), "SLACK_WEBHOOK_URL=fixture\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "secret.txt"), "fixture\n")
+	gitRun(t, root, "add", ".gitignore", "tracked.go")
+	gitRun(t, root, "commit", "-q", "-m", "init")
+
+	var staged []string
+	adapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, dir string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		staged = stagedFiles(t, dir)
+		return nil, nil, 0, os.WriteFile(argument(argv, "--report-path"), []byte("[]"), 0o644)
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exec, err := adapter.Scan(context.Background(), requestFor(t, root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if exec.Status != StatusCompleted {
+		t.Fatalf("status = %s, want COMPLETED (%v)", exec.Status, exec.Diagnostics)
+	}
+	for _, want := range []string{".gitignore", "tracked.go", "untracked.go"} {
+		if !contains(staged, want) {
+			t.Errorf("source file %s was not staged: %v", want, staged)
+		}
+	}
+	for _, unwanted := range []string{".env", ".worktrees/nested/secret.txt"} {
+		if contains(staged, unwanted) {
+			t.Errorf("ignored local file %s was staged: %v", unwanted, staged)
+		}
+	}
+	if !strings.Contains(strings.Join(exec.Diagnostics, " "), "tracked and untracked non-ignored files") {
+		t.Errorf("diagnostics = %v, want the repository-source scope statement", exec.Diagnostics)
+	}
+
+	// An explicit changed-files scope is the supported way to request a local
+	// secret scan of an ignored file. The repository-source default never adds it.
+	var explicitStaged []string
+	explicitAdapter, err := BuildAdapter(config.SecurityAdapterConfig{
+		ID: "gitleaks", Category: "secrets", Protocol: "builtin",
+		Command: []string{"gitleaks"}, Version: "8.99.0",
+	}, BuildOptions{Executor: fakeExecutor{run: func(_ context.Context, dir string, argv []string, _ []byte, _ int) ([]byte, []byte, int, error) {
+		explicitStaged = stagedFiles(t, dir)
+		return nil, nil, 0, os.WriteFile(argument(argv, "--report-path"), []byte("[]"), 0o644)
+	}}, Timeout: time.Second, MaxOutputBytes: 1 << 20})
+	if err != nil {
+		t.Fatal(err)
+	}
+	explicitReq := requestFor(t, root)
+	explicitReq.Scope = Scope{Mode: "changed-files", Files: []string{".env"}}
+	if _, err := explicitAdapter.Scan(context.Background(), explicitReq); err != nil {
+		t.Fatal(err)
+	}
+	if !contains(explicitStaged, ".env") {
+		t.Errorf("explicit changed-files scope did not stage .env: %v", explicitStaged)
+	}
+}
+
+func gitWorkspace(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	gitRun(t, root, "init", "-q")
+	gitRun(t, root, "config", "user.email", "test@example.com")
+	gitRun(t, root, "config", "user.name", "Test")
+	return root
+}
+
+func gitRun(t *testing.T, root string, args ...string) {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = root
+	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }
 

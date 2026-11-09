@@ -309,6 +309,12 @@ was scanned, not that it is free of vulnerabilities.
 - Generated output, vendored content, fixtures, and legacy or non-production trees
   are in scope by default. Excluding them requires an explicit `security.exclude`
   entry and a recorded reason; otherwise their skips are coverage gaps.
+- `.git`, `.agent-sdlc`, and `.worktrees` are machine-local metadata, not
+  repository source. They are always outside the source scan: Git metadata and
+  SOP evidence are not project content, and a nested `.worktrees/` directory
+  contains linked checkouts of this repository (often other branches) rather
+  than the checkout under scan. Excluding them is a scope boundary recorded in
+  `scope.excluded`, not a coverage improvement.
 
 #### Coverage conformance
 
@@ -330,9 +336,19 @@ json --report-path <restricted-temp> --exit-code 0 --no-banner` directly. When
   adapter still filters any unexpected finding as a guard and records staged
   exclusions in diagnostics. Symbolic links are not followed; their presence
   makes coverage `PARTIAL`. Scanner-side skips reported by Gitleaks (for example
-  an allowlist file skip) also make coverage `PARTIAL`. `.env` files are never
-  excluded automatically; they are secret-scan targets unless the operator
-  explicitly declares them outside the scope.
+  an allowlist file skip) also make coverage `PARTIAL`.
+- In a Git workspace the staged view is the repository source set: every tracked
+  file plus every untracked file that is not ignored. An ignored local file such
+  as `.env` is therefore outside the repository-source scan. A `git add`ed or
+  otherwise tracked `.env` is always staged, so a credential accidentally
+  committed to source control is still detected. A non-Git workspace has no
+  ignore metadata and falls back to a filtered filesystem walk.
+- An explicit `changed-files` scope may name an ignored file; that is the
+  supported way to request a local workspace-secret scan of a file such as
+  `.env`. The repository-source default never adds ignored files on its own.
+- A checkout whose Git source set cannot be enumerated fails closed with
+  `FAILED` coverage `UNKNOWN`; it never broadens to a full filesystem walk that
+  would read ignored local files.
 - Every secret finding is `HIGH`; original provider meaning (`secret`) is
   retained. Messages and metadata are sanitized.
 - Raw report files live only in restricted temporary storage and are removed on

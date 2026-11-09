@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/config"
@@ -18,6 +19,47 @@ func detectFixture(t *testing.T, name string) Detection {
 		t.Fatalf("DetectRepository(%q): %v", root, err)
 	}
 	return detection
+}
+
+func TestDetectRepositoryScopedExcludesNestedWorktreeFixtures(t *testing.T) {
+	root := t.TempDir()
+	writeFile(t, filepath.Join(root, "go.mod"), "module example.com/root\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, "main.go"), "package main\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "go.mod"), "module example.com/nested\n\ngo 1.22\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "main.go"), "package main\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "Cargo.toml"), "[package]\nname = \"nested\"\nversion = \"0.1.0\"\n")
+	writeFile(t, filepath.Join(root, ".worktrees", "nested", "src", "lib.rs"), "pub fn f() {}\n")
+
+	// Without the scope boundary, the nested fixture is visible. This proves the
+	// regression test exercises a real duplicate-worktree surface.
+	unscoped, err := DetectRepositoryScoped(root, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !unscoped.HasLanguage(LanguageRust) {
+		t.Fatalf("precondition: nested fixtures were not detected before scoping: %+v", unscoped.Languages)
+	}
+
+	detection, err := DetectRepositoryScoped(root, []string{".worktrees"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !detection.HasLanguage(LanguageGo) {
+		t.Fatalf("languages = %v, want the root Go module to remain covered", detection.Languages)
+	}
+	if detection.HasLanguage(LanguageRust) {
+		t.Fatalf("languages = %v, want nested worktree Rust excluded", detection.Languages)
+	}
+	for _, manifest := range detection.Manifests {
+		if strings.HasPrefix(manifest.Path, ".worktrees/") {
+			t.Errorf("manifest %q from a nested worktree entered the scan scope", manifest.Path)
+		}
+	}
+	for _, obligation := range detection.Obligations {
+		if strings.HasPrefix(obligation.Input, ".worktrees/") {
+			t.Errorf("dependency input %q from a nested worktree entered the scan scope", obligation.Input)
+		}
+	}
 }
 
 func TestDetectGoOnly(t *testing.T) {
