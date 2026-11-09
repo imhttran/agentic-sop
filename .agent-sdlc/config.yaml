@@ -71,6 +71,10 @@ security:
   exclude:
     - .git
     - .agent-sdlc
+    # Machine-local linked checkouts. They are copies of this repository (often
+    # other branches), not the checkout under scan; including them duplicates
+    # findings and surfaces unrelated fixture manifests.
+    - .worktrees
     - .run/reference
     - internal/security/testdata
     - testdata

@@ -120,7 +120,7 @@ func TestSecurityExcludesAreAdditiveAndDeterministic(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := cfg.SecurityExcludes()
-	want := []string{".git", ".agent-sdlc", "internal/security/testdata"}
+	want := []string{".git", ".agent-sdlc", ".worktrees", "internal/security/testdata"}
 	if len(got) != len(want) {
 		t.Fatalf("excludes = %v, want %v", got, want)
 	}
