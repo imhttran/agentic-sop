@@ -124,6 +124,8 @@ re-verified by those refreshes.
 
 ## Related baseline evidence
 
+- [gap-register-20261109.md](gap-register-20261109.md) — the remaining Plan 01,
+  03, 04, 05, and 10 gaps, their dispositions, and the decision each one needs.
 - [../security-hardening/final.md](../security-hardening/final.md) — declared
   report-only scan scope and residual findings.
 - [../security-hardening/SEC-H-004-dependency-coverage-readiness.md](../security-hardening/SEC-H-004-dependency-coverage-readiness.md)
