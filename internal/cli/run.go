@@ -1818,6 +1818,22 @@ func loadConfigOrDefault(dir string) (config.Config, error) {
 	return config.Config{}, err
 }
 
+// boundedValidationStream bounds one validation stream included in a model
+// prompt to the canonical context limit, so a failing check that streams a huge
+// diagnostic cannot make the prompt unbounded. It cuts on a rune boundary and
+// marks the cut.
+func boundedValidationStream(s string) string {
+	limit := sopctx.DefaultLimits().MaxBytes
+	if limit <= 0 || len(s) <= limit {
+		return s
+	}
+	cut := limit
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + fmt.Sprintf("\n… [truncated %d bytes]", len(s)-cut)
+}
+
 // validationFailureContext renders the deterministic validation failure that made
 // an implementation agent necessary, so a verify-first task's agent starts from
 // the actual failure instead of rediscovering it.
@@ -1831,7 +1847,7 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 		fmt.Fprintf(&b, "\n- %s %s `%s`\n", r.Status, r.Category, r.Command)
 		for _, stream := range []string{r.Stdout, r.Stderr} {
 			if out := strings.TrimSpace(stream); out != "" {
-				fmt.Fprintf(&b, "\n```\n%s\n```\n", redactDiagnosticText(out))
+				fmt.Fprintf(&b, "\n```\n%s\n```\n", boundedValidationStream(redactDiagnosticText(out)))
 			}
 		}
 	}

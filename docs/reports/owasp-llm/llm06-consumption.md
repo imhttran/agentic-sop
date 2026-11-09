@@ -1,11 +1,13 @@
 # OWASP LLM06 — Unbounded consumption: SOP execution limits
 
-Status: `VERIFIED` on macOS for the implemented controls; the default
-output-token-cap policy and Linux descendant evidence remain `GAP` / `NOT_RUN`.
+Status: `VERIFIED` for the merged execution controls on macOS and Linux CI; the
+validation-runner output fix is on the follow-up branch; the default
+output-token-cap decision remains a governance decision, not a demonstrated defect.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
-Base commit: `14b01a18fc32005625c568c413bdb70e326fb6cc` (`origin/main` after refresh).
-Code/verification commits: `400e4544`, `c8e00b1c` (main fix set), and `e656a8e7` (command-agent process-group follow-up). Final code head: `e656a8e7`.
-Platform: macOS `darwin/arm64`, Go `go1.27.1`; Linux runtime evidence `NOT_RUN`.
+Base commit: `360b96ef721526e58b89f7a7986849caa8a96080` (`origin/main` after the follow-up rebase).
+Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
+Follow-up code commits: `cb230d66ffad174f3040944876d6c0f7b9c7c730` (validation output bounds) and `e053d18e9252ef9d821b2648accca1967e04f0f8` (retain trailing structured evidence).
+Platform: macOS `darwin/arm64` locally; Linux verified by GitHub Actions `ubuntu-26.04` CI.
 Configuration identity: `.agent-sdlc/config.yaml` — harness `tool`, provider `ollama`, model `deepseek-v4.1-flash:cloud`, validation `go build ./...` / `go test ./...` / `go vet ./...`, review `self`, quality `max_fix_cycles: 3`, autonomy `balanced`, `approval_before_commit: true`.
 
 This is an article-based OWASP taxonomy report, not a formal compliance
@@ -55,8 +57,9 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | Capability ceilings | turns / invocation | `internal/ollamaagent/policy.go` | PLAN 11, REVIEW 10, DESIGN_TESTS 12, DIAGNOSE 12, default 12 | capability loops | Not persisted | Early completion is normal; the ceiling is a stop |
 | Synthesis correction bound | corrections / invocation | `internal/ollamaagent/policy.go` | 2 | two-phase engine | Not persisted | Bounded |
 | Orchestration envelope | count / run | `internal/orchestration`; `SOP_ORCH_*` | workers 8, active 4, assignments 16, integrations 4, replans 3 | pre-dispatch, worker pool, INTEGRATE, replan | In-memory envelope | One integration/replan in flight |
-| Command timeout | s / command | `toolharness.Config`; `ollamaagent.Config`; controller config | 120 s (toolharness/ollamaagent); 15 m (controller) | `execCaptured`; process-group kill on cancellation/timeout | Not persisted | Direct process plus its group; Linux runtime evidence `NOT_RUN` |
+| Command timeout | s / command | `toolharness.Config`; `ollamaagent.Config`; controller config | 120 s (toolharness/ollamaagent); 15 m (controller) | `execCaptured`; process-group kill on cancellation/timeout | Not persisted | Direct process plus its group; macOS and Linux CI verified |
 | Tool output bound | bytes / tool call | `toolharness.Config.MaxOutputBytes` | 256 KiB | `boundedCapture` and `readFileBounded` (read boundary) | Not persisted | Retained bytes are bounded; the child may write until the timeout |
+| Validation command output | bytes / check | `internal/testrunner.Runner.MaxOutputBytes`; canonical context limit for prompt rendering | 10 MiB capture; 64 KiB per stream in the prompt | `limitedBuffer` at read; `boundedValidationStream` before rendering | Not persisted | Bounded at both read and prompt boundaries (follow-up) |
 | Provider request timeout | s / model call | `internal/agent/provider.go`; provider-specific timeout envs | 120 s | `http.Client.Timeout` | Not persisted | A provider may continue billing after the client cancels |
 | Provider response bound | bytes / model call | `internal/agent/provider.go` | 10 MiB | `io.LimitReader` in `postJSON` | Not persisted | The read is bounded; provider generation is not |
 | Provider output-token bound | tokens / request | `SOP_AGENT_MAX_OUTPUT_TOKENS` (operator opt-in) | **none** (provider default) | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | **GAP by default**: no SOP cap unless the operator sets it |
@@ -66,14 +69,14 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | ACP cancel bound | s / cancel | `internal/acp` | 30 s (`CancelStopBound`) | cancel seam | Not persisted | Host may not acknowledge within the bound |
 | ACP output excerpt | bytes / frame | `internal/acp` | 16 KiB | `MaxOutputChunkBytes` | Not persisted | Excerpt is cut, not the underlying work |
 | MCP request frame | bytes / message | `internal/mcp` | 1 MiB (`MaxFrameSize`) | `readFrame` before JSON decode | Not persisted | Oversized frame is drained, answered once with a parse error, then discarded |
-| Command agent call | s / call | `internal/agent/command.go`; `SOP_AGENT_COMMAND_TIMEOUT` | 120 s | `context.WithTimeout` around `sh -c`; process-group kill on timeout/cancel | Not persisted | Direct process and its group; macOS verified, Linux `NOT_RUN` |
+| Command agent call | s / call | `internal/agent/command.go`; `SOP_AGENT_COMMAND_TIMEOUT` | 120 s | `context.WithTimeout` around `sh -c`; process-group kill on timeout/cancel | Not persisted | Direct process and its group; macOS and Linux CI verified |
 | Command agent output | bytes / call | `internal/agent/command.go` | 10 MiB stdout; 2 KiB stderr diagnostics | `limitedBuffer` at the write boundary | Not persisted | Retained bytes are bounded |
 | Security adapter timeout | s / adapter | `internal/config/security.go` | 300 s | security runner | Not persisted | Adapter process; descendant termination is not claimed |
 | Security adapter output | bytes / adapter | `internal/config/security.go` | 1 MiB | adapter capture | Not persisted | Bounded |
 | Task attempt budget | count / task | `internal/domain.DefaultRetryPolicy`; `max_attempts` | 3 | `Task.Requeue` / `MaxAttempts` | `state.db` | `sop retry --force` deliberately raises the budget; operator action |
 | Continuation budget | count / task | `internal/autonomy`; `SOP_AUTONOMY_MAX_CONTINUATIONS` | 4 | `Run.ConsumeContinuation` under the project lock | `continuations.txt` per task | `SOP_RUN_MAX_CONTINUES` (default 1) bounds one run; concurrent spend is serialized |
 | Fix-cycle budget | cycles / task | `quality.max_fix_cycles` | 3 | quality gate | `state.json` / run artifacts | Exhaustion yields `NEEDS_HUMAN`, not a loop |
-| DQ harness limits | decisions / requests / retries / elapsed / tokens | `internal/dqharness` | 180 / 360 / 180 / 90 min / 400000 | pre-request `CanRequest` / `CanRetry` | `usage.json` | Tokens only when reported; unreported per-request usage is a GAP |
+| DQ harness limits | decisions / requests / retries / elapsed / tokens | `internal/dqharness` | 180 / 360 / 180 / 90 min / 400000 | pre-request `CanRequest` / `CanRetry` | `usage.json` | Token counts are deterministic estimates (`ModelDecision`), not provider usage; in-flight requests are tracked as uncertain |
 | Hipcompare budget | elapsed / tokens / retries | `internal/hipcompare` | 200000 tokens; caller time; automatic retries | `Run` before execution | result artifact | `TokensReported` distinguishes unknown from zero |
 | Monetary budget | currency | **none** | — | — | — | **GAP**: no pricing or pre-dispatch reservation |
 
@@ -197,19 +200,41 @@ process-group experiment to be reverted.
 
 Evidence on macOS: `TestExecTimeoutKillsProcessGroup`,
 `TestExecCancellationKillsProcessGroup`, `TestExecutionContextCancelsOnSignal`.
-Linux runtime evidence is `NOT_RUN`.
+Linux was verified by GitHub Actions run `42576841956`, job `129026456948`
+(`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`): the full `go test ./...`
+passed, including the unix-tagged process-group and signal tests. No skip path is
+present in those tests.
 
 ### 2.9 Provider output-token bound
 
 `SOP_AGENT_MAX_OUTPUT_TOKENS` is now an operator-owned opt-in bound. When set, the
 single-shot providers send `max_tokens` (OpenAI-compatible) or
 `options.num_predict` (Ollama), and the in-process tool loop sends
-`options.num_predict`, before dispatch. When unset, no SOP cap is sent; this is a
-policy `GAP`, not an enforced default.
+`options.num_predict`, before dispatch. When unset, no SOP cap is sent. That is a
+**required governance decision** (choose a default cap, or accept opt-in-only),
+not a demonstrated defect: the plan explicitly forbids inventing a numeric quota.
 
 Evidence: `TestClientsHonorOperatorMaxOutputTokens`,
 `TestProviderRejectsInvalidMaxOutputTokens`,
 `TestOllamaClientSendsOperatorMaxOutputTokens`.
+
+### 2.10 Validation output was captured and rendered without a bound
+
+`internal/testrunner` captured each check's stdout/stderr in an unbounded
+`bytes.Buffer`, and `validationFailureContext` inserted that stream directly into
+the model prompt. A streaming validation check could therefore allocate and send
+unbounded output.
+
+Fix: `execute` now captures each stream through `limitedBuffer` at a 10 MiB
+read-boundary bound, retaining a bounded head and tail so trailing `go test -json`
+package-completion events survive a verbose passing check. `validationFailureContext`
+bounds each rendered stream to the canonical context limit
+(`sopctx.DefaultLimits().MaxBytes`, 64 KiB) with a truncation marker. This is a
+capture safety bound, not a configurable quota.
+
+Evidence: `TestRunBoundsCapturedOutput`,
+`TestPostgresCompletionSurvivesCaptureBound`,
+`TestValidationFailureContextBoundsHugeOutput`.
 
 ## 3. Lifecycle outcomes for exhaustion and cancellation
 
@@ -226,8 +251,19 @@ Evidence: `TestClientsHonorOperatorMaxOutputTokens`,
   `TestConsumeContinuationDoesNotOverspendConcurrently`).
 - Resume preserves the spent count (`TestPreflightFailureKeepsContinuationBudget`).
 - A signal cancels the foreground context; the lifecycle returns before recording
-  recovery, and the tool harness kills the command's process group on macOS.
+  recovery, and the tool harness kills the command's process group on macOS and
+  Linux CI.
 - Local cancellation is not evidence that a provider stopped billing.
+
+## 3a. Post-merge reconciliation of reported residuals
+
+| Reported residual | Disposition | Evidence / decision |
+|---|---|---|
+| Default provider output-token cap | Required governance decision | `SOP_AGENT_MAX_OUTPUT_TOKENS` is implemented and tested; an unset value sends no cap. The plan forbids inventing a numeric quota, so choosing a default (or accepting opt-in-only) is an operator decision. |
+| Linux descendant termination | Required criterion satisfied | GitHub Actions run `42576841956`, job `129026456948` (`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`) passed `go test ./...` including the unix-tagged process-group and signal tests. |
+| Validation-runner output bound | Required criterion implemented and verified on the follow-up branch | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
+| Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
+| `dqharness` unknown-token handling | `NOT_APPLICABLE` for the provider-usage criterion | Production `ModelDecision` counts deterministic `retrievalboundary.EstimateTokens` for the prompt and output, not provider-reported usage; in-flight requests are recorded as uncertain. |
 
 ## 4. Acceptance mapping
 
@@ -254,15 +290,19 @@ Evidence: `TestClientsHonorOperatorMaxOutputTokens`,
 - Concurrent accounting: `TestConsumeContinuationDoesNotOverspendConcurrently`;
   in-process `perf.Usage` remains mutex-protected
   (`TestUsageSumsCallsByModel`).
-- Timeout/cancellation: direct process and process group verified on macOS;
-  Linux `NOT_RUN`.
-- Oversized/streamed output bounded at the read boundary: §2.1, §2.2, §2.6, §2.7.
+- Timeout/cancellation: direct process and process group verified on macOS and
+  Linux CI (`TestExecTimeoutKillsProcessGroup`,
+  `TestExecCancellationKillsProcessGroup`, `TestCommandAgentTimeoutKillsDescendant`).
+- Oversized/streamed output bounded at the read boundary: §2.1, §2.2, §2.6,
+  §2.7, and §2.10 (validation output).
 - A normal bounded task still completes: `make check` passes; boundary tests
   include the just-below case with no truncation.
 
 ### BUDGET-003 — Verify terminal behavior and report limits
 
-- Missing usage is unknown, not zero: §2.3.
+- Missing usage is unknown, not zero: §2.3. `dqharness` is an estimate-based
+  evaluation path (`ModelDecision` uses `retrievalboundary.EstimateTokens`), not a
+  provider-usage path, so this criterion is `NOT_APPLICABLE` there.
 - No hard dollar-cap claim: §6.
 - Per-call overshoot and unsupported provider behavior: §1 and §6.
 - Focused and required checks pass: §5.
@@ -276,46 +316,49 @@ All commands ran in the isolated worktree on `darwin/arm64`.
 | `go build ./...` | PASS |
 | `go vet ./...` | PASS |
 | `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/mcp/... ./internal/toolharness/... ./internal/run/... ./internal/continuation/... ./internal/perf/...` | PASS |
-| `go test -count=1 ./internal/cli/...` | PASS |
+| `go test -count=1 ./internal/cli/... ./internal/testrunner/...` | PASS |
 | `go test -count=1 ./internal/failure/... ./internal/recovery/... ./internal/autonomy/... ./internal/domain/... ./internal/dqharness/... ./internal/hipcompare/...` | PASS |
 | `make check` (`go fmt`, `go vet`, `go test ./...`, `go build ./...`, plugin check) | PASS |
 
 The focused suites are the evidence for the changed read, usage, continuation,
-MCP, command-agent, and cancellation bounds. No live model call was required for
-these checks.
+MCP, command-agent, validation, and cancellation bounds. No live model call was
+required for these checks. The merged Linux CI job `129026456948` (`ubuntu-26.04`,
+run `42576841956`, head `dfd135c`) passed the full suite including the unix-tagged
+process-group and signal tests.
 
 ## 6. Residual limitations and follow-up proposals
 
-1. **Default output-token cap is a policy decision.** `SOP_AGENT_MAX_OUTPUT_TOKENS`
+1. **Default output-token cap is a governance decision.** `SOP_AGENT_MAX_OUTPUT_TOKENS`
    is opt-in; an unset value sends no SOP cap. Choosing a default (and the
    provider-specific interaction with context windows) needs an operator decision.
+   This is not a demonstrated defect: the plan forbids inventing a numeric quota.
 2. **No execution token budget.** Token usage is diagnostic; the execution circuit
    breakers are turns, tool calls, stale iterations, and lifecycle counts. A token
    budget would be a new policy control.
 3. **Provider-side billing may continue** after a local timeout or cancellation;
    only a provider-side stop or verified billing report can establish that it
    stopped.
-4. **Linux descendant evidence is NOT_RUN.** The process-group tests ran on macOS.
-   The same code path is compiled on other Unix platforms, but it is not claimed
-   as verified there.
-5. **Validation-runner output is unbounded.** `internal/testrunner` still captures
-   validation commands in `bytes.Buffer`; a configured check that streams huge
-   output can allocate it. A bound would need an operator-visible policy.
-6. **Tool snapshot reads a whole file.** `toolharness.snapshot` reads a file into
-   memory to support `restore_file`; a very large file is fully allocated. A bound
-   needs a restore-policy decision.
-7. **Security adapter descendants are not claimed.** The security runner bounds
+4. **Tool snapshot reads a whole file.** `toolharness.snapshot` reads a file into
+   memory to support `restore_file`; a very large file is fully allocated. This is
+   an internal undo-correctness mechanism, not model-visible output or a configured
+   consumption limit, so it is outside Plan 06's output-bound criterion; a bound
+   would need a restore-policy decision.
+5. **Security adapter descendants are not claimed.** The security runner bounds
    time/output but does not use the tool-harness process-group path.
-8. **DQ harness per-request unreported tokens.** It tracks in-flight requests as
-   uncertain, but `EndRequest(tokens)` still records zero when a provider omits
-   usage. `hipcompare` already carries `TokensReported`.
-9. **No monetary accounting.** There is no pricing table, pre-dispatch
+6. **`dqharness` uses token estimates, not provider usage.** Its `ModelDecision`
+   counts `retrievalboundary.EstimateTokens` for the prompt and output, so the
+   "missing provider usage is zero" concern does not apply to that path; in-flight
+   requests are tracked as uncertain.
+7. **No monetary accounting.** There is no pricing table, pre-dispatch
    reservation, or hard dollar cap. This report makes no monetary-cap claim.
 
 ## 7. PR and handoff
 
-- Branch: `security/llm06-unbounded-consumption`.
-- Base: `14b01a18fc32005625c568c413bdb70e326fb6cc`.
-- Code/verification commits: `400e4544`, `c8e00b1c`, and `e656a8e7`.
-- PR: https://github.com/imhttran/agentic-sop/pull/284 (the report commit follows
-  the code commits; the PR head is the final commit on the branch).
+- Merged PR: https://github.com/imhttran/agentic-sop/pull/284 (merge commit
+  `026f970c2d1040548e8578bb2d949f57e40f6a1f`).
+- Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
+- Follow-up branch: `security/llm06-reconcile`.
+- Follow-up code commits: `cb230d66ffad174f3040944876d6c0f7b9c7c730` (validation
+  output bounds) and `e053d18e9252ef9d821b2648accca1967e04f0f8` (retain trailing
+  structured evidence).
+- Follow-up PR: https://github.com/imhttran/agentic-sop/pull/289 (this PR; not merged).
