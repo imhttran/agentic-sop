@@ -15,7 +15,6 @@ import (
 	"github.com/imhttran/agentic-sop/internal/commandpolicy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/durablefs"
-	"github.com/imhttran/agentic-sop/internal/handoff"
 	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/planner"
 	"github.com/imhttran/agentic-sop/internal/quality"
@@ -712,6 +711,7 @@ func isGoTestArgv(argv []string) bool {
 // the exact argv, the process exit code, and a bounded (<=400 byte) excerpt of the
 // combined stdout/stderr. The untruncated combined output is also retained so the
 // `go test -json` decision can inspect the full event stream.
+// It is the one boundary that both redacts and bounds the retained output.
 func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	run := checkRun{argv: append([]string(nil), argv...), dir: dir}
 	if len(argv) == 0 {
@@ -724,7 +724,7 @@ func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	cmd.Stderr = &out
 	runErr := cmd.Run()
 	// Redact before bounding, so neither the excerpt nor the log carries a secret.
-	run.full = handoff.Redact(out.String(), os.Environ())
+	run.full = redactDiagnosticText(out.String())
 	run.output = boundOutput(run.full)
 	if runErr == nil {
 		run.exitCode = 0
