@@ -32,7 +32,7 @@ and preserved the original Linux `x86_64` record.
 | OUTPUT-002 | 7 — sink-specific fixes, no destructive global escaping | manual | `IMPLEMENTED` | §Reproduced gaps and fixes; `TestPromptJSONKeepsModelResultIntact` |
 | OUTPUT-003 | 1 — protocol data valid; diagnostics do not corrupt output | check | `VERIFIED` | `TestPromptJSONKeepsModelResultIntact`; ACP/MCP tests |
 | OUTPUT-003 | 2 — synthetic canaries contained in tested paths | check | `VERIFIED` | Terminal and Slack control tests |
-| OUTPUT-003 | 3 — required checks pass; PR records OS/client coverage | manual | `NOT_RUN` for full CI; focused checks `PASS` | This request records the exact host and path coverage; the PR triggers CI |
+| OUTPUT-003 | 3 — required checks pass; PR records OS/client coverage | manual | automated CI `PASS`; manual acceptance `GAP` | Full CI [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) passed on `eaf34114`; the PR body records Linux `x86_64` and Darwin arm64 scope and the unverified external clients. Passing CI is evidence, not an acceptance record. |
 | OUTPUT-003 | 4 — cumulative matrix updated | check | `VERIFIED` | `git grep "Improper Output Handling" docs/reports/owasp-llm/README.md` |
 | OUTPUT-003 | 5 — no full coverage inferred from plan/PR existence | manual | `IMPLEMENTED` | README §What this matrix does not claim |
 
@@ -42,7 +42,8 @@ and preserved the original Linux `x86_64` record.
    active webhook channel, and no channel observation exist. The HTTP 2xx
    distinction is recorded in [llm10-live-delivery.md](llm10-live-delivery.md).
 2. **Manual acceptance — not recorded.** The six manual criteria above have no
-   designated-approver decision record.
+   designated-approver decision record. The full CI passed for `OUTPUT-003`
+   criterion 3; that is automated evidence, not an acceptance record.
 3. **Owning SOP lifecycle state — absent.** No checkout holds Plan 10 state. A
    merged PR is not lifecycle completion.
 
@@ -50,7 +51,9 @@ and preserved the original Linux `x86_64` record.
 
 | Item | Value |
 | --- | --- |
-| Repository revision | `ed9ec2dc215eaa0b31a13eb49dbe2938d253c913` (`main`, 2026-11-09) |
+| Repository revision | `ed9ec2dc215eaa0b31a13eb49dbe2938d253c913` (wrap-up re-verification, 2026-11-09) |
+| Merged as | PR #328, merge `35340774c16b10236b0ca0143cc0d07c85a8e6b3` (2026-11-09T23:20:02Z) |
+| Full CI | [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910), `PASS` on PR head `eaf34114a5fcfe96088986d8939309c1efc75ffa` |
 | Wrap-up host | Darwin arm64, Go 1.27.1 |
 | Original verification host | Linux `x86_64`, Go 1.27.1 (`linux/amd64`) at `24be068` + change set |
 | Report | `docs/reports/owasp-llm/llm10-output-handling.md` |
@@ -141,6 +144,8 @@ This request does not perform any of those steps.
 
 - It would bind the named report sections and revision to the named manual criteria
   for the recorded attempt.
+- It would **not** convert the passing CI run into an acceptance record; the run is
+  evidence for `OUTPUT-003` criterion 3.
 - It would **not** turn deterministic tests into live Slack evidence.
 - It would **not** prove third-party terminal, IDE, editor, or Markdown rendering.
 - It would **not** prove live Slack delivery or rendering, mention behavior, or

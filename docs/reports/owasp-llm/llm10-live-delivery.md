@@ -4,6 +4,10 @@ Status: **PREPARED, NOT AUTHORIZED, NOT RUN — BLOCKED ON OPERATOR.** No messag
 sent by this work, and no channel was enabled. The prompt that produced this
 document authorizes preparation and a request for approval, not an external send.
 
+The Plan 10 wrap-up merged in PR #328 as
+`35340774c16b10236b0ca0143cc0d07c85a8e6b3`; it did not enable the channel or send a
+message, so this test remains `NOT_RUN`.
+
 Related: [llm10-output-handling.md](llm10-output-handling.md) (Plan 10),
 [llm10-acceptance-request.md](llm10-acceptance-request.md),
 [NOTIFICATIONS.md](../../guides/NOTIFICATIONS.md), and the cumulative
