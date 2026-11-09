@@ -80,6 +80,16 @@ func pluginFiles(t *testing.T) []string {
 	return files
 }
 
+// pluginSkillName returns the skill folder that owns a packaged file, or "" when the
+// file is not inside the generated skills/ mirror.
+func pluginSkillName(file string) string {
+	rel, err := filepath.Rel(filepath.Join(pluginDir, "skills"), file)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	return strings.Split(filepath.ToSlash(rel), "/")[0]
+}
+
 // TestClaudePluginManifestIsValid proves the package satisfies the official manifest
 // requirements: the manifest exists, parses, and carries the metadata the validator
 // expects (a kebab-case name, a description, a version, and an author).
@@ -225,7 +235,7 @@ func TestClaudePluginCarriesNoPolicyOrModelAccess(t *testing.T) {
 			}
 		}
 		for _, cmd := range skill.MutationCommands {
-			if strings.Contains(body, cmd) {
+			if strings.Contains(body, cmd) && !skill.AllowsDirectMutation(pluginSkillName(file), cmd) {
 				t.Errorf("%s: contains a direct-mutation instruction %q", file, cmd)
 			}
 		}

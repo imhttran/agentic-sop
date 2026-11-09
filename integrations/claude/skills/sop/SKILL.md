@@ -82,6 +82,10 @@ Thin aliases in the same install expose one capability each:
                           published target, historicalize eligible plans through
                           SOP, and remove only fully-merged clean worktrees and
                           branches
+/sop-fix-conflicts <path?>
+                          resolve an in-progress merge conflict only when both
+                          sides' intent can be kept; otherwise stop and report
+                          the decision the operator must make
 /sop-next-action [plan]   determine the single highest-priority safe next action:
                           read-only status, authorized plan preparation, and
                           governed execution (`sop status`, `sop continue --check`,
@@ -107,6 +111,12 @@ they verify the published target contains the intended commits, close eligible p
 through `sop plan historicalize`, preserve lifecycle evidence, and remove only
 fully-merged clean worktrees and local branches. That skill never infers completion
 from a merge, never marks a plan superseded, and never force-removes or rewrites.
+
+Explicit `/sop-fix-conflicts` requests resolve an in-progress merge: they read both
+sides of every conflict, keep both intents when the resolution is mechanical, verify
+the merged result, and complete the merge locally. The skill stops with the markers
+intact when a conflict needs a product, security, or policy decision, and it never
+publishes or rewrites history.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
