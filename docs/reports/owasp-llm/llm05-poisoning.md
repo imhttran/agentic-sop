@@ -46,10 +46,10 @@ here. Evidence states used in this report:
 | Source | Files in the repository working tree (Go sources, Markdown, YAML, JSON, TOML, config) |
 | Writer | `internal/repoindex` `Build` (`internal/repoindex/index.go`) |
 | Source identity | Repository-relative path in `File.Path` and `Document.Path` |
-| Revision / digest | `Identity.Digest` — SHA-256 over `(relative path, file content SHA-256)` pairs for every indexed file, truncated to 16 hex characters; `Identity.Head` records the commit when supplied |
+| Revision / digest | `Identity.Digest` — SHA-256 over `(relative path, file content SHA-256)` pairs for every indexed file and each resolved document row (class, authority, lifecycle, authority source), truncated to 16 hex characters; `Identity.Head` records the commit when supplied |
 | Trust classification | `DocumentClass` (`plan`, `spec`, `history`, `documentation`, `config`, `other`) plus `Authority` (`current`, `historical`, `unknown`) with `AuthoritySource` = `sop` \| `header` \| `path` \| `unknown` |
 | Consumer | Index artifact `FileName` = `context/index.json` under the SOP state directory, for later Context Engine consumption; building the index invokes no model |
-| Digest scope note | The per-file content hash feeds the single index digest only. `File` and `Document` rows carry path, kind, class and authority — they do **not** carry a per-file digest. An individual document row is therefore not digest-verified on its own; the index identity as a whole is. |
+| Digest scope note | The per-file content hash feeds the single index digest together with each resolved document row's class, authority, lifecycle, and authority source. `File` and `Document` rows still do **not** carry a digest of their own, so a single row is not independently digest-verified; the aggregate identity covers the row's semantic content. The per-row decision is recorded in [PROPOSAL-REPOINDEX-ROW-DIGESTS.md](../../plans/PROPOSAL-REPOINDEX-ROW-DIGESTS.md). |
 
 ### Path 2 — External or retrieved content (RAG)
 
@@ -207,7 +207,9 @@ Run inside the copy:
 Result: `VERIFIED`. One changed document produced a different `Identity.Digest`
 (`7ad8f2f26e6dcded` → `756465cfafbe3002`), and the recorded identity also flips
 `dirty=true`. The command rewrites only the derived index artifact; source files and
-history are untouched. Per-document rows still carry no digest of their own (`GAP-4`).
+history are untouched. Per-document rows still carry no digest of their own (`GAP-4`),
+but the aggregate identity now also changes when SOP metadata reclassifies a document
+(`TestBuildIdentityCoversSOPDocumentAuthority`).
 
 ### Path B — Outcome reindex with the digest-aware source gate
 
@@ -319,7 +321,7 @@ what the evidence proves and what it does not prove.
 | Dimension | What it proves | What it does not prove | Evidence state |
 | --- | --- | --- | --- |
 | Provider model name | The provider and model identifiers that the configuration selected, copied verbatim into the outcome record `Environment` (`model_selection` in `report.json`; `internal/outcomefile` `IngestRunFor`) | That the provider serves the same weights, that the model revision is unchanged, or that the model is untampered. Model revision and weight provenance are not recorded and cannot be verified from this repository | `IMPLEMENTED` (copied); weight and revision provenance `GAP` |
-| Content checksum | That the bytes of `report.json` and the recorded source artifacts match the recorded SHA-256 values (`SourceHash`, `SourceDigests`, document `ContentHash`) and that the index identity matches its file set (`Identity.Digest`). GAP-2 exclusions (`source deleted`, `source modified`, `source unverified`) are `VERIFIED` | That the content is benign, correct, or free of poisoned text. Byte integrity does not prove benign semantics. An individual indexed document row carries no per-file digest (`GAP-4`, open) | `VERIFIED` for outcome artifacts; `GAP-4` open for per-document rows |
+| Content checksum | That the bytes of `report.json` and the recorded source artifacts match the recorded SHA-256 values (`SourceHash`, `SourceDigests`, document `ContentHash`) and that the index identity matches its file set and resolved document rows (`Identity.Digest`). GAP-2 exclusions (`source deleted`, `source modified`, `source unverified`) are `VERIFIED` | That the content is benign, correct, or free of poisoned text. Byte integrity does not prove benign semantics. An individual indexed document row carries no per-file digest (`GAP-4`, open) | `VERIFIED` for outcome artifacts; row-level integrity `GAP-4` |
 | Publisher authenticity | Nothing established in this scope. SOP does not verify who authored, published, or served retrieved or provided content | That a document came from a trusted author, or that a retrieval server is the one the operator intended. A `document_hash` reported by the retrieval server is not recomputed by SOP (`GAP-5`, open) | `GAP` (not established) |
 | Semantic trust | Nothing established in this scope. Eligibility shows that a record passed the ingest and reindex gates, not that its claim is true | That evidence supports a claim, that a conclusion is correct, or that retrieved content is relevant and unpoisoned | `GAP` (not established) |
 
@@ -360,7 +362,7 @@ above.
 | GAP-1 | `internal/outcomefile` `IngestRunFor` — a self-declared `outcome.status` could map to a success record without corroboration | **Fixed** (`successCorroborated`, required/boundary criteria and validation checks, declared-id check, strict `counts.json` decode) | `go test ./internal/outcomefile -run TestIngestProvenance -count=1` |
 | GAP-2 | `internal/outcomefile` `GateWithSourcesAndDigests` — a changed source retained an obsolete verified identity | **Fixed** (`source modified`, `source unverified`, `source deleted` exclusion reasons; use in `internal/memindex` `RebuildFromDir`) | `go test ./internal/memindex -run TestReindexProvenance -count=1` |
 | GAP-3 | `internal/decisionmemory`, `internal/cli` `applicableDecisionItems` — whether a decision record can claim a verified outcome or override authoritative state | **Closed by trace, no change** — it cannot (see §Verified-override analysis, path 4). `decisions.json` has no integrity check, so it is trusted only as advisory context | Code trace above |
-| GAP-4 | `internal/repoindex` `File` / `Document` — indexed document rows carry no per-file content digest, so a single document row is not independently digest-verified | **Open** | `go test ./internal/repoindex -count=1` (index identity only) |
+| GAP-4 | `internal/repoindex` `File` / `Document` — indexed document rows carry no per-file content digest, so a single document row is not independently digest-verified | **Partially fixed, open** — `Identity.Digest` now covers the resolved document rows (class, authority, lifecycle, authority source), so a metadata-driven reclassification changes it. Per-row verification still needs the schema decision in [PROPOSAL-REPOINDEX-ROW-DIGESTS.md](../../plans/PROPOSAL-REPOINDEX-ROW-DIGESTS.md) | `go test ./internal/repoindex -run TestBuildIdentityCoversSOPDocumentAuthority -count=1`; pre-fix the digest was unchanged |
 | GAP-5 | `internal/ragclient` `Evidence.DocumentHash` — the per-item `document_hash` is reported by the retrieval server and is not recomputed or verified by SOP against the returned text | **Open** (trust limit) — `document_hash` covers the full source document while SOP receives only a chunk, so it cannot be recomputed; deterministic fixtures pin the current non-verification and the additive proposal is [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md) | `go test ./internal/ragclient -run 'TestDocumentHashIsServerReportedAndNotRecomputed|TestDocumentHashMayBeEmpty' -count=1` |
 | GAP-6 | `internal/cli` `loadDecisionStore` / `saveDecisionStore` — an unreadable `decisions.json` (malformed JSON or an unknown schema) loads as an empty store, and the next `sop memory add` overwrites the file, so the earlier records are lost without a warning | **Fixed** (`loadDecisionStoreForWrite`, via `decisionmemory.UnmarshalStrict`, refuses a malformed, unknown-schema or partly invalid file, exits 1 and leaves the bytes unchanged; reading for context still applies nothing and never writes) | `go test ./internal/cli -run TestMemoryAddRefusesUnreadableStore -count=1`. Pre-fix reproduction: in a disposable git repo, write `{"schema":"unknown-future","records":[{"decision":"keep me"}]}` to `.agent-sdlc/context/decisions.json` and run `sop memory add --decision new --reason r`; before the fix it exited 0 and the file held only the new record |
 | GAP-7 | `internal/cli` `runMemory` / `memoryUsage`, `internal/decisionmemory` `Store` — decision memory has no supported removal or invalidation command, so a poisoned decision record cannot be retired through the CLI | **Fixed** (`sop memory remove --id <id>` via `Store.Remove`; `sop memory list` prints ids; an unknown id exits 1 with the file unchanged) | `go test ./internal/cli -run TestMemoryRemoveByID -count=1`. Pre-fix reproduction: §Recovery and invalidation evidence, Path D |
@@ -374,9 +376,14 @@ above.
   (see §Verification).
 - GAP-3 is **closed by trace**: a decision-memory record cannot claim a verified
   outcome or override authoritative state. No code changed.
-- GAP-4 and GAP-5 are **open** trust limits. They are recorded here rather than
-  fixed, because each would need a new contract or new policy. GAP-5 now has deterministic fixtures pinning the current
-  non-verification, and its contract proposal is linked in the gap table above.
+- GAP-4 is **partially fixed and open**. The reproduced aggregate defect — the index
+  identity did not cover the document authority and lifecycle it carried — is fixed
+  and covered by `TestBuildIdentityCoversSOPDocumentAuthority`. Per-row digests remain
+  a schema/compatibility decision and are not implemented here.
+- GAP-5 is an **open trust limit**. `document_hash` is the server-reported
+  fingerprint of the full source document, while SOP receives only a retrieved
+  chunk, so the hash cannot be recomputed without a contract change; the compatible
+  proposal is [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md).
 - GAP-6 is **fixed** in a follow-up change. `sop memory add` (and `sop memory
   remove`) refuse to overwrite a `decisions.json` that is malformed, has another
   schema, or holds records that fail validation; they exit 1 and the file bytes are

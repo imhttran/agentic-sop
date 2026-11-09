@@ -163,8 +163,10 @@ type Identity struct {
 	SchemaVersion int    `json:"schema_version"`
 	Head          string `json:"head,omitempty"`
 	Dirty         bool   `json:"dirty"`
-	// Digest is a stable digest over the indexed files (path + content hash), so identical
-	// repository state yields identical identity and any content change yields a new one.
+	// Digest is a stable digest over the indexed files (path + content hash) and the
+	// resolved document rows (path + class + authority + lifecycle + authority source),
+	// so identical repository state and SOP metadata yield identical identity and any
+	// change to either yields a new one.
 	Digest string `json:"digest"`
 }
 
@@ -192,7 +194,8 @@ type Options struct {
 }
 
 // Build indexes the repository at opts.Root deterministically. It is model-free and
-// read-only. Only the files it indexes affect the result; collections are fully ordered.
+// read-only. Only the files it indexes and the SOP metadata that resolves document
+// authority affect the result; collections are fully ordered.
 func Build(opts Options) (Index, error) {
 	root := strings.TrimSpace(opts.Root)
 	if root == "" {
@@ -348,6 +351,21 @@ func Build(opts Options) (Index, error) {
 	sort.Slice(idx.Documents, func(i, j int) bool { return idx.Documents[i].Path < idx.Documents[j].Path })
 
 	idx.Counts = countIndex(idx)
+
+	// The identity must cover the rows it describes, not only the indexed file bytes: a
+	// document's class, authority, lifecycle, and authority source can change when SOP
+	// metadata outside the walk changes (.agent-sdlc/plan.meta.json and
+	// .agent-sdlc/archive/*/lifecycle.json). Fold the resolved rows into the digest so a
+	// caller comparing Identity.Digest sees that change.
+	for _, doc := range idx.Documents {
+		for _, part := range []string{
+			doc.Path, string(doc.Class), string(doc.Authority), string(doc.Lifecycle), doc.AuthoritySource,
+		} {
+			_, _ = io.WriteString(digest, part)
+			digest.Write([]byte{0})
+		}
+	}
+
 	idx.Identity = Identity{
 		SchemaVersion: SchemaVersion,
 		Head:          strings.TrimSpace(opts.Head),
