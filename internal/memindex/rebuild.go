@@ -36,8 +36,10 @@ func SnapshotContext(ctx context.Context, dir string) (map[string]outcomefile.Ou
 
 // RebuildFromDir rebuilds the index from the authoritative outcome files in dir. Records
 // that fail eligibility (incomplete, superseded, unauthorized) are counted once as
-// excluded and not indexed. Documents rejected by the reader carry an explicit reason.
-// The result is deterministic for the same frozen source records.
+// excluded and not indexed. A record whose source artifact is missing or whose content no
+// longer matches the digest recorded at ingest time is excluded and counted, not indexed.
+// Documents rejected by the reader carry an explicit reason. The result is deterministic
+// for the same frozen source records.
 func (ix *Index) RebuildFromDir(ctx context.Context, dir string) (RebuildReport, error) {
 	records, rejected, err := outcomefile.ReadAllContext(ctx, dir)
 	if err != nil {
@@ -45,9 +47,17 @@ func (ix *Index) RebuildFromDir(ctx context.Context, dir string) (RebuildReport,
 	}
 	rep := RebuildReport{Rejected: rejected}
 	// Count each source-side exclusion exactly once.
-	rep.Excluded = len(outcomefile.Gate(records))
+	excluded := outcomefile.GateWithSourcesAndDigests(records, outcomefile.FileSourceExists, outcomefile.FileSourceDigest)
+	rep.Excluded = len(excluded)
+	excludedIDs := make(map[string]bool, len(excluded))
+	for _, e := range excluded {
+		excludedIDs[e.RecordID] = true
+	}
 	var in []Record
 	for _, r := range records {
+		if excludedIDs[r.RecordID] {
+			continue
+		}
 		if ok, _ := r.Eligible(); ok {
 			in = append(in, Record{
 				RecordID:    r.RecordID,

@@ -25,7 +25,7 @@ func writeRun(t *testing.T, runsDir, taskID, outcomeStatus, decision, reason str
   "model_selection": {"class":"large","provider":"ollama","model":"m","locality":"cloud","source":"env","fallback":false},
   "outcome": {
     "status": "` + outcomeStatus + `",
-    "criteria": [{"ID":"criterion-1","Required":true,"Met":false,"Description":"a criterion","Evidence":"unverifiable: no deterministic check supplied"}],
+    "criteria": [{"ID":"criterion-1","Required":true,"Met":true,"Description":"a criterion","Evidence":"go build ./..."}],
     "reasons": ["` + reason + `"],
     "lifecycle": "LOCAL_DONE",
     "compatibility": "legacy plan: no acceptance mapping is declared"

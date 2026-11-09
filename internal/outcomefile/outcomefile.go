@@ -114,8 +114,12 @@ type OutcomeRecord struct {
 	// Provenance.
 	SourceArtifacts []string `json:"source_artifacts,omitempty"`
 	SourceHash      string   `json:"source_hash,omitempty"`
-	RecordedAt      string   `json:"recorded_at,omitempty"`
-	AccessScope     string   `json:"access_scope,omitempty"`
+	// SourceDigests records the SHA-256 of each source artifact at ingest time, so the
+	// gate can tell a modified source from an unchanged one. The key is the artifact
+	// path as stored in SourceArtifacts.
+	SourceDigests map[string]string `json:"source_digests,omitempty"`
+	RecordedAt    string            `json:"recorded_at,omitempty"`
+	AccessScope   string            `json:"access_scope,omitempty"`
 
 	// Lifecycle.
 	Lifecycle    string `json:"lifecycle,omitempty"`
@@ -358,8 +362,36 @@ func (r OutcomeRecord) Eligible() (bool, string) {
 	case r.Status == StatusSuccess && len(r.EvidenceRefs) == 0 && len(r.Verification) == 0:
 		// A success claim without evidence is not a verified success.
 		return false, "missing evidence for success"
+	case r.Status == StatusSuccess && verificationContradictsSuccess(r.Verification):
+		// A recorded check that failed contradicts the success claim, so the record is
+		// not verified evidence.
+		return false, "verification contradicts success"
 	}
 	return true, ""
+}
+
+// verificationContradictsSuccess reports whether any recorded verification failed. A
+// verification with a non-zero exit code or a non-pass result contradicts a success.
+func verificationContradictsSuccess(vs []Verification) bool {
+	for _, v := range vs {
+		if v.ExitCode != 0 {
+			return true
+		}
+		if !passResult(v.Result) {
+			return true
+		}
+	}
+	return false
+}
+
+// passResult reports whether a recorded check result is a pass. An empty result is not a
+// pass, so an unreadable check never corroborates a success.
+func passResult(s string) bool {
+	switch strings.ToUpper(strings.TrimSpace(s)) {
+	case "PASS", "PASSED", "OK", "SUCCESS", "VERIFIED":
+		return true
+	}
+	return false
 }
 
 // Gate applies the eligibility gate to records and returns one Exclusion for each
@@ -369,11 +401,29 @@ func Gate(records []OutcomeRecord) []Exclusion {
 	return GateWithSources(records, nil)
 }
 
+// ReasonSourceDeleted is the exclusion reason for a record whose source artifact is gone.
+const ReasonSourceDeleted = "source deleted"
+
+// ReasonSourceModified is the exclusion reason for a record whose source artifact content
+// no longer matches the digest recorded at ingest time.
+const ReasonSourceModified = "source modified"
+
 // GateWithSources applies the eligibility gate and additionally excludes any record whose
 // recorded source artifacts no longer exist. A nil sourceExists skips the source check. A
 // deleted, moved or access-restricted source therefore invalidates its record instead of
 // leaving indexable evidence behind.
+//
+// When a record also carries recorded source digests, a source whose content changed is
+// excluded as modified, so a changed source never keeps its obsolete verified identity.
 func GateWithSources(records []OutcomeRecord, sourceExists func(string) bool) []Exclusion {
+	return GateWithSourcesAndDigests(records, sourceExists, nil)
+}
+
+// GateWithSourcesAndDigests applies GateWithSources and additionally excludes a record
+// whose source content no longer matches the digest recorded at ingest time. A nil
+// sourceDigest skips the content check, which keeps existence-only behaviour as the
+// fallback when no digest is available.
+func GateWithSourcesAndDigests(records []OutcomeRecord, sourceExists func(string) bool, sourceDigest func(string) (string, error)) []Exclusion {
 	var out []Exclusion
 	for _, r := range records {
 		ok, reason := r.Eligible()
@@ -383,17 +433,56 @@ func GateWithSources(records []OutcomeRecord, sourceExists func(string) bool) []
 					continue
 				}
 				if !sourceExists(src) {
-					ok, reason = false, "source deleted"
+					ok, reason = false, ReasonSourceDeleted
 					break
 				}
 			}
 		}
 		if !ok {
 			out = append(out, Exclusion{RecordID: r.RecordID, Reason: reason})
+			continue
+		}
+		if sourceDigest != nil && len(r.SourceDigests) > 0 {
+			if modified := sourceContentModified(r, sourceDigest); modified {
+				out = append(out, Exclusion{RecordID: r.RecordID, Reason: ReasonSourceModified})
+			}
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].RecordID < out[j].RecordID })
 	return out
+}
+
+// sourceContentModified reports whether any recorded source digest disagrees with the
+// current content of that artifact. A digest that cannot be recomputed is treated as a
+// modification, so the record fails closed.
+func sourceContentModified(r OutcomeRecord, sourceDigest func(string) (string, error)) bool {
+	for src, want := range r.SourceDigests {
+		if strings.TrimSpace(src) == "" || strings.TrimSpace(want) == "" {
+			continue
+		}
+		got, err := sourceDigest(src)
+		if err != nil || got != want {
+			return true
+		}
+	}
+	return false
+}
+
+// FileSourceExists reports whether a source artifact path still exists. It is the
+// existence predicate the gate uses on a local run tree.
+func FileSourceExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
+}
+
+// FileSourceDigest returns the SHA-256 of a source artifact's current content.
+func FileSourceDigest(path string) (string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
 }
 
 // Redact removes credential-shaped substrings from free-form evidence. It is applied to
@@ -511,14 +600,43 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 	if err := json.Unmarshal(raw, &rep); err != nil {
 		return OutcomeRecord{}, fmt.Errorf("outcomefile: ingest %s: decode report: %w", taskID, err)
 	}
+	// The report must claim the identity of the run directory it was read from. A report
+	// substituted under another task's directory is rejected, so its content is never
+	// ingested under a different identity.
+	declaredID := strings.TrimSpace(rep.ID)
+	if declaredID == "" {
+		return OutcomeRecord{}, fmt.Errorf("%w: %s report.json has no id", ErrIncompleteRecord, taskID)
+	}
+	if declaredID != taskID {
+		return OutcomeRecord{}, fmt.Errorf("%w: report id %q does not match run directory %q", ErrIncompleteRecord, declaredID, taskID)
+	}
+
 	status, ok := outcomeStatus(rep.Outcome.Status)
 	if !ok {
 		return OutcomeRecord{}, fmt.Errorf("%w: %s has unknown outcome status %q", ErrIncompleteRecord, taskID, rep.Outcome.Status)
 	}
+	// A self-declared success is corroborated from the report's own required criteria and
+	// validation results. An uncorroborated claim stays usable as advisory data, but it is
+	// never recorded as a verified success.
+	if status == StatusSuccess && !successCorroborated(rep) {
+		status = StatusPartial
+	}
 
+	// counts.json supplies the record attempt and revision. When present it is parsed
+	// strictly: a malformed file is an explicit rejection, so identity never comes from
+	// unverified metadata. A missing file contributes no metadata, so the attempt
+	// defaults and the record stays usable as advisory data.
 	var counts runCounts
-	if data, err := os.ReadFile(filepath.Join(runDir, "counts.json")); err == nil {
-		_ = json.Unmarshal(data, &counts)
+	countsData, err := os.ReadFile(filepath.Join(runDir, "counts.json"))
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(countsData, &counts); err != nil {
+			return OutcomeRecord{}, fmt.Errorf("outcomefile: ingest %s: decode counts.json: %w", taskID, err)
+		}
+	case os.IsNotExist(err):
+		// No counts metadata; the attempt stays zero.
+	default:
+		return OutcomeRecord{}, fmt.Errorf("outcomefile: ingest %s: read counts.json: %w", taskID, err)
 	}
 
 	sum := sha256.Sum256(raw)
@@ -528,6 +646,7 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 		attempt = 0
 	}
 
+	artifacts := existingArtifacts(runDir)
 	runID := fmt.Sprintf("%s-attempt-%d", taskID, attempt)
 	rec := OutcomeRecord{
 		SchemaVersion:    SchemaVersion,
@@ -547,8 +666,9 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 		EvidenceRefs:     existingArtifacts(runDir),
 		FailureSignature: Redact(firstNonEmpty(rep.Outcome.Reasons)),
 		Uncertainty:      Redact(rep.Outcome.Compatibility),
-		SourceArtifacts:  existingArtifacts(runDir),
+		SourceArtifacts:  artifacts,
 		SourceHash:       hex.EncodeToString(sum[:]),
+		SourceDigests:    sourceDigests(artifacts),
 		RecordedAt:       rep.GeneratedAt,
 		AccessScope:      "local",
 		Lifecycle:        rep.Outcome.Lifecycle,
@@ -565,6 +685,44 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 	}
 	rec.ContentHash = hash
 	return rec, nil
+}
+
+// successCorroborated reports whether the report's own required criteria and validation
+// results agree with a claimed success. Every required criterion must be met, every
+// recorded criterion must be well-formed, and at least one validation result must be
+// recorded and passing. Anything else leaves the claim uncorroborated.
+func successCorroborated(rep runReport) bool {
+	if len(rep.Validation) == 0 {
+		return false
+	}
+	for _, v := range rep.Validation {
+		if v.ExitCode != 0 || !passResult(v.Status) {
+			return false
+		}
+	}
+	for _, c := range rep.Outcome.Criteria {
+		if c.Required && !c.Met {
+			return false
+		}
+	}
+	return true
+}
+
+// sourceDigests records the SHA-256 of every named source artifact that exists. A digest
+// that cannot be read is omitted, so the gate falls back to the existence check for it.
+func sourceDigests(artifacts []string) map[string]string {
+	out := make(map[string]string, len(artifacts))
+	for _, a := range artifacts {
+		h, err := FileSourceDigest(a)
+		if err != nil {
+			continue
+		}
+		out[a] = h
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // verificationFromReport records the observed validation commands without their stdout,
