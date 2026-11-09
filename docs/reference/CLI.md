@@ -195,7 +195,7 @@ and a plan id), so `sop run docs/PLAN-Jev.md` runs that plan independently.
   with an actionable `NEEDS_HUMAN` rather than silently rebuilding the graph.
 - If a different plan is requested while another is active, `sop run` hands off
   automatically when every task in the active plan is complete (archiving its
-  records under `.agent-sdlc/archive/<plan-id>/`); otherwise it stops with
+  records under `.agent-sdlc/archive/<plan-id>[.<n>]/`); otherwise it stops with
   `NEEDS_HUMAN`. It never mixes tasks from two plans or silently switches away
   from unfinished work.
 
@@ -226,11 +226,11 @@ plan's task graph as the active plan and stops — it never executes the first t
 so activation and execution are separate operator actions; `sop run` then executes
 the next runnable task. `sop plan supersede <PLAN.md>` explicitly replaces the active
 plan, even one with unfinished work, archiving the previous plan as `SUPERSEDED`
-(under `.agent-sdlc/archive/<plan-id>/`, with a `lifecycle.json`) while preserving its
+(under `.agent-sdlc/archive/<plan-id>[.<n>]/`, with a `lifecycle.json`) while preserving its
 task states, run evidence, and approvals verbatim — supersession never fabricates a
 PASS or an approval. `sop plan complete` archives the active plan as `COMPLETE` once all of
 its tasks are satisfied and releases it without installing a successor; it fails closed
-while any task is unresolved and never fabricates work. `sop plan historicalize [<PLAN.md>]` is the general, deterministic historicalization of a completed (or explicitly disposed) plan: it evaluates readiness (task counts by state, unresolved tasks, pending approvals, and missing verification), archives the plan under `.agent-sdlc/archive/<plan-id>/`, and removes it from ACTIVE selection. `--check` reports readiness without mutating; `--disposition SUPERSEDED` records an explicit disposal of unfinished work; it is idempotent (`ALREADY_HISTORICALIZED`) and refuses a plan that changed since readiness was evaluated. With `SOP_HISTORICALIZE_ON_COMPLETION=true`, `sop run` performs it as the final stage of a successful run whose plan is fully satisfied and eligible (never across a pending approval gate). `sop status` prints the active plan's identity and state before
+while any task is unresolved and never fabricates work. `sop plan historicalize [<PLAN.md>]` is the general, deterministic historicalization of a completed (or explicitly disposed) plan: it evaluates readiness (task counts by state, unresolved tasks, pending approvals, and missing verification), archives the plan under `.agent-sdlc/archive/<plan-id>[.<n>]/`, and removes it from ACTIVE selection. `--check` reports readiness without mutating; `--disposition SUPERSEDED` records an explicit disposal of unfinished work; it is idempotent (`ALREADY_HISTORICALIZED`) and refuses a plan that changed since readiness was evaluated. With `SOP_HISTORICALIZE_ON_COMPLETION=true`, `sop run` performs it as the final stage of a successful run whose plan is fully satisfied and eligible (never across a pending approval gate). `sop status` prints the active plan's identity and state before
 the task list. `sop task complete <task-id> --external [--commit <sha>]` records the completion of a task
 whose work was performed and merged **outside** the SOP execution — an explicit, model-free
 operator action. It fails closed unless the evidence establishes completion: the task exists

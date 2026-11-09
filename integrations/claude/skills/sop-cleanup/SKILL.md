@@ -174,7 +174,7 @@ junk"; it is out of scope.
 Two different things must not be conflated:
 
 ```text
-A. SOP MACHINE LIFECYCLE ARCHIVE     .agent-sdlc/archive/<plan-id>/
+A. SOP MACHINE LIFECYCLE ARCHIVE     .agent-sdlc/archive/<plan-id>[.<n>]/
 B. REPOSITORY DOCUMENT HISTORY       docs/history/
 ```
 

@@ -25,7 +25,7 @@ Operator
    ↓
 sop plan historicalize        (SOP's deterministic, model-free lifecycle transition)
    ↓
-.agent-sdlc/archive/<plan-id>/   (task outcomes, provenance, verification, disposition)
+.agent-sdlc/archive/<plan-id>[.<n>]/   (task outcomes, provenance, verification, disposition)
 ```
 
 ## DISCOVER

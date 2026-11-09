@@ -432,15 +432,11 @@ type Lifecycle struct {
 }
 
 // archivePlan preserves a plan's task records, provenance, and terminal
-// disposition under DirName/archive/<plan-id>/ before its active association is
-// released, so the previous plan's history stays readable and its lifecycle state
-// stays unambiguous. It returns the archive directory it wrote.
+// disposition in the activation's archive slot (archiveSlot) before its active
+// association is released, so the previous plan's history stays readable and its
+// lifecycle state stays unambiguous. It returns the archive directory it wrote.
 func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, metaPath, disposition string) (string, error) {
-	id := strings.TrimSpace(meta.PlanID)
-	if id == "" {
-		id = "plan"
-	}
-	root := filepath.Join(dir, config.DirName, archiveDirName, id)
+	root := archiveSlot(dir, meta.PlanID, tasks)
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return "", err
 	}
@@ -483,6 +479,76 @@ func archivePlan(dir string, meta Metadata, tasks []*domain.Task, planPath, meta
 		return "", err
 	}
 	return root, nil
+}
+
+// archiveSlotDir is slot n of a plan's archive: the first activation of a plan id
+// is archive/<id>, and a later activation reusing the id is archive/<id>.<n>. A
+// plan id is [a-z0-9-] only (planID), so the "." suffix never names another plan.
+func archiveSlotDir(dir, id string, n int) string {
+	name := strings.TrimSpace(id)
+	if name == "" {
+		name = "plan"
+	}
+	if n > 1 {
+		name = fmt.Sprintf("%s.%d", name, n)
+	}
+	return filepath.Join(dir, config.DirName, archiveDirName, name)
+}
+
+// latestArchive returns the newest archive slot written for a plan id and its
+// number, or "", 0 when the id was never archived. Slots are created in order.
+func latestArchive(dir, id string) (string, int) {
+	n := 0
+	for {
+		info, err := os.Stat(archiveSlotDir(dir, id, n+1))
+		if err != nil || !info.IsDir() {
+			break
+		}
+		n++
+	}
+	if n == 0 {
+		return "", 0
+	}
+	return archiveSlotDir(dir, id, n), n
+}
+
+// archiveSlot picks the archive directory for the activation being archived. It
+// reuses the newest slot only when that slot is unfinished (no terminal record)
+// or already records exactly these tasks, so re-running an interrupted
+// transition rewrites its own slot. Any other activation gets the next slot, so
+// no transition overwrites an earlier activation's records.
+func archiveSlot(dir, id string, tasks []*domain.Task) string {
+	latest, n := latestArchive(dir, id)
+	// An empty snapshot "holds" any slot, so it must not reuse a recorded one: that
+	// would overwrite an earlier activation's records with nothing.
+	if n > 0 && (!fileExists(filepath.Join(latest, lifecycleFile)) || (len(tasks) > 0 && archiveHolds(latest, tasks))) {
+		return latest
+	}
+	return archiveSlotDir(dir, id, n+1)
+}
+
+// archiveHolds reports whether the archive slot at root records every active task
+// exactly as it is now, so releasing them loses nothing. It fails closed: an
+// unreadable archive snapshot holds nothing.
+func archiveHolds(root string, tasks []*domain.Task) bool {
+	if len(tasks) == 0 {
+		return true
+	}
+	var archived []*domain.Task
+	data, err := os.ReadFile(filepath.Join(root, archivedTasksFile))
+	if err != nil || json.Unmarshal(data, &archived) != nil {
+		return false
+	}
+	want := make(map[string]string, len(archived))
+	for _, t := range archived {
+		want[t.ID] = historicalizationTaskRow(t)
+	}
+	for _, t := range tasks {
+		if want[t.ID] != historicalizationTaskRow(t) {
+			return false
+		}
+	}
+	return true
 }
 
 // --- Explicit reconciliation ---------------------------------------------

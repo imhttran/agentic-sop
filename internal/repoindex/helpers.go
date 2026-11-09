@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 )
 
 // defaultExcludedDirs are directory names the index never descends into. They match the
@@ -424,6 +425,9 @@ func readSOPMetadata(root, stateDir string) sopMeta {
 	if src := readMetaSource(filepath.Join(dir, "plan.meta.json")); src != "" {
 		m.activeSource = src
 	}
+	// A plan source archived more than once has several slots (archive/<id>,
+	// archive/<id>.<n>); the most recently recorded one decides its disposition.
+	newest := map[string]time.Time{}
 	entries, _ := os.ReadDir(filepath.Join(dir, "archive"))
 	for _, e := range entries {
 		if !e.IsDir() {
@@ -435,14 +439,19 @@ func readSOPMetadata(root, stateDir string) sopMeta {
 			continue
 		}
 		disp := "complete"
+		var life struct {
+			Disposition string    `json:"disposition"`
+			RecordedAt  time.Time `json:"recorded_at"`
+		}
 		if data, err := os.ReadFile(filepath.Join(adir, "lifecycle.json")); err == nil {
-			var life struct {
-				Disposition string `json:"disposition"`
-			}
 			if json.Unmarshal(data, &life) == nil && strings.TrimSpace(life.Disposition) != "" {
 				disp = strings.ToLower(strings.TrimSpace(life.Disposition))
 			}
 		}
+		if seen, ok := newest[src]; ok && !life.RecordedAt.After(seen) {
+			continue
+		}
+		newest[src] = life.RecordedAt
 		m.archived[src] = disp
 	}
 	return m

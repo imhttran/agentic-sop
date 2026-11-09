@@ -1,6 +1,7 @@
 package planflow
 
 import (
+	"context"
 	"errors"
 	"os"
 	"path/filepath"
@@ -46,7 +47,7 @@ func completedPlan(t *testing.T, dir string) *fakeStore {
 }
 
 func archiveLifecyclePath(dir, planID string) string {
-	return filepath.Join(dir, config.DirName, archiveDirName, archiveID(planID), lifecycleFile)
+	return filepath.Join(archiveSlotDir(dir, planID, 1), lifecycleFile)
 }
 
 // TestHistoricalizeCompletedPlanArchives proves a fully satisfied, verified plan
@@ -84,7 +85,7 @@ func TestHistoricalizeCompletedPlanArchives(t *testing.T) {
 	}
 	// The active-plan selection is released, so the plan cannot be re-activated
 	// from a stale machine plan.
-	archived := read(t, filepath.Join(dir, config.DirName, archiveDirName, archiveID(res.Readiness.PlanID), archivedTasksFile))
+	archived := read(t, filepath.Join(archiveSlotDir(dir, res.Readiness.PlanID, 1), archivedTasksFile))
 	if !strings.Contains(archived, "\"S001\"") || !strings.Contains(archived, "\"S002\"") {
 		t.Errorf("archived tasks lost records: %s", archived)
 	}
@@ -220,7 +221,7 @@ func TestHistoricalizeExplicitSupersededAllowsUnfinished(t *testing.T) {
 	if life.Disposition != DispositionSuperseded {
 		t.Errorf("disposition = %q, want SUPERSEDED", life.Disposition)
 	}
-	archived := read(t, filepath.Join(dir, config.DirName, archiveDirName, archiveID(res.Readiness.PlanID), archivedTasksFile))
+	archived := read(t, filepath.Join(archiveSlotDir(dir, res.Readiness.PlanID, 1), archivedTasksFile))
 	if !strings.Contains(archived, "\"S002\"") || !strings.Contains(archived, "PLANNED") {
 		t.Errorf("unfinished S002 was not preserved verbatim: %s", archived)
 	}
@@ -359,10 +360,12 @@ func TestHistoricalizeDetectsStateChangeBetweenReads(t *testing.T) {
 func TestHistoricalizeCompletesStagedRelease(t *testing.T) {
 	dir := t.TempDir()
 	st := completedPlan(t, dir)
-	// Simulate a failure after the archive stage: the terminal record exists while
-	// the plan is still ACTIVE.
-	write(t, dir, filepath.Join(config.DirName, archiveDirName, "plan", lifecycleFile),
-		`{"plan_id":"plan","source":"PLAN.md","disposition":"COMPLETE","recorded_at":"2026-01-01T00:00:00Z"}`+"\n")
+	// Simulate a failure after the archive stage: the archive (task snapshot and
+	// terminal record) exists while the plan is still ACTIVE.
+	metaPath := filepath.Join(dir, config.DirName, metaFileName)
+	if _, err := archivePlan(dir, readMetadata(metaPath), st.tasks, filepath.Join(dir, config.DirName, planFileName), metaPath, DispositionComplete); err != nil {
+		t.Fatalf("stage archive: %v", err)
+	}
 
 	ready, err := EvaluateHistoricalization(dir, st, "", "")
 	if err != nil {
@@ -385,6 +388,83 @@ func TestHistoricalizeCompletesStagedRelease(t *testing.T) {
 	if _, _, ok := ActivePlanID(dir); ok {
 		t.Error("staged release did not release the active association")
 	}
+}
+
+// reactivatedPlan archives PLAN.md as SUPERSEDED, re-activates the same plan id,
+// and finishes its work with verification evidence. It returns the store and the
+// first activation's archived task snapshot.
+func reactivatedPlan(t *testing.T, dir string) (*fakeStore, string) {
+	t.Helper()
+	st := prepareForReconcile(t, dir, "PLAN.md", reconcileDocTwo)
+	if _, err := Historicalize(HistoricalizeOptions{Dir: dir, Store: st, Disposition: DispositionSuperseded}); err != nil {
+		t.Fatalf("first historicalize: %v", err)
+	}
+	first := read(t, filepath.Join(archiveSlotDir(dir, "plan", 1), archivedTasksFile))
+	return completedPlan(t, dir), first
+}
+
+// assertSecondArchive checks that the first activation's archive is untouched and
+// the re-activation was archived on its own, with its finished tasks.
+func assertSecondArchive(t *testing.T, dir, first, disposition string) {
+	t.Helper()
+	if got := read(t, filepath.Join(archiveSlotDir(dir, "plan", 1), archivedTasksFile)); got != first {
+		t.Error("first activation's archive was overwritten")
+	}
+	second := archiveSlotDir(dir, "plan", 2)
+	life, err := readRecordedLifecycle(filepath.Join(second, lifecycleFile))
+	if err != nil || life.Disposition != disposition {
+		t.Fatalf("second archive lifecycle = %+v, %v; want disposition %s", life, err, disposition)
+	}
+	if got := read(t, filepath.Join(second, archivedTasksFile)); !strings.Contains(got, string(domain.LOCAL_DONE)) {
+		t.Error("second archive does not hold the finished tasks")
+	}
+}
+
+// The four tests below prove a plan id reused by a later activation gets its own
+// archive under every terminal transition, instead of one transition discarding
+// the new task records (historicalize) or overwriting the earlier archive
+// (complete, supersede, handoff).
+
+func TestReactivatedPlanHistoricalizesToNewArchive(t *testing.T) {
+	dir := t.TempDir()
+	st, first := reactivatedPlan(t, dir)
+	res, err := Historicalize(HistoricalizeOptions{Dir: dir, Store: st})
+	if err != nil {
+		t.Fatalf("historicalize: %v", err)
+	}
+	if res.Outcome != OutcomeHistoricalized || len(st.tasks) != 0 {
+		t.Fatalf("res = %+v with %d task(s) left; want HISTORICALIZED and released", res, len(st.tasks))
+	}
+	assertSecondArchive(t, dir, first, DispositionComplete)
+}
+
+func TestReactivatedPlanCompletesToNewArchive(t *testing.T) {
+	dir := t.TempDir()
+	st, first := reactivatedPlan(t, dir)
+	if _, err := Complete(Options{Dir: dir, Store: st}); err != nil {
+		t.Fatalf("complete: %v", err)
+	}
+	assertSecondArchive(t, dir, first, DispositionComplete)
+}
+
+func TestReactivatedPlanSupersedesToNewArchive(t *testing.T) {
+	dir := t.TempDir()
+	st, first := reactivatedPlan(t, dir)
+	write(t, dir, "PLAN2.md", planDocB)
+	if _, err := Supersede(context.Background(), Options{Dir: dir, PlanSource: filepath.Join(dir, "PLAN2.md"), Store: st}); err != nil {
+		t.Fatalf("supersede: %v", err)
+	}
+	assertSecondArchive(t, dir, first, DispositionSuperseded)
+}
+
+func TestReactivatedPlanHandsOffToNewArchive(t *testing.T) {
+	dir := t.TempDir()
+	st, first := reactivatedPlan(t, dir)
+	write(t, dir, "PLAN2.md", planDocB)
+	if _, err := Prepare(context.Background(), Options{Dir: dir, PlanSource: filepath.Join(dir, "PLAN2.md"), Store: st}); err != nil {
+		t.Fatalf("handoff: %v", err)
+	}
+	assertSecondArchive(t, dir, first, DispositionComplete)
 }
 
 // TestHistoricalizeReadinessReportsCounts proves readiness reports task counts by
@@ -460,5 +540,25 @@ func TestHistoricalizeMissingPlanPathIsRefused(t *testing.T) {
 	}
 	if len(st.tasks) == 0 {
 		t.Error("readiness must not mutate")
+	}
+}
+
+// TestArchivePlanRerunReusesSlot proves re-running an interrupted transition over
+// the same tasks rewrites its own archive slot instead of opening a new one.
+func TestArchivePlanRerunReusesSlot(t *testing.T) {
+	dir := t.TempDir()
+	st := completedPlan(t, dir)
+	metaPath := filepath.Join(dir, config.DirName, metaFileName)
+	planPath := filepath.Join(dir, config.DirName, planFileName)
+	first, err := archivePlan(dir, readMetadata(metaPath), st.tasks, planPath, metaPath, DispositionComplete)
+	if err != nil {
+		t.Fatalf("archive: %v", err)
+	}
+	again, err := archivePlan(dir, readMetadata(metaPath), st.tasks, planPath, metaPath, DispositionComplete)
+	if err != nil {
+		t.Fatalf("re-archive: %v", err)
+	}
+	if again != first {
+		t.Errorf("re-run archived to %s, want the same slot %s", again, first)
 	}
 }
