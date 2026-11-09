@@ -1,28 +1,26 @@
 # OWASP LLM program — evidence matrix
 
-This index links the security-plan workstreams that have a plan or report in this
-checkout. It is an evidence matrix, not a compliance certification. A row is never
-marked fully covered from partial evidence: `IMPLEMENTED`, `ENABLED`, `VERIFIED`,
-`NOT_RUN`, `GAP`, and `NOT_APPLICABLE` are separate dimensions, and a missing live
-test stays visible.
+This index links the ten security-plan workstreams. It is an evidence matrix,
+not a compliance certification. A row is never marked fully covered from partial
+evidence: `IMPLEMENTED`, `ENABLED`, `VERIFIED`, `NOT_RUN`, `GAP`, and
+`NOT_APPLICABLE` are separate dimensions, and a missing live test stays visible.
 
 Baseline: `imhttran/agentic-sop` `main` at
-`0750e8be0cf5f318a173abb34c2b752ac131521c` (refreshed 2026-11-09 UTC). The
-Plan 01 row was updated at `985472a` (PR #271). The Plan 03 and Plan 10 rows were
-refreshed against `main` at `24be068`/`985472a` (2026-11-08). Older rows are not
-re-verified by those refreshes.
+The Plan 10 row was refreshed on the branch merged with `main` at
+`9689de7` (2026-11-08); earlier rows are not re-verified by that refresh.
+`0750e8be0cf5f318a173abb34c2b752ac131521c` (refreshed 2026-11-09 UTC).
 
 | Plan | Category | Workstream | Report / evidence | Evidence state | Boundary |
 | --- | --- | --- | --- | --- | --- |
-| Plan 01 | Excessive Agency (LLM03) | Linux agent (`task/LLM03-impl-plan-01-agency-boundary-controls`, PR #271) | [llm03-agency.md](llm03-agency.md), [agency-002-evidence.md](agency-002-evidence.md) | `IMPLEMENTED`; Linux local verification `PASS` (`go build`, `go vet`, `go test ./...`); Linux Bubblewrap runtime isolation verified; macOS Seatbelt `UNVERIFIED` | Normal agent execution is policy-only and not OS-sandboxed. OS isolation is demonstrated only on the isolated-replay and evaltarget paths; platform identity and macOS runtime evidence remain gaps. |
-| Plan 02 | Prompt Injection (LLM01) | Linux agent | Existing deterministic controls: `docs/reports/security-shift-left/aisec-live-assessment.md`; partial seam on `security/llm01-injection` (not merged) | `NOT_RUN` for live adversarial; deterministic/real-control tests exist | Live-adversarial evidence needs an evaltarget-routed live path; a fixture or text assertion is not a substitute. |
-| Plan 03 | Sensitive Information Disclosure (LLM02) | Mac agent (`security/llm02-disclosure`, merged) | [llm02-disclosure.md](llm02-disclosure.md) | Static tracing `IMPLEMENTED` / `VERIFIED` (macOS); live `NOT_RUN` | Live extraction depends on Plan 02's merged live-test infrastructure, which is absent. The report's historical outcomes remain `PARTIAL` where the acceptance mapping changed after execution. |
-| Plan 04 | Supply Chain (LLM04) | Mac agent (`security/llm04-supply-chain`) | [llm04-supply-chain.md](llm04-supply-chain.md) | `IMPLEMENTED` / `VERIFIED` for the declared report-only scope | Provider model provenance, publisher signatures, required-mode enablement, and normal-agent OS isolation remain out of scope or unverified. |
-| Plan 05 | Data and Model Poisoning (LLM05) | Linux agent (`security/llm05-data-and-model-poisoning`, merged) | Plan: `docs/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`; no category report in this checkout | Implementation merged; category evidence `NOT_RUN` | The merged change hardens outcome/memory provenance at ingest. It is not re-verified here and does not claim poisoning detection or retrieval isolation. |
-| Plan 06 | not recorded in this checkout | — | No plan or report present | `NOT_RUN` | No category claim is made. |
-| Plan 07 | not recorded in this checkout | — | No plan or report present | `NOT_RUN` | Plan 10 was authored assuming Plan 07 owns evidence claims, but that work is absent from this baseline. |
-| Plan 08 | not recorded in this checkout | — | No plan or report present | `NOT_RUN` | No category claim is made. |
-| Plan 09 | not recorded in this checkout | — | No plan or report present | `NOT_RUN` | Plan 10's source document names Plan 09 as retrieval-query isolation, but that work is absent from this baseline. |
+| Plan 01 | Excessive Agency | Linux agent (`task/LLM03-impl-plan-01-agency-boundary-controls`, PR #271) | [llm03-agency.md](llm03-agency.md), [agency-002-evidence.md](agency-002-evidence.md) | `IMPLEMENTED`; Linux local verification `PASS` (`go build`, `go vet`, `go test ./...`); Linux Bubblewrap runtime isolation verified; macOS Seatbelt `UNVERIFIED` | Normal agent execution is policy-only and not OS-sandboxed. OS isolation is demonstrated only on the isolated-replay and evaltarget paths; platform identity and macOS runtime evidence remain gaps. |
+| Plan 02 | Prompt Injection | Linux agent | No report in this checkout; existing deterministic controls: `docs/reports/security-shift-left/aisec-live-assessment.md` | `NOT_RUN` for live adversarial; deterministic/real-control tests exist | Live-adversarial evidence needs an evaltarget-routed live path; a fixture or text assertion is not a substitute. |
+| Plan 03 | Sensitive Information Disclosure | Mac agent (`security/llm02-disclosure`, merged in PR #266) | [llm02-disclosure.md](llm02-disclosure.md) | Static tracing `IMPLEMENTED` / `VERIFIED`; live extraction `NOT_RUN` | Plan 03 live tests depend on Plan 02's merged live-test infrastructure. Static tracing is independent. |
+| Plan 04 | Supply Chain | Mac agent (`security/llm04-supply-chain`) | [llm04-supply-chain.md](llm04-supply-chain.md) | `IMPLEMENTED` / `VERIFIED` for the declared report-only scope | Provider model provenance, publisher signatures, required-mode enablement, and normal-agent OS isolation remain out of scope or unverified. |
+| Plan 05 | Data and Model Poisoning | `security/llm05-data-and-model-poisoning` (merged in PR #268; follow-up fixes merged in PR #274) | Plan: `docs/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`; report `llm05-poisoning.md` not yet written (POISON-001) | POISON-002 outcome-provenance fix `IMPLEMENTED` (CI and review clean); SOP acceptance `PARTIAL`, blocked on issue #273; POISON-001/003 `NOT_RUN` | Provider-owned training is outside SOP control and is not marked secure. |
+| Plan 06 | Unbounded Consumption | Not started | Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` | `NOT_RUN` (plan `PROPOSED`) | Token/spend accounting that does not exist stays a `GAP`; no dollar-cap claim without pre-dispatch enforcement. |
+| Plan 07 | Misinformation | Not started | Plan: `docs/plans/PLAN-07-SOP-LLM07-Misinformation.md` | `NOT_RUN` (plan `PROPOSED`) | Scope is evidence used in decisions, not factual correctness of every generated sentence. |
+| Plan 08 | Hidden Context Exposure | Not started | Plan: `docs/plans/PLAN-08-SOP-LLM08-Hidden-Context-Exposure.md` | `NOT_RUN` (plan `PROPOSED`) | Reuses Plan 03 redaction and Plan 02 live evaluation; adds no second DLP layer. |
+| Plan 09 | Vector and Embedding Weaknesses | Not started | Plan: `docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md` | `NOT_RUN` (plan `PROPOSED`) | Plan 05 owns ingestion provenance; this plan owns query scope, cache scope, and stale results. |
 | Plan 10 | Improper Output Handling (LLM10) | Linux agent (`security/llm10-improper-output-handling`) | [llm10-output-handling.md](llm10-output-handling.md) | `IMPLEMENTED` / `ENABLED` / `VERIFIED` for the Linux CLI terminal and the Slack payload encoder; live delivery `NOT_RUN` | Third-party terminal/IDE rendering, persisted Markdown rendering, and Slack auto-unfurl remain external. Shell, path, database, and protocol controls were inspected and confirmed, not re-authored. |
 
 ## What the Plan 04 row evidences
@@ -60,15 +58,15 @@ re-verified by those refreshes.
 ## What this matrix does not claim
 
 - It does not claim full OWASP Top 10 for LLM Applications coverage.
-- It does not claim a formal OWASP edition mapping; confirm the official edition
-  before publishing a compliance claim.
+- Category IDs and names follow the OWASP Top 10 for LLM Applications 2026
+  edition (published 2026-08-04), as listed in the Cycode guide
+  (https://cycode.com/blog/owasp-top-10-llm-applications/). This is not a
+  compliance mapping; the official document's framework appendix has not been
+  checked against these rows.
 - It does not infer Linux protection from macOS Seatbelt results.
 - It does not infer runtime protection from a specification, scanner `PASS`, or
   dependency plan alone.
-- It does not infer a category is covered because a plan, branch, or PR exists.
 - It does not claim a merge, deployment, installation, or live adversarial run.
-- It does not invent category names for Plan 06–09 where the source document and
-  repository do not record them.
 
 ## Related baseline evidence
 
