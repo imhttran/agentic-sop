@@ -409,6 +409,10 @@ const ReasonSourceDeleted = "source deleted"
 // no longer matches the digest recorded at ingest time.
 const ReasonSourceModified = "source modified"
 
+// ReasonSourceUnverified is the exclusion reason for a record that names an immutable
+// source artifact with no recorded digest, so its content cannot be compared.
+const ReasonSourceUnverified = "source unverified"
+
 // GateWithSources applies the eligibility gate and additionally excludes any record whose
 // recorded source artifacts no longer exist. A nil sourceExists skips the source check. A
 // deleted, moved or access-restricted source therefore invalidates its record instead of
@@ -421,9 +425,11 @@ func GateWithSources(records []OutcomeRecord, sourceExists func(string) bool) []
 }
 
 // GateWithSourcesAndDigests applies GateWithSources and additionally excludes a record
-// whose source content no longer matches the digest recorded at ingest time. A nil
-// sourceDigest skips the content check, which keeps existence-only behaviour as the
-// fallback when no digest is available.
+// whose source content no longer matches the digest recorded at ingest time, or whose
+// immutable source artifact has no recorded digest at all. A nil sourceDigest skips the
+// content checks, which keeps existence-only behaviour as the fallback when no digest
+// comparison is requested. A record with no digest map at all is legacy and is not
+// excluded here; the rebuild compatibility rule downgrades a digest-less success.
 func GateWithSourcesAndDigests(records []OutcomeRecord, sourceExists func(string) bool, sourceDigest func(string) (string, error)) []Exclusion {
 	var out []Exclusion
 	for _, r := range records {
@@ -444,8 +450,11 @@ func GateWithSourcesAndDigests(records []OutcomeRecord, sourceExists func(string
 			continue
 		}
 		if sourceDigest != nil && len(r.SourceDigests) > 0 {
-			if modified := sourceContentModified(r, sourceDigest); modified {
+			switch {
+			case sourceContentModified(r, sourceDigest):
 				out = append(out, Exclusion{RecordID: r.RecordID, Reason: ReasonSourceModified})
+			case sourceArtifactUnverified(r):
+				out = append(out, Exclusion{RecordID: r.RecordID, Reason: ReasonSourceUnverified})
 			}
 		}
 	}
@@ -469,6 +478,26 @@ func sourceContentModified(r OutcomeRecord, sourceDigest func(string) (string, e
 		}
 		got, err := sourceDigest(src)
 		if err != nil || got != want {
+			return true
+		}
+	}
+	return false
+}
+
+// sourceArtifactUnverified reports whether an eligible record names an immutable source
+// artifact with no recorded digest. It applies only to a record that already carries a
+// digest map: a record with no digests at all is legacy and is handled by the rebuild
+// compatibility rule, not by this check. An artifact that could not be read at ingest
+// therefore cannot later escape the content check.
+func sourceArtifactUnverified(r OutcomeRecord) bool {
+	if len(r.SourceDigests) == 0 {
+		return false
+	}
+	for _, src := range r.SourceArtifacts {
+		if strings.TrimSpace(src) == "" || mutableLifecycleArtifact(src) {
+			continue
+		}
+		if _, ok := r.SourceDigests[src]; !ok {
 			return true
 		}
 	}
@@ -756,9 +785,10 @@ func mutableLifecycleArtifact(path string) bool {
 }
 
 // sourceDigests records the SHA-256 of every named immutable evidence artifact that
-// exists. A digest that cannot be read is omitted, so the gate falls back to the
-// existence check for it. Mutable lifecycle state is skipped: an ordinary lifecycle
-// update must not invalidate a record whose evidence is unchanged.
+// exists and can be read. An artifact that cannot be read is omitted, and the gate then
+// excludes the record as unverified rather than falling back to an existence-only check.
+// Mutable lifecycle state is skipped: an ordinary lifecycle update must not invalidate a
+// record whose evidence is unchanged.
 func sourceDigests(artifacts []string) map[string]string {
 	out := make(map[string]string, len(artifacts))
 	for _, a := range artifacts {
