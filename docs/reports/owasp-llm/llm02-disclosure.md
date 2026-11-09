@@ -115,6 +115,30 @@ Reproduction before the fix (new test against the unmodified code):
 Fix: `validationFailureContext` passes each stream through
 `redactDiagnosticText`. The ordinary failure text remains available to the model.
 
+### GAP-03 (fixed): JSON-escaped Go test output bypassed redaction
+
+`runAcceptanceCheck` forces `go test -json`, so the acceptance-check boundary
+receives JSON-escaped event text rather than plain diagnostics. A test logging
+`password="canary-private-value"` produces an event Output containing
+`password=\"canary-private-value\"`. Redacting the escaped text replaced only
+the backslash before the opening quote, left the value exposed, and produced
+invalid JSON.
+
+Reproduction through the actual acceptance-check path before the fix:
+
+```text
+--- FAIL: TestCheckEvidenceRedactsEscapedQuotedCredential
+    log artifact leaks the escaped quoted credential:
+    ... "Output":"    fail_test.go:10: password=[redacted]\"canary-private-value\"\n" ...
+```
+
+Fix: `redactAcceptanceOutput` decodes each valid JSON line, redacts every string
+value (including the event `Output`), and re-encodes the line. Non-JSON lines are
+redacted as plain text. The unredacted captured output is kept separately in
+`checkRun.original` and used only for the structured `go test` acceptance
+decision; it is never persisted. The persisted log therefore remains valid JSON
+and contains no escaped credential.
+
 ### Provider authentication is not model content
 
 `internal/agent/provider.go` `postJSON` sets `Authorization: Bearer <key>` on the
@@ -140,6 +164,7 @@ Observed: all PASS.
 | Exact environment secrets are redacted from check logs | `TestCheckEvidenceRedactsSecrets` | PASS (existing) |
 | Credential-shaped text is redacted from check logs | `TestCheckEvidenceRedactsCredentialShapes` | PASS (new) |
 | Model-visible validation failure redacts env secrets and shapes | `TestValidationFailureContextRedactsCredentialShapes` | PASS (new) |
+| JSON-escaped quoted credentials are redacted and the log stays valid JSON | `TestCheckEvidenceRedactsEscapedQuotedCredential` | PASS (new) |
 | Provider key stays in the auth header, not the request body | `TestOpenAICompatibleExecutionReusesAuthorization` | PASS (strengthened) |
 | Empty and ordinary diagnostic text is preserved | `TestRedactDiagnosticTextKeepsOrdinaryText` | PASS (new) |
 | Handoff capsules redact before persistence | `TestManagerRedactsBeforePersisting`, `TestRedactUsesSharedSecretNames` | PASS (existing) |
@@ -202,12 +227,12 @@ sop security scan --report-only
 
 Observed on the final working tree:
 
-- Verdict `PASS`; coverage `COMPLETE`; duration 9,042 ms.
+- Verdict `PASS`; coverage `COMPLETE`; duration 9,997 ms.
 - Commit `0750e8be0cf5f318a173abb34c2b752ac131521c`; working tree dirty with the Plan 03 change set.
 - `gitleaks`, `semgrep`, and `osv-scanner`: `COMPLETED`, coverage `COMPLETE`.
 - Findings: 67 total, 53 suppressed by the reviewed baseline, 0 unsuppressed blocking findings.
 - Required-mode readiness: `false` because `security.required_categories` is empty. Required mode is **not enabled**.
-- Artifact: `.agent-sdlc/runs/security-20261109T011008Z/security/scan.{md,json}` (machine-local/git-ignored).
+- Artifact: `.agent-sdlc/runs/security-20261109T015127Z/security/scan.{md,json}` (machine-local/git-ignored).
 
 The synthetic canaries are deliberately non-secret placeholder strings; they still
 exercise the shared credential-shape detector without adding a scanner finding or

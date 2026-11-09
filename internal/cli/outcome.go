@@ -657,12 +657,12 @@ func flagName(arg string) string {
 // argv, the working directory, the process exit code, a bounded output excerpt, and
 // the untruncated output. Both outputs are secret-redacted.
 type checkRun struct {
-	argv     []string
-	dir      string
-	exitCode int
-	output   string // bounded (<=400 byte) excerpt, for recorded evidence
-	full     string // untruncated combined output, for the go test decision and log artifact
-	failed   bool   // set by the caller once the check's verdict is known
+	argv           []string
+	dir            string
+	exitCode       int
+	output         string // bounded (<=400 byte) redacted excerpt, for recorded evidence
+	full, original string // redacted log output; unredacted input for structured go test decisions
+	failed         bool   // set by the caller once the check's verdict is known
 }
 
 // runAcceptanceCheck executes an authorized acceptance check's argument vector
@@ -691,7 +691,7 @@ func runAcceptanceCheck(dir string, argv []string) (error, checkRun) {
 	}
 	// Judge the full event stream, not the bounded evidence excerpt, so a pass event
 	// beyond the 400-byte excerpt still counts.
-	met, reason := goTestJSONMet(run.exitCode, run.full)
+	met, reason := goTestJSONMet(run.exitCode, run.original)
 	if !met {
 		return fmt.Errorf("acceptance check %q executed no passing test: %s", strings.Join(argv, " "), reason), run
 	}
@@ -723,8 +723,11 @@ func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	runErr := cmd.Run()
-	// Redact before bounding, so neither the excerpt nor the log carries a secret.
-	run.full = redactDiagnosticText(out.String())
+	// Keep the original output for structured decisions, and persist a redacted
+	// form that decodes and re-encodes each JSON line so escaping cannot bypass
+	// credential detection or produce invalid JSON.
+	run.original = out.String()
+	run.full = redactAcceptanceOutput(run.original)
 	run.output = boundOutput(run.full)
 	if runErr == nil {
 		run.exitCode = 0

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -71,5 +72,35 @@ func TestRedactDiagnosticTextKeepsOrdinaryText(t *testing.T) {
 	const ordinary = "token budget exhausted; GET https://example.com/v1/status"
 	if got := redactDiagnosticText(ordinary); got != ordinary {
 		t.Fatalf("ordinary text changed: %q", got)
+	}
+}
+
+// TestCheckEvidenceRedactsEscapedQuotedCredential exercises the actual acceptance
+// check path with `go test -json`: a quoted credential is JSON-escaped in the
+// event Output, and redacting the escaped text would leave the value exposed and
+// corrupt the JSON. The persisted log must be redacted and remain valid JSON.
+func TestCheckEvidenceRedactsEscapedQuotedCredential(t *testing.T) {
+	const canary = "canary-private-value"
+	body := `"password=\"` + canary + `\""`
+	rn, cr, report := failingCheckRun(t, body)
+
+	log := readLog(t, rn, cr)
+	if strings.Contains(log, canary) {
+		t.Fatalf("log artifact leaks the escaped quoted credential:\n%s", log)
+	}
+	if !strings.Contains(log, "[redacted]") {
+		t.Fatalf("log artifact has no redaction marker:\n%s", log)
+	}
+	if out, _ := cr["Output"].(string); strings.Contains(out, canary) {
+		t.Fatalf("excerpt leaks the escaped quoted credential: %s", out)
+	}
+	if strings.Contains(report, canary) {
+		t.Fatalf("report leaks the escaped quoted credential:\n%s", report)
+	}
+	for _, line := range strings.Split(strings.TrimSpace(log), "\n") {
+		var event any
+		if err := json.Unmarshal([]byte(line), &event); err != nil {
+			t.Fatalf("persisted log line is not valid JSON: %v\n%s", err, line)
+		}
 	}
 }
