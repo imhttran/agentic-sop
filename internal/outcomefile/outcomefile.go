@@ -114,9 +114,10 @@ type OutcomeRecord struct {
 	// Provenance.
 	SourceArtifacts []string `json:"source_artifacts,omitempty"`
 	SourceHash      string   `json:"source_hash,omitempty"`
-	// SourceDigests records the SHA-256 of each source artifact at ingest time, so the
-	// gate can tell a modified source from an unchanged one. The key is the artifact
-	// path as stored in SourceArtifacts.
+	// SourceDigests records the SHA-256 of each immutable source artifact at ingest
+	// time, so the gate can tell a modified source from an unchanged one. The key is
+	// the absolute artifact path as stored in SourceArtifacts. Mutable lifecycle state
+	// (state.json) is not digested because SOP rewrites it after capture.
 	SourceDigests map[string]string `json:"source_digests,omitempty"`
 	RecordedAt    string            `json:"recorded_at,omitempty"`
 	AccessScope   string            `json:"access_scope,omitempty"`
@@ -460,6 +461,12 @@ func sourceContentModified(r OutcomeRecord, sourceDigest func(string) (string, e
 		if strings.TrimSpace(src) == "" || strings.TrimSpace(want) == "" {
 			continue
 		}
+		if mutableLifecycleArtifact(src) {
+			// SOP rewrites lifecycle state after capture (for example when parking a
+			// run at the human boundary). It is not evidence, so it never invalidates
+			// the record's provenance, including for records written before this rule.
+			continue
+		}
 		got, err := sourceDigest(src)
 		if err != nil || got != want {
 			return true
@@ -647,6 +654,7 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 	}
 
 	artifacts := existingArtifacts(runDir)
+	sourceArtifacts := absoluteArtifacts(artifacts)
 	runID := fmt.Sprintf("%s-attempt-%d", taskID, attempt)
 	rec := OutcomeRecord{
 		SchemaVersion:    SchemaVersion,
@@ -666,9 +674,9 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 		EvidenceRefs:     existingArtifacts(runDir),
 		FailureSignature: Redact(firstNonEmpty(rep.Outcome.Reasons)),
 		Uncertainty:      Redact(rep.Outcome.Compatibility),
-		SourceArtifacts:  artifacts,
+		SourceArtifacts:  sourceArtifacts,
 		SourceHash:       hex.EncodeToString(sum[:]),
-		SourceDigests:    sourceDigests(artifacts),
+		SourceDigests:    sourceDigests(sourceArtifacts),
 		RecordedAt:       rep.GeneratedAt,
 		AccessScope:      "local",
 		Lifecycle:        rep.Outcome.Lifecycle,
@@ -708,11 +716,30 @@ func successCorroborated(rep runReport) bool {
 	return true
 }
 
-// sourceDigests records the SHA-256 of every named source artifact that exists. A digest
-// that cannot be read is omitted, so the gate falls back to the existence check for it.
+// mutableLifecycleArtifacts names run files SOP rewrites after outcome capture. They
+// carry lifecycle state, not evidence, so their content is not part of the provenance
+// identity: hashing them would invalidate a valid record on an ordinary lifecycle
+// update (for example parking a run at the human boundary).
+var mutableLifecycleArtifacts = map[string]bool{
+	"state.json": true,
+}
+
+// mutableLifecycleArtifact reports whether the artifact path names mutable lifecycle
+// state rather than immutable evidence.
+func mutableLifecycleArtifact(path string) bool {
+	return mutableLifecycleArtifacts[filepath.Base(filepath.FromSlash(path))]
+}
+
+// sourceDigests records the SHA-256 of every named immutable evidence artifact that
+// exists. A digest that cannot be read is omitted, so the gate falls back to the
+// existence check for it. Mutable lifecycle state is skipped: an ordinary lifecycle
+// update must not invalidate a record whose evidence is unchanged.
 func sourceDigests(artifacts []string) map[string]string {
 	out := make(map[string]string, len(artifacts))
 	for _, a := range artifacts {
+		if mutableLifecycleArtifact(a) {
+			continue
+		}
 		h, err := FileSourceDigest(a)
 		if err != nil {
 			continue
@@ -747,6 +774,22 @@ func existingArtifacts(runDir string) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// absoluteArtifacts resolves each artifact path against the ingest process's working
+// directory. A record persisted with a relative path would otherwise be resolved
+// against whatever directory a later rebuild runs in, wrongly excluding an unchanged
+// source as deleted. A path that cannot be made absolute is kept as-is.
+func absoluteArtifacts(artifacts []string) []string {
+	out := make([]string, 0, len(artifacts))
+	for _, a := range artifacts {
+		if abs, err := filepath.Abs(filepath.FromSlash(a)); err == nil {
+			out = append(out, filepath.ToSlash(abs))
+			continue
+		}
+		out = append(out, a)
+	}
 	return out
 }
 

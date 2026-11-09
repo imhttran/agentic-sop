@@ -81,7 +81,7 @@ func TestReindexProvenanceBeforeAndAfterRebuild(t *testing.T) {
 	// Ingest two runs through the real path and write the outcome documents.
 	writeReindexRun(t, runsDir, "KEEP-1")
 	writeReindexRun(t, runsDir, "CHANGE-1")
-	var kept, changed outcomefile.OutcomeRecord
+	var kept outcomefile.OutcomeRecord
 	for _, taskID := range []string{"KEEP-1", "CHANGE-1"} {
 		rec, err := outcomefile.IngestRunFor(runsDir, taskID, "agentic-sop")
 		if err != nil {
@@ -92,8 +92,6 @@ func TestReindexProvenanceBeforeAndAfterRebuild(t *testing.T) {
 		}
 		if taskID == "KEEP-1" {
 			kept = rec
-		} else {
-			changed = rec
 		}
 	}
 
@@ -131,40 +129,56 @@ func TestReindexProvenanceBeforeAndAfterRebuild(t *testing.T) {
 		t.Fatalf("second search = %v, want only the unmodified record %q", ids, kept.RecordID)
 	}
 
-	// Delete one run directory: the deleted record is never returned.
+	// Delete one run directory and rebuild: the deleted record is excluded by the
+	// source-aware gate and is never returned, so the index no longer carries it.
 	if err := os.RemoveAll(filepath.Join(runsDir, "KEEP-1")); err != nil {
 		t.Fatal(err)
 	}
-	current, err := Snapshot(outDir)
+	rep, err = ix.RebuildFromDir(ctx, outDir)
+	if err != nil {
+		t.Fatalf("RebuildFromDir after deletion: %v", err)
+	}
+	if rep.Indexed != 0 || rep.Excluded != 2 {
+		t.Fatalf("third rebuild = %+v, want 0 indexed and 2 excluded", rep)
+	}
+	if ids := searchIDs(t, ix, "provenance reindex evidence"); len(ids) != 0 {
+		t.Fatalf("third search = %v, want no record after deletion", ids)
+	}
+}
+
+// TestReindexProvenanceIgnoresMutableLifecycleState proves a run parked at the human
+// boundary after capture stays indexed: the lifecycle rewrite of state.json is not
+// evidence, so it does not exclude an otherwise unchanged record.
+func TestReindexProvenanceIgnoresMutableLifecycleState(t *testing.T) {
+	ctx := context.Background()
+	runsDir := t.TempDir()
+	outDir := t.TempDir()
+	ix := openTestIndex(t)
+
+	dir := writeReindexRun(t, runsDir, "PARK-1")
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"id":"PARK-1","stage":"LOCAL_DONE"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := outcomefile.IngestRunFor(runsDir, "PARK-1", "agentic-sop")
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The deletion is observed by the source-aware gate, which the retriever mirrors
-	// through its current-source check.
-	live := map[string]outcomefile.OutcomeRecord{}
-	for id, r := range current {
-		if id == kept.RecordID {
-			continue
-		}
-		live[id] = r
+	if _, _, err := outcomefile.Write(outDir, rec); err != nil {
+		t.Fatal(err)
 	}
-	if _, ok := live[changed.RecordID]; !ok {
-		t.Fatalf("the changed record disappeared from the readable documents: %v", live)
+	// The lifecycle parks the run after capture, rewriting state.json.
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"id":"PARK-1","stage":"WAITING_FOR_HUMAN"}`), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	lr := &LocalRetriever{Index: ix, Current: func(context.Context) (map[string]outcomefile.OutcomeRecord, error) {
-		return live, nil
-	}}
-	res, err := lr.Retrieve(ctx, retrievalboundary.ScopedQuery{
-		Scope:  retrievalboundary.Scope{Corpus: retrievalboundary.CorpusOutcome},
-		Text:   "provenance reindex evidence",
-		Limits: retrievalboundary.Limits{MaxResults: 10},
-	})
+
+	rep, err := ix.RebuildFromDir(ctx, outDir)
 	if err != nil {
-		t.Fatalf("Retrieve: %v", err)
+		t.Fatalf("RebuildFromDir: %v", err)
 	}
-	for _, e := range res.Evidence {
-		if e.RecordID == kept.RecordID {
-			t.Fatal("a deleted source record was returned")
-		}
+	if rep.Indexed != 1 || rep.Excluded != 0 {
+		t.Fatalf("rebuild = %+v, want 1 indexed and 0 excluded after a lifecycle update", rep)
+	}
+	if ids := searchIDs(t, ix, "provenance reindex evidence"); len(ids) != 1 {
+		t.Fatalf("search = %v, want the parked record", ids)
 	}
 }

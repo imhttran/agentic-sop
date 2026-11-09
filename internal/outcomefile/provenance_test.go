@@ -346,3 +346,87 @@ func TestIngestProvenanceGateRejectsContradictedSuccess(t *testing.T) {
 		t.Fatalf("partial history was excluded: %q", reason)
 	}
 }
+
+// TestIngestProvenanceMutableLifecycleStateDoesNotInvalidate proves an ordinary
+// lifecycle rewrite of state.json (parking a run at the human boundary after capture)
+// does not invalidate a record whose evidence is unchanged. A changed report still does.
+func TestIngestProvenanceMutableLifecycleStateDoesNotInvalidate(t *testing.T) {
+	runsDir := t.TempDir()
+	outDir := t.TempDir()
+	dir := writeProvenanceRun(t, runsDir, "PARK-1", passingReport("PARK-1", "valid run"))
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"id":"PARK-1","stage":"LOCAL_DONE"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	rec, err := IngestRunFor(runsDir, "PARK-1", "agentic-sop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for artifact := range rec.SourceDigests {
+		if filepath.Base(filepath.FromSlash(artifact)) == "state.json" {
+			t.Fatalf("mutable lifecycle state was digested: %s", artifact)
+		}
+	}
+	if _, _, err := Write(outDir, rec); err != nil {
+		t.Fatal(err)
+	}
+	records, _, err := ReadAll(outDir)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("ReadAll = %d records, %v", len(records), err)
+	}
+	if ex := GateWithSourcesAndDigests(records, FileSourceExists, FileSourceDigest); len(ex) != 0 {
+		t.Fatalf("an unmodified record was excluded: %+v", ex)
+	}
+
+	// The lifecycle parks the run after capture, rewriting state.json.
+	if err := os.WriteFile(filepath.Join(dir, "state.json"), []byte(`{"id":"PARK-1","stage":"WAITING_FOR_HUMAN"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if ex := GateWithSourcesAndDigests(records, FileSourceExists, FileSourceDigest); len(ex) != 0 {
+		t.Fatalf("a lifecycle state rewrite invalidated the record: %+v", ex)
+	}
+
+	// A changed evidence artifact still invalidates the same record.
+	reportPath := filepath.Join(dir, "report.json")
+	data, err := os.ReadFile(reportPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(reportPath, append(data, '\n'), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	ex := GateWithSourcesAndDigests(records, FileSourceExists, FileSourceDigest)
+	if len(ex) != 1 || ex[0].Reason != ReasonSourceModified {
+		t.Fatalf("exclusions = %+v, want one %q", ex, ReasonSourceModified)
+	}
+}
+
+// TestIngestProvenanceRelativeSourcePathsAreAbsolute proves a relative runs directory is
+// persisted as absolute source paths, so a later rebuild from another working directory
+// does not wrongly exclude an unchanged source as deleted.
+func TestIngestProvenanceRelativeSourcePathsAreAbsolute(t *testing.T) {
+	absRuns := t.TempDir()
+	writeProvenanceRun(t, absRuns, "REL-1", passingReport("REL-1", "valid run"))
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	relRuns, err := filepath.Rel(cwd, absRuns)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := IngestRunFor(relRuns, "REL-1", "agentic-sop")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rec.SourceArtifacts) == 0 {
+		t.Fatal("no source artifacts were recorded")
+	}
+	for _, artifact := range rec.SourceArtifacts {
+		if !filepath.IsAbs(filepath.FromSlash(artifact)) {
+			t.Fatalf("source artifact %q is not absolute", artifact)
+		}
+	}
+	if ex := GateWithSourcesAndDigests([]OutcomeRecord{rec}, FileSourceExists, FileSourceDigest); len(ex) != 0 {
+		t.Fatalf("an unchanged relative-ingest record was excluded: %+v", ex)
+	}
+}
