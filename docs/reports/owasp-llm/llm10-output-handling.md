@@ -5,8 +5,8 @@ CLI; live notification delivery `NOT_RUN`. Shell, path, database, and protocol
 boundaries were inspected and their existing controls confirmed.
 
 Baseline: `imhttran/agentic-sop` `main` at
-`24be0687b0ac0dec5e2e69584be67f1795c0f6f1` (refreshed 2026-11-08).
-Host: Linux `x86_64`, Go 1.27.1 (`linux/amd64`).
+`24be0687b0ac0dec5e2e69584be67f1795c0f6f1`, merged with `main` at `985472a`
+before review (2026-11-08). Host: Linux `x86_64`, Go 1.27.1 (`linux/amd64`).
 Branch: `security/llm10-improper-output-handling`.
 
 This report treats model, tool, provider, and configured-command output as
@@ -189,6 +189,8 @@ Focused evidence paths:
 - No shell, path, database, or protocol violation was reproduced at the current
   baseline; those controls remain owned by their existing packages.
 - External client rendering and live Slack delivery remain explicitly unverified.
-- Plan 01's action-authority branch and Plan 07's evidence-claim work were not
-  merged into this baseline; this plan does not depend on their code to enforce
-  the sink-specific controls above.
+- Plan 01 (LLM03 action authority) merged to `main` at `985472a` (PR #271) while
+  this branch was in review; its report is linked in the cumulative matrix. This
+  plan does not depend on its code to enforce the sink-specific controls above.
+- Plan 07's evidence-claim work is still absent from this checkout, and no
+  criterion here depends on it.

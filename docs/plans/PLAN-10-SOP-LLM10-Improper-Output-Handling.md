@@ -27,10 +27,11 @@ to external clients. Fix only demonstrated gaps using existing abstractions.
 
 - Plan 03 (LLM02 redaction) is merged at this baseline. Its redaction surfaces and
   tests are reused; this plan does not re-implement them.
-- Plan 01 (action authority) is not merged to this baseline. Its implementation
-  branch exists on `task/LLM03-impl-plan-01-agency-boundary-controls`, but no
-  acceptance criterion here depends on that code. The existing command policy and
-  path resolver are the authority this plan verifies.
+- Plan 01 (action authority, LLM03) merged to `main` at `985472a` (PR #271)
+  while this branch was in review. Its report and evidence are linked from the
+  cumulative matrix. No acceptance criterion here depends on that code; the
+  existing command policy and path resolver remain the authority this plan
+  verifies.
 - Plan 07 (evidence claims) does not exist in this checkout. No acceptance
   criterion here depends on it.
 - No dependency blocks execution. The absent work is recorded as a boundary, not
@@ -197,8 +198,9 @@ rendering remains an explicit gap.
 ## Baseline and evidence rules
 
 Baseline: `imhttran/agentic-sop` `main` at
-`24be0687b0ac0dec5e2e69584be67f1795c0f6f1`, Linux `x86_64`, Go 1.27.1. Historical
-observations from the planning document are context, not runtime evidence.
+`24be0687b0ac0dec5e2e69584be67f1795c0f6f1`, merged with `main` at `985472a`
+before review; Linux `x86_64`, Go 1.27.1. Historical observations from the
+planning document are context, not runtime evidence.
 
 Use `IMPLEMENTED`, `ENABLED`, `VERIFIED` (with platform and path), `NOT_RUN`, `GAP`,
 and `NOT_APPLICABLE` as separate dimensions. A deterministic test is not live-model

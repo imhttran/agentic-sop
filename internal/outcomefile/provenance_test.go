@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -451,5 +452,77 @@ func TestIngestProvenanceRelativeSourcePathsAreAbsolute(t *testing.T) {
 	}
 	if ex := GateWithSourcesAndDigests([]OutcomeRecord{rec}, FileSourceExists, FileSourceDigest); len(ex) != 0 {
 		t.Fatalf("an unchanged relative-ingest record was excluded: %+v", ex)
+	}
+}
+
+// TestIngestProvenanceUnreadableArtifactIsExcluded proves an immutable artifact that
+// could not be digested at ingest cannot later escape the check. The record is written
+// with a partial digest map; once the artifact changes, the gate excludes it rather than
+// silently accepting it as unverified provenance.
+func TestIngestProvenanceUnreadableArtifactIsExcluded(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Geteuid() == 0 {
+		t.Skip("file permissions do not make an artifact unreadable in this environment")
+	}
+	runsDir := t.TempDir()
+	outDir := t.TempDir()
+	dir := writeProvenanceRun(t, runsDir, "UNREAD-1", passingReport("UNREAD-1", "valid run"))
+	artifact := filepath.Join(dir, "report.md")
+	if err := os.WriteFile(artifact, []byte("original evidence"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(artifact, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(artifact, 0o644) }()
+
+	rec, err := IngestRunFor(runsDir, "UNREAD-1", "agentic-sop")
+	if err != nil {
+		t.Fatalf("IngestRunFor: %v", err)
+	}
+	absolute := filepath.ToSlash(artifact)
+	if _, ok := rec.SourceDigests[absolute]; ok {
+		t.Fatalf("an unreadable artifact was digested: %s", absolute)
+	}
+	if _, _, err := Write(outDir, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	// The artifact becomes readable and its content changes after capture.
+	if err := os.Chmod(artifact, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(artifact, []byte("changed evidence"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	records, _, err := ReadAll(outDir)
+	if err != nil || len(records) != 1 {
+		t.Fatalf("ReadAll = %d records, %v", len(records), err)
+	}
+	ex := GateWithSourcesAndDigests(records, FileSourceExists, FileSourceDigest)
+	if len(ex) != 1 {
+		t.Fatalf("exclusions = %+v, want the unverified artifact excluded", ex)
+	}
+	if ex[0].Reason != ReasonSourceUnverified {
+		t.Fatalf("reason = %q, want %q", ex[0].Reason, ReasonSourceUnverified)
+	}
+}
+
+// TestIngestProvenanceEmptyVerificationResultIsContradictory pins the intentional
+// fail-closed compatibility behavior: a success record whose recorded verification has
+// exit 0 but an empty result string is treated as contradicted and excluded. This is not
+// silently changed; it is an explicit compatibility decision for legacy reports.
+func TestIngestProvenanceEmptyVerificationResultIsContradictory(t *testing.T) {
+	rec := OutcomeRecord{
+		RecordID: "legacy-empty-result", Corpus: retrievalboundary.CorpusOutcome, Complete: true,
+		Status: StatusSuccess, Authorized: true, ContentHash: "h",
+		EvidenceRefs: []string{"run/report.json"},
+		Verification: []Verification{{Command: "go test ./...", ExitCode: 0, Result: ""}},
+	}
+	ok, reason := rec.Eligible()
+	if ok {
+		t.Fatal("a success with an empty verification result is eligible")
+	}
+	if reason != "verification contradicts success" {
+		t.Fatalf("reason = %q, want an explicit contradiction reason", reason)
 	}
 }

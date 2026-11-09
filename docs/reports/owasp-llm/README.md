@@ -8,13 +8,13 @@ test stays visible.
 
 Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c` (refreshed 2026-11-09 UTC). The
-Plan 10 row and the Plan 03 row were refreshed against `main` at
-`24be0687b0ac0dec5e2e69584be67f1795c0f6f1` (2026-11-08). Older rows are not
-re-verified by that refresh.
+Plan 01 row was updated at `985472a` (PR #271). The Plan 03 and Plan 10 rows were
+refreshed against `main` at `24be068`/`985472a` (2026-11-08). Older rows are not
+re-verified by those refreshes.
 
 | Plan | Category | Workstream | Report / evidence | Evidence state | Boundary |
 | --- | --- | --- | --- | --- | --- |
-| Plan 01 | Excessive Agency (LLM03) | Linux agent (Mac workstream not started) | Source and implementation branch exist outside this checkout (`security/llm03-agency`, `task/LLM03-impl-plan-01-agency-boundary-controls`); not merged to this baseline | `NOT_RUN` in this checkout | Linux-owned. No Mac result is substituted. The Plan 01 handoff was not available. |
+| Plan 01 | Excessive Agency (LLM03) | Linux agent (`task/LLM03-impl-plan-01-agency-boundary-controls`, PR #271) | [llm03-agency.md](llm03-agency.md), [agency-002-evidence.md](agency-002-evidence.md) | `IMPLEMENTED`; Linux local verification `PASS` (`go build`, `go vet`, `go test ./...`); Linux Bubblewrap runtime isolation verified; macOS Seatbelt `UNVERIFIED` | Normal agent execution is policy-only and not OS-sandboxed. OS isolation is demonstrated only on the isolated-replay and evaltarget paths; platform identity and macOS runtime evidence remain gaps. |
 | Plan 02 | Prompt Injection (LLM01) | Linux agent | Existing deterministic controls: `docs/reports/security-shift-left/aisec-live-assessment.md`; partial seam on `security/llm01-injection` (not merged) | `NOT_RUN` for live adversarial; deterministic/real-control tests exist | Live-adversarial evidence needs an evaltarget-routed live path; a fixture or text assertion is not a substitute. |
 | Plan 03 | Sensitive Information Disclosure (LLM02) | Mac agent (`security/llm02-disclosure`, merged) | [llm02-disclosure.md](llm02-disclosure.md) | Static tracing `IMPLEMENTED` / `VERIFIED` (macOS); live `NOT_RUN` | Live extraction depends on Plan 02's merged live-test infrastructure, which is absent. The report's historical outcomes remain `PARTIAL` where the acceptance mapping changed after execution. |
 | Plan 04 | Supply Chain (LLM04) | Mac agent (`security/llm04-supply-chain`) | [llm04-supply-chain.md](llm04-supply-chain.md) | `IMPLEMENTED` / `VERIFIED` for the declared report-only scope | Provider model provenance, publisher signatures, required-mode enablement, and normal-agent OS isolation remain out of scope or unverified. |
