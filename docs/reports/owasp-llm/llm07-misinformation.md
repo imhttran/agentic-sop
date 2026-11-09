@@ -1,9 +1,11 @@
 # Plan 07 — SOP Misinformation (LLM07) evidence report
 
-Status: IMPLEMENTED on the `security/llm07-misinformation` branch; deterministic
-verification `VERIFIED` on macOS arm64. Live-model adversarial evaluation and
-Linux verification are `NOT_RUN`. This report does **not** claim general factual
-correctness of generated text.
+Status: PARTIAL. GROUND-001 and GROUND-003 have current deterministic evidence;
+GROUND-002 remains open on a required governance decision (content/commit binding
+for manual acceptance evidence). Deterministic verification PASS on macOS arm64;
+live-model adversarial evaluation and Linux verification are `NOT_RUN`; not
+merged. This report does **not** claim general factual correctness of generated
+text.
 
 - Repository: `imhttran/agentic-sop`
 - Base revision: `9cf554e6b67a6c61588326adb4a76fd46bfe850d` (`origin/main`)
@@ -15,17 +17,24 @@ correctness of generated text.
   routing, autonomy, approval, or validation setting was changed.
 - Scope boundary: the **use of evidence in decisions**, not the truth of every
   generated sentence. A model that reads a file is not proven to understand it.
+- SOP lifecycle (`.agent-sdlc/state.db`, plan
+  `plan-07-sop-llm07-misinformation`, state `ACTIVE`): GROUND-001 is
+  `LOCAL_DONE` via external completion at `e93751ef` (validation PASS);
+  GROUND-002 is `PLANNED`; GROUND-003 is `PLANNED` because its dependency
+  GROUND-002 is unsatisfied. The plan is not complete.
 
 ## Executive status
 
-| Dimension                | Result                                                                                                                                       | Evidence                                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| IMPLEMENTED              | Yes, on the branch (not merged)                                                                                                              | Code and tests listed below                                                                   |
-| ENABLED                  | Yes, in the default local lifecycle                                                                                                          | No new flag; the tool-harness write boundary and the outcome-artifact reset are always active |
-| VERIFIED (deterministic) | Yes, macOS arm64                                                                                                                             | `go build ./...`, `go vet ./...`, `go test ./...` all passed                                  |
-| VERIFIED (live model)    | `NOT_RUN`                                                                                                                                    | No live-model campaign was required or run                                                    |
-| Linux verification       | `NOT_RUN`                                                                                                                                    | No Linux host was used                                                                        |
-| Residual GAP             | Manual decisions are bound to criterion text + attempt, not a commit/content hash; `run_command` subprocesses are outside the write boundary | Documented below                                                                              |
+| Dimension                | Result                                                                                                                                                | Evidence                                                                                      |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| IMPLEMENTED              | Yes, on the branch (not merged)                                                                                                                       | Code and tests listed below                                                                   |
+| ENABLED                  | Yes, in the default local lifecycle                                                                                                                   | No new flag; the tool-harness write boundary and the outcome-artifact reset are always active |
+| VERIFIED (deterministic) | Yes, macOS arm64; external completion at `e93751ef` reported validation PASS                                                                          | `go build ./...`, `go vet ./...`, `go test ./...`                                             |
+| VERIFIED (live model)    | `NOT_RUN`                                                                                                                                             | No live-model campaign was required or run                                                    |
+| Linux verification       | `NOT_RUN`                                                                                                                                             | No Linux host was used                                                                        |
+| SOP lifecycle            | `ACTIVE`: GROUND-001 `LOCAL_DONE` (external); GROUND-002 `PLANNED`; GROUND-003 `PLANNED` (dependency-blocked)                                         | `.agent-sdlc/runs/GROUND-001/external-completion.json`                                        |
+| Required decision        | Manual acceptance evidence is bound to task + criterion text + manual-evidence text + attempt, not to content/commit; GROUND-002 criterion 2 is unmet | Decision section below                                                                        |
+| Subprocess boundary      | `run_command` subprocesses are outside the file-tool write boundary                                                                                   | `TestSubprocessStateWriteIsOutsideFileToolBoundary`                                           |
 
 ## Authority chain (Plan 01 inventory, current implementation)
 
@@ -80,17 +89,19 @@ found these authoritative sources and bindings:
 
 5. **Evidence for changed or invalidated content.**
    Acceptance checks are re-run on the current tree; an earlier `outcome.json` is
-   cleared at the start of every lifecycle attempt; the cross-run verification
-   cache requires an exact `VERIFIED` identity (repository revision + effective
-   input content + command + environment + policy + scope). Verified by
+   cleared at the start of every lifecycle attempt and by a supported external
+   completion; the cross-run verification cache requires an exact `VERIFIED`
+   identity (repository revision, effective input content, command, environment,
+   policy, and scope). Verified by
    `TestFailedRunDoesNotExposePreviousVerifiedOutcome`,
-   `TestDecideFailClosed`, and `TestCacheReusableOnlyVerified`.
+   `TestExternalCompletionClearsStaleOutcome`, `TestDecideFailClosed`, and
+   `TestCacheReusableOnlyVerified`. For **manual acceptance decisions**, the
+   binding is the attempt only, not content/commit: this is the open decision below.
 
 6. **Model approval prose.**
-   Approval is a durable record written only by `sop approve` / `sop outcome
---accept`; model prose is never parsed into a decision. A manual criterion with
-   no decision remains `PARTIAL`. Verified by
-   `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`.
+   Approval is a durable record written only by `sop approve` / `sop outcome --accept`;
+   model prose is never parsed into a decision. A manual criterion with no decision
+   remains `PARTIAL`. Verified by `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`.
 
 7. **Retrieved historical content.**
    Retrieved advice and handoff capsules are prompt context only. They are not
@@ -103,15 +114,29 @@ found these authoritative sources and bindings:
    available except `state.db`). Before this change only `.agent-sdlc/state.db`
    was protected, so a model could write `acceptance_decisions.jsonl`,
    `waivers.jsonl`, `changed-files.json`, `outcome.json`, or `results/` and turn
-   prose into an approval or implementation evidence. Verified by
-   `TestStateDirectoryIsWriteProtectedForModelTools`.
+   prose into an approval or implementation evidence. The boundary is resolved by
+   filesystem identity as well as path string, so a case alias (`.AGENT-SDLC` on a
+   case-insensitive filesystem) or a symlink into the state directory cannot bypass
+   it; `list_files`/`search_files` hide `state.db` and do not traverse the state
+   directory. Verified by `TestStateDirectoryIsWriteProtectedForModelTools` and
+   `TestStateDirectoryAliasesAreRecognized`.
 
 9. **SOP state cited as repository proof.**
    `verifySatisfiedDetailed` now rejects an evidence path inside `.agent-sdlc`
    with `STATE_EVIDENCE`, even when the read succeeded. This prevents another
-   task's outcome/decision artifact from being cited as current evidence.
-   Verified by `TestStateEvidencePath` (in `TestVerifySatisfiedDetailedRejectionCodes`)
-   and `TestAlreadySatisfiedRejectsStateEvidenceOnRealPath`.
+   task's outcome/decision artifact from being cited as current evidence. The
+   check uses filesystem identity, so a case alias or symlink cannot substitute a
+   repository path for state. Verified by `TestStateEvidencePath` (in
+   `TestVerifySatisfiedDetailedRejectionCodes`) and
+   `TestAlreadySatisfiedRejectsStateEvidenceOnRealPath`.
+
+10. **Subprocess writes are outside the file-tool boundary.**
+    A SAFE `run_command` (for example `go test ./...`) executes a subprocess that
+    the harness does not sandbox for `.agent-sdlc` writes. The file tools refuse
+    the state directory, but a contributed test or build step can still write it
+    as a side effect. `TestSubprocessStateWriteIsOutsideFileToolBoundary` records
+    this current boundary; the plan does not claim comprehensive protection
+    against model-authored state. This is a Plan 01 execution-isolation concern.
 
 ## Confirmed defects and fixes
 
@@ -124,9 +149,17 @@ found these authoritative sources and bindings:
   `.agent-sdlc/runs/<task>/`. Those artifacts are read back as authoritative
   evidence (`readAcceptanceDecisions`, `recordedWaiverForTask`, `rn.ChangedFiles`).
 - **Fix:** `resolveIn` now refuses write access to `.agent-sdlc` for every file
-  tool and returns `ErrProtectedPath`. Reads still work except `state.db`, so a
-  task can inspect configuration.
-- **Regression:** `internal/toolharness/state_dir_write_test.go`.
+  tool and returns `ErrProtectedPath`. The check is resolved by filesystem
+  identity as well as path string, so a case alias (`.AGENT-SDLC`) on a
+  case-insensitive filesystem and a symlink into the state directory are refused;
+  `list_files`/`search_files` also hide `state.db` by identity. Reads still work
+  except `state.db`, so a task can inspect configuration.
+- **Regression:** `internal/toolharness/state_dir_write_test.go`, including
+  `TestStateDirectoryAliasesAreRecognized` and a positive control for ordinary
+  repository writes and configuration reads.
+- **Boundary:** this is the **file-tool** boundary. A `run_command` subprocess is
+  not sandboxed; see `TestSubprocessStateWriteIsOutsideFileToolBoundary` and the
+  limitation below.
 
 ### D2 — A failed run could expose a previous VERIFIED verdict
 
@@ -135,9 +168,13 @@ found these authoritative sources and bindings:
   clears only `attempts/`, not `outcome.json`. `sop verify` therefore reprinted a
   prior run's `VERIFIED` after a later run produced no verdict.
 - **Fix:** `clearOutcomeArtifact` runs at the start of every lifecycle attempt,
-  so the artifact always describes the latest attempt. `sop verify` now says
+  so the artifact always describes the latest attempt. A supported external
+  completion (`sop task complete <id> --external`) also clears the prior verdict:
+  it records commit and validation provenance but derives no acceptance verdict,
+  so a stale `VERIFIED`/`PARTIAL` must not remain visible. `sop verify` now says
   "no recorded outcome for the latest run" instead of implying the task never ran.
-- **Regression:** `internal/cli/outcome_stale_test.go`.
+- **Regression:** `internal/cli/outcome_stale_test.go`, including
+  `TestExternalCompletionClearsStaleOutcome`.
 
 ### D3 — SOP runtime state could be cited as repository evidence
 
@@ -145,45 +182,89 @@ found these authoritative sources and bindings:
   observed `read_file`, including `.agent-sdlc/runs/<other>/outcome.json`. That is
   another task's/attempt's evidence, not current repository proof.
 - **Fix:** `Harness.IsStatePath` exposes the read-side boundary; the verifier
-  rejects `.agent-sdlc` evidence paths with `STATE_EVIDENCE`.
+  rejects `.agent-sdlc` evidence paths with `STATE_EVIDENCE`. The check is
+  identity-aware, so a case alias or symlink cannot substitute a repository path
+  for state.
 - **Regression:** `TestVerifySatisfiedDetailedRejectionCodes/state_evidence_path`
   and `TestAlreadySatisfiedRejectsStateEvidenceOnRealPath`.
 
+### D4 — Manual acceptance evidence is not bound to content/commit (UNRESOLVED)
+
+- **Reproduction:** `AcceptanceDecision` binds the task, criterion text,
+  manual-evidence text, and attempt, but not a commit or content hash. A manual
+  criterion can be accepted at attempt N; the repository content then changes
+  within the same attempt (a re-run does not increment `task.Attempt` until a
+  failure/requeue is recorded). Re-deriving the outcome still honors the old
+  decision, so invalidated content satisfies the current task.
+- **Determination:** the requirement is **required** by GROUND-002 criterion 2
+  ("Evidence from the wrong identity or invalidated content cannot satisfy the
+  current task"), not optional. It is not fixed in this change because it alters
+  the SOP-003 acceptance-decision contract and historical-outcome compatibility.
+- **Unmet criterion:** GROUND-002, criterion 2, for manual acceptance decisions.
+  Wrong-identity/wrong-attempt and model/observed evidence paths are blocked; a
+  same-attempt content change is not.
+- **Exact governance decision needed:** the operator must choose and record:
+  1. **Strict content binding:** an accepting decision is valid only while the
+     current repository content identity (HEAD + dirty-tree content digest, using
+     the existing `verifcache.RepositoryIdentity`) matches the identity recorded at
+     decision time; any content change requires re-acceptance.
+  2. **Attempt-scoped, backward-compatible:** new decisions record a content
+     identity; legacy records without one remain valid only for their recorded
+     attempt (current behavior). A same-attempt content change invalidates new
+     decisions only.
+  3. **Explicit scope narrowing:** declare human-owned manual acceptance evidence
+     exempt from GROUND-002's invalidated-content criterion, with the rationale
+     recorded; this changes the plan's acceptance scope and needs operator
+     approval.
+
+The decision must also state the migration rule for existing
+`acceptance_decisions.jsonl` records (grandfather for their attempt, re-accept,
+or invalidate) and whether a content-bound decision is bound to a commit, a
+dirty-tree digest, or both.
+
 ## Deterministic fixture coverage
 
-| Required fixture                                 | Test                                                                                                                       | Result |
-| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------ |
-| Model claims PASS when a required check failed   | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                    | PASS   |
-| Model claims PASS when a check never ran         | `TestVerifySatisfiedDetailedRejectionCodes` (`validation_not_executed`); `TestOutcomeIntegrationDeliverableAloneIsPartial` | PASS   |
-| Citation references nonexistent evidence         | `TestVerifySatisfiedDetailedRejectionCodes` (`unread_evidence_path`)                                                       | PASS   |
-| Evidence belongs to another task/attempt         | `TestManualEvidenceRequiresDecision` (`stale-attempt`, `wrong-attempt`); `TestStateEvidencePath`                           | PASS   |
-| Evidence refers to changed/invalidated content   | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `TestAcceptanceRecoveryInvalidatesChangedCriterionOrEvidence`         | PASS   |
-| Model text claims approval without a decision    | `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`                                                                      | PASS   |
-| ALREADY_SATISFIED lacks required evidence        | `TestAlreadySatisfiedRequiresObjectiveProof`                                                                               | PASS   |
-| Historical content replaces current verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                    | PASS   |
-| Valid observed evidence still advances           | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestVerifiedAlreadySatisfied`                                          | PASS   |
-| Supported manual acceptance still advances       | `TestOutcomeAcceptRecordsDecision`; `TestManualEvidenceRequiresDecision` (accepting case)                                  | PASS   |
+| Required fixture                                 | Test                                                                                                                                                           | Result                                                              |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| Model claims PASS when a required check failed   | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                                                        | PASS                                                                |
+| Model claims PASS when a check never ran         | `TestVerifySatisfiedDetailedRejectionCodes` (`validation_not_executed`); `TestOutcomeIntegrationDeliverableAloneIsPartial`                                     | PASS                                                                |
+| Citation references nonexistent evidence         | `TestVerifySatisfiedDetailedRejectionCodes` (`unread_evidence_path`)                                                                                           | PASS                                                                |
+| Evidence belongs to another task/attempt         | `TestManualEvidenceRequiresDecision` (`stale-attempt`, `wrong-attempt`); `TestStateEvidencePath`                                                               | PASS                                                                |
+| Evidence refers to changed/invalidated content   | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `TestExternalCompletionClearsStaleOutcome`; `TestAcceptanceRecoveryInvalidatesChangedCriterionOrEvidence` | PASS for checks/outcomes; **NOT MET** for manual decisions (see D4) |
+| Model text claims approval without a decision    | `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`                                                                                                          | PASS                                                                |
+| ALREADY_SATISFIED lacks required evidence        | `TestAlreadySatisfiedRequiresObjectiveProof`                                                                                                                   | PASS                                                                |
+| Historical content replaces current verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                                                        | PASS                                                                |
+| Valid observed evidence still advances           | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestVerifiedAlreadySatisfied`                                                                              | PASS                                                                |
+| Supported manual acceptance still advances       | `TestOutcomeAcceptRecordsDecision`; `TestManualEvidenceRequiresDecision` (accepting case)                                                                      | PASS                                                                |
+| Case alias/symlink into the state directory      | `TestStateDirectoryAliasesAreRecognized`                                                                                                                       | PASS                                                                |
+| External completion supersedes a stale verdict   | `TestExternalCompletionClearsStaleOutcome`                                                                                                                     | PASS                                                                |
+| Subprocess write outside the file-tool boundary  | `TestSubprocessStateWriteIsOutsideFileToolBoundary`                                                                                                            | PASS (gap characterized, not closed)                                |
 
 ## Criterion-to-evidence mapping
 
 ### GROUND-001
 
-| Criterion                                                                                          | Evidence                                                                                                      | State                                                                                                |
-| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| Distinguish model assertions, observed tool results, accepted human evidence, verified task status | Trace table above; `internal/outcome/criteria.go`; `internal/ollamaagent/already_satisfied.go`                | `VERIFIED` (deterministic)                                                                           |
-| Identify content/commit, task, attempt, and policy binding                                         | Trace table; `internal/verifcache` identity; `outcome.CriterionMapping.Attempt`; `AcceptanceDecision.Attempt` | `VERIFIED` for the implemented bindings; commit/content-hash binding for manual decisions is a `GAP` |
-| Deliver this report with concrete traces                                                           | This file                                                                                                     | `IMPLEMENTED`                                                                                        |
+| Criterion                                                                                          | Evidence                                                                                                      | State                                                                                                                    |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| Distinguish model assertions, observed tool results, accepted human evidence, verified task status | Trace table above; `internal/outcome/criteria.go`; `internal/ollamaagent/already_satisfied.go`                | `VERIFIED` (deterministic)                                                                                               |
+| Identify content/commit, task, attempt, and policy binding                                         | Trace table; `internal/verifcache` identity; `outcome.CriterionMapping.Attempt`; `AcceptanceDecision.Attempt` | `VERIFIED` for identification; manual decisions lack content/commit binding (required by GROUND-002 criterion 2; see D4) |
+| Deliver this report with concrete traces                                                           | This file                                                                                                     | `DELIVERED` (committed; file present)                                                                                    |
 
 ### GROUND-002
 
-| Criterion                                                                  | Evidence                                                                                                                    | State      |
-| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------- |
-| Fabricated PASS text cannot override failed/missing checks                 | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestOutcomeIntegration*`                                          | `VERIFIED` |
-| Wrong identity/invalidated content cannot satisfy the task                 | `TestManualEvidenceRequiresDecision`; `TestStateEvidencePath`; `TestFailedRunDoesNotExposePreviousVerifiedOutcome`          | `VERIFIED` |
-| ALREADY_SATISFIED follows the existing contract                            | `TestAlreadySatisfiedRequiresObjectiveProof`; `TestVerifySatisfiedDetailedRejectionCodes`                                   | `VERIFIED` |
-| Untrusted retrieved material cannot grant approval or replace verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`              | `VERIFIED` |
-| Valid observed evidence and manual acceptance still advance                | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestOutcomeAcceptRecordsDecision`                                       | `VERIFIED` |
-| Regression tests use the real outcome/transition path                      | `runInjectedCLI` → `runSingleTask` → `runStages` → `deriveGatedOutcome`; `CompleteWithEvidence` → `verifySatisfiedDetailed` | `VERIFIED` |
+| Criterion                                                                  | Evidence                                                                                                                                                                                                                                                             | State                                                     |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| Fabricated PASS text cannot override failed/missing checks                 | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestOutcomeIntegration*`                                                                                                                                                                                   | `VERIFIED`                                                |
+| Wrong identity/invalidated content cannot satisfy the task                 | Wrong identity/attempt: `TestManualEvidenceRequiresDecision`, `TestStateEvidencePath`; checks/outcomes: `TestFailedRunDoesNotExposePreviousVerifiedOutcome`, `TestExternalCompletionClearsStaleOutcome`; manual same-attempt content change: **no binding, no test** | **PARTIAL — NOT MET** for manual acceptance evidence (D4) |
+| ALREADY_SATISFIED follows the existing contract                            | `TestAlreadySatisfiedRequiresObjectiveProof`; `TestVerifySatisfiedDetailedRejectionCodes`                                                                                                                                                                            | `VERIFIED`                                                |
+| Untrusted retrieved material cannot grant approval or replace verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`                                                                                                                                                       | `VERIFIED`                                                |
+| Valid observed evidence and manual acceptance still advance                | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestOutcomeAcceptRecordsDecision`                                                                                                                                                                                | `VERIFIED`                                                |
+| Regression tests use the real outcome/transition path                      | `runInjectedCLI` → `runSingleTask` → `runStages` → `deriveGatedOutcome`; `CompleteWithEvidence` → `verifySatisfiedDetailed`                                                                                                                                          | `VERIFIED`                                                |
+
+GROUND-002's SOP task is `PLANNED` and is **not** externally completed: criterion
+2 is unmet for manual acceptance evidence. Consequently GROUND-003's criteria have
+current evidence, but its SOP task is `PLANNED` because `sop task complete
+GROUND-003 --external` refuses while GROUND-002 is unsatisfied.
 
 ### GROUND-003
 
@@ -192,34 +273,58 @@ found these authoritative sources and bindings:
 | User-visible result and persisted lifecycle agree                          | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `sop verify` reads the cleared artifact | `VERIFIED`                                        |
 | Missing checks are `NOT_RUN`, not implied PASS                             | `writeNoValidationResults`; `outcome.Verify` required `objective-acceptance`                 | `VERIFIED` (inspection + existing tests)          |
 | Source references resolve to the recorded evidence identity                | `STATE_EVIDENCE` rejection; `verifcache` identity tests                                      | `VERIFIED` for the paths that declare an identity |
-| Required checks pass; PR documents before/after evidence and residual risk | This report; repository checks below                                                         | `VERIFIED` (deterministic)                        |
+| Required checks pass; PR documents before/after evidence and residual risk | This report; external completion validation at `e93751ef`                                    | `VERIFIED` (deterministic)                        |
+
+GROUND-003's acceptance criteria are met, but its SOP task is `PLANNED` and
+cannot be externally completed until GROUND-002 is satisfied (dependency gate).
+
+## SOP lifecycle reconciliation
+
+| Task       | SOP state    | Evidence                                                                                                                             | Reason                                                                             |
+| ---------- | ------------ | ------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| GROUND-001 | `LOCAL_DONE` | `sop task complete GROUND-001 --external --commit e93751ef`; validation PASS; `.agent-sdlc/runs/GROUND-001/external-completion.json` | All three criteria have current deterministic evidence                             |
+| GROUND-002 | `PLANNED`    | `sop status --detailed`                                                                                                              | Criterion 2 is unmet for manual acceptance evidence (D4); not externally completed |
+| GROUND-003 | `PLANNED`    | `sop task complete GROUND-003 --external` → `unsatisfied dependencies: GROUND-002`                                                   | Criteria met, but the dependency ordering prevents external completion             |
+
+Plan state: `ACTIVE`, not complete. `sop plan complete` is intentionally not run.
+No task status was hand-edited and no approval was fabricated.
 
 ## Commands and results
 
 Run from the worktree root on macOS 26.6.2/arm64, Go 1.27.1.
 
-| Command                                                                                            | Result                              |
-| -------------------------------------------------------------------------------------------------- | ----------------------------------- |
-| `go test ./internal/toolharness/... -run TestStateDirectoryIsWriteProtectedForModelTools -count=1` | PASS                                |
-| `go test ./internal/cli/... -run TestModelPassClaimCannotOverrideFailedAcceptanceCheck -count=1`   | PASS                                |
-| `go test ./internal/cli/... -run TestModelApprovalClaimWithoutDecisionDoesNotAdvance -count=1`     | PASS                                |
-| `go test ./internal/cli/... -run TestFailedRunDoesNotExposePreviousVerifiedOutcome -count=1`       | PASS                                |
-| `go test ./internal/outcome/... -count=1`                                                          | PASS                                |
-| `go test ./internal/toolharness/... -count=1`                                                      | PASS                                |
-| `go test ./internal/ollamaagent/... -count=1`                                                      | PASS (66.5 s)                       |
-| `go test ./internal/cli/... -count=1`                                                              | PASS (130.3 s)                      |
-| `go build ./...`                                                                                   | PASS                                |
-| `go vet ./...`                                                                                     | PASS                                |
-| `go test ./...`                                                                                    | PASS (116 packages `ok`, no `FAIL`) |
+| Command                                                                                            | Result                                                 |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `go test ./internal/toolharness/... -run TestStateDirectoryIsWriteProtectedForModelTools -count=1` | PASS                                                   |
+| `go test ./internal/cli/... -run TestModelPassClaimCannotOverrideFailedAcceptanceCheck -count=1`   | PASS                                                   |
+| `go test ./internal/cli/... -run TestModelApprovalClaimWithoutDecisionDoesNotAdvance -count=1`     | PASS                                                   |
+| `go test ./internal/cli/... -run TestFailedRunDoesNotExposePreviousVerifiedOutcome -count=1`       | PASS                                                   |
+| `go test ./internal/outcome/... -count=1`                                                          | PASS                                                   |
+| `go test ./internal/toolharness/ -run TestStateDirectoryAliasesAreRecognized -count=1`             | PASS                                                   |
+| `go test ./internal/toolharness/ -run TestSubprocessStateWriteIsOutsideFileToolBoundary -count=1`  | PASS (gap characterized)                               |
+| `go test ./internal/cli/ -run TestExternalCompletionClearsStaleOutcome -count=1`                   | PASS                                                   |
+| `go test ./internal/toolharness/... -count=1`                                                      | PASS                                                   |
+| `go test ./internal/ollamaagent/... -count=1`                                                      | PASS (66.5 s)                                          |
+| `go test ./internal/cli/... -count=1`                                                              | PASS (130.3 s)                                         |
+| `go build ./...`                                                                                   | PASS                                                   |
+| `go vet ./...`                                                                                     | PASS                                                   |
+| `go test ./...`                                                                                    | PASS (116 packages `ok`, no `FAIL`; run at `a91d7493`) |
+| `sop task complete GROUND-001 --external --commit e93751ef`                                        | PASS; validation PASS                                  |
+| `sop task complete GROUND-003 --external --commit e93751ef`                                        | BLOCKED: unsatisfied dependency GROUND-002             |
 
-The full-suite log used for this report is the terminal capture for
-`go test ./...`; it was not committed (it is machine-local output). The plan's
-acceptance checks are the focused commands in the table above.
+The external completion at `e93751ef` ran the configured `go build ./...`,
+`go test ./...`, and `go vet ./...` and reported validation PASS. The earlier
+full-suite run at `a91d7493` also passed. The plan's acceptance checks are the
+focused commands in the table above; the full-suite runs are the repository's
+required validation, not a per-criterion substitute.
 
 ## Revisions
 
 - Base: `9cf554e6b67a6c61588326adb4a76fd46bfe850d` (`origin/main`).
-- Change-set commit: `257b9b40` (`security/llm07-misinformation`).
+- Change-set commits on `security/llm07-misinformation`: `257b9b40` (core
+  evidence/lifecycle fixes), `a91d7493` (report revisions), `e93751ef`
+  (alias/symlink boundary and external-completion stale verdict).
+- SOP external completion: GROUND-001 at `e93751ef`, validation PASS.
 - Branch: `security/llm07-misinformation`; the PR records the final head.
 - The change set is the branch diff against the base; the verification commands
   above were run on that change set on the platform named at the top.
@@ -231,15 +336,22 @@ acceptance checks are the focused commands in the table above.
   their commands exit 0, not that the prose around them is true.
 - **Review is model-based.** The review gate blocks on findings, but a review
   `PASS` is not independent verification and cannot substitute for acceptance.
-- **Manual decisions are not content-addressed.** `AcceptanceDecision` binds the
-  task, criterion text, manual-evidence text, and attempt, but not a commit or
-  content hash. A code change within the same attempt could leave a prior manual
-  decision applicable. Changing this would alter the historical-outcome contract,
-  so it is recorded as a `GAP`, not silently changed.
-- **`run_command` subprocesses are outside the write boundary.** A SAFE command
-  (for example a contributed test) can still write `.agent-sdlc` as a side effect;
-  the harness's file-tool boundary does not sandbox subprocesses. This is a Plan
-  01 execution-isolation concern, not a second permission system in this plan.
+- **Required decision: manual acceptance is not content-addressed (GROUND-002
+  criterion 2 unmet).** `AcceptanceDecision` binds the task, criterion text,
+  manual-evidence text, and attempt, but not a commit or content hash. A code
+  change within the same attempt can leave a prior manual decision applicable.
+  This is **required by the plan's acceptance text and unresolved**, not an
+  optional follow-up. The exact options and migration question are in D4.
+- **File-tool boundary, not a subprocess sandbox.** A SAFE `run_command`
+  (for example `go test ./...`) can still write `.agent-sdlc` as a side effect;
+  the harness does not sandbox subprocesses. `TestSubprocessStateWriteIsOutsideFileToolBoundary`
+  records this boundary. This is a Plan 01 execution-isolation concern, not a
+  second permission system in this plan. The report does **not** claim
+  comprehensive protection against model-authored state.
+- **SOP lifecycle is PARTIAL.** GROUND-001 is externally complete;
+  GROUND-002/003 remain `PLANNED`, and the plan is `ACTIVE`. No merge is
+  recommended until the D4 decision is recorded and the dependent tasks are
+  reconciled.
 - **Live-model/adversarial evidence is `NOT_RUN`.** All results are deterministic,
   synthetic-fixture results. No live model was asked to fabricate evidence.
 - **Linux is `NOT_RUN`.** Only macOS arm64 was exercised.
@@ -248,7 +360,10 @@ acceptance checks are the focused commands in the table above.
 
 ## Handoff
 
-The existing authority chain now rejects the reproduced unsupported-claim paths
-and reports the latest attempt's verdict consistently. The remaining work is the
-manual-decision content binding and subprocess isolation recorded above; both
-require a policy/contract decision rather than an implicit change.
+The existing authority chain rejects the reproduced unsupported-claim paths for
+model/observed evidence, and the file-tool state boundary now handles case aliases
+and symlinks. The plan is **not complete**: GROUND-002 criterion 2 requires a
+governance decision on content/commit binding for manual acceptance evidence, and
+GROUND-003 cannot be externally completed while its dependency is open. Do not
+merge or mark the plan complete until that decision is recorded; the deterministic
+code changes in this PR are otherwise verified and ready for review.
