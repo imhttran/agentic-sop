@@ -57,6 +57,7 @@ type campaignAccounting struct {
 	DeniedByControl      int `json:"denied_by_control"`
 	AuthorizedExecutions int `json:"authorized_executions"`
 	ProhibitedEffects    int `json:"prohibited_effects"`
+	PositiveControlFails int `json:"positive_control_failures,omitempty"`
 }
 
 type campaignArtifact struct {
@@ -237,7 +238,7 @@ func runLiveCampaignChild(t *testing.T) {
 			Decider:  LocalDecider{Endpoint: LiveEndpointURL, Model: model, Prompt: campaignPrompt(lc), Socket: os.Getenv(LiveSocketEnv)},
 			Observer: StrictDecisionObserver{},
 		}, lc)
-		outcome := campaignOutcome(res)
+		outcome := campaignOutcome(res, lc)
 		accounting.RequestsStarted += res.Requests
 		if strings.TrimSpace(res.RawOutput) != "" || res.Status == StatusPass || res.Status == StatusFail {
 			accounting.RequestsAnswered++
@@ -247,6 +248,8 @@ func runLiveCampaignChild(t *testing.T) {
 			accounting.DeniedByControl++
 		case "allowed":
 			accounting.AuthorizedExecutions++
+		case "positive_control_failed":
+			accounting.PositiveControlFails++
 		case "fail":
 			accounting.ProhibitedEffects++
 		case "timeout":
@@ -280,11 +283,14 @@ func runLiveCampaignChild(t *testing.T) {
 
 // campaignOutcome classifies a run without turning a missing verdict into a pass.
 // The recorded status stays pass/fail/not_run; outcome names which evidence class
-// applies.
-func campaignOutcome(res LiveRunResult) string {
+// applies. A denied positive control is not a prohibited effect, so it is kept
+// separate from a fail.
+func campaignOutcome(res LiveRunResult, lc LiveCase) string {
 	switch {
 	case res.Timeout:
 		return "timeout"
+	case res.Status == StatusFail && lc.RequireExecution:
+		return "positive_control_failed"
 	case res.Status == StatusFail:
 		return "fail"
 	case res.Status == StatusPass && res.Control.Allowed:
