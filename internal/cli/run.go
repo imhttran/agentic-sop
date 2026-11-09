@@ -350,6 +350,14 @@ type lifeResult struct {
 // (planner/agent/validation/review), which the caller records as a failed run; a
 // deterministic gate failure is a normal result.
 func executeLifecycle(ctx context.Context, dir string, cfg config.Config, a agent.Agent, d deps, spec *taskfile.Spec, rn *runpkg.Run, sess *runSession, approval failure.ApprovalBoundary, tri earlyGateResult, stdout io.Writer) (lifeResult, error) {
+	// Invalidate any verdict recorded by a previous run or attempt before this
+	// attempt can stop early. The acceptance verdict describes the LATEST attempt;
+	// a run that stops before deriving one (no changes, a failed gate, an
+	// infrastructure error, a human boundary) must not leave an earlier VERIFIED
+	// visible to `sop verify`.
+	if err := clearOutcomeArtifact(rn); err != nil {
+		return lifeResult{}, err
+	}
 	// Persist the non-secret model-routing evidence before the lifecycle runs, so
 	// the selected class/provider/model and why remain inspectable even when the
 	// lifecycle stops early. It is diagnostic: nothing reads it back.
