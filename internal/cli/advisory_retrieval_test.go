@@ -62,6 +62,7 @@ func outcomeEvidence(id, text, status string) retrievalboundary.Evidence {
 		RecordID:    id,
 		ContentHash: "hash-" + id,
 		Corpus:      retrievalboundary.CorpusOutcome,
+		Repository:  "agentic-sop",
 		Citation:    "run/" + id,
 		Text:        text,
 		Status:      status,

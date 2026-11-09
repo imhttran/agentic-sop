@@ -15,13 +15,15 @@ type RebuildReport struct {
 }
 
 // Snapshot reads the current authoritative outcome records from dir and returns them
-// keyed by stable record ID, plus a per-record exclusion map for ineligible records.
-// The map is suitable for LocalRetriever.Current and DetectDrift.
+// keyed by stable record ID. The map is suitable for LocalRetriever.Current and
+// DetectDrift. Snapshot is the raw read: it does not apply the source-aware gate, so use
+// SnapshotGatedContext for the read-path current-source check.
 func Snapshot(dir string) (map[string]outcomefile.OutcomeRecord, error) {
 	return SnapshotContext(context.Background(), dir)
 }
 
-// SnapshotContext reads source records within the caller's deadline.
+// SnapshotContext reads source records within the caller's deadline. It is the raw read
+// and does not apply the source-aware gate.
 func SnapshotContext(ctx context.Context, dir string) (map[string]outcomefile.OutcomeRecord, error) {
 	records, _, err := outcomefile.ReadAllContext(ctx, dir)
 	if err != nil {
@@ -29,6 +31,33 @@ func SnapshotContext(ctx context.Context, dir string) (map[string]outcomefile.Ou
 	}
 	out := make(map[string]outcomefile.OutcomeRecord, len(records))
 	for _, r := range records {
+		out[r.RecordID] = r
+	}
+	return out, nil
+}
+
+// SnapshotGatedContext reads the current authoritative outcome records within the caller's
+// deadline and applies the same source-aware eligibility gate that RebuildFromDir applies:
+// outcomefile.GateWithSourcesAndDigests with FileSourceExists and FileSourceDigest. A record
+// whose source artifact is deleted or whose content no longer matches the recorded digest
+// is excluded before it can be returned. This is the gated read the read-path current-source
+// check uses, so a modified or deleted source artifact is excluded even before a manual
+// rebuild. SnapshotContext remains the raw, ungated read.
+func SnapshotGatedContext(ctx context.Context, dir string) (map[string]outcomefile.OutcomeRecord, error) {
+	records, _, err := outcomefile.ReadAllContext(ctx, dir)
+	if err != nil {
+		return nil, err
+	}
+	excluded := outcomefile.GateWithSourcesAndDigests(records, outcomefile.FileSourceExists, outcomefile.FileSourceDigest)
+	excludedIDs := make(map[string]bool, len(excluded))
+	for _, e := range excluded {
+		excludedIDs[e.RecordID] = true
+	}
+	out := make(map[string]outcomefile.OutcomeRecord, len(records))
+	for _, r := range records {
+		if excludedIDs[r.RecordID] {
+			continue
+		}
 		out[r.RecordID] = r
 	}
 	return out, nil
