@@ -6,6 +6,8 @@ evidence: `IMPLEMENTED`, `ENABLED`, `VERIFIED`, `NOT_RUN`, `GAP`, and
 `NOT_APPLICABLE` are separate dimensions, and a missing live test stays visible.
 
 Baseline: `imhttran/agentic-sop` `main` at
+The Plan 10 row was refreshed on the branch merged with `main` at
+`9689de7` (2026-11-08); earlier rows are not re-verified by that refresh.
 `0750e8be0cf5f318a173abb34c2b752ac131521c` (refreshed 2026-11-09 UTC).
 
 | Plan | Category | Workstream | Report / evidence | Evidence state | Boundary |
@@ -19,7 +21,7 @@ Baseline: `imhttran/agentic-sop` `main` at
 | Plan 07 | Misinformation | Not started | Plan: `docs/plans/PLAN-07-SOP-LLM07-Misinformation.md` | `NOT_RUN` (plan `PROPOSED`) | Scope is evidence used in decisions, not factual correctness of every generated sentence. |
 | Plan 08 | Hidden Context Exposure | Not started | Plan: `docs/plans/PLAN-08-SOP-LLM08-Hidden-Context-Exposure.md` | `NOT_RUN` (plan `PROPOSED`) | Reuses Plan 03 redaction and Plan 02 live evaluation; adds no second DLP layer. |
 | Plan 09 | Vector and Embedding Weaknesses | Not started | Plan: `docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md` | `NOT_RUN` (plan `PROPOSED`) | Plan 05 owns ingestion provenance; this plan owns query scope, cache scope, and stale results. |
-| Plan 10 | Improper Output Handling | Not started | Plan: `docs/plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md` | `NOT_RUN` (plan `PROPOSED`) | Covers terminal escape sequences and renderer auto-fetch only where SOP owns the renderer. |
+| Plan 10 | Improper Output Handling (LLM10) | Linux agent (`security/llm10-improper-output-handling`) | [llm10-output-handling.md](llm10-output-handling.md) | `IMPLEMENTED` / `ENABLED` / `VERIFIED` for the Linux CLI terminal and the Slack payload encoder; live delivery `NOT_RUN` | Third-party terminal/IDE rendering, persisted Markdown rendering, and Slack auto-unfurl remain external. Shell, path, database, and protocol controls were inspected and confirmed, not re-authored. |
 
 ## What the Plan 04 row evidences
 
@@ -35,6 +37,23 @@ Baseline: `imhttran/agentic-sop` `main` at
 - Residual risks are recorded rather than suppressed: descriptive Semgrep/Gitleaks
   pins, runtime binary hash re-checking, provider model provenance, and required
   mode.
+
+## What the Plan 10 row evidences
+
+- Model, tool, provider, and configured-command output is inventoried against
+  every SOP-owned sink: tool commands, file paths, SQL, HTML, the CLI terminal,
+  notifications, MCP/ACP, and configured outbound HTTP.
+- The model-facing `run_command` tool and acceptance checks use structured
+  argument vectors with no shell; `SplitCommand` rejects shell metacharacters and
+  `commandpolicy` must classify the command `SAFE`.
+- File tools retain the symlink-resolved workspace boundary and protect
+  `.agent-sdlc/state.db`; arguments are validated before any write.
+- SQL uses bound placeholders; the controller uses `html/template` auto-escaping
+  with no trusted-markup escape hatches; MCP/ACP use JSON encoders.
+- Two display-sink gaps were reproduced and fixed: terminal control sequences in
+  CLI output, and Slack mrkdwn mention/link injection in model-derived event text.
+- External rendering and live Slack delivery are recorded as explicit limitations,
+  not inferred protections.
 
 ## What this matrix does not claim
 
