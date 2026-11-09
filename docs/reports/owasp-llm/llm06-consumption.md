@@ -319,6 +319,7 @@ Evidence: `TestRunBoundsCapturedOutput`,
 | Validation-runner output bound | Required criterion implemented and verified; merged in #289 | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
 | Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
 | `dqharness` unknown-token handling | `NOT_APPLICABLE` for the provider-usage criterion | Production `ModelDecision` counts deterministic `retrievalboundary.EstimateTokens` for the prompt and output, not provider-reported usage; in-flight requests are recorded as uncertain. |
+| Security adapter descendant termination | IMPLEMENTED and VERIFIED on unix | `internal/security/exec.go` `run` now sets `SysProcAttr{Setpgid: true}` and a `cmd.Cancel` that calls `terminateGroup(cmd.Process.Pid)` (SIGKILL to the process group) with a direct-`Kill` fallback; `proc_other.go` still kills only the direct child. Command/result: `go test ./internal/security -run TestProcessGroup -count=1 -v` → `--- PASS: TestProcessGroupKillsSigtermIgnoringDescendant (0.50s)`; `go build ./...` PASS; `go vet ./...` PASS; `go test ./...` PASS. |
 
 ## 4. Acceptance mapping
 
@@ -403,8 +404,15 @@ process-group and signal tests.
    an internal undo-correctness mechanism, not model-visible output or a configured
    consumption limit, so it is outside Plan 06's output-bound criterion; a bound
    would need a restore-policy decision.
-5. **Security adapter descendants are not claimed.** The security runner bounds
-   time/output but does not use the tool-harness process-group path.
+5. **Security adapter descendants on unix are now killed with the process group.**
+   `internal/security/exec.go` sets `sysProcAttrKill()` (`Setpgid`) and a `Cancel`
+   that calls `terminateGroup(cmd.Process.Pid)`, so scanner timeout or cancellation
+   kills the process group on unix, not just the direct child. Evidence:
+   `go test ./internal/security -run TestProcessGroup -count=1 -v` →
+   `--- PASS: TestProcessGroupKillsSigtermIgnoringDescendant (0.50s)`; the test
+   waits for the SIGTERM-ignoring descendant PID to be gone, so it proves group
+   termination. `proc_other.go` still kills only the direct child on non-unix
+   platforms, so group termination is not claimed there.
 6. **`dqharness` uses token estimates, not provider usage.** Its `ModelDecision`
    counts `retrievalboundary.EstimateTokens` for the prompt and output, so the
    "missing provider usage is zero" concern does not apply to that path; in-flight
