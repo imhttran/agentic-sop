@@ -227,12 +227,12 @@ sop security scan --report-only
 
 Observed on the final working tree:
 
-- Verdict `PASS`; coverage `COMPLETE`; duration 9,997 ms.
+- Verdict `PASS`; coverage `COMPLETE`; duration 9,217 ms.
 - Commit `0750e8be0cf5f318a173abb34c2b752ac131521c`; working tree dirty with the Plan 03 change set.
 - `gitleaks`, `semgrep`, and `osv-scanner`: `COMPLETED`, coverage `COMPLETE`.
 - Findings: 67 total, 53 suppressed by the reviewed baseline, 0 unsuppressed blocking findings.
 - Required-mode readiness: `false` because `security.required_categories` is empty. Required mode is **not enabled**.
-- Artifact: `.agent-sdlc/runs/security-20261109T015127Z/security/scan.{md,json}` (machine-local/git-ignored).
+- Artifact: `.agent-sdlc/runs/security-20261109T015432Z/security/scan.{md,json}` (machine-local/git-ignored).
 
 The synthetic canaries are deliberately non-secret placeholder strings; they still
 exercise the shared credential-shape detector without adding a scanner finding or
