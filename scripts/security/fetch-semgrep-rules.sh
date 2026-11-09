@@ -41,7 +41,6 @@ die() {
 }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
-command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v tar >/dev/null 2>&1 || die "tar is required"
 [ -f "$manifest" ] || die "missing manifest: $manifest"
 
@@ -53,9 +52,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/sop-semgrep-rules.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 archive="$work/rules.tar.gz"
-curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 180 "$archive_url" -o "$archive" || die "download failed: $archive_url"
-actual_tar="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$archive")"
-[ "$actual_tar" = "$expected_tar" ] || die "tarball checksum mismatch: want $expected_tar, got $actual_tar"
+"$script_dir/fetch-pinned.sh" "$archive_url" "$expected_tar" "$archive" 180
 
 mkdir -p "$work/src"
 tar -xzf "$archive" -C "$work/src" || die "tarball extraction failed"
