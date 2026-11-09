@@ -212,13 +212,31 @@ alone. Manual mappings require explicit operator acceptance decisions before a
 future run can resolve them; the final gate is validation evidence, not
 acceptance evidence.
 
+## Local cache and execution verification (2026-11-09)
+
+Plan 04's remaining trust question is the long-lived tools directory, not the
+download path. Re-checked on `93c72857`:
+
+- `scripts/security/fetch-pinned.sh` re-hashes a cache hit and fails closed on a
+  mismatch; `scripts/checks/test-fetch-pinned.sh` covers a tampered cache entry and
+  runs before provisioning in CI.
+- CI persists only the download cache. `SOP_SECURITY_TOOLS_DIR` is under
+  `runner.temp` and is provisioned per job.
+- Provisioning verifies the archive or binary pin; execution verifies the version.
+  Dependency adapters MUST enforce an exact version, while the Semgrep/Gitleaks
+  pins are descriptive by contract (`docs/reference/CONFIGURATION.md`).
+- A same-version replacement inside a writable tools directory is therefore
+  undetected. That is a trust-policy decision, not a deviation from an enforced
+  MUST; the options are in
+  [PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md).
+
 ## Residual gaps and boundaries
 
 | Item | State | Owner | Note |
 | --- | --- | --- | --- |
 | GAP-01: Semgrep/Gitleaks version pins are descriptive | GAP | Security add-on contract | Configuration says the `version` field is descriptive unless an adapter enforces it; the specification only requires dependency adapters to verify `--version`. Enforcing these pins would be a contract/policy change, not a demonstrated contract violation. Recorded, not silently enabled. |
 | Semgrep rules runtime digest is recorded, not enforced against the manifest | GAP | Security add-on | Fetch-time verification is implemented; a post-provisioning change is detectable in provenance but does not fail the scan. |
-| Scanner binary runtime hash is not re-checked | GAP | Security add-on | Provisioning verifies SHA-256; scans verify the version only. Same-version replacement is not detected. |
+| Scanner binary runtime hash is not re-checked | GAP / decision | Security add-on | Provisioning verifies SHA-256; scans verify the version only. Same-version replacement is not detected. Options: [PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md). |
 | Future-dated `downloaded_at` | GAP (low) | Security add-on | A sidecar timestamp later than the host clock is accepted as fresh (clock skew or a crafted sidecar). This is recorded, not silently normalized. |
 | Advisory database authenticity | NOT_APPLICABLE / residual | OSV/provider | HTTPS and a same-source checksum do not establish publisher authentication. No signing infrastructure was added. |
 | Model provenance | NOT_APPLICABLE to SOP | Ollama/oMLX/remote provider | SOP sends a model name; it does not load weights or receive an immutable digest. A model name is not a digest. |
