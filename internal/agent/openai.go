@@ -41,11 +41,12 @@ var openAITextCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure,
 // error text, never the wire protocol. It performs model inference only — it
 // cannot mutate the repository or workflow state.
 type OpenAICompatible struct {
-	id      string
-	baseURL string
-	model   string
-	apiKey  string
-	client  *http.Client
+	id              string
+	baseURL         string
+	model           string
+	apiKey          string
+	client          *http.Client
+	maxOutputTokens int
 }
 
 // LlamaCpp and MLX are the two configured identities of the shared transport.
@@ -74,12 +75,17 @@ func NewOpenAICompatible(id, baseURL, model, apiKey string, timeout time.Duratio
 	if timeout <= 0 {
 		timeout = defaultProviderTimeout
 	}
+	maxOutputTokens, err := MaxOutputTokensFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	return &OpenAICompatible{
-		id:      id,
-		baseURL: baseURL,
-		model:   model,
-		apiKey:  strings.TrimSpace(apiKey),
-		client:  &http.Client{Timeout: timeout},
+		id:              id,
+		baseURL:         baseURL,
+		model:           model,
+		apiKey:          strings.TrimSpace(apiKey),
+		client:          &http.Client{Timeout: timeout},
+		maxOutputTokens: maxOutputTokens,
 	}, nil
 }
 
@@ -131,9 +137,10 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 	}
 
 	body := chatRequest{
-		Model:    c.model,
-		Messages: []chatMessage{{Role: "user", Content: renderPrompt(request)}},
-		Stream:   false,
+		Model:     c.model,
+		Messages:  []chatMessage{{Role: "user", Content: renderPrompt(request)}},
+		Stream:    false,
+		MaxTokens: c.maxOutputTokens,
 	}
 
 	var out struct {
@@ -142,14 +149,22 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
 		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
+			PromptTokens     *int `json:"prompt_tokens"`
+			CompletionTokens *int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	if err := postJSON(ctx, c.client, c.baseURL+"/v1/chat/completions", c.apiKey, body, &out); err != nil {
 		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, withTimeoutHint(err, c.timeoutEnv()))
 	}
-	perf.AddUsage(ctx, c.model, out.Usage.PromptTokens, out.Usage.CompletionTokens)
+	reported := out.Usage.PromptTokens != nil && out.Usage.CompletionTokens != nil
+	input, output := 0, 0
+	if out.Usage.PromptTokens != nil {
+		input = *out.Usage.PromptTokens
+	}
+	if out.Usage.CompletionTokens != nil {
+		output = *out.Usage.CompletionTokens
+	}
+	perf.AddUsageWithReport(ctx, c.model, input, output, reported)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("%s %s: %s", c.id, request.Capability, detail)
 	}

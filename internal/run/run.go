@@ -4,6 +4,7 @@
 package run
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/durablefs"
+	"github.com/imhttran/agentic-sop/internal/projectlock"
 )
 
 // runsDirName is the subdirectory of the project state dir holding runs.
@@ -212,6 +214,37 @@ func (r *Run) ReadContinuations() int {
 // RecordContinuations stores the continuation count for the next run.
 func (r *Run) RecordContinuations(n int) error {
 	return os.WriteFile(filepath.Join(r.dir, continuationFileName), []byte(strconv.Itoa(n)+"\n"), 0o644)
+}
+
+// ConsumeContinuation atomically reads, checks, and increments the persisted
+// continuation count under the project lock. The read and the write are one
+// critical section, so two concurrent runs cannot both spend the same
+// continuation and no caller can overspend the configured maximum.
+func (r *Run) ConsumeContinuation(max int) (n int, allowed bool, err error) {
+	if max <= 0 {
+		return 0, false, fmt.Errorf("run: continuation max must be positive")
+	}
+	lock, err := projectlock.AcquireWait(context.Background(), r.projectRoot(), 0)
+	if err != nil {
+		return 0, false, err
+	}
+	defer lock.Release()
+
+	n = r.ReadContinuations()
+	if n >= max {
+		return n, false, nil
+	}
+	if err := r.RecordContinuations(n + 1); err != nil {
+		return n, false, err
+	}
+	return n + 1, true, nil
+}
+
+// projectRoot returns the project directory that owns this run directory. A run
+// directory is always <project>/.agent-sdlc/runs/<id>, so three parents reach
+// the project root without storing a second copy of it on every handle.
+func (r *Run) projectRoot() string {
+	return filepath.Dir(filepath.Dir(filepath.Dir(r.dir)))
 }
 
 // Load reads a run's persisted stage without creating or modifying anything.

@@ -51,6 +51,12 @@ type ollamaChatRequest struct {
 	Stream   bool            `json:"stream"`
 	Format   json.RawMessage `json:"format,omitempty"`
 	Think    *bool           `json:"think,omitempty"`
+	Options  *ollamaOptions  `json:"options,omitempty"`
+}
+
+// ollamaOptions carries the operator-owned output-token bound.
+type ollamaOptions struct {
+	NumPredict int `json:"num_predict,omitempty"`
 }
 
 // jsonFormatMode is the generic JSON-object response mode used by normal agent
@@ -62,8 +68,9 @@ type ollamaChatResponse struct {
 	Message chatMessage     `json:"message"`
 	Error   json.RawMessage `json:"error"`
 	// PromptEvalCount and EvalCount are Ollama's input and output token counts.
-	PromptEvalCount int `json:"prompt_eval_count"`
-	EvalCount       int `json:"eval_count"`
+	// They are pointers so an absent report is distinguished from a measured zero.
+	PromptEvalCount *int `json:"prompt_eval_count"`
+	EvalCount       *int `json:"eval_count"`
 }
 
 // errEmptyResponse is returned when the model produces no message content. It is
@@ -125,10 +132,12 @@ func (e *ollamaTransportError) Unwrap() error { return e.err }
 // messages and a forced JSON format, which the provider's single-prompt boundary
 // does not expose.
 type ollamaClient struct {
-	baseURL  string
-	model    string
-	http     *http.Client
-	maxBytes int
+	baseURL string
+	model   string
+	http    *http.Client
+	// maxBytes bounds one response; maxOutputTokens is sent as options.num_predict.
+	maxBytes        int
+	maxOutputTokens int
 	// retryDelay is the base delay between provider retries. It is bounded by
 	// maxProviderAttempts, and a non-positive value disables the wait entirely.
 	retryDelay time.Duration
@@ -136,12 +145,22 @@ type ollamaClient struct {
 
 func newOllamaClient(cfg Config) *ollamaClient {
 	return &ollamaClient{
-		baseURL:    strings.TrimRight(cfg.BaseURL, "/"),
-		model:      cfg.Model,
-		http:       &http.Client{Timeout: cfg.Timeout},
-		maxBytes:   maxHTTPResponseBytes,
-		retryDelay: defaultProviderRetryDelay,
+		baseURL:         strings.TrimRight(cfg.BaseURL, "/"),
+		model:           cfg.Model,
+		http:            &http.Client{Timeout: cfg.Timeout},
+		maxBytes:        maxHTTPResponseBytes,
+		maxOutputTokens: cfg.MaxOutputTokens,
+		retryDelay:      defaultProviderRetryDelay,
 	}
+}
+
+// chatOptions returns the Ollama options block for the operator-owned
+// output-token bound, or nil when no bound was configured.
+func (c *ollamaClient) chatOptions() *ollamaOptions {
+	if c.maxOutputTokens <= 0 {
+		return nil
+	}
+	return &ollamaOptions{NumPredict: c.maxOutputTokens}
 }
 
 // chat sends one non-streaming chat completion in the generic JSON mode,
@@ -207,6 +226,7 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 		Stream:   false,
 		Format:   format,
 		Think:    &think,
+		Options:  c.chatOptions(),
 	})
 	if err != nil {
 		return "", nil, fmt.Errorf("encode ollama request: %w", err)
@@ -242,7 +262,15 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 	if detail := rawErrorMessage(out.Error); detail != "" {
 		return "", nil, fmt.Errorf("ollama: %s", detail)
 	}
-	perf.AddUsage(ctx, c.model, out.PromptEvalCount, out.EvalCount)
+	reported := out.PromptEvalCount != nil && out.EvalCount != nil
+	input, output := 0, 0
+	if out.PromptEvalCount != nil {
+		input = *out.PromptEvalCount
+	}
+	if out.EvalCount != nil {
+		output = *out.EvalCount
+	}
+	perf.AddUsageWithReport(ctx, c.model, input, output, reported)
 	// A native tool call with empty content is a valid turn, never an empty
 	// response: only content == "" with no tool calls is errEmptyResponse.
 	calls := normalizeToolCalls(out.Message.ToolCalls)

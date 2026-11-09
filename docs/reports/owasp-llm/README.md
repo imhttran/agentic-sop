@@ -17,7 +17,7 @@ The Plan 10 row was refreshed on the branch merged with `main` at
 | Plan 03 | Sensitive Information Disclosure | Mac agent (`security/llm02-disclosure`, merged in PR #266) | [llm02-disclosure.md](llm02-disclosure.md) | Static tracing `IMPLEMENTED` / `VERIFIED`; live extraction `NOT_RUN` | Plan 03 live tests depend on Plan 02's merged live-test infrastructure. Static tracing is independent. |
 | Plan 04 | Supply Chain | Mac agent (`security/llm04-supply-chain`) | [llm04-supply-chain.md](llm04-supply-chain.md) | `IMPLEMENTED` / `VERIFIED` for the declared report-only scope | Provider model provenance, publisher signatures, required-mode enablement, and normal-agent OS isolation remain out of scope or unverified. |
 | Plan 05 | Data and Model Poisoning | `security/llm05-data-and-model-poisoning` (merged in PR #268; follow-up fixes merged in PR #274) | Plan: `docs/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`; report `llm05-poisoning.md` not yet written (POISON-001) | POISON-002 outcome-provenance fix `IMPLEMENTED` (CI and review clean); SOP acceptance `PARTIAL`, blocked on issue #273; POISON-001/003 `NOT_RUN` | Provider-owned training is outside SOP control and is not marked secure. |
-| Plan 06 | Unbounded Consumption | Not started | Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` | `NOT_RUN` (plan `PROPOSED`) | Token/spend accounting that does not exist stays a `GAP`; no dollar-cap claim without pre-dispatch enforcement. |
+| Plan 06 | Unbounded Consumption | Mac agent (`security/llm06-unbounded-consumption`) | [llm06-consumption.md](llm06-consumption.md) | `IMPLEMENTED` / `VERIFIED` for read-boundary output/read bounds, unknown-token reporting, atomic continuation accounting, command-agent timeout/output, MCP frame bounds, and macOS process-group cancellation; provider output-token cap is opt-in (default `GAP`), Linux descendant evidence `NOT_RUN`, and monetary accounting `GAP` | Token/spend accounting that does not exist stays a `GAP`; no dollar-cap claim without pre-dispatch enforcement. |
 | Plan 07 | Misinformation | `security/llm07-misinformation` | [llm07-misinformation.md](llm07-misinformation.md); Plan: `docs/plans/PLAN-07-SOP-LLM07-Misinformation.md` | `IMPLEMENTED` / `ENABLED`; deterministic checks `VERIFIED` (macOS arm64); SOP `PARTIAL` (GROUND-001 externally complete, GROUND-002/003 open); live-model and Linux `NOT_RUN` | Scope is evidence used in decisions, not factual correctness. Manual acceptance evidence is not content/commit-bound; that is a required governance decision. `run_command` subprocesses are outside the file-write boundary. |
 | Plan 08 | Hidden Context Exposure | Not started | Plan: `docs/plans/PLAN-08-SOP-LLM08-Hidden-Context-Exposure.md` | `NOT_RUN` (plan `PROPOSED`) | Reuses Plan 03 redaction and Plan 02 live evaluation; adds no second DLP layer. |
 | Plan 09 | Vector and Embedding Weaknesses | Not started | Plan: `docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md` | `NOT_RUN` (plan `PROPOSED`) | Plan 05 owns ingestion provenance; this plan owns query scope, cache scope, and stale results. |
@@ -37,6 +37,26 @@ The Plan 10 row was refreshed on the branch merged with `main` at
 - Residual risks are recorded rather than suppressed: descriptive Semgrep/Gitleaks
   pins, runtime binary hash re-checking, provider model provenance, and required
   mode.
+
+## What the Plan 06 row evidences
+
+- The execution limits are inventoried by unit, owner, default, enforcement
+  point, persistence, and overshoot: invocation turns/tool calls, command and
+  provider timeouts, output bytes, ACP frames/prompts, MCP frames, attempts,
+  continuations, fix cycles, orchestration counts, and the evaluation harnesses.
+- Read-boundary defects were reproduced and fixed: command output was buffered in
+  full before truncation, `read_file` read the whole file before truncating, the
+  command agent retained unbounded stdout/stderr, and MCP frames had no bound.
+- Missing provider token usage is now reported as `unknown`/unreported rather
+  than a zero-token call; measured zero stays distinguishable.
+- Continuation accounting is atomic under the project lock, so concurrent runs
+  cannot spend the same continuation; the persisted count still survives resume.
+- `SOP_AGENT_MAX_OUTPUT_TOKENS` is an operator-owned opt-in cap sent before
+  dispatch. No default cap, no execution token budget, and no monetary accounting
+  exist; those are recorded as `GAP`, not inferred from the byte/time bounds.
+- Tool command timeout and cancellation kill the command's process group on macOS;
+  Linux runtime evidence is `NOT_RUN`, and local cancellation is not described as
+  stopping provider-side billing.
 
 ## What the Plan 10 row evidences
 

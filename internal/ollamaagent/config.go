@@ -96,6 +96,10 @@ type Config struct {
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
 	MaxOutputBytes int
+	// MaxOutputTokens is the operator-owned output-token bound sent to the model
+	// before dispatch (Ollama's options.num_predict). Zero means no SOP-imposed
+	// cap; a positive value is enforced on every chat request.
+	MaxOutputTokens int
 	// Roots are additional task-authorized repository roots (read-only unless a
 	// root is explicitly read-write). They come from trusted configuration/input.
 	Roots []toolharness.Root
@@ -151,6 +155,11 @@ func ConfigFromEnv() (Config, error) {
 	// override never disables a limit.
 	cfg.Budget = budget.Resolve(os.Getenv, budget.Defaults())
 	cfg.MaxToolCalls = cfg.Budget.ToolCalls
+	maxOutputTokens, err := agent.MaxOutputTokensFromEnv()
+	if err != nil {
+		return Config{}, err
+	}
+	cfg.MaxOutputTokens = maxOutputTokens
 	cfg.CommandEvidencePath = strings.TrimSpace(os.Getenv(envCommandEvidence))
 	if v := strings.TrimSpace(os.Getenv(envWorkspaceRoots)); v != "" {
 		roots, err := parseWorkspaceRoots(v)

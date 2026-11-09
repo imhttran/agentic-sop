@@ -44,3 +44,23 @@ func TestUsageSumsCallsByModel(t *testing.T) {
 		t.Errorf("task line = %q", line)
 	}
 }
+
+// TestUnreportedUsageIsNotZero pins that a call whose server omitted token usage
+// is counted as unreported and rendered as unknown rather than as zero tokens.
+func TestUnreportedUsageIsNotZero(t *testing.T) {
+	ctx := WithUsage(context.Background(), &Usage{})
+	AddUsageWithReport(ctx, "m", 0, 0, false)
+	got := UsageFrom(ctx)
+	if got["m"] != (Tokens{Calls: 1, UnreportedCalls: 1}) {
+		t.Fatalf("usage = %+v, want one unreported call", got)
+	}
+	line := (Task{Tokens: got}).Line()
+	if !strings.Contains(line, "tokens unknown") {
+		t.Errorf("task line = %q, want tokens unknown", line)
+	}
+	var b bytes.Buffer
+	WriteTokens(&b, got)
+	if !strings.Contains(b.String(), "unreported") {
+		t.Errorf("token report missing the unreported column:\n%s", b.String())
+	}
+}

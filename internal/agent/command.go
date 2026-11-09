@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/normalize"
 )
@@ -16,6 +18,11 @@ import (
 // subprocess-backed agent. Its value is a shell command that reads a JSON
 // Request on stdin and writes the model's raw output to stdout.
 const EnvAgentCommand = "SOP_AGENT_COMMAND"
+
+// EnvAgentCommandTimeout bounds one command-agent invocation. It uses the same
+// duration syntax and default as the provider timeouts, so an external agent
+// command cannot run forever when the caller's context has no deadline.
+const EnvAgentCommandTimeout = "SOP_AGENT_COMMAND_TIMEOUT"
 
 // legacyEnvAgentCommand is the pre-rename variable name, still accepted so
 // existing configurations keep working.
@@ -29,6 +36,9 @@ type CommandAgent struct {
 	// class is the model class routing selected, exported to the command as
 	// EnvSelectedClass so one command can vary its settings per class.
 	class string
+	// timeout bounds one invocation; maxOutput bounds retained stdout.
+	timeout   time.Duration
+	maxOutput int
 }
 
 // EnvSelectedClass names the variable set in the command's environment to the
@@ -46,7 +56,7 @@ func (a *CommandAgent) WithClass(class string) *CommandAgent {
 
 // NewCommandAgent returns a CommandAgent that runs command via the shell.
 func NewCommandAgent(command string) *CommandAgent {
-	return &CommandAgent{command: command}
+	return &CommandAgent{command: command, timeout: defaultProviderTimeout, maxOutput: maxResponseBytes}
 }
 
 // Capabilities declares that the command agent serves every capability.
@@ -62,7 +72,13 @@ func NewCommandAgentFromEnv() (Agent, error) {
 	if command == "" {
 		return nil, fmt.Errorf("no agent configured: set %s", EnvAgentCommand)
 	}
-	return NewCommandAgent(command), nil
+	timeout, err := timeoutFromEnv(EnvAgentCommandTimeout)
+	if err != nil {
+		return nil, err
+	}
+	a := NewCommandAgent(command)
+	a.timeout = timeout
+	return a, nil
 }
 
 // Generate validates the request, serialises it as JSON to the command's
@@ -78,18 +94,46 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 		return Response{}, fmt.Errorf("agent %s: encode request: %w", request.Capability, err)
 	}
 
-	cmd := exec.CommandContext(ctx, "sh", "-c", a.command)
+	timeout := a.timeout
+	if timeout <= 0 {
+		timeout = defaultProviderTimeout
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, "sh", "-c", a.command)
 	cmd.Stdin = bytes.NewReader(payload)
+	cmd.SysProcAttr = sysProcAttrKill()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := terminateGroup(cmd.Process.Pid); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	// The group kill closes the output pipes with the process; WaitDelay is a
+	// teardown bound if a descendant somehow keeps one open.
+	cmd.WaitDelay = 2 * time.Second
 	if a.class != "" {
 		cmd.Env = append(os.Environ(), EnvSelectedClass+"="+a.class)
 	}
 
-	var stdout, stderr bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stderr
+	maxOutput := a.maxOutput
+	if maxOutput <= 0 {
+		maxOutput = maxResponseBytes
+	}
+	stdout := newLimitedBuffer(maxOutput)
+	stderr := newLimitedBuffer(maxErrorDetail)
+	cmd.Stdout = stdout
+	cmd.Stderr = stderr
 
 	if err := cmd.Run(); err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
+		if ctxErr := runCtx.Err(); ctxErr != nil {
+			if errors.Is(ctxErr, context.DeadlineExceeded) {
+				return Response{}, fmt.Errorf("agent %s timed out after %s: %w", request.Capability, timeout, ctxErr)
+			}
 			return Response{}, fmt.Errorf("agent %s canceled: %w", request.Capability, ctxErr)
 		}
 		detail := strings.TrimSpace(stderr.String())
@@ -106,6 +150,41 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 	}
 
 	return Response{Content: content, Outcome: ParseOutcome(content)}, nil
+}
+
+// limitedBuffer retains at most limit bytes while counting everything written,
+// so a command that streams output cannot make the caller allocate it. It is the
+// command-agent counterpart of the tool harness's bounded capture.
+type limitedBuffer struct {
+	buf   bytes.Buffer
+	limit int
+	total int
+}
+
+func newLimitedBuffer(limit int) *limitedBuffer {
+	if limit <= 0 {
+		limit = maxResponseBytes
+	}
+	return &limitedBuffer{limit: limit}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	b.total += len(p)
+	if room := b.limit - b.buf.Len(); room > 0 {
+		if len(p) > room {
+			b.buf.Write(p[:room])
+		} else {
+			b.buf.Write(p)
+		}
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	if b.total > b.limit {
+		return b.buf.String() + fmt.Sprintf("\n… [truncated %d bytes]", b.total-b.limit)
+	}
+	return b.buf.String()
 }
 
 // CommandHarness adapts a CommandAgent to the Harness interface, enabling the
