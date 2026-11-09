@@ -1,7 +1,8 @@
 # OWASP LLM — remaining gap register (2026-11-09)
 
-**Current reconciliation:** `main` at `d3830e35` (2026-11-09 UTC), after the closeout
-PRs merged. The original point-in-time baseline at `93c72857` is preserved verbatim
+**Current reconciliation:** this correction is based on `main` at `347a96f1`
+(2026-11-09 UTC), after PR #316 merged at `1ace57a8` and PR #317 merged at
+`347a96f1`. The original point-in-time baseline at `93c72857` is preserved verbatim
 in [gap-register-20261109-baseline.md](gap-register-20261109-baseline.md). That file
 is historical evidence; it is not the current disposition.
 
@@ -31,12 +32,11 @@ policy, trust, or acceptance decision are recorded separately.
 | Scanner integrity investigation   | #311 | `c3a8eed8` | Investigation and proposal complete; binary-pin decision open           |
 | Slack test preparation            | #313 | `f557c6fd` | Preparation complete; live delivery `NOT_RUN`                           |
 | Plan 03 acceptance request        | #314 | `a37a7bbd` | Request prepared; acceptance pending                                    |
-| Accepted-outcome resume fix       | #315 | `d3830e35` | Merged, but **not fully closed**: its P1 correction is #316, still open |
+| Accepted-outcome resume fix       | #315 | `d3830e35` | Merged                                          |
+| Accepted-outcome refresh P1 fix   | #316 | `1ace57a8` | Merged; closes the #315 follow-up               |
 
-Outstanding: **#316** (`fix/lifecycle-resume-p1-followup`, `fix(cli): persist
-accepted-outcome refresh (P1 follow-up)`) remains open. It is not an OWASP
-deliverable and is owned by its author. This closeout did not duplicate it, and no
-lifecycle closeout below relies on it.
+Both the accepted-outcome resume fix (#315) and its P1 correction (#316) are merged.
+Merging these PRs does not imply installation, deployment, or SOP plan completion.
 
 ## SOP lifecycle state (verified read-only; COMPLETE states confirmed)
 
