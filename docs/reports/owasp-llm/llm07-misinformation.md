@@ -159,7 +159,10 @@ found these authoritative sources and bindings:
   repository writes and configuration reads.
 - **Boundary:** this is the **file-tool** boundary. A `run_command` subprocess is
   not sandboxed; see `TestSubprocessStateWriteIsOutsideFileToolBoundary` and the
-  limitation below.
+  limitation below. SOP's own lifecycle writes are unaffected: the CLI writes
+  `.agent-sdlc` directly (`state.db`, run artifacts) rather than through the model
+  tool harness, and the external completion and lifecycle in this checkout wrote
+  them successfully.
 
 ### D2 — A failed run could expose a previous VERIFIED verdict
 
@@ -174,7 +177,11 @@ found these authoritative sources and bindings:
   so a stale `VERIFIED`/`PARTIAL` must not remain visible. `sop verify` now says
   "no recorded outcome for the latest run" instead of implying the task never ran.
 - **Regression:** `internal/cli/outcome_stale_test.go`, including
-  `TestExternalCompletionClearsStaleOutcome`.
+  `TestExternalCompletionClearsStaleOutcome`. The same clear runs on the
+  planner-resume path: `plannerResume` opens the existing run with
+  `runpkg.Resume` and calls `executeLifecycle`, so a resumed attempt cannot
+  inherit a prior verdict. `sop resume` itself is a read-only next-action
+  command.
 
 ### D3 — SOP runtime state could be cited as repository evidence
 
