@@ -1,38 +1,77 @@
 # OWASP LLM — remaining gap register (2026-11-09)
 
-This register records the remaining Plan 01, 03, 04, 05, and 10 gaps from the
-current `main`, so each one has a disposition and an owner before any code
-changes. It is a point-in-time report, not a compliance claim.
+**Current reconciliation:** `main` at `d3830e35` (2026-11-09 UTC), after the closeout
+PRs merged. The original point-in-time baseline at `93c72857` is preserved verbatim
+in [gap-register-20261109-baseline.md](gap-register-20261109-baseline.md). That file
+is historical evidence; it is not the current disposition.
 
-Baseline: `main` at `93c72857` (2026-11-09 UTC). No open pull request claimed any
-of these items when this register was written. Merged evidence that is **not**
-reopened: PR #297 (provider truncation rejection), PR #298 (retrieval
-deadline/cancellation), PR #300 (bounded Plan 03 live disclosure), PR #303 (Linux
-child/grandchild cancellation).
+This register separates what merged from what is still open. **A merged proposal is
+not a closed gap.** Implementation or investigation completion and the remaining
+policy, trust, or acceptance decision are recorded separately.
 
-Dispositions:
+## Current dispositions
 
-- **Defect** — the current code contradicts an existing, enforced contract, and a
-  focused regression can demonstrate it.
-- **Missing evidence** — the behavior exists but is unverified on the stated
-  platform or path.
-- **Decision** — closing the item requires a policy, trust, schema, or acceptance
-  decision that this work cannot make on the operator's behalf.
-- **Limitation** — the boundary is documented as out of scope and stays explicit.
+| #   | Item                                         | Completed implementation or investigation (merge)                                                                                                                                                                                                                         | Still open                                                                                                                                                    | Retained limitation                                                                                                                                                                        |
+| --- | -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| 1   | Plan 05 GAP-4 — per-document index integrity | Aggregate identity defect fixed: the resolved document rows (class, authority, lifecycle, authority source) now feed `Identity.Digest`, with a regression that fails before the fix (PR #308, `bf0d824d`). SOP state for this plan is not available in an owning checkout | **Decision:** per-row digest and schema v2 ([PROPOSAL-REPOINDEX-ROW-DIGESTS.md](../../plans/PROPOSAL-REPOINDEX-ROW-DIGESTS.md))                               | Rows still carry no digest of their own; no consumer loads `context/index.json` today; the aggregate digest is truncated to 16 hex and covers bytes plus resolved rows, not benign content |
+| 2   | Plan 05 GAP-5 — RAG `document_hash`          | Deterministic fixtures pin the current non-verification, and an additive chunk-hash contract is proposed (PR #310, `3e3e313e`). SOP state for this plan is not available in an owning checkout                                                                            | **Decision:** contract option A/B/C in [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md)                                             | `document_hash` covers the full source document while SOP receives one returned chunk; a matching hash would prove bytes, not publisher authenticity or benign content                     |
+| 3   | Plan 04 — local scanner integrity            | Verification record plus the binary-pin options, with no enforced-MUST deviation found (PR #311, `c3a8eed8`). Plan `plan-04-sop-llm04-supply-chain` is `HISTORICALIZED` / `COMPLETE`                                                                                      | **Decision:** keep the contract, optional `binary_sha256`, or platform trust ([PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md)) | Same-version substitution in a writable local tools directory is undetected; report-only mode, empty `required_categories`, no execution-time binary pin, no publisher authenticity        |
+| 4   | Plan 01 — macOS isolation evidence           | Boundary fixtures re-run with a loopback positive control; Unix-domain socket denial enabled on Seatbelt; process-group kill recorded (PR #312, `b37f9560`). Plan `plan-01-sop-llm03-excessive-agency` is `HISTORICALIZED` / `COMPLETE`                                   | No open evidence item for the isolated-replay and evaltarget paths. Normal-agent isolation and Linux remain out of scope                                      | macOS arm64 only, and only the isolated-replay and evaltarget paths; normal agent execution is policy-only and not OS-sandboxed; Linux Bubblewrap is `NOT_RUN` here                        |
+| 5   | Plan 10 — Slack delivery                     | Local payload/transport verification is confirmed and the authorized live test is prepared (PR #313, `f557c6fd`). SOP state for this plan is not available in an owning checkout                                                                                          | **Decision:** authorization and channel confirmation for one synthetic message to `#sop-alert`; the send itself is not performed                              | Live delivery and rendering are `NOT_RUN`; 2xx proves endpoint acceptance, not Slack rendering; unfurl and client rendering are external; Linux CLI evidence only                          |
+| 6   | Plan 03 — live-evidence acceptance           | The exact evidence identity and supported acceptance interface are prepared (PR #314, `a37a7bbd`). Plan `plan-03-sop-llm02-sensitive-information-disclosure` is `ACTIVE`                                                                                                  | **Decision:** designated approver must accept the exact campaign artifact (`0c8cc0ff…`, revision `9c32e3d2…`); no acceptance is recorded                      | One model (`qwen3.5:4b`) on macOS arm64, 7 requests; Linux live is `NOT_RUN`; no general DLP; model-visible repository content and persisted model output remain bounded gaps              |
 
-| # | Item | Contract | Exact path | Existing evidence | Disposition |
-| - | ---- | -------- | ---------- | ----------------- | ----------- |
-| 1 | Plan 05 GAP-4 — per-document index integrity | `Identity.Digest` is a digest over `(relative path, file content SHA-256)` for every indexed file; `Document` rows carry `Class`, `Authority`, `Lifecycle`, `AuthoritySource`; `Identity` claims to capture "the repository state the index corresponds to" (`internal/repoindex/index.go:160-168`) | `internal/repoindex/index.go` (`Build`, `Identity`), `internal/repoindex/helpers.go` (`classifyAuthority`, `readSOPMetadata`), `internal/cli/index.go` | `internal/repoindex/index_test.go` (determinism/authority); `docs/reports/owasp-llm/llm05-poisoning.md:361-364`; no test covers metadata-driven identity | **Defect** (aggregate identity omits SOP-metadata-derived document rows) plus a **decision** for per-row digests/schema |
-| 2 | Plan 05 GAP-5 — RAG `document_hash` | The contract maps `documents.content_hash` to the ingestion fingerprint of the full source document; `text` is the returned chunk (`docs/specs/RAG-RETRIEVAL-CONTRACT.md:100-121`). Algorithm and canonicalization are not defined | `internal/ragclient/ragclient.go:85-96` (`Evidence.DocumentHash`), `internal/ragclient/ragclient.go:273-291` (decode) | `internal/ragclient/ragclient_test.go:41,89` round-trip the literal `sha256:abc`; no comparison with returned text; `llm05-poisoning.md:364` | **Limitation** (SOP never receives the full document) + **decision** for an additive chunk-hash contract |
-| 3 | Plan 04 — local scanner integrity | Acquisition pins archives/binaries; dependency adapters MUST run `--version` and match the pin; Semgrep/Gitleaks pins are descriptive and scanning is version-checked only (`docs/specs/SECURITY-SCANNER-ADDON.md:439-451`; `llm04-supply-chain.md:219`) | `scripts/security/*`, `scripts/checks/security-integration.sh`, `.github/workflows/ci.yml:71-85`, `internal/security/{semgrep,gitleaks,osv,cargoaudit}.go` | `scripts/checks/test-fetch-pinned.sh` (cache hits re-verified); manifest pins; CI download cache is re-verified; execution verifies version only | **Decision** (same-version binary substitution in a writable local tools directory is outside the current contract); no deviation from an enforced MUST was found |
-| 4 | Plan 01 — macOS isolation evidence | OS isolation is demonstrated only on the isolated-replay and evaltarget paths; normal agent execution is policy-only (`docs/reports/security-shift-left/seatbelt-evidence.md`, `execution-path-matrix.md`) | `internal/dqharness` (Seatbelt profile `replay_exec.go:132-140`), `internal/evaltarget` | `seatbelt-evidence.md`: 18 PASS/3 SKIP (`dqharness`), 9 PASS (`evaltarget`) on Darwin arm64; the matrix still recorded macOS Seatbelt `UNVERIFIED` | **Missing evidence** — two fixtures could pass vacuously (an external-IP network probe, and a `/dev/shm` write on macOS where the path is absent) and the Unix-socket test was gated to bubblewrap. Re-running with a loopback positive control and the socket test enabled on Seatbelt confirms filesystem, IP network, Unix-domain socket, credential, timeout, and process-group boundaries; the evidence documents need to record it |
-| 5 | Plan 10 — Slack delivery | The webhook client accepts a 2xx as confirmed delivery; Slack mrkdwn is escaped; no channel is enabled by default (`docs/guides/NOTIFICATIONS.md`) | `internal/notify` (`slack.go`, `webhook.go`, `dispatch.go`), `internal/cli/notify.go` | `internal/notify/*_test.go`; `internal/cli/notify_acceptance_test.go:158` delivers to a loopback `httptest` receiver; live delivery is `NOT_RUN` (`llm10-output-handling.md:180`) | **Missing evidence** (one live message) gated on explicit operator authorization; HTTP acceptance is not rendering evidence |
-| 6 | Plan 03 — live-evidence acceptance | The bounded campaign is evidence, not approval; manual operator acceptance is required (`llm02-disclosure.md:247-259`) | `docs/reports/owasp-llm/llm02-campaign.json`, `llm02-disclosure.md` | Campaign artifact sha256 `0c8cc0ff…`, revision `9c32e3d2…`, merged in PR #300 (`6de95c33`); `DISCLOSE-003` is `PLANNED`, the recorded outcomes are `PARTIAL`, and no acceptance record exists | **Decision** (designated approver must accept the exact artifact); model-visible content disclosure and the absence of general DLP stay explicit |
+## Deliverable closeout
 
-## Cross-cutting boundaries
+| Deliverable                       | PR   | Merge      | Disposition                                                             |
+| --------------------------------- | ---- | ---------- | ----------------------------------------------------------------------- |
+| Gap register                      | #307 | `61b03790` | Merged; this file is its reconciled successor                           |
+| Aggregate index identity defect   | #308 | `bf0d824d` | Fixed; per-row digest/schema decision open                              |
+| macOS isolation evidence          | #312 | `b37f9560` | Complete for isolated replay and evaltarget only                        |
+| RAG `document_hash` investigation | #310 | `3e3e313e` | Investigation and proposal complete; GAP-5 open                         |
+| Scanner integrity investigation   | #311 | `c3a8eed8` | Investigation and proposal complete; binary-pin decision open           |
+| Slack test preparation            | #313 | `f557c6fd` | Preparation complete; live delivery `NOT_RUN`                           |
+| Plan 03 acceptance request        | #314 | `a37a7bbd` | Request prepared; acceptance pending                                    |
+| Accepted-outcome resume fix       | #315 | `d3830e35` | Merged, but **not fully closed**: its P1 correction is #316, still open |
 
-- No new service, evaluator, gate, or permission framework is required by any
-  item above.
-- Provider model provenance, publisher authentication, and general DLP remain
-  outside SOP ownership; none of the items above changes that.
-- The repository's report-only security mode and retrieval defaults are unchanged.
+Outstanding: **#316** (`fix/lifecycle-resume-p1-followup`, `fix(cli): persist
+accepted-outcome refresh (P1 follow-up)`) remains open. It is not an OWASP
+deliverable and is owned by its author. This closeout did not duplicate it, and no
+lifecycle closeout below relies on it.
+
+## SOP lifecycle state (verified read-only, then supported closeout)
+
+| Owning checkout                              | Plan                                                 | State                         | Readiness                                                              | Action taken                                       |
+| -------------------------------------------- | ---------------------------------------------------- | ----------------------------- | ---------------------------------------------------------------------- | -------------------------------------------------- |
+| `.worktrees/llm03-agency`                    | `plan-01-sop-llm03-excessive-agency`                 | `HISTORICALIZED` / `COMPLETE` | eligible (3 tasks `LOCAL_DONE`, no approvals or verification blockers) | `sop plan historicalize`; 3 task records preserved |
+| `.worktrees/llm04-supply-chain`              | `plan-04-sop-llm04-supply-chain`                     | `HISTORICALIZED` / `COMPLETE` | eligible (3 tasks `LOCAL_DONE`, no approvals or verification blockers) | `sop plan historicalize`; 3 task records preserved |
+| `.worktrees/llm02-disclosure`                | `plan-03-sop-llm02-sensitive-information-disclosure` | `ACTIVE`                      | ineligible: `DISCLOSE-003 (PLANNED)`                                   | None; acceptance remains pending                   |
+| Main checkout                                | none                                                 | `NONE`                        | ineligible: no active plan                                             | None                                               |
+| `fond-eel`, `stark-stoat`, closeout worktree | none                                                 | not initialized               | unverified                                                             | None                                               |
+| Plan 05, Plan 10, Plans 02/06/07/08/09       | documents under `docs/`                              | owning SOP state unavailable  | unverified                                                             | None; a merged PR is not completion proof          |
+
+No approval, per-criterion acceptance, task skip, retry, reconcile, or state-database
+edit was performed. The two historicalizations were SOP's own eligible transition.
+
+## Decisions still required
+
+1. **Per-row index digests** — [PROPOSAL-REPOINDEX-ROW-DIGESTS.md](../../plans/PROPOSAL-REPOINDEX-ROW-DIGESTS.md): A (additive row digests, schema v2) recommended; B aggregate-only; C detached manifest.
+2. **RAG evidence hash** — [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md): A (definition plus optional `chunk_hash`) recommended; B definition only; C schema v2 requiring `chunk_hash`.
+3. **Scanner binary pins** — [PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md): A keep the contract; B optional `binary_sha256` from a verified acquisition (recommended); C platform/publisher trust.
+4. **Live Slack test** — authorize one synthetic message and confirm the webhook is bound to `#sop-alert`; the send remains not performed.
+5. **Plan 03 acceptance** — a designated approver records acceptance for the exact campaign artifact and criteria; no acceptance is recorded.
+
+## Cross-cutting boundaries (unchanged)
+
+- No new service, evaluator, gate, or permission framework is required by any item.
+- Provider model provenance, publisher authentication, and general DLP remain outside
+  SOP ownership.
+- The repository remains in report-only security mode with no required categories and
+  retrieval disabled by default.
+- The evidence matrix is not a compliance mapping and does not imply installation,
+  deployment, or full OWASP coverage.
+
+## Preserved baseline
+
+The original register at `main` `93c72857`, including its dispositions and boundaries,
+is preserved verbatim in
+[gap-register-20261109-baseline.md](gap-register-20261109-baseline.md).
