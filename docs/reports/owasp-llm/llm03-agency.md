@@ -1,6 +1,9 @@
 # OWASP LLM03 — Agency: Current Execution Boundary
 
-Task: AGENCY-001. Status: first-pass trace by inspection.
+Task: AGENCY-001. Status: refreshed trace by inspection against the current
+checkout. This revision reuses the recovered inventory, re-verifies its
+`file:symbol` references against current source, and adds the entry points the
+first pass left untraced (MCP handler set, recovery/resume, eval, runtrace).
 
 This report traces each supported execution entry point from its caller to its
 command or effect sink. For each path it records the actual policy call, the
@@ -16,8 +19,8 @@ approval authority, credentials/environment, filesystem reach, and OS isolation.
 - **Policy-only** enforcement means in-process checks (name/flag/path rules). It
   is not OS isolation. Only an OS sandbox (container, namespace, seccomp, LSM,
   cgroup, bubblewrap, macOS `sandbox-exec`) is OS isolation. OS isolation was
-  observed on exactly one path: the evaltarget child-command path (section 6).
-  Every other traced path is policy-only.
+  observed on exactly one path: the evaltarget child-command path (entry point
+  7). Every other traced path is policy-only.
 
 ## Distinctions required by the task
 
@@ -31,14 +34,30 @@ approval authority, credentials/environment, filesystem reach, and OS isolation.
   `agentbin.EnvHome`), the cargo permission (`config.CargoAgentTool`), and
   harness `Config.Roots`. `toolharness.Root` documents this: roots come from
   trusted configuration/input state and the model may only select an authorized
-  root by exact canonical path (`toolharness.Harness.selectRoot`).
+  root by exact canonical path (`toolharness.Harness.selectRoot`). Verification
+  command strings are trusted project configuration too: `internal/testrunner`
+  states the command string "is never built from untrusted input"
+  (`testrunner.execute`).
 - Untrusted model/request data is the tool-call name, tool arguments, the
   `agent.Request` payload produced from model output, and MCP `tools/call`
   arguments. `toolharness.Harness.Run` dispatches on this data but every effect
   runs through `checkCommandIn` / `resolveIn` / the capability policy first.
   `mcp.Server.callTool` looks the requested tool name up in the fixed registered
   set (`mcp.Server.find`) and rejects an unknown name with
-  `codeInvalidParams`; there is no generic filesystem or shell tool.
+  `codeInvalidParams`; there is no generic filesystem or shell tool in
+  `internal/mcp`.
+- MCP arguments are untrusted even when a registered tool accepts them. The
+  registered handlers confine them where they touch the filesystem: for example
+  `startWork` in `internal/cli/mcp_start_work.go` treats a client-supplied
+  `plan_path` as untrusted and confines it through `planflow.ResolvePlanPath` +
+  `resolvePromptFile` before `os.ReadFile`. `sop_answer_submit` and
+  `sop_decision_submit` record state and never approve or resume. The MCP
+  approval tools (`sop_approve`, `sop_decline`) are the human gate, not a
+  capability the model gains over commands.
+- The planner treats the PRD/context and model output as untrusted:
+  `planner.Plan.Validate` is deterministic and `decodePlan` clears
+  model-authored `AcceptanceChecks`, so the model cannot author its own
+  acceptance checks.
 
 **Policy-only enforcement vs OS isolation**
 
@@ -47,13 +66,24 @@ approval authority, credentials/environment, filesystem reach, and OS isolation.
   function), `Harness.resolveIn` / `resolveArg` (path confinement,
   state-DB protection, read-only root), `Harness.SplitCommand` (no shell
   metacharacters), `ollamaagent.CapabilityPolicy.Allows` (tool-set gate),
-  `github.validateBranchish`, and `evaltarget.confinedDir`.
+  `github.validateBranchish`, `mcp.Server.find` (registered-tool name gate),
+  `cli.startWork` path confinement (`planflow.ResolvePlanPath`,
+  `resolvePromptFile`), and `evaltarget.confinedDir`.
 - OS isolation observed: only on the `evaltarget` child path,
   `evaltarget.RunChild` → `isolation_linux.go` (`bwrap` bubblewrap) /
   `isolation_darwin.go` (`sandbox-exec`), with process-group kill
   (`sysProcAttrKill`, `terminateGroup`) and an environment allow-list
-  (`evaltarget.IsolateEnv`). Every other execution sink uses plain
-  `exec.CommandContext` with no namespace, container, seccomp, LSM or cgroup.
+  (`evaltarget.IsolateEnv`).
+- Every other execution sink uses plain `exec.CommandContext`, `exec.Command`,
+  or `sh -c` with no namespace, container, seccomp, LSM or cgroup. Named sinks:
+  `toolharness.Harness.exec` / `runCommandWithStatus` / `execCaptured`,
+  `agent.CommandAgent.Generate` (`sh -c`), `testrunner.execute` (`sh -c`),
+  `git` `execRunner`, `github` `execRunner`, and
+  `cli.launchWorkProcess` (`exec.Command(exe, args...)`).
+- The MCP `sop_start_work` tool is a launch surface, not a sandbox boundary: it
+  starts the same `sop` binary that an operator would run, so the started
+  process is policy-only, exactly as the terminal command is. It does not
+  approve a gate.
 
 ## Path-by-path matrix
 
@@ -97,15 +127,15 @@ Entry point: `agent.NewCommandAgentFromEnv` reading `SOP_AGENT_COMMAND`
 |---|---|---|---|---|---|---|
 | `CommandAgent.Generate` (`internal/agent/command.go`) | SOP provider → `Generate` → `exec.CommandContext(ctx, "sh", "-c", a.command)` | **None on the configured command string.** The command is operator-configured, not model output. `request.Validate()` gates the payload only. | Operator environment (`SOP_AGENT_COMMAND`) | `cmd.Env` set to `os.Environ()` plus `SOP_SELECTED_CLASS` only when a class is set; the full inherited environment reaches the shell | Arbitrary: `sh -c` runs with the inherited working directory and full filesystem reach of the SOP process | None; a shell with no sandbox |
 | `agentbin` (installed-binary resolution) | `agentbin.Resolve` → `Candidates` → `$SOP_OLLAMA_AGENT_BIN`, `$SOP_OLLAMA_AGENT_HOME/sop-ollama-agent`, `DefaultHome` | `isExecutableFile` (regular + executable). It never compiles working-tree source; a missing binary is `ErrNotInstalled`. | Operator environment | The resolved path only; no credentials read | Reads filesystem metadata in the configured locations; does not itself execute | Not a sink: `agentbin` resolves a path and returns it. Invocation happens elsewhere with the environment it is given. `internal/agentbin` is traced as a resolver, not an execution sink. |
-| `CommandAgent` (ollama variant used in this run) | `SOP_AGENT_COMMAND` invoked `sop-ollama-agent`, which runs `ollamaagent.Run` | The inner loop re-enters `toolharness` (path 1) | Operator + harness policy | Inner harness inherits env; Ollama base URL/model from `SOP_OLLAMA_*` (`ollamaagent.ConfigFromEnv`) | Repo root from `getwd()`, plus `SOP_WORKSPACE_ROOTS` | None |
-| `agent.openai` / `agent.openaicompatible` | Provider HTTP client → network sink | Request payload built from `agent.Request`; no command policy applies | Operator config (API key env) | **UNVERIFIED** — the exact credential variable names were not inspected in this pass | None locally; network reach to the configured endpoint | None (network egress unrestricted) |
+| `CommandAgent` (ollama variant used in this run) | `SOP_AGENT_COMMAND` invoked `sop-ollama-agent`, which runs `ollamaagent.Run` | The inner loop re-enters `toolharness` (entry point 1) | Operator + harness policy | Inner harness inherits env; Ollama base URL/model from `SOP_OLLAMA_*` (`ollamaagent.ConfigFromEnv`) | Repo root from `getwd()`, plus `SOP_WORKSPACE_ROOTS` | None |
+| `agent.openai` / `agent.openaicompatible` | Provider HTTP client → network sink | Request payload built from `agent.Request`; no command policy applies | Operator config (API key env) | **UNVERIFIED** — the exact credential variable names were not re-inspected in this pass | None locally; network reach to the configured endpoint | None (network egress unrestricted) |
 | `agent.ollama` | Provider HTTP client → `SOP_OLLAMA_BASE_URL` (default `http://127.0.0.1:11434`) | None; HTTP request only | Operator config | No credential by default (local endpoint) | None locally | None |
-| `agent.mlx` | Provider client | None; local model call | Operator config | **UNVERIFIED** — credential/env handling was not inspected in this pass | None locally | None |
+| `agent.mlx` | Provider client | None; local model call | Operator config | **UNVERIFIED** — credential/env handling was not re-inspected in this pass | None locally | None |
 
 Model influence: model output cannot choose the `SOP_AGENT_COMMAND` string,
 but it does influence the `agent.Request` JSON passed on stdin and the tool
-calls the inner loop executes. The inner tool calls are gated by path 1 policy.
-The outer `sh -c` string is trusted configuration.
+calls the inner loop executes. The inner tool calls are gated by entry point 1
+policy. The outer `sh -c` string is trusted configuration.
 
 ### 3. Verification commands
 
@@ -116,26 +146,40 @@ selection is additionally guarded by `toolharness.noTestsMatched`, which appends
 `noTestMatchDiagnostic` when the selection matched no tests, so a zero exit
 cannot be read as a pass.
 
-- Other verification-related sinks also exist outside the harness:
-  `internal/testrunner` (`internal/testrunner/command.go`:
-  `exec.CommandContext(ctx, "sh", "-c", command)`) runs a shell command
-  string. It is not fed by model tool data; the command string is supplied by
-  the caller. **UNVERIFIED**: whether every caller of `testrunner` passes only
-  repository-verified command strings was not traced in this pass. Treat any
-  caller of `testrunner` as policy-free shell execution until traced.
+- `internal/testrunner` (`testrunner.execute` in `internal/testrunner/command.go`)
+  runs `exec.CommandContext(ctx, "sh", "-c", command)`. The package documents
+  the trust decision: verification commands are trusted project configuration,
+  commonly need shell syntax, and "the command string is never built from
+  untrusted input". The child environment is `buildEnv(env)`: `os.Environ()`
+  with any overrides applied last, so the full inherited environment reaches the
+  shell. Filesystem reach is `cmd.Dir` (the project directory) plus whatever the
+  shell itself can reach; there is no path confinement on this sink.
+- Policy call on the testrunner sink: **none in-process.** Trust is delegated to
+  the caller that supplies the command string. No `commandpolicy.Classify` runs
+  inside `internal/testrunner`.
 - `internal/testfast` and `internal/verifcache` are support packages for
-  verification; their command construction was not traced line-by-line here.
+  verification. `internal/testfast` is identified by
+  `internal/testfast/testfast_test.go`; `internal/verifcache` by search. Their
+  command construction was not re-traced line-by-line here.
+- `internal/cli` exposes verification to MCP through `mcpValidate`
+  (`internal/cli/mcp.go`), which calls `validate.Run(ctx, dir, cfg.Validation)`
+  with the configured `cfg.Validation` command set (trusted repository config),
+  and reports status lines. The `sop_validate` tool is not registered in
+  `--status-only` or `--planner` mode.
 - Policy call (harness path): `commandpolicy.Classify` inside `checkCommandIn`.
 - Approval authority: SOP workflow decides which acceptance commands to run;
-  the harness enforces the `Safe` class.
+  the harness enforces the `Safe` class. `internal/testrunner` has no approval
+  step; its caller owns the choice.
 - Credentials/environment: inherited process env, no credentials.
-- Filesystem reach: repository root; path args confined by `resolveIn`.
-- OS isolation: none.
-- Gap / UNVERIFIED: the internal call chain from scheduler to `internal/verify`
-  and to `internal/testrunner` was not followed line-by-line in this pass.
-  Verification is traced only to the point where it re-enters the harness
-  policy (harness path) or reaches `testrunner`'s shell sink (unverified
-  callers).
+- Filesystem reach: repository root; path args confined by `resolveIn` on the
+  harness path, unconfined on the `testrunner` shell path.
+- OS isolation: none on either path.
+- Gap / UNVERIFIED: the precise call site that invokes `internal/testrunner`
+  was not located by search in this pass (`search_files` for `testrunner.` in
+  `internal/` returned no matches, consistent with the package being imported
+  through an alias or wrapper). The scheduler-to-`internal/verify` chain was not
+  followed line-by-line. The trust claim for `testrunner` callers is therefore
+  read from the package doc, not proven per caller.
 
 ### 4. Git and GitHub operations
 
@@ -153,7 +197,7 @@ Write sinks live in SOP workflow code, outside the tool harness:
 | push (branch to origin) | `github.CommandClient.PushBranch` (`internal/github/command.go`) → `c.run(ctx, "git", "push", "-u", "origin", branch)` | `validateBranchish` (empty and metacharacter check); no command policy | SOP workflow that owns the PR handoff | Inherited env (`append(os.Environ(), "GH_PROMPT_DISABLED=1")`); host Git credential helper / SSH agent | Repository working directory of `CommandClient` | None |
 | PR creation | `github.CommandClient.CreatePullRequest` → `c.run(ctx, "gh", "pr", "create", ...)` | Required non-empty base/head/title; structured args, no shell | SOP workflow | Inherited env; `gh` auth from host | Repository working directory | None |
 | PR read / checks | `github.CommandClient.GetPullRequest` / `Checks` → `gh pr view` / `gh pr checks` | Argument guards; read-only | Workflow | Same | Same | None |
-| merge | `github.CommandClient.Merge` → `c.run(ctx, "gh", "pr", "merge", ...)` | Method must be squash/merge/rebase | Workflow merge gate (`internal/mergegate` — not traced line-by-line) | Inherited env; `gh` auth | Repository working directory | None |
+| merge | `github.CommandClient.Merge` → `c.run(ctx, "gh", "pr", "merge", ...)` | Method must be squash/merge/rebase | Workflow merge gate (`internal/mergegate` — not re-inspected in this pass) | Inherited env; `gh` auth | Repository working directory | None |
 
 The package doc of `internal/git` states the rule: "Workflow control decides
 when Git state may change; agents and models never call these operations
@@ -161,12 +205,14 @@ directly." The harness enforces that rule for the tool surface; the gates below
 it are the approval authority for the write effects.
 
 Gap / UNVERIFIED: `internal/commitgate` and `internal/mergegate` were not
-inspected in this pass, so the exact branch-name and `gh` argument ownership of
-commit and merge approvals is unproven. What is proven: the write commands run
-through `internal/github/command.go`'s `execRunner` with the full inherited
-environment and no OS isolation.
+re-inspected in this pass either, so the exact branch-name and `gh` argument
+ownership of commit and merge approvals remains unproven. What is proven: the
+write commands run through `internal/github/command.go`'s `execRunner` with the
+full inherited environment and no OS isolation.
 
 ### 5. Planner and MCP entry points
+
+#### 5a. Planner
 
 Planner: `internal/planner.Planner.GenerateWithContext` builds an
 `agent.Request` (`Capability: agent.Plan`, `Task: planTaskPrompt`,
@@ -178,7 +224,7 @@ author its own acceptance checks. The Planner writes no files and touches no
 workflow state.
 
 - Caller → sink: `Planner.GenerateWithContext` → `agent.Agent.Generate` →
-  whichever adapter in section 2 is configured. It does not itself execute a
+  whichever adapter in entry point 2 is configured. It does not itself execute a
   command; its sink is the model adapter's sink.
 - Policy: `Plan.Validate` on the model output; deterministic acceptance checks
   are only accepted from the operator's Markdown path.
@@ -187,29 +233,88 @@ workflow state.
   planner enforces a JSON schema and validates the resulting graph. It does not
   grant any execution authority.
 
-MCP: `internal/mcp.Server` (`mcp.go`) is a newline-delimited JSON-RPC server
-that serves `initialize`, `tools/list`, `tools/call`. It exposes only the tools
-passed to `mcp.NewServer`. `callTool` parses the client's `name`, resolves it
-via `Server.find`, and rejects unknown names with `codeInvalidParams`. There is
-no generic read/write/exec tool in the package:
+#### 5b. MCP server and registered handler set
 
-- MCP `tools/*` requests are untrusted client/request data. They are gated by
-  the fixed registered-tool set. The `ReadOnly` flag on `mcp.Tool` is
-  descriptive only (`toolDescriptors` adds `annotations.readOnlyHint`); access is
-  enforced by registration, not by that flag.
-- Traced: every MCP tool either exists in the registered set (allowed) or is
-  rejected. None of the registered handlers live in `internal/mcp`; they are
-  supplied by the caller.
-- Gap / UNVERIFIED: the concrete handler set registered by
-  `internal/cli/mcp_start_work.go` was not enumerated in this pass. Whether each
-  handler reaches `toolharness` policy or a dedicated workflow service is
-  unproven. `internal/cli/mcp_start_work.go` also runs `exec.Command(exe, args...)`
-  to launch a sub-process; its arguments were not traced.
-- Untrusted-input note: MCP request data must be treated as untrusted, like model
-  tool-call data. This report claims only the name gate (registered tools only);
-  it does not claim that every registered handler is policy-checked.
+`internal/mcp.Server` (`mcp.go`) is a newline-delimited JSON-RPC server that
+serves `initialize`, `tools/list`, `tools/call`. It exposes only the tools passed
+to `mcp.NewServer`. `callTool` parses the client's `name`, resolves it via
+`Server.find`, and rejects unknown names with `codeInvalidParams`. The `ReadOnly`
+flag on `mcp.Tool` is descriptive only (`toolDescriptors` adds
+`annotations.readOnlyHint`); access is enforced by registration, not by that
+flag.
 
-### 6. Replay and evaltarget
+Concrete handler set, registered by `cli.runMCP` (`internal/cli/mcp.go`) and
+`cli.mcpStartWorkTools` (`internal/cli/mcp_start_work.go`), in three modes plus
+one opt-in surface:
+
+- Default (`sop mcp`), from `cli.mcpTools` → `cli.mcpToolsWithMode(dir, d, false)`:
+  `sop_status` (`cli.mcpStatusTool`, read-only), `sop_validate` (`cli.mcpValidate`),
+  `sop_review` (`cli.mcpReview`), `sop_approval` (`cli.approvalRead`),
+  `sop_approve` (`cli.approvalApprove`), `sop_decline` (`cli.approvalDecline`).
+- Status-only (`sop mcp --status-only`), from
+  `cli.mcpToolsWithMode(dir, d, true)`: `sop_status` only. The approval, validate,
+  and review tools are never registered, so they cannot be listed or called.
+- Planner (`sop mcp --planner`), from `cli.mcpPlannerTools`: `sop_status`,
+  `sop_question_list`, `sop_question_get`, `sop_answer_submit`, `sop_task_result`,
+  `sop_decision_list`, `sop_decision_submit`. The human approval actions are
+  deliberately absent.
+- Opt-in start-work (`--start-work`, appended by `cli.runMCP`), from
+  `cli.mcpStartWorkTools`: `sop_start_work` (`cli.mcpStartWorkTool`) and
+  `sop_work_status` (`cli.mcpWorkStatusTool`, read-only). `--start-work` is
+  refused with `--status-only`.
+
+Reach of each registered handler:
+
+- Read-only handlers read the state database or working tree and write nothing:
+  `mcpStatus`, `mcpQuestionListTool` / `mcpQuestionGetTool`, `mcpWorkStatusTool`.
+- `sop_validate` runs the configured validation commands through `validate.Run`
+  (entry point 3). This is a policy-only command sink; the commands are trusted
+  repository config.
+- `sop_review` calls the configured review provider (`reviewProvider`); its sink
+  is the provider adapter in entry point 2.
+- `sop_approve` / `sop_decline` call `approval.Service.Approve` / `Decline`
+  through `cli.approvalTool`. They record the human gate; they never bypass
+  validation, review, or the quality gate. `sop_answer_submit` and
+  `sop_decision_submit` record state only.
+- `sop_start_work` is the one MCP handler that launches a subprocess:
+  `cli.startWork` → `env.launch` → `cli.launchWorkProcess` →
+  `exec.Command(exe, args...)` with `exe = os.Executable()`, `cmd.Dir = dir`,
+  `cmd.Env = append(os.Environ(), JobEnvDir, JobEnvID, JobEnvProject)`, and a
+  detached process attribute (`detachedProcAttr()`). The child runs the same
+  `sop prompt --capability … --file …` or `sop run <plan>` an operator would
+  type. `startWork` confines the client-supplied `plan_path` through
+  `planflow.ResolvePlanPath` + `resolvePromptFile` before reading it, bounds
+  prompt size (`maxWorkPromptBytes`), refuses duplicate or concurrent jobs
+  (`acquireWorkLock`, `listWorkJobs`, mid-run task check), and never approves a
+  gate. OS isolation: none (policy-only).
+
+Untrusted-input note: MCP `tools/*` requests are untrusted client/request data.
+They are gated by the fixed registered-tool set; arguments are confined only
+where the handler code confines them (for example `startWork`'s `plan_path`).
+This report claims the name gate and the per-handler confinement above; it does
+not claim that every handler performs a `commandpolicy` check.
+
+### 6. Replay entry points (recovery, resume, eval, runtrace, cmd/deceleval-*)
+
+- `internal/recovery` and `internal/resume` restore and continue the SOP workflow.
+  They do not run child commands themselves; a resumed workflow re-enters the
+  tool harness (entry point 1) and the configured agent command (entry point 2).
+  This is read from the package boundaries; **UNVERIFIED**: the precise
+  statement-by-statement path from `internal/recovery` / `internal/resume` to a
+  command sink was not traced line-by-line in this pass, and the presence of any
+  direct `exec.Command` inside those packages was not excluded.
+- `internal/runtrace` records trace data. **UNVERIFIED**: it was not inspected in
+  this pass, so whether it opens any process sink or writes outside the trace
+  store is unproven. `internal/eval` is likewise **UNVERIFIED** for the same
+  reason: neither package was inspected in this pass.
+- `cmd/deceleval-*` are the case-execution commands. The recovered inventory
+  states they invoke `evaltarget` for case execution; **UNVERIFIED**: the exact
+  call chain from each `cmd/deceleval-*` `main` into `evaltarget.RunChild` was not
+  re-traced line-by-line here, and any additional direct `exec.Command` inside
+  those commands was not excluded.
+- Sink in the traced case: `evaltarget.RunChild` (entry point 7).
+
+### 7. evaltarget
 
 `internal/evaltarget.RunChild` (`internal/evaltarget/command.go`) is a real
 re-execution path and it applies stronger isolation than the tool harness:
@@ -231,19 +336,11 @@ re-execution path and it applies stronger isolation than the tool harness:
 - Approval authority: the SOP AISEC/eval workflow supplies the case and its
   `CommandRequest`; the model does not. `evaltarget` arguments are not read from
   model output.
-- Related packages: `internal/eval` (evaluations), `internal/runtrace`
-  (trace recording), `internal/recovery` and `internal/resume` (workflow
-  recovery and resume), and the `cmd/deceleval-*` commands. The latter invoke
-  `evaltarget` for their case execution. `internal/recovery` and `internal/resume`
-  do not appear to re-execute arbitrary child commands; recovery resumes the SOP
-  workflow, which then goes back through the tool harness (path 1) — this is
-  reasoned from package boundaries, not traced line-by-line.
-- Gap / UNVERIFIED: the exact call chain from `internal/recovery` /
-  `internal/resume` / `cmd/deceleval-*` into `evaltarget.RunChild` (and whether
-  any of those packages also runs a plain `exec.Command`) was not traced
-  line-by-line. `internal/runtrace` and `internal/eval` were not inspected.
 
-### 7. Entry points found during tracing beyond the named set
+This is the only entry point in this report that carries OS isolation. The
+replay packages in entry point 6 are unproven, not sandboxed by assumption.
+
+### 8. Entry points found during tracing beyond the named set
 
 - `cli/preflight.go` `PreflightAgentTool` builds `toolharness.New` with
   `CargoAgentToolEnabled: decl.CargoAgentTool`. Cargo permission comes from
@@ -252,6 +349,8 @@ re-execution path and it applies stronger isolation than the tool harness:
   `ollamaagent.Harness.WorkingTreeFingerprint` / `WorkingTreeChanged` /
   `ChangedSince` run fixed read-only Git commands through `Harness.exec` /
   `execFingerprintCmd`. Model cannot influence the subcommand.
+- `cli.launchWorkProcess` (MCP start-work subprocess launch) is traced in entry
+  point 5b; it is a policy-only `exec.Command` sink.
 - Operator-set log sinks: `SOP_TOOL_AUDIT_LOG` (`NewFileAuditor`),
   `SOP_OLLAMA_TRACE_LOG` (`Harness.FlushTrace`), `SOP_COMMAND_EVIDENCE_LOG`
   (`newEvidenceSink`). These are written outside `.agent-sdlc/state.db` by
@@ -283,13 +382,17 @@ approval authority, and it is distinct from `commandpolicy.Classify`'s
 - The service is deterministic and I/O-free: persistence (`Record`, `Tasks`) and
   the clock are injected. It applies no filesystem or command policy itself. Its
   authority is over the SOP lifecycle, not over a command or effect sink.
+- Over MCP, the approval authority is reachable through `sop_approval`,
+  `sop_approve`, and `sop_decline` (`cli.approvalTool`), which delegate to the
+  same `approval.Service`. They are absent from the status-only and planner
+  surfaces.
 
 Approval authority per traced path: the SOP workflow is the approval authority
-for every command and effect sink in sections 1-6. The tool harness (section 1)
-never authorizes a write Git effect; Git/GitHub write effects (section 4) are
-gated by the workflow, not by `commandpolicy`. The human `approval.Service`
-records the lifecycle gate that a workflow raises; it is not called from any
-`exec.CommandContext` site.
+for every command and effect sink in entry points 1-7. The tool harness (entry
+point 1) never authorizes a write Git effect; Git/GitHub write effects (entry
+point 4) are gated by the workflow, not by `commandpolicy`. The human
+`approval.Service` records the lifecycle gate that a workflow raises; it is not
+called from any `exec.CommandContext` site.
 
 ## Existing tests (identified by inspection, not rerun)
 
@@ -316,19 +419,26 @@ search as covering the traced paths:
   `untracked_binary_test.go`; `internal/git/git_test.go` exercises a real
   `git push` to a local remote.
 - GitHub CLI client: `internal/github/` tests (not enumerated in this pass).
-- Verification: `internal/verify/verify_test.go`; `internal/testfast/testfast_test.go`.
-- MCP server: `internal/mcp/mcp_test.go` (name gate, unknown-tool rejection).
+- Verification: `internal/verify/verify_test.go`; `internal/testfast/testfast_test.go`;
+  `internal/testrunner/runner_test.go`, `enforcement_test.go`,
+  `gofmt_gate_test.go`, `postgres_skip_test.go`.
+- MCP server: `internal/mcp/mcp_test.go` (name gate, unknown-tool rejection);
+  `internal/cli/mcp_planner_test.go`, `mcp_decision_test.go`,
+  `mcp_start_work_test.go`, `mcp_status_only_test.go` exercise the registered
+  handler sets and the start-work launcher with an injected fake `workLauncher`.
 - Planner: `internal/planner/planner_test.go`, `compiler_hardening_test.go`,
-  `required_evidence_test.go`, `taskshape_test.go`, `security_plan_test.go`.
+  `required_evidence_test.go`, `taskshape_test.go`, `security_plan_test.go`;
+  `internal/cli/planner_test.go`, `planner_gate_test.go`,
+  `planner_contract_cli_test.go`, `planner_integration_test.go`.
 - Evaltarget isolation: `internal/evaltarget/runner_test.go`,
   `production_controls_test.go`, `aisec_test.go`, `isolation_darwin_test.go`.
 - Architecture guard: `internal/archtest` (tests exist per plan evidence; not
   inspected in this pass).
 
-Paths with no test identified in this pass: the concrete MCP handler set in
-`internal/cli/mcp_start_work.go`, replay (`internal/recovery`, `internal/resume`),
-and `internal/eval` / `internal/runtrace`. These are also the UNVERIFIED paths,
-so the missing tests are consistent with the missing trace.
+Paths with no test identified in this pass: replay (`internal/recovery`,
+`internal/resume`, `internal/eval`, `internal/runtrace`) and the
+`cmd/deceleval-*` → `evaltarget` chain. These are also the UNVERIFIED paths, so
+the missing tests are consistent with the missing trace.
 
 ## Host-specific runtime evidence
 
@@ -337,8 +447,10 @@ so the missing tests are consistent with the missing trace.
   `SOP_OLLAMA_BASE_URL`, `SOP_OLLAMA_MODEL`, `SOP_OLLAMA_TIMEOUT`,
   `SOP_WORKSPACE_ROOTS`, `SOP_TOOL_AUDIT_LOG`, `SOP_OLLAMA_TRACE_LOG`,
   `SOP_COMMAND_EVIDENCE_LOG`, `SOP_OLLAMA_AGENT_BIN`,
-  `SOP_OLLAMA_AGENT_HOME`. Read by `agent.EnvAgentCommand`,
-  `agentbin.Candidates`, and `ollamaagent.ConfigFromEnv`.
+  `SOP_OLLAMA_AGENT_HOME`, and the start-work job variables (`JobEnvDir`,
+  `JobEnvID`, `JobEnvProject`). Read by `agent.EnvAgentCommand`,
+  `agentbin.Candidates`, `ollamaagent.ConfigFromEnv`, and
+  `cli.launchWorkProcess`.
 - OS isolation on the evaltarget path depends on host tooling: `bwrap`
   (bubblewrap) on Linux and `/usr/bin/sandbox-exec` on macOS. If that tooling is
   absent, isolation is not available.
@@ -347,30 +459,100 @@ so the missing tests are consistent with the missing trace.
 - Git and GitHub effects rely on the host's Git credential helper or SSH agent
   and on `gh` authentication. No SOP-managed credential store was observed on
   the inspected paths.
-- Host-specific runtime evidence for the current attempt was not captured in
-  this pass. This report does not present an execution log.
+- Linux Bubblewrap isolation suite: **Linux/historical only.** Recorded PASS
+  (27.7 s, operator-observed) on the Linux source host at baseline `0750e8be`,
+  with
+  `SOP_REPLAY_ISOLATION_REQUIRED=1 go test ./internal/dqharness/ -run 'TestIsolatedReplay|TestReplayIsolationRequiredEnv' -count=1 -timeout 240s -v`,
+  including the Linux-only `TestIsolatedReplayUnixSocket` and
+  `TestIsolatedReplayToolchainProcAndTemp`. It is not evidence for the current
+  Mac checkout and this report does not infer a macOS result from it.
+- Current Mac host facts observed during inspection: this checkout produced no
+  host runtime evidence for AGENCY-001. No `bwrap` or `sandbox-exec` result and
+  no isolation suite result were observed on this host in this pass.
+- The Linux `go test ./...` run failed by timeout because of host storage
+  failure; it is incomplete verification, not an implementation finding, and it
+  is not a current-checkout result.
 
 ## Summary findings
 
 1. Every tool-agent effect passes one policy implementation in
    `internal/toolharness`. Denials are sentinel-classified and audited.
 2. The full process environment (and any credentials in it) is inherited by
-   every `exec.CommandContext` sink on paths 1-5 and by the `sh -c` external
-   agent command. Only `evaltarget.RunChild` uses an allow-list environment.
+   every command sink on entry points 1-5 and by the `sh -c` external agent
+   command, the `testrunner.execute` shell, and the MCP `sop_start_work` child.
+   Only `evaltarget.RunChild` uses an allow-list environment.
 3. OS isolation was observed only on the evaltarget child path (`bwrap` /
-   `sandbox-exec`). Paths 1-5 are policy-only. Agent processes are not sandboxed.
+   `sandbox-exec`). Entry points 1-5 and the configured external-agent `sh -c`
+   shell are policy-only. Agent processes are not sandboxed. The MCP
+   `sop_start_work` child is policy-only too.
 4. Git write effects and push/PR/merge are owned by `internal/git` and
    `internal/github`, gated by the SOP workflow, not by the harness. The harness
    correctly refuses destructive Git.
 5. MCP is a fixed registered-tool server with a name gate; the concrete handler
-   set is UNVERIFIED. The planner path funnels through the configured agent
-   adapter and validates its output deterministically. The concrete
-   `internal/recovery`/`internal/resume`/`cmd/deceleval-*` → `evaltarget` chain
-   and `internal/eval`/`internal/runtrace` remain UNVERIFIED.
+   set is enumerated in entry point 5b (default, status-only, planner, and
+   opt-in start-work). The planner path funnels through the configured agent
+   adapter and validates its output deterministically. The
+   `internal/recovery` / `internal/resume` / `internal/eval` / `internal/runtrace`
+   / `cmd/deceleval-*` → `evaltarget.RunChild` chain remains UNVERIFIED: those
+   packages were not traced line-by-line in this pass, so none of them is
+   described as sandboxed.
+6. The `internal/testrunner` shell sink is policy-free by design and trusts the
+   caller that supplies the command string. Its callers were not located by
+   search in this pass, so per-caller trust is UNVERIFIED.
+
+## Remaining gaps
+
+1. `internal/recovery`, `internal/resume`, `internal/eval`, `internal/runtrace`,
+   and `cmd/deceleval-*` are not traced to `evaltarget.RunChild` or to a plain
+   `exec.Command`. Follow-up: trace each `main` and each resume entry to its
+   command sink, and add a focused test that asserts the sink package. This does
+   not block entry points 1-5, 7.
+2. `internal/commitgate` and `internal/mergegate` are not inspected, so commit
+   and merge approval argument ownership is unproven. Follow-up: inspect both
+   gates and record which layer owns the branch name and `gh` arguments.
+3. The caller that invokes `internal/testrunner` was not located by search.
+   Follow-up: locate the import site and record whether it passes only
+   repository-configured command strings.
+4. `agent.openai` / `agent.openaicompatible` / `agent.mlx` credential variable
+   handling is UNVERIFIED. Follow-up: read the provider constructors and record
+   the exact env keys.
+5. `internal/github` tests were not enumerated. Follow-up: list them and map
+   each to a `CommandClient` effect.
+
+## Verification record
+
+- For AGENCY-001, **no test and no build was run.** This deliverable is an
+  inspection report.
+- Existing tests and host evidence named above are identified by inspection
+  only. They are not a current-checkout result.
+- The Linux Bubblewrap PASS is historical and tied to baseline `0750e8be` on the
+  Linux source host.
+- `go test ./...`, `go build ./...`, and `go vet ./...` are owned by
+  AGENCY-002 and AGENCY-003, not by this task.
+
+## Reusable production seams for Plan 02
+
+- **evaltarget observer.** `evaltarget.RunChild` plus `evaltarget.IsolateEnv`,
+  `evaltarget.confinedDir`, and the per-platform `isolation_linux.go` /
+  `isolation_darwin.go` / `isolation_other.go` files are the one path with OS
+  isolation today. Plan 02 can observe a live path by routing cases through it.
+- **Production authorization controls.** `commandpolicy.Classify` /
+  `CargoClassify` and `toolharness.Harness.checkCommandIn` are the command
+  authority; `toolharness.Harness.resolveIn` / `resolveArg` are the path
+  authority; `mcp.Server.find` is the tool-name authority;
+  `internal/approval.Service` is the human gate. Plan 02 must exercise these,
+  not a duplicate policy.
+- **Inert effect boundary.** `internal/testrunner.execute`,
+  `agent.CommandAgent.Generate`, `git` / `github` `execRunner`, and
+  `cli.launchWorkProcess` are the non-isolated effect sinks. Plan 02 negative
+  cases need inert sinks (a local remote, a fake launcher, a `sh -c` no-op) so a
+  denial is provable with no side effect at the governed sink.
 
 ## Optional targeted follow-up (not run)
 
 - `go test ./internal/toolharness/ ./internal/ollamaagent/ ./internal/git/`
 - `go test ./internal/verify/ ./internal/mcp/ ./internal/planner/ ./internal/evaltarget/`
+- `go test ./internal/cli/ -run 'TestMCP|TestStartWork'`
 
-These are optional. This report was produced by inspection.
+These are optional. This report was produced by inspection; none of them was run
+for AGENCY-001.
