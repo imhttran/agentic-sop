@@ -135,7 +135,7 @@ surfaces below are a derived index and an attempt-scoped evidence handoff.
 | Reuse point | Scope | Invalidation / validation |
 | --- | --- | --- |
 | SQLite FTS5 index | Separate database file from execution state; per configured workspace | Schema-version change drops/recreates tables; upsert is idempotent by content hash; rebuild reseeds from authoritative outcome files |
-| Read-path current-source check | Same repository/corpus scope as the SQL query | `SnapshotGatedContext` applies `GateWithSourcesAndDigests`; a deleted or modified source artifact is excluded before a manual rebuild; `LocalRetriever` then applies drift exclusion |
+| Read-path current-source check | Same repository/corpus scope as the SQL query | `SnapshotGatedContext` applies `GateWithSourcesAndDigestsContext` with `FileSourceDigestContext`; a deleted or modified source artifact is excluded before a manual rebuild, and the configured retrieval deadline can cancel the check; `LocalRetriever` then applies drift exclusion |
 | Rebuild | One outcomes directory replaces the derived index | `RebuildFromDir` applies the source-aware eligibility gate; a success without corroborating evidence or provenance digests is downgraded to advisory partial history |
 | Required-evidence attempt result | One task attempt; corpus validated | Reused only for the already-verified attempt; never used by optional retrieval or another task; `TestRAGConcurrentTasksIsolated` proves cross-task isolation |
 
@@ -322,6 +322,8 @@ TMPDIR=/dev/shm/llm09-tmp go test ./internal/retrievalboundary -run 'TestRankerA
 # ok
 TMPDIR=/dev/shm/llm09-tmp go test ./internal/outcomefile -run TestIngestProvenance -count=1
 # ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/outcomefile -run TestLLM09 -count=1
+# ok
 TMPDIR=/dev/shm/llm09-tmp go test ./internal/memindex -run 'TestReindexProvenance|TestStaleEvidenceIsNotReturned' -count=1
 # ok
 ```
@@ -338,6 +340,11 @@ The `TMPDIR`/`GOFLAGS` settings are execution-environment settings for this
 filesystem. The repository's configured validation command remains `go test ./...`;
 the PR records the same result. The security scanner is report-only and recorded
 `INDETERMINATE` in this environment; it is not presented as a security pass.
+
+Review follow-up: the Codex review P2 on `SnapshotGatedContext` (the read-path gate
+ignored the retrieval deadline while hashing source artifacts) was fixed with
+`outcomefile.GateWithSourcesAndDigestsContext` and `FileSourceDigestContext`.
+`TestLLM09GateContextCanceled` and `TestLLM09FileSourceDigestContextCanceled` pass.
 
 ## Dependency handoff
 
@@ -386,8 +393,10 @@ the PR records the same result. The security scanner is report-only and recorded
 - A shared derived index file is not a supported multi-workspace store. Rebuilding
   from one workspace replaces the derived index and drops the other workspace's rows;
   the default is a workspace-local index.
-- `SnapshotGatedContext` stats and hashes source artifacts on each retrieval. This is
-  bounded by the outcome-file set but has not been performance-benchmarked.
+- `SnapshotGatedContext` stats and hashes source artifacts on each retrieval. The gate
+  and digest reads are context-aware, so the configured retrieval deadline can cancel
+  them; the cost is bounded by the outcome-file set and has not been
+  performance-benchmarked.
 - Strict repository matching in `mapAdvisoryResult` requires a backend to populate
   `Evidence.Repository`. The local backend and ranker adapter do; an uninformed
   backend yields no advisory items rather than unscoped evidence.

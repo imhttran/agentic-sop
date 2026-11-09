@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -462,6 +463,61 @@ func GateWithSourcesAndDigests(records []OutcomeRecord, sourceExists func(string
 	return out
 }
 
+// GateWithSourcesAndDigestsContext is GateWithSourcesAndDigests with a caller context.
+// It checks the context before each record and each source artifact, and the supplied
+// sourceDigest may itself observe the context (FileSourceDigestContext does). A bounded
+// retrieval or capture deadline can therefore abort instead of walking an unbounded
+// history. A nil context is treated as context.Background().
+func GateWithSourcesAndDigestsContext(ctx context.Context, records []OutcomeRecord, sourceExists func(string) bool, sourceDigest func(string) (string, error)) ([]Exclusion, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var out []Exclusion
+	for _, r := range records {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("outcomefile: gate: %w", err)
+		}
+		ok, reason := r.Eligible()
+		if ok && sourceExists != nil {
+			for _, src := range r.SourceArtifacts {
+				if strings.TrimSpace(src) == "" {
+					continue
+				}
+				if err := ctx.Err(); err != nil {
+					return nil, fmt.Errorf("outcomefile: gate: %w", err)
+				}
+				if !sourceExists(src) {
+					ok, reason = false, ReasonSourceDeleted
+					break
+				}
+			}
+		}
+		if !ok {
+			out = append(out, Exclusion{RecordID: r.RecordID, Reason: reason})
+			continue
+		}
+		if sourceDigest != nil && len(r.SourceDigests) > 0 {
+			if err := ctx.Err(); err != nil {
+				return nil, fmt.Errorf("outcomefile: gate: %w", err)
+			}
+			switch {
+			case sourceContentModified(r, sourceDigest):
+				// A canceled digest read is reported as a modification by
+				// sourceContentModified; surface the cancellation instead of
+				// treating the record as merely modified.
+				if err := ctx.Err(); err != nil {
+					return nil, fmt.Errorf("outcomefile: gate: %w", err)
+				}
+				out = append(out, Exclusion{RecordID: r.RecordID, Reason: ReasonSourceModified})
+			case sourceArtifactUnverified(r):
+				out = append(out, Exclusion{RecordID: r.RecordID, Reason: ReasonSourceUnverified})
+			}
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RecordID < out[j].RecordID })
+	return out, nil
+}
+
 // sourceContentModified reports whether any recorded source digest disagrees with the
 // current content of that artifact. A digest that cannot be recomputed is treated as a
 // modification, so the record fails closed.
@@ -519,6 +575,43 @@ func FileSourceDigest(path string) (string, error) {
 	}
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// FileSourceDigestContext returns the SHA-256 of a source artifact's current content
+// while observing ctx. It reads in bounded chunks, so a canceled retrieval deadline
+// stops a large hash instead of waiting for the entire file to be read.
+func FileSourceDigestContext(ctx context.Context, path string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	buf := make([]byte, 32*1024)
+	for {
+		if err := ctx.Err(); err != nil {
+			return "", err
+		}
+		n, readErr := f.Read(buf)
+		if n > 0 {
+			if _, werr := h.Write(buf[:n]); werr != nil {
+				return "", werr
+			}
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			return "", readErr
+		}
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // Redact removes credential-shaped substrings from free-form evidence. It is applied to
