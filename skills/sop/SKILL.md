@@ -86,6 +86,10 @@ Thin aliases in the same install expose one capability each:
                           resolve an in-progress merge conflict only when both
                           sides' intent can be kept; otherwise stop and report
                           the decision the operator must make
+/sop-ci-fix <request>     repair a deterministic push failure: formatting drift,
+                          or a documentation link that breaks only in the merge
+                          with the base branch; ambiguous results stop for a human
+                          (merge conflicts belong to /sop-fix-conflicts)
 /sop-next-action [plan]   determine the single highest-priority safe next action:
                           read-only status, authorized plan preparation, and
                           governed execution (`sop status`, `sop continue --check`,
@@ -116,6 +120,13 @@ Explicit `/sop-fix-conflicts` requests resolve an in-progress merge: they read b
 sides of every conflict, keep both intents when the resolution is mechanical, verify
 the merged result, and complete the merge locally. The skill stops with the markers
 intact when a conflict needs a product, security, or policy decision, and it never
+
+Explicit `/sop-ci-fix` requests repair only two deterministic push failures: formatting
+drift, and a documentation link whose target moved in the base branch. It reproduces
+the failure with `sop validate` and the repository's own check scripts, makes the
+smallest change, re-runs the same gate, and stops for a human on anything ambiguous.
+It never weakens a check, never bypasses the local gate, and never publishes. Merge
+conflicts are not its work: `/sop-fix-conflicts` owns them.
 publishes or rewrites history.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or

@@ -4,7 +4,7 @@ This guide shows how to install the SOP skills so Zed's agent exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
 `/sop-continue`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`,
-`/sop-fix-conflicts`, the RAG skills `/rag-schema`,
+`/sop-ci-fix`, `/sop-fix-conflicts`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -93,6 +93,7 @@ scripts/install/install-skills.sh zed --uninstall
 | `/sop-security-scan`   | _security evidence_      | no            | report-only Go/Rust/mixed security scan and triage          |
 | `/sop-publish`         | _merge completion_       | **yes**       | complete an authorized merge/publish and clean up safely    |
 | `/sop-fix-conflicts`   | _merge conflicts_        | **yes**       | resolve an in-progress merge conflict when decidable        |
+| `/sop-ci-fix`         | _deterministic repair_   | no            | repair formatting drift and moved doc links                 |
 | `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix      |
 
 `/sop-fix-conflicts` resolves an in-progress merge only when both sides' intent can
