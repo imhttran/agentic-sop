@@ -173,6 +173,41 @@ Self-review MUST examine at least:
 - architecture boundaries;
 - unnecessary complexity.
 
+### 7.1 Challenge Order
+
+The self reviewer MUST be driven through a fixed order of challenge questions. The
+implemented prompt asks these questions in this order:
+
+1. **Goal fit** — does the change satisfy the task and its acceptance criteria?
+2. **Correctness** — is the change correct for real inputs, edge cases, and error
+   paths?
+3. **Complexity** — is the change more complex than the problem requires?
+4. **Tests** — do the tests prove the change, and do they still cover what they
+   covered before?
+5. **Change justification** — is each change needed, and does it stay inside the
+   task scope?
+
+The reviewer evaluates these questions in this order, so a complexity or test
+observation follows a goal-fit and correctness check.
+
+### 7.2 Finding Obligations
+
+A finding MUST meet these obligations:
+
+- It MUST cite the concrete affected code path (`file`, and `line` when known)
+  when it concerns specific code. A requirement gap that no single code path
+  captures MUST cite the task criterion instead.
+- It MUST cite the task criterion when the finding concerns a requirement.
+- When the finding suggests a simplification, it MUST state the material benefit:
+  the concrete defect or maintenance cost the simplification removes.
+- It MUST NOT assert that tests passed or failed unless the change or the supplied
+  evidence shows it; missing coverage is reported as missing evidence.
+- A proposed refactor MUST NOT dilute a requirement, remove an important guard, or
+  weaken tests.
+
+A reviewer MUST prefer no change over speculative refactoring. When the existing
+code is adequate, the reviewer MUST return an empty findings list.
+
 ## 8. External Review
 
 - External automated review provides an independent second pass.
