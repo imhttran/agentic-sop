@@ -177,7 +177,7 @@ Focused evidence paths:
 | Persisted Markdown artifacts | GAP / bounded | `report.md`, `result.md`, and `implementation.md` retain model text as data. They are not executed by SOP, but a downstream renderer may interpret embedded HTML. |
 | Slack client behavior | limitation | Mrkdwn mention/link syntax is neutralized. Slack may still auto-unfurl a bare URL; that fetch is performed by Slack, not SOP. |
 | MCP/ACP client rendering | NOT_APPLICABLE / limitation | Protocol payloads are valid JSON. How an external client renders the returned prose is outside SOP control. |
-| Live notification delivery | NOT_RUN | No live Slack message was sent. The encoder is unit-tested only. |
+| Live notification delivery | NOT_RUN | No live Slack message was sent. The encoder and the loopback transport are tested; the authorized send is prepared in [llm10-live-delivery.md](llm10-live-delivery.md). |
 | Windows terminal behavior | NOT_RUN | The sink is platform-independent Go, but only the Linux CLI was executed here. |
 | Unicode bidi/format characters | bounded | `sanitizeTerminal` removes C0/C1 control runes but does not strip Cf runes (for example U+202E). They cannot execute a terminal sequence, but they can visually reorder text. |
 | Provider/tool output as model input | GAP / bounded | Tool output is bounded and delivered to the model as data. SOP does not claim general content sanitization for model reasoning. |

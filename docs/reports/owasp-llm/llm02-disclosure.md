@@ -248,7 +248,9 @@ original acceptance criterion:
   unavailable (Linux live is still `NOT_RUN`); criterion 6 is the configured
   checks plus the focused PR. Manual operator acceptance of this live evidence is
   still required; the artifact and this report are evidence, not an approval. The
-  SOP task state is not changed by this report.
+  SOP task state is not changed by this report. The exact requested decision and
+  evidence identity are in
+  [llm02-acceptance-request.md](llm02-acceptance-request.md).
 
 The mapping for the two executed tasks was added after their first execution.
 `sop reconcile --accept-changed` accepted the changed executed definitions while
