@@ -24,9 +24,9 @@ Install the SOP skills normally (`./install.sh --skills zed` or
 The skill uses the read-only helper:
 
 ```bash
-scripts/agents/codex-review-triage.sh [PR] --repo OWNER/REPO
-scripts/agents/codex-review-triage.sh [PR] --json
-scripts/agents/codex-review-triage.sh [PR] --include-resolved
+skills/codex-review-triage/findings.sh [PR] --repo OWNER/REPO
+skills/codex-review-triage/findings.sh [PR] --json
+skills/codex-review-triage/findings.sh [PR] --include-resolved
 ```
 
 The helper prints unresolved Codex review-thread comments, top-level review bodies,

@@ -128,8 +128,8 @@ thread_jq='.data.repository.pullRequest.reviewThreads.nodes[]
   | select('"$resolved_condition"')
   | . as $t
   | $t.comments.nodes[]
-  | select((.author.login | ascii_downcase) | contains("codex"))
-  | select(.body | contains("codex-code-review-finding"))'
+  | select(((.author.login // "") | ascii_downcase) | contains("codex"))
+  | select((.body // "") | contains("codex-code-review-finding"))'
 if [ "$json" -eq 1 ]; then
   thread_jq="$thread_jq"'
   | {source:"review_thread", id:(.databaseId|tostring), path, line,
@@ -145,8 +145,8 @@ gh api graphql -f query="$query" -F owner="$owner" -F repo="$name" -F number="$p
   --jq "$thread_jq" >"$threads"
 
 review_jq='.[]
-  | select((.user.login | ascii_downcase) | contains("codex"))
-  | select(.body | contains("codex-code-review-finding"))'
+  | select(((.user.login // "") | ascii_downcase) | contains("codex"))
+  | select((.body // "") | contains("codex-code-review-finding"))'
 if [ "$json" -eq 1 ]; then
   review_jq="$review_jq"'
   | {source:"review", id:(.id|tostring), path:null, line:null,
@@ -161,8 +161,8 @@ fi
 gh api "repos/$owner/$name/pulls/$pr/reviews" --paginate --jq "$review_jq" >"$reviews"
 
 comment_jq='.[]
-  | select((.user.login | ascii_downcase) | contains("codex"))
-  | select(.body | contains("codex-code-review-finding"))'
+  | select(((.user.login // "") | ascii_downcase) | contains("codex"))
+  | select((.body // "") | contains("codex-code-review-finding"))'
 if [ "$json" -eq 1 ]; then
   comment_jq="$comment_jq"'
   | {source:"issue_comment", id:(.id|tostring), path:null, line:null,

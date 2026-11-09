@@ -40,12 +40,15 @@ poll, not a daemon. For continuous monitoring, use the repository's scheduled
 
 ## Discover the findings
 
-Use the repository helper, which is read-only:
+Use the read-only helper bundled in this skill's directory. The skill envelope shows
+the directory containing this `SKILL.md`; run `./findings.sh` from there. If the client
+does not expose the skill directory, run it from the SOP checkout at
+`skills/codex-review-triage/findings.sh`.
 
 ```sh
-scripts/agents/codex-review-triage.sh "${PR:-}" --repo "$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
-scripts/agents/codex-review-triage.sh "${PR:-}" --json
-scripts/agents/codex-review-triage.sh "${PR:-}" --include-resolved
+./findings.sh "${PR:-}" --repo "$(gh repo view --json nameWithOwner --jq .nameWithOwner)"
+./findings.sh "${PR:-}" --json
+./findings.sh "${PR:-}" --include-resolved
 ```
 
 The helper prints unresolved Codex review-thread comments, top-level review

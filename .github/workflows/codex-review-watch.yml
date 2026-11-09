@@ -46,7 +46,7 @@ jobs:
           if [ -n "$prs" ]; then
             # Stable ordering keeps the issue body stable when nothing changed.
             for pr in $(printf '%s\n' "$prs" | sort -n); do
-              json="$(bash scripts/agents/codex-review-triage.sh "$pr" --repo "$repo" --json)"
+              json="$(bash skills/codex-review-triage/findings.sh "$pr" --repo "$repo" --json)"
               if [ -z "$json" ]; then
                 continue
               fi
