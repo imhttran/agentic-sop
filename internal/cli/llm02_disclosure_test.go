@@ -53,6 +53,8 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"## Live extraction",
 		"## Residual risks and bounded claims",
 		"## Handoff to Plan 04",
+		"### Tool-output `.env` canary reconciliation",
+		"### Closeout re-verification",
 	} {
 		if !strings.Contains(report, section) {
 			t.Errorf("report is missing required section %q", section)
@@ -60,6 +62,19 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 	}
 	// The report must not claim general DLP or complete OWASP coverage. These are
 	// bounded-claim text assertions for the deliverable, not behavioral evidence.
+	// The .env canary reconciliation must keep the model-visible observation and
+	// the narrower harness-audit claim separate; this is a text guard, not
+	// behavioral evidence. Normalize line wrapping before matching.
+	normalized := strings.Join(strings.Fields(report), " ")
+	for _, claim := range []string{
+		"model_visible=true",
+		"harness audit does not persist tool result content",
+		"model output remains persisted verbatim",
+	} {
+		if !strings.Contains(normalized, claim) {
+			t.Errorf("report is missing the reconciled claim %q", claim)
+		}
+	}
 	for _, claim := range []string{
 		"provides general DLP",
 		"complete OWASP",
