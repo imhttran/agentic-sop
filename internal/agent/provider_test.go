@@ -689,6 +689,15 @@ func TestClientsHonorOperatorMaxOutputTokens(t *testing.T) {
 	}
 }
 
+// TestMaxOutputTokensDefaultsWhenUnset proves an unset operator value still caps
+// output (OWASP LLM06) instead of leaving the provider unbounded.
+func TestMaxOutputTokensDefaultsWhenUnset(t *testing.T) {
+	t.Setenv(EnvAgentMaxOutputTokens, "")
+	if n, err := MaxOutputTokensFromEnv(); err != nil || n != DefaultMaxOutputTokens {
+		t.Fatalf("MaxOutputTokensFromEnv() = %d, %v; want %d, nil", n, err, DefaultMaxOutputTokens)
+	}
+}
+
 // TestProviderRejectsInvalidMaxOutputTokens proves a malformed operator value
 // fails rather than silently removing the bound.
 func TestProviderRejectsInvalidMaxOutputTokens(t *testing.T) {

@@ -304,12 +304,12 @@ timed-out call names the setting to raise. `SOP_REVIEW_COMMAND` selects the exte
 and `SOP_TOOL_AUDIT_LOG` keep the per-turn trace and tool audit; they are not
 SOP's state database.
 
-`SOP_AGENT_MAX_OUTPUT_TOKENS` is an optional operator-owned output-token bound. When
-set to a positive integer, SOP sends it on every provider request before dispatch
-(`max_tokens` for OpenAI-compatible servers, `options.num_predict` for Ollama).
-When unset, SOP imposes no output-token cap and the provider's own default applies;
-this is a deliberate policy gap, not evidence of an enforced cap. A malformed or
-non-positive value fails before a request is sent.
+`SOP_AGENT_MAX_OUTPUT_TOKENS` is the per-request output-token bound SOP sends on
+every provider request before dispatch (`max_tokens` for OpenAI-compatible servers,
+`options.num_predict` for Ollama). When unset, SOP sends the default of `16384`
+tokens; set a positive integer to raise or lower it. A malformed or non-positive
+value fails before a request is sent. A response that reaches the cap is cut off
+by the provider; SOP does not yet detect that truncation.
 
 `SOP_AGENT_COMMAND_TIMEOUT` bounds one `SOP_AGENT_COMMAND` invocation with the same
 Go-duration syntax and `120s` default as the provider timeouts. The command's

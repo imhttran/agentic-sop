@@ -96,9 +96,9 @@ type Config struct {
 	CommandTimeout time.Duration
 	// MaxOutputBytes bounds the output kept from a tool call.
 	MaxOutputBytes int
-	// MaxOutputTokens is the operator-owned output-token bound sent to the model
-	// before dispatch (Ollama's options.num_predict). Zero means no SOP-imposed
-	// cap; a positive value is enforced on every chat request.
+	// MaxOutputTokens is the output-token bound sent to the model before dispatch
+	// (Ollama's options.num_predict). ConfigFromEnv sets the operator value or
+	// agent.DefaultMaxOutputTokens; zero (a hand-built Config) sends no cap.
 	MaxOutputTokens int
 	// Roots are additional task-authorized repository roots (read-only unless a
 	// root is explicitly read-write). They come from trusted configuration/input.
