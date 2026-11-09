@@ -187,3 +187,44 @@ func TestRepeatedAcceptedResumeIsIdempotent(t *testing.T) {
 		t.Fatalf("T001 status = %s, want LOCAL_DONE", task.Status)
 	}
 }
+
+func TestReacceptanceAfterContentChangeCompletesWithoutRestart(t *testing.T) {
+	dir, a := manualRecoveryFixture(t)
+	firstManualRun(t, dir, a)
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed original content", "--by", "operator"); code != exitOK {
+		t.Fatalf("accept original: code=%d stderr=%s", code, stderr)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve: code=%d stderr=%s", code, stderr)
+	}
+	writeFile(t, dir, "tracked.txt", "content changed after acceptance\n")
+
+	before := len(a.implementations)
+	code, stdout, _ := runInjectedCLI(t, dir, resumeTestDiff, a, "run")
+	if code == exitOK {
+		t.Fatalf("stale acceptance completed the task:\n%s", stdout)
+	}
+	if len(a.implementations) != before {
+		t.Fatalf("stale acceptance invoked the agent: %v", a.implementations)
+	}
+	if !strings.Contains(stdout, "WAITING_FOR_ACCEPTANCE") {
+		t.Fatalf("stdout does not name the stale acceptance gate:\n%s", stdout)
+	}
+
+	// The blocked transition persisted the current content identity. Re-accepting
+	// the changed content must now satisfy the same criterion and complete without
+	// another planning or implementation invocation.
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed changed content", "--by", "operator"); code != exitOK {
+		t.Fatalf("re-accept changed content: code=%d stderr=%s", code, stderr)
+	}
+	code, stdout, stderr := runInjectedCLI(t, dir, resumeTestDiff, a, "run")
+	if code != exitOK {
+		t.Fatalf("re-accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if a.count("T001") != 1 {
+		t.Fatalf("T001 was restarted after re-acceptance: %v", a.implementations)
+	}
+	if a.count("T002") != 1 {
+		t.Fatalf("dependent task count = %d, want one: %v", a.count("T002"), a.implementations)
+	}
+}
