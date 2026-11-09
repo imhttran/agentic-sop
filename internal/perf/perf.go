@@ -363,19 +363,20 @@ func WriteRun(w io.Writer, r Run) {
 }
 
 // WriteTokens renders token usage per model and in total. Nothing is printed when
-// no call reported usage.
+// no call reported usage. A model whose server omitted usage is shown as
+// unreported rather than as a zero-token call.
 func WriteTokens(w io.Writer, byModel map[string]Tokens) {
 	if len(byModel) == 0 {
 		return
 	}
 	fmt.Fprintf(w, "\nTokens (as reported by each server):\n")
-	fmt.Fprintf(w, "  %-36s %6s %12s %10s\n", "model", "calls", "input", "output")
+	fmt.Fprintf(w, "  %-36s %6s %12s %10s %12s\n", "model", "calls", "input", "output", "unreported")
 	for _, m := range sortedModels(byModel) {
 		t := byModel[m]
-		fmt.Fprintf(w, "  %-36s %6d %12d %10d\n", m, t.Calls, t.Input, t.Output)
+		fmt.Fprintf(w, "  %-36s %6d %12d %10d %12d\n", m, t.Calls, t.Input, t.Output, t.UnreportedCalls)
 	}
 	sum := TotalTokens(byModel)
-	fmt.Fprintf(w, "  %-36s %6d %12d %10d\n", "TOTAL", sum.Calls, sum.Input, sum.Output)
+	fmt.Fprintf(w, "  %-36s %6d %12d %10d %12d\n", "TOTAL", sum.Calls, sum.Input, sum.Output, sum.UnreportedCalls)
 }
 
 // WriteInput renders a model-input size record. Nothing is printed when no input was
@@ -567,7 +568,14 @@ func (t Task) Line() string {
 	}
 	if len(t.Tokens) > 0 {
 		sum := TotalTokens(t.Tokens)
-		line += fmt.Sprintf(" | tokens %d in, %d out", sum.Input, sum.Output)
+		switch {
+		case sum.Calls > 0 && sum.UnreportedCalls == sum.Calls:
+			line += " | tokens unknown (server reported no usage)"
+		case sum.UnreportedCalls > 0:
+			line += fmt.Sprintf(" | tokens %d in, %d out (%d calls unreported)", sum.Input, sum.Output, sum.UnreportedCalls)
+		default:
+			line += fmt.Sprintf(" | tokens %d in, %d out", sum.Input, sum.Output)
+		}
 	}
 	return line
 }

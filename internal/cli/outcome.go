@@ -956,6 +956,21 @@ var knownRootFiles = map[string]bool{
 	"BUILD":         true,
 }
 
+// clearOutcomeArtifact removes the task's recorded objective-level verdict so a
+// new lifecycle attempt never inherits it. A run that stops before deriving a
+// verdict must not leave the previous attempt's VERIFIED visible to `sop verify`:
+// the artifact describes the latest attempt only.
+func clearOutcomeArtifact(rn *runpkg.Run) error {
+	if rn == nil {
+		return nil
+	}
+	err := os.Remove(filepath.Join(rn.Dir(), "outcome.json"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("clear outcome artifact: %w", err)
+	}
+	return nil
+}
+
 // writeOutcomeArtifact persists the verdict beside the other run artifacts, with
 // each failed check's full-log artifact. The logs live in the run directory and
 // share its lifecycle; no separate retention rule applies. A write failure is

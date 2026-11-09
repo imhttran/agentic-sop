@@ -506,7 +506,9 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 		}
 	}
 
-	ctx := taskActivityContext(context.Background(), rn.Dir(), progress, rn.State().ID, wi.Title)
+	baseCtx, stop := executionContext()
+	defer stop()
+	ctx := taskActivityContext(baseCtx, rn.Dir(), progress, rn.State().ID, wi.Title)
 	tri := runPromptJEV(ctx, cfg, d, wi, rn)
 	// Early JEV triage owns a human boundary exactly as it does for a task, and
 	// BEFORE any implementation work, so a policy escalation cannot mutate the
@@ -516,6 +518,10 @@ func runPromptImplement(dir string, cfg config.Config, d deps, wi workitem.WorkI
 	}
 
 	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, newRunSession(), currentApprovalBoundary(rn, priorStage), tri, progress)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		fmt.Fprintf(progress, "%s interrupted: %v\n", rn.State().ID, ctxErr)
+		return exitError
+	}
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)

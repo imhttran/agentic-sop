@@ -8,6 +8,8 @@
 package mcp
 
 import (
+	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -18,6 +20,11 @@ import (
 
 // ProtocolVersion is the MCP protocol revision this server implements.
 const ProtocolVersion = "2024-11-05"
+
+// MaxFrameSize bounds one newline-delimited JSON-RPC frame, so a client cannot
+// make the server allocate an unbounded request. It mirrors the ACP transport's
+// frame bound; a normal request is far smaller.
+const MaxFrameSize = 1 << 20
 
 // ServerName identifies this server in the initialize handshake.
 const ServerName = "sop"
@@ -70,14 +77,18 @@ type rpcError struct {
 
 // JSON-RPC error codes.
 const (
+	codeParseError     = -32700
 	codeMethodNotFound = -32601
 	codeInvalidParams  = -32602
 )
 
-// Serve reads requests from in and writes responses to out until in reaches EOF
-// or the context is cancelled. Notifications produce no response.
+// Serve reads newline-delimited requests from in and writes responses to out
+// until in reaches EOF or the context is cancelled. A frame larger than
+// MaxFrameSize is rejected once with a parse error and the rest of that line is
+// discarded, so one oversized request cannot unboundedly allocate or poison the
+// stream. Notifications produce no response.
 func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
-	dec := json.NewDecoder(in)
+	reader := bufio.NewReaderSize(in, 64<<10)
 	enc := json.NewEncoder(out)
 
 	for {
@@ -85,12 +96,30 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 			return err
 		}
 
-		var req rpcRequest
-		if err := dec.Decode(&req); err != nil {
+		frame, err := readFrame(reader, MaxFrameSize)
+		if err != nil {
 			if errors.Is(err, io.EOF) {
 				return nil
 			}
-			return fmt.Errorf("mcp: decode request: %w", err)
+			if errors.Is(err, errFrameTooLarge) {
+				if eerr := enc.Encode(s.fail(json.RawMessage("null"), codeParseError,
+					fmt.Sprintf("request exceeds the %d-byte frame bound", MaxFrameSize))); eerr != nil {
+					return fmt.Errorf("mcp: encode response: %w", eerr)
+				}
+				continue
+			}
+			return fmt.Errorf("mcp: read frame: %w", err)
+		}
+		if len(frame) == 0 {
+			continue
+		}
+
+		var req rpcRequest
+		if err := json.Unmarshal(frame, &req); err != nil {
+			if eerr := enc.Encode(s.fail(json.RawMessage("null"), codeParseError, "invalid JSON request")); eerr != nil {
+				return fmt.Errorf("mcp: encode response: %w", eerr)
+			}
+			continue
 		}
 
 		resp := s.handle(ctx, req)
@@ -99,6 +128,48 @@ func (s *Server) Serve(ctx context.Context, in io.Reader, out io.Writer) error {
 		}
 		if err := enc.Encode(resp); err != nil {
 			return fmt.Errorf("mcp: encode response: %w", err)
+		}
+	}
+}
+
+// errFrameTooLarge reports a frame that exceeded the configured bound. The rest
+// of that line is discarded before the error is returned.
+var errFrameTooLarge = errors.New("mcp: frame exceeds bound")
+
+// readFrame reads one newline-delimited frame, retaining at most max bytes (plus
+// the delimiter). A larger frame is drained through its newline and reported as
+// errFrameTooLarge so the caller can answer and continue.
+func readFrame(r *bufio.Reader, max int) ([]byte, error) {
+	var buf []byte
+	tooLarge := false
+	for {
+		chunk, err := r.ReadSlice('\n')
+		if !tooLarge {
+			if len(buf)+len(chunk) > max+1 {
+				tooLarge = true
+				buf = nil
+			} else {
+				buf = append(buf, chunk...)
+			}
+		}
+		switch {
+		case err == nil:
+			if tooLarge {
+				return nil, errFrameTooLarge
+			}
+			return bytes.TrimSpace(buf), nil
+		case errors.Is(err, bufio.ErrBufferFull):
+			continue
+		case errors.Is(err, io.EOF):
+			if tooLarge {
+				return nil, errFrameTooLarge
+			}
+			if len(buf) > 0 {
+				return bytes.TrimSpace(buf), nil
+			}
+			return nil, io.EOF
+		default:
+			return nil, err
 		}
 	}
 }

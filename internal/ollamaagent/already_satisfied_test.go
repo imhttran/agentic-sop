@@ -66,6 +66,24 @@ func TestVerifiedAlreadySatisfied(t *testing.T) {
 	}
 }
 
+func TestAlreadySatisfiedRejectsStateEvidenceOnRealPath(t *testing.T) {
+	dir, req := satisfactionFixture(t)
+	// A readable SOP runtime artifact is not repository evidence for this task.
+	writeFile(t, dir, ".agent-sdlc/runs/T1/outcome.json", `{"status":"VERIFIED"}`)
+	readState := `{"tool":"read_file","args":{"path":".agent-sdlc/runs/T1/outcome.json"}}`
+	stateFinal := `{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"Add returns the sum","paths":[".agent-sdlc/runs/T1/outcome.json"]}]}}`
+
+	_, srv := newFakeOllama(t, readAdd, readAddTest, readState, validateAdd, stateFinal)
+	cfg := testConfig(srv.URL)
+	cfg.MaxToolCalls = 20
+	h := New(cfg, dir)
+	ev := &mutationEvidence{}
+	_, _, err := h.CompleteWithEvidence(context.Background(), req, ev)
+	if err == nil || ev.alreadySatisfied {
+		t.Fatalf("state evidence was accepted as completion evidence: err=%v evidence=%+v", err, ev)
+	}
+}
+
 func TestAlreadySatisfiedRequiresObjectiveProof(t *testing.T) {
 	for _, cap := range []agent.Capability{agent.Implement, agent.Fix} {
 		for _, tc := range []struct {
@@ -370,6 +388,13 @@ func TestVerifySatisfiedDetailedRejectionCodes(t *testing.T) {
 	readOnly := satisfProof("fp")
 	readOnly.reads[canonical] = true
 
+	// readState has an SOP runtime artifact read and cited. It is readable, but it
+	// describes SOP's own runs, not repository content, so it is never criterion
+	// evidence for the current task.
+	writeFile(t, dir, ".agent-sdlc/runs/T1/outcome.json", `{"status":"VERIFIED"}`)
+	readState := satisfProof("fp")
+	readState.reads[canonicalPath(t, dir, ".agent-sdlc/runs/T1/outcome.json")] = true
+
 	cases := []struct {
 		name  string
 		st    *executionState
@@ -383,6 +408,7 @@ func TestVerifySatisfiedDetailedRejectionCodes(t *testing.T) {
 		{"malformed evidence", &executionState{}, satisfProof("fp"), map[string]any{"status": string(agent.OutcomeCompleted), "evidence": "not-an-object"}, RejectMalformedEvidence},
 		{"missing criterion evidence", &executionState{}, satisfProof("fp"), map[string]any{"status": string(agent.OutcomeCompleted), "evidence": map[string]any{"acceptance": []any{}}}, RejectMissingCriterionEvidence},
 		{"unread evidence path", &executionState{}, satisfProof("fp"), evidenceFinal("c1", []any{"missing.go"}), RejectUnreadEvidencePath},
+		{"state evidence path", &executionState{}, readState, evidenceFinal("c1", []any{".agent-sdlc/runs/T1/outcome.json"}), RejectStateEvidencePath},
 		{"validation not executed", &executionState{}, readOnly, evidenceFinal("c1", []any{"a.go"}), RejectValidationNotExecuted},
 	}
 	for _, c := range cases {

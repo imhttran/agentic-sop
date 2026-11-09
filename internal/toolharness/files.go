@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -42,11 +43,38 @@ func (h *Harness) readFile(args map[string]any) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("read_file: %s is a directory", p.rel)
 	}
-	data, err := os.ReadFile(p.abs)
+	result, err := readFileBounded(p.abs, info.Size(), h.cfg.MaxOutputBytes)
 	if err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
-	return truncate(string(data), h.cfg.MaxOutputBytes), nil
+	return result, nil
+}
+
+// readFileBounded reads at most limit bytes plus one sentinel byte, so a large
+// file is never fully allocated before truncation. For a regular file the stat
+// size gives the exact truncated count; for a growing or special file the marker
+// reports the cut without claiming a total it did not measure.
+func readFileBounded(path string, size int64, limit int) (string, error) {
+	if limit <= 0 {
+		limit = DefaultConfig().MaxOutputBytes
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) <= limit {
+		return string(data), nil
+	}
+	truncated := int64(len(data)) - int64(limit)
+	if size > int64(limit) {
+		truncated = size - int64(limit)
+	}
+	return string(data[:limit]) + fmt.Sprintf("\n… [truncated %d bytes]", truncated), nil
 }
 
 // writeFile writes or creates a file. mustNotExist implements create_file.
@@ -242,8 +270,9 @@ func (h *Harness) listFiles(args map[string]any) (string, error) {
 	var b strings.Builder
 	listed := 0
 	for _, e := range entries {
-		// The state database is never exposed, even as a name.
-		if h.isProtectedPath(filepath.Join(p.rel, e.Name())) {
+		// The state database is never exposed, even as a name. Compare by
+		// identity as well, so a case alias of its parent does not expose it.
+		if h.isProtectedPath(filepath.Join(p.rel, e.Name())) || h.isProtectedReal(filepath.Join(p.abs, e.Name())) {
 			continue
 		}
 		if listed >= maxListEntries {
@@ -283,12 +312,12 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 			return nil // skip unreadable entries
 		}
 		if d.IsDir() {
-			if p != start.abs && (d.Name() == ".git" || d.Name() == stateDirRel) {
+			if p != start.abs && (d.Name() == ".git" || d.Name() == stateDirRel || h.sameAsStateDir(p)) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if h.isProtectedPath(relFrom(base, p)) {
+		if h.isProtectedPath(relFrom(base, p)) || h.isProtectedReal(p) {
 			return nil
 		}
 		info, err := d.Info()
@@ -372,8 +401,17 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 		return resolvedPath{}, fmt.Errorf("path escapes the repository: %s", raw)
 	}
 	rel = filepath.ToSlash(rel)
-	if h.isProtectedPath(rel) {
+	if h.isProtectedPath(rel) || h.isProtectedReal(real) {
 		return resolvedPath{}, fmt.Errorf("%w: %s", ErrProtectedPath, raw)
+	}
+	// SOP owns its runtime state directory. The model may inspect it (except the
+	// state database) but must never author it: run artifacts such as
+	// outcome.json, acceptance_decisions.jsonl, waivers.jsonl, changed-files.json,
+	// and published results are authoritative evidence. A model-written one would
+	// turn prose into a verified outcome, an approval, or implementation progress.
+	// The system prompt already forbids modifying .agent-sdlc; this enforces it.
+	if access == accessWrite && h.inStateDir(real) {
+		return resolvedPath{}, fmt.Errorf("%w: %s is SOP state and cannot be written by model tools", ErrProtectedPath, raw)
 	}
 	return resolvedPath{abs: real, rel: rel, root: root.path}, nil
 }
@@ -384,6 +422,82 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 func (h *Harness) isProtectedPath(rel string) bool {
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return rel == stateDBRel
+}
+
+// isProtectedReal reports whether abs is SOP's state database, using filesystem
+// identity. It catches a case alias on a case-insensitive filesystem (for
+// example ".AGENT-SDLC/state.db") that the string comparison would miss.
+func (h *Harness) isProtectedReal(abs string) bool {
+	if h == nil || strings.TrimSpace(abs) == "" {
+		return false
+	}
+	dbInfo, err := os.Stat(filepath.Join(h.root, stateDBRel))
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(info, dbInfo)
+}
+
+// isStatePath reports whether rel names SOP's runtime state directory. Model
+// tools may read it (except state.db) so an inspection can see configuration,
+// but a write would let a model fabricate authoritative workflow evidence.
+func isStatePath(rel string) bool {
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return rel == stateDirRel || strings.HasPrefix(rel, stateDirRel+"/")
+}
+
+// sameAsStateDir reports whether abs is the state directory, by filesystem
+// identity. It recognizes a case alias and a symlink that resolves to it.
+func (h *Harness) sameAsStateDir(abs string) bool {
+	if h == nil || strings.TrimSpace(abs) == "" {
+		return false
+	}
+	stateInfo, err := os.Stat(filepath.Join(h.root, stateDirRel))
+	if err != nil {
+		return false
+	}
+	info, err := os.Stat(abs)
+	if err != nil {
+		return false
+	}
+	return os.SameFile(info, stateInfo)
+}
+
+// inStateDir reports whether abs lies inside SOP's runtime state directory. It
+// combines the normalized relative-path check with a filesystem-identity walk,
+// so a case alias on a case-insensitive filesystem (".AGENT-SDLC") and a symlink
+// that resolves into the state directory are both recognized. A distinct
+// directory merely sharing the name on a case-sensitive filesystem is not.
+func (h *Harness) inStateDir(abs string) bool {
+	if h == nil || strings.TrimSpace(abs) == "" {
+		return false
+	}
+	if rel, err := filepath.Rel(h.root, abs); err == nil && isStatePath(filepath.ToSlash(rel)) {
+		return true
+	}
+	for p := filepath.Clean(abs); pathWithin(p, h.root); {
+		if h.sameAsStateDir(p) {
+			return true
+		}
+		if p == h.root {
+			break
+		}
+		p = filepath.Dir(p)
+	}
+	return false
+}
+
+// IsStatePath reports whether an absolute path lies inside SOP's runtime state
+// directory. It is the read-side counterpart of the write protection: a caller
+// that selects evidence can refuse SOP-owned runtime artifacts as repository
+// proof. The check uses filesystem identity, so a case alias or symlink cannot
+// substitute a repository path for state.
+func (h *Harness) IsStatePath(abs string) bool {
+	return h.inStateDir(abs)
 }
 
 // relFrom renders p relative to base, slash-separated.
