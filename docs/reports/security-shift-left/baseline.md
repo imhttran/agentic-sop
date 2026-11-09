@@ -43,7 +43,7 @@ downloaded.
 | Command policy / authorization | `internal/commandpolicy` allow-list, deterministic; wired into tool execution. | Every tool invocation. | Deterministic; no model authority. | `internal/commandpolicy/*.go`; SEC-LEFT-005 inventories per-path trust boundaries. | UNVERIFIED (per-path coverage) |
 | AISEC-001..006 scenarios | `internal/evaltarget` definitions plus deterministic and real-control tests. | Evaluation tests, not the task security gate. | Live-model adversarial coverage absent. | `internal/evaltarget/*.go`; SEC-LEFT-004 owns live classification. | UNVERIFIED |
 | Linux Bubblewrap isolated replay | `bwrap` protection on the isolated replay path only. | Isolated replay. | Linux only. | `internal/security/*`; SEC-LEFT-005 owns the matrix. | UNVERIFIED (scope limits) |
-| macOS Seatbelt runtime isolation | No runtime isolation evidence found. | Not exercised. | Construction only, if any. | Searches of `internal/security` and `docs/specs/EXECUTION.md`. | UNVERIFIED |
+| macOS Seatbelt runtime isolation | `internal/dqharness` isolated replay and `internal/evaltarget` child processes. | Both isolated paths only. | Runtime confinement observed on Darwin arm64 under `sandbox-exec`: writes, IP network, Unix-domain sockets, credentials, timeout, and process-group kill. | `seatbelt-evidence.md` (18 PASS/3 SKIP `dqharness`; 9 isolation + 2 process-group PASS `evaltarget`). | VERIFIED (isolated paths only) |
 
 ## Scan result (authoritative)
 
@@ -127,8 +127,9 @@ measured after-change scan (5775 ms).
 - Pre-IMPLEMENT readiness seam: none existed at baseline time. SEC-LEFT-003 adds
   one narrow read-only probe at the existing pre-execution seam; it runs no
   scanner and creates no second verdict.
-- macOS Seatbelt runtime isolation: no evidence. The claim remains `UNVERIFIED`
-  and is limited to the execution paths SEC-LEFT-005 inventories.
+- macOS Seatbelt runtime isolation: runtime evidence exists for the isolated
+  replay and evaltarget paths (SEC-LEFT-005). The claim is limited to those paths
+  and does not extend to normal agent tool calls.
 
 ## Per-task trigger decisions
 

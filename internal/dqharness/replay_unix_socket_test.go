@@ -13,14 +13,14 @@ import (
 	"time"
 )
 
-// requireBubblewrapRuntime skips the test unless the detected backend is the Linux
+// requireBubblewrapRuntime skips a boundary test unless the detected backend is the Linux
 // bubblewrap sandbox. It reuses requireIsolation, so SOP_REPLAY_ISOLATION_REQUIRED=1
 // turns a missing backend into a hard failure rather than a skip.
 func requireBubblewrapRuntime(t *testing.T) {
 	t.Helper()
 	requireIsolation(t)
 	if iso := DetectIsolation(); iso.Backend != BackendBubblewrap {
-		t.Skipf("unix-socket boundary test requires the Linux bubblewrap backend, got %q", iso.Backend)
+		t.Skipf("this boundary test requires the Linux bubblewrap backend, got %q", iso.Backend)
 	}
 }
 
@@ -53,18 +53,21 @@ func awaitConnection(ch <-chan struct{}, d time.Duration) bool {
 }
 
 // TestIsolatedReplayUnixSocket proves a host Unix-domain socket outside the replay
-// directory is unreachable from inside the bubblewrap sandbox. The same client succeeds
-// outside isolation and is denied inside it.
+// directory is unreachable from inside the sandbox. Bubblewrap hides the path in its
+// restricted view; Seatbelt denies the connect itself. The same client succeeds outside
+// isolation and is denied inside it, so the denial is a sandbox effect, not a missing
+// listener.
 func TestIsolatedReplayUnixSocket(t *testing.T) {
-	requireBubblewrapRuntime(t)
+	requireIsolation(t)
 
 	if _, err := exec.LookPath("python3"); err != nil {
 		t.Fatalf("python3 client is required but missing: %v", err)
 	}
 
 	// The socket lives in a host temp directory outside the replay directory, so the
-	// restricted view hides it.
-	sockDir, err := os.MkdirTemp("", "unixsock-")
+	// restricted view hides it. Use a short path: macOS rejects Unix socket paths above
+	// roughly 104 bytes, and the per-user temp directory can already be long.
+	sockDir, err := os.MkdirTemp("/tmp", "sop-unixsock-")
 	if err != nil {
 		t.Fatalf("temp dir for listener: %v", err)
 	}

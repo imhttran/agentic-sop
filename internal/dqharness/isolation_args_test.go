@@ -288,9 +288,10 @@ func TestIsolatedReplayConfinementTempRoots(t *testing.T) {
 }
 
 // TestIsolatedReplayDeniesPrivateMountWrite proves a write under /dev/shm fails even
-// though it would land in a private sandbox mount.
+// though it would land in a private sandbox mount. It is bubblewrap-only: macOS has no
+// /dev/shm, so on Seatbelt the probe would fail for a missing path and prove nothing.
 func TestIsolatedReplayDeniesPrivateMountWrite(t *testing.T) {
-	requireIsolation(t)
+	requireBubblewrapRuntime(t)
 	probe := filepath.Join("/dev/shm", "private-mount-probe.txt")
 	f := isolationFixture("sh", "-c", "echo probe > "+probe)
 	code, out, err := IsolatedReplay(context.Background(), t.TempDir(), f, 10*time.Second)

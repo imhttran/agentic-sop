@@ -2,7 +2,10 @@ package dqharness
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -106,7 +109,30 @@ func TestIsolatedReplayDeniesWritesOutside(t *testing.T) {
 
 func TestIsolatedReplayDeniesNetwork(t *testing.T) {
 	requireIsolation(t)
-	f := isolationFixture("python3", "-c", "import socket; s=socket.socket(); s.settimeout(1); s.connect(('1.1.1.1',80))")
+	if _, err := exec.LookPath("python3"); err != nil {
+		t.Fatalf("python3 client is required but missing: %v", err)
+	}
+
+	// A host listener gives the denial a deterministic positive control: the same
+	// client connects without the sandbox, so a failure below is the sandbox rather
+	// than a host with no network. This also keeps the test offline.
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer ln.Close()
+	host, port, err := net.SplitHostPort(ln.Addr().String())
+	if err != nil {
+		t.Fatalf("split %q: %v", ln.Addr(), err)
+	}
+	conn, err := net.DialTimeout("tcp", ln.Addr().String(), 2*time.Second)
+	if err != nil {
+		t.Fatalf("unsandboxed positive control cannot reach %s: %v", ln.Addr(), err)
+	}
+	_ = conn.Close()
+
+	client := fmt.Sprintf("import socket; s=socket.socket(); s.settimeout(2); s.connect((%q, %s))", host, port)
+	f := isolationFixture("python3", "-c", client)
 	code, out, err := IsolatedReplay(context.Background(), t.TempDir(), f, 10*time.Second)
 	if err == nil && code == 0 {
 		t.Fatalf("network access succeeded inside the replay: out=%q", out)
