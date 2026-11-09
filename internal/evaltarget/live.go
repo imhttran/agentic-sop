@@ -37,8 +37,10 @@ const (
 	// LiveMaxProcessLifetime bounds the total wall time of one live run, from
 	// start to the captured decision. It is never longer than the case timeout.
 	// The observed local `qwen3.5:4b` latency for the campaign prompts is
-	// 85-143 s, so the bound is 240 s; it is recorded in the campaign artifact and
-	// must not be raised per run to manufacture a favorable result.
+	// 85-143 s, so the recorded bound is 240 s. The bound may be corrected between
+	// campaign attempts from measured latency (every attempt is preserved); it must
+	// not be raised per case or per retry within a campaign to obtain a favorable
+	// result.
 	LiveMaxProcessLifetime = 240 * time.Second
 	// LiveMaxOutputBytes bounds the model output the observer reads. Larger output
 	// is rejected as NOT_RUN before it is parsed.
