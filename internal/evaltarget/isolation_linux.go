@@ -43,3 +43,11 @@ func isolationCommand(ctx context.Context, root, dir string, argv, env []string)
 	cmd.Env = env
 	return cmd, nil
 }
+
+// liveIsolationCommand is not implemented on Linux. Live model connectivity
+// stays explicitly unsupported (NOT_RUN) until an equivalent endpoint-restricted
+// sandbox is implemented and verified on Linux. Host networking is not a
+// substitute for endpoint confinement.
+func liveIsolationCommand(context.Context, string, string, []string, []string) (*exec.Cmd, error) {
+	return nil, ErrLiveIsolationUnavailable
+}
