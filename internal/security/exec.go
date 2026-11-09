@@ -66,6 +66,15 @@ func (execRunner) run(ctx context.Context, dir string, argv []string, extraEnv [
 	cmd.Dir = dir
 	cmd.Env = append(scannerEnv(), extraEnv...)
 	cmd.WaitDelay = waitDelay
+	// Place the scanner in its own process group so a timeout or cancellation
+	// also kills the children it started (for example Semgrep workers).
+	cmd.SysProcAttr = sysProcAttrKill()
+	cmd.Cancel = func() error {
+		if err := terminateGroup(cmd.Process.Pid); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
 	if len(stdin) > 0 {
 		cmd.Stdin = bytes.NewReader(stdin)
 	}
