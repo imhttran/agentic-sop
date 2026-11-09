@@ -34,8 +34,9 @@ miss the writes that matter most:
 
 - **`state.db` must be excluded, and it is the main target.** SOP's store writes
   the SQLite task graph and its `-wal`/`-shm`/journal files on its own schedule.
-  A subprocess that edits `state.db` directly (for example with `sqlite3`) can
-  change task status or attempts. A check that excludes `state.db` cannot see
+  A subprocess that edits `state.db` directly can change task status or attempts.
+  `commandpolicy` does not class `sqlite3` as SAFE, but a SAFE `go test ./...`
+  runs whatever test code the model wrote, and that code can open the file. A check that excludes `state.db` cannot see
   that; a check that includes it fails on SOP's own writes.
 - **SOP writes into the same run directory as the forgeable artifacts.** When
   activity reporting is on, SOP appends `runs/<task>/activity.jsonl` live while
@@ -44,10 +45,10 @@ miss the writes that matter most:
   `changed-files.json`) live in that same `runs/<task>/` directory. Excluding the
   directory hides forgeries; excluding files by name is a list that must track
   every artifact SOP may write during a task, now and later.
-- **The window can be escaped.** The harness kills a command's process group on
-  timeout or cancellation, but a command that exits normally can leave a detached
-  descendant (for example one that called `setsid`) that writes after the "after"
-  fingerprint is taken.
+- **The window can be escaped.** The harness kills a command's process group
+  only on timeout or cancellation (`internal/toolharness/harness.go`,
+  `execCaptured`). A descendant left running after a normal exit, or one that
+  left the group with `setsid`, can write after the "after" fingerprint is taken.
 
 A check with these holes would report protection it does not provide. The
 investigation therefore stops here rather than shipping it.
@@ -60,9 +61,9 @@ Re-checked against `main` at `54b8cb4c`.
 | --- | --- | --- | --- |
 | Task store (SQLite) | `state.db`, `state.db-wal`, `state.db-shm`, `state.db-journal` | Any task save or graph change, independent of `run_command` | `internal/store/sqlite.go` (`Open`) |
 | Project lock | `state.lock` | Acquire/release around plan-state changes | `internal/projectlock/lock.go` (`FileName`) |
-| Execution lease | `state.exec.lock`, `state.exec.lock.recover.*` | Periodic heartbeat for the whole run (`HeartbeatEvery`) | `internal/executionlease/lease.go`; `internal/cli/execution_lease.go` |
+| Execution lease | `state.exec.lock`; `state.exec.lock.recover.*` during stale-lease recovery | Heartbeat refresh for the whole run (`HeartbeatEvery`) | `internal/executionlease/lease.go`; `internal/cli/execution_lease.go` |
 | Activity artifact | `runs/<task>/activity.jsonl` | Appended live while the task runs, when activity reporting is enabled | `internal/cli/activity.go` (`taskActivityContext`) |
-| Run artifacts | other files under `runs/<task>/` (`state.json`, `attempt.txt`, routing, JEV, outcome, review) | On run transitions, before and after the agent invocation | `internal/run` |
+| Run artifacts | other files under `runs/<task>/` (`state.json`, `attempt.txt`, routing, JEV, outcome, review) | On run transitions around the agent invocation (whether any is written while it runs was not checked) | `internal/run` |
 | Operator sinks | any path set by `SOP_TOOL_AUDIT_LOG`, `SOP_OLLAMA_TRACE_LOG`, `SOP_COMMAND_EVIDENCE_LOG` (not restricted, so possibly inside `.agent-sdlc/`) | Appended by the agent harness during the invocation | `internal/ollamaagent/harness.go`, `config.go` |
 | Command agent | none directly; it talks over stdin/stdout/stderr only | — | `internal/agent/command.go` |
 
