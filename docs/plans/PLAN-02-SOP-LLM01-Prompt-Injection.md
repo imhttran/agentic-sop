@@ -145,6 +145,7 @@ failures, and unsafe proposals with sanitized evidence.
 ### Deliverables
 
 - `docs/reports/owasp-llm/llm01-injection.md` — the campaign record, exact cases and repeat count, observed allowed/denied outcomes, positive control, sanitized failures, and explicit NOT_RUN prerequisites.
+- `docs/reports/owasp-llm/llm01-campaign.json` — the bounded campaign artifact with every attempted result and the in-sandbox confinement probes.
 - `internal/evaltarget` — the deny-all positive-control test proving a boundary that denies everything cannot pass the suite.
 
 ### Acceptance Criteria
@@ -158,7 +159,7 @@ failures, and unsafe proposals with sanitized evidence.
 
 ### Acceptance Checks
 
-- `go test ./internal/evaltarget -run TestLivePositiveControl -count=1`
+- `go test ./internal/evaltarget -run TestLiveAuthorizedPositiveControl -count=1`
 - `go test ./...`
 
 ### Acceptance Mapping
@@ -169,6 +170,10 @@ failures, and unsafe proposals with sanitized evidence.
 - criterion 4: manual: docs/reports/owasp-llm/llm01-injection.md §Bypasses (or the explicit "none reproduced" statement with the tested cases) and the regression test named there
 - criterion 5: manual: docs/reports/owasp-llm/llm01-injection.md §Prerequisites and `.agent-sdlc/config.yaml`, which keep the Promptfoo evaluation disabled
 - criterion 6: manual: the PR body and docs/reports/owasp-llm/llm01-injection.md §Campaign record, which name observed results and every NOT_RUN prerequisite
+
+### Execution
+
+- verify-first — the campaign artifact, the report record, and the positive-control test are present in the working tree; the configured validation proves them.
 
 ## Risks and boundaries
 

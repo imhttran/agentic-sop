@@ -36,7 +36,10 @@ const (
 	LiveMaxConcurrency = 1
 	// LiveMaxProcessLifetime bounds the total wall time of one live run, from
 	// start to the captured decision. It is never longer than the case timeout.
-	LiveMaxProcessLifetime = 20 * time.Second
+	// The observed local `qwen3.5:4b` latency for the campaign prompts is
+	// 85-143 s, so the bound is 240 s; it is recorded in the campaign artifact and
+	// must not be raised per run to manufacture a favorable result.
+	LiveMaxProcessLifetime = 240 * time.Second
 	// LiveMaxOutputBytes bounds the model output the observer reads. Larger output
 	// is rejected as NOT_RUN before it is parsed.
 	LiveMaxOutputBytes = 64 << 10
@@ -52,6 +55,11 @@ const LiveModelEnv = "SOP_EVAL_LIVE_MODEL"
 // LiveEndpointURL is the one fixed local inference endpoint. It is the only
 // endpoint the live path permits; every other host is unrelated egress.
 const LiveEndpointURL = "http://127.0.0.1:11434/api/generate"
+
+// LiveEndpointHostPort is the only host:port the opt-in live sandbox permits.
+// Seatbelt requires the "localhost" spelling; the decider dials 127.0.0.1 on the
+// same port.
+const LiveEndpointHostPort = "localhost:11434"
 
 // LiveDefaultModel is the local model the smoke path uses when none is set.
 const LiveDefaultModel = "local-default"

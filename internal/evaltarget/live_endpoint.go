@@ -157,10 +157,8 @@ func (d LocalDecider) Decide(ctx context.Context) (string, error) {
 	client := d.Client
 	if client == nil {
 		client = &http.Client{
-			Timeout: LiveMaxProcessLifetime,
-			CheckRedirect: func(*http.Request, []*http.Request) error {
-				return http.ErrUseLastResponse
-			},
+			Timeout:       LiveMaxProcessLifetime,
+			CheckRedirect: noRedirect,
 		}
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, LiveEndpointURL, bytes.NewReader(body))
@@ -190,3 +188,7 @@ func (d LocalDecider) Decide(ctx context.Context) (string, error) {
 	}
 	return parsed.Response, nil
 }
+
+// noRedirect is the live client's redirect policy: a redirect is never followed,
+// so a model endpoint cannot bounce the request to an unallowlisted destination.
+func noRedirect(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
