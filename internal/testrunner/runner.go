@@ -120,6 +120,9 @@ type Runner struct {
 	// MaxOutputBytes bounds each captured stream. A non-positive value uses the
 	// built-in 10 MiB bound; it is a capture safety bound, not a user quota.
 	MaxOutputBytes int
+	// Timeout bounds each check. A non-positive value uses 30 minutes, which
+	// also caps a longer deadline on the caller's context.
+	Timeout time.Duration
 }
 
 // New returns a Runner that executes checks in dir.
@@ -143,7 +146,7 @@ func (r *Runner) Run(ctx context.Context, check Check) Result {
 	}
 
 	start := time.Now()
-	exitCode, stdout, stderr, err := execute(ctx, r.Dir, r.Env, check.Command, r.MaxOutputBytes)
+	exitCode, stdout, stderr, err := execute(ctx, r.Dir, r.Env, check.Command, r.MaxOutputBytes, r.Timeout)
 	result.Duration = time.Since(start)
 	result.ExitCode = exitCode
 	result.Stdout = stdout

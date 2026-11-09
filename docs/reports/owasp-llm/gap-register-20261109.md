@@ -1,11 +1,12 @@
 # OWASP LLM — remaining gap register (2026-11-09)
 
-**Current reconciliation:** this correction is based on `main` at `347a96f1`
+**Current reconciliation:** this register builds on `main` at `347a96f1`
 (2026-11-09 UTC), after PR #316 merged at `1ace57a8` and PR #317 merged at
 `347a96f1`. The Plan 10 row was re-verified at `main` `ed9ec2dc` (2026-11-09) on
 Darwin arm64 and adds the live-delivery blocker and acceptance request; the other
-rows keep their recorded revision. The original point-in-time baseline at
-`93c72857` is preserved verbatim in
+rows keep their recorded revision. This branch also merged `main` at `bf370358`
+(PRs #327 and #329); those changes are not re-verified by this register. The
+original point-in-time baseline at `93c72857` is preserved verbatim in
 [gap-register-20261109-baseline.md](gap-register-20261109-baseline.md). That file
 is historical evidence; it is not the current disposition.
 

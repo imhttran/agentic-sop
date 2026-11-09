@@ -8,12 +8,19 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // maxOutputBytes bounds the stdout and stderr captured from one validation
 // command. It matches the provider response bound so a streaming check cannot
 // allocate unbounded memory; a larger stream is drained and marked truncated.
 const maxOutputBytes = 10 << 20
+
+// defaultCheckTimeout bounds one validation command when the Runner sets no
+// Timeout, so a hung check cannot hold the run forever.
+const defaultCheckTimeout = 30 * time.Minute
 
 // execute runs command through the shell in dir. maxBytes bounds each captured
 // stream at the read boundary; a non-positive value uses maxOutputBytes.
@@ -28,7 +35,7 @@ const maxOutputBytes = 10 << 20
 //   - err == nil, exitCode != 0   → the command exited non-zero (verification failure)
 //   - err == ctx.Err(), code == -1 → canceled or deadline exceeded
 //   - err != nil, exitCode == -1  → the check could not start (infrastructure error)
-func execute(ctx context.Context, dir string, env map[string]string, command string, maxBytes int) (exitCode int, stdout, stderr string, err error) {
+func execute(ctx context.Context, dir string, env map[string]string, command string, maxBytes int, timeout time.Duration) (exitCode int, stdout, stderr string, err error) {
 	fi, statErr := os.Stat(dir)
 	if statErr != nil {
 		return -1, "", "", statErr
@@ -37,9 +44,17 @@ func execute(ctx context.Context, dir string, env map[string]string, command str
 		return -1, "", "", fmt.Errorf("working directory %q is not a directory", dir)
 	}
 
+	if timeout <= 0 {
+		timeout = defaultCheckTimeout
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
 	cmd.Dir = dir
 	cmd.Env = buildEnv(env)
+	// A timeout or cancellation kills the shell and every child it started.
+	procgroup.Bind(cmd)
 
 	if maxBytes <= 0 {
 		maxBytes = maxOutputBytes

@@ -180,12 +180,16 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 - The security shift-left baseline and hardening are merged (PRs #260–#261);
   project policy remains report-only and the existing deterministic quality gate
   remains the only verdict authority.
-- OWASP LLM Plans 01, 02, 04, 05, 06, 07, 08, and 10 have merged implementation
-  or evidence. Plan 03 has merged static disclosure controls but its live extraction
-  remains NOT_RUN. Plan 09 merged in PR #295, and its retrieval cancellation/deadline
+- All ten OWASP LLM workstreams now have merged implementation or evidence, but
+  this is an evidence matrix rather than a compliance certification. Plan 03's bounded
+  live campaign is observed and its lifecycle is complete; per-criterion acceptance is
+  still unrecorded. Plan 09 merged in PR #295, and its retrieval cancellation/deadline
   finding was fixed in PR #298.
-- Provider requests now carry a 16384-token default output cap (PR #294). Detection
-  of provider responses truncated at that cap remains a follow-up.
+- Provider requests carry a 16384-token default output cap (PR #294), and
+  provider-reported `length` truncation is rejected. Scanner child process groups are
+  terminated on timeout or cancellation (PR #320); monetary accounting remains a gap.
+- Repeated activation of a same-named plan now receives a distinct archive slot
+  (PR #322), preventing a later lifecycle transition from overwriting earlier evidence.
 - These capabilities do not change governance authority: deterministic Go remains
   authoritative, and adapter availability does not authorize promotion or enablement.
 
