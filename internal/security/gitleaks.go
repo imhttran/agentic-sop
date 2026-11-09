@@ -10,6 +10,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/git"
 )
 
 // gitleaksAdapter wraps the Gitleaks CLI. It scans local files (no Git history),
@@ -38,6 +40,48 @@ func (a *gitleaksAdapter) Descriptor() Descriptor {
 		Network:         "none required for local detection; no verified-secret service is used",
 		RepositoryWide:  true,
 	}
+}
+
+// gitleaksSourceFiles derives the repository-source set for Gitleaks. A Git
+// workspace is scanned from its snapshot of tracked files plus untracked files
+// that are not ignored; an explicit changed-files scope may additionally name an
+// ignored file, which is the only way to request a local secret scan. A
+// non-Git workspace has no snapshot and falls back to a filtered walk.
+func gitleaksSourceFiles(ctx context.Context, req Request) (gitleaksSource, error) {
+	if strings.TrimSpace(req.WorkspaceRoot) == "" {
+		return gitleaksSource{}, nil
+	}
+	repo := git.New(req.WorkspaceRoot)
+	files, err := repo.SnapshotFiles(ctx)
+	if err != nil {
+		if ctx.Err() != nil {
+			return gitleaksSource{}, ctx.Err()
+		}
+		// A directory with Git metadata is a checkout; if its source cannot be
+		// enumerated, fail closed rather than walking ignored local files.
+		if _, statErr := os.Lstat(filepath.Join(req.WorkspaceRoot, ".git")); statErr == nil {
+			return gitleaksSource{}, err
+		}
+		return gitleaksSource{}, nil
+	}
+	if req.Scope.Mode == "changed-files" && len(req.Scope.Files) > 0 {
+		files = mergeSourceFiles(files, req.Scope.Files)
+	}
+	return gitleaksSource{files: files, scoped: true}, nil
+}
+
+func mergeSourceFiles(files, explicit []string) []string {
+	seen := make(map[string]bool, len(files)+len(explicit))
+	out := make([]string, 0, len(files)+len(explicit))
+	for _, raw := range append(append([]string(nil), files...), explicit...) {
+		path, _ := NormalizePath(raw)
+		if path == "" || seen[path] {
+			continue
+		}
+		seen[path] = true
+		out = append(out, path)
+	}
+	return out
 }
 
 func (a *gitleaksAdapter) currentProvenance(req Request) (Provenance, error) {
@@ -97,7 +141,17 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 	if patterns := matcher.Patterns(); len(patterns) > 0 {
 		exec.Diagnostics = append(exec.Diagnostics, "configured exclusions: "+SanitizeText(strings.Join(patterns, ", "), MaxDiagnosticBytes))
 	}
-	view, verr := stageGitleaksView(req.WorkspaceRoot, viewDir, matcher)
+	source, serr := gitleaksSourceFiles(ctx, req)
+	if serr != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = append(exec.Diagnostics, "gitleaks source scope is unavailable: "+SanitizeText(serr.Error(), MaxDiagnosticBytes))
+		return finish(exec, nil)
+	}
+	if source.scoped {
+		exec.Diagnostics = append(exec.Diagnostics, "gitleaks source scope: tracked and untracked non-ignored files; ignored local files are outside repository-source scanning")
+	}
+	view, verr := stageGitleaksView(req.WorkspaceRoot, viewDir, matcher, source)
 	if verr != nil {
 		exec.Status = StatusFailed
 		exec.Coverage = CoverageUnknown

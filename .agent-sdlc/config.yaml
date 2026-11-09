@@ -71,6 +71,13 @@ security:
   exclude:
     - .git
     - .agent-sdlc
+    # Machine-local linked checkouts. They are copies of this repository (often
+    # other branches), not the checkout under scan; including them duplicates
+    # findings and surfaces unrelated fixture manifests.
+    - .worktrees
+    # Machine-local historical run evidence, including copied test fixtures.
+    # It is preserved for audit but is not active repository source.
+    - .sop-evidence
     - .run/reference
     - internal/security/testdata
     - testdata

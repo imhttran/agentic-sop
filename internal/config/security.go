@@ -202,10 +202,13 @@ func (s SecurityConfig) AdapterEnabled(adapter SecurityAdapterConfig) bool {
 	return adapter.Enabled == nil || *adapter.Enabled
 }
 
-// defaultSecurityExcludes are always outside a source scan. Git metadata is not
-// source, and SOP's own run state is evidence rather than project content; both
-// must never be scanned or persisted as findings.
-var defaultSecurityExcludes = []string{".git", ".agent-sdlc"}
+// defaultSecurityExcludes are always outside a source scan. Git metadata and
+// SOP's own run state are not source. A nested .worktrees/ directory contains
+// machine-local linked checkouts of this repository (often other branches), not
+// the checkout under scan; including it duplicates findings and surfaces
+// unrelated fixture manifests. .sop-evidence/ is machine-local historical run
+// evidence, including copied test fixtures, not active repository source.
+var defaultSecurityExcludes = []string{".git", ".agent-sdlc", ".worktrees", ".sop-evidence"}
 
 // defaultCategoryForID returns the built-in category for a built-in adapter id.
 // An external adapter always declares its category explicitly.
