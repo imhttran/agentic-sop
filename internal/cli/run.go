@@ -1817,7 +1817,7 @@ func validationFailureContext(suite testrunner.SuiteResult) string {
 		fmt.Fprintf(&b, "\n- %s %s `%s`\n", r.Status, r.Category, r.Command)
 		for _, stream := range []string{r.Stdout, r.Stderr} {
 			if out := strings.TrimSpace(stream); out != "" {
-				fmt.Fprintf(&b, "\n```\n%s\n```\n", out)
+				fmt.Fprintf(&b, "\n```\n%s\n```\n", redactDiagnosticText(out))
 			}
 		}
 	}

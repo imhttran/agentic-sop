@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -27,10 +29,11 @@ func clearOpenAICompatibleExecutionEnv(t *testing.T) {
 // request, and returns a minimal OpenAI-compatible response. It is the shared
 // fixture for the execution-path tests; no external model service is required.
 type capturedOpenAIRequest struct {
-	method string
-	path   string
-	auth   string
-	body   chatRequest
+	method  string
+	path    string
+	auth    string
+	body    chatRequest
+	rawBody string
 }
 
 func captureOpenAICompatibleServer(t *testing.T, content string) (*httptest.Server, *capturedOpenAIRequest) {
@@ -40,7 +43,12 @@ func captureOpenAICompatibleServer(t *testing.T, content string) (*httptest.Serv
 		got.method = r.Method
 		got.path = r.URL.Path
 		got.auth = r.Header.Get("Authorization")
-		_ = json.NewDecoder(r.Body).Decode(&got.body)
+		raw, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read request body: %v", err)
+		}
+		got.rawBody = string(raw)
+		_ = json.Unmarshal(raw, &got.body)
 		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"` + content + `"}}]}`))
 	}))
 	t.Cleanup(srv.Close)
@@ -146,6 +154,9 @@ func TestOpenAICompatibleExecutionReusesAuthorization(t *testing.T) {
 	}
 	if got.auth != "Bearer s3cret" {
 		t.Errorf("Authorization = %q, want the reused bearer mechanism", got.auth)
+	}
+	if strings.Contains(got.rawBody, "s3cret") {
+		t.Errorf("request body leaks the API key: %s", got.rawBody)
 	}
 	oc, ok := a.(*OpenAICompatible)
 	if !ok || oc.id != ProviderOpenAICompatible {
