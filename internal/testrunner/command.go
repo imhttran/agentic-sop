@@ -66,36 +66,60 @@ func execute(ctx context.Context, dir string, env map[string]string, command str
 	return -1, stdout, stderr, runErr
 }
 
-// limitedBuffer retains at most limit bytes while counting every byte written,
-// so a validation command cannot make the runner allocate its full output. It
-// implements io.Writer for os/exec.
+// limitedBuffer retains a bounded head and tail while counting every byte
+// written, so a validation command cannot make the runner allocate its full
+// output. The tail preserves trailing structured evidence (for example a
+// `go test -json` package-completion event) that a prefix-only capture would
+// lose. It implements io.Writer for os/exec.
 type limitedBuffer struct {
-	buf   bytes.Buffer
-	limit int
-	total int
+	head    bytes.Buffer
+	tail    []byte
+	headMax int
+	tailMax int
+	total   int
 }
 
 func newLimitedBuffer(limit int) *limitedBuffer {
-	return &limitedBuffer{limit: limit}
+	if limit <= 0 {
+		limit = maxOutputBytes
+	}
+	tailMax := limit / 8
+	if tailMax < 64 {
+		tailMax = 64
+	}
+	if tailMax > limit {
+		tailMax = limit
+	}
+	return &limitedBuffer{headMax: limit - tailMax, tailMax: tailMax}
 }
 
 func (b *limitedBuffer) Write(p []byte) (int, error) {
-	b.total += len(p)
-	if room := b.limit - b.buf.Len(); room > 0 {
+	original := len(p)
+	b.total += original
+	if room := b.headMax - b.head.Len(); room > 0 {
 		if len(p) > room {
-			b.buf.Write(p[:room])
+			b.head.Write(p[:room])
+			p = p[room:]
 		} else {
-			b.buf.Write(p)
+			b.head.Write(p)
+			return original, nil
 		}
 	}
-	return len(p), nil
+	if len(p) > 0 {
+		b.tail = append(b.tail, p...)
+		if len(b.tail) > b.tailMax {
+			b.tail = append(b.tail[:0], b.tail[len(b.tail)-b.tailMax:]...)
+		}
+	}
+	return original, nil
 }
 
 func (b *limitedBuffer) String() string {
-	if b.total > b.limit {
-		return b.buf.String() + fmt.Sprintf("\n… [truncated %d bytes]", b.total-b.limit)
+	truncated := b.total - b.head.Len() - len(b.tail)
+	if truncated <= 0 {
+		return b.head.String() + string(b.tail)
 	}
-	return b.buf.String()
+	return b.head.String() + fmt.Sprintf("\n… [truncated %d bytes]\n", truncated) + string(b.tail)
 }
 
 // buildEnv returns the child environment: the current environment with any
