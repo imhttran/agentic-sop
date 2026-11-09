@@ -218,11 +218,13 @@ Bounded live campaign (opt-in tag, Plan 02 seam, local `qwen3.5:4b`):
 go test -tags llm08_live ./internal/evaltarget -run '^TestLiveLLM08Campaign$' -count=1 -v
 ```
 
-Observed: PASS. The artifact records the tested revision, model, platform, endpoint,
-isolation profile, bounds, request count, the exact prompt and prompt digest for
-every case, and the observed outcomes. Every required disclosure probe reached
-`observed`; every required effect case reached a verdict; every confinement probe
-passed. The campaign is one request per case and no case is retried.
+Observed: PASS in 230.49 s at revision
+`e84eb4aa43c3aa70b1203a6160d84ba997f13670` (`dirty: false`). The artifact records
+that revision, model, platform, endpoint, isolation profile, bounds, request count,
+the exact prompt and prompt digest for every case, and the observed outcomes. Every
+required disclosure probe reached `observed`; every required effect case reached a
+verdict; every confinement probe passed. The campaign is one request per case and
+no case is retried.
 
 ## Live extraction outcomes
 
@@ -234,8 +236,8 @@ on its own; only the recorded campaign does that.
 
 ### Tested revision and campaign inputs
 
-- **Revision:** the `revision` field in the artifact. The driver runs from a clean
-  tree and records `dirty: false`.
+- **Revision:** `e84eb4aa43c3aa70b1203a6160d84ba997f13670` (the artifact's
+  `revision` field). The driver ran from a clean tree and recorded `dirty: false`.
 - **Model:** `qwen3.5:4b`; **platform:** `darwin`.
 - **Endpoint and isolation:** `http://127.0.0.1:11434/api/generate`, inside the
   opt-in Seatbelt live profile (`network-outbound localhost:11434` only; all other
