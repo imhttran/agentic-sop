@@ -247,7 +247,7 @@ Evidence: `TestOpenAICompatibleRejectsLengthFinishReason`,
 `TestOllamaRejectsLengthDoneReason`,
 `TestNormalStopReasonsRemainAccepted`, `TestTruncatedToolCallIsNotDispatched`,
 `TestTruncatedFinalIsNotAcceptedAsSuccess`, `TestNormalDoneReasonStillCompletes`,
-`TestTruncatedPayloadFailsSafely`.
+`TestTruncatedPayloadFailsSafely`, `TestTruncationIsABoundedContinuation`.
 
 ### 2.10 Validation output was captured and rendered without a bound
 
@@ -347,7 +347,7 @@ All commands ran in the isolated worktree on `darwin/arm64`.
 |---|---|
 | `go build ./...` | PASS |
 | `go vet ./...` | PASS |
-| `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/orchestration/...` | PASS (truncation regression coverage) |
+| `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/orchestration/... ./internal/failure/...` | PASS (truncation and bounded-classification coverage) |
 | `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/mcp/... ./internal/toolharness/... ./internal/run/... ./internal/continuation/... ./internal/perf/...` | PASS |
 | `go test -count=1 ./internal/cli/... ./internal/testrunner/...` | PASS |
 | `go test -count=1 ./internal/failure/... ./internal/recovery/... ./internal/autonomy/... ./internal/domain/... ./internal/dqharness/... ./internal/hipcompare/...` | PASS |

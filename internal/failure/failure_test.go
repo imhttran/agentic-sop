@@ -924,3 +924,19 @@ func TestSecurityScanFailureIsBlockedNotAutoFixed(t *testing.T) {
 		t.Fatalf("approval precedence = %+v, want APPROVAL_REQUIRED/NEEDS_HUMAN", approval)
 	}
 }
+
+// TestTruncationIsABoundedContinuation pins that a provider-reported truncation
+// is routed through the existing bounded continuation path: it is not a human
+// boundary and it does not add an unbounded retry.
+func TestTruncationIsABoundedContinuation(t *testing.T) {
+	err := &agent.TruncationError{
+		Provider:   agent.ProviderOllama,
+		Capability: agent.Implement,
+		Limit:      agent.DefaultMaxOutputTokens,
+		Reason:     "length",
+	}
+	got := Classify(Evidence{Source: "IMPLEMENT", Err: err})
+	if got.Kind != IncompleteImplementation || got.Disposition != Continue {
+		t.Fatalf("classification = %+v, want %s/CONTINUE", got, IncompleteImplementation)
+	}
+}
