@@ -110,7 +110,7 @@ the recovery action SOP applied afterwards. Attempt records:
   id), so SOP never mixes tasks from two plans.
 - When a different plan is requested while another is active, SOP MUST hand off
   automatically once every task in the active plan is complete, archiving the
-  completed plan's records under `.agent-sdlc/archive/<plan-id>/`; if the active
+  completed plan's records under `.agent-sdlc/archive/<plan-id>[.<n>]/`; if the active
   plan still has unresolved work, SOP MUST stop with an actionable `NEEDS_HUMAN`
   instead of discarding history.
 - If the active plan's own PLAN file changed after its task graph was created,
@@ -252,7 +252,7 @@ plan, and `sop status` reports it.
   approvals, and trace evidence.
 - **Supersession (`sop plan supersede <PLAN.md>`)** is the operator's explicit "abandon
   / replace" transition: it replaces the active plan even when work remains. The previous
-  plan is archived under `.agent-sdlc/archive/<plan-id>/` with a `lifecycle.json`
+  plan is archived under `.agent-sdlc/archive/<plan-id>[.<n>]/` with a `lifecycle.json`
   disposition of `SUPERSEDED` (a completed plan that hands off is archived `COMPLETE`).
   Supersession MUST NOT turn an unfinished task into PASS, a FAILED task into PASS, or a
   `NEEDS_HUMAN` record into an approval; it preserves those states as history. It never

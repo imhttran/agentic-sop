@@ -20,7 +20,7 @@ import (
 
 // Historicalization is the deterministic, model-free lifecycle transition that
 // moves a plan from ACTIVE into its historical record. It reuses the archive
-// storage the plan lifecycle already owns (.agent-sdlc/archive/<plan-id>/), so it
+// storage the plan lifecycle already owns (.agent-sdlc/archive/<plan-id>[.<n>]/), so it
 // introduces no second source of truth.
 //
 // It NEVER rewrites a task outcome to make a plan appear complete. A normal
@@ -157,7 +157,7 @@ func evaluateHistoricalization(dir string, store TaskStore, targetID, targetSour
 		return HistoricalizationReadiness{}, err
 	}
 
-	state, id := historicalizationState(dir, meta, tasks, targetID)
+	state, id, latest := historicalizationState(dir, meta, tasks, targetID)
 	r := HistoricalizationReadiness{
 		PlanID:      id,
 		State:       state,
@@ -178,11 +178,8 @@ func evaluateHistoricalization(dir string, store TaskStore, targetID, targetSour
 	}
 	r.UnresolvedVerification = historicalizationMissingVerification(dir, tasks)
 
-	if id != "" {
-		archive := filepath.Join(dir, config.DirName, archiveDirName, archiveID(id))
-		if fileExists(filepath.Join(archive, lifecycleFile)) {
-			r.Archived = relOf(dir, archive)
-		}
+	if state == HistoricalizationStateHistoricalized || state == HistoricalizationStateInconsistent {
+		r.Archived = relOf(dir, latest)
 	}
 
 	// A named plan that is not the active plan is never historicalized: it would
@@ -228,13 +225,11 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 		return res, ErrNoActivePlan
 	}
 
-	if readiness.State == HistoricalizationStateActive {
-		if opts.ExpectedFingerprint != "" && opts.ExpectedFingerprint != readiness.Fingerprint {
-			return res, ErrStaleHistoricalizationState
-		}
-		if !readiness.Eligible {
-			return res, fmt.Errorf("%w: %s", ErrHistoricalizationIneligible, readiness.Reason)
-		}
+	if readiness.State == HistoricalizationStateActive && opts.ExpectedFingerprint != "" && opts.ExpectedFingerprint != readiness.Fingerprint {
+		return res, ErrStaleHistoricalizationState
+	}
+	if !readiness.Eligible {
+		return res, fmt.Errorf("%w: %s", ErrHistoricalizationIneligible, readiness.Reason)
 	}
 
 	metaPath := filepath.Join(opts.Dir, config.DirName, metaFileName)
@@ -247,10 +242,12 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 	if err != nil {
 		return res, err
 	}
+	// An unchanged fingerprint also proves a staged release still releases exactly
+	// the tasks readiness found archived.
+	if fp := historicalizationFingerprint(meta, tasks); fp != readiness.Fingerprint {
+		return res, ErrStaleHistoricalizationState
+	}
 	if readiness.State == HistoricalizationStateActive {
-		if fp := historicalizationFingerprint(meta, tasks); fp != readiness.Fingerprint {
-			return res, ErrStaleHistoricalizationState
-		}
 		if err := historicalizationStillEligible(opts.Dir, tasks, readiness.Disposition); err != nil {
 			return res, err
 		}
@@ -260,25 +257,22 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 	if planID == "" {
 		planID = readiness.PlanID
 	}
-	archiveRoot := filepath.Join(opts.Dir, config.DirName, archiveDirName, archiveID(planID))
-	lifecyclePath := filepath.Join(archiveRoot, lifecycleFile)
-
-	// Stage 1: archive. archivePlan rewrites a fixed set of files, so re-running it
-	// over a partially written archive cannot duplicate records. It is skipped when
-	// the terminal record already exists (a completed or staged transition), so a
-	// re-run never rewrites the recorded disposition or timestamp.
-	if !fileExists(lifecyclePath) {
-		root, err := archivePlan(opts.Dir, meta, tasks, planPath, metaPath, readiness.Disposition)
-		if err != nil {
-			return res, err
-		}
-		archiveRoot = root
+	// Stage 1: archive. A staged release already archived these exact tasks, so it
+	// keeps that slot and its recorded disposition and timestamp. Otherwise
+	// archivePlan writes this activation's slot; re-running it over a partially
+	// written slot rewrites the same fixed files and cannot duplicate records.
+	var archiveRoot string
+	if readiness.State == HistoricalizationStateInconsistent {
+		archiveRoot, _ = latestArchive(opts.Dir, planID)
+	} else if archiveRoot, err = archivePlan(opts.Dir, meta, tasks, planPath, metaPath, readiness.Disposition); err != nil {
+		return res, err
 	}
 	res.Archived = relOf(opts.Dir, archiveRoot)
 
 	// Stage 2: release the active association. Each step is individually durable;
 	// if one fails the error says the release is incomplete, and a re-run completes
-	// it (the archive already exists, so archivePlan is skipped).
+	// it (the newest slot then holds these tasks, so the plan reads as a staged
+	// release and archivePlan is skipped).
 	if err := opts.Store.ClearTasks(); err != nil {
 		return res, fmt.Errorf("%w: clear tasks: %v", ErrPartialHistoricalization, err)
 	}
@@ -290,7 +284,7 @@ func Historicalize(opts HistoricalizeOptions) (HistoricalizeResult, error) {
 	}
 
 	// Verify the resulting lifecycle state before reporting success.
-	if err := verifyHistoricalized(opts.Dir, opts.Store, planID, readiness.Disposition); err != nil {
+	if err := verifyHistoricalized(opts.Dir, opts.Store, archiveRoot, readiness.Disposition); err != nil {
 		return res, err
 	}
 
@@ -363,23 +357,29 @@ func looksLikePlanPath(arg string) bool {
 
 // historicalizationState classifies the plan's current lifecycle state. id is the
 // plan id the evaluation is about: the recorded active plan id when one exists,
-// otherwise the caller's target.
-func historicalizationState(dir string, meta Metadata, tasks []*domain.Task, targetID string) (state, id string) {
+// otherwise the caller's target. latest is the newest archive slot for id, or "".
+func historicalizationState(dir string, meta Metadata, tasks []*domain.Task, targetID string) (state, id, latest string) {
 	active := len(tasks) > 0 || strings.TrimSpace(meta.PlanID) != "" || strings.TrimSpace(meta.Source) != ""
 	id = strings.TrimSpace(meta.PlanID)
 	if id == "" {
 		id = targetID
 	}
-	archived := id != "" && fileExists(filepath.Join(dir, config.DirName, archiveDirName, archiveID(id), lifecycleFile))
+	if id != "" {
+		latest, _ = latestArchive(dir, id)
+	}
+	archived := latest != "" && fileExists(filepath.Join(latest, lifecycleFile))
 	switch {
-	case active && archived:
-		return HistoricalizationStateInconsistent, id
+	// Active and archived is a staged release only when the newest slot already
+	// records every active task as it is now. Otherwise the plan id was re-activated
+	// after an earlier activation was archived, and this activation is plain ACTIVE.
+	case active && archived && archiveHolds(latest, tasks):
+		return HistoricalizationStateInconsistent, id, latest
 	case active:
-		return HistoricalizationStateActive, id
+		return HistoricalizationStateActive, id, latest
 	case archived:
-		return HistoricalizationStateHistoricalized, id
+		return HistoricalizationStateHistoricalized, id, latest
 	default:
-		return HistoricalizationStateNone, id
+		return HistoricalizationStateNone, id, latest
 	}
 }
 
@@ -451,7 +451,7 @@ func historicalizationStillEligible(dir string, tasks []*domain.Task, dispositio
 
 // verifyHistoricalized asserts the post-conditions of the transition. A failure
 // is a partial historicalization the caller must not report as success.
-func verifyHistoricalized(dir string, store TaskStore, planID, disposition string) error {
+func verifyHistoricalized(dir string, store TaskStore, archiveRoot, disposition string) error {
 	tasks, err := store.List()
 	if err != nil {
 		return err
@@ -465,7 +465,7 @@ func verifyHistoricalized(dir string, store TaskStore, planID, disposition strin
 	if fileExists(filepath.Join(dir, config.DirName, planFileName)) {
 		return fmt.Errorf("%w: the machine plan still exists", ErrPartialHistoricalization)
 	}
-	life, err := readRecordedLifecycle(filepath.Join(dir, config.DirName, archiveDirName, archiveID(planID), lifecycleFile))
+	life, err := readRecordedLifecycle(filepath.Join(archiveRoot, lifecycleFile))
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrPartialHistoricalization, err)
 	}
@@ -617,26 +617,18 @@ func historicalizationHasVerification(dir, taskID string) bool {
 func historicalizationFingerprint(meta Metadata, tasks []*domain.Task) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "plan_id=%s\nsource=%s\nsha=%s\n", meta.PlanID, meta.Source, meta.SourceSHA256)
-	type row struct {
-		id, status, reason string
-		attempt            int
-		updated            int64
-	}
-	rows := make([]row, 0, len(tasks))
-	for _, t := range tasks {
-		rows = append(rows, row{
-			id:      t.ID,
-			status:  string(t.Status),
-			reason:  string(t.BlockedReason),
-			attempt: t.Attempt,
-			updated: t.UpdatedAt.UTC().UnixNano(),
-		})
-	}
-	sort.Slice(rows, func(i, j int) bool { return rows[i].id < rows[j].id })
-	for _, r := range rows {
-		fmt.Fprintf(h, "%s|%s|%s|%d|%d\n", r.id, r.status, r.reason, r.attempt, r.updated)
+	sorted := append([]*domain.Task(nil), tasks...)
+	sort.Slice(sorted, func(i, j int) bool { return sorted[i].ID < sorted[j].ID })
+	for _, t := range sorted {
+		fmt.Fprintln(h, historicalizationTaskRow(t))
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+// historicalizationTaskRow is one task's identity and state as the fingerprint and
+// the archive comparison see it.
+func historicalizationTaskRow(t *domain.Task) string {
+	return fmt.Sprintf("%s|%s|%s|%d|%d", t.ID, t.Status, t.BlockedReason, t.Attempt, t.UpdatedAt.UTC().UnixNano())
 }
 
 // normalizeHistoricalizationDisposition maps the operator's disposition argument
@@ -652,14 +644,6 @@ func normalizeHistoricalizationDisposition(d string) (string, error) {
 	default:
 		return "", fmt.Errorf("historicalize: unknown disposition %q (want %s or %s)", d, DispositionComplete, DispositionSuperseded)
 	}
-}
-
-// archiveID normalizes a plan id for its archive directory, matching archivePlan.
-func archiveID(id string) string {
-	if strings.TrimSpace(id) == "" {
-		return "plan"
-	}
-	return id
 }
 
 // readRecordedLifecycle reads a plan's terminal disposition record.

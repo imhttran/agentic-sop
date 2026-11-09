@@ -14,7 +14,7 @@ Historicalization is that transition. It is the general form of the plan
 lifecycle's terminal step; the existing `sop plan complete` (disposition
 `COMPLETE`) and `sop plan supersede` (disposition `SUPERSEDED`) remain their
 operator verbs. Historicalization reuses the same archive storage
-(`.agent-sdlc/archive/<plan-id>/`) and the same terminal vocabulary; it does not
+(`.agent-sdlc/archive/<plan-id>[.<n>]/`) and the same terminal vocabulary; it does not
 introduce a second source of truth or a parallel disposition enum.
 
 ## 2. Model independence
@@ -78,8 +78,13 @@ When eligible, historicalization MUST:
 3. capture the final plan status;
 4. preserve task outcomes, verification evidence, approval/decision history, and
    the tracked source revisions/provenance;
-5. write the historical record under `.agent-sdlc/archive/<plan-id>/`
-   (`plan.json`, `plan.meta.json`, `tasks.json`, `lifecycle.json`);
+5. write the historical record under `.agent-sdlc/archive/<plan-id>[.<n>]/`
+   (`plan.json`, `plan.meta.json`, `tasks.json`, `lifecycle.json`). A plan's
+   first activation uses `archive/<plan-id>/`; a later activation that reuses the
+   plan id (the same file re-activated, or another file with the same base name)
+   gets the next slot, `archive/<plan-id>.<n>/`, so no transition overwrites an
+   earlier activation's archive. A slot is reused only to finish an interrupted
+   transition over exactly the tasks it already records;
 6. remove the plan from ACTIVE selection (clear the task graph, release the
    active-plan association, remove the machine plan);
 7. verify the resulting lifecycle state before reporting success.
