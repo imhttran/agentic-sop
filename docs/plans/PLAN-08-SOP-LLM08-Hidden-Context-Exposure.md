@@ -79,22 +79,21 @@ None
 ### Acceptance Checks
 
 - `go test ./internal/prompt ./internal/agent ./internal/ollamaagent ./internal/toolharness -count=1`
-- `go test ./internal/cli -run TestOWASPLLM08 -count=1`
 
 ### Acceptance Mapping
 
 - criterion 1: check 1
-- criterion 2: check 1
-- criterion 3: check 2
-- criterion 4: check 2
-- criterion 5: check 2
-- criterion 6: check 2
+- criterion 2: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Executable versus instruction-only controls; the executable half is exercised by check 1
+- criterion 3: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Persistence and export
+- criterion 4: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Classification
+- criterion 5: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Confirmed defects and fixes and §Context source and sink inventory
+- criterion 6: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Method
 
 ### Execution
 
 - verify-first — the inventory report is present in the working tree; the focused
-  prompt/agent/tool-boundary tests and the configured validation prove the traced
-  paths still exist and behave as recorded.
+  prompt/agent/tool-boundary tests prove the traced executable paths. The inventory,
+  classification, persistence, and no-credential claims require operator acceptance.
 
 ## CONTEXT-002 — Verify exclusion and authority independence
 
@@ -126,7 +125,6 @@ against the real policy boundary.
 ### Acceptance Checks
 
 - `go test ./internal/agent ./internal/ollamaagent ./internal/toolharness ./internal/prompt ./internal/evaltarget -count=1`
-- `go test ./internal/cli -run TestOWASPLLM08 -count=1`
 
 ### Acceptance Mapping
 
@@ -134,13 +132,14 @@ against the real policy boundary.
 - criterion 2: check 1
 - criterion 3: check 1
 - criterion 4: check 1
-- criterion 5: check 2
-- criterion 6: check 1
+- criterion 5: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Confirmed defects and fixes (no new DLP layer; Plan 03 and Plan 02 seams reused)
+- criterion 6: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Criterion-to-evidence mapping names the tests; `internal/agent/hidden_context_test.go` and `internal/ollamaagent/hidden_context_test.go` call the real request and tool paths
 
 ### Execution
 
 - verify-first — the canary tests and report are present in the working tree; the
-  focused tests and the configured validation prove them.
+  focused tests prove the behavioral criteria. The seam-reuse and test-path claims
+  require operator acceptance.
 
 ## CONTEXT-003 — Record bounded extraction evidence
 
@@ -172,21 +171,23 @@ NOT_RUN.
 ### Acceptance Checks
 
 - `go test ./internal/evaltarget -run TestLive -count=1`
-- `go test ./internal/cli -run TestOWASPLLM08 -count=1`
+- `go test ./internal/cli -run TestOWASPLLM08CampaignArtifact -count=1`
 
 ### Acceptance Mapping
 
-- criterion 1: check 2
-- criterion 2: check 2
+- criterion 1: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Live extraction outcomes; docs/reports/owasp-llm/llm08-campaign.json disclosure fields
+- criterion 2: manual: docs/reports/owasp-llm/llm08-hidden-context.md §Residual risks and bounded claims
 - criterion 3: check 2
 - criterion 4: check 1
-- criterion 5: check 1
-- criterion 6: check 1
+- criterion 5: manual: the PR description records exact live coverage or incomplete criteria and links current CI
+- criterion 6: check 2
 
 ### Execution
 
-- verify-first — the deterministic live-path tests and report are present; a live
-  campaign is opt-in and recorded separately.
+- verify-first — the deterministic live-path tests and artifact-integrity check run;
+  the live campaign is opt-in and recorded separately. Distinguishing disclosure from
+  leakage, the bounded unextractability claim, and the PR coverage statement require
+  operator acceptance.
 
 ## Risks and completion
 
