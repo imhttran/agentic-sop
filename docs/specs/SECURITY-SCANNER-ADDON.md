@@ -309,12 +309,14 @@ was scanned, not that it is free of vulnerabilities.
 - Generated output, vendored content, fixtures, and legacy or non-production trees
   are in scope by default. Excluding them requires an explicit `security.exclude`
   entry and a recorded reason; otherwise their skips are coverage gaps.
-- `.git`, `.agent-sdlc`, and `.worktrees` are machine-local metadata, not
-  repository source. They are always outside the source scan: Git metadata and
-  SOP evidence are not project content, and a nested `.worktrees/` directory
-  contains linked checkouts of this repository (often other branches) rather
-  than the checkout under scan. Excluding them is a scope boundary recorded in
-  `scope.excluded`, not a coverage improvement.
+- `.git`, `.agent-sdlc`, `.worktrees`, and `.sop-evidence` are machine-local
+  metadata or evidence, not repository source. They are always outside the source
+  scan: Git metadata and SOP run state are not project content, a nested
+  `.worktrees/` directory contains linked checkouts of this repository (often
+  other branches) rather than the checkout under scan, and `.sop-evidence/`
+  preserves historical run artifacts and copied fixtures for audit. Excluding
+  them is a scope boundary recorded in `scope.excluded`, not a coverage
+  improvement.
 
 #### Coverage conformance
 
