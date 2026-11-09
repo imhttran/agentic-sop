@@ -71,7 +71,7 @@ for ecosystem in "${ecosystems[@]}"; do
   mkdir -p "$dir"
   archive="$dir/all.zip"
   url="https://osv-vulnerabilities.storage.googleapis.com/${ecosystem}/all.zip"
-  curl -fsSL --max-time 300 "$url" -o "$work/all.zip" || die "download failed: $url"
+  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 300 "$url" -o "$work/all.zip" || die "download failed: $url"
   python3 - "$work/all.zip" <<'PY' || die "downloaded archive is not a valid zip"
 import sys, zipfile
 with zipfile.ZipFile(sys.argv[1]) as z:

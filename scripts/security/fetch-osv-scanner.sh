@@ -74,7 +74,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/sop-osv-scanner.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 binary="$work/$asset"
-curl -fsSL --max-time 300 "$url" -o "$binary" || die "download failed: $url"
+curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 300 "$url" -o "$binary" || die "download failed: $url"
 actual="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$binary")"
 [ "$actual" = "$expected" ] || die "checksum mismatch for $asset: want $expected, got $actual"
 chmod 0755 "$binary"
