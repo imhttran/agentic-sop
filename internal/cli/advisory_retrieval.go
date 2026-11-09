@@ -111,7 +111,10 @@ func openAdvisoryRetriever(ctx context.Context, cfg config.AdvisoryRetrievalConf
 	lr := &memindex.LocalRetriever{
 		Index: ix,
 		Current: func(ctx context.Context) (map[string]outcomefile.OutcomeRecord, error) {
-			return memindex.SnapshotContext(ctx, cfg.OutcomesDir)
+			// Use the gated read: it applies the same source-aware eligibility gate as
+			// RebuildFromDir, so a modified or deleted source artifact is excluded from
+			// the current-source check even before a manual rebuild.
+			return memindex.SnapshotGatedContext(ctx, cfg.OutcomesDir)
 		},
 	}
 	return lr, func() { _ = ix.Close() }, nil
@@ -232,6 +235,19 @@ func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever Advisory
 		out.ReasonCode = ragReasonAdvisoryNoCorpus
 		return out
 	}
+
+	// Fail closed when the trusted repository is empty: an empty scope would build a
+	// query with no repository filter, which could return cross-repository evidence.
+	// This check runs after the disabled and no-corpus paths so those keep their
+	// existing bounded reason codes.
+	trustedRepo := strings.TrimSpace(repository)
+	if trustedRepo == "" {
+		verr := &retrievalboundary.InvalidQueryError{Reason: "trusted repository required for advisory retrieval scope"}
+		out.ReasonCode = ragReasonFromError(verr)
+		out.Err = verr
+		return out
+	}
+	repository = trustedRepo
 	if retriever == nil {
 		// The local path is the default: a separate SQLite index plus the authoritative
 		// outcome files for drift exclusion. No subprocess and no database service.
@@ -268,7 +284,7 @@ func retrieveAdvisory(ctx context.Context, cfg config.Config, retriever Advisory
 			out.Err = rerr
 			return out
 		}
-		for _, it := range mapAdvisoryResult(res, corpus, resolved.CompatibilityFloor) {
+		for _, it := range mapAdvisoryResult(res, corpus, repository, resolved.CompatibilityFloor) {
 			// Per-item admission against the configured hard bound. The boundary
 			// already applies the same rule server-side; this keeps the client bound
 			// exact even for a backend that reports tokens differently.
@@ -312,11 +328,17 @@ func ragReasonFromError(err error) string {
 // floor, and any approval-shaped record. Failure evidence maps to warnings;
 // verified correction evidence maps to candidate remedies. All mapped text is
 // untrusted evidence, never approved.
-func mapAdvisoryResult(res retrievalboundary.Result, scope retrievalboundary.Corpus, compatFloor string) []AdvisoryItem {
+func mapAdvisoryResult(res retrievalboundary.Result, scope retrievalboundary.Corpus, trustedRepo, compatFloor string) []AdvisoryItem {
+	trustedRepo = strings.TrimSpace(trustedRepo)
 	items := make([]AdvisoryItem, 0, len(res.Evidence))
 	for _, ev := range res.Evidence {
 		if ev.Corpus != scope {
 			// Cross-corpus record: never mapped.
+			continue
+		}
+		if strings.TrimSpace(ev.Repository) != trustedRepo {
+			// Cross-repository evidence: an injected or faulty backend cannot make a
+			// record belong to the trusted repository. Drop it.
 			continue
 		}
 		if isApprovalRecord(ev) {

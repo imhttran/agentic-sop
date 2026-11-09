@@ -1,132 +1,338 @@
 # LLM09 — Retrieval boundaries in agentic-sop
 
-This report records how retrieval works in this repository. It maps each backend and path, the scope model, cache and invalidation behavior, the context-delivery boundary, and the content classes. The system is single-user and scopes by repository binding plus an optional task ID. It has no tenant identity, and this report does not invent one.
+Status: **VERIFIED for the tested Linux scope; enabled-by-default claims are not made.**
+Baseline: `5ac9b4ba6ba6d15b66f74aec19cffb8ef084a775` (`origin/main`), with the
+RETRIEVE-001 inventory committed at `536057ab698034039dba11417b412c17441d521d`.
+Tested platform: Linux `7.0.0-38-generic` x86_64, Go `1.27.1`,
+`modernc.org/sqlite v1.59.0`.
 
-Line references use the form `file:line` or `file:start-end` against the inspected revision.
+This report is the RETRIEVE-001 deliverable, extended with the RETRIEVE-002
+isolation/stale-record evidence and the RETRIEVE-003 rebuild evidence. The
+RETRIEVE-001 inventory was accepted at report SHA-256
+`b3c9880d2943d836559f4675200c6cb1697af8a6adc7697ab527e7618f1e63c4`; this revision
+adds later evidence and therefore has a different hash. The accepted hash is
+preserved in the SOP approval and acceptance-decision audits, not rewritten here.
 
 ## Scope and trusted binding
 
-`retrievalboundary.Scope` has three fields (`internal/retrievalboundary/boundary.go:56-60`, definition at line 56):
+Retrieval is single-user and repository-scoped. There is no tenant or workspace
+identity, and none is invented.
 
-| Field | Type | Source | Classification |
-| --- | --- | --- | --- |
-| `Corpus` | `Corpus` (`run`, `decision`, `failure`, `outcome`) | Set per query from the resolved allowlist `config.AdvisoryRetrievalConfig.AllowedCorpora` (`advisoryCorpora`, `internal/cli/advisory_retrieval.go:236-242`) or from the trusted corpus allowlist in `ragclient.Config.AllowedCorpora` (`internal/ragclient/ragclient.go:130-133, 213-217`) | Operator-controlled configuration; checked against a trusted allowlist |
-| `Repository` | `string` | The authorized repository passed into the advisory path (`advisoryQuery`, `internal/cli/advisory_retrieval.go:200-212`) | Trusted project binding |
-| `TaskID` | `string` | Deliberately empty on the advisory path (comment at `internal/cli/advisory_retrieval.go:203-206`) | Trusted project binding, but unused for advisory memory |
+| Identity | Source | Classification |
+| --- | --- | --- |
+| `Scope.Corpus` | Resolved `advisory_retrieval.allowed_corpora` or `rag.allowed_corpora`; exactly one corpus per query | Operator-controlled allowlist; `retrievalboundary.Validate` rejects an unknown corpus (`ErrUnsupportedCorpus`) |
+| `Scope.Repository` | `config.Project.Name`, passed by `internal/cli/run.go` into `advisoryKnowledgeForAttempt` | Trusted project binding |
+| `Scope.TaskID` | Deliberately empty on the advisory path, because advisory memory is history from other tasks | Optional narrowing; unused for advisory memory |
+| `ScopedQuery.Text` | Deterministically derived from task metadata and, in recovery, the recorded failure context; truncated to 512 runes | Caller-controlled; selects candidates only and never widens scope |
 
-Caller-controlled value: `ScopedQuery.Text`. The query text comes from task metadata (`advisoryQueryText`, `internal/cli/advisory_retrieval.go:214-232`), and it is truncated to 512 runes. It selects candidates only. It never widens scope, and it never appears in a filter that the caller can weaken.
+The advisory path now fails closed when the trusted repository is empty:
+`retrieveAdvisory` returns `ADVISORY_INVALID_QUERY` and performs no query. This
+closes the previously possible unscoped read at the exported advisory seam.
+Production still supplies `cfg.Project.Name`; the guard is defense in depth.
 
-Trusted project binding: `Repository`. The advisory path passes the already-authorized repository string. `internal/memindex/index.go` adds `AND r.repository = ?` to the SQL only when the field is set. `internal/retrievalboundary/ranker.go:33-38` rejects any query that carries a non-empty repository or task ID, because the wrapped BM25 index has no such metadata. That check fails closed.
+The local backend applies corpus, eligibility, repository, and task predicates in
+SQL before ranking (`internal/memindex/index.go`, `Search`). `mapAdvisoryResult`
+rechecks both the evidence corpus and the evidence repository against the trusted
+query scope before mapping, so an injected or faulty backend cannot return a
+cross-repository record as advisory evidence. Evidence whose repository is empty
+or different is dropped; a backend that cannot populate `Evidence.Repository`
+therefore fails closed for scoped advisory retrieval.
 
-Supported scopes:
-
-- Repository scope: one authorized repository, enforced in SQL (`internal/memindex/index.go:283-288`) and in the producer-client corpus allowlist (`internal/ragclient/ragclient.go:196-201`).
-- Task scope: an optional `TaskID` narrows a query (`internal/memindex/index.go:286-289`). The advisory path leaves it empty on purpose, because advisory memory is history from other tasks.
-- Corpus scope: exactly one `Corpus` per query. `Validate` (definition at `internal/retrievalboundary/boundary.go:146`) rejects an unknown corpus with `ErrUnsupportedCorpus` (`internal/retrievalboundary/boundary.go:146-149`).
-- Workspace scope: there is no separate workspace identifier. A workspace is the checkout of one repository, so the repository binding is the workspace scope.
-- Tenant identity: **does not exist.** `Scope` has no tenant or workspace field. The system is single-user per repository.
+The BM25 ranker adapter (`internal/retrievalboundary/ranker.go`) rejects a query
+that carries a non-empty repository or task scope because the in-memory index has
+no such metadata. It fails closed rather than returning evidence as if it matched
+a narrower scope.
 
 ## Scope trace
 
-Each path below goes from request to datastore query to returned context, in that order.
+### Advisory retrieval — local SQLite FTS5
 
-### Path 1 — advisory retrieval (SQLite FTS5 local index)
+1. Request: `advisoryKnowledgeForAttempt` skips advisory retrieval when the task
+   declares `RequiredEvidence`; otherwise it calls `retrieveAdvisory`.
+2. Disabled or invalid configuration returns no items.
+3. Query construction: `advisoryQuery` builds one `ScopedQuery` per configured
+   corpus with `Scope.Corpus`, `Scope.Repository`, `Scope.TaskID`, `Text`, and the
+   configured bounds. `retrievalboundary.Validate` normalizes the limits.
+4. Trusted-scope guard: an empty repository fails closed before any backend call.
+5. Retriever selection: `openAdvisoryRetriever` opens the separate SQLite index and
+   wraps it in `memindex.LocalRetriever` with a gated current-source snapshot.
+6. Datastore query: `LocalRetriever.Retrieve` fetches up to the boundary ceilings
+   through `Index.Search`.
+7. SQL: `BuildFTSQuery` quotes each token and ORs them, so user text cannot break
+   FTS syntax. `Search` applies `records_fts MATCH ? AND r.corpus = ? AND
+   r.eligible = 1`, then the repository filter when set, then the task filter, and
+   orders by `bm25` score and record ID.
+8. Post-filter: a relevance floor keeps only rows sharing at least two distinct
+   query terms (one for a one-term query).
+9. Returned context: the gated current-source snapshot excludes records whose
+   source artifact is deleted or whose digest no longer matches; drift exclusion
+   then drops any fetched row that no longer matches the current outcome. The
+   boundary applies the result-count and token budgets. `mapAdvisoryResult` drops
+   cross-corpus, cross-repository, approval-shaped, and sub-floor records, then
+   yields low-priority untrusted context items.
 
-1. Request: `advisoryKnowledgeForAttempt` skips retrieval when the task carries `RequiredEvidence` (`internal/cli/advisory_retrieval.go:157-162`). Otherwise it calls `retrieveAdvisory`.
-2. Disabled or invalid configuration returns a result with no items (`internal/cli/advisory_retrieval.go:253-259`).
-3. Query construction: `advisoryQuery` builds one `ScopedQuery` per configured corpus with `Scope.Corpus`, `Scope.Repository`, `Scope.TaskID`, `Text`, and `Limits` (`internal/cli/advisory_retrieval.go:200-216`). `retrieveAdvisory` calls `retrievalboundary.Validate` first (`internal/cli/advisory_retrieval.go:279-283`).
-4. Retriever selection: `openAdvisoryRetriever` opens `memindex.OpenContext` and wraps the index in `memindex.LocalRetriever` with the authoritative outcome snapshot (`internal/cli/advisory_retrieval.go:119-132`).
-5. Datastore query: `LocalRetriever.Retrieve` fetches up to the ceilings through `Index.Search` (`internal/memindex/drift.go:140-149`).
-6. SQL: `BuildFTSQuery` quotes each token and ORs them (`internal/memindex/query.go:20-31`). `Search` runs `records_fts MATCH ? AND r.corpus = ? AND r.eligible = 1`, then adds the repository filter and the task filter, then orders by `score ASC, r.record_id ASC LIMIT ?` (`internal/memindex/index.go:272-292`).
-7. Post-filter: a relevance floor keeps only rows that share at least two distinct query terms, or one term for a one-term query (`internal/memindex/index.go:312-325`).
-8. Returned context: drift exclusion drops any row that no longer matches the current outcome record (`internal/memindex/drift.go:150-157`). `ApplyBounds` enforces the result count and token budget (`internal/retrievalboundary/boundary.go:187-201`). `mapAdvisoryResult` drops cross-corpus evidence, approval-shaped records, and records below the compatibility floor. It then sorts by kind and source reference (`internal/cli/advisory_retrieval.go:329-380`).
+### BM25 code and repository context
 
-Corpus check locations: `retrievalboundary.Validate` (`internal/retrievalboundary/boundary.go:146-149`), repeated in `mapAdvisoryResult` (`internal/cli/advisory_retrieval.go:334-337`). Repository and task narrowing in the ranker adapter fails closed (`internal/retrievalboundary/ranker.go:33-38`).
+1. Request: `internal/cli/run.go` sets `Retrieved: codeRetrievalItems(...)` in
+   `sopctx.Inputs` when `context.code_retrieval` is enabled.
+2. `codeRetrievalItems` calls `codeRetrievalHits`, which builds the Structural
+   Repository Index with `repoindex.Build(repoindex.Options{Root: dir})`. `dir` is
+   the project working directory; the index is workspace-bound and reads no other
+   checkout.
+3. `retrieval.New(retrieval.CodeCandidatesFromIndex(idx))` ranks symbols and file
+   paths with deterministic BM25; `QueryFromEvidence` assembles the task ID,
+   title, acceptance criteria, and failure context. The top five pointers become an
+   advisory list of IDs and paths, never file contents.
+4. The result is a `sopctx.Item` with `SourceRetrieval` and `PriorityGeneric`; the
+   context engine appends it to the canonical items. It is advisory and is not an
+   instruction, an approval, or authoritative execution evidence.
+5. `sop retrieve` exposes the same model-free ranker over symbols, files, and
+   documents. It is read-only and writes no artifact.
 
-Deterministic ordering: SQL uses `ORDER BY score ASC, r.record_id ASC` (`internal/memindex/index.go:290`). The boundary helper `SortDeterministic` uses score descending then record ID ascending (`internal/retrievalboundary/boundary.go:203-212`). The ranker adapter reports "score descending, record id ascending" (`internal/retrievalboundary/ranker.go:72`).
+### BM25 ranker adapter
 
-### Path 2 — lexical BM25 ranker adapter
+`RankerAdapter` adapts `retrieval.Index` to the bounded `Retriever` interface. It
+checks the corpus, rejects repository/task narrowing it cannot honor, ranks the
+full match set, and applies the result/token bounds. It is not wired to a
+production datastore.
 
-1. Request: `RankerAdapter.Retrieve` receives a `ScopedQuery` (`internal/retrievalboundary/ranker.go:22`).
-2. Scope checks: `Validate`, then the corpus match against the adapter's fixed corpus, then a hard rejection of any repository or task narrowing (`internal/retrievalboundary/ranker.go:23-38`).
-3. Datastore query: `retrieval.Index.Search(retrieval.Query{Terms: retrieval.Tokenize(q.Text)}, 0)` runs in memory with no result limit (`internal/retrievalboundary/ranker.go:43`).
-4. Returned context: `ApplyBounds` cuts by result count and token budget (`internal/retrievalboundary/ranker.go:58-73`).
+### External RAG producer client
 
-This is a keyword/BM25 path. It is not wired to a production datastore in this repository; it is the compatibility adapter over `internal/retrieval`.
+1. Request: `ragclient.Client.Retrieve` sends one bounded `rag-retrieval/v1` request
+   with the configured trusted corpus.
+2. Scope checks: schema version, non-empty query, query size, non-empty corpus, and
+   the operator allowlist. A corpus outside the allowlist is
+   `UNAUTHORIZED_SCOPE`.
+3. Datastore query: one configured executable, one JSON request, bounded response.
+4. Response validation: strict JSON; every evidence item must carry the requested
+   corpus; chunk and response sizes are bounded. A corpus mismatch rejects the whole
+   response.
+5. Returned context: validated, attributed, untrusted evidence. Required-evidence
+   tasks use this path; optional tasks fall back to no RAG items on failure.
 
-### Path 3 — external RAG producer client (required evidence)
+The RAG protocol has no repository identity. Its isolation unit is the corpus; this
+report does not claim a project binding the protocol does not carry. Live producer,
+PostgreSQL, embedding, and live-model behavior are **NOT_RUN**.
 
-1. Request: `ragclient.Client.Retrieve` receives a `Request` with `Filters.Corpus` (`internal/ragclient/ragclient.go:227`).
-2. Scope checks: the schema version, a non-empty query, the query size, a non-empty corpus, and the trusted allowlist (`internal/ragclient/ragclient.go:228-249`).
-3. Datastore query: the client runs one configured executable with one JSON request and a bounded response (`internal/ragclient/ragclient.go:251-268`).
-4. Response validation: every evidence item must carry the requested corpus, and the text must be within the chunk limit (`internal/ragclient/ragclient.go:271-301`). A mismatch returns `CodeUnauthorizedScope`.
-5. Returned context: the caller receives validated, attributed evidence. The client never touches SOP state (`internal/ragclient/ragclient.go:8-15`).
+### Required evidence
 
-### Path 4 — code and repository context retrieval
-
-`internal/repoindex` and `internal/context` provide code context. This report does not claim more than the package presence and the plan's cited behaviour test. The full assembly chain was not read in this inspection, so no finer trace is recorded here.
+`enforceRequiredEvidenceOnce` performs one attempt-scoped retrieval and validates
+every declared `corpus:`/`source:` identity. A disabled RAG, invalid configuration,
+timeout, unavailable producer, or missing identity becomes the existing
+`REQUIRED_EVIDENCE_MISSING` block with no agent invocation. Optional RAG and optional
+advisory retrieval never satisfy and never replace required evidence.
 
 ## Cache and invalidation trace
 
-No retrieval-result cache exists. Searches of `internal/retrieval`, `internal/retrievalboundary`, and `internal/memindex` found no cache type, and the advisory path opens a retriever per attempt. The reuse points below are the index store and the drift checks.
+**No retrieval-result cache exists.** A repository search of
+`internal/retrieval`, `internal/retrievalboundary`, `internal/memindex`,
+`internal/ragclient`, `internal/repoindex`, and the advisory/code retrieval call
+sites found no result-cache type or cache-key path. The prompt cache is a
+model-response cache, not a retrieval cache, and is outside this scope. The
+retrieval-result cache criterion is therefore **NOT_APPLICABLE**; the reused
+surfaces below are a derived index and an attempt-scoped evidence handoff.
 
-| Reuse point | Location | Invalidation trigger |
+| Reuse point | Scope | Invalidation / validation |
 | --- | --- | --- |
-| SQLite index file (separate from the execution-state database) | `internal/memindex/index.go:56-90` | A schema-version change drops and recreates the tables (`internal/memindex/index.go:117-133`) |
-| Idempotent upsert | `internal/memindex/index.go:158-201` | A matching content hash makes the write a no-op; a new hash replaces the row and its FTS body |
-| Full rebuild | `internal/memindex/rebuild.go:42-97` | `Rebuild` deletes both tables, then reseeds from the authoritative outcome files |
-| Drift detection | `internal/memindex/drift.go:22-108` | Compares each row hash with the current source. Reports `deleted`, `superseded`, `modified`, `unauthorized`, `incomplete`, or `missing` |
-| Read-path drift exclusion | `internal/memindex/drift.go:150-157` | `LocalRetriever.Retrieve` drops any fetched row that drifts, even before a rebuild |
-| `last_rebuild` timestamp | `internal/memindex/index.go:350` | Written on each rebuild; read by `Status` |
+| SQLite FTS5 index | Separate database file from execution state; per configured workspace | Schema-version change drops/recreates tables; upsert is idempotent by content hash; rebuild reseeds from authoritative outcome files |
+| Read-path current-source check | Same repository/corpus scope as the SQL query | `SnapshotGatedContext` applies `GateWithSourcesAndDigests`; a deleted or modified source artifact is excluded before a manual rebuild; `LocalRetriever` then applies drift exclusion |
+| Rebuild | One outcomes directory replaces the derived index | `RebuildFromDir` applies the source-aware eligibility gate; a success without corroborating evidence or provenance digests is downgraded to advisory partial history |
+| Required-evidence attempt result | One task attempt; corpus validated | Reused only for the already-verified attempt; never used by optional retrieval or another task; `TestRAGConcurrentTasksIsolated` proves cross-task isolation |
 
-Deleted or superseded advisory records stop being retrieved in two ways. First, `LocalRetriever.Retrieve` compares each fetched row against the current outcome snapshot and drops the row when `DriftReasonFor` reports drift (`internal/memindex/drift.go:150-157`). Second, `RebuildFromDir` excludes ineligible, superseded, unauthorized, incomplete, and digest-mismatched records from the index entirely (`internal/memindex/rebuild.go:42-97`). A success written before provenance digests existed is indexed as `partial`, never as a verified success (`internal/memindex/rebuild.go:64-69`).
-
-Fallback outcomes per case (`ragReasonFromError`, `internal/cli/advisory_retrieval.go:309-322`):
-
-| Case | Reason code | Outcome |
-| --- | --- | --- |
-| Disabled | `ragReasonAdvisoryDisabled` | No retrieval, nil result, context unchanged (`internal/cli/advisory_retrieval.go:256-258`) |
-| Timeout | `ragReasonAdvisoryTimeout` | No items; the caller follows the existing fallback path |
-| Unsupported corpus | `ragReasonAdvisoryUnsupported` | No items |
-| Invalid query | `ragReasonAdvisoryInvalidQuery` | No items |
-| Other failure | `ragReasonAdvisoryFailed` | No items |
-| Index unavailable | `ragReasonAdvisoryUnavailable` | No items |
-| Task has required evidence | `ragReasonAdvisoryRequired` | Advisory retrieval is skipped so it never weakens the required evidence (`internal/cli/advisory_retrieval.go:157-162`) |
-
-Advisory retrieval is optional, so every failure above falls back to no items. The only blocking retrieval path is required evidence, which the task contract enforces separately.
+A rebuild replaces the whole derived index. With the default workspace-local index
+path this preserves scope. If an operator deliberately points multiple workspaces at
+one index file, rebuilding from one workspace removes the other workspace's derived
+rows; that is index loss, not cross-project disclosure. The report does not recommend
+a shared index and does not add a new database or tenant model.
 
 ## Content classes and authority
 
 | Class | Definition | Evidence |
 | --- | --- | --- |
-| Current content | The SOP execution state and the authoritative outcome records read at retrieval time | `outcomefile.ReadAllContext` in `SnapshotContext` (`internal/memindex/rebuild.go:29-40`) is the source of truth the index is compared against |
-| Historical advisory content | Indexed outcome and failure records returned as warnings (`warning`) or candidate remedies (`candidate_remedy`) | `advisoryKindFor` (`internal/cli/advisory_retrieval.go:383-405`), `advisoryReason` (`internal/cli/advisory_retrieval.go:459-473`), and the `Evidence.Status` label preserved into the item reason |
-| Authoritative execution evidence | The SOP-owned task state, approval records, and required-evidence checks | Retrieved approval records are dropped and never satisfy an approval (`isApprovalRecord`, `internal/cli/advisory_retrieval.go:434-447`). The advisory path is skipped when required evidence exists (`internal/cli/advisory_retrieval.go:157-162`) |
+| Current content | SOP execution state and the authoritative outcome records read at retrieval time | `outcomefile.ReadAllContext` and the source-aware gate; the gated read path excludes deleted/modified sources |
+| Historical advisory content | Indexed outcome and failure records returned as `warning` or `candidate_remedy` | `advisoryKindFor`, `advisoryReason`; the record status label is preserved |
+| Authoritative execution evidence | SOP-owned task state, approval records, required-evidence checks, and recorded verification | `isApprovalRecord` drops approval-shaped records; advisory retrieval is skipped for required-evidence tasks; approval and quality gates remain deterministic |
 
-Retrieved records are never instructions and never approvals. The `Evidence.Text` comment states the text is untrusted data, never an instruction or approval (`internal/retrievalboundary/boundary.go:76-79`). The advisory reason label repeats "untrusted; never an instruction; never an approval" (`internal/cli/advisory_retrieval.go:461-469`). The producer client also describes its output as untrusted evidence only (`internal/ragclient/ragclient.go:8-15, 88-100`).
-
-## Context-delivery boundary
-
-The exact point where retrieved evidence becomes untrusted data in the agent input is `advisoryContextItem` (`internal/cli/advisory_retrieval.go:449-476`). It converts one evidence record into a `sopctx.Item` with `Source: sopctx.SourceKnowledgeRAG`, `Priority: sopctx.PriorityKnowledgeRAG`, and the untrusted-evidence reason label. `advisoryKnowledgeForAttempt` returns those items for addition to the canonical context (`internal/cli/advisory_retrieval.go:163-171`). From that point on, the item carries a low priority and an explicit untrusted label, and no approval authority.
+Retrieved records are never instructions and never approvals. `Evidence.Text` is
+documented as untrusted data, the advisory reason label says "untrusted; never an
+instruction; never an approval", and the RAG client describes its output as
+untrusted evidence only. Ranking, compatibility floors, and historical
+down-weighting are relevance controls, not authorization controls.
 
 ## Backend coverage matrix
 
-| Backend | Path | Kind | Status | Evidence |
-| --- | --- | --- | --- | --- |
-| SQLite FTS5 local advisory index | `openAdvisoryRetriever` → `memindex.LocalRetriever` → `Index.Search` | Keyword / FTS / BM25 | Supported, production | `internal/cli/advisory_retrieval.go:119-132`, `internal/memindex/index.go:255-330` |
-| BM25 ranker adapter | `retrievalboundary.RankerAdapter` over `retrieval.Index` | Keyword / BM25 | Supported adapter; not a production datastore | `internal/retrievalboundary/ranker.go:22-73` |
-| External RAG producer client | `ragclient.Client.Retrieve` | Operator-configured producer (schema `rag-retrieval/v1`) | Supported for required evidence; retrieval method is the producer's | `internal/ragclient/ragclient.go:227-301` |
-| Code / repository context | `internal/repoindex`, `internal/context`, `internal/cli` | Repository context | Supported (opt-in), assembly not traced here | Package presence only; no finer claim made |
-| `gate retrieve` evaluation | `internal/retrievalgate` | Model-free retrieval evaluation | Evaluation-only | Exposed by `internal/cli/gate.go` |
-| `gate vector` evaluation | `internal/vectoreval` | Model-free vector-space / hybrid evaluation | **Evaluation-only** | Package comment: "It is an evaluation harness, not production retrieval: no vector retriever is wired into the workflow" (`internal/vectoreval/vectoreval.go:1-20`); invoked from `internal/cli/gate.go:70` |
-| RAG evaluation | `internal/rageval` | Retrieval evaluation | Evaluation-only | Package present; not wired into `internal/retrieval`, `internal/retrievalboundary`, `internal/memindex`, or advisory retrieval |
+| Backend / path | Kind | IMPLEMENTED | ENABLED | VERIFIED | Evidence and limits |
+| --- | --- | --- | --- | --- | --- |
+| Local SQLite FTS5 advisory retrieval (`openAdvisoryRetriever` → `memindex.LocalRetriever` → `Index.Search`) | Keyword / FTS / BM25 | Yes | **No by default** (`advisory_retrieval.enabled: false`); opt-in | **Yes** for the tested Linux scope | New `TestLLM09*` memindex/CLI tests; disabled-by-default behavior is an explicit limitation |
+| BM25 code/repository context (`codeRetrievalItems` → `codeRetrievalHits` → `repoindex.Build` → `retrieval.Index.Search` → `sopctx.Inputs.Retrieved`) | Keyword / BM25 | Yes | **Opt-in** (`context.code_retrieval`) | **Yes** for the static path | `TestRunCodeRetrievalFlag`, `TestCodeRetrievalItemsBoundedStableAndFailOpen`; no live model A/B |
+| BM25 ranker adapter (`retrievalboundary.RankerAdapter`) | Keyword / BM25 | Yes | Only when injected; not production datastore | **Yes** for boundary behavior | `TestRankerAdapterRejectsScopeItCannotHonor`; fails closed on repository/task narrowing |
+| External RAG client (`ragclient.Client.Retrieve`) | Operator-configured producer (`rag-retrieval/v1`) | Yes | **No by default**; recorded rollout decision is NO-GO | **Client contract verified**; live producer/DB/embedding **NOT_RUN** | `TestLLM09CrossCorpusCanaryRejected`; existing contract tests; corpus is the isolation unit, no repository binding |
+| Vector / embedding retrieval | Vector | **No production retriever** | Not enabled | **NOT_APPLICABLE** to production | `internal/vectoreval` is evaluation-only and states no vector retriever is wired into the workflow |
+| RAG evaluation (`internal/rageval`) | Evaluation | Yes | Evaluation-only | **NOT_APPLICABLE** to production | Not wired into retrieval |
+| Decision memory (`internal/decisionmemory`) | Durable decision store, not text retrieval | Yes | Opt-in (`context.decision_memory`) | **Yes** for repository-identity filtering | `Applicable`/`Stale`; current repository evidence outranks memory |
 
-Keyword, BM25, and FTS retrieval apply to Path 1 and Path 2. Path 1 is the production keyword/FTS/BM25 backend.
+## Isolation and stale-record evidence
 
-### Explicit backend omissions
+Two disposable projects were used with overlapping document names (`doc-common`,
+`docs/shared.md`) and unique canaries (`CANARY-ALPHA`, `CANARY-BETA`). Tests use the
+real `memindex.LocalRetriever`/`SnapshotGatedContext`, the real `advisoryKnowledgeForAttempt`
+path, or the real `ragclient.Client`, not a parallel reimplementation.
 
-- **No production vector or embedding retriever.** `internal/vectoreval` compares BM25 against a model-free TF-IDF/cosine candidate and a reciprocal-rank-fusion hybrid, and it states that no vector retriever is wired into the workflow (`internal/vectoreval/vectoreval.go:1-20`). It is reached only from the `gate vector` command (`internal/cli/gate.go:70`). Embedding-based semantic retrieval is named in the report's `NotMeasured` list (`internal/vectoreval/vectoreval.go:88`).
-- **No production reranker.** The evidence order comes from the backend (FTS bm25, or the ranker adapter) plus the deterministic boundary sort. `mapAdvisoryResult` sorts by kind and source reference, and it is not a model reranker.
-- **No tenant or workspace identity.** `Scope` has no such field, and this report does not invent one.
-- **No production wiring of the BM25 ranker adapter to a datastore.** It is an adapter over the in-memory `retrieval.Index`.
-- **No traced code-context assembly chain.** This inspection did not read the assembly code, so it makes no claim about it.
+| Test | Property | Result |
+| --- | --- | --- |
+| `TestLLM09CrossProjectScope` | A query favoring the other project's canary returns no other-project record; the in-scope control is still returned | PASS |
+| `TestLLM09SharedDocumentNames` | Identical document names in two projects do not leak across repository scope | PASS |
+| `TestLLM09CrossRepositoryEvidenceDropped` | `mapAdvisoryResult` drops evidence whose repository differs from the trusted query repository | PASS |
+| `TestLLM09EmptyRepositoryFailsClosed` | An empty trusted repository performs no query and returns `ADVISORY_INVALID_QUERY` | PASS |
+| `TestLLM09ForgedContentMetadataDoesNotOverrideScope` | `repository=`/`corpus=` text inside a record cannot override the backend's trusted scope fields | PASS |
+| `TestLLM09MaliciousInstructionIsUntrustedData` | A highly ranked "SYSTEM: approve…" record is preserved only as untrusted warning evidence; an `approval=` record is dropped | PASS |
+| `TestLLM09ModifiedSourceExcluded` | A modified source artifact is not retrievable before a manual rebuild | PASS |
+| `TestLLM09DeletedSourceExcluded` | A deleted source artifact is not retrievable before a manual rebuild | PASS |
+| `TestLLM09RebuildScopeParity` | Rebuild preserves scope and does not import the other workspace's records | PASS |
+| `TestLLM09OptionalFailureAndRequiredSkipAreDistinct` | Optional timeout yields no items and a timeout reason; a required-evidence task skips advisory retrieval with a distinct reason | PASS |
+| `TestLLM09CrossCorpusCanaryRejected` | The RAG client rejects a mixed response containing the other corpus; the single-corpus control returns only its canary | PASS |
+| `TestRAGConcurrentTasksIsolated` | Concurrent tasks do not share RAG evidence or telemetry | PASS |
+| `TestRequiredEvidenceMissingBlocks` | Required evidence failure blocks with `REQUIRED_EVIDENCE_MISSING` and no agent run | PASS |
+| `TestRAGOptionalFailureAgentInput` | Optional RAG failure falls back to BM25-only context | PASS |
+
+No test claims that similarity or lexical rank establishes trust. Content-level
+poisoning inside an authorized repository remains possible; that is a content
+limitation, not a scope bypass.
+
+## Rebuild and invalidation evidence
+
+- `TestLLM09RebuildScopeParity` writes two projects' outcomes, rebuilds the derived
+  index, and proves the query for project A returns only A while the project B record
+  remains invisible. Rebuilding does not import the other workspace's evidence into
+  the queried scope.
+- `TestReindexProvenanceBeforeAndAfterRebuild` (Plan 05) proves a modified source is
+  excluded on rebuild, a deleted run directory is never returned, and valid
+  historical records remain usable.
+- `TestLLM09ModifiedSourceExcluded` and `TestLLM09DeletedSourceExcluded` prove the
+  read path now applies the same source-aware gate before a rebuild, so obsolete
+  records are not used as current evidence merely because the index was not rebuilt.
+- Rebuild removes only derived index rows; authoritative outcome files and user
+  indexes are not deleted. A shared index file is an operator configuration, not a
+  supported cross-project store; rebuilding it from one workspace drops the other
+  workspace's derived rows as described above.
+
+## Historical down-weighting
+
+`internal/retrieval` applies `HistoricalWeight = 0.5` to document candidates whose
+repository authority is historical. This is a relevance adjustment: the record still
+appears, lower than current evidence for the same terms. It is not an authorization
+control and does not mark a record verified. Code retrieval uses
+`CodeCandidatesFromIndex`, which excludes document candidates, so the code path does
+not apply the historical document weight. `TestCandidatesFromIndexFullTextAndHistory`
+asserts the weight.
+
+## Required-evidence timeout behavior
+
+| Path | Timeout / failure | Required evidence? | Observed behavior |
+| --- | --- | --- | --- |
+| RAG producer | Request deadline or unavailable producer | Yes | `retrieveAttemptEvidence` returns the error; `enforceRequiredEvidenceOnce` records `REQUIRED_EVIDENCE_MISSING` and blocks before any agent call. No fallback to optional RAG or BM25 |
+| RAG producer | Request deadline or unavailable producer | No | `optionalRAGKnowledge` returns nil; telemetry records `OPTIONAL_FALLBACK`; the task proceeds with the remaining deterministic context |
+| Advisory local index | Time budget / invalid query / unavailable index | No | No items; a bounded `ADVISORY_TIMEOUT`, `ADVISORY_INVALID_QUERY`, or failure reason; the existing fallback path continues |
+| Advisory local index | Task declares required evidence | N/A | Advisory retrieval is skipped entirely with `ADVISORY_REQUIRED_EVIDENCE`; it cannot replace or weaken required evidence |
+
+## Verification record
+
+Platform and versions:
+
+- Linux `7.0.0-38-generic` x86_64.
+- Go `1.27.1`.
+- `modernc.org/sqlite v1.59.0` (SQLite FTS5 is used by the local advisory index).
+- SOP CLI `sop dev`; recorded binary revision `82ad60bc9316e58c5969db9631191403582f6ba6`,
+  binary SHA-256 `f1830d1e6744d3de60ada7b55f010bc1a21202bc57efd0723fdea08c974a188e`
+  (development build, `modified: true`).
+- Base commit `5ac9b4ba6ba6d15b66f74aec19cffb8ef084a775`; RETRIEVE-001 commit
+  `536057ab698034039dba11417b412c17441d521d`.
+
+Focused commands and observed results (run in the isolated worktree; `TMPDIR` on
+tmpfs avoids the slow SQLite fsync that otherwise exceeds Go's per-package timeout):
+
+```sh
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/memindex -run TestLLM09 -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/cli -run TestLLM09 -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/ragclient -run TestLLM09 -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/cli -run 'TestRunCodeRetrievalFlag|TestCodeRetrievalItemsBoundedStableAndFailOpen' -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/cli -run TestRAGConcurrentTasksIsolated -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/cli -run TestRequiredEvidenceMissingBlocks -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/cli -run TestRAGOptionalFailureAgentInput -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/retrieval -run TestCandidatesFromIndexFullTextAndHistory -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/retrievalboundary -run 'TestRankerAdapterRejectsScopeItCannotHonor|TestValidateRejectsUnboundedOrInvalidLimits' -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/outcomefile -run TestIngestProvenance -count=1
+# ok
+TMPDIR=/dev/shm/llm09-tmp go test ./internal/memindex -run 'TestReindexProvenance|TestStaleEvidenceIsNotReturned' -count=1
+# ok
+```
+
+Repository-required checks (run after the final code and report revision):
+
+```sh
+GOFLAGS=-p=1 TMPDIR=/dev/shm/llm09-tmp go build ./...          # exit 0
+GOFLAGS=-p=1 TMPDIR=/dev/shm/llm09-tmp go vet ./...            # exit 0
+GOFLAGS=-p=1 TMPDIR=/dev/shm/llm09-tmp go test ./... -count=1  # exit 0; 0 failures
+```
+
+The `TMPDIR`/`GOFLAGS` settings are execution-environment settings for this
+filesystem. The repository's configured validation command remains `go test ./...`;
+the PR records the same result. The security scanner is report-only and recorded
+`INDETERMINATE` in this environment; it is not presented as a security pass.
+
+## Dependency handoff
+
+- **Plan 05 — data/model poisoning.** Merged in PR #268 with follow-ups in PR #274.
+  The reused contract is `outcomefile` (`IngestRunFor`, content identity,
+  eligibility, `GateWithSourcesAndDigests`) and `memindex.RebuildFromDir`. POISON-002
+  is implemented; POISON-001/003 remain `NOT_RUN`. This plan reuses the provenance
+  gate and does not re-author ingestion.
+- **Plan 03 — sensitive information disclosure.** Merged static tracing in PR #266.
+  Its report records the retrieval corpus/repository/task scope and the
+  untrusted-evidence boundary. Live extraction remains `NOT_RUN`; this plan does not
+  claim live DLP.
+- **Plan 07 — misinformation.** `NOT_RUN` (plan `PROPOSED`). Evidence authority in
+  this baseline remains SOP's outcome eligibility, recorded verification, content
+  hash, and required-evidence contract. This plan records the handoff and adds no
+  new authority model.
+- **Lifecycle resume issue.** The RETRIEVE-001 manual acceptance gate required an
+  explicit operator decision. The normal resume path re-entered RETRIEVE-001 and
+  failed in the planning agent with an invalid-plan JSON error. The operator chose
+  the supported external-completion path; completion provenance is recorded as
+  `external`, commit `536057ab698034039dba11417b412c17441d521d`, validation `PASS`.
+  Fixing the resume/planning behavior is outside this task.
+
+## Limitations
+
+- The local advisory backend is implemented but **disabled by default**. Its tests
+  are deterministic and run through the real retrieval interfaces; they are not live
+  model evidence.
+- RAG is disabled by default and the recorded rollout decision is NO-GO. Live
+  producer, PostgreSQL, embedding-provider, and live-model results are **NOT_RUN**.
+  The RAG protocol isolates by corpus; it carries no project/repository identity.
+- No production vector or embedding retriever exists. `internal/vectoreval` is an
+  evaluation harness only, so vector/embedding coverage is **NOT_APPLICABLE** to
+  production and is not claimed as a pass.
+- The code-context trace is static. No live model A/B, task-success, or usefulness
+  measurement is claimed.
+- Similarity and lexical scores do not establish trust. Content-level poisoning
+  inside an authorized repository remains possible; no semantic immunity is claimed.
+- A shared derived index file is not a supported multi-workspace store. Rebuilding
+  from one workspace replaces the derived index and drops the other workspace's rows;
+  the default is a workspace-local index.
+- `SnapshotGatedContext` stats and hashes source artifacts on each retrieval. This is
+  bounded by the outcome-file set but has not been performance-benchmarked.
+- Strict repository matching in `mapAdvisoryResult` requires a backend to populate
+  `Evidence.Repository`. The local backend and ranker adapter do; an uninformed
+  backend yields no advisory items rather than unscoped evidence.
+- The security scan is report-only and `INDETERMINATE` in this environment (scanner
+  adapters unavailable/failed). It is not evidence of a clean security posture.

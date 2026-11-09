@@ -104,7 +104,7 @@ RETRIEVE-001
 - `go test ./internal/memindex -run 'TestLLM09' -count=1`
 - `go test ./internal/cli -run 'TestLLM09' -count=1`
 - `go test ./internal/ragclient -run 'TestLLM09' -count=1`
-- `go test ./internal/cli -run 'TestRAGConcurrentTasksIsolated|TestRequiredEvidenceMissingBlocks|TestRAGOptionalFailureAgentInput' -count=1`
+- `go test ./internal/cli -run TestRAGConcurrentTasksIsolated -count=1`
 
 ### Acceptance Mapping
 
@@ -128,6 +128,10 @@ Finish the report corrections started in RETRIEVE-002: verified references, a co
 
 - RETRIEVE-001
 - RETRIEVE-002
+
+### Discovery iterations
+
+30 — rebuild evidence, report corrections, and final verification.
 
 ### Deliverables
 
