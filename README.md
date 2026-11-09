@@ -180,7 +180,8 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   remains the only verdict authority.
 - OWASP LLM Plans 01, 02, 04, 05, 06, 07, 08, and 10 have merged implementation
   or evidence. Plan 03 has merged static disclosure controls but its live extraction
-  remains NOT_RUN. Plan 09 is in review in PR #295.
+  remains NOT_RUN. Plan 09 merged in PR #295; its retrieval cancellation/deadline
+  finding remains open.
 - Provider requests now carry a 16384-token default output cap (PR #294). Detection
   of provider responses truncated at that cap remains a follow-up.
 - These capabilities do not change governance authority: deterministic Go remains
