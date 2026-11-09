@@ -66,7 +66,7 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | ACP cancel bound | s / cancel | `internal/acp` | 30 s (`CancelStopBound`) | cancel seam | Not persisted | Host may not acknowledge within the bound |
 | ACP output excerpt | bytes / frame | `internal/acp` | 16 KiB | `MaxOutputChunkBytes` | Not persisted | Excerpt is cut, not the underlying work |
 | MCP request frame | bytes / message | `internal/mcp` | 1 MiB (`MaxFrameSize`) | `readFrame` before JSON decode | Not persisted | Oversized frame is drained, answered once with a parse error, then discarded |
-| Command agent call | s / call | `internal/agent/command.go`; `SOP_AGENT_COMMAND_TIMEOUT` | 120 s | `context.WithTimeout` around `sh -c` | Not persisted | Direct process; the command itself owns its descendants |
+| Command agent call | s / call | `internal/agent/command.go`; `SOP_AGENT_COMMAND_TIMEOUT` | 120 s | `context.WithTimeout` around `sh -c`; process-group kill on timeout/cancel | Not persisted | Direct process and its group; macOS verified, Linux `NOT_RUN` |
 | Command agent output | bytes / call | `internal/agent/command.go` | 10 MiB stdout; 2 KiB stderr diagnostics | `limitedBuffer` at the write boundary | Not persisted | Retained bytes are bounded |
 | Security adapter timeout | s / adapter | `internal/config/security.go` | 300 s | security runner | Not persisted | Adapter process; descendant termination is not claimed |
 | Security adapter output | bytes / adapter | `internal/config/security.go` | 1 MiB | adapter capture | Not persisted | Bounded |
@@ -167,7 +167,9 @@ Evidence: `TestConsumeContinuationDoesNotOverspendConcurrently`,
 
 `internal/agent/command.go` now bounds one invocation with
 `SOP_AGENT_COMMAND_TIMEOUT` (default `120s`) and retains stdout/stderr through
-`limitedBuffer` (10 MiB stdout, 2 KiB diagnostics). A malformed duration fails at
+`limitedBuffer` (10 MiB stdout, 2 KiB diagnostics). The command runs in its own
+process group, and timeout/cancellation kills that group, so a shell child cannot
+hold the output pipe or outlive the bound. A malformed duration fails at
 configuration time.
 
 Evidence: `TestCommandAgentTimeoutBoundsInvocation`,

@@ -103,6 +103,19 @@ func (a *CommandAgent) Generate(ctx context.Context, request Request) (Response,
 
 	cmd := exec.CommandContext(runCtx, "sh", "-c", a.command)
 	cmd.Stdin = bytes.NewReader(payload)
+	cmd.SysProcAttr = sysProcAttrKill()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := terminateGroup(cmd.Process.Pid); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	// The group kill closes the output pipes with the process; WaitDelay is a
+	// teardown bound if a descendant somehow keeps one open.
+	cmd.WaitDelay = 2 * time.Second
 	if a.class != "" {
 		cmd.Env = append(os.Environ(), EnvSelectedClass+"="+a.class)
 	}
