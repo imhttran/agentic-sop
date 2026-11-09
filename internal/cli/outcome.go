@@ -11,12 +11,14 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/imhttran/agentic-sop/internal/commandpolicy"
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/durablefs"
 	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/planner"
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/taskfile"
@@ -770,7 +772,12 @@ func runAcceptanceArgv(dir string, argv []string) (error, checkRun) {
 	if len(argv) == 0 {
 		return errors.New("acceptance check has an empty command"), run
 	}
-	cmd := exec.CommandContext(context.Background(), argv[0], argv[1:]...)
+	// The same bound as a validation check: a hung acceptance command and the
+	// children it started are killed instead of holding the run forever.
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, argv[0], argv[1:]...)
+	procgroup.Bind(cmd)
 	cmd.Dir = dir
 	var out bytes.Buffer
 	cmd.Stdout = &out
