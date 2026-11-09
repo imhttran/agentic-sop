@@ -60,9 +60,17 @@ func recordAcceptanceDecision(dir, taskID string, res *outcomeArtifact, criterio
 	if mapping == nil {
 		return outcome.AcceptanceDecision{}, fmt.Errorf("criterion %q is not mapped to manual evidence", criterionID)
 	}
+	// Strict content binding (Plan 07 D4): the decision must name the exact
+	// repository content the operator reviewed. An outcome derived without an
+	// identity (a legacy artifact, or a fingerprint failure) cannot bind one, so
+	// refuse rather than record a decision that a later derivation cannot honor.
+	if mapping.ContentIdentity == "" {
+		return outcome.AcceptanceDecision{}, fmt.Errorf("criterion %q has no repository content identity in the reviewed outcome; re-run the task so the decision can bind to the reviewed content", criterionID)
+	}
 	d.CriterionDescription = mapping.Description
 	d.ManualEvidence = mapping.ManualEvidence
 	d.Attempt = mapping.Attempt
+	d.ContentIdentity = mapping.ContentIdentity
 	if err := outcome.ValidateAcceptanceDecision(d, res.Mappings, designated); err != nil {
 		return outcome.AcceptanceDecision{}, err
 	}

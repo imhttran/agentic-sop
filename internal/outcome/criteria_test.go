@@ -182,6 +182,53 @@ func TestManualEvidenceRequiresDecision(t *testing.T) {
 	}
 }
 
+// TestManualDecisionContentBinding pins the strict content binding added for
+// Plan 07 D4: a content-bound mapping is satisfied only by a decision carrying
+// the exact same non-empty identity. A legacy decision without an identity is
+// not accepted for a content-bound mapping; the both-empty legacy pair remains
+// compatible for pre-change callers.
+func TestManualDecisionContentBinding(t *testing.T) {
+	crit := acceptance("criterion-1")
+	baseMap := CriterionMapping{CriterionID: "criterion-1", Required: true, Kind: EvidenceManual, Description: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 1}
+	baseDec := AcceptanceDecision{Task: "T1", CriterionID: "criterion-1", Evidence: "e", Decision: DecisionAccept, Approver: "tom", RecordedAt: "t", CriterionDescription: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 1}
+
+	boundMap := baseMap
+	boundMap.ContentIdentity = "content-A"
+	for name, id := range map[string]string{"matching": "content-A", "wrong": "content-B", "legacy": ""} {
+		d := baseDec
+		d.ContentIdentity = id
+		res := VerifyAcceptance(passed, crit, []CriterionMapping{boundMap}, nil, []AcceptanceDecision{d})
+		if name == "matching" {
+			if res.Status != Verified {
+				t.Errorf("%s: status = %s reasons=%v, want VERIFIED", name, res.Status, res.Reasons)
+			}
+			continue
+		}
+		if res.Status == Verified {
+			t.Errorf("%s: verified with identity %q", name, id)
+		}
+	}
+
+	// The both-empty legacy pair remains compatible.
+	if res := VerifyAcceptance(passed, crit, []CriterionMapping{baseMap}, nil, []AcceptanceDecision{baseDec}); res.Status != Verified {
+		t.Fatalf("legacy both-empty: status = %s reasons=%v, want VERIFIED", res.Status, res.Reasons)
+	}
+
+	if err := ValidateAcceptanceDecision(baseDec, []CriterionMapping{boundMap}, []string{"tom"}); err == nil {
+		t.Error("a legacy decision without a content identity was accepted for a content-bound mapping")
+	}
+	wrong := baseDec
+	wrong.ContentIdentity = "content-B"
+	if err := ValidateAcceptanceDecision(wrong, []CriterionMapping{boundMap}, []string{"tom"}); err == nil {
+		t.Error("a mismatched content identity was accepted")
+	}
+	matched := baseDec
+	matched.ContentIdentity = "content-A"
+	if err := ValidateAcceptanceDecision(matched, []CriterionMapping{boundMap}, []string{"tom"}); err != nil {
+		t.Errorf("a matching content identity was rejected: %v", err)
+	}
+}
+
 func TestAcceptanceRecoveryPreservesReviewedDecision(t *testing.T) {
 	crit := acceptance("criterion-1")
 	mapping := CriterionMapping{CriterionID: "criterion-1", Required: true, Kind: EvidenceManual, Description: "criterion criterion-1", ManualEvidence: "docs reviewed", Attempt: 2}
