@@ -1,6 +1,6 @@
 # Plan 07 — SOP Misinformation (LLM07)
 
-Status: IMPLEMENTED on `security/llm07-misinformation`; deterministic verification PASS on macOS arm64; live-model and Linux NOT_RUN; not merged. Evidence: `docs/reports/owasp-llm/llm07-misinformation.md`.
+Status: COMPLETE for the deterministic scope; strict content binding for manual acceptance evidence implemented (Plan 07 D4 option 1); all three SOP tasks externally completed and the plan archived. Live-model and Linux verification are NOT_RUN. Evidence: `docs/reports/owasp-llm/llm07-misinformation.md`.
 Date: 2026-11-08 (America/Chicago); adapted 2026-11-09.
 Series: next six plans after Plans 01–04; numbering follows category order, not mandatory execution order.
 Suggested branch: security/llm07-misinformation.

@@ -42,6 +42,12 @@ type CriterionMapping struct {
 	// is bound to it, so a decision recorded for an earlier attempt cannot satisfy
 	// a later one. Zero means the attempt was not recorded (legacy callers).
 	Attempt int `json:"attempt,omitempty"`
+	// ContentIdentity is the content-complete repository identity the mapping was
+	// derived against. A manual decision is bound to it, so a decision recorded
+	// before a repository content change cannot satisfy the changed tree. Empty
+	// means the caller did not provide one (legacy callers); production outcome
+	// derivation always sets it when a manual criterion is mapped.
+	ContentIdentity string `json:"content_identity,omitempty"`
 }
 
 // CheckResult is the recorded execution of one acceptance check.
@@ -79,6 +85,11 @@ type AcceptanceDecision struct {
 	// Attempt binds the decision to the task attempt whose outcome was reviewed.
 	// Zero means the attempt was not recorded (legacy callers).
 	Attempt int `json:"attempt,omitempty"`
+	// ContentIdentity binds the decision to the exact repository content the
+	// operator reviewed. When the mapping carries an identity, the decision must
+	// carry the same non-empty identity; a legacy decision without one requires
+	// re-acceptance against the current content.
+	ContentIdentity string `json:"content_identity,omitempty"`
 }
 
 // AcceptanceRecovery is an explicit, append-only record that a human-authorized
@@ -264,8 +275,9 @@ func latestBoundDecision(m CriterionMapping, decisions []AcceptanceDecision, rec
 }
 
 // decisionBoundTo reports whether d names the exact criterion content, manual
-// evidence, and attempt of m. The attempt is compared only when the mapping
-// carries one, so a legacy mapping without attempt information stays usable.
+// evidence, content identity, and attempt of m. The attempt is compared only when
+// the mapping carries one, so a legacy mapping without attempt information stays
+// usable.
 func decisionBoundTo(d AcceptanceDecision, m CriterionMapping) bool {
 	if !decisionContentMatches(d, m) {
 		return false
@@ -289,13 +301,25 @@ func decisionBoundToAttempt(d AcceptanceDecision, m CriterionMapping, recoveries
 	return recoveryReaches(d, m, recoveries)
 }
 
-// decisionContentMatches reports whether d and m name the same criterion text
-// and manual-evidence description.
+// decisionContentMatches reports whether d and m name the same criterion text,
+// manual-evidence description, and repository content identity.
+//
+// Strict content binding (Plan 07 D4): when either side carries a content
+// identity, both must carry the same non-empty identity. A legacy decision with
+// no identity therefore cannot satisfy a content-bound mapping, and must be
+// re-recorded. When BOTH sides are empty, the legacy content/attempt contract
+// still applies for compatibility with pre-change callers.
 func decisionContentMatches(d AcceptanceDecision, m CriterionMapping) bool {
-	return strings.TrimSpace(d.CriterionDescription) != "" &&
-		strings.TrimSpace(d.ManualEvidence) != "" &&
-		d.CriterionDescription == m.Description &&
-		d.ManualEvidence == m.ManualEvidence
+	if strings.TrimSpace(d.CriterionDescription) == "" || strings.TrimSpace(d.ManualEvidence) == "" {
+		return false
+	}
+	if d.CriterionDescription != m.Description || d.ManualEvidence != m.ManualEvidence {
+		return false
+	}
+	if m.ContentIdentity != "" || d.ContentIdentity != "" {
+		return d.ContentIdentity != "" && d.ContentIdentity == m.ContentIdentity
+	}
+	return true
 }
 
 // recoveryReaches reports whether recorded recoveries connect the decision's
@@ -351,7 +375,8 @@ func (r Result) BlocksAdvancement() bool {
 
 // ValidateAcceptanceDecision fails closed unless d is an explicit, traceable decision
 // by a designated approver on a criterion mapped to manual evidence, and is bound
-// to that mapping's exact criterion content, manual evidence, and attempt.
+// to that mapping's exact criterion content, manual evidence, content identity, and
+// attempt.
 func ValidateAcceptanceDecision(d AcceptanceDecision, mappings []CriterionMapping, designated []string) error {
 	switch {
 	case d.Task == "":
@@ -368,7 +393,7 @@ func ValidateAcceptanceDecision(d AcceptanceDecision, mappings []CriterionMappin
 	for _, m := range mappings {
 		if m.CriterionID == d.CriterionID && m.Kind == EvidenceManual {
 			if !decisionBoundTo(d, m) {
-				return fmt.Errorf("outcome: criterion %q decision is not bound to the current criterion text, manual evidence, and attempt", d.CriterionID)
+				return fmt.Errorf("outcome: criterion %q decision is not bound to the current criterion text, manual evidence, content identity, and attempt", d.CriterionID)
 			}
 			return nil
 		}
