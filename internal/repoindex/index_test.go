@@ -147,6 +147,29 @@ func TestBuildDocumentAuthority(t *testing.T) {
 	}
 }
 
+// TestBuildIdentityCoversSOPDocumentAuthority proves the index identity changes when SOP
+// metadata reclassifies an indexed document, even though no indexed file byte changes.
+// Identity.Digest is the caller's staleness check, so a metadata-driven authority change
+// must not leave it unchanged.
+func TestBuildIdentityCoversSOPDocumentAuthority(t *testing.T) {
+	root := fixture(t)
+	before := build(t, root)
+	if d := docByPath(before, "docs/plans/ACTIVE.md"); d == nil || d.Authority != AuthorityCurrent {
+		t.Fatalf("fixture should classify ACTIVE.md current, got %+v", d)
+	}
+
+	// Re-point SOP metadata at another document without touching indexed file bytes.
+	write(t, root, ".agent-sdlc/plan.meta.json", `{"source":"docs/plans/PLAN-Future.md","plan_id":"future","source_kind":"plan"}`)
+	after := build(t, root)
+
+	if d := docByPath(after, "docs/plans/PLAN-Future.md"); d == nil || d.Authority != AuthorityCurrent {
+		t.Fatalf("metadata change should classify PLAN-Future.md current, got %+v", d)
+	}
+	if before.Identity.Digest == after.Identity.Digest {
+		t.Error("identity digest must change when SOP metadata changes a document's authority")
+	}
+}
+
 func TestBuildIsDeterministic(t *testing.T) {
 	root := fixture(t)
 	a := build(t, root)
