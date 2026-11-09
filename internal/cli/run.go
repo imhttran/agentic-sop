@@ -260,7 +260,9 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 		}
 	}
 
-	ctx := taskActivityContext(context.Background(), rn.Dir(), stdout, rn.State().ID, spec.Title)
+	baseCtx, stop := executionContext()
+	defer stop()
+	ctx := taskActivityContext(baseCtx, rn.Dir(), stdout, rn.State().ID, spec.Title)
 
 	// Optional early JEV task-triage checkpoint (Phase 3). Single-task mode has no
 	// scheduler store to requeue into, so a policy escalation stops with a clear
@@ -277,6 +279,10 @@ func runSingleTask(file string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, currentApprovalBoundary(rn, priorStage), tri, stdout)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		fmt.Fprintf(stdout, "%s interrupted: %v\n", rn.State().ID, ctxErr)
+		return exitError
+	}
 	emitClassificationActivity(ctx, res.classification, res.decision)
 	if err != nil {
 		return failRun(rn, stderr, err)

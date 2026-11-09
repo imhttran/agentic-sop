@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -42,11 +43,38 @@ func (h *Harness) readFile(args map[string]any) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("read_file: %s is a directory", p.rel)
 	}
-	data, err := os.ReadFile(p.abs)
+	result, err := readFileBounded(p.abs, info.Size(), h.cfg.MaxOutputBytes)
 	if err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
-	return truncate(string(data), h.cfg.MaxOutputBytes), nil
+	return result, nil
+}
+
+// readFileBounded reads at most limit bytes plus one sentinel byte, so a large
+// file is never fully allocated before truncation. For a regular file the stat
+// size gives the exact truncated count; for a growing or special file the marker
+// reports the cut without claiming a total it did not measure.
+func readFileBounded(path string, size int64, limit int) (string, error) {
+	if limit <= 0 {
+		limit = DefaultConfig().MaxOutputBytes
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err != nil {
+		return "", err
+	}
+	if len(data) <= limit {
+		return string(data), nil
+	}
+	truncated := int64(len(data)) - int64(limit)
+	if size > int64(limit) {
+		truncated = size - int64(limit)
+	}
+	return string(data[:limit]) + fmt.Sprintf("\n… [truncated %d bytes]", truncated), nil
 }
 
 // writeFile writes or creates a file. mustNotExist implements create_file.

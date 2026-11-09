@@ -204,6 +204,11 @@ type authorizedRoot struct {
 // A nil auditor discards audit records.
 func New(root string, cfg Config, auditor Auditor) *Harness {
 	canonical := canonicalDir(root)
+	if cfg.MaxOutputBytes <= 0 {
+		// A missing or malformed output bound must never disable the bound; the
+		// built-in default keeps every capture finite.
+		cfg.MaxOutputBytes = DefaultConfig().MaxOutputBytes
+	}
 	h := &Harness{
 		root:    canonical,
 		cfg:     cfg,
@@ -881,12 +886,25 @@ func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
 	cmd.Dir = dir
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	cmd.SysProcAttr = sysProcAttrKill()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := terminateGroup(cmd.Process.Pid); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	// The context cancellation kills the whole group; WaitDelay bounds the wait
+	// for the output pipes if a descendant somehow keeps one open.
+	cmd.WaitDelay = 2 * time.Second
+	cap := newBoundedCapture(h.cfg.MaxOutputBytes)
+	cmd.Stdout = cap
+	cmd.Stderr = cap
 
 	runErr := cmd.Run()
-	out := truncate(buf.String(), h.cfg.MaxOutputBytes)
+	out := cap.String()
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		return out, false, out, -1, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
 	}

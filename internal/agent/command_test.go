@@ -9,6 +9,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 )
 
 // validRequest returns a minimal, valid request for a capability.
@@ -148,6 +149,54 @@ func TestCommandAgentRespectsCancellation(t *testing.T) {
 	_, err := NewCommandAgent("sleep 5").Generate(ctx, validRequest(Implement))
 	if !errors.Is(err, context.Canceled) {
 		t.Errorf("err = %v, want context.Canceled", err)
+	}
+}
+
+// TestCommandAgentTimeoutBoundsInvocation proves the command agent has a
+// configured deadline even when the caller's context has none.
+func TestCommandAgentTimeoutBoundsInvocation(t *testing.T) {
+	t.Setenv(EnvAgentCommand, "sleep 5")
+	t.Setenv(EnvAgentCommandTimeout, "100ms")
+	a, err := NewCommandAgentFromEnv()
+	if err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	_, err = a.Generate(context.Background(), validRequest(Implement))
+	if err == nil {
+		t.Fatal("expected a timeout")
+	}
+	if !errors.Is(err, context.DeadlineExceeded) && !strings.Contains(err.Error(), "timed out") {
+		t.Errorf("err = %v, want a timeout", err)
+	}
+	if time.Since(start) > 2*time.Second {
+		t.Errorf("timeout took %s, want the 100ms bound", time.Since(start))
+	}
+}
+
+// TestCommandAgentBoundsStdout proves the command agent retains at most its
+// configured output bound and marks the cut.
+func TestCommandAgentBoundsStdout(t *testing.T) {
+	a := &CommandAgent{command: "printf '%0200d' 0", timeout: time.Second, maxOutput: 64}
+	resp, err := a.Generate(context.Background(), validRequest(Review))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(resp.Content) > 128 {
+		t.Errorf("content length = %d, want at most 128", len(resp.Content))
+	}
+	if !strings.Contains(resp.Content, "truncated 136 bytes") {
+		t.Errorf("content missing the exact truncation marker: %q", resp.Content)
+	}
+}
+
+// TestCommandAgentRejectsInvalidTimeoutEnv proves a malformed timeout is
+// reported rather than silently disabling the bound.
+func TestCommandAgentRejectsInvalidTimeoutEnv(t *testing.T) {
+	t.Setenv(EnvAgentCommand, "true")
+	t.Setenv(EnvAgentCommandTimeout, "soon")
+	if _, err := NewCommandAgentFromEnv(); err == nil {
+		t.Fatal("expected an invalid-duration error")
 	}
 }
 

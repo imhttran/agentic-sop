@@ -29,9 +29,10 @@ var ollamaCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure, Rev
 
 // Ollama is an Agent backed by a local Ollama server's chat API.
 type Ollama struct {
-	baseURL string
-	model   string
-	client  *http.Client
+	baseURL         string
+	model           string
+	client          *http.Client
+	maxOutputTokens int
 }
 
 // NewOllama returns an Ollama provider for the given base URL and model. An
@@ -49,7 +50,11 @@ func NewOllama(baseURL, model string, timeout time.Duration) (*Ollama, error) {
 	if timeout <= 0 {
 		timeout = defaultProviderTimeout
 	}
-	return &Ollama{baseURL: baseURL, model: model, client: &http.Client{Timeout: timeout}}, nil
+	maxOutputTokens, err := MaxOutputTokensFromEnv()
+	if err != nil {
+		return nil, err
+	}
+	return &Ollama{baseURL: baseURL, model: model, client: &http.Client{Timeout: timeout}, maxOutputTokens: maxOutputTokens}, nil
 }
 
 // NewOllamaFromEnv builds an Ollama provider from the environment, using
@@ -87,17 +92,28 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 		Messages: []chatMessage{{Role: "user", Content: renderPrompt(request)}},
 		Stream:   false,
 	}
+	if o.maxOutputTokens > 0 {
+		body.Options = &chatOptions{NumPredict: o.maxOutputTokens}
+	}
 
 	var out struct {
 		Message         chatMessage     `json:"message"`
 		Error           json.RawMessage `json:"error"`
-		PromptEvalCount int             `json:"prompt_eval_count"`
-		EvalCount       int             `json:"eval_count"`
+		PromptEvalCount *int            `json:"prompt_eval_count"`
+		EvalCount       *int            `json:"eval_count"`
 	}
 	if err := postJSON(ctx, o.client, o.baseURL+"/api/chat", "", body, &out); err != nil {
 		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, withTimeoutHint(err, EnvOllamaTimeout))
 	}
-	perf.AddUsage(ctx, o.model, out.PromptEvalCount, out.EvalCount)
+	reported := out.PromptEvalCount != nil && out.EvalCount != nil
+	input, output := 0, 0
+	if out.PromptEvalCount != nil {
+		input = *out.PromptEvalCount
+	}
+	if out.EvalCount != nil {
+		output = *out.EvalCount
+	}
+	perf.AddUsageWithReport(ctx, o.model, input, output, reported)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("ollama %s: %s", request.Capability, detail)
 	}

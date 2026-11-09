@@ -11,6 +11,19 @@ type Tokens struct {
 	Calls  int64 `json:"calls"`
 	Input  int64 `json:"input"`
 	Output int64 `json:"output"`
+	// UnreportedCalls counts calls whose server did not report usage. It is kept
+	// separate from Calls so an absent report is never rendered as zero tokens: the
+	// totals above cover only the calls that actually reported usage.
+	UnreportedCalls int64 `json:"unreported_calls,omitempty"`
+}
+
+// add combines two token records, including the unreported-call count.
+func (t Tokens) add(o Tokens) Tokens {
+	t.Calls += o.Calls
+	t.Input += o.Input
+	t.Output += o.Output
+	t.UnreportedCalls += o.UnreportedCalls
+	return t
 }
 
 // Usage collects the token usage of every model call made under one context,
@@ -29,8 +42,18 @@ func WithUsage(ctx context.Context, u *Usage) context.Context {
 	return context.WithValue(ctx, usageKey{}, u)
 }
 
-// AddUsage records one model call on the Usage carried by ctx, if any.
+// AddUsage records one model call on the Usage carried by ctx, if any. It treats
+// the call as having reported usage; use AddUsageWithReport when the server may
+// omit it.
 func AddUsage(ctx context.Context, model string, input, output int) {
+	AddUsageWithReport(ctx, model, input, output, true)
+}
+
+// AddUsageWithReport records one model call and whether its server reported
+// token usage. An unreported call increments UnreportedCalls instead of silently
+// recording zero tokens, so a missing report stays distinguishable from a
+// measured zero.
+func AddUsageWithReport(ctx context.Context, model string, input, output int, reported bool) {
 	u, _ := ctx.Value(usageKey{}).(*Usage)
 	if u == nil {
 		return
@@ -42,8 +65,12 @@ func AddUsage(ctx context.Context, model string, input, output int) {
 	}
 	t := u.byModel[model]
 	t.Calls++
-	t.Input += int64(input)
-	t.Output += int64(output)
+	if reported {
+		t.Input += int64(input)
+		t.Output += int64(output)
+	} else {
+		t.UnreportedCalls++
+	}
 	u.byModel[model] = t
 }
 
@@ -70,9 +97,7 @@ func UsageFrom(ctx context.Context) map[string]Tokens {
 func TotalTokens(byModel map[string]Tokens) Tokens {
 	var sum Tokens
 	for _, t := range byModel {
-		sum.Calls += t.Calls
-		sum.Input += t.Input
-		sum.Output += t.Output
+		sum = sum.add(t)
 	}
 	return sum
 }
@@ -97,9 +122,7 @@ func addTokens(a, b map[string]Tokens) map[string]Tokens {
 	}
 	for m, t := range b {
 		s := out[m]
-		s.Calls += t.Calls
-		s.Input += t.Input
-		s.Output += t.Output
+		s = s.add(t)
 		out[m] = s
 	}
 	return out
