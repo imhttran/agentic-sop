@@ -1,0 +1,83 @@
+name: Codex review watch
+
+# Keeps one issue up to date with unresolved Codex review findings across open pull
+# requests. This is a notification dashboard, not a merge gate or an approval. The
+# /codex-review-triage skill does the fixing and backlog logging; this workflow only
+# reads findings and updates the dashboard issue.
+
+on:
+  schedule:
+    # Every six hours at :17 UTC. Change the cadence here if needed.
+    - cron: "17 */6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+  issues: write
+
+concurrency:
+  group: codex-review-watch
+  cancel-in-progress: false
+
+jobs:
+  watch:
+    name: update the Codex findings dashboard
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Collect and publish the dashboard
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          repo="$GITHUB_REPOSITORY"
+          out="$RUNNER_TEMP/codex-review-watch.md"
+
+          {
+            printf '%s\n' '<!-- codex-review-watch -->'
+            printf '%s\n\n' '# Codex review findings'
+            printf '%s\n\n' 'Updated automatically by `.github/workflows/codex-review-watch.yml`. This is a dashboard, not an approval. Use `/codex-review-triage` to fix or log a finding.'
+          } >"$out"
+
+          found=0
+          prs="$(gh pr list --repo "$repo" --state open --limit 100 --json number --jq '.[].number')"
+          if [ -n "$prs" ]; then
+            # Stable ordering keeps the issue body stable when nothing changed.
+            for pr in $(printf '%s\n' "$prs" | sort -n); do
+              json="$(bash scripts/agents/codex-review-triage.sh "$pr" --repo "$repo" --json)"
+              if [ -z "$json" ]; then
+                continue
+              fi
+              found=1
+              pr_url="$(gh pr view "$pr" --repo "$repo" --json url --jq .url)"
+              {
+                printf '\n### PR #%s\n\n%s\n\n' "$pr" "$pr_url"
+                printf '%s\n' "$json" | jq -r '
+                  "- **\(.source)** \(.author) — `\(.path // "-"):\(.line // .original_line // "-")` — [finding](\(.url))\(if .outdated then " _(outdated)_" else "" end)\n  > \(.body | gsub("[\r\n]+"; " ") | .[0:400])\n"
+                '
+                printf '\n'
+              } >>"$out"
+            done
+          fi
+
+          if [ "$found" -eq 0 ]; then
+            printf '%s\n' 'No unresolved Codex findings across open pull requests.' >>"$out"
+          fi
+
+          existing="$(gh issue list --repo "$repo" --state open --search '"Codex review findings" in:title' --json number,title --jq '.[] | select(.title == "Codex review findings") | .number' | head -n 1)"
+          if [ -n "$existing" ]; then
+            old="$RUNNER_TEMP/codex-review-watch-old.md"
+            new="$RUNNER_TEMP/codex-review-watch-new.md"
+            gh issue view "$existing" --repo "$repo" --json body --jq .body | sed 's/[[:space:]]*$//' >"$old"
+            sed 's/[[:space:]]*$//' "$out" >"$new"
+            if cmp -s "$old" "$new"; then
+              echo "Codex review dashboard unchanged (issue #$existing)."
+              exit 0
+            fi
+            gh issue edit "$existing" --repo "$repo" --body-file "$out"
+            echo "Updated Codex review dashboard (issue #$existing)."
+          else
+            gh issue create --repo "$repo" --title "Codex review findings" --body-file "$out"
+          fi

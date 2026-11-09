@@ -4,7 +4,7 @@ This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
 `/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`,
-`/sop-publish`, `/sop-fix-conflicts`, the RAG skills `/rag-schema`,
+`/sop-publish`, `/sop-fix-conflicts`, `/codex-review-triage`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -106,6 +106,7 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-security-scan`   | _security evidence_      | no            | report-only Go/Rust/mixed security scan and triage                                   |
 | `/sop-publish`         | _merge completion_       | **yes**       | complete an authorized merge/publish and clean up safely                             |
 | `/sop-fix-conflicts`   | _merge conflicts_        | **yes**       | resolve an in-progress merge conflict when decidable                                 |
+| `/codex-review-triage` | _Codex review triage_    | **working tree** | fix in-scope Codex findings or log them to the backlog                          |
 | `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix                               |
 
 `/sop-fix-conflicts` resolves an in-progress merge only when both sides' intent can
@@ -116,6 +117,13 @@ security, or policy decision. It never publishes or rewrites history.
 `/mcp-live-validation` prepares an isolated candidate and, after approval, stops the
 verified baseline and starts the candidate. It never replaces the production binary or
 merges; local tests are not independent validation.
+
+`/codex-review-triage` reads unresolved Codex review findings from a pull request,
+verifies each finding against the code, fixes only small in-scope issues with tests, and
+records deferred findings in `docs/plans/BACKLOG.md`. It never treats a finding as
+authority and never merges or publishes. The scheduled
+`.github/workflows/codex-review-watch.yml` maintains a GitHub issue dashboard of
+unresolved findings; see [`CODEX-REVIEW-WATCH.md`](CODEX-REVIEW-WATCH.md).
 
 It writes a portable `validation-handoff.json`. See
 [MCP-LIVE-VALIDATION-PROVIDERS.md](MCP-LIVE-VALIDATION-PROVIDERS.md) for ChatGPT, Claude,
