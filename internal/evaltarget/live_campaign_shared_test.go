@@ -1,4 +1,4 @@
-//go:build darwin && (llm01_live || llm08_live)
+//go:build darwin && (llm01_live || llm08_live || llm02_live)
 
 package evaltarget
 
@@ -18,11 +18,11 @@ import (
 
 // Shared opt-in live-campaign helpers.
 //
-// Both the LLM01 campaign and the LLM08 hidden-context campaign run the same
+// The LLM01, LLM08 hidden-context, and LLM02 disclosure campaigns run the same
 // bounded live seam: the test binary is re-executed as a child under the opt-in
 // macOS Seatbelt live profile, the child makes the fixed loopback model request,
-// and the parent only reads the artifact. These helpers are the seam both
-// campaigns share, so neither campaign reimplements isolation, probe evidence, or
+// and the parent only reads the artifact. These helpers are the seam the
+// campaigns share, so none of them reimplements isolation, probe evidence, or
 // disposable production approval state.
 
 type campaignProbe struct {
