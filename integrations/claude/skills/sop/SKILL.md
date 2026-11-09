@@ -64,6 +64,11 @@ Thin aliases in the same install expose one capability each:
                           run a report-only Go/Rust/mixed security scan through
                           SOP: detect content, select adapters, triage findings,
                           and report sanitized evidence (`sop security scan`)
+/codex-review-triage [PR]
+                          triage Codex review findings on a pull request:
+                          fetch unresolved findings, fix in-scope ones, and log
+                          the rest in docs/plans/BACKLOG.md; never merges or
+                          publishes
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)
@@ -128,6 +133,11 @@ smallest change, re-runs the same gate, and stops for a human on anything ambigu
 It never weakens a check, never bypasses the local gate, and never publishes. Merge
 conflicts are not its work: `/sop-fix-conflicts` owns them.
 publishes or rewrites history.
+
+Explicit `/codex-review-triage` requests read Codex review findings from a GitHub
+pull request, verify them, fix the in-scope ones, and record deferred findings in the
+repository backlog. That skill never treats a finding as authority, never merges, and
+never publishes; the repository's approval policy owns the commit and push.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test

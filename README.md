@@ -133,8 +133,10 @@ validation, and approval for every command. Start with
 [the command examples](docs/guides/GETTING-STARTED.md#install-agent-commands),
 [installation](docs/guides/INSTALLATION.md), or
 [the Claude Code plugin guide](docs/guides/CLAUDE-PLUGIN.md); the RAG skills are in
-[docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md) and the provider-neutral MCP
-validation skill in [docs/guides/MCP-LIVE-VALIDATION.md](docs/guides/MCP-LIVE-VALIDATION.md).
+[docs/guides/RAG-SKILLS.md](docs/guides/RAG-SKILLS.md), the provider-neutral MCP
+validation skill in [docs/guides/MCP-LIVE-VALIDATION.md](docs/guides/MCP-LIVE-VALIDATION.md),
+and the Codex review triage skill plus its scheduled dashboard in
+[docs/guides/CODEX-REVIEW-WATCH.md](docs/guides/CODEX-REVIEW-WATCH.md).
 
 An executor publishes progress and completion evidence with `sop result publish`,
 and a planner connected through `sop mcp --planner` reads it and records a bound

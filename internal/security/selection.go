@@ -275,9 +275,8 @@ func automaticAdapters(cfg config.SecurityConfig, detection Detection, claimed m
 	for _, language := range detection.Languages {
 		detected[language] = true
 	}
-	if len(detected) == 0 {
-		return nil
-	}
+	// Secrets scanning is repository-wide. The language-scoped blocks below are
+	// guarded by the detected content; Gitleaks is not.
 	var out []SelectedAdapter
 	add := func(raw config.SecurityAdapterConfig, languages []Language, repositoryWide bool) {
 		id := normalizeAdapterID(raw.ID)
