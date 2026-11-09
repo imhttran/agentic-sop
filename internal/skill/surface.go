@@ -64,6 +64,12 @@ var Commands = []Command{
 	// scanning to SOP's configured adapters, and reports sanitized evidence. It
 	// fixes no capability and never mutates the repository or scanner policy.
 	{Name: "sop-security-scan", Capability: "", Delegation: "sop security scan"},
+	// A Codex review-triage companion: it fetches unresolved Codex findings from a
+	// GitHub pull request, verifies each one, fixes in-scope findings, and records
+	// deferred ones in the repository backlog. It fixes no capability and never
+	// publishes or merges. Its shell examples are repository helpers, GitHub CLI
+	// calls, Git, and local checks, not SOP CLI calls.
+	{Name: "codex-review-triage", Capability: "", Delegation: "sop status", UsesRepositoryScripts: true},
 
 	// RAG engineering aliases: domain skills that add a pgvector/RAG checklist to an
 	// existing read-only capability. They fix a read-only capability only, so they can
