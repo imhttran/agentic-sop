@@ -138,26 +138,14 @@ func runsProjectSuite(file string, exempt map[string]bool) bool {
 	return false
 }
 
-// mergeConflictIndexCommands are the only direct-mutation instructions a skill may
-// contain, and only for the merge-conflict resolver: staging a resolved path and
-// completing an in-progress merge. A conflict resolution exists only in the git
-// index, so it cannot be expressed as an SOP capability; the rest of the
-// direct-mutation boundary still applies to every shipped skill.
-var mergeConflictIndexCommands = map[string]bool{
-	"git add":    true,
-	"git commit": true,
-}
-
-// resolvesMergeConflicts reports whether file belongs to the command that resolves
-// an in-progress merge (see Command.ResolvesMergeConflicts).
-func resolvesMergeConflicts(file string) bool {
-	slash := filepath.ToSlash(file)
-	for _, c := range Commands {
-		if c.ResolvesMergeConflicts && strings.Contains(slash, "/"+c.Name+"/") {
-			return true
-		}
+// skillName returns the skill folder name for a file under skillsRoot, or "" when the
+// file is not inside a skill folder.
+func skillName(file string) string {
+	rel, err := filepath.Rel(skillsRoot, file)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
 	}
-	return false
+	return strings.Split(filepath.ToSlash(rel), "/")[0]
 }
 
 // TestSkillDoesNotRestatePolicyOrMutate proves the skill does not carry SOP policy
@@ -171,14 +159,11 @@ func TestSkillDoesNotRestatePolicyOrMutate(t *testing.T) {
 				t.Errorf("%s: skill restates a SOP policy setting %q", file, knob)
 			}
 		}
+		name := skillName(file)
 		for _, cmd := range MutationCommands {
-			if !strings.Contains(body, cmd) {
-				continue
+			if strings.Contains(body, cmd) && !AllowsDirectMutation(name, cmd) {
+				t.Errorf("%s: skill contains a direct-mutation instruction %q", file, cmd)
 			}
-			if resolvesMergeConflicts(file) && mergeConflictIndexCommands[cmd] {
-				continue
-			}
-			t.Errorf("%s: skill contains a direct-mutation instruction %q", file, cmd)
 		}
 	}
 }
@@ -219,12 +204,10 @@ func TestMergeConflictResolverDocumentedContract(t *testing.T) {
 // direct-mutation instructions.
 func TestMutationWaiverStaysNarrow(t *testing.T) {
 	for _, file := range skillFiles(t) {
-		if resolvesMergeConflicts(file) {
-			continue
-		}
+		name := skillName(file)
 		body := read(t, file)
-		for cmd := range mergeConflictIndexCommands {
-			if strings.Contains(body, cmd) {
+		for cmd := range MergeConflictIndexCommands {
+			if strings.Contains(body, cmd) && !AllowsDirectMutation(name, cmd) {
 				t.Errorf("%s: %q is only allowed in a merge-conflict resolver", file, cmd)
 			}
 		}

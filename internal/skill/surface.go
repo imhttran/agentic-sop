@@ -141,3 +141,27 @@ var ModelLiterals = []string{
 // MutationCommands are direct-mutation instructions an adapter must not contain: an
 // implement request goes through `sop prompt --capability implement`, not the shell.
 var MutationCommands = []string{"git commit", "git push", "git add", "sed -i", "rm -rf"}
+
+// MergeConflictIndexCommands are the only direct-mutation instructions a skill may
+// contain, and only for a command whose Command.ResolvesMergeConflicts is set:
+// staging a resolved path and completing an in-progress merge. They cannot be
+// expressed as an SOP capability because the resolution is the merge result itself.
+var MergeConflictIndexCommands = map[string]bool{
+	"git add":    true,
+	"git commit": true,
+}
+
+// AllowsDirectMutation reports whether the named command may contain instruction.
+// Only the merge-conflict resolver is exempt, and only for the index operations that
+// complete a merge; every other command keeps the full direct-mutation boundary.
+func AllowsDirectMutation(name, instruction string) bool {
+	if !MergeConflictIndexCommands[instruction] {
+		return false
+	}
+	for _, c := range Commands {
+		if c.Name == name {
+			return c.ResolvesMergeConflicts
+		}
+	}
+	return false
+}
