@@ -105,7 +105,10 @@ All of the following must be true, and recorded:
 - egress from this host to `hooks.slack.com` is permitted;
 - `notifications.channel: webhook` is enabled and
   `notifications.webhook.payload: slack` is set by the operator;
-- a pre-send `sop notify status --json` snapshot (`configured_unverified`);
+- a pre-send `sop notify status --json` snapshot showing `pending: 0`
+  (`configured_unverified`); `sop notify test` runs a bounded drain with the
+  default limit of 50, so a non-empty outbox would also attempt other due
+  deliveries, not only the synthetic test event;
 - the message content is synthetic: no real secret, no customer data, no
   `@channel`/`@here`, no external or exfiltration link;
 - the operator is watching the channel (or will supply a permalink/screenshot)
@@ -124,9 +127,11 @@ wrap-up; it requires the explicit approval above.
 > - **Window:** `<UTC start> – <UTC end>` (to be filled in by the approver)
 > - **Content:** the default `sop notify test` event shown below; no mentions, no
 >   real secret, no external or exfiltration link
-> - **Effect:** one POST to the configured webhook, at most one visible message;
->   delivery is at-least-once with bounded retry, so a retry is not a second
->   acceptance event
+> - **Effect:** one POST per attempt to the configured webhook. Delivery is
+>   at-least-once with bounded retry and no receiver-side deduplication guarantee:
+>   a lost acknowledgement, timeout, or 5xx can produce a second visible message.
+>   A retry is not a second acceptance event, but it may be a second visible
+>   message.
 > - **Observation:** the operator confirms the channel name, the visible text,
 >   the rendering, and the absence of pings, and provides a permalink or
 >   screenshot
@@ -172,7 +177,7 @@ explicit authorization.
 
 ```sh
 sop notify status --json     # pre-send snapshot; record the exact availability
-sop notify test              # enqueues and attempts exactly one synthetic event
+sop notify test              # enqueues one synthetic event, then runs a bounded drain
 sop notify status --json     # post-send snapshot: availability and counts
 ```
 
@@ -185,6 +190,12 @@ current channel. This is a status-reporting limitation, not a Plan 10 sink repai
 The test event carries a fresh 8-byte nonce and `transition=NOTIFY_TEST`. A
 confirmed delivery prints `Test event <id> delivered (confirmed by channel
 webhook).`
+
+`sop notify test` calls the bounded drain with the default limit of 50, so it can
+also attempt other due deliveries. Confirm `pending: 0` in the pre-send snapshot,
+or drain/isolate the outbox first, so the approval covers only the synthetic event.
+A retry of the test delivery can produce a second visible message; that is the
+documented at-least-once behavior.
 
 ## What each observation proves
 

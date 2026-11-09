@@ -62,8 +62,9 @@ and preserved the original Linux `x86_64` record.
 
 ## Decision A — authorize one live Slack test
 
-The approver must decide whether to authorize one synthetic message to the webhook
-bound to `#sop-alert`, during a named window. The exact request text and payload
+The approver must decide whether to authorize one synthetic test event to the
+webhook bound to `#sop-alert`, during a named window, with an empty outbox and the
+at-least-once caveat recorded in [llm10-live-delivery.md](llm10-live-delivery.md). The exact request text and payload
 are in [llm10-live-delivery.md](llm10-live-delivery.md) §Exact authorization
 request. The decision is required because:
 
@@ -169,7 +170,7 @@ all improper output handling is prevented.
 ## Exact next action
 
 The designated approver (`Tom Tran`, per `.agent-sdlc/config.yaml`) answers Decision
-A (authorize one synthetic message to the `#sop-alert` webhook and name the window)
+A (authorize one synthetic test event to the `#sop-alert` webhook and name the window)
 and Decision B (accept or decline the six manual criteria with the evidence text
 above). Until both records exist, Plan 10 keeps live delivery `NOT_RUN` and manual
 acceptance `GAP`.

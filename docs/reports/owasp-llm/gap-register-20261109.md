@@ -67,7 +67,7 @@ acceptance criteria were accepted; no acceptance decision exists.
 1. **Per-row index digests** — [PROPOSAL-REPOINDEX-ROW-DIGESTS.md](../../plans/PROPOSAL-REPOINDEX-ROW-DIGESTS.md): A (additive row digests, schema v2) recommended; B aggregate-only; C detached manifest.
 2. **RAG evidence hash** — [PROPOSAL-RAG-EVIDENCE-HASH.md](../../plans/PROPOSAL-RAG-EVIDENCE-HASH.md): A (definition plus optional `chunk_hash`) recommended; B definition only; C schema v2 requiring `chunk_hash`.
 3. **Scanner binary pins** — [PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md): A keep the contract; B optional `binary_sha256` from a verified acquisition (recommended); C platform/publisher trust.
-4. **Live Slack test** — authorize one synthetic message to the `#sop-alert` webhook for a named window, enable the `webhook` channel with the `slack` payload, and confirm the binding; no authorization record exists and the send remains not performed. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
+4. **Live Slack test** — authorize one synthetic test event to the `#sop-alert` webhook for a named window with an empty pre-send outbox, enable the `webhook` channel with the `slack` payload, and confirm the binding; no authorization record exists and the send remains not performed. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
 5. **Plan 03 acceptance** — a designated approver records acceptance for the exact campaign artifact and criteria; no acceptance is recorded.
 6. **Plan 10 manual acceptance** — the designated approver accepts or declines the six manual criteria; no owning SOP state exists, so `sop outcome --accept` is not yet available. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
 
