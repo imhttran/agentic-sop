@@ -308,8 +308,10 @@ SOP's state database.
 every provider request before dispatch (`max_tokens` for OpenAI-compatible servers,
 `options.num_predict` for Ollama). When unset, SOP sends the default of `16384`
 tokens; set a positive integer to raise or lower it. A malformed or non-positive
-value fails before a request is sent. A response that reaches the cap is cut off
-by the provider; SOP does not yet detect that truncation.
+value fails before a request is sent. A provider that reports it stopped at that
+bound (`finish_reason` / `done_reason` `length`) returns an incomplete response;
+SOP rejects it as a failure instead of accepting it as a complete answer or
+dispatching a partial tool call.
 
 `SOP_AGENT_COMMAND_TIMEOUT` bounds one `SOP_AGENT_COMMAND` invocation with the same
 Go-duration syntax and `120s` default as the provider timeouts. The command's

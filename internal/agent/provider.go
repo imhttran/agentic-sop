@@ -533,6 +533,14 @@ func requireNonEmpty(provider string, cap Capability, content string) (Response,
 	return Response{Content: content}, nil
 }
 
+// OutputTokenLimited reports whether a provider's finish/stop reason explicitly
+// means the response stopped at the output-token limit. Only the provider's
+// "length" value qualifies: an absent or other nonstandard reason is not
+// reclassified as truncation.
+func OutputTokenLimited(reason string) bool {
+	return strings.EqualFold(strings.TrimSpace(reason), "length")
+}
+
 // normalizeBaseURL trims whitespace and any trailing slashes from a base URL.
 func normalizeBaseURL(baseURL string) string {
 	return strings.TrimRight(strings.TrimSpace(baseURL), "/")
