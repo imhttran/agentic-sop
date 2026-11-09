@@ -1,14 +1,15 @@
 # OWASP LLM06 — Unbounded consumption: SOP execution limits
 
 Status: `VERIFIED` for the merged execution controls on macOS and Linux CI; the
-validation-runner output fix is on the follow-up branch; the provider
-output-token cap now defaults to 16384 tokens per request, and the built-in
-provider adapters reject a provider-reported `length` truncation instead of
-accepting it as a complete response.
+validation-runner output follow-up (#289) is merged; the provider output-token
+cap now defaults to 16384 tokens per request, and the built-in provider adapters
+reject a provider-reported `length` truncation instead of accepting it as a
+complete response.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
 Base commit: `360b96ef721526e58b89f7a7986849caa8a96080` (`origin/main` after the follow-up rebase).
 Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
 Follow-up code commits: `cb230d66ffad174f3040944876d6c0f7b9c7c730` (validation output bounds) and `e053d18e9252ef9d821b2648accca1967e04f0f8` (retain trailing structured evidence).
+Follow-up merge commits: `94471fac53a0c16a38a7dd8d249f933cc1e678ea` (#289, validation output bounds), `38ecec14d436334aa1625e1209c3a4733888dec7` (#294, default output cap), `18924d33b17ea6d956f3d414df39c8c547a17c97` (#297, truncation rejection).
 Platform: macOS `darwin/arm64` locally; Linux verified by GitHub Actions `ubuntu-26.04` CI.
 Configuration identity: `.agent-sdlc/config.yaml` — harness `tool`, provider `ollama`, model `deepseek-v4.1-flash:cloud`, validation `go build ./...` / `go test ./...` / `go vet ./...`, review `self`, quality `max_fix_cycles: 3`, autonomy `balanced`, `approval_before_commit: true`.
 
@@ -293,7 +294,7 @@ Evidence: `TestRunBoundsCapturedOutput`,
 | Default provider output-token cap | Decided by the operator; implemented | Unset `SOP_AGENT_MAX_OUTPUT_TOKENS` now sends `agent.DefaultMaxOutputTokens` (16384). Test: `TestMaxOutputTokensDefaultsWhenUnset`. |
 | Provider `length` truncation accepted as complete | Implemented and verified | `finish_reason`/`done_reason` `length` becomes `agent.TruncationError`; the in-process bridge marks `Response.Truncated` and returns a `failed` outcome, and the orchestration mapping refuses success. Tests: `TestOpenAICompatibleRejectsLengthFinishReason`, `TestOllamaRejectsLengthDoneReason`, `TestTruncatedToolCallIsNotDispatched`, `TestTruncatedFinalIsNotAcceptedAsSuccess`, `TestTruncatedPayloadFailsSafely`. |
 | Linux descendant termination | Required criterion satisfied | GitHub Actions run `42576841956`, job `129026456948` (`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`) passed `go test ./...` including the unix-tagged process-group and signal tests. |
-| Validation-runner output bound | Required criterion implemented and verified on the follow-up branch | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
+| Validation-runner output bound | Required criterion implemented and verified; merged in #289 | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
 | Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
 | `dqharness` unknown-token handling | `NOT_APPLICABLE` for the provider-usage criterion | Production `ModelDecision` counts deterministic `retrievalboundary.EstimateTokens` for the prompt and output, not provider-reported usage; in-flight requests are recorded as uncertain. |
 
@@ -394,8 +395,14 @@ process-group and signal tests.
 - Merged PR: https://github.com/imhttran/agentic-sop/pull/284 (merge commit
   `026f970c2d1040548e8578bb2d949f57e40f6a1f`).
 - Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
-- Follow-up branch: `security/llm06-reconcile`.
-- Follow-up code commits: `cb230d66ffad174f3040944876d6c0f7b9c7c730` (validation
-  output bounds) and `e053d18e9252ef9d821b2648accca1967e04f0f8` (retain trailing
+- Merged follow-up PR: https://github.com/imhttran/agentic-sop/pull/289 (merge
+  commit `94471fac53a0c16a38a7dd8d249f933cc1e678ea`; validation output bounds).
+  Code commits: `cb230d66ffad174f3040944876d6c0f7b9c7c730` (validation output
+  bounds) and `e053d18e9252ef9d821b2648accca1967e04f0f8` (retain trailing
   structured evidence).
-- Follow-up PR: https://github.com/imhttran/agentic-sop/pull/289 (this PR; not merged).
+- Merged follow-up PR: https://github.com/imhttran/agentic-sop/pull/294 (merge
+  commit `38ecec14d436334aa1625e1209c3a4733888dec7`; default 16384-token
+  provider output cap).
+- Merged follow-up PR: https://github.com/imhttran/agentic-sop/pull/297 (merge
+  commit `18924d33b17ea6d956f3d414df39c8c547a17c97`; reject provider output
+  truncated at the token limit).
