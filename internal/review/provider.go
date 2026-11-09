@@ -14,7 +14,30 @@ import (
 // reviewOutputSchema is the output contract for the REVIEW capability.
 const reviewOutputSchema = `Return JSON only (no prose, no markdown):
 {"summary": string, "findings": [{"severity": "INFO|LOW|MEDIUM|HIGH|CRITICAL", "title": string, "detail": string, "file": string, "line": number, "suggestion": string}]}
-Report only real findings; use severity CRITICAL/HIGH only for correctness, safety, or security problems.`
+Report only real findings; use severity CRITICAL/HIGH only for correctness, safety, or security problems.
+Use "file" (and "line" when known) when the finding concerns specific code.`
+
+// reviewTask is the instruction the self reviewer receives. It drives the
+// reviewer through a fixed order of challenge questions and states the
+// obligations a finding must meet, so a reviewer can identify a concrete
+// requirement defect, justify a complexity reduction, or return an empty
+// findings list when the code is adequate.
+const reviewTask = `Review the implementation for the change under review.
+
+Ask these questions in this order, and report a finding only where the code fails one:
+1. Goal fit: does the change satisfy the task and its acceptance criteria?
+2. Correctness: is the change correct for real inputs, edge cases, and error paths?
+3. Complexity: is the change more complex than the problem requires?
+4. Tests: do the tests prove the change, and do they still cover what they covered before?
+5. Change justification: is each change needed, and does it stay inside the task scope?
+
+Report obligations:
+- Cite the concrete affected code path (file, and line when known) when the finding concerns specific code.
+- Cite the task criterion when the finding concerns a requirement that no single code path captures.
+- For a suggested simplification, state its material benefit: the concrete defect or maintenance cost it removes.
+- Do not state that tests passed or failed unless the change or the supplied evidence shows it; report missing test coverage as missing evidence.
+- Prefer no change over speculative refactoring. When the existing code is adequate, return an empty findings list.
+- A proposed refactor MUST NOT dilute a requirement, remove an important guard, or weaken tests.`
 
 // reviewRetryBound is the small, fixed number of REVIEW-capability attempts made
 // when a response cannot be parsed into a valid report. It is deliberately small:
@@ -104,7 +127,7 @@ func (p *AgentProvider) Review(ctx context.Context, request Request) (Report, er
 		}
 		resp, err := p.agent.Generate(ctx, agent.Request{
 			Capability:         agent.Review,
-			Task:               "Review the implementation for the change under review.",
+			Task:               reviewTask,
 			Input:              request.text(),
 			OutputRequirements: reviewOutputSchema,
 		})
