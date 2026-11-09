@@ -4,7 +4,7 @@ Status: report-only trace. This document records what SOP owns, what an external
 provider owns, and which confirmed gaps were fixed at the current baseline. It adds
 no classifier, trust service, poisoning-detection claim, or runtime control.
 
-Task: `POISON-001` (`docs/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`).
+Task: `POISON-001` (`docs/history/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`).
 Dependency: `POISON-002` (outcome-ingestion integrity repair).
 Recovery stage: `POISON-003` (recovery and invalidation evidence, provenance
 dimensions, Plan 09 handoff).
