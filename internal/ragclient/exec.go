@@ -4,17 +4,20 @@ import (
 	"bytes"
 	"context"
 	"os/exec"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // execRunner executes the producer as a child process with no shell. The
 // executable is invoked directly (an absolute path), stdin carries the request
 // JSON, stdout carries the response JSON, and stderr carries diagnostics. The
-// process is killed when ctx is cancelled (exec.CommandContext).
+// process group is killed when ctx is cancelled.
 type execRunner struct{}
 
 // Run implements Runner.
 func (execRunner) Run(ctx context.Context, executable string, stdin []byte, maxOut int) ([]byte, []byte, error) {
 	cmd := exec.CommandContext(ctx, executable)
+	procgroup.Bind(cmd)
 	cmd.Stdin = bytes.NewReader(stdin)
 	out := &limitedBuffer{limit: maxOut}
 	errOut := &limitedBuffer{limit: 64 << 10}

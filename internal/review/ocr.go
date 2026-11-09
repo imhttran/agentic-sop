@@ -9,6 +9,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // ErrNotConfigured is returned by ProviderFromEnv when no external review
@@ -53,6 +55,7 @@ func (p *OCRProvider) Review(ctx context.Context, request Request) (Report, erro
 	}
 
 	cmd := exec.CommandContext(ctx, "sh", "-c", p.command)
+	procgroup.Bind(cmd)
 	cmd.Stdin = bytes.NewReader(payload)
 
 	var stdout, stderr bytes.Buffer

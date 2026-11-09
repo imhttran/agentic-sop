@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // CommandOptions are the parsed arguments of the opt-in `sop compare` subcommand.
@@ -394,6 +396,7 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 	// wants no model call passes an empty command; then only verification decides.
 	if strings.TrimSpace(c.opts.ExecutorCommand) != "" {
 		cmd := exec.CommandContext(ctx, "sh", "-c", c.opts.ExecutorCommand)
+		procgroup.Bind(cmd)
 		cmd.Dir = in.Worktree
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()
@@ -421,6 +424,7 @@ func (c commandExecutor) Execute(ctx context.Context, in ExecutorInput) (Executo
 			return res, ctx.Err()
 		}
 		cmd := exec.CommandContext(ctx, "sh", "-c", vc)
+		procgroup.Bind(cmd)
 		cmd.Dir = in.Worktree
 		cmd.Env = env
 		out, err := cmd.CombinedOutput()

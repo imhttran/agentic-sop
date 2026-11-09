@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/handoff"
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // Runner executes a configured command, sending input on stdin and returning
@@ -87,6 +88,7 @@ type ShellRunner struct{}
 // Run executes command with input on stdin.
 func (ShellRunner) Run(ctx context.Context, command, input string) (string, error) {
 	cmd := exec.CommandContext(ctx, "sh", "-c", command)
+	procgroup.Bind(cmd)
 	cmd.Stdin = strings.NewReader(input)
 
 	var stdout, stderr bytes.Buffer
