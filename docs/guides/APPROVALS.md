@@ -153,6 +153,22 @@ on disk is **not** evidence on its own. A provider failure says nothing about th
 task definition, so it never qualifies; the request must then be decided. Missing or
 ambiguous acceptance evidence is refused rather than backfilled.
 
+### Accepting an already-applied plan-only change
+
+If an operator already applied a plan-only correction (for example a deliverable edit
+that the executable task model cannot see) and a pending request still names the old
+definition, reconcile can record the task-scoped acceptance:
+
+```bash
+sop reconcile docs/plans/PLAN.md --accept-changed TASK-ID
+```
+
+When the requested plan already matches the machine plan, reconcile uses the pending
+request's recorded definition digest as the "before" digest. When the requested plan
+contains the plan-only change but it is not yet in the machine plan, reconcile uses the
+recorded plan's digest. In both cases it writes the accepted-change record and does not
+decide the request. Then run `sop approval invalidate` as above.
+
 ### Refusal cases
 
 | Situation | Result |
