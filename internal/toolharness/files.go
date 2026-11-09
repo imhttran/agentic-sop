@@ -375,6 +375,15 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 	if h.isProtectedPath(rel) {
 		return resolvedPath{}, fmt.Errorf("%w: %s", ErrProtectedPath, raw)
 	}
+	// SOP owns its runtime state directory. The model may inspect it (except the
+	// state database) but must never author it: run artifacts such as
+	// outcome.json, acceptance_decisions.jsonl, waivers.jsonl, changed-files.json,
+	// and published results are authoritative evidence. A model-written one would
+	// turn prose into a verified outcome, an approval, or implementation progress.
+	// The system prompt already forbids modifying .agent-sdlc; this enforces it.
+	if access == accessWrite && isStatePath(rel) {
+		return resolvedPath{}, fmt.Errorf("%w: %s is SOP state and cannot be written by model tools", ErrProtectedPath, raw)
+	}
 	return resolvedPath{abs: real, rel: rel, root: root.path}, nil
 }
 
@@ -384,6 +393,29 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 func (h *Harness) isProtectedPath(rel string) bool {
 	rel = filepath.ToSlash(filepath.Clean(rel))
 	return rel == stateDBRel
+}
+
+// isStatePath reports whether rel names SOP's runtime state directory. Model
+// tools may read it (except state.db) so an inspection can see configuration,
+// but a write would let a model fabricate authoritative workflow evidence.
+func isStatePath(rel string) bool {
+	rel = filepath.ToSlash(filepath.Clean(rel))
+	return rel == stateDirRel || strings.HasPrefix(rel, stateDirRel+"/")
+}
+
+// IsStatePath reports whether an absolute path lies inside SOP's runtime state
+// directory. It is the read-side counterpart of the write protection: a caller
+// that selects evidence can refuse SOP-owned runtime artifacts as repository
+// proof.
+func (h *Harness) IsStatePath(abs string) bool {
+	if h == nil || strings.TrimSpace(abs) == "" {
+		return false
+	}
+	rel, err := filepath.Rel(h.root, abs)
+	if err != nil {
+		return false
+	}
+	return isStatePath(filepath.ToSlash(rel))
 }
 
 // relFrom renders p relative to base, slash-separated.

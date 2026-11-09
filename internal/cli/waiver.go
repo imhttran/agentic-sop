@@ -143,7 +143,7 @@ func runVerify(args []string, stdout, stderr io.Writer, getwd func() (string, er
 		return exitError
 	}
 	if res == nil {
-		fmt.Fprintf(stdout, "verify %s: no recorded outcome (run the task first)\n", taskID)
+		fmt.Fprintf(stdout, "verify %s: no recorded outcome for the latest run (the lifecycle derived none, or the task has not run)\n", taskID)
 		return exitOK
 	}
 	return printRecordedOutcome(stdout, stderr, dir, taskID, res)
@@ -236,7 +236,7 @@ func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, e
 		return exitError
 	}
 	if res == nil {
-		fmt.Fprintf(stderr, "outcome: no recorded outcome for %s; run the task first\n", taskID)
+		fmt.Fprintf(stderr, "outcome: no recorded outcome for %s in the latest run; run the task first\n", taskID)
 		return exitError
 	}
 	if accept != "" {
