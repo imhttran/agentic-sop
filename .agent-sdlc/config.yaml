@@ -25,6 +25,8 @@ quality:
     - high
 human:
   approval_before_commit: true
+  designated_approvers:
+    - "Tom Tran"
 autonomy:
   level: balanced
 workflow:
