@@ -366,7 +366,9 @@ are the repository's required validation, not a per-criterion substitute.
   the harness does not sandbox subprocesses. `TestSubprocessStateWriteIsOutsideFileToolBoundary`
   records this boundary. This is a Plan 01 execution-isolation concern, not a
   second permission system in this plan. The report does **not** claim
-  comprehensive protection against model-authored state.
+  comprehensive protection against model-authored state. A before/after
+  detection check was investigated and rejected (NO-GO, 2026-11-09): see
+  [llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md).
 - **SOP lifecycle is COMPLETE.** GROUND-001/002/003 are `LOCAL_DONE` through
   external completion; the plan is archived. No merge, install, deployment, or
   worktree removal is claimed for the follow-up PR.
