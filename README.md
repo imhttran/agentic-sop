@@ -173,15 +173,16 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 
 ## Status
 
-### Current delivery notes (2026-11-08)
+### Current delivery notes (2026-11-09)
 
-- PR #259 is merged: opt-in, default-off BM25 code-pointer context is available for
-  IMPLEMENT. The live E2 A/B remains unrun pending model-budget approval, and the
-  advertised FIX-path integration still needs correction.
-- PR #260 is merged: the security shift-left work adds a required-mode readiness
-  probe at the existing pre-IMPLEMENT seam, keeps the single quality gate, leaves
-  project policy report-only, and moves Promptfoo out of routine scans. PR #261 is
-  the active follow-up for verified security gaps.
+- The security shift-left baseline and hardening are merged (PRs #260–#261);
+  project policy remains report-only and the existing deterministic quality gate
+  remains the only verdict authority.
+- OWASP LLM Plans 01, 02, 04, 05, 06, 07, 08, and 10 have merged implementation
+  or evidence. Plan 03 has merged static disclosure controls but its live extraction
+  remains NOT_RUN. Plan 09 is in review in PR #295.
+- Provider requests now carry a 16384-token default output cap (PR #294). Detection
+  of provider responses truncated at that cap remains a follow-up.
 - These capabilities do not change governance authority: deterministic Go remains
   authoritative, and adapter availability does not authorize promotion or enablement.
 
