@@ -68,6 +68,23 @@ func requestFor(t *testing.T, root string) Request {
 	}
 }
 
+func TestDefaultSecurityExcludesMachineLocalEvidence(t *testing.T) {
+	excludes := config.Config{}.SecurityExcludes()
+	for _, path := range []string{
+		".sop-evidence/pr-114-closeout/local-work/projectdetect-exec_test.go",
+		".worktrees/nested/main.go",
+		".agent-sdlc/runs/security/scan.json",
+		".git/config",
+	} {
+		if !ExcludedPath(path, excludes) {
+			t.Errorf("machine-local path %q is inside the default source scope: %v", path, excludes)
+		}
+	}
+	if ExcludedPath("internal/security/exec.go", excludes) {
+		t.Errorf("real source file is outside the default source scope: %v", excludes)
+	}
+}
+
 func TestExcludedPathMatchesDeclaredScope(t *testing.T) {
 	patterns := NormalizeExcludes([]string{
 		"./internal/security/testdata/",
