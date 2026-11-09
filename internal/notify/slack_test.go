@@ -53,6 +53,38 @@ func TestEncodeSlackPayloadHasTextAndEventID(t *testing.T) {
 	}
 }
 
+// TestEncodeSlackPayloadEscapesMrkdwn proves model-derived event text cannot
+// inject a Slack mention or masked link, while the payload stays valid JSON.
+func TestEncodeSlackPayloadEscapesMrkdwn(t *testing.T) {
+	p := completedParams()
+	p.Outcome = "<!channel> see <https://example.invalid|link> & more"
+	e := mustEvent(t, p)
+
+	body, err := EncodeSlackPayload(e)
+	if err != nil {
+		t.Fatalf("EncodeSlackPayload: %v", err)
+	}
+	var msg struct {
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(body, &msg); err != nil {
+		t.Fatalf("payload is not valid JSON: %v", err)
+	}
+	for _, active := range []string{"<!channel>", "<https://"} {
+		if strings.Contains(msg.Text, active) {
+			t.Errorf("payload keeps active mrkdwn %q: %q", active, msg.Text)
+		}
+	}
+	for _, want := range []string{"&lt;!channel&gt;", "&amp;"} {
+		if !strings.Contains(msg.Text, want) {
+			t.Errorf("payload = %q, missing escaped %q", msg.Text, want)
+		}
+	}
+	if !strings.Contains(msg.Text, e.ID) {
+		t.Errorf("payload lost the event id %q: %q", e.ID, msg.Text)
+	}
+}
+
 func TestWebhookNativePayloadUnchanged(t *testing.T) {
 	e := mustEvent(t, completedParams())
 	stub := &bodyTransport{status: 200}

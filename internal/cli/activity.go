@@ -177,9 +177,10 @@ func activityEnabled(w io.Writer) bool {
 
 // isTerminal reports whether w is a character device (an interactive terminal).
 // A bytes.Buffer, a pipe, or a regular file is not, so redirecting stdout keeps
-// the previous, quieter behavior.
+// the previous, quieter behavior. The terminal sink wraps the real writer, so the
+// check unwraps it before inspecting the file.
 func isTerminal(w io.Writer) bool {
-	f, ok := w.(*os.File)
+	f, ok := terminalWriter(w).(*os.File)
 	if !ok {
 		return false
 	}

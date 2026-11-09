@@ -278,6 +278,13 @@ func Run(args []string, stdout, stderr io.Writer) int {
 
 // run is Run with injectable boundaries.
 func run(args []string, stdout, stderr io.Writer, d deps) int {
+	// Every console write passes through the terminal sink. Model, tool, provider,
+	// and command output can carry ANSI/OSC control sequences; filtering here keeps
+	// them out of the operator's terminal without altering persisted artifacts or
+	// machine-readable JSON (whose encoder already escapes control characters).
+	stdout = newTerminalSink(stdout)
+	stderr = newTerminalSink(stderr)
+
 	if len(args) == 0 {
 		writeHelp(stdout)
 		return exitOK
