@@ -57,15 +57,19 @@ None
 
 ### Acceptance Criteria
 
-- The report exists and covers components, owner, acquisition, version/digest, verification, update process, trust limitation, and the SOP-owned versus provider-owned boundary.
-
-### Acceptance Checks
-
-- `go test ./internal/security -run TestOWASPLLMReportsPresent -count=1`
+- Inventory derives from current code/configuration; no hypothetical framework entries.
+- A provider model name is not described as an immutable model digest.
+- Scanner coverage is separated from executable authenticity and model provenance.
+- Hash matching is not represented as publisher authentication.
+- NOT_APPLICABLE entries explain why SOP does not own the loading boundary.
 
 ### Acceptance Mapping
 
-- criterion 1: check 1
+- criterion 1: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Trust-chain inventory; source references `go.mod`, `.agent-sdlc/config.yaml`, and `scripts/security/*-manifest.json`
+- criterion 2: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Trust-chain inventory row "Model providers and model files" and §SOP-owned versus provider-owned
+- criterion 3: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Trust-chain inventory scanner rows and §SOP-owned versus provider-owned
+- criterion 4: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Trust-chain inventory verification column and §Residual gaps and boundaries
+- criterion 5: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Residual gaps and boundaries NOT_APPLICABLE rows and §Trust-chain inventory
 
 ### Execution
 
@@ -89,7 +93,11 @@ before fixing it.
 
 ### Acceptance Criteria
 
-- The OSV acquisition metadata is authoritative for freshness when present; malformed metadata and unreadable acquisition times fail closed; a database without metadata keeps the documented mtime fallback. Existing version, stale-policy, required-mode, and dependency-coverage tests still pass.
+- Focused cases cover missing/mismatched supported tools, corrupt/stale advisory data, and incomplete declared dependency coverage as applicable.
+- Required mode fails closed under its existing contract; report-only remains report-only.
+- No network downloads or tool installs occur implicitly as a test side effect.
+- Fixes are limited to existing contracts; broad signing infrastructure and new mandatory providers are excluded.
+- No new vulnerability suppression is added to manufacture a clean result.
 
 ### Acceptance Checks
 
@@ -98,6 +106,10 @@ before fixing it.
 ### Acceptance Mapping
 
 - criterion 1: check 1
+- criterion 2: check 1
+- criterion 3: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Verification record and §Reproduced gap and fix; no provisioning script ran and the tests use in-memory or temporary fixtures
+- criterion 4: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Reproduced gap and fix and §Residual gaps and boundaries; the diff is limited to `internal/security/osv.go` and its tests
+- criterion 5: manual: `.agent-sdlc/security-baseline.json` is unchanged; docs/reports/owasp-llm/llm04-supply-chain.md §Verification record records the existing 53 suppressions and no new suppression
 
 ### Execution
 
@@ -123,15 +135,23 @@ cumulative matrix at `docs/reports/owasp-llm/README.md`.
 
 ### Acceptance Criteria
 
-- The cumulative matrix exists, links the available reports, marks unavailable Linux work as NOT_RUN, and makes no full-coverage claim from partial evidence. The plan inventory references both new plans.
+- Supported checks are mapped to observed evidence; provider-owned assurances remain unverified unless sourced.
+- Current configured dependency scan is reported with scope, version, database freshness, result, and exact limitations.
+- New provisioning, signature requirements, or required-mode enablement are recorded as concrete policy decisions, not silently enabled.
+- Focused and required checks pass; PR contains final coverage and residual-risk summary.
+- A short cumulative matrix links all four reports without marking a category fully covered from partial evidence.
 
 ### Acceptance Checks
 
-- `go test ./internal/security -run TestOWASPLLMReportsPresent -count=1`
+- `go test ./internal/security -count=1`
 
 ### Acceptance Mapping
 
-- criterion 1: check 1
+- criterion 1: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Verification record and §Trust-chain inventory
+- criterion 2: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Configured scan on this baseline
+- criterion 3: manual: docs/reports/owasp-llm/llm04-supply-chain.md §Residual gaps and boundaries; `.agent-sdlc/config.yaml` still has `security.mode: report-only` and no required categories
+- criterion 4: manual: `sop validate` PASS, `go test ./internal/security -count=1` PASS, and PR #265 body records final coverage and residual risks
+- criterion 5: manual: docs/reports/owasp-llm/README.md cumulative matrix
 
 ### Execution
 

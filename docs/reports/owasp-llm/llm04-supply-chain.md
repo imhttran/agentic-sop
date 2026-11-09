@@ -1,6 +1,6 @@
 # LLM04 — AI supply-chain coverage (SOP Mac workstream)
 
-Status: IMPLEMENTED and VERIFIED for the declared report-only scope.
+Status: IMPLEMENTED; historical SOP outcomes PARTIAL (preserved); declared report-only scan PASS. Provider-owned assurances remain unverified.
 Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c`.
 Host: macOS `Darwin` arm64, Go `1.27.1`.
@@ -185,18 +185,32 @@ criteria remain unmapped, so `VerifyAcceptance` records `PARTIAL` and never
 unverified; it does not mean the configured build, test, lint, or acceptance check
 failed.
 
-The mapping now recorded for this workstream is:
+The first adaptation collapsed each task's original acceptance bullets into one
+criterion and used a Markdown-presence test as the only check. That test verified
+file existence, not the substantive criteria. This revision restores every
+original acceptance criterion and maps it to the evidence that actually applies:
 
-- SUPPLY-001 criterion 1 -> check 1 (`go test ./internal/security -run TestOWASPLLMReportsPresent -count=1`).
-- SUPPLY-002 criterion 1 -> check 1 (`go test ./internal/security -count=1`).
-- SUPPLY-003 criterion 1 -> check 1 (`go test ./internal/security -run TestOWASPLLMReportsPresent -count=1`).
+- SUPPLY-001: five documentation criteria, all mapped to exact sections of this
+  report (trust-chain inventory, provider/model boundary, scanner authenticity,
+  hash-matching limitation, and NOT_APPLICABLE boundaries). No Markdown-presence
+  test is used.
+- SUPPLY-002: five criteria. Criteria 1-2 are verified by
+  `go test ./internal/security -count=1`; criteria 3-5 are manual evidence in this
+  report and the unchanged baseline/configuration (`no network`, `no new
+  suppression`, `fix limited to the OSV adapter`).
+- SUPPLY-003: five criteria. All five are manual evidence: this report's observed
+  checks and configured scan, the unchanged report-only policy, the passing
+  focused/required checks plus PR summary, and the cumulative matrix. The
+  `go test ./internal/security -count=1` check remains a required check but does
+  not by itself satisfy the documentation criteria.
 
 The mapping was added after the first execution. `sop reconcile --accept-changed`
 accepted the changed executed definitions while preserving status and attempt
 history, so the historical outcome artifacts remain `PARTIAL`. This report does
 not rewrite those outcomes and does not claim `VERIFIED` from the final gate
-alone. The mapped checks and the deliverables above are the evidence a future
-re-execution will use.
+alone. Manual mappings require explicit operator acceptance decisions before a
+future run can resolve them; the final gate is validation evidence, not
+acceptance evidence.
 
 ## Residual gaps and boundaries
 
