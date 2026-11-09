@@ -85,7 +85,7 @@ here. Evidence states used in this report:
 | Trust classification | Advisory context. Records become `sopctx.Item`s with `Source: memory` and `Priority: PriorityGeneric` (5), which ranks below task, lifecycle, repository, execution and recovery evidence and above only optional RAG knowledge (6) |
 | Consumer | `internal/cli` `applicableDecisionItems` (`run.go`) adds the records to the bounded agent context through `Store.Applicable`, which returns only records whose `Repository` equals the current `RepositoryIdentity(HEAD, dirty, "")`. Records from another HEAD or dirty state are `Stale` and are reported by `sop memory list`, not applied |
 | Not part of this path | `internal/memindex` does not read `decisions.json`; it indexes outcome records (Path 3). `internal/decisionadapter` is the decision-provider seam, not decision memory |
-| Removal | No supported removal or invalidation subcommand exists. See §Recovery and invalidation evidence (`GAP-7`) |
+| Removal | `sop memory remove --id <id>` (`runMemoryRemove` → `Store.Remove`) deletes exactly one record; `sop memory list` prints each record's `id`. An unknown id fails and leaves the file unchanged (`GAP-7`, fixed) |
 
 ### Path 5 — Model selection recorded in a run report
 
@@ -119,7 +119,7 @@ override authoritative state?
 | 1 | `internal/repoindex` `Build`, `classifyAuthority` | An indexed document cannot claim a verified run outcome. It receives a deterministic `DocumentClass` and `Authority` (`current`, `historical`, `unknown`), so a document header can at most claim document authority, never execution evidence. A new content change yields a new `Identity.Digest`. |
 | 2 | `internal/outcomefile` `IngestRunFor` (`Redact`), then `Eligible` | Retrieved content cannot create a success. It enters record text as advisory data and is redacted; a success claim must still pass `successCorroborated`. |
 | 3 | `successCorroborated`; `declaredID != taskID` check; strict `counts.json` decode; `Eligible`; `GateWithSourcesAndDigests`; `memindex.RebuildFromDir` digest-less downgrade | A forged `outcome.status` is downgraded to `partial` because `successCorroborated` requires a non-failing quality-gate verdict and decision, at least one recorded validation result with every result passing (exit code 0 and a passing status), every boundary criterion met, and at least one required criterion with every required criterion met. A report substituted under another task's directory is rejected. A malformed `counts.json` is rejected. A success whose recorded verification failed is excluded as `verification contradicts success`. A record whose source is deleted, modified, or has no recorded digest is excluded (`source deleted`, `source modified`, `source unverified`). A success written before digests existed is rebuilt as `partial`. |
-| 4 | `decisionmemory.Store.Applicable`; `internal/cli` `applicableDecisionItems` | A decision record cannot claim a verified outcome: it is never written as an outcome record, never passes through `Eligible`, and reaches the model only as generic-priority context text. It cannot override lifecycle or approval state, which live in `state.db`. Limit: anyone who can write `.agent-sdlc/context/decisions.json` can add a record stamped with the current repository identity, and it will be included as context (`GAP-6` covers the related overwrite behaviour). There is no supported way to remove a record (`GAP-7`). |
+| 4 | `decisionmemory.Store.Applicable`; `internal/cli` `applicableDecisionItems` | A decision record cannot claim a verified outcome: it is never written as an outcome record, never passes through `Eligible`, and reaches the model only as generic-priority context text. It cannot override lifecycle or approval state, which live in `state.db`. Limit: anyone who can write `.agent-sdlc/context/decisions.json` can add a record stamped with the current repository identity, and it will be included as context (`GAP-6`, fixed: `memory add` and `memory remove` now refuse to overwrite a file they cannot round-trip). A record is retired with `sop memory remove --id <id>` (`GAP-7`, fixed). |
 | 5 | None | Model selection is copied into `Environment` as advisory context. It cannot claim a verified outcome. |
 
 ## Provider-owned boundary
@@ -292,6 +292,12 @@ and not applied. Removing the records file by hand is outside the supported cont
 and is not recommended here. This report adds no destructive cleanup command and no
 `remove` subcommand.
 
+Follow-up fix: `GAP-7` is now fixed. `sop memory remove --id <id>` deletes exactly one
+record through `decisionmemory.Store.Remove`, `sop memory list` prints each applicable
+record's `id`, and an unknown id exits 1 with the file unchanged
+(`TestMemoryRemoveByID` in `internal/cli/memory_test.go`). The evidence table above is
+the pre-fix reproduction.
+
 ### Summary of recovery dispositions
 
 | Path | Remediation | State |
@@ -299,7 +305,7 @@ and is not recommended here. This report adds no destructive cleanup command and
 | Structural index | Rerun `sop index` after any content change | `VERIFIED` |
 | Outcome record, source changed or deleted | Rerun `internal/memindex` `RebuildFromDir`; `GateWithSourcesAndDigests` excludes the record | `VERIFIED` |
 | Outcome record, uncorroborated success | `successCorroborated` downgrades to `partial` on ingest | `VERIFIED` |
-| Decision-memory record | No supported removal or invalidation command | `GAP` (GAP-7) |
+| Decision-memory record | `sop memory remove --id <id>` (id from `sop memory list`) | `VERIFIED` (GAP-7 fixed, `TestMemoryRemoveByID`) |
 
 No supported path in this section deletes authoritative history. The paths rewrite a
 derived index artifact or exclude a record from the advisory index. The persisted run
@@ -356,8 +362,8 @@ above.
 | GAP-3 | `internal/decisionmemory`, `internal/cli` `applicableDecisionItems` — whether a decision record can claim a verified outcome or override authoritative state | **Closed by trace, no change** — it cannot (see §Verified-override analysis, path 4). `decisions.json` has no integrity check, so it is trusted only as advisory context | Code trace above |
 | GAP-4 | `internal/repoindex` `File` / `Document` — indexed document rows carry no per-file content digest, so a single document row is not independently digest-verified | **Open** | `go test ./internal/repoindex -count=1` (index identity only) |
 | GAP-5 | `internal/ragclient` `Evidence.DocumentHash` — the per-item `document_hash` is reported by the retrieval server and is not recomputed or verified by SOP against the returned text | **Open** (trust limit) | No reproducing test or command exists yet |
-| GAP-6 | `internal/cli` `loadDecisionStore` / `saveDecisionStore` — an unreadable `decisions.json` (malformed JSON or an unknown schema) loads as an empty store, and the next `sop memory add` overwrites the file, so the earlier records are lost without a warning | **Open** | In a disposable git repo: write `{"schema":"unknown-future","records":[{"decision":"keep me"}]}` to `.agent-sdlc/context/decisions.json`, run `sop memory add --decision new --reason r`; the command exits 0 and the file then holds only the new record |
-| GAP-7 | `internal/cli` `runMemory` / `memoryUsage`, `internal/decisionmemory` `Store` — decision memory has no supported removal or invalidation command, so a poisoned decision record cannot be retired through the CLI | **Open** (recovery gap, recorded by POISON-003; no destructive command is added) | Run `sop memory remove --decision probe` in a disposable copy: exit code 2, `unknown memory command: remove`, then the `memoryUsage` line. See §Recovery and invalidation evidence, Path D |
+| GAP-6 | `internal/cli` `loadDecisionStore` / `saveDecisionStore` — an unreadable `decisions.json` (malformed JSON or an unknown schema) loads as an empty store, and the next `sop memory add` overwrites the file, so the earlier records are lost without a warning | **Fixed** (`loadDecisionStoreForWrite`, via `decisionmemory.UnmarshalStrict`, refuses a malformed, unknown-schema or partly invalid file, exits 1 and leaves the bytes unchanged; reading for context still applies nothing and never writes) | `go test ./internal/cli -run TestMemoryAddRefusesUnreadableStore -count=1`. Pre-fix reproduction: in a disposable git repo, write `{"schema":"unknown-future","records":[{"decision":"keep me"}]}` to `.agent-sdlc/context/decisions.json` and run `sop memory add --decision new --reason r`; before the fix it exited 0 and the file held only the new record |
+| GAP-7 | `internal/cli` `runMemory` / `memoryUsage`, `internal/decisionmemory` `Store` — decision memory has no supported removal or invalidation command, so a poisoned decision record cannot be retired through the CLI | **Fixed** (`sop memory remove --id <id>` via `Store.Remove`; `sop memory list` prints ids; an unknown id exits 1 with the file unchanged) | `go test ./internal/cli -run TestMemoryRemoveByID -count=1`. Pre-fix reproduction: §Recovery and invalidation evidence, Path D |
 
 ## Disposition
 
@@ -371,14 +377,13 @@ above.
 - GAP-4 and GAP-5 are **open** trust limits. They are recorded here rather than
   fixed, because each would need a new contract or new policy. GAP-5 states
   explicitly that no reproducing test or command exists yet.
-- GAP-6 is **open** and reproducible. It is a defect in an existing contract and is
-  proposed as a follow-up change: refuse to overwrite an unreadable
-  `decisions.json` instead of replacing it. This report-only task does not change
-  code. No new control is added by this report.
-- GAP-7 is **open**. It is the recovery gap recorded by POISON-003: decision memory
-  has no supported removal or invalidation command. It is documented, not fixed. No
-  destructive cleanup command is added, and no new subcommand is proposed by this
-  report.
+- GAP-6 is **fixed** in a follow-up change. `sop memory add` (and `sop memory
+  remove`) refuse to overwrite a `decisions.json` that is malformed, has another
+  schema, or holds records that fail validation; they exit 1 and the file bytes are
+  unchanged (`TestMemoryAddRefusesUnreadableStore`).
+- GAP-7 is **fixed** in a follow-up change. `sop memory remove --id <id>` retires
+  exactly one record, `sop memory list` prints each record's id, and an unknown id
+  fails with the file unchanged (`TestMemoryRemoveByID`).
 - Provider-owned training, fine-tuning and weight loading remain outside direct SOP
   control. They have no disposition of "fixed" here.
 
@@ -402,9 +407,8 @@ Further limits:
 
 - Retrieval query isolation is not covered here. It is handed to Plan 09
   (`docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md`).
-- Decision memory has no supported removal or invalidation command (`GAP-7`), and no
-  integrity check on `decisions.json`; it is trusted only as advisory context, and an
-  unreadable file is silently replaced (`GAP-6`).
+- Decision memory has no integrity check on `decisions.json`; it is trusted only as
+  advisory context. Removal (`GAP-7`) and the overwrite refusal (`GAP-6`) are fixed.
 - The provider owns model training and weight provenance. SOP cannot verify either
   from this repository.
 
@@ -425,10 +429,10 @@ passing command below. `NOT_RUN` marks evidence this report does not supply.
 | Structural index reindex before/after | `VERIFIED` | §Recovery and invalidation evidence, Path A |
 | Outcome reindex invalidation before/after | `VERIFIED` | `internal/memindex/provenance_test.go` (`TestReindexProvenanceBeforeAndAfterRebuild`) |
 | Success corroboration on ingest | `VERIFIED` | `internal/outcomefile/provenance_test.go` (`TestIngestProvenance*`) |
-| Decision-memory removal | `GAP` (GAP-7) | `internal/cli/memory.go` (`memoryUsage`), `internal/decisionmemory/decisionmemory.go` |
+| Decision-memory removal | `VERIFIED` (GAP-7 fixed) | `internal/cli/memory.go` (`runMemoryRemove`), `internal/cli/memory_test.go` (`TestMemoryRemoveByID`) |
 | External retrieval client | `IMPLEMENTED` | `internal/ragclient/ragclient.go` |
 | Retrieval query isolation | `NOT_APPLICABLE` here | Handed to Plan 09 (`docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md`) |
-| Decision-memory trace | `IMPLEMENTED` (read from code); overwrite defect `GAP-6` reproduced with the scratch `sop` build of `origin/main` `87d68ad9`, macOS arm64 | `internal/decisionmemory/decisionmemory.go`, `internal/cli/memory.go`, `internal/cli/run.go` |
+| Decision-memory trace | `IMPLEMENTED` (read from code); overwrite defect `GAP-6` reproduced with the scratch `sop` build of `origin/main` `87d68ad9`, macOS arm64, and fixed (`loadDecisionStoreForWrite` → `decisionmemory.UnmarshalStrict`, `TestMemoryAddRefusesUnreadableStore`) | `internal/decisionmemory/decisionmemory.go`, `internal/cli/memory.go`, `internal/cli/run.go` |
 | Training / fine-tuning / weight loading | `NOT_APPLICABLE` | Absence search above |
 
 Focused commands for the fixed and recovery contracts:
@@ -438,6 +442,7 @@ Focused commands for the fixed and recovery contracts:
 | `go test ./internal/outcomefile -run TestIngestProvenance -count=1` | 0 | PASS — the selected `TestIngestProvenance*` tests ran and passed, including `TestIngestProvenanceTamperedSuccessIsNotVerified`, `TestIngestProvenanceMalformedCountsRejected` and `TestIngestProvenanceModifiedSourceInvalidated` |
 | `go test ./internal/memindex -run TestReindexProvenance -count=1` | 0 | PASS — all four `TestReindexProvenance*` tests ran and passed |
 | `go test ./internal/repoindex -count=1` | 0 | PASS — index identity tests passed |
+| `go test ./internal/cli -run 'TestMemoryAddRefusesUnreadableStore\|TestMemoryRemoveByID' -count=1` | 0 | PASS — GAP-6 overwrite refused with bytes unchanged (unknown schema, malformed JSON, invalid record); GAP-7 removal by id and unknown id rejected |
 
 Required checks for POISON-003:
 
