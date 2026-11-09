@@ -2,8 +2,8 @@
 
 Status: `VERIFIED` for the merged execution controls on macOS and Linux CI; the
 validation-runner output fix is on the follow-up branch; the provider
-output-token cap now defaults to 16384 tokens per request, and each supported
-agent adapter rejects a provider-reported `length` truncation instead of
+output-token cap now defaults to 16384 tokens per request, and the built-in
+provider adapters reject a provider-reported `length` truncation instead of
 accepting it as a complete response.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
 Base commit: `360b96ef721526e58b89f7a7986849caa8a96080` (`origin/main` after the follow-up rebase).
