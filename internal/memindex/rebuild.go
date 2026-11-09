@@ -48,7 +48,12 @@ func SnapshotGatedContext(ctx context.Context, dir string) (map[string]outcomefi
 	if err != nil {
 		return nil, err
 	}
-	excluded := outcomefile.GateWithSourcesAndDigests(records, outcomefile.FileSourceExists, outcomefile.FileSourceDigest)
+	excluded, gerr := outcomefile.GateWithSourcesAndDigestsContext(ctx, records, outcomefile.FileSourceExists, func(path string) (string, error) {
+		return outcomefile.FileSourceDigestContext(ctx, path)
+	})
+	if gerr != nil {
+		return nil, gerr
+	}
 	excludedIDs := make(map[string]bool, len(excluded))
 	for _, e := range excluded {
 		excludedIDs[e.RecordID] = true
