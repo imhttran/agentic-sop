@@ -218,8 +218,15 @@ func (s *Store) Marshal() ([]byte, error) {
 
 // Unmarshal loads a store written by Marshal. A store whose schema does not match the
 // current SchemaVersion loads empty rather than applying decisions from an incompatible
-// schema.
-func Unmarshal(data []byte) (*Store, error) {
+// schema, and invalid records are skipped.
+func Unmarshal(data []byte) (*Store, error) { return decode(data, false) }
+
+// UnmarshalStrict is Unmarshal for a caller that will rewrite the store: it fails on
+// another schema or an invalid record instead of dropping it, so a rewrite never
+// silently loses what the file held.
+func UnmarshalStrict(data []byte) (*Store, error) { return decode(data, true) }
+
+func decode(data []byte, strict bool) (*Store, error) {
 	var doc struct {
 		Schema  string   `json:"schema"`
 		Limit   int      `json:"limit"`
@@ -230,10 +237,16 @@ func Unmarshal(data []byte) (*Store, error) {
 	}
 	s := New(doc.Limit)
 	if doc.Schema != SchemaVersion {
+		if strict {
+			return nil, fmt.Errorf("decisionmemory: schema %q, not %q", doc.Schema, SchemaVersion)
+		}
 		return s, nil
 	}
-	for _, r := range doc.Records {
-		if r.validate() != nil {
+	for i, r := range doc.Records {
+		if err := r.validate(); err != nil {
+			if strict {
+				return nil, fmt.Errorf("record %d: %w", i, err)
+			}
 			continue
 		}
 		s.records[r.ID()] = r
