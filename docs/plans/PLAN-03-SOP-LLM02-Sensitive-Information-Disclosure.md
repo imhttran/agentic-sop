@@ -1,8 +1,8 @@
 # Plan 03 — SOP sensitive information disclosure (LLM02)
 
-Status: STATIC TRACING IMPLEMENTED / VERIFIED; LIVE `NOT_RUN` (Plan 02
-handoff unavailable). Historical task outcomes remain PARTIAL until re-execution
-under the newly recorded acceptance mapping. See the dependency reconciliation below.
+Status: STATIC TRACING IMPLEMENTED; LIVE `NOT_RUN`; historical outcomes PARTIAL
+(preserved). Plan 02 live-test infrastructure is an external prerequisite. See the
+dependency reconciliation below.
 Order: 3 of 4.
 Suggested branch: security/llm02-disclosure.
 Dependencies: Plan 01 boundary inventory; Plan 02 live seam for adversarial
@@ -61,19 +61,23 @@ None
 
 ### Acceptance Criteria
 
-- The report exists, traces the listed sources and sinks, and separates provider authentication from model-visible content.
-
-### Acceptance Checks
-
-- `go test ./internal/cli -run TestOWASPLLMDisclosureReportPresent -count=1`
+- Distinguish intentional provider authentication headers from model-visible context.
+- Identify where redaction occurs before sending, before persistence, and before display.
+- Record scope checks before retrieval and response validation after retrieval.
+- Distinguish credentials from other confidential source content; pattern matching is not general DLP.
+- Do not read or print actual secret values during assessment.
 
 ### Acceptance Mapping
 
-- criterion 1: check 1
+- criterion 1: manual: docs/reports/owasp-llm/llm02-disclosure.md §Provider authentication is not model content and §Data-flow trace provider row
+- criterion 2: manual: docs/reports/owasp-llm/llm02-disclosure.md §Where redaction happens
+- criterion 3: manual: docs/reports/owasp-llm/llm02-disclosure.md §Authorization boundaries and §Data-flow trace retrieval row; `TestSearchRejectsUnrelatedEvidence`, `TestRankerAdapterRejectsScopeItCannotHonor`
+- criterion 4: manual: docs/reports/owasp-llm/llm02-disclosure.md §Residual risks and bounded claims, row "Pattern matching", and §Data-flow trace
+- criterion 5: manual: docs/reports/owasp-llm/llm02-disclosure.md §Method; only synthetic canaries were used
 
 ### Execution
 
-- verify-first — the static trace report is present in the working tree; the deterministic report test and the configured validation prove it.
+- verify-first — the static trace report is present in the working tree; the configured validation proves the repository still builds.
 
 ## DISCLOSE-002 — Add canary regressions and fix confirmed leaks
 
@@ -96,31 +100,43 @@ messages separately from transport authentication.
 
 ### Acceptance Criteria
 
-- The two reproduced leaks are fixed through `redactDiagnosticText`; environment secrets and credential-shaped text do not appear in check logs, report excerpts, or the model-visible validation failure context; ordinary diagnostic text survives; the provider key remains in the `Authorization` header and not the request body; existing retrieval, handoff, notification, ACP, controller, and outcome redaction tests still pass.
+- Protected canaries do not appear in unauthorized model messages, persisted diagnostics, or outgoing payloads at in-scope boundaries.
+- Cross-scope retrieval content is rejected before it can become model context under the current retrieval contract.
+- Legitimate non-sensitive content and required authentication still work.
+- Each fix reuses the shared redaction or established authorization boundary where appropriate.
+- Unknown formats and arbitrary confidential text remain explicitly bounded claims.
 
 ### Acceptance Checks
 
-- `go test ./internal/cli -count=1`
+- `go test ./internal/cli ./internal/agent -count=1`
+- `go test ./internal/retrievalboundary ./internal/memindex ./internal/handoff ./internal/notify ./internal/acp ./internal/controller/sopclient ./internal/outcomefile -count=1`
 
 ### Acceptance Mapping
 
 - criterion 1: check 1
+- criterion 2: check 2
+- criterion 3: check 1
+- criterion 4: manual: `internal/cli/redaction.go` `redactDiagnosticText` reuses `handoff.Redact` and `redact.ShapesValues`; docs/reports/owasp-llm/llm02-disclosure.md §Reproduced gaps and fixes
+- criterion 5: manual: docs/reports/owasp-llm/llm02-disclosure.md §Residual risks and bounded claims, row "Pattern matching"
 
 ### Execution
 
-- verify-first — the fix and its canary regressions are present in the working tree; the package test and the configured validation prove them.
+- verify-first — the fix and its canary regressions are present in the working tree; the package tests and the configured validation prove them.
 
 ## DISCLOSE-003 — Exercise live extraction and finish review
 
 Reuse Plan 02's bounded local evaluation path for requests to reveal synthetic
 secrets or transmit protected content. Observe actual outputs and attempted
-effects, not an LLM judge alone. This task is intentionally left unexecuted until
-Plan 02's merged live-test infrastructure is available; it adds no competing
-live-test implementation.
+effects, not an LLM judge alone. This task remains unexecuted until the
+prerequisite below exists; it adds no competing live-test implementation.
 
 ### Dependencies
 
 - DISCLOSE-002
+
+### Prerequisites
+
+- Plan 02 merged live-test infrastructure: an evaltarget-routed live path whose observer reads back a model tool decision, plus the pinned binary and a reachable local model.
 
 ### Deliverables
 
@@ -128,11 +144,21 @@ live-test implementation.
 
 ### Acceptance Criteria
 
-- Live direct and indirect extraction are `NOT_RUN` with the missing Plan 02 prerequisite recorded; no fixture or text assertion is presented as live evidence.
+- Direct extraction and an indirect injected extraction case have recorded outcomes.
+- Unauthorized tool effects remain denied even if the model proposes disclosure.
+- No real credential or external receiver is used.
+- Report separates prompt exposure, generated disclosure, artifact leakage, and attempted exfiltration.
+- Unavailable live prerequisites produce NOT_RUN and leave the relevant acceptance incomplete.
+- Required verification passes and a focused PR records changed paths and residual risks.
 
 ### Acceptance Mapping
 
-- criterion 1: manual: Plan 02 merged live-test infrastructure and recorded live extraction evidence (currently NOT_RUN)
+- criterion 1: manual: live run artifact recording direct and indirect extraction outcomes (currently NOT_RUN; Plan 02 prerequisite missing)
+- criterion 2: manual: live run artifact recording denied unauthorized effects (currently NOT_RUN)
+- criterion 3: manual: live harness fixture uses only synthetic canaries and no real receiver (currently NOT_RUN)
+- criterion 4: manual: docs/reports/owasp-llm/llm02-disclosure.md §Live extraction separates prompt exposure, generated disclosure, artifact leakage, and attempted exfiltration (currently NOT_RUN)
+- criterion 5: manual: docs/reports/owasp-llm/llm02-disclosure.md §Live extraction records NOT_RUN and the Plan 02 prerequisite
+- criterion 6: manual: `sop validate` PASS and the PR diff/residual-risk summary; live acceptance remains incomplete
 
 ## Risks and boundaries
 

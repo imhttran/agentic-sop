@@ -163,18 +163,34 @@ criteria remain unmapped, so `VerifyAcceptance` records `PARTIAL` and never
 unverified; it does not mean the configured build, test, lint, or acceptance check
 failed.
 
-The mapping now recorded for this workstream is:
+The first adaptation collapsed each task's original acceptance bullets into one
+criterion and used a Markdown-presence test as the only check. That test verified
+file existence, not the substantive criteria. This revision restores every
+original acceptance criterion:
 
-- DISCLOSE-001 criterion 1 -> check 1 (`go test ./internal/cli -run TestOWASPLLMDisclosureReportPresent -count=1`).
-- DISCLOSE-002 criterion 1 -> check 1 (`go test ./internal/cli -count=1`).
-- DISCLOSE-003 criterion 1 -> manual: Plan 02 merged live-test infrastructure and recorded live extraction evidence (currently `NOT_RUN`).
+- DISCLOSE-001: five documentation criteria, all mapped to exact sections of this
+  report (authentication vs. model context, redaction ordering, retrieval scope,
+  credential vs. confidential content, and the no-real-secret method). No
+  Markdown-presence test is used.
+- DISCLOSE-002: five criteria. Criteria 1-3 are covered by
+  `go test ./internal/cli ./internal/agent -count=1` and the retrieval/handoff/
+  notification/ACP/controller/outcome package tests; criterion 4 is manual source
+  evidence for the shared redaction reuse; criterion 5 is the bounded-claims row
+  in this report.
+- DISCLOSE-003: six criteria, all manual live-evidence criteria. The Plan 02
+  merged live-test infrastructure is a **prerequisite**, not an acceptance
+  result. Acceptance requires observed direct and indirect extraction outcomes,
+  denied unauthorized effects, no real credential or receiver, separated
+  disclosure categories, and recorded evidence. All remain `NOT_RUN`; the task
+  stays `PLANNED`.
 
 The mapping for the two executed tasks was added after their first execution.
-`sop reconcile --accept-changed` accepted the changed executed definition while
-preserving status and attempt history, so the historical outcome artifact remains
-`PARTIAL`. This report does not rewrite that outcome and does not claim `VERIFIED`
-from the final gate alone. DISCLOSE-003 remains `PLANNED`; its manual mapping does
-not mark live acceptance complete.
+`sop reconcile --accept-changed` accepted the changed executed definitions while
+preserving status and attempt history, so the historical outcome artifacts remain
+`PARTIAL`. This report does not rewrite those outcomes and does not claim
+`VERIFIED` from the final gate alone. Manual mappings require explicit operator
+acceptance decisions before a future run can resolve them; the final gate is
+validation evidence, not acceptance evidence.
 
 ## Configured scan on this baseline
 
@@ -211,8 +227,11 @@ model tool decision through `evaltarget` (see
 - Prerequisite: an evaltarget-routed live path whose observer reads back a model
   tool decision, plus the pinned binary and a reachable local model.
 
-These acceptance items remain incomplete. No fixture or text assertion is
-presented as live evidence.
+The prerequisite is not itself acceptance. Acceptance requires observed direct and
+indirect extraction outcomes, denied unauthorized effects even when the model
+proposes disclosure, no real credential or external receiver, the four separated
+disclosure categories, and recorded evidence. These acceptance items remain
+incomplete. No fixture or text assertion is presented as live evidence.
 
 ## Residual risks and bounded claims
 
