@@ -20,6 +20,27 @@
         },
       },
     },
+    // Opt-in profile for deterministic CI repair. It can read, edit, and run
+    // commands, but not delete paths or spawn subagents, so a repair cannot widen
+    // itself into unrelated work. The behaviour lives in skills/sop-ci-fix.
+    "profiles": {
+      "ci-fix": {
+        "name": "CI Fix",
+        "tools": {
+          "read_file": true,
+          "grep": true,
+          "find_path": true,
+          "list_directory": true,
+          "edit_file": true,
+          "write_file": true,
+          "move_path": true,
+          "copy_path": true,
+          "diagnostics": true,
+          "terminal": true,
+          "skill": true,
+        },
+      },
+    },
   },
   "languages": {
     "Rust": {
