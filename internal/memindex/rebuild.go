@@ -38,8 +38,9 @@ func SnapshotContext(ctx context.Context, dir string) (map[string]outcomefile.Ou
 // that fail eligibility (incomplete, superseded, unauthorized) are counted once as
 // excluded and not indexed. A record whose source artifact is missing or whose content no
 // longer matches the digest recorded at ingest time is excluded and counted, not indexed.
-// Documents rejected by the reader carry an explicit reason. The result is deterministic
-// for the same frozen source records.
+// A success written before provenance digests existed is indexed as partial advisory
+// history, never as a verified success. Documents rejected by the reader carry an explicit
+// reason. The result is deterministic for the same frozen source records.
 func (ix *Index) RebuildFromDir(ctx context.Context, dir string) (RebuildReport, error) {
 	records, rejected, err := outcomefile.ReadAllContext(ctx, dir)
 	if err != nil {
@@ -59,13 +60,20 @@ func (ix *Index) RebuildFromDir(ctx context.Context, dir string) (RebuildReport,
 			continue
 		}
 		if ok, _ := r.Eligible(); ok {
+			status := r.Status
+			if status == outcomefile.StatusSuccess && len(r.SourceDigests) == 0 {
+				// A success written before provenance digests cannot prove it was
+				// corroborated at ingest. Keep it as advisory history, but never as a
+				// verified success.
+				status = outcomefile.StatusPartial
+			}
 			in = append(in, Record{
 				RecordID:    r.RecordID,
 				ContentHash: r.ContentHash,
 				Corpus:      r.Corpus,
 				Repository:  r.Repository,
 				TaskID:      r.TaskID,
-				Status:      string(r.Status),
+				Status:      string(status),
 				Lifecycle:   r.Lifecycle,
 				Eligible:    true,
 				Citation:    r.Citation,
