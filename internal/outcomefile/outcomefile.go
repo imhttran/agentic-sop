@@ -547,6 +547,9 @@ type runReport struct {
 			Description string `json:"Description"`
 			Evidence    string `json:"Evidence"`
 		} `json:"criteria"`
+		Validation struct {
+			Passed *bool `json:"passed"`
+		} `json:"validation"`
 		Reasons       []string `json:"reasons"`
 		Lifecycle     string   `json:"lifecycle"`
 		Compatibility string   `json:"compatibility"`
@@ -704,6 +707,16 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 // even when it is not required, because the outcome verifier treats that case as HOLD.
 // Anything else leaves the claim uncorroborated.
 func successCorroborated(rep runReport) bool {
+	// The quality gate's verdict is separate from the command results. A report that
+	// records a failed gate (for example, a blocking review finding) cannot corroborate
+	// a success even when every command passed. An absent verdict stays compatible with
+	// reports written before the field existed.
+	if rep.Outcome.Validation.Passed != nil && !*rep.Outcome.Validation.Passed {
+		return false
+	}
+	if decision := strings.ToUpper(strings.TrimSpace(rep.Decision)); decision != "" && decision != "PASS" {
+		return false
+	}
 	if len(rep.Validation) == 0 {
 		return false
 	}

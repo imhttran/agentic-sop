@@ -33,7 +33,13 @@ type provenanceReport struct {
 	Reason     string
 	Criteria   []provenanceCriterion
 	Validation []provenanceValidation
+	// GatePassed models the nested quality-gate verdict. Nil means the report predates
+	// the field, so it is not treated as a contradiction.
+	GatePassed *bool
 }
+
+// boolPtr returns a pointer to v for an optional fixture field.
+func boolPtr(v bool) *bool { return &v }
 
 // passingReport returns a report that corroborates a claimed success.
 func passingReport(id, reason string) provenanceReport {
@@ -55,6 +61,16 @@ func writeProvenanceRun(t *testing.T, runsDir, dirTaskID string, rep provenanceR
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
 	}
+	outcome := map[string]any{
+		"status":        rep.Outcome,
+		"criteria":      rep.Criteria,
+		"reasons":       []string{rep.Reason},
+		"lifecycle":     "LOCAL_DONE",
+		"compatibility": "declared acceptance mapping",
+	}
+	if rep.GatePassed != nil {
+		outcome["validation"] = map[string]any{"passed": *rep.GatePassed}
+	}
 	body := map[string]any{
 		"id":         rep.ID,
 		"stage":      "PASSED",
@@ -65,13 +81,7 @@ func writeProvenanceRun(t *testing.T, runsDir, dirTaskID string, rep provenanceR
 			"class": "large", "provider": "ollama", "model": "m",
 			"locality": "cloud", "source": "env", "fallback": false,
 		},
-		"outcome": map[string]any{
-			"status":        rep.Outcome,
-			"criteria":      rep.Criteria,
-			"reasons":       []string{rep.Reason},
-			"lifecycle":     "LOCAL_DONE",
-			"compatibility": "declared acceptance mapping",
-		},
+		"outcome":      outcome,
 		"generated_at": "2026-10-19T17:10:35.909017Z",
 	}
 	data, err := json.MarshalIndent(body, "", "  ")
@@ -112,6 +122,8 @@ func TestIngestProvenanceTamperedSuccessIsNotVerified(t *testing.T) {
 				{ID: "boundary-1", Required: false, Met: false, Boundary: true},
 			}
 		}},
+		{"failed quality gate", func(r *provenanceReport) { r.GatePassed = boolPtr(false) }},
+		{"failed quality decision", func(r *provenanceReport) { r.Decision = "FAIL" }},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
