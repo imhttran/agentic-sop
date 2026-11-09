@@ -18,6 +18,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/executionlease"
 	"github.com/imhttran/agentic-sop/internal/failure"
+	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/perf"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/quality"
@@ -543,6 +544,14 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 			id := res.Task.ID
 			attempt := res.Task.Attempt
 			tasksEntered++
+			if handled, code := resumeAcceptedOutcome(ctx, dir, cfg, st, res.Task, stdout, stderr); handled {
+				addTaskMetrics(run, dir, id)
+				if code != exitOK {
+					return code
+				}
+				completed++
+				continue
+			}
 			code := runScheduledTask(ctx, dir, cfg, a, d, st, res.Task, sess, stdout, stderr)
 			addTaskMetrics(run, dir, res.Task.ID)
 			if code != exitOK {
@@ -1242,6 +1251,119 @@ func completeTask(saver taskSaver, task *domain.Task) error {
 	task.Status = staged.Status
 	task.UpdatedAt = staged.UpdatedAt
 	return nil
+}
+
+// resumeAcceptedOutcome completes a task from an already-recorded manual
+// acceptance outcome without re-entering planning or implementation. It is
+// deliberately narrow: the persisted outcome must have passed validation, the
+// task must have an approved gate, and the current plan mapping must be
+// manual-only. Validation is reused through the existing verifcache identity
+// contract, or re-run when that contract does not permit reuse. Only a VERIFIED
+// derived outcome completes the task. A still-partial manual outcome is reported
+// as WAITING_FOR_ACCEPTANCE and left runnable; a stale or mismatched decision
+// never falls through to a silent completion.
+func resumeAcceptedOutcome(ctx context.Context, dir string, cfg config.Config, saver taskSaver, task *domain.Task, stdout, stderr io.Writer) (bool, int) {
+	if task == nil || len(task.RequiredEvidence) > 0 {
+		return false, exitOK
+	}
+	prior, err := readOutcomeArtifact(dir, task.ID)
+	if err != nil || prior == nil || prior.Validation == nil || !prior.Validation.Passed {
+		return false, exitOK
+	}
+	hasManual := false
+	for _, m := range prior.Mappings {
+		if m.Kind == outcome.EvidenceManual {
+			hasManual = true
+			break
+		}
+	}
+	if !hasManual {
+		return false, exitOK
+	}
+	rec := runpkg.At(runpkg.Dir(dir, task.ID))
+	req, ok := rec.Approval()
+	if !ok || req.TaskID != task.ID || req.Status != domain.ApprovalApproved {
+		return false, exitOK
+	}
+
+	spec := specFromTask(task)
+	spec.Deliverables = planTaskDeliverables(dir, task)
+	spec.DeliverableGroups = deliverableGroups(spec)
+	spec.AcceptanceChecks = planTaskAcceptanceChecks(dir, task)
+	spec.AcceptanceMapping = planTaskAcceptanceMapping(dir, task)
+	if len(spec.AcceptanceMapping) == 0 {
+		return false, exitOK
+	}
+	if code := runPreflight(dir, PreflightDeclarationsFromConfig(cfg, spec.AcceptanceChecks), stdout, stderr); code != exitOK {
+		return true, code
+	}
+	suite, reused, _ := validateWithCache(ctx, dir, &cfg, true)
+	if !suite.Passed() {
+		return false, exitOK
+	}
+	derived := deriveGatedOutcome(cfg, spec, dir, quality.Result{
+		Decision: quality.Pass,
+		Reasons:  []string{"all required checks passed"},
+	})
+	if derived == nil {
+		return false, exitOK
+	}
+	if derived.Status == outcome.Verified {
+		if err := completeTask(saver, task); err != nil {
+			fmt.Fprintf(stderr, "run: accepted outcome: %v\n", err)
+			return true, exitError
+		}
+		validationNote := "executed"
+		if reused {
+			validationNote = "reused"
+		}
+		fmt.Fprintf(stdout, "Accepted: %s LOCAL_DONE %s (existing accepted outcome; validation %s; no implementation agent invoked)\n", task.ID, task.Title, validationNote)
+		fmt.Fprintf(stdout, "outcome: %s\n", derived.Status)
+		return true, exitOK
+	}
+	if missing, waiting := manualAcceptanceWaiting(derived); waiting {
+		fmt.Fprintf(stdout, "%s WAITING_FOR_ACCEPTANCE: the approved gate does not satisfy the required manual criteria %s; record each decision with `sop outcome %s --accept <criterion-id> --evidence <reviewed evidence> --by <designated approver>`\n", task.ID, strings.Join(missing, ", "), task.ID)
+		return true, exitApprovalBlocked
+	}
+	return false, exitOK
+}
+
+// manualAcceptanceWaiting reports whether the derived outcome is PARTIAL only
+// because required manual criteria are not accepted. A validation failure, a
+// missing deliverable, or any failed non-manual criterion returns false so the
+// ordinary lifecycle can handle it.
+func manualAcceptanceWaiting(res *outcomeArtifact) ([]string, bool) {
+	if res == nil || res.Status != outcome.Partial || res.Validation == nil || !res.Validation.Passed {
+		return nil, false
+	}
+	manual := map[string]bool{}
+	for _, m := range res.Mappings {
+		if m.Kind == outcome.EvidenceManual {
+			manual[m.CriterionID] = true
+		}
+	}
+	if len(manual) == 0 {
+		return nil, false
+	}
+	var missing []string
+	for _, c := range res.Criteria {
+		if !c.Required {
+			continue
+		}
+		if manual[c.ID] {
+			if !c.Met {
+				missing = append(missing, c.ID)
+			}
+			continue
+		}
+		if !c.Met {
+			return nil, false
+		}
+	}
+	if len(missing) == 0 {
+		return nil, false
+	}
+	return missing, true
 }
 
 // blockTask moves a task to the terminal BLOCKED state with a reason.
