@@ -886,6 +886,19 @@ func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
 	cmd.Dir = dir
+	cmd.SysProcAttr = sysProcAttrKill()
+	cmd.Cancel = func() error {
+		if cmd.Process == nil {
+			return nil
+		}
+		if err := terminateGroup(cmd.Process.Pid); err != nil {
+			return cmd.Process.Kill()
+		}
+		return nil
+	}
+	// The context cancellation kills the whole group; WaitDelay bounds the wait
+	// for the output pipes if a descendant somehow keeps one open.
+	cmd.WaitDelay = 2 * time.Second
 	cap := newBoundedCapture(h.cfg.MaxOutputBytes)
 	cmd.Stdout = cap
 	cmd.Stderr = cap

@@ -650,6 +650,54 @@ func TestClientsReportTokenUsage(t *testing.T) {
 	}
 }
 
+// TestClientsHonorOperatorMaxOutputTokens proves the operator-owned output-token
+// bound is sent before dispatch on both provider transports.
+func TestClientsHonorOperatorMaxOutputTokens(t *testing.T) {
+	t.Setenv(EnvAgentMaxOutputTokens, "321")
+	var ollamaBody, compatBody map[string]any
+	ollama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&ollamaBody)
+		_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"ok"}}`))
+	}))
+	defer ollama.Close()
+	compat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&compatBody)
+		_, _ = w.Write([]byte(`{"choices":[{"message":{"role":"assistant","content":"ok"}}]}`))
+	}))
+	defer compat.Close()
+
+	o, err := NewOllama(ollama.URL, "om", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c, err := NewOpenAICompatible(ProviderOpenAICompatible, compat.URL, "cm", "", time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range []Agent{o, c} {
+		if _, err := a.Generate(context.Background(), validRequest(Review)); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	opts, _ := ollamaBody["options"].(map[string]any)
+	if opts == nil || opts["num_predict"] != float64(321) {
+		t.Errorf("ollama options = %+v, want num_predict 321", ollamaBody["options"])
+	}
+	if compatBody["max_tokens"] != float64(321) {
+		t.Errorf("openai-compatible max_tokens = %v, want 321", compatBody["max_tokens"])
+	}
+}
+
+// TestProviderRejectsInvalidMaxOutputTokens proves a malformed operator value
+// fails rather than silently removing the bound.
+func TestProviderRejectsInvalidMaxOutputTokens(t *testing.T) {
+	t.Setenv(EnvAgentMaxOutputTokens, "many")
+	if _, err := NewOllama("http://127.0.0.1:1", "m", time.Second); err == nil {
+		t.Fatal("expected an invalid output-token error")
+	}
+}
+
 // TestClientsReportAbsentUsageAsUnknown pins that a server which omits token
 // usage yields an unreported call, never a measured zero.
 func TestClientsReportAbsentUsageAsUnknown(t *testing.T) {

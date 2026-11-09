@@ -41,11 +41,12 @@ var openAITextCapabilities = NewCapabilities(Plan, DesignTests, DiagnoseFailure,
 // error text, never the wire protocol. It performs model inference only — it
 // cannot mutate the repository or workflow state.
 type OpenAICompatible struct {
-	id      string
-	baseURL string
-	model   string
-	apiKey  string
-	client  *http.Client
+	id              string
+	baseURL         string
+	model           string
+	apiKey          string
+	client          *http.Client
+	maxOutputTokens int
 }
 
 // LlamaCpp and MLX are the two configured identities of the shared transport.
@@ -74,12 +75,17 @@ func NewOpenAICompatible(id, baseURL, model, apiKey string, timeout time.Duratio
 	if timeout <= 0 {
 		timeout = defaultProviderTimeout
 	}
+	maxOutputTokens, err := MaxOutputTokensFromEnv()
+	if err != nil {
+		return nil, err
+	}
 	return &OpenAICompatible{
-		id:      id,
-		baseURL: baseURL,
-		model:   model,
-		apiKey:  strings.TrimSpace(apiKey),
-		client:  &http.Client{Timeout: timeout},
+		id:              id,
+		baseURL:         baseURL,
+		model:           model,
+		apiKey:          strings.TrimSpace(apiKey),
+		client:          &http.Client{Timeout: timeout},
+		maxOutputTokens: maxOutputTokens,
 	}, nil
 }
 
@@ -131,9 +137,10 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 	}
 
 	body := chatRequest{
-		Model:    c.model,
-		Messages: []chatMessage{{Role: "user", Content: renderPrompt(request)}},
-		Stream:   false,
+		Model:     c.model,
+		Messages:  []chatMessage{{Role: "user", Content: renderPrompt(request)}},
+		Stream:    false,
+		MaxTokens: c.maxOutputTokens,
 	}
 
 	var out struct {
