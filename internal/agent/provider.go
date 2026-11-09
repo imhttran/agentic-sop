@@ -28,10 +28,15 @@ const EnvAgentHarness = "SOP_AGENT_HARNESS"
 const EnvAgentProvider = "SOP_AGENT_PROVIDER"
 
 // EnvAgentMaxOutputTokens is the operator-owned output-token bound sent to a
-// provider before dispatch. An unset value keeps the provider's own behavior
-// (no SOP-imposed cap); a set value must be a positive integer. It is not a
-// default quota: the operator explicitly opts in.
+// provider before dispatch. An unset value applies DefaultMaxOutputTokens; a set
+// value must be a positive integer and replaces the default.
 const EnvAgentMaxOutputTokens = "SOP_AGENT_MAX_OUTPUT_TOKENS"
+
+// DefaultMaxOutputTokens is the per-request output-token cap SOP sends when the
+// operator sets none (OWASP LLM06). It is far above a plan or review, including
+// a reasoning model's thinking tokens, so it bounds a runaway generation without
+// shaping normal output. Raise it with SOP_AGENT_MAX_OUTPUT_TOKENS.
+const DefaultMaxOutputTokens = 16384
 
 // EnvAgentModel selects which model the composition root builds. It is optional:
 // when unset the configured model or provider-specific environment variable is used.
@@ -383,27 +388,26 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
-	// MaxTokens is the OpenAI-compatible output-token bound. It is omitted when
-	// the operator did not configure SOP_AGENT_MAX_OUTPUT_TOKENS.
+	// MaxTokens is the OpenAI-compatible output-token bound
+	// (SOP_AGENT_MAX_OUTPUT_TOKENS or DefaultMaxOutputTokens).
 	MaxTokens int `json:"max_tokens,omitempty"`
-	// Options carries the Ollama output-token bound (num_predict). It is omitted
-	// when the operator did not configure SOP_AGENT_MAX_OUTPUT_TOKENS.
+	// Options carries the Ollama output-token bound (num_predict).
 	Options *chatOptions `json:"options,omitempty"`
 }
 
-// chatOptions is the Ollama request options block used for the operator-owned
-// output-token bound.
+// chatOptions is the Ollama request options block used for the output-token
+// bound.
 type chatOptions struct {
 	NumPredict int `json:"num_predict,omitempty"`
 }
 
-// MaxOutputTokensFromEnv returns the operator-owned output-token bound. An unset
-// value returns 0, meaning "no SOP-imposed cap"; a present but invalid value is
-// an error so a typo cannot silently disable or alter the bound.
+// MaxOutputTokensFromEnv returns the output-token bound: the operator's value, or
+// DefaultMaxOutputTokens when unset. A present but invalid value is an error so a
+// typo cannot silently disable or alter the bound.
 func MaxOutputTokensFromEnv() (int, error) {
 	raw := strings.TrimSpace(os.Getenv(EnvAgentMaxOutputTokens))
 	if raw == "" {
-		return 0, nil
+		return DefaultMaxOutputTokens, nil
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil || n <= 0 {
