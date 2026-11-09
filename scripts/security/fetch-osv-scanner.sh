@@ -43,7 +43,6 @@ die() {
 }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
-command -v curl >/dev/null 2>&1 || die "curl is required"
 [ -f "$manifest" ] || die "missing manifest: $manifest"
 
 case "$(uname -s)" in
@@ -74,9 +73,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/sop-osv-scanner.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 binary="$work/$asset"
-curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 300 "$url" -o "$binary" || die "download failed: $url"
-actual="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$binary")"
-[ "$actual" = "$expected" ] || die "checksum mismatch for $asset: want $expected, got $actual"
+"$script_dir/fetch-pinned.sh" "$url" "$expected" "$binary" 300
 chmod 0755 "$binary"
 
 reported="$("$binary" --version 2>/dev/null | sed -n '1p' | tr -d '\r' | awk '{print $NF}')"
