@@ -382,7 +382,11 @@ func missingDeliverables(spec *taskfile.Spec, dir string) []string {
 // remains a HOLD boundary.
 func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, cargoEnabled bool) *outcomeArtifact {
 	criteria := deliverableCriteria(spec, dir)
-	mappings := specCriterionMappings(spec)
+	// Strict content binding (Plan 07 D4): a manual acceptance decision is bound
+	// to the exact repository content the operator reviewed. The identity is
+	// computed only when a manual criterion is mapped.
+	contentID, idErr := manualContentIdentity(spec, dir)
+	mappings := specCriterionMappings(spec, contentID)
 	mappedChecks := make(map[string]bool, len(mappings))
 	for _, m := range mappings {
 		if m.Kind == outcome.EvidenceCheck && m.CheckRef != "" {
@@ -438,6 +442,13 @@ func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, c
 		res.Status = outcome.Partial
 		res.Reasons = append(res.Reasons, "acceptance decisions could not be read: "+derr.Error())
 	}
+	if idErr != nil {
+		// An unavailable content identity cannot bind a manual decision. Fail the
+		// verdict closed rather than letting a legacy decision stand in for the
+		// unreviewed current content.
+		res.Status = outcome.Partial
+		res.Reasons = append(res.Reasons, "repository content identity unavailable: "+idErr.Error())
+	}
 	if rerr != nil {
 		res.Status = outcome.Partial
 		res.Reasons = append(res.Reasons, acceptanceRecoveryReadReason(rerr))
@@ -460,14 +471,41 @@ func checkResultOf(id string, run checkRun, logs map[string]string) outcome.Chec
 	return c
 }
 
+// manualContentIdentity returns the content-complete repository identity a manual
+// acceptance decision must be bound to. It is computed only when the spec maps at
+// least one criterion to manual evidence, so check-only plans do not pay for a
+// full working-tree hash. The identity excludes .git and SOP's own state, so
+// recording a decision under .agent-sdlc does not change it.
+func manualContentIdentity(spec *taskfile.Spec, dir string) (string, error) {
+	needs := false
+	for _, line := range spec.AcceptanceMapping {
+		if planner.ParseAcceptanceMapping(line).Manual != "" {
+			needs = true
+			break
+		}
+	}
+	if !needs {
+		return "", nil
+	}
+	fp, err := toolharness.New(dir, toolharness.DefaultConfig(), nil).RepositoryFingerprint(context.Background())
+	if err != nil {
+		return "", err
+	}
+	if fp == "" {
+		return "", errors.New("repository content fingerprint is empty")
+	}
+	return fp, nil
+}
+
 // specCriterionMappings projects the spec's '- criterion N: check M' /
 // '- criterion N: manual: <evidence>' lines onto outcome mappings keyed by the
-// criterion-N / check-M ids deriveMappedOutcome uses.
-func specCriterionMappings(spec *taskfile.Spec) []outcome.CriterionMapping {
+// criterion-N / check-M ids deriveMappedOutcome uses. contentID binds every
+// mapping to the repository content the outcome was derived against.
+func specCriterionMappings(spec *taskfile.Spec, contentID string) []outcome.CriterionMapping {
 	var out []outcome.CriterionMapping
 	for _, line := range spec.AcceptanceMapping {
 		m := planner.ParseAcceptanceMapping(line)
-		cm := outcome.CriterionMapping{CriterionID: fmt.Sprintf("criterion-%d", m.Criterion), Required: true, Kind: outcome.EvidenceCheck, Attempt: spec.Attempt}
+		cm := outcome.CriterionMapping{CriterionID: fmt.Sprintf("criterion-%d", m.Criterion), Required: true, Kind: outcome.EvidenceCheck, Attempt: spec.Attempt, ContentIdentity: contentID}
 		if m.Criterion >= 1 && m.Criterion <= len(spec.AcceptanceCriteria) {
 			cm.Description = spec.AcceptanceCriteria[m.Criterion-1]
 		}

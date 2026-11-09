@@ -19,12 +19,27 @@ func manualPartial() *outcomeArtifact {
 	}
 }
 
+// manualPartialWithContentIdentity returns the manual outcome artifact bound to
+// the temp tree's content-complete repository identity. New decisions must bind
+// to this identity; a legacy artifact without one cannot record a decision.
+func manualPartialWithContentIdentity(t *testing.T, dir string) *outcomeArtifact {
+	t.Helper()
+	id, err := manualContentIdentity(&taskfile.Spec{AcceptanceMapping: []string{"criterion 1: manual: reviewer reads docs"}}, dir)
+	if err != nil || id == "" {
+		t.Fatalf("content identity: %v", err)
+	}
+	res := manualPartial()
+	res.Mappings[0].ContentIdentity = id
+	return res
+}
+
 // TestOutcomeAcceptRecordsDecision proves --accept appends one traceable decision,
 // leaves outcome.json byte-identical, and the next derived outcome is VERIFIED.
 func TestOutcomeAcceptRecordsDecision(t *testing.T) {
 	dir := t.TempDir()
 	writeDesignatedApprovers(t, dir, "operator")
-	writeOutcomeArtifactFor(t, dir, "T1", manualPartial())
+	res := manualPartialWithContentIdentity(t, dir)
+	writeOutcomeArtifactFor(t, dir, "T1", res)
 	before, _ := os.ReadFile(outcomeArtifactPath(dir, "T1"))
 
 	code, stdout, stderr := runCLI(t, dir, "outcome", "T1", "--accept", "criterion-1", "--evidence", "read docs/x.md", "--by", "operator")
@@ -46,6 +61,9 @@ func TestOutcomeAcceptRecordsDecision(t *testing.T) {
 	if d.Task != "T1" || d.CriterionID != "criterion-1" || d.Approver != "operator" || d.Evidence != "read docs/x.md" || d.RecordedAt == "" || d.Decision != outcome.DecisionAccept {
 		t.Errorf("decision not traceable: %+v", d)
 	}
+	if d.ContentIdentity == "" || d.ContentIdentity != res.Mappings[0].ContentIdentity {
+		t.Errorf("decision is not content-bound: decision=%q mapping=%q", d.ContentIdentity, res.Mappings[0].ContentIdentity)
+	}
 
 	spec := &taskfile.Spec{ID: "T1", AcceptanceCriteria: []string{"docs are clear"}, AcceptanceMapping: []string{"criterion 1: manual: reviewer reads docs"}, Attempt: 1}
 	if res := deriveOutcome(spec, dir, quality.Result{Decision: quality.Pass}); res.Status != outcome.Verified {
@@ -58,7 +76,7 @@ func TestOutcomeAcceptRecordsDecision(t *testing.T) {
 func TestOutcomeAcceptRejectsInvalidDecision(t *testing.T) {
 	dir := t.TempDir()
 	writeDesignatedApprovers(t, dir, "operator")
-	writeOutcomeArtifactFor(t, dir, "T1", manualPartial())
+	writeOutcomeArtifactFor(t, dir, "T1", manualPartialWithContentIdentity(t, dir))
 	for name, args := range map[string][]string{
 		"undesignated": {"--accept", "criterion-1", "--evidence", "e", "--by", "mallory"},
 		"no evidence":  {"--accept", "criterion-1", "--by", "operator"},
