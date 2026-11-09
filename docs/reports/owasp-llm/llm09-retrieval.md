@@ -342,7 +342,7 @@ the PR records the same result. The security scanner is report-only and recorded
 ## Dependency handoff
 
 - **Plan 05 — data/model poisoning.** Plan source:
-  [`PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`](../../plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md).
+  [`PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`](../../history/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md).
   Merged in PR #268 with follow-ups in PR #274. The reused contract is `outcomefile`
   (`IngestRunFor`, content identity, eligibility, `GateWithSourcesAndDigests`) and
   `memindex.RebuildFromDir`. POISON-002 is implemented; POISON-001/003 remain
