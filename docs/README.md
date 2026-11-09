@@ -211,7 +211,7 @@ noted in [Canonical Locations and Kept Paths](#canonical-locations-and-kept-path
 - [testing/MCP-CANDIDATE-HANDOFF.md](testing/MCP-CANDIDATE-HANDOFF.md) — the handoff contract for a planner MCP candidate: local tests vs live ChatGPT-to-MCP validation, the 10-round/20-call read-only acceptance test, required report fields, and rollback.
 - [testing/WINDOWS-CLEAN-ROOM.md](testing/WINDOWS-CLEAN-ROOM.md) — the clean-room Windows test checklist and its results log; real-machine results stay marked **NOT YET RUN** until they are actually performed, separately from CI.
 
-- [plans/sop-security-plan.md](plans/sop-security-plan.md) — **IMPLEMENTED / MERGED (PR #260, merge 9cc4bf2)**: security shift-left execution added the required-mode pre-IMPLEMENT readiness probe at the existing seam, preserved report-only project policy and the single deterministic quality gate, and moved Promptfoo out of routine scans. The reconciled evidence is [reports/security-shift-left/final.md](reports/security-shift-left/final.md); PR #261 tracks the verified follow-up gaps.
+- [plans/sop-security-plan.md](plans/sop-security-plan.md) — **IMPLEMENTED / MERGED (PRs #260–#261)**: security shift-left execution added the required-mode pre-IMPLEMENT readiness probe, preserved report-only policy and the single deterministic quality gate, moved Promptfoo out of routine scans, completed declared SAST/secrets coverage, and reconciled the reviewed findings. The original reconciliation is [reports/security-shift-left/final.md](reports/security-shift-left/final.md); current OWASP follow-up status is indexed in [reports/owasp-llm/README.md](reports/owasp-llm/README.md).
 
 ## Reports
 
