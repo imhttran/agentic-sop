@@ -99,6 +99,48 @@ func TestRetrieveSuccessPreservesProvenance(t *testing.T) {
 	}
 }
 
+// TestDocumentHashIsServerReportedAndNotRecomputed pins the current trust boundary.
+// DocumentHash is the producer's fingerprint of the full source document, while Text is
+// only the returned chunk. SOP receives no full-document bytes and the contract defines
+// no canonicalization, so it carries the value verbatim and does not compare it with the
+// returned text. A mismatch therefore does not fail the request; the limitation is
+// recorded in docs/reports/owasp-llm/llm05-poisoning.md (GAP-5) and the proposal
+// docs/plans/PROPOSAL-RAG-EVIDENCE-HASH.md.
+func TestDocumentHashIsServerReportedAndNotRecomputed(t *testing.T) {
+	resp := okEvidence()
+	// The reported hash deliberately does not describe the returned text.
+	resp.Evidence[0].DocumentHash = "sha256:" + strings.Repeat("0", 64)
+	resp.Evidence[0].Text = "the returned chunk, which is not the full document"
+	r := &fakeRunner{out: mustJSON(t, resp)}
+	c := newTestClient(t, Config{Executable: "/producer", AllowedCorpora: []string{"kb"}}, r)
+
+	got, err := c.Retrieve(context.Background(), Request{Query: "q", Filters: Filters{Corpus: "kb"}})
+	if err != nil {
+		t.Fatalf("Retrieve returned %v; the current contract carries document_hash verbatim", err)
+	}
+	if len(got.Evidence) != 1 || got.Evidence[0].DocumentHash != resp.Evidence[0].DocumentHash {
+		t.Fatalf("document_hash was not preserved: %+v", got.Evidence)
+	}
+}
+
+// TestDocumentHashMayBeEmpty pins the compatibility edge of the same boundary: the field
+// is decoded as a string with no required-value validation, so an empty value is accepted.
+// A future contract that requires a hash must reject it explicitly.
+func TestDocumentHashMayBeEmpty(t *testing.T) {
+	resp := okEvidence()
+	resp.Evidence[0].DocumentHash = ""
+	r := &fakeRunner{out: mustJSON(t, resp)}
+	c := newTestClient(t, Config{Executable: "/producer", AllowedCorpora: []string{"kb"}}, r)
+
+	got, err := c.Retrieve(context.Background(), Request{Query: "q", Filters: Filters{Corpus: "kb"}})
+	if err != nil {
+		t.Fatalf("Retrieve: %v", err)
+	}
+	if len(got.Evidence) != 1 || got.Evidence[0].DocumentHash != "" {
+		t.Fatalf("empty document_hash was not preserved: %+v", got.Evidence)
+	}
+}
+
 func TestRetrieveRejectsUnauthorizedCorpus(t *testing.T) {
 	c := newTestClient(t, Config{Executable: "/producer", AllowedCorpora: []string{"kb"}}, &fakeRunner{})
 	for name, corpus := range map[string]string{"empty": "", "not allowed": "other"} {
