@@ -357,5 +357,4 @@ process-group and signal tests.
 - Follow-up branch: `security/llm06-reconcile`.
 - Follow-up code commit: `e70f9bb0c8f5e7032ffec158a714e677a392bd14` (validation
   output bounds).
-- Follow-up PR: opened from this branch; the URL is recorded in the handoff
-  response and the pull request itself. This PR is not merged.
+- Follow-up PR: https://github.com/imhttran/agentic-sop/pull/289 (this PR; not merged).
