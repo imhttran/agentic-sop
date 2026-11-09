@@ -90,6 +90,13 @@ func EncodeSlackPayload(e Event) ([]byte, error) {
 	return body, nil
 }
 
+// slackMrkdwn escapes the three characters Slack's mrkdwn parser gives meaning
+// to. Event text can carry model-derived prose (a JEV finding or failure reason),
+// so unescaped text could inject a channel mention (<!channel>) or a masked link.
+// Slack renders the original characters after decoding these entities, so
+// legitimate text stays readable.
+var slackMrkdwn = strings.NewReplacer("&", "&amp;", "<", "&lt;", ">", "&gt;")
+
 // slackEventText renders the single mrkdwn summary line the Slack body carries.
 func slackEventText(e Event) string {
 	var b strings.Builder
@@ -113,5 +120,5 @@ func slackEventText(e Event) string {
 	if e.ResolutionCommand != "" {
 		fmt.Fprintf(&b, "\nresolve: %s", e.ResolutionCommand)
 	}
-	return b.String()
+	return slackMrkdwn.Replace(b.String())
 }

@@ -8,7 +8,9 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/autonomy"
+	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/planflow"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -92,11 +94,12 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 
 	res, err := planflow.Reconcile(context.Background(), planflow.ReconcileOptions{
-		Dir:           dir,
-		PlanSource:    source,
-		Agent:         a,
-		Store:         st,
-		AcceptChanged: accept,
+		Dir:                    dir,
+		PlanSource:             source,
+		Agent:                  a,
+		Store:                  st,
+		AcceptChanged:          accept,
+		PriorDefinitionDigests: pendingDefinitionDigests(dir, accept),
 		// The autonomy policy, not the CLI, decides whether a safe plan change is
 		// reconciled automatically. Under a low/balanced policy this authorizes
 		// nothing and the explicit-approval behavior is unchanged.
@@ -112,6 +115,25 @@ func runReconcile(args []string, stdout, stderr io.Writer, d deps) int {
 
 	printReconcileSummary(stdout, res)
 	return exitOK
+}
+
+// pendingDefinitionDigests resolves the definition digest recorded on each task's
+// PENDING approval request. An explicit --accept-changed can then record an
+// already-applied plan-only change that the executable task comparison cannot see.
+// A task with no pending stamped request contributes nothing and follows the normal
+// changed-task path.
+func pendingDefinitionDigests(projectDir string, taskIDs []string) map[string]string {
+	out := make(map[string]string, len(taskIDs))
+	for _, id := range taskIDs {
+		req, ok := runpkg.At(runpkg.Dir(projectDir, id)).Approval()
+		if !ok || req.TaskID != id || req.Status != domain.ApprovalPending {
+			continue
+		}
+		if digest := strings.TrimSpace(req.DefinitionDigest); digest != "" {
+			out[id] = digest
+		}
+	}
+	return out
 }
 
 // reconcileAutoAccept builds the reconciliation callback the planflow layer

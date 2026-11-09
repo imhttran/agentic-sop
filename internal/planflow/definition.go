@@ -77,6 +77,28 @@ func stageDigestByID(plan *planner.Plan, taskID string) string {
 	return ""
 }
 
+// planOnlyChanges returns the IDs of stages whose recorded and requested definitions
+// differ in a field samePlanOnlyFields compares (for example deliverables). Those fields
+// are part of the digest an approval request is bound to, so an executed task that
+// changed only there is still a changed definition and needs an explicit acceptance
+// (issue #273).
+func planOnlyChanges(recorded, requested *planner.Plan) map[string]bool {
+	out := map[string]bool{}
+	if recorded == nil || requested == nil {
+		return out
+	}
+	before := make(map[string]planner.Stage, len(recorded.Stages))
+	for _, s := range recorded.Stages {
+		before[s.ID] = s
+	}
+	for _, s := range requested.Stages {
+		if prev, ok := before[s.ID]; ok && !samePlanOnlyFields(prev, s) {
+			out[s.ID] = true
+		}
+	}
+	return out
+}
+
 // TaskDefinitionText renders the persisted stage for a task as text, for consistency
 // checks over what the current definition says. It is not a second definition store:
 // it reads plan.json and returns the same fields stageDigest covers.
