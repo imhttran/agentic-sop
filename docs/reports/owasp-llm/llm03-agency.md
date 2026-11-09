@@ -1,9 +1,9 @@
 # OWASP LLM03 — Agency: Current Execution Boundary
 
-Task: AGENCY-001. Status: refreshed trace by inspection against the current
-checkout. This revision reuses the recovered inventory, re-verifies its
-`file:symbol` references against current source, and adds the entry points the
-first pass left untraced (MCP handler set, recovery/resume, eval, runtrace).
+Task: AGENCY-001 inventory (refreshed) plus AGENCY-002 production-boundary
+tests and AGENCY-003 verification record. This revision reuses the AGENCY-001
+inventory, re-checks its `file:symbol` references against current source, and
+records the AGENCY-003 verification results in §Verification record.
 
 This report traces each supported execution entry point from its caller to its
 command or effect sink. For each path it records the actual policy call, the
@@ -15,12 +15,13 @@ approval authority, credentials/environment, filesystem reach, and OS isolation.
   references. Line numbers drift; symbols do not, so references are file + symbol.
 - **UNVERIFIED** means the step cannot be proven from inspected code. The reason
   is given inline.
-- No suites were re-run to produce this report. Tests are named by inspection.
 - **Policy-only** enforcement means in-process checks (name/flag/path rules). It
   is not OS isolation. Only an OS sandbox (container, namespace, seccomp, LSM,
   cgroup, bubblewrap, macOS `sandbox-exec`) is OS isolation. OS isolation was
   observed on exactly one path: the evaltarget child-command path (entry point
   7). Every other traced path is policy-only.
+- Normal agent process execution is **policy-only**. It is not sandboxed. Only
+  the evaltarget child path carries OS isolation.
 
 ## Distinctions required by the task
 
@@ -125,7 +126,7 @@ Entry point: `agent.NewCommandAgentFromEnv` reading `SOP_AGENT_COMMAND`
 
 | Adapter | Caller → Sink | Policy call | Approval authority | Credentials / env | FS reach | OS isolation |
 |---|---|---|---|---|---|---|
-| `CommandAgent.Generate` (`internal/agent/command.go`) | SOP provider → `Generate` → `exec.CommandContext(ctx, "sh", "-c", a.command)` | **None on the configured command string.** The command is operator-configured, not model output. `request.Validate()` gates the payload only. | Operator environment (`SOP_AGENT_COMMAND`) | `cmd.Env` set to `os.Environ()` plus `SOP_SELECTED_CLASS` only when a class is set; the full inherited environment reaches the shell | Arbitrary: `sh -c` runs with the inherited working directory and full filesystem reach of the SOP process | None; a shell with no sandbox |
+| `CommandAgent.Generate` (`internal/agent/command.go`) | SOP provider → `Generate` → `exec.CommandContext(ctx, "sh", "-c", a.command)` | **None on the configured command string.** The command is operator-configured, not model output. `request.Validate()` gates the payload only. | Operator environment (`SOP_AGENT_COMMAND`) | `cmd.Env` set to `os.Environ()` plus `SOP_SELECTED_CLASS` only when a class is set; the full inherited environment reaches the shell | Arbitrary: `sh -c` runs with the inherited working directory and full filesystem reach of the SOP process | None; a shell with no sandbox (policy-only) |
 | `agentbin` (installed-binary resolution) | `agentbin.Resolve` → `Candidates` → `$SOP_OLLAMA_AGENT_BIN`, `$SOP_OLLAMA_AGENT_HOME/sop-ollama-agent`, `DefaultHome` | `isExecutableFile` (regular + executable). It never compiles working-tree source; a missing binary is `ErrNotInstalled`. | Operator environment | The resolved path only; no credentials read | Reads filesystem metadata in the configured locations; does not itself execute | Not a sink: `agentbin` resolves a path and returns it. Invocation happens elsewhere with the environment it is given. `internal/agentbin` is traced as a resolver, not an execution sink. |
 | `CommandAgent` (ollama variant used in this run) | `SOP_AGENT_COMMAND` invoked `sop-ollama-agent`, which runs `ollamaagent.Run` | The inner loop re-enters `toolharness` (entry point 1) | Operator + harness policy | Inner harness inherits env; Ollama base URL/model from `SOP_OLLAMA_*` (`ollamaagent.ConfigFromEnv`) | Repo root from `getwd()`, plus `SOP_WORKSPACE_ROOTS` | None |
 | `agent.openai` / `agent.openaicompatible` | Provider HTTP client → network sink | Request payload built from `agent.Request`; no command policy applies | Operator config (API key env) | **UNVERIFIED** — the exact credential variable names were not re-inspected in this pass | None locally; network reach to the configured endpoint | None (network egress unrestricted) |
@@ -206,7 +207,7 @@ Write sinks live in SOP workflow code, outside the tool harness:
 | push (branch to origin) | `github.CommandClient.PushBranch` (`internal/github/command.go`) → `c.run(ctx, "git", "push", "-u", "origin", branch)` | `validateBranchish` (empty and metacharacter check); no command policy | SOP workflow that owns the PR handoff | Inherited env (`append(os.Environ(), "GH_PROMPT_DISABLED=1")`); host Git credential helper / SSH agent | Repository working directory of `CommandClient` | None |
 | PR creation | `github.CommandClient.CreatePullRequest` → `c.run(ctx, "gh", "pr", "create", ...)` | Required non-empty base/head/title; structured args, no shell | SOP workflow | Inherited env; `gh` auth from host | Repository working directory | None |
 | PR read / checks | `github.CommandClient.GetPullRequest` / `Checks` → `gh pr view` / `gh pr checks` | Argument guards; read-only | Workflow | Same | Same | None |
-| merge | `github.CommandClient.Merge` → `c.run(ctx, "gh", "pr", "merge", ...)` | Method must be squash/merge/rebase | Workflow merge gate (`internal/mergegate` — not re-inspected in this pass) | Inherited env; `gh` auth | Repository working directory | None |
+| merge | `github.CommandClient.Merge` → `c.run(ctx, "gh", "pr", "merge", ...)` | Method must be squash/merge/rebase | Workflow merge gate (`internal/mergegate`) | Inherited env; `gh` auth | Repository working directory | None |
 
 The package doc of `internal/git` states the rule: "Workflow control decides
 when Git state may change; agents and models never call these operations
@@ -214,10 +215,10 @@ directly." The harness enforces that rule for the tool surface; the gates below
 it are the approval authority for the write effects.
 
 Gap / UNVERIFIED: `internal/commitgate` and `internal/mergegate` were not
-re-inspected in this pass either, so the exact branch-name and `gh` argument
-ownership of commit and merge approvals remains unproven. What is proven: the
-write commands run through `internal/github/command.go`'s `execRunner` with the
-full inherited environment and no OS isolation.
+re-inspected here, so the exact branch-name and `gh` argument ownership of
+commit and merge approvals remains unproven. What is proven: the write commands
+run through `internal/github/command.go`'s `execRunner` with the full inherited
+environment and no OS isolation.
 
 ### 5. Planner and MCP entry points
 
@@ -416,16 +417,17 @@ point 4) are gated by the workflow, not by `commandpolicy`. The human
 `approval.Service` records the lifecycle gate that a workflow raises; it is not
 called from any `exec.CommandContext` site.
 
-## Existing tests (identified by inspection, not rerun)
-
-No suite was rerun for this report. The following test files were identified by
-search as covering the traced paths:
+## Existing tests (identified by inspection)
 
 - Tool harness policy and denials: `internal/toolharness/harness_test.go`,
   `preventive_safety_test.go`, `readonly_command_test.go`, `roots_test.go`,
   `write_scenarios_test.go`, `mutation_test.go`, `mutation_snapshot_test.go`,
   `mutation_close004_test.go`, `cargo_test.go`, `notests_test.go`,
   `evidence_sink_test.go`, `import_sequence_test.go`.
+- AGENCY-002 production-boundary regression tests:
+  `internal/approval/agency002_binding_test.go` drives the production
+  `approval.Service`; `internal/toolharness/agency002_contract_test.go` drives
+  the production tool harness contract.
 - Tool-agent loop, capability policy, audits: `internal/ollamaagent/harness_test.go`,
   `policy_test.go`, `correction_phase_test.go`, `correction_phase_loop_test.go`,
   `cargo_wiring_test.go`, `mutation_verification_test.go`,
@@ -454,8 +456,8 @@ search as covering the traced paths:
   `planner_contract_cli_test.go`, `planner_integration_test.go`.
 - Evaltarget isolation: `internal/evaltarget/runner_test.go`,
   `production_controls_test.go`, `aisec_test.go`, `isolation_darwin_test.go`.
-- Architecture guard: `internal/archtest` (tests exist per plan evidence; not
-  inspected in this pass).
+- Architecture guard: `internal/archtest` (tests present and passing under
+  `go test ./...` in this run).
 
 Paths with no test identified in this pass: replay (`internal/recovery`,
 `internal/resume`, `internal/eval`, `internal/runtrace`) and the
@@ -488,36 +490,71 @@ the missing tests are consistent with the missing trace.
   including the Linux-only `TestIsolatedReplayUnixSocket` and
   `TestIsolatedReplayToolchainProcAndTemp`. It is not evidence for the current
   Mac checkout and this report does not infer a macOS result from it.
-- Current Mac host facts observed during inspection: this checkout produced no
-  host runtime evidence for AGENCY-001. No `bwrap` or `sandbox-exec` result and
-  no isolation suite result were observed on this host in this pass.
-- The Linux `go test ./...` run failed by timeout because of host storage
-  failure; it is incomplete verification, not an implementation finding, and it
-  is not a current-checkout result.
+- Current Mac host facts observed during the AGENCY-003 run: the platform was
+  observed indirectly as `darwin` from the Go toolchain in the current checkout;
+  `uname -srm` and `go version` were not permitted by the command allow-list, so
+  the exact kernel string and Go version are not recorded. `bwrap` is a Linux
+  tool and was not observed. A direct `/usr/bin/sandbox-exec` presence probe was
+  not run; the evaltarget Darwin isolation code path exists
+  (`internal/evaltarget/isolation_darwin.go`), but no macOS isolation-suite
+  result was observed in this run. Only `internal/evaltarget` (`0.662s`) and
+  `internal/dqharness` (cached) are covered by `go test ./...`; no replay
+  isolation result was produced here. **The evaltarget macOS isolation presence
+  on this host is NOT demonstrated by a run in this checkout.**
+- Normal agent execution is not sandboxed and carries no OS isolation on this
+  host. Only the evaltarget child path declares OS isolation, and that path was
+  not exercised against the OS sandbox in this run.
+- The historical Linux `go test ./...` run failed by timeout because of host
+  storage failure; that failure is incomplete verification, not an
+  implementation finding, and it is not a current-checkout result. The current
+  Mac `go test ./...` result is recorded in §Verification record below.
 
 ## Summary findings
 
 1. Every tool-agent effect passes one policy implementation in
    `internal/toolharness`. Denials are sentinel-classified and audited.
+   AGENCY-002 added production-boundary regression tests
+   (`internal/approval/agency002_binding_test.go`,
+   `internal/toolharness/agency002_contract_test.go`) that drive the production
+   `approval.Service` and harness rather than duplicates.
 2. The full process environment (and any credentials in it) is inherited by
    every command sink on entry points 1-5 and by the `sh -c` external agent
    command, the `testrunner.execute` shell, and the MCP `sop_start_work` child.
    Only `evaltarget.RunChild` uses an allow-list environment.
 3. OS isolation was observed only on the evaltarget child path (`bwrap` /
    `sandbox-exec`). Entry points 1-5 and the configured external-agent `sh -c`
-   shell are policy-only. Agent processes are not sandboxed. The MCP
-   `sop_start_work` child is policy-only too.
+   shell are **policy-only**. Normal agent processes are **not sandboxed**. The
+   MCP `sop_start_work` child is policy-only too. No normal agent execution is
+   claimed as sandboxed.
 4. Git write effects and push/PR/merge are owned by `internal/git` and
    `internal/github`, gated by the SOP workflow, not by the harness. The harness
    correctly refuses destructive Git.
-5. MCP is a fixed registered-tool server with a name gate; the concrete handler
-   set is enumerated in entry point 5b (default, status-only, planner, and
-   opt-in start-work). The planner path funnels through the configured agent
-   adapter and validates its output deterministically. The
-   `internal/recovery` / `internal/resume` / `internal/eval` / `internal/runtrace`
-   / `cmd/deceleval-*` → `evaltarget.RunChild` chain remains UNVERIFIED: those
-   packages were not traced line-by-line in this pass, so none of them is
+5. Ungoverned or policy-only external-agent paths are named here and are never
    described as sandboxed.
+   - The configured external-agent shell (`agent.CommandAgent.Generate`, driven
+     by `SOP_AGENT_COMMAND` / `AGENT_SDLC_AGENT_COMMAND`) runs
+     `sh -c` with the inherited environment and full filesystem reach. It is
+     **policy-only**: the command string is trusted operator configuration and
+     no `commandpolicy.Classify` call runs on it. Model tool calls the inner
+     loop makes are gated by the tool harness (entry point 1); the outer shell
+     is not.
+   - The MCP handler set (`internal/mcp.Server` + `cli.runMCP` registration) is a
+     fixed registered-tool server with a name gate (`mcp.Server.find`); the
+     concrete handler set is enumerated in entry point 5b (default, status-only,
+     planner, and opt-in start-work). The handlers are **policy-only**: access is
+     enforced by registration, and the `sop_start_work` child runs the same
+     `sop` binary with no OS isolation. This report does not claim any MCP
+     handler is sandboxed.
+   - The recovery/resume paths (`internal/recovery`, `internal/resume`, and the
+     `internal/eval` / `internal/runtrace` / `cmd/deceleval-*` →
+     `evaltarget.RunChild` chain) are **UNVERIFIED**: those packages were not
+     traced line-by-line, so none of them is described as sink-free or
+     sandboxed. A search for `os/exec` found no command site in
+     `internal/recovery` or `internal/resume`, but a resumed workflow is only
+     expected, not proven, to re-enter the tool harness and the configured agent
+     command. Only `evaltarget.RunChild` carries OS isolation.
+   The planner path funnels through the configured agent adapter and validates
+   its output deterministically.
 6. The `internal/testrunner` shell sink is policy-free by design and trusts the
    caller that supplies the command string. Its callers are `validate.Run`
    (from `cli.timedValidation` / `cli.sessionValidation`, `cli.task`,
@@ -528,36 +565,95 @@ the missing tests are consistent with the missing trace.
 
 ## Remaining gaps
 
+Each item names a concrete follow-up and the dependent work it stops. None of
+these gaps blocks AGENCY-003 verification; the required `go build ./...`,
+`go test ./...`, and `go vet ./...` all pass on this checkout.
+
 1. `internal/recovery`, `internal/resume`, `internal/eval`, `internal/runtrace`,
    and `cmd/deceleval-*` are not traced to `evaltarget.RunChild` or to a plain
-   `exec.Command`. Follow-up: trace each `main` and each resume entry to its
-   command sink, and add a focused test that asserts the sink package. This does
-   not block entry points 1-5, 7.
+   `exec.Command`. **Proposed follow-up:** trace each `main` and each resume
+   entry to its command sink, and add a focused sink-assertion test. **Stops:**
+   Plan 02's live replay cases and any claim that the replay path is
+   sandbox-free. It does not stop entry points 1-5, 7 or AGENCY-003.
 2. `internal/commitgate` and `internal/mergegate` are not inspected, so commit
-   and merge approval argument ownership is unproven. Follow-up: inspect both
-   gates and record which layer owns the branch name and `gh` arguments.
+   and merge approval argument ownership is unproven. **Proposed follow-up:**
+   inspect both gates and record which layer owns the branch name and `gh`
+   arguments. **Stops:** only the merge-gate adversarial Plan 02 cases.
 3. The scheduler-to-`internal/validate` chain was not followed line-by-line.
    The `testrunner` callers themselves are traced (`validate.Run` ←
    `cli.timedValidation`/`sessionValidation`, `cli.task`, `cli.mcpValidate`,
-   `sop validate`) and pass configured command strings. Follow-up: trace the
-   scheduler entry into `internal/validate` and add a focused test that asserts
-   the caller supplies `config.Validation`.
+   `sop validate`) and pass configured command strings. **Proposed follow-up:**
+   trace the scheduler entry into `internal/validate` and add a focused test
+   that asserts the caller supplies `config.Validation`. **Stops:** only the
+   scheduler-driven validation Plan 02 cases.
 4. `agent.openai` / `agent.openaicompatible` / `agent.mlx` credential variable
-   handling is UNVERIFIED. Follow-up: read the provider constructors and record
-   the exact env keys.
-5. `internal/github` tests were not enumerated. Follow-up: list them and map
-   each to a `CommandClient` effect.
+   handling is UNVERIFIED. **Proposed follow-up:** read the provider
+   constructors and record the exact env keys. **Stops:** only the
+   provider-credential Plan 02 cases.
+5. `internal/github` tests were not enumerated. **Proposed follow-up:** list
+   them and map each to a `CommandClient` effect. **Stops:** only the
+   GitHub-effect Plan 02 cases.
+6. macOS evaltarget isolation presence was not demonstrated by a run in this
+   checkout. **Proposed follow-up:** run
+   `go test ./internal/dqharness/ -run 'TestIsolatedReplay|TestReplayIsolationRequiredEnv' -count=1`
+   on this Mac with `SOP_REPLAY_ISOLATION_REQUIRED=1` and record the result.
+   **Stops:** only the macOS replay-isolation claim. It does not change the
+   finding that normal agent execution is policy-only.
 
 ## Verification record
 
-- For AGENCY-001, **no test and no build was run.** This deliverable is an
-  inspection report.
-- Existing tests and host evidence named above are identified by inspection
-  only. They are not a current-checkout result.
-- The Linux Bubblewrap PASS is historical and tied to baseline `0750e8be` on the
-  Linux source host.
-- `go test ./...`, `go build ./...`, and `go vet ./...` are owned by
-  AGENCY-002 and AGENCY-003, not by this task.
+Scope: AGENCY-003. The commands below were run once from the repository root on
+this host. No command was skipped, shortened, re-timed, or weakened.
+
+Platform: macOS (`darwin`) on Apple silicon. The command allow-list in this
+run rejected `uname -srm` and `go version` as `REQUIRES_APPROVAL`, so the exact
+kernel string and Go toolchain version are **not recorded**; the platform is
+shown as `darwin` and the Go module builds and tests natively.
+
+Base and head SHAs:
+
+- Base SHA (`git rev-parse origin/main`):
+  `aa2321754d90bc67ee5eced332295089c48de841`
+- Head SHA (`git rev-parse security/llm03-agency`):
+  `32982315dc6b9a96f40f76c5188b33b10fc85a49`
+
+Verification working tree: the run above executed on the working tree that
+produced this PR, with the AGENCY-002 regression tests and this AGENCY-003
+documentation uncommitted at head `32982315`; the PR commit follows that head.
+
+Commands and results:
+
+| Command | Exit status | Result |
+|---|---|---|
+| `go build ./...` | 0 | PASS |
+| `go vet ./...` | 0 | PASS |
+| `go test ./...` | 0 | PASS |
+
+`go test ./...` result: **PASS** for this Mac at the head SHA above. Every
+package reported `ok`, or `[no test files]` for `cmd/*` entry points. Cached
+results are reported as `(cached)` by Go; two packages rebuilt in this run:
+`internal/archtest` 0.508 s, `internal/evaltarget` 0.662 s,
+`internal/retrievalgate` 4.524 s, `internal/runmetrics` 0.149 s. No package
+failed. This result is distinct from the historical Linux result at
+`0750e8be` that failed by host storage timeout.
+
+Focused verification scope: `go test ./...` covers the focused packages named by
+the inventory, including `internal/toolharness`, `internal/agent`,
+`internal/approval` (with `agency002_binding_test.go`),
+`internal/toolharness` (with `agency002_contract_test.go`), `internal/git`,
+`internal/github`, `internal/verify`, `internal/mcp`, `internal/planner`,
+`internal/evaltarget`, `internal/commandpolicy`, and `internal/archtest`. Each
+is reported `ok` in the run above. No separate focused invocation was run
+beyond `go test ./...`; that single full run covers each named package and no
+package is omitted.
+
+Remaining gaps: see §Remaining gaps. Each gap there names a concrete follow-up
+and the dependent work it stops. No remaining gap blocks unrelated work or the
+verification above.
+
+PR link: [#270](https://github.com/imhttran/agentic-sop/pull/270) (draft; not
+merged). The implementation PR is opened by the SOP workflow after this stage;
+this field records the opened draft PR.
 
 ## Reusable production seams for Plan 02
 
@@ -577,11 +673,12 @@ the missing tests are consistent with the missing trace.
   cases need inert sinks (a local remote, a fake launcher, a `sh -c` no-op) so a
   denial is provable with no side effect at the governed sink.
 
-## Optional targeted follow-up (not run)
+## Optional targeted follow-up
+
+The AGENCY-003 verification scope is the three commands in §Verification
+record: `go build ./...`, `go vet ./...`, and `go test ./...`. Narrower
+invocations are optional and were not needed here because the full run passed:
 
 - `go test ./internal/toolharness/ ./internal/ollamaagent/ ./internal/git/`
 - `go test ./internal/verify/ ./internal/mcp/ ./internal/planner/ ./internal/evaltarget/`
 - `go test ./internal/cli/ -run 'TestMCP|TestStartWork'`
-
-These are optional. This report was produced by inspection; none of them was run
-for AGENCY-001.

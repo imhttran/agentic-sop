@@ -80,6 +80,10 @@ None
 - criterion 3: manual: docs/reports/owasp-llm/llm03-agency.md §Distinctions required by the task, paragraph "Policy-only enforcement vs OS isolation", and §Summary findings items 3 and 5
 - criterion 4: manual: docs/reports/owasp-llm/llm03-agency.md §Existing tests (identified by inspection) and §Host-specific runtime evidence, which name the suites and mark the Linux-only result as historical
 
+### Execution
+
+- verify-first — the reviewed inventory is present in the working tree; the configured validation proves the repository still builds and the checked packages pass, so no further implementation is required.
+
 ## AGENCY-002 — Reproduce and repair contract violations
 
 Priority: P1. Use the inventory to select focused negative cases: unauthorized
@@ -123,6 +127,10 @@ Tests must exercise the production boundary, not a duplicate policy implementati
 - criterion 4: check 1
 - criterion 5: manual: docs/reports/owasp-llm/llm03-agency.md §Summary findings item 5 and §Path-by-path matrix UNVERIFIED entries; the report must name the configured external-agent shell, MCP handler set, and recovery/resume paths as policy-only or UNVERIFIED, never as sandboxed
 
+### Execution
+
+- verify-first — the focused regression tests and the reviewed report are present in the working tree; the configured validation proves them, so no further implementation is required.
+
 ## AGENCY-003 — Verify, document residual authority, and open PR
 
 Priority: P1. Run focused checks and required repository verification. Update the
@@ -155,6 +163,10 @@ are justified.
 - criterion 2: manual: docs/reports/owasp-llm/llm03-agency.md §Summary findings item 3 and §Host-specific runtime evidence; normal agent execution is policy-only, and only evaltarget carries OS isolation
 - criterion 3: manual: docs/reports/owasp-llm/llm03-agency.md §Optional targeted follow-up and §Remaining gaps; each architecture-level gap names a concrete follow-up and does not block unrelated work
 - criterion 4: manual: docs/reports/owasp-llm/llm03-agency.md §Reusable production seams for Plan 02, naming the evaltarget observer, production authorization controls, and inert effect boundary
+
+### Execution
+
+- verify-first — the verification record, matrix update, and reviewed inventory are present in the working tree; the configured validation proves the repository still builds and the checked packages pass.
 
 ## Risks and boundaries
 
