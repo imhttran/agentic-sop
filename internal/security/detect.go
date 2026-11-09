@@ -675,38 +675,39 @@ func SelectCandidatesWithDatabase(detection Detection, configured []config.Secur
 // database cache root available to the OSV capability classifier. The advisory
 // database path and the OSV cache are deliberately not interchangeable.
 func SelectCandidatesWithDatabases(detection Detection, configured []config.SecurityAdapterConfig, advisoryDatabasePath, osvDatabasePath string) []AdapterCandidate {
-	if len(detection.Languages) == 0 {
-		return nil
-	}
 	byID := configuredAdaptersByID(configured)
 	languages := append([]Language(nil), detection.Languages...)
 	var out []AdapterCandidate
 
 	// SAST: Semgrep is proposed when Go or Rust source exists. Its coverage is
 	// derived from the local rules' declared languages, never from a path guess.
-	sast := AdapterCandidate{ID: AdapterIDSemgrep, Category: CategorySAST, Languages: languages}
-	rules := ""
-	if raw, ok := byID[AdapterIDSemgrep]; ok {
-		rules = strings.TrimSpace(raw.Rules)
-	}
-	if rules == "" {
-		sast.Status = CapabilityUnsupported
-	} else if covered, err := coveredLanguages(rules, languages); err != nil || len(covered) == 0 {
-		sast.Status = CapabilityUnsupported
-	} else {
-		// Only a ruleset that actually declares a detected language is offered.
-		sast.Rules = rules
-		if raw, ok := byID[AdapterIDSemgrep]; ok && !executableResolvable(raw.Command) {
-			sast.Status = CapabilityUnavailable
-		} else if ok {
-			sast.Status = CapabilityAvailable
-		} else {
-			sast.Status = CapabilityProposed
+	// This block stays language-scoped; secrets scanning below does not.
+	if len(detection.Languages) > 0 {
+		sast := AdapterCandidate{ID: AdapterIDSemgrep, Category: CategorySAST, Languages: languages}
+		rules := ""
+		if raw, ok := byID[AdapterIDSemgrep]; ok {
+			rules = strings.TrimSpace(raw.Rules)
 		}
+		if rules == "" {
+			sast.Status = CapabilityUnsupported
+		} else if covered, err := coveredLanguages(rules, languages); err != nil || len(covered) == 0 {
+			sast.Status = CapabilityUnsupported
+		} else {
+			// Only a ruleset that actually declares a detected language is offered.
+			sast.Rules = rules
+			if raw, ok := byID[AdapterIDSemgrep]; ok && !executableResolvable(raw.Command) {
+				sast.Status = CapabilityUnavailable
+			} else if ok {
+				sast.Status = CapabilityAvailable
+			} else {
+				sast.Status = CapabilityProposed
+			}
+		}
+		out = append(out, sast)
 	}
-	out = append(out, sast)
 
-	// Secrets: Gitleaks is language-agnostic and is proposed when content exists.
+	// Secrets: Gitleaks is language-agnostic and is proposed for any repository
+	// content, including a text/config-only tree with no manifest or source.
 	secrets := AdapterCandidate{ID: AdapterIDGitleaks, Category: CategorySecrets, Languages: languages}
 	if raw, ok := byID[AdapterIDGitleaks]; ok {
 		if executableResolvable(raw.Command) {
@@ -828,35 +829,36 @@ func AutoAdapterConfigs(detection Detection, configured []config.SecurityAdapter
 			categories[category] = true
 		}
 	}
-	if len(detection.Languages) == 0 {
-		return out
-	}
+	// Secrets scanning is repository-wide and does not depend on a source-language
+	// manifest. Add Gitleaks before the language-scoped additions below.
 	if !categories[config.SecurityCategorySecrets] {
 		out = append(out, config.SecurityAdapterConfig{
 			ID: AdapterIDGitleaks, Category: config.SecurityCategorySecrets,
 			Protocol: config.SecurityProtocolBuiltin, Command: []string{"gitleaks"},
 		})
 	}
-	if !categories[config.SecurityCategorySAST] {
-		rules := ""
-		if raw, ok := byID[AdapterIDSemgrep]; ok {
-			rules = raw.Rules
+	if len(detection.Languages) > 0 {
+		if !categories[config.SecurityCategorySAST] {
+			rules := ""
+			if raw, ok := byID[AdapterIDSemgrep]; ok {
+				rules = raw.Rules
+			}
+			out = append(out, config.SecurityAdapterConfig{
+				ID: AdapterIDSemgrep, Category: config.SecurityCategorySAST,
+				Protocol: config.SecurityProtocolBuiltin, Command: []string{"semgrep"}, Rules: rules,
+			})
 		}
-		out = append(out, config.SecurityAdapterConfig{
-			ID: AdapterIDSemgrep, Category: config.SecurityCategorySAST,
-			Protocol: config.SecurityProtocolBuiltin, Command: []string{"semgrep"}, Rules: rules,
-		})
-	}
-	if detection.HasLanguage(LanguageRust) && !categories[config.SecurityCategoryDependencies] {
-		database := databasePath
-		if raw, ok := byID[AdapterIDCargoAudit]; ok && strings.TrimSpace(raw.Database) != "" {
-			database = raw.Database
+		if detection.HasLanguage(LanguageRust) && !categories[config.SecurityCategoryDependencies] {
+			database := databasePath
+			if raw, ok := byID[AdapterIDCargoAudit]; ok && strings.TrimSpace(raw.Database) != "" {
+				database = raw.Database
+			}
+			out = append(out, config.SecurityAdapterConfig{
+				ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
+				Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
+				Database: database, Stale: "",
+			})
 		}
-		out = append(out, config.SecurityAdapterConfig{
-			ID: AdapterIDCargoAudit, Category: config.SecurityCategoryDependencies,
-			Protocol: config.SecurityProtocolBuiltin, Command: []string{"cargo", "audit"},
-			Database: database, Stale: "",
-		})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].ID < out[j].ID })
 	return out
@@ -1199,11 +1201,14 @@ func configuredDescriptor(raw config.SecurityAdapterConfig) (Descriptor, error) 
 }
 
 // candidateSupportedFor reports whether an adapter id can cover the detected
-// content. Built-in scanner adapters need at least one detected language.
+// content. Language-scoped scanners need at least one detected language;
+// Gitleaks is repository-wide and remains eligible for text/config-only content.
 func candidateSupportedFor(id string, detection Detection) bool {
 	switch id {
-	case AdapterIDSemgrep, AdapterIDGitleaks:
+	case AdapterIDSemgrep:
 		return len(detection.Languages) > 0
+	case AdapterIDGitleaks:
+		return true
 	case AdapterIDCargoAudit:
 		return detection.HasLanguage(LanguageRust) && detection.HasPresentLockfile(LanguageRust)
 	case AdapterIDOSVScanner:
