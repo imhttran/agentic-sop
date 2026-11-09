@@ -42,7 +42,6 @@ die() {
 }
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required"
-command -v curl >/dev/null 2>&1 || die "curl is required"
 command -v tar >/dev/null 2>&1 || die "tar is required"
 [ -f "$manifest" ] || die "missing manifest: $manifest"
 
@@ -76,9 +75,7 @@ work="$(mktemp -d "${TMPDIR:-/tmp}/sop-cargo-audit.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 
 archive="$work/$asset"
-curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time 180 "$url" -o "$archive" || die "download failed: $url"
-actual="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$archive")"
-[ "$actual" = "$expected" ] || die "checksum mismatch for $asset: want $expected, got $actual"
+"$script_dir/fetch-pinned.sh" "$url" "$expected" "$archive" 180
 
 extracted="$work/extracted"
 mkdir -p "$extracted"

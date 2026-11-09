@@ -72,9 +72,19 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
+      # Pinned scanner downloads, keyed by their committed SHA-256 pins. A cache
+      # hit gets the same checksum check as a fresh download, so CI does not
+      # depend on GitHub release downloads succeeding on every run.
+      - uses: actions/cache@v4
+        with:
+          path: ${{ runner.temp }}/sop-security-downloads
+          key: sop-security-downloads-${{ runner.os }}-${{ hashFiles('scripts/security/*-manifest.json', 'scripts/checks/security-integration.sh') }}
+      - name: pinned download cache self-check
+        run: bash scripts/checks/test-fetch-pinned.sh
       - name: provision and run pinned scanners
         env:
           SOP_SECURITY_TOOLS_DIR: ${{ runner.temp }}/sop-security-tools
+          SOP_SECURITY_DOWNLOAD_CACHE: ${{ runner.temp }}/sop-security-downloads
         run: bash scripts/checks/security-integration.sh
 
   # The suite under the race detector, which the lifecycle and scheduler tests rely on.
