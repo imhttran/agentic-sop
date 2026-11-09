@@ -3,10 +3,16 @@
 **Current reconciliation:** this register builds on `main` at `347a96f1`
 (2026-11-09 UTC), after PR #316 merged at `1ace57a8` and PR #317 merged at
 `347a96f1`. The Plan 10 row was re-verified at `main` `ed9ec2dc` (2026-11-09) on
-Darwin arm64 and adds the live-delivery blocker and acceptance request; the other
-rows keep their recorded revision. This branch also merged `main` at `bf370358`
-(PRs #327 and #329); those changes are not re-verified by this register. The
-original point-in-time baseline at `93c72857` is preserved verbatim in
+Darwin arm64 and prepared the live-delivery blocker and acceptance request. The
+Plan 10 wrap-up merged in PR #328 as
+`35340774c16b10236b0ca0143cc0d07c85a8e6b3`; its full CI passed on the PR head
+`eaf34114a5fcfe96088986d8939309c1efc75ffa` (CI
+[42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282),
+CodeQL
+[42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910)).
+This follow-up records that merged evidence and does not re-run it. The other
+rows keep their recorded revision. The original point-in-time baseline at
+`93c72857` is preserved verbatim in
 [gap-register-20261109-baseline.md](gap-register-20261109-baseline.md). That file
 is historical evidence; it is not the current disposition.
 
@@ -36,12 +42,16 @@ policy, trust, or acceptance decision are recorded separately.
 | Scanner integrity investigation   | #311              | `c3a8eed8` | Investigation and proposal complete; binary-pin decision open                                                         |
 | Slack test preparation            | #313              | `f557c6fd` | Preparation complete; live delivery `NOT_RUN`                                                                         |
 | Plan 03 acceptance request        | #314              | `a37a7bbd` | Request prepared; acceptance pending                                                                                  |
-| Plan 10 wrap-up                   | this PR (pending) | —          | Reconciles the sink evidence and prepares the authorization/acceptance request; no live send, no lifecycle transition |
+| Plan 10 wrap-up                   | #328 | `35340774c16b10236b0ca0143cc0d07c85a8e6b3` | Merged; reconciles the sink evidence and prepares the authorization/acceptance request; no live send, no lifecycle transition |
 | Accepted-outcome resume fix       | #315              | `d3830e35` | Merged                                                                                                                |
 | Accepted-outcome refresh P1 fix   | #316              | `1ace57a8` | Merged; closes the #315 follow-up                                                                                     |
 
 Both the accepted-outcome resume fix (#315) and its P1 correction (#316) are merged.
+
 Merging these PRs does not imply installation, deployment, or SOP plan completion.
+The merged-evidence follow-up (`docs/llm10-merged-evidence`) is documentation-only:
+it records the #328 identity and CI result, re-runs no test, sends no message,
+records no acceptance, and creates no SOP state.
 
 ## SOP lifecycle state (verified; actual transitions marked)
 
@@ -52,7 +62,8 @@ Merging these PRs does not imply installation, deployment, or SOP plan completio
 | `.worktrees/llm02-disclosure` (retired)        | `plan-03-sop-llm02-sensitive-information-disclosure` | `HISTORICALIZED` / `COMPLETE` (external completion) | `DISCLOSE-003` `LOCAL_DONE` via external completion; no pending approval; no per-criterion acceptance                          | `sop task complete DISCLOSE-003 --external --commit d3830e35` (validation `PASS`, 2026-11-09T17:19:43Z); `sop plan historicalize` (`COMPLETE`, 2026-11-09T17:19:47Z); evidence preserved at `.agent-sdlc/archive/worktree-evidence/plan-03-sop-llm02-sensitive-information-disclosure/`; worktree/local branch removed |
 | Main checkout                                  | none                                                 | `NONE`                                              | ineligible: no active plan                                                                                                     | None                                                                                                                                                                                                                                                                                                                   |
 | `fond-eel`, `stark-stoat`, closeout worktree   | none                                                 | not initialized                                     | unverified                                                                                                                     | None                                                                                                                                                                                                                                                                                                                   |
-| `worktrees/agentic-sop/dense-pond/agentic-sop` | `PLAN-10-SOP-LLM10-Improper-Output-Handling.md`      | not initialized                                     | ineligible: `sop status`, `sop plan historicalize --check`, and `sop continue --check` all report `project is not initialized` | None; no bootstrap, no state edit, no transition claimed                                                                                                                                                                                                                                                               |
+| `worktrees/agentic-sop/dense-pond/agentic-sop` | `PLAN-10-SOP-LLM10-Improper-Output-Handling.md`      | not initialized                                     | ineligible: `sop status`, `sop plan historicalize --check`, and `sop continue --check` all report `project is not initialized` | None; no bootstrap, no state edit, no transition claimed; the merged-evidence follow-up also did not initialize state                                                                                                                                                                                                   |
+| `worktrees/agentic-sop/plan10-followup/agentic-sop` | `PLAN-10-SOP-LLM10-Improper-Output-Handling.md` | not initialized                                 | ineligible: no state was created                                                                                               | None; documentation-only follow-up; no bootstrap, no state edit, no transition claimed                                                                                                                                                                                                                                  |
 | Plan 05, Plan 10, Plans 02/06/07/08/09         | documents under `docs/`                              | owning SOP state unavailable                        | unverified                                                                                                                     | None; a merged PR is not completion proof                                                                                                                                                                                                                                                                              |
 
 No approval, per-criterion acceptance, task skip, retry, reconcile, or state-database
@@ -70,7 +81,7 @@ acceptance criteria were accepted; no acceptance decision exists.
 3. **Scanner binary pins** — [PROPOSAL-SCANNER-BINARY-PINS.md](../../plans/PROPOSAL-SCANNER-BINARY-PINS.md): A keep the contract; B optional `binary_sha256` from a verified acquisition (recommended); C platform/publisher trust.
 4. **Live Slack test** — authorize one synthetic test event to the `#sop-alert` webhook for a named window with an empty pre-send outbox, enable the `webhook` channel with the `slack` payload, and confirm the binding; no authorization record exists and the send remains not performed. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
 5. **Plan 03 acceptance** — a designated approver records acceptance for the exact campaign artifact and criteria; no acceptance is recorded.
-6. **Plan 10 manual acceptance** — the designated approver accepts or declines the six manual criteria; no owning SOP state exists, so `sop outcome --accept` is not yet available. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
+6. **Plan 10 manual acceptance** — the designated approver accepts or declines the six manual criteria. Passing CI is evidence for `OUTPUT-003` criterion 3, not an acceptance record. No owning SOP state exists, so `sop outcome --accept` is not yet available. See [llm10-acceptance-request.md](llm10-acceptance-request.md).
 
 ## Cross-cutting boundaries (unchanged)
 
