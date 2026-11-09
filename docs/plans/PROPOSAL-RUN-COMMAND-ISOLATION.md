@@ -7,8 +7,8 @@ matrix row, and no README status changes are part of this task. Every
 [`../reports/security-shift-left/execution-path-matrix.md`](../reports/security-shift-left/execution-path-matrix.md)
 stays as it is today.
 
-Related: [`8-llm03-run-command-isolation-design.md`](8-llm03-run-command-isolation-design.md)
-(the plan this proposal answers).
+Related: `8-llm03-run-command-isolation-design.md`, the plan this proposal
+answers (an agent prompt, since removed from the repository).
 
 ## Environment
 
