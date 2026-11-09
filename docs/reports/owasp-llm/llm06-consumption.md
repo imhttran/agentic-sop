@@ -1,8 +1,8 @@
 # OWASP LLM06 — Unbounded consumption: SOP execution limits
 
 Status: `VERIFIED` for the merged execution controls on macOS and Linux CI; the
-validation-runner output fix is on the follow-up branch; the default
-output-token-cap decision remains a governance decision, not a demonstrated defect.
+validation-runner output fix is on the follow-up branch; the provider
+output-token cap now defaults to 16384 tokens per request.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
 Base commit: `360b96ef721526e58b89f7a7986849caa8a96080` (`origin/main` after the follow-up rebase).
 Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
@@ -62,7 +62,7 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | Validation command output | bytes / check | `internal/testrunner.Runner.MaxOutputBytes`; canonical context limit for prompt rendering | 10 MiB capture; 64 KiB per stream in the prompt | `limitedBuffer` at read; `boundedValidationStream` before rendering | Not persisted | Bounded at both read and prompt boundaries (follow-up) |
 | Provider request timeout | s / model call | `internal/agent/provider.go`; provider-specific timeout envs | 120 s | `http.Client.Timeout` | Not persisted | A provider may continue billing after the client cancels |
 | Provider response bound | bytes / model call | `internal/agent/provider.go` | 10 MiB | `io.LimitReader` in `postJSON` | Not persisted | The read is bounded; provider generation is not |
-| Provider output-token bound | tokens / request | `SOP_AGENT_MAX_OUTPUT_TOKENS` (operator opt-in) | **none** (provider default) | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | **GAP by default**: no SOP cap unless the operator sets it |
+| Provider output-token bound | tokens / request | `agent.DefaultMaxOutputTokens`; `SOP_AGENT_MAX_OUTPUT_TOKENS` overrides | 16384 | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | A response cut off at the cap is not detected as truncated |
 | Provider retry bound | attempts / chat turn | `internal/ollamaagent/ollama.go` | 3 (initial + 2) | `chatWithFormat` before any tool executes | Not persisted | Retries multiply provider calls but are fixed and bounded |
 | ACP frame bound | bytes / frame | `internal/acp` | 1 MiB | transport frame reader | Not persisted | Oversize frame is rejected |
 | ACP prompt bound | bytes / submission | `internal/acp` | 256 KiB | `PromptSubmission` | Not persisted | Rejected |
@@ -109,7 +109,7 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
   output, timeout, attempt, or continuation limits.
 - Provider request construction carries no model-supplied output-token value.
   `SOP_AGENT_MAX_OUTPUT_TOKENS` is operator-owned and is copied into the request
-  before dispatch; when it is unset, no SOP cap is sent (GAP by default).
+  before dispatch; when it is unset, `agent.DefaultMaxOutputTokens` (16384) is sent.
 
 ## 2. Reproduced defects and repairs
 
@@ -207,14 +207,15 @@ present in those tests.
 
 ### 2.9 Provider output-token bound
 
-`SOP_AGENT_MAX_OUTPUT_TOKENS` is now an operator-owned opt-in bound. When set, the
-single-shot providers send `max_tokens` (OpenAI-compatible) or
+The single-shot providers send `max_tokens` (OpenAI-compatible) or
 `options.num_predict` (Ollama), and the in-process tool loop sends
-`options.num_predict`, before dispatch. When unset, no SOP cap is sent. That is a
-**required governance decision** (choose a default cap, or accept opt-in-only),
-not a demonstrated defect: the plan explicitly forbids inventing a numeric quota.
+`options.num_predict`, before dispatch. The value is `SOP_AGENT_MAX_OUTPUT_TOKENS`
+when set, otherwise `agent.DefaultMaxOutputTokens` (16384). The default was chosen
+by the operator as the governance decision this report previously left open; it
+sits far above a plan or review, including reasoning-model thinking tokens.
 
-Evidence: `TestClientsHonorOperatorMaxOutputTokens`,
+Evidence: `TestMaxOutputTokensDefaultsWhenUnset`,
+`TestClientsHonorOperatorMaxOutputTokens`,
 `TestProviderRejectsInvalidMaxOutputTokens`,
 `TestOllamaClientSendsOperatorMaxOutputTokens`.
 
@@ -259,7 +260,7 @@ Evidence: `TestRunBoundsCapturedOutput`,
 
 | Reported residual | Disposition | Evidence / decision |
 |---|---|---|
-| Default provider output-token cap | Required governance decision | `SOP_AGENT_MAX_OUTPUT_TOKENS` is implemented and tested; an unset value sends no cap. The plan forbids inventing a numeric quota, so choosing a default (or accepting opt-in-only) is an operator decision. |
+| Default provider output-token cap | Decided by the operator; implemented | Unset `SOP_AGENT_MAX_OUTPUT_TOKENS` now sends `agent.DefaultMaxOutputTokens` (16384). Test: `TestMaxOutputTokensDefaultsWhenUnset`. |
 | Linux descendant termination | Required criterion satisfied | GitHub Actions run `42576841956`, job `129026456948` (`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`) passed `go test ./...` including the unix-tagged process-group and signal tests. |
 | Validation-runner output bound | Required criterion implemented and verified on the follow-up branch | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
 | Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
@@ -328,10 +329,10 @@ process-group and signal tests.
 
 ## 6. Residual limitations and follow-up proposals
 
-1. **Default output-token cap is a governance decision.** `SOP_AGENT_MAX_OUTPUT_TOKENS`
-   is opt-in; an unset value sends no SOP cap. Choosing a default (and the
-   provider-specific interaction with context windows) needs an operator decision.
-   This is not a demonstrated defect: the plan forbids inventing a numeric quota.
+1. **Truncation at the output-token cap is not detected.** The default cap is
+   16384 tokens per request. A response cut off at the cap (`finish_reason` /
+   `done_reason` `length`) is not reported as truncated, and the cap's interaction
+   with provider context windows is not measured.
 2. **No execution token budget.** Token usage is diagnostic; the execution circuit
    breakers are turns, tool calls, stale iterations, and lifecycle counts. A token
    budget would be a new policy control.
