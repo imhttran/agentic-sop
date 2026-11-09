@@ -80,8 +80,12 @@ type osvDatabase struct {
 	Digest    string
 	Size      int64
 	Modified  time.Time
-	Source    string
-	Metadata  string
+	// Acquired is the acquisition time recorded in the sidecar metadata. It is
+	// preferred over Modified for freshness: copying or restoring an archive
+	// rewrites its mtime, so mtime alone can make a stale database look fresh.
+	Acquired time.Time
+	Source   string
+	Metadata string
 }
 
 func (a *osvAdapter) stalePolicyValue() string {
@@ -394,38 +398,58 @@ func inspectOSVDatabase(ecosystem, path string) (osvDatabase, error) {
 		Size:      info.Size(),
 		Modified:  info.ModTime().UTC(),
 	}
-	if data, err := os.ReadFile(path + ".metadata.json"); err == nil {
-		var meta struct {
-			Source       string `json:"source"`
-			SHA256       string `json:"sha256"`
-			DownloadedAt string `json:"downloaded_at"`
+	data, metaErr := os.ReadFile(path + ".metadata.json")
+	if metaErr != nil {
+		if !errors.Is(metaErr, os.ErrNotExist) {
+			return osvDatabase{}, fmt.Errorf("OSV acquisition metadata for %s is unavailable: %s", ecosystem, SanitizeText(metaErr.Error(), MaxDiagnosticBytes))
 		}
-		if json.Unmarshal(data, &meta) == nil {
-			if strings.TrimSpace(meta.SHA256) != "" && !strings.EqualFold(strings.TrimSpace(meta.SHA256), digest) {
-				return osvDatabase{}, fmt.Errorf("OSV database digest for %s does not match its acquisition metadata", ecosystem)
-			}
-			db.Source = SanitizeText(meta.Source, MaxMessageBytes)
-			parts := []string{"ecosystem=" + ecosystem, "digest=" + digest,
-				fmt.Sprintf("size=%d", db.Size), "modified=" + db.Modified.Format(time.RFC3339)}
-			if db.Source != "" {
-				parts = append(parts, "source="+db.Source)
-			}
-			if strings.TrimSpace(meta.DownloadedAt) != "" {
-				parts = append(parts, "downloaded_at="+SanitizeText(meta.DownloadedAt, 128))
-			}
-			db.Metadata = strings.Join(parts, ";")
-			return db, nil
-		}
+		db.Metadata = fmt.Sprintf("ecosystem=%s;digest=%s;size=%d;modified=%s", ecosystem, digest, db.Size, db.Modified.Format(time.RFC3339))
+		return db, nil
 	}
-	db.Metadata = fmt.Sprintf("ecosystem=%s;digest=%s;size=%d;modified=%s", ecosystem, digest, db.Size, db.Modified.Format(time.RFC3339))
+	var meta struct {
+		Source       string `json:"source"`
+		SHA256       string `json:"sha256"`
+		Size         int64  `json:"size"`
+		DownloadedAt string `json:"downloaded_at"`
+	}
+	if err := json.Unmarshal(data, &meta); err != nil {
+		// Corrupt acquisition metadata is not clean evidence. Falling back to
+		// mtime here would silently turn a damaged database record into a fresh one.
+		return osvDatabase{}, fmt.Errorf("OSV acquisition metadata for %s is malformed: %s", ecosystem, SanitizeText(err.Error(), MaxDiagnosticBytes))
+	}
+	if strings.TrimSpace(meta.SHA256) != "" && !strings.EqualFold(strings.TrimSpace(meta.SHA256), digest) {
+		return osvDatabase{}, fmt.Errorf("OSV database digest for %s does not match its acquisition metadata", ecosystem)
+	}
+	if meta.Size != 0 && meta.Size != db.Size {
+		return osvDatabase{}, fmt.Errorf("OSV database size for %s does not match its acquisition metadata: found %d, want %d", ecosystem, db.Size, meta.Size)
+	}
+	db.Source = SanitizeText(meta.Source, MaxMessageBytes)
+	parts := []string{"ecosystem=" + ecosystem, "digest=" + digest,
+		fmt.Sprintf("size=%d", db.Size), "modified=" + db.Modified.Format(time.RFC3339)}
+	if db.Source != "" {
+		parts = append(parts, "source="+db.Source)
+	}
+	if raw := strings.TrimSpace(meta.DownloadedAt); raw != "" {
+		acquired, err := time.Parse(time.RFC3339, raw)
+		if err != nil {
+			return osvDatabase{}, fmt.Errorf("OSV acquisition metadata for %s has an unreadable downloaded_at %q", ecosystem, SanitizeText(raw, MaxDiagnosticBytes))
+		}
+		db.Acquired = acquired.UTC()
+		parts = append(parts, "downloaded_at="+SanitizeText(raw, 128))
+	}
+	db.Metadata = strings.Join(parts, ";")
 	return db, nil
 }
 
 func osvDatabaseIdentity(databases []osvDatabase) string {
 	parts := make([]string, 0, len(databases))
 	for _, db := range databases {
-		parts = append(parts, fmt.Sprintf("ecosystem=%s;digest=%s;size=%d;modified=%s",
-			db.Ecosystem, db.Digest, db.Size, db.Modified.Format(time.RFC3339)))
+		part := fmt.Sprintf("ecosystem=%s;digest=%s;size=%d;modified=%s",
+			db.Ecosystem, db.Digest, db.Size, db.Modified.Format(time.RFC3339))
+		if !db.Acquired.IsZero() {
+			part += ";acquired=" + db.Acquired.Format(time.RFC3339)
+		}
+		parts = append(parts, part)
 	}
 	sort.Strings(parts)
 	return strings.Join(parts, ";")
@@ -443,10 +467,17 @@ func osvDatabaseMetadata(databases []osvDatabase) string {
 }
 
 // osvDatabaseStale reports whether any required database is older than the
-// documented freshness boundary. Missing freshness evidence is treated as stale.
+// documented freshness boundary. The acquisition time recorded beside the
+// archive is authoritative when present; filesystem mtime is only a fallback,
+// because copying or restoring an archive rewrites it. Missing freshness evidence
+// is treated as stale.
 func osvDatabaseStale(databases []osvDatabase, now time.Time) bool {
 	for _, db := range databases {
-		if db.Modified.IsZero() || now.Sub(db.Modified) > osvScannerStaleMaxAge {
+		observed := db.Acquired
+		if observed.IsZero() {
+			observed = db.Modified
+		}
+		if observed.IsZero() || now.Sub(observed) > osvScannerStaleMaxAge {
 			return true
 		}
 	}
