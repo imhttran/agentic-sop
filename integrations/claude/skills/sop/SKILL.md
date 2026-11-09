@@ -64,10 +64,6 @@ Thin aliases in the same install expose one capability each:
                           run a report-only Go/Rust/mixed security scan through
                           SOP: detect content, select adapters, triage findings,
                           and report sanitized evidence (`sop security scan`)
-/sop-ci-fix <request>     repair a deterministic push failure: formatting drift,
-                          a documentation link that breaks only in the merge with
-                          the base branch, or a merge conflict the branch alone
-                          caused; everything else stops for a human
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)
@@ -86,6 +82,14 @@ Thin aliases in the same install expose one capability each:
                           published target, historicalize eligible plans through
                           SOP, and remove only fully-merged clean worktrees and
                           branches
+/sop-fix-conflicts <path?>
+                          resolve an in-progress merge conflict only when both
+                          sides' intent can be kept; otherwise stop and report
+                          the decision the operator must make
+/sop-ci-fix <request>     repair a deterministic push failure: formatting drift,
+                          or a documentation link that breaks only in the merge
+                          with the base branch; ambiguous results stop for a human
+                          (merge conflicts belong to /sop-fix-conflicts)
 /sop-next-action [plan]   determine the single highest-priority safe next action:
                           read-only status, authorized plan preparation, and
                           governed execution (`sop status`, `sop continue --check`,
@@ -112,12 +116,18 @@ through `sop plan historicalize`, preserve lifecycle evidence, and remove only
 fully-merged clean worktrees and local branches. That skill never infers completion
 from a merge, never marks a plan superseded, and never force-removes or rewrites.
 
-Explicit `/sop-ci-fix` requests repair only three mechanical failures: formatting
-drift, a documentation link whose target moved in the base branch, and a merge
-conflict caused by the branch alone. It reproduces the failure with `sop validate`
-and the repository's own check scripts, makes the smallest change, re-runs the same
-gate, and stops for a human on anything ambiguous. It never weakens a check, never
-bypasses the local gate, and never publishes.
+Explicit `/sop-fix-conflicts` requests resolve an in-progress merge: they read both
+sides of every conflict, keep both intents when the resolution is mechanical, verify
+the merged result, and complete the merge locally. The skill stops with the markers
+intact when a conflict needs a product, security, or policy decision, and it never
+
+Explicit `/sop-ci-fix` requests repair only two deterministic push failures: formatting
+drift, and a documentation link whose target moved in the base branch. It reproduces
+the failure with `sop validate` and the repository's own check scripts, makes the
+smallest change, re-runs the same gate, and stops for a human on anything ambiguous.
+It never weakens a check, never bypasses the local gate, and never publishes. Merge
+conflicts are not its work: `/sop-fix-conflicts` owns them.
+publishes or rewrites history.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test

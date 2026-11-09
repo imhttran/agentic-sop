@@ -208,6 +208,28 @@ Linux was verified by GitHub Actions run `42576841956`, job `129026456948`
 passed, including the unix-tagged process-group and signal tests. No skip path is
 present in those tests.
 
+Local Linux reproduction at base revision `92c996a` (Linux `7.0.0-38-generic`
+x86_64, Go `1.27.1`), with the new fixtures added on this branch:
+
+```sh
+TMPDIR=/dev/shm/llm06-tmp go test ./internal/toolharness -run 'TestExec|TestCleanupOwnedPID' -count=1
+TMPDIR=/dev/shm/llm06-tmp go test ./internal/agent -run TestCommandAgentTimeoutKillsDescendant -count=1
+TMPDIR=/dev/shm/llm06-tmp go test ./internal/cli -run TestExecutionContextCancelsOnSignal -count=1
+```
+
+All passed. `TestExecNormalCompletionNoDescendants`,
+`TestExecTimeoutKillsGrandchild`, `TestExecCancellationKillsGrandchild`, and
+`TestExecTimeoutKillsSigtermIgnoringDescendant` record the child and grandchild
+PIDs and wait until `syscall.Kill(pid, 0)` reports them gone, so the evidence is
+actual termination, not merely that the caller returned.
+`TestCleanupOwnedPIDDoesNotSignalDifferentIdentity` proves the cleanup helper
+signals a PID only when the recorded `/proc/<pid>/stat` start time still matches,
+so a reused PID is not signalled. The unix contract has no graceful escalation
+phase: process-group SIGKILL is the contract, and the SIGTERM-ignoring fixture
+confirms that a descendant which ignores SIGTERM is still terminated. No
+production-code change was required; the existing `Setpgid` plus
+`terminateGroup` implementation already covered the grandchild.
+
 ### 2.9 Provider output-token bound
 
 The single-shot providers send `max_tokens` (OpenAI-compatible) or
@@ -293,7 +315,7 @@ Evidence: `TestRunBoundsCapturedOutput`,
 |---|---|---|
 | Default provider output-token cap | Decided by the operator; implemented | Unset `SOP_AGENT_MAX_OUTPUT_TOKENS` now sends `agent.DefaultMaxOutputTokens` (16384). Test: `TestMaxOutputTokensDefaultsWhenUnset`. |
 | Provider `length` truncation accepted as complete | Implemented and verified | `finish_reason`/`done_reason` `length` becomes `agent.TruncationError`; the in-process bridge marks `Response.Truncated` and returns a `failed` outcome, and the orchestration mapping refuses success. Tests: `TestOpenAICompatibleRejectsLengthFinishReason`, `TestOllamaRejectsLengthDoneReason`, `TestTruncatedToolCallIsNotDispatched`, `TestTruncatedFinalIsNotAcceptedAsSuccess`, `TestTruncatedPayloadFailsSafely`. |
-| Linux descendant termination | Required criterion satisfied | GitHub Actions run `42576841956`, job `129026456948` (`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`) passed `go test ./...` including the unix-tagged process-group and signal tests. |
+| Linux descendant termination | Required criterion satisfied; local Linux evidence added | Existing process-group SIGKILL contract. Local Linux tests at base `92c996a` with the new fixtures: `TestExecTimeoutKillsGrandchild`, `TestExecCancellationKillsGrandchild`, `TestExecTimeoutKillsSigtermIgnoringDescendant`, `TestExecNormalCompletionNoDescendants`, `TestCommandAgentTimeoutKillsDescendant`, and `TestCleanupOwnedPIDDoesNotSignalDifferentIdentity` pass. Each timeout/cancellation test verifies the child and grandchild PIDs are gone; the cleanup helper verifies `/proc` start time before signalling. GitHub Actions run `42576841956`, job `129026456948`, remains corroborating CI evidence. |
 | Validation-runner output bound | Required criterion implemented and verified; merged in #289 | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
 | Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
 | `dqharness` unknown-token handling | `NOT_APPLICABLE` for the provider-usage criterion | Production `ModelDecision` counts deterministic `retrievalboundary.EstimateTokens` for the prompt and output, not provider-reported usage; in-flight requests are recorded as uncertain. |
@@ -389,6 +411,12 @@ process-group and signal tests.
    requests are tracked as uncertain.
 7. **No monetary accounting.** There is no pricing table, pre-dispatch
    reservation, or hard dollar cap. This report makes no monetary-cap claim.
+8. **No graceful escalation phase exists on unix.** The subprocess contract sends
+   process-group SIGKILL on timeout or cancellation; it does not send SIGTERM first.
+   `TestExecTimeoutKillsSigtermIgnoringDescendant` confirms a SIGTERM-ignoring
+   descendant is still terminated. This evidence is for the unix process-group
+   implementation; `proc_other.go` still kills only the direct child and is not
+   claimed as group termination.
 
 ## 7. PR and handoff
 

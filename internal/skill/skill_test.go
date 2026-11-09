@@ -119,7 +119,7 @@ func TestSkillBashBlocksInvokeSOPOnly(t *testing.T) {
 func shellExamplesExempt() map[string]bool {
 	out := map[string]bool{}
 	for _, c := range Commands {
-		if c.RunsProjectTests || c.UsesRepositoryScripts {
+		if c.RunsProjectTests || c.UsesRepositoryScripts || c.ResolvesMergeConflicts {
 			out[c.Name] = true
 		}
 	}
@@ -138,8 +138,19 @@ func runsProjectSuite(file string, exempt map[string]bool) bool {
 	return false
 }
 
+// skillName returns the skill folder name for a file under skillsRoot, or "" when the
+// file is not inside a skill folder.
+func skillName(file string) string {
+	rel, err := filepath.Rel(skillsRoot, file)
+	if err != nil || rel == "." || strings.HasPrefix(rel, "..") {
+		return ""
+	}
+	return strings.Split(filepath.ToSlash(rel), "/")[0]
+}
+
 // TestSkillDoesNotRestatePolicyOrMutate proves the skill does not carry SOP policy
-// settings or direct-mutation instructions.
+// settings or direct-mutation instructions, except for the two index operations the
+// merge-conflict resolver needs to complete a merge.
 func TestSkillDoesNotRestatePolicyOrMutate(t *testing.T) {
 	for _, file := range skillFiles(t) {
 		body := read(t, file)
@@ -148,9 +159,56 @@ func TestSkillDoesNotRestatePolicyOrMutate(t *testing.T) {
 				t.Errorf("%s: skill restates a SOP policy setting %q", file, knob)
 			}
 		}
+		name := skillName(file)
 		for _, cmd := range MutationCommands {
-			if strings.Contains(body, cmd) {
+			if strings.Contains(body, cmd) && !AllowsDirectMutation(name, cmd) {
 				t.Errorf("%s: skill contains a direct-mutation instruction %q", file, cmd)
+			}
+		}
+	}
+}
+
+// TestMergeConflictResolverDocumentedContract proves the one command that stages and
+// completes a merge states the rule it decides by and the stop condition that leaves
+// an undecidable conflict for the operator. It also proves the resolver's boundary:
+// no publishing, no history rewrite, and no bypassed gate.
+func TestMergeConflictResolverDocumentedContract(t *testing.T) {
+	found := false
+	for _, c := range Commands {
+		if !c.ResolvesMergeConflicts {
+			continue
+		}
+		found = true
+		body := read(t, filepath.Join(skillsRoot, c.Name, "SKILL.md"))
+		for _, want := range []string{"git add", "git commit --no-edit", "STOP", "both sides"} {
+			if !strings.Contains(body, want) {
+				t.Errorf("%s: must contain %q", c.Name, want)
+			}
+		}
+		for _, forbidden := range []string{
+			"git push", "git rebase", "git reset", "git commit --amend",
+			"--force", "--no-verify", "git merge --abort",
+		} {
+			if strings.Contains(body, forbidden) {
+				t.Errorf("%s: merge resolution must not contain %q", c.Name, forbidden)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no command declares ResolvesMergeConflicts")
+	}
+}
+
+// TestMutationWaiverStaysNarrow proves the staging/commit exception applies to the
+// merge-conflict resolver alone: no other shipped skill may contain those two
+// direct-mutation instructions.
+func TestMutationWaiverStaysNarrow(t *testing.T) {
+	for _, file := range skillFiles(t) {
+		name := skillName(file)
+		body := read(t, file)
+		for cmd := range MergeConflictIndexCommands {
+			if strings.Contains(body, cmd) && !AllowsDirectMutation(name, cmd) {
+				t.Errorf("%s: %q is only allowed in a merge-conflict resolver", file, cmd)
 			}
 		}
 	}

@@ -1,28 +1,32 @@
 ---
 name: sop-ci-fix
 description: |-
-  Repair the deterministic failures a push causes — formatting drift, and
-  documentation links that break only in the merge with the base branch — and
-  resolve merge conflicts confined to files the branch itself changed. Stops and
-  reports anything ambiguous instead of guessing, and never publishes.
+  Repair the two deterministic failures a push causes that a branch-only check
+  cannot see: formatting drift, and a documentation link that breaks only in the
+  merge with the base branch. Stops and reports anything ambiguous instead of
+  guessing, never publishes, and hands merge conflicts to /sop-fix-conflicts.
   Use for: "/sop-ci-fix", "fix the CI failure", "CI is red", "the formatter check
-  failed", "fix the merge conflict", "my branch no longer merges".
+  failed", "the documentation link check failed", "my branch passes locally but
+  fails in CI".
 disable-model-invocation: true
 ---
 
-# /sop-ci-fix — repair a deterministic CI failure
+# /sop-ci-fix — repair a deterministic push failure
 
-`/sop-ci-fix` handles exactly three mechanical classes and refuses everything
-else:
+`/sop-ci-fix` handles exactly two mechanical classes and refuses everything else:
 
-| Class | Symptom | Fix |
-| --- | --- | --- |
-| `FORMATTING` | the formatter check lists files | run the project's formatter over exactly those files |
-| `MOVED_LINK` | a documentation link fails only in the merge result | correct the link target only |
-| `CONFLICT` | the branch no longer merges with its base | resolve only hunks the branch alone changed |
+| Class        | Symptom                                             | Fix                                                  |
+| ------------ | --------------------------------------------------- | ---------------------------------------------------- |
+| `FORMATTING` | the formatter gate lists files                      | run the project's formatter over exactly those files |
+| `MOVED_LINK` | a documentation link fails only in the merge result | correct the link target only                         |
 
-Anything outside those three classes is not this skill's work. Report it and stop;
-`/sop-diagnose` owns diagnosis and `/sop-implement` owns code changes.
+Two things are deliberately not this skill's work:
+
+- **Merge conflicts** belong to `/sop-fix-conflicts`, which owns the decidable-merge
+  contract. Do not resolve a conflict here; hand off and stop.
+- **Everything else** — a failing test, a build error, a lint rule, a provider or
+  infrastructure failure — belongs to `/sop-diagnose` for diagnosis and
+  `/sop-implement` for a code change.
 
 ## Preconditions
 
@@ -48,16 +52,21 @@ sop validate
 ```
 
 `sop validate` runs the project's configured build/test/lint commands, so a
-formatter gate appears there. When the repository also ships
-`scripts/checks/pre-push.sh`, run it: it evaluates the documentation link check
-against the merge with the base branch, which is what CI evaluates and what a
-branch-only check cannot see.
+formatter gate appears there. This is also how you prove the failure is **not** one
+of the two classes above: if a test or build command fails, stop and report
+`NOT_THIS_CLASS`.
+
+When the repository ships `scripts/checks/pre-push.sh`, also run it. It evaluates
+the documentation link check against the merge with the base branch, which is what
+CI evaluates and what a branch-only check cannot see.
 
 ```bash
 scripts/checks/pre-push.sh --base origin/main
 ```
 
-Treat a passing reproduction as "not one of the three classes" and stop.
+If that gate reports `HEAD does not merge cleanly`, the branch conflicts with its
+base: STOP this skill and use `/sop-fix-conflicts`. If both gates pass, there is
+nothing in scope — report `NOT_THIS_CLASS`.
 
 ## Step 3 — classify and fix
 
@@ -79,30 +88,9 @@ The link check prints `broken: <file> -> <target>`. Determine which is true:
   different document and do not delete the surrounding sentence. Report the missing
   target for the operator to decide.
 
-### `CONFLICT`
-
-Merge the base into the branch:
-
-```bash
-git merge origin/main
-```
-
-Then resolve only a hunk that satisfies one of these:
-
-- the branch is the only side that changed those lines;
-- the base applied a move or rename the branch did not touch;
-- both sides changed different, non-overlapping lines of the same hunk.
-
-Stop and abort the merge (`git merge --abort`) when:
-
-- both sides changed the same logic, and one resolution would silently discard a
-  change;
-- the conflicting file is not one the branch changed;
-- the conflict is in generated output, a lockfile, or a binary.
-
-Never rebase published history, and never reset, restore, stash, or clean the
-worktree to "get past" a conflict. Those operations discard work this skill cannot
-recover.
+Both classes are mechanical by construction. If a fix requires a judgement about
+which of two documents is correct, it is not a `MOVED_LINK`; stop and report
+`NEEDS_HUMAN`.
 
 ## Step 4 — verify
 
@@ -125,7 +113,8 @@ Four sections, in this order:
    inspected.
 3. **Verification** — the commands re-run and their results. Never claim a pass that
    was not observed.
-4. **Next action** — exactly one of `FIXED`, `NEEDS_HUMAN`, `NOT_THIS_CLASS`.
+4. **Next action** — exactly one of `FIXED`, `NEEDS_HUMAN`, `NOT_THIS_CLASS`,
+   `USE_SOP_FIX_CONFLICTS`.
 
 Publication is a separate, operator-authorized step. A repair is not permission to
 stage, commit, push, or merge to the remote.
@@ -135,16 +124,19 @@ stage, commit, push, or merge to the remote.
 - **Never weaken the gate.** Do not edit CI configuration, disable a check, relax a
   linter, or delete a test to obtain a green result. A green build reached by
   weakening a check is a regression, not a fix.
-- **Never bypass the hook.** A failing local gate is evidence, not an obstacle. If a
-  repair cannot pass it, report `NEEDS_HUMAN`.
+- **Never bypass the local gate.** A failing local gate is evidence, not an
+  obstacle. If a repair cannot pass it, report `NEEDS_HUMAN`.
+- **Never resolve a merge conflict here.** That contract belongs to
+  `/sop-fix-conflicts`; duplicating it in a second skill would give the operator two
+  different rules for the same decision.
 - **Never touch lifecycle evidence.** Do not edit `.agent-sdlc`, the state database,
   run history, plan files, or approval records.
 - **Never publish.** Staging, committing, pushing, and merging are the operator's
   decisions; this skill stops with a verified working tree.
 - **Preserve user-owned work.** Uncommitted changes that are not part of the repair
   are never reverted, stashed, or folded into the fix.
-- **One class per run.** A run that starts in `FORMATTING` does not continue into
-  conflict resolution; report and let the operator invoke it again.
+- **One class per run.** A run that starts in `FORMATTING` does not continue into the
+  link class; report and let the operator invoke it again.
 
 ## What the skill must not do
 
@@ -159,7 +151,7 @@ stage, commit, push, or merge to the remote.
 Formatting drift:
 
 ```text
-Findings: FORMATTING — `gofmt -l .` listed internal/cli/run.go
+Findings: FORMATTING — the formatter gate listed internal/cli/run.go
 Actions taken: formatted internal/cli/run.go
 Verification: `sop validate` clean; `scripts/checks/pre-push.sh` broken links: 0
 Next action: FIXED
@@ -175,11 +167,11 @@ Verification: broken links: 0 on the merge with origin/main
 Next action: FIXED
 ```
 
-A conflict that is not mechanical:
+A conflict, which is not this skill's work:
 
 ```text
-Findings: CONFLICT — internal/retrieval/rank.go, both sides changed the same scorer
-Actions taken: none; merged state aborted, tree unchanged
+Findings: CONFLICT — the branch does not merge cleanly with origin/main
+Actions taken: none
 Verification: not run; no repair attempted
-Next action: NEEDS_HUMAN
+Next action: USE_SOP_FIX_CONFLICTS
 ```
