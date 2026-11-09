@@ -46,7 +46,7 @@ same tests with the same assertions — it is a faster place to put their tempor
 files, never a reduced or skipped suite, and a failure still exits non-zero.
 
 **How the RAM-backed temporary directory works.** `make test-fast` delegates to
-`scripts/checks/test-fast.sh`. Each invocation creates its *own* directory with
+`scripts/checks/test-fast.sh`. Each invocation creates its _own_ directory with
 `mktemp -d` (default `/dev/shm/sop-test-fast.XXXXXX` on Linux), sets `TMPDIR` to
 that directory only for the `go test` child process, and removes exactly that
 directory on exit. The shared base (`/dev/shm`, `$TMPDIR`, `/tmp`) is never
@@ -58,12 +58,12 @@ setting is changed.
 **Configuration.** Override any input on the command line or via the
 environment:
 
-| Setting             | Make variable              | Environment            | Default |
-| ------------------- | -------------------------- | ---------------------- | ------- |
-| Parallelism         | `TEST_FAST_PARALLEL`       | `SOP_TEST_PARALLEL`    | `2`     |
-| Timeout             | `TEST_FAST_TIMEOUT`        | `SOP_TEST_TIMEOUT`     | `3m`    |
-| Temp base directory | `TEST_FAST_TMPDIR`         | `SOP_TEST_TMPDIR`      | auto    |
-| Min free RAM (MiB)  | `TEST_FAST_MIN_FREE_MB`    | `SOP_TEST_MIN_FREE_MB` | `512`   |
+| Setting             | Make variable           | Environment            | Default |
+| ------------------- | ----------------------- | ---------------------- | ------- |
+| Parallelism         | `TEST_FAST_PARALLEL`    | `SOP_TEST_PARALLEL`    | `2`     |
+| Timeout             | `TEST_FAST_TIMEOUT`     | `SOP_TEST_TIMEOUT`     | `3m`    |
+| Temp base directory | `TEST_FAST_TMPDIR`      | `SOP_TEST_TMPDIR`      | auto    |
+| Min free RAM (MiB)  | `TEST_FAST_MIN_FREE_MB` | `SOP_TEST_MIN_FREE_MB` | `512`   |
 
 For example: `make test-fast TEST_FAST_PARALLEL=4 TEST_FAST_TIMEOUT=5m`.
 
@@ -106,6 +106,32 @@ make install-ollama-agent TEST_MODE=fast
 a gate or the installer runs, so a typo cannot install a binary. In both modes the
 formatting, vet, build, and plugin-package gates are unchanged; a failing gate
 stops the installation.
+
+## Pushing changes
+
+CI evaluates a pull request **merged into its base branch**, not the branch alone. A
+relative documentation link can therefore resolve on the branch and still be broken
+in the merge result; PRs #295 and #296 both failed the `documentation links` step
+this way. `make check-push` runs the same gates locally, with the link check
+evaluated on that merge:
+
+```bash
+make check-push                 # gofmt, then doc links on the merge with origin/main
+make check-push-fix             # rewrite unformatted Go files, then re-check
+make check-push CHECK_PUSH_BASE=origin/release   # merge against another base
+make install-hooks              # install the same gates as a local pre-push hook
+```
+
+Both targets delegate to `scripts/checks/pre-push.sh`, which is also the script CI
+runs, so there is one implementation of these gates rather than three. The merge
+result is materialized with `git archive` into a temporary directory; the working
+tree and repository state are never modified. If the base ref cannot be resolved (a
+shallow CI checkout, for example), the script says so and checks the working tree
+instead of silently skipping the gate. `--no-merge` forces that working-tree check.
+
+The hook is opt-in: `make install-hooks` writes only `.git/hooks/pre-push`, which is
+never committed, and `git push --no-verify` bypasses it. Remove it with
+`rm .git/hooks/pre-push`.
 
 ## Development principles
 

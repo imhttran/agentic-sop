@@ -4,7 +4,7 @@
 # scripts/ are support tooling, grouped by responsibility (install/, packaging/,
 # checks/, agents/).
 
-.PHONY: fmt vet test test-fast test-planner-tunnel test-mcp-portability setup-planner build check check-fast check-plugin install install-all install-ollama-agent \
+.PHONY: fmt vet test test-fast test-planner-tunnel test-mcp-portability setup-planner build check check-fast check-plugin check-push check-push-fix install-hooks install install-all install-ollama-agent \
 	security-integration \
 	ollama-agent-pin-preflight ollama-agent-invalid-test-mode plugin install-plugin \
 	install-skills install-skills-zed install-skills-claude \
@@ -84,6 +84,27 @@ check: fmt vet test build check-plugin
 # `TEST_MODE=fast` form of the Ollama agent installation gate; `check` above
 # remains the ordinary, disk-backed gate.
 check-fast: fmt vet test-fast build check-plugin
+
+# Fast gates a push must pass: gofmt, and documentation links evaluated on the merge
+# of HEAD with the base branch (CI checks the merge, not the branch alone). Delegate to
+# scripts/checks/pre-push.sh so the hook, make, and CI share one implementation.
+CHECK_PUSH_BASE ?= origin/main
+
+check-push:
+	./scripts/checks/pre-push.sh --base '$(CHECK_PUSH_BASE)'
+
+# Apply gofmt to the files the check-push gate reports, then re-check.
+check-push-fix:
+	./scripts/checks/pre-push.sh --fix --base '$(CHECK_PUSH_BASE)'
+
+# Install the same gates as a local pre-push hook. Opt-in: it writes only
+# .git/hooks/pre-push (never committed), and `git push --no-verify` bypasses it.
+install-hooks:
+	@hook_dir="$$(git rev-parse --git-path hooks)"; \
+	mkdir -p "$$hook_dir"; \
+	printf '%s\n' '#!/bin/sh' 'exec "$$(git rev-parse --show-toplevel)/scripts/checks/pre-push.sh"' > "$$hook_dir/pre-push"; \
+	chmod +x "$$hook_dir/pre-push"; \
+	echo "installed $$hook_dir/pre-push"
 
 # Verify the packaged Claude Code plugin still mirrors the canonical skills/ tree.
 check-plugin:

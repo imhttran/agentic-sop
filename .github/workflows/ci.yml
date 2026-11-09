@@ -23,14 +23,12 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
-      - name: gofmt
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "::error::these files are not gofmt-formatted:"
-            echo "$unformatted"
-            exit 1
-          fi
+      # Formatting and documentation links, through the one script the local
+      # pre-push hook and `make check-push` also run. On a pull_request checkout the
+      # working tree is already the merge result; when `origin/main` is not fetched
+      # the script says so and checks that working tree.
+      - name: formatting and documentation links
+        run: bash scripts/checks/pre-push.sh --base origin/main
       - name: vet
         run: go vet ./...
       - name: build
@@ -46,8 +44,6 @@ jobs:
           SOP_TEST_PARALLEL: "4"
           SOP_TEST_TIMEOUT: "10m"
         run: ./scripts/checks/test-fast.sh
-      - name: documentation links
-        run: bash scripts/checks/check-doc-links.sh
       # End-to-end ACP stdio smoke: builds the binary and drives initialize,
       # session/new, session/prompt, and session/cancel the way an ACP client does.
       # A blocking command harness keeps the governed child alive, so the job needs
