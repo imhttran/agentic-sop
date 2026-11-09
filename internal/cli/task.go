@@ -235,9 +235,17 @@ func runTaskComplete(args []string, stdout, stderr io.Writer, getwd func() (stri
 	// recorded completion. Open (not New) binds the task's EXISTING run directory, so
 	// recording provenance never resets state.json or clears attempts/ evidence.
 	if rn, rerr := runpkg.Open(dir, id); rerr == nil {
+		// The external completion supersedes any earlier objective-level verdict. It
+		// derives no acceptance evidence, so a prior run's outcome.json must not stay
+		// visible to `sop verify` as this completion's verdict.
+		if cerr := clearOutcomeArtifact(rn); cerr != nil {
+			fmt.Fprintf(stdout, "warning: stale outcome artifact not cleared: %v\n", cerr)
+		}
 		if werr := rn.WriteExternalCompletion(rec); werr != nil {
 			fmt.Fprintf(stdout, "warning: external-completion artifact not persisted: %v\n", werr)
 		}
+	} else {
+		fmt.Fprintf(stdout, "warning: run directory unavailable; stale outcome artifact not cleared: %v\n", rerr)
 	}
 
 	fmt.Fprintf(stdout, "task %s: recorded external completion (%s)\n", id, task.Status)

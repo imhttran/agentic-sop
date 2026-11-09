@@ -8,6 +8,39 @@ import (
 	"github.com/imhttran/agentic-sop/internal/outcome"
 )
 
+// TestExternalCompletionClearsStaleOutcome proves a supported external completion
+// supersedes an earlier objective-level verdict instead of leaving it visible to
+// `sop verify`. External completion records provenance and validation evidence but
+// derives no acceptance verdict, so the old artifact must not describe it.
+func TestExternalCompletionClearsStaleOutcome(t *testing.T) {
+	dir := t.TempDir()
+	head := setupExtProject(t, dir, extCompleteConfig, autoPlanDoc)
+	writeOutcomeArtifactFor(t, dir, "S001", &outcomeArtifact{
+		Status:   outcome.Verified,
+		Criteria: []outcome.CriterionResult{{ID: "criterion-1", Required: true, Met: true, Evidence: "met"}},
+		Reasons:  []string{"every required criterion was independently met"},
+	})
+
+	code, out, errOut := runCLIWithAgent(t, dir, nil, "task", "complete", "S001", "--external", "--commit", head)
+	if code != exitOK {
+		t.Fatalf("complete: code=%d stdout=%s stderr=%s", code, out, errOut)
+	}
+	if _, err := os.Stat(outcomeArtifactPath(dir, "S001")); !os.IsNotExist(err) {
+		t.Fatalf("stale outcome survived external completion: %v", err)
+	}
+
+	code, verifyOut, verifyErr := runCLI(t, dir, "verify", "S001")
+	if code != exitOK {
+		t.Fatalf("verify code=%d stderr=%s", code, verifyErr)
+	}
+	if strings.Contains(verifyOut, "VERIFIED") {
+		t.Fatalf("verify reprinted a stale VERIFIED after external completion: %s", verifyOut)
+	}
+	if !strings.Contains(verifyOut, "no recorded outcome") {
+		t.Fatalf("verify output = %q, want an explicit no-verdict result", verifyOut)
+	}
+}
+
 // TestFailedRunDoesNotExposePreviousVerifiedOutcome pins GROUND-003: the recorded
 // verdict artifact describes the LATEST attempt. A run that stops before deriving
 // one (here, a completion claim with no repository change) must not leave an
