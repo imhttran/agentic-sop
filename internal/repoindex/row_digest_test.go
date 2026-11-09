@@ -65,6 +65,11 @@ func TestRowDigests(t *testing.T) {
 		t.Fatalf("absent digest: err = %v, want malformed", err)
 	}
 
+	tampered.Documents[0].Digest = meta.Documents[0].Digest + "00" // must not panic
+	if err := VerifyRows(root, tampered); !errors.Is(err, ErrRowDigestMalformed) {
+		t.Fatalf("over-long digest: err = %v, want malformed", err)
+	}
+
 	// A v1 index is unverified, never valid.
 	meta.SchemaVersion = 1
 	if err := VerifyRows(root, meta); !errors.Is(err, ErrRowsUnverified) {

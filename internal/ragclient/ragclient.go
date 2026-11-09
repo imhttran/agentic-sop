@@ -322,7 +322,11 @@ func checkChunkHash(i int, ev Evidence) error {
 	}
 	var want [sha256.Size]byte
 	hexPart, ok := strings.CutPrefix(ev.ChunkHash, "sha256:")
-	if n, err := hex.Decode(want[:], []byte(hexPart)); !ok || err != nil || n != sha256.Size || hex.EncodeToString(want[:]) != hexPart {
+	// The length check must come first: hex.Decode panics on a too-long input.
+	if !ok || len(hexPart) != hex.EncodedLen(sha256.Size) {
+		return errf(CodeMalformed, "evidence %d chunk_hash %q is not sha256:<64 lowercase hex>", i, ev.ChunkHash)
+	}
+	if n, err := hex.Decode(want[:], []byte(hexPart)); err != nil || n != sha256.Size || hex.EncodeToString(want[:]) != hexPart {
 		return errf(CodeMalformed, "evidence %d chunk_hash %q is not sha256:<64 lowercase hex>", i, ev.ChunkHash)
 	}
 	if sha256.Sum256([]byte(ev.Text)) != want {

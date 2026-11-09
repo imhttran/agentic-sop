@@ -419,7 +419,10 @@ func VerifyRows(root string, idx Index) error {
 	check := func(kind, path, got string, want func(h string) string) error {
 		var raw [sha256.Size]byte
 		hexPart, ok := strings.CutPrefix(got, "sha256:")
-		if n, err := hex.Decode(raw[:], []byte(hexPart)); !ok || err != nil || n != sha256.Size || hex.EncodeToString(raw[:]) != hexPart {
+		if !ok || len(hexPart) != hex.EncodedLen(sha256.Size) { // hex.Decode panics on a too-long input
+			return fmt.Errorf("%w: %s %s", ErrRowDigestMalformed, kind, path)
+		}
+		if n, err := hex.Decode(raw[:], []byte(hexPart)); err != nil || n != sha256.Size || hex.EncodeToString(raw[:]) != hexPart {
 			return fmt.Errorf("%w: %s %s", ErrRowDigestMalformed, kind, path)
 		}
 		h, ok := hashes[path]

@@ -32,6 +32,7 @@ func TestChunkHash(t *testing.T) {
 		{"no prefix", text, strings.TrimPrefix(chunkHash(text), "sha256:"), CodeMalformed, false},
 		{"uppercase hex", text, "sha256:" + strings.ToUpper(strings.TrimPrefix(chunkHash(text), "sha256:")), CodeMalformed, false},
 		{"short", text, "sha256:abc", CodeMalformed, false},
+		{"too long", text, chunkHash(text) + "00", CodeMalformed, false},
 		{"not hex", text, "sha256:" + strings.Repeat("z", 64), CodeMalformed, false},
 	}
 	for _, tc := range cases {
