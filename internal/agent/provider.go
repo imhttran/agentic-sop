@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,6 +26,12 @@ const EnvAgentHarness = "SOP_AGENT_HARNESS"
 // optional: when unset the historical subprocess command agent is used, so
 // existing configurations keep working unchanged.
 const EnvAgentProvider = "SOP_AGENT_PROVIDER"
+
+// EnvAgentMaxOutputTokens is the operator-owned output-token bound sent to a
+// provider before dispatch. An unset value keeps the provider's own behavior
+// (no SOP-imposed cap); a set value must be a positive integer. It is not a
+// default quota: the operator explicitly opts in.
+const EnvAgentMaxOutputTokens = "SOP_AGENT_MAX_OUTPUT_TOKENS"
 
 // EnvAgentModel selects which model the composition root builds. It is optional:
 // when unset the configured model or provider-specific environment variable is used.
@@ -376,6 +383,33 @@ type chatRequest struct {
 	Model    string        `json:"model"`
 	Messages []chatMessage `json:"messages"`
 	Stream   bool          `json:"stream"`
+	// MaxTokens is the OpenAI-compatible output-token bound. It is omitted when
+	// the operator did not configure SOP_AGENT_MAX_OUTPUT_TOKENS.
+	MaxTokens int `json:"max_tokens,omitempty"`
+	// Options carries the Ollama output-token bound (num_predict). It is omitted
+	// when the operator did not configure SOP_AGENT_MAX_OUTPUT_TOKENS.
+	Options *chatOptions `json:"options,omitempty"`
+}
+
+// chatOptions is the Ollama request options block used for the operator-owned
+// output-token bound.
+type chatOptions struct {
+	NumPredict int `json:"num_predict,omitempty"`
+}
+
+// MaxOutputTokensFromEnv returns the operator-owned output-token bound. An unset
+// value returns 0, meaning "no SOP-imposed cap"; a present but invalid value is
+// an error so a typo cannot silently disable or alter the bound.
+func MaxOutputTokensFromEnv() (int, error) {
+	raw := strings.TrimSpace(os.Getenv(EnvAgentMaxOutputTokens))
+	if raw == "" {
+		return 0, nil
+	}
+	n, err := strconv.Atoi(raw)
+	if err != nil || n <= 0 {
+		return 0, fmt.Errorf("%s: invalid value %q: want a positive integer", EnvAgentMaxOutputTokens, raw)
+	}
+	return n, nil
 }
 
 // timeoutFromEnv parses a duration environment variable, falling back to the

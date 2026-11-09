@@ -415,8 +415,12 @@ never task success.
 
 `sop memory add --decision <text> --reason <text> [--scope <scope>] [--source <id>]
 [--evidence <text>]` records a durable engineering decision, and `sop memory list`
-prints the decisions applicable to the current repository identity; a decision recorded
-under another state is reported as stale and is never applied.
+prints the decisions applicable to the current repository identity, each with its `id`;
+a decision recorded under another state is reported as stale and is never applied.
+`sop memory remove --id <id>` retires exactly that one decision; an unknown id fails and
+leaves the file unchanged. `add` and `remove` refuse to overwrite a `decisions.json`
+that is malformed, has another schema, or holds invalid records, so earlier decisions
+are never silently lost; move the file aside or repair it first.
 
 The artifacts live under `.agent-sdlc/context/`. Default behavior is unchanged: no
 cache is consulted and no memory is applied unless these flags are used.

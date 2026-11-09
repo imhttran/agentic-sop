@@ -177,20 +177,22 @@ func TestAcceptanceRecoveryAcrossApprovedAttempt(t *testing.T) {
 }
 
 // TestAcceptanceRecoveryFromAlreadyRecordedDecision proves the rollout case: an
-// operator already recorded a decision against an older outcome (attempt 1) and
-// the task has since advanced (attempt 5). Approving the still-pending gate with
-// the fixed binary records the 1 -> 5 recovery, and the next verdict accepts the
-// original decision without rewriting it.
+// operator recorded a content-bound decision against an older outcome (attempt 1)
+// and the task has since advanced (attempt 5). Approving the still-pending gate
+// with the fixed binary records the 1 -> 5 recovery, and the next verdict accepts
+// the original decision without rewriting it.
 func TestAcceptanceRecoveryFromAlreadyRecordedDecision(t *testing.T) {
 	dir := t.TempDir()
 	initProject(t, dir)
 	writeDesignatedApprovers(t, dir, "operator")
 	seedTask(t, dir, &domain.Task{ID: "T001", Title: "T001", Status: domain.PLANNED, Attempt: 5, MaxAttempts: 10})
-	writeOutcomeArtifactFor(t, dir, "T001", manualPartial())
+	res := manualPartialWithContentIdentity(t, dir)
+	writeOutcomeArtifactFor(t, dir, "T001", res)
 	if err := appendJSONL(acceptanceDecisionPath(dir, "T001"), outcome.AcceptanceDecision{
 		Task: "T001", CriterionID: "criterion-1", Evidence: "read docs/x.md",
 		Decision: outcome.DecisionAccept, Approver: "operator", RecordedAt: "2026-10-18T00:00:00Z",
 		CriterionDescription: "docs are clear", ManualEvidence: "reviewer reads docs", Attempt: 1,
+		ContentIdentity: res.Mappings[0].ContentIdentity,
 	}); err != nil {
 		t.Fatalf("seed decision: %v", err)
 	}
@@ -214,6 +216,30 @@ func TestAcceptanceRecoveryFromAlreadyRecordedDecision(t *testing.T) {
 	spec := &taskfile.Spec{ID: "T001", AcceptanceCriteria: []string{"docs are clear"}, AcceptanceMapping: []string{"criterion 1: manual: reviewer reads docs"}, Attempt: 5}
 	if res := deriveOutcome(spec, dir, quality.Result{Decision: quality.Pass}); res.Status != outcome.Verified {
 		t.Fatalf("derived status = %s reasons=%v, want VERIFIED", res.Status, res.Reasons)
+	}
+}
+
+// TestLegacyDecisionWithoutContentIdentityRequiresReacceptance pins the strict
+// migration rule: a decision recorded without a content identity cannot satisfy a
+// content-bound mapping, even when the criterion text, evidence, and attempt still
+// match. The operator must re-record it against the reviewed content.
+func TestLegacyDecisionWithoutContentIdentityRequiresReacceptance(t *testing.T) {
+	dir := t.TempDir()
+	initProject(t, dir)
+	writeDesignatedApprovers(t, dir, "operator")
+	spec := &taskfile.Spec{ID: "T001", AcceptanceCriteria: []string{"docs are clear"}, AcceptanceMapping: []string{"criterion 1: manual: reviewer reads docs"}, Attempt: 1}
+	res := manualPartialWithContentIdentity(t, dir)
+	res.Mappings[0].Attempt = spec.Attempt
+	writeOutcomeArtifactFor(t, dir, "T001", res)
+	if err := appendJSONL(acceptanceDecisionPath(dir, "T001"), outcome.AcceptanceDecision{
+		Task: "T001", CriterionID: "criterion-1", Evidence: "read docs/x.md",
+		Decision: outcome.DecisionAccept, Approver: "operator", RecordedAt: "2026-10-18T00:00:00Z",
+		CriterionDescription: "docs are clear", ManualEvidence: "reviewer reads docs", Attempt: spec.Attempt,
+	}); err != nil {
+		t.Fatalf("seed legacy decision: %v", err)
+	}
+	if got := deriveOutcome(spec, dir, quality.Result{Decision: quality.Pass}); got.Status == outcome.Verified {
+		t.Fatalf("a legacy decision without a content identity verified changed content: %+v", got)
 	}
 }
 

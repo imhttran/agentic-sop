@@ -26,7 +26,9 @@ if [ -n "$cache" ] && [ -f "$cache/$expected" ]; then
   cached=" (cached at $cache/$expected; delete it to re-download)"
 else
   command -v curl >/dev/null 2>&1 || die "curl is required"
-  curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 --max-time "$max_time" "$url" -o "$dest" || die "download failed: $url"
+  # No --retry-delay: curl backs off 1s, 2s, 4s, ... so 8 retries span ~4 minutes,
+  # long enough to ride out the intermittent 504s from GitHub release downloads.
+  curl -fsSL --retry 8 --retry-all-errors --max-time "$max_time" "$url" -o "$dest" || die "download failed: $url"
 fi
 
 actual="$(python3 -c 'import hashlib,sys; print(hashlib.sha256(open(sys.argv[1],"rb").read()).hexdigest())' "$dest")"

@@ -48,3 +48,21 @@ func TestPostgresCheckAllSkippedIsNotPass(t *testing.T) {
 		t.Fatalf("all-skipped postgres check classified PASS (exit 0); status=%s", res.Status)
 	}
 }
+
+// TestPostgresCompletionSurvivesCaptureBound proves the bounded capture keeps a
+// trailing go test -json package-completion event even when a passing check emits
+// far more than the capture bound before it.
+func TestPostgresCompletionSurvivesCaptureBound(t *testing.T) {
+	command := `printf '{"Action":"pass","Package":"pkg","Test":"TestA"}\n'; printf '%02000d' 0; printf '\n{"Action":"pass","Package":"pkg","Test":""}\n'`
+	res := (&Runner{Dir: t.TempDir(), MaxOutputBytes: 512}).Run(t.Context(), Check{Category: PostgresIntegration, Command: command})
+	if res.Status != Pass {
+		t.Fatalf("status = %s, want PASS (stderr=%q stdout_tail=%q)", res.Status, res.Stderr, tail(res.Stdout, 200))
+	}
+}
+
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	return s[len(s)-n:]
+}

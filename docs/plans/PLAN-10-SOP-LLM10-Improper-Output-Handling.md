@@ -160,7 +160,7 @@ overstating coverage.
 - `go test ./internal/acp -count=1`
 - `go test ./internal/mcp -count=1`
 - `go test ./internal/cli -run Terminal -count=1`
-- `git grep -q "Improper Output Handling (LLM10)" -- docs/reports/owasp-llm/README.md`
+- `git grep -q "Improper Output Handling" -- docs/reports/owasp-llm/README.md`
 
 ### Acceptance Mapping
 

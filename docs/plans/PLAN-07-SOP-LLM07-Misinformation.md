@@ -1,33 +1,67 @@
 # Plan 07 — SOP Misinformation (LLM07)
 
-Status: PROPOSED; not executed.
-Date: 2026-11-08 (America/Chicago).
+Status: COMPLETE for the deterministic scope; strict content binding for manual acceptance evidence implemented (Plan 07 D4 option 1); all three SOP tasks externally completed and the plan archived. Live-model and Linux verification are NOT_RUN. Evidence: `docs/reports/owasp-llm/llm07-misinformation.md`.
+Date: 2026-11-08 (America/Chicago); adapted 2026-11-09.
 Series: next six plans after Plans 01–04; numbering follows category order, not mandatory execution order.
 Suggested branch: security/llm07-misinformation.
 Suggested repository path: docs/plans/PLAN-07-SOP-LLM07-Misinformation.md.
 
-## Goal and scope
+## Project
+
+`imhttran/agentic-sop`. This plan hardens SOP's use of evidence in decisions: a
+generated completion claim, citation, test summary, review finding, or historical
+suggestion must not become a verified outcome or authorize a downstream action
+unless the existing evidence resolver and lifecycle contracts accept it.
+
+## Summary
 
 Prevent unsupported model claims from becoming verified outcomes or authorizing downstream actions. Reuse SOP's evidence resolver, criterion mapping, approval provenance, and review workflow.
 
 Dependency: Plan 01's authority inventory and current acceptance/review hardening. Plan 09 owns retrieval isolation. This plan owns the use of evidence in decisions, not general factual correctness of every generated sentence.
 
-## Tasks
-
-### GROUND-001 — Trace claims to authoritative decisions
+## GROUND-001 — Trace claims to authoritative decisions
 
 Map generated completion text, proposed findings, citations, test summaries, and historical suggestions to stored outcomes and downstream actions. Identify authoritative sources and freshness requirements for each transition.
 
-Acceptance:
+### Dependencies
+
+None
+
+### Deliverables
+
+- `docs/reports/owasp-llm/llm07-misinformation.md`
+
+### Acceptance Criteria
+
 - Distinguish model assertions, observed tool results, accepted human evidence, and verified task status.
 - Identify content/commit, task, attempt, and policy binding required by current evidence contracts.
 - Deliver docs/reports/owasp-llm/llm07-misinformation.md with concrete claim-to-decision traces.
 
-### GROUND-002 — Exercise fabricated and stale evidence
+### Acceptance Checks
+
+- `go test ./internal/outcome/...`
+
+### Acceptance Mapping
+
+- criterion 1: check 1
+- criterion 2: check 1
+- criterion 3: check 1
+
+## GROUND-002 — Exercise fabricated and stale evidence
 
 Use deterministic responses that claim tests passed when the recorded test failed or never ran; cite nonexistent evidence; reference another task/attempt; reuse stale commit evidence; and claim approval without an authoritative decision. Repair only reproduced acceptance or provenance defects.
 
-Acceptance:
+### Dependencies
+
+GROUND-001
+
+### Deliverables
+
+- `internal/toolharness/state_dir_write_test.go`
+- `internal/cli/misinformation_fixtures_test.go`
+
+### Acceptance Criteria
+
 - Fabricated PASS text cannot override failed or missing required checks.
 - Evidence from the wrong identity or invalidated content cannot satisfy the current task.
 - ALREADY_SATISFIED follows the existing evidence contract rather than free-form assertions.
@@ -35,15 +69,51 @@ Acceptance:
 - Valid observed evidence and supported manual acceptance still advance normally.
 - Regression tests invoke the real outcome/transition path, not only a prompt template.
 
-### GROUND-003 — Make reports match observed state
+### Acceptance Checks
+
+- `go test ./internal/toolharness/... -run TestStateDirectoryIsWriteProtectedForModelTools`
+- `go test ./internal/cli/... -run TestModelPassClaimCannotOverrideFailedAcceptanceCheck`
+- `go test ./internal/cli/... -run TestModelApprovalClaimWithoutDecisionDoesNotAdvance`
+
+### Acceptance Mapping
+
+- criterion 1: check 2
+- criterion 2: check 1
+- criterion 3: check 1
+- criterion 4: check 1
+- criterion 5: check 3
+- criterion 6: check 2
+
+## GROUND-003 — Make reports match observed state
 
 Repair reporting inconsistencies at existing output paths where necessary. Keep failed, blocked, cancelled, unverified, and verified outcomes distinct. Document when a source supports a claim without proving it.
 
-Acceptance:
+### Dependencies
+
+GROUND-002
+
+### Deliverables
+
+- `docs/reports/owasp-llm/llm07-misinformation.md`
+- `internal/cli/outcome_stale_test.go`
+
+### Acceptance Criteria
+
 - User-visible result and persisted lifecycle agree for the tested paths.
 - Missing checks are NOT_RUN, not implied PASS.
 - Source references resolve to the recorded evidence identity where that contract exists.
 - Required checks pass; PR links before/after evidence and residual factual-error risks.
+
+### Acceptance Checks
+
+- `go test ./internal/cli/... -run TestFailedRunDoesNotExposePreviousVerifiedOutcome`
+
+### Acceptance Mapping
+
+- criterion 1: check 1
+- criterion 2: check 1
+- criterion 3: check 1
+- criterion 4: check 1
 
 ## Risks and completion
 
@@ -77,4 +147,3 @@ Category numbers and names follow the supplied Cycode article's displayed 2026 l
 - At execution, inspect current docs/specs/SECURITY.md, docs/specs/QUALITY.md, configuration, and relevant reports before relying on historical assertions.
 
 Final handoff: changed behavior, criterion-to-evidence mapping, PR link, residual gaps, blocked criteria, and exact next action. Proposed report paths are deliverables, not claims that files already exist.
-

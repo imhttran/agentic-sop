@@ -209,3 +209,20 @@ func TestEnvironmentOverride(t *testing.T) {
 		t.Errorf("stdout = %q, want bar", res.Stdout)
 	}
 }
+
+// TestRunBoundsCapturedOutput proves a streaming validation command cannot
+// allocate its full output before the bound is applied.
+func TestRunBoundsCapturedOutput(t *testing.T) {
+	runner := &Runner{Dir: t.TempDir(), MaxOutputBytes: 64}
+	res := runner.Run(context.Background(), Check{Category: Build, Command: `printf '%0200d' 0`})
+
+	if res.Status != Pass {
+		t.Fatalf("status = %s, want PASS (stderr=%q)", res.Status, res.Stderr)
+	}
+	if len(res.Stdout) > 128 {
+		t.Errorf("stdout length = %d, want at most 128", len(res.Stdout))
+	}
+	if !strings.Contains(res.Stdout, "truncated 136 bytes") {
+		t.Errorf("stdout missing the exact truncation marker: %q", res.Stdout)
+	}
+}

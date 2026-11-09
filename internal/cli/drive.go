@@ -145,7 +145,8 @@ func runGraph(planArg string, maxTasks int, stdout, stderr io.Writer, d deps) in
 		planSource = resolved
 	}
 
-	ctx := context.Background()
+	ctx, stop := executionContext()
+	defer stop()
 	prepared, err := planflow.Prepare(ctx, planflow.Options{
 		Dir:        dir,
 		PlanSource: planSource,
@@ -510,6 +511,10 @@ func driveGraph(ctx context.Context, dir string, cfg config.Config, a agent.Agen
 	maxIterations := iterationsPerTask*len(tasks) + 2
 
 	for i := 0; i < maxIterations; i++ {
+		if err := ctx.Err(); err != nil {
+			fmt.Fprintf(stdout, "run interrupted: %v\n", err)
+			return exitError
+		}
 		// Operator execution bound (--max-tasks): stop before selecting the next
 		// task, so a bounded invocation never enters (or even promotes to READY)
 		// task N+1. The bound counts tasks entered, not successful completions, and
@@ -898,6 +903,10 @@ func runScheduledTask(ctx context.Context, dir string, cfg config.Config, a agen
 		d.handoffItems = dependencyHandoffItems(task, saver)
 	}
 	res, err := runAttempts(ctx, dir, cfg, a, d, spec, rn, sess, approval, tri, stdout)
+	if ctxErr := ctx.Err(); ctxErr != nil {
+		fmt.Fprintf(stdout, "%s interrupted: %v\n", task.ID, ctxErr)
+		return exitError
+	}
 	emitClassificationActivity(ctx, res.classification, res.decision)
 
 	// A structured planner request parks THIS run at WAITING_FOR_PLANNER. It is not a
@@ -1144,18 +1153,18 @@ func continueTask(saver taskSaver, task *domain.Task, rn *runpkg.Run, signature,
 	if max <= 0 {
 		max = autonomy.DefaultMaxContinuations
 	}
-	n := rn.ReadContinuations() + 1
-	if n > max {
+	n, allowed, err := rn.ConsumeContinuation(max)
+	if err != nil {
+		fmt.Fprintf(stderr, "run: %v\n", err)
+		return exitError
+	}
+	if !allowed {
 		if err := blockTask(saver, task, domain.CONTINUATION_EXHAUSTED); err != nil {
 			fmt.Fprintf(stderr, "run: %v\n", err)
 			return exitError
 		}
 		fmt.Fprintf(stdout, "%s CONTINUE (continuation budget exhausted %d/%d; BLOCKED: %s)\n", task.ID, max, max, reason)
 		fmt.Fprintf(stdout, "continuation: %d/%d\n", max, max)
-		return exitError
-	}
-	if err := rn.RecordContinuations(n); err != nil {
-		fmt.Fprintf(stderr, "run: %v\n", err)
 		return exitError
 	}
 	if err := requeueTask(saver, task, false); err != nil {

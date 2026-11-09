@@ -10,7 +10,13 @@ import (
 	"strings"
 )
 
-// execute runs command through the shell in dir.
+// maxOutputBytes bounds the stdout and stderr captured from one validation
+// command. It matches the provider response bound so a streaming check cannot
+// allocate unbounded memory; a larger stream is drained and marked truncated.
+const maxOutputBytes = 10 << 20
+
+// execute runs command through the shell in dir. maxBytes bounds each captured
+// stream at the read boundary; a non-positive value uses maxOutputBytes.
 //
 // Verification commands are trusted project configuration and commonly need
 // shell syntax (e.g. "go test ./...", "docker compose ... up"), so a shell is
@@ -22,7 +28,7 @@ import (
 //   - err == nil, exitCode != 0   → the command exited non-zero (verification failure)
 //   - err == ctx.Err(), code == -1 → canceled or deadline exceeded
 //   - err != nil, exitCode == -1  → the check could not start (infrastructure error)
-func execute(ctx context.Context, dir string, env map[string]string, command string) (exitCode int, stdout, stderr string, err error) {
+func execute(ctx context.Context, dir string, env map[string]string, command string, maxBytes int) (exitCode int, stdout, stderr string, err error) {
 	fi, statErr := os.Stat(dir)
 	if statErr != nil {
 		return -1, "", "", statErr
@@ -35,9 +41,13 @@ func execute(ctx context.Context, dir string, env map[string]string, command str
 	cmd.Dir = dir
 	cmd.Env = buildEnv(env)
 
-	var outBuf, errBuf bytes.Buffer
-	cmd.Stdout = &outBuf
-	cmd.Stderr = &errBuf
+	if maxBytes <= 0 {
+		maxBytes = maxOutputBytes
+	}
+	outBuf := newLimitedBuffer(maxBytes)
+	errBuf := newLimitedBuffer(maxBytes)
+	cmd.Stdout = outBuf
+	cmd.Stderr = errBuf
 
 	runErr := cmd.Run()
 	stdout, stderr = outBuf.String(), errBuf.String()
@@ -54,6 +64,62 @@ func execute(ctx context.Context, dir string, env map[string]string, command str
 		return exitErr.ExitCode(), stdout, stderr, nil
 	}
 	return -1, stdout, stderr, runErr
+}
+
+// limitedBuffer retains a bounded head and tail while counting every byte
+// written, so a validation command cannot make the runner allocate its full
+// output. The tail preserves trailing structured evidence (for example a
+// `go test -json` package-completion event) that a prefix-only capture would
+// lose. It implements io.Writer for os/exec.
+type limitedBuffer struct {
+	head    bytes.Buffer
+	tail    []byte
+	headMax int
+	tailMax int
+	total   int
+}
+
+func newLimitedBuffer(limit int) *limitedBuffer {
+	if limit <= 0 {
+		limit = maxOutputBytes
+	}
+	tailMax := limit / 8
+	if tailMax < 64 {
+		tailMax = 64
+	}
+	if tailMax > limit {
+		tailMax = limit
+	}
+	return &limitedBuffer{headMax: limit - tailMax, tailMax: tailMax}
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	original := len(p)
+	b.total += original
+	if room := b.headMax - b.head.Len(); room > 0 {
+		if len(p) > room {
+			b.head.Write(p[:room])
+			p = p[room:]
+		} else {
+			b.head.Write(p)
+			return original, nil
+		}
+	}
+	if len(p) > 0 {
+		b.tail = append(b.tail, p...)
+		if len(b.tail) > b.tailMax {
+			b.tail = append(b.tail[:0], b.tail[len(b.tail)-b.tailMax:]...)
+		}
+	}
+	return original, nil
+}
+
+func (b *limitedBuffer) String() string {
+	truncated := b.total - b.head.Len() - len(b.tail)
+	if truncated <= 0 {
+		return b.head.String() + string(b.tail)
+	}
+	return b.head.String() + fmt.Sprintf("\n… [truncated %d bytes]\n", truncated) + string(b.tail)
 }
 
 // buildEnv returns the child environment: the current environment with any

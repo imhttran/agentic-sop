@@ -153,3 +153,21 @@ func TestRemove(t *testing.T) {
 		t.Error("record was not removed")
 	}
 }
+
+// TestUnmarshalStrictRefusesWhatUnmarshalDrops proves the rewrite loader fails where the
+// lenient loader would silently load empty or skip a record.
+func TestUnmarshalStrictRefusesWhatUnmarshalDrops(t *testing.T) {
+	for name, doc := range map[string]string{
+		"other schema":   `{"schema":"other","limit":4,"records":[]}`,
+		"invalid record": `{"schema":"decisionmemory/1","limit":4,"records":[{"decision":"","scope":"architecture","reason":"r","repository":"repo-1","source":"t1"}]}`,
+		"malformed":      `{"schema":`,
+	} {
+		if _, err := UnmarshalStrict([]byte(doc)); err == nil {
+			t.Errorf("%s: UnmarshalStrict must fail", name)
+		}
+	}
+	s, err := UnmarshalStrict([]byte(`{"schema":"decisionmemory/1","limit":4,"records":[{"decision":"d","scope":"architecture","reason":"r","repository":"repo-1","source":"t1"}]}`))
+	if err != nil || s.Len() != 1 {
+		t.Errorf("valid store: len=%d err=%v", s.Len(), err)
+	}
+}

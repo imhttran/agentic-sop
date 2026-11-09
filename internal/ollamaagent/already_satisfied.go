@@ -114,7 +114,7 @@ func (n correctionNeed) actionable() bool {
 func correctableRejection(code RejectionCode) bool {
 	switch code {
 	case RejectMissingCriterionEvidence, RejectUnreadEvidencePath, RejectDirectoryEvidence,
-		RejectValidationNotExecuted, RejectValidationFailed:
+		RejectStateEvidencePath, RejectValidationNotExecuted, RejectValidationFailed:
 		return true
 	}
 	return false
@@ -135,6 +135,9 @@ func (h *Harness) classifyEvidencePath(path string, p *satisfactionProof) (strin
 	}
 	if info, statErr := os.Stat(canonical); statErr == nil && info.IsDir() {
 		return canonical, "directory"
+	}
+	if h.tools.IsStatePath(canonical) {
+		return canonical, "state"
 	}
 	if !p.reads[canonical] {
 		return canonical, "unread"
@@ -287,7 +290,7 @@ func alreadySatisfiedEvidenceCorrection(need correctionNeed, observedReads, succ
 	writeEvidenceList(&b, "Validation commands the harness observed execute successfully:", succeeded)
 	writeEvidenceList(&b, "Required validation commands NOT executed (run them):", need.NotExecuted)
 	writeEvidenceList(&b, "Required validation commands that FAILED (fix and re-run them):", need.Failed)
-	b.WriteString("A criterion paths list must name FILES the harness observed you read with read_file. A directory, a package path, or a validation command you ran is NOT file evidence for a criterion and is rejected.\n")
+	b.WriteString("A criterion paths list must name FILES the harness observed you read with read_file. A directory, a package path, a validation command you ran, or SOP's own runtime state (.agent-sdlc) is NOT file evidence for a criterion and is rejected.\n")
 	b.WriteString("Do NOT change any file. Read the relevant repository files if you have not already, then return the same object with EVERY criterion mapped to files you actually read:\n")
 	b.WriteString(`{"status":"completed","completion":"ALREADY_SATISFIED","changes_expected":false,"evidence":{"acceptance":[{"criterion":"<exact criterion>","paths":["<file you read>"]}]}}`)
 	b.WriteString("\nA path you did not read, a fabricated claim, or any repository change is rejected. This is the only correction allowed for this claim.")
@@ -425,7 +428,11 @@ const (
 	// RejectDirectoryEvidence: a cited path exists but names a directory (or other
 	// non-regular file). It is never criterion evidence, because the contract requires
 	// files the harness observed being read. The verification outcome is unchanged.
-	RejectDirectoryEvidence     RejectionCode = "DIRECTORY_EVIDENCE"
+	RejectDirectoryEvidence RejectionCode = "DIRECTORY_EVIDENCE"
+	// RejectStateEvidencePath: a cited path is inside SOP's runtime state directory.
+	// Its artifacts describe SOP's own runs (often another task or attempt), so they
+	// are never repository evidence for the current task.
+	RejectStateEvidencePath     RejectionCode = "STATE_EVIDENCE"
 	RejectDeliverableMissing    RejectionCode = "DELIVERABLE_MISSING"
 	RejectValidationNotExecuted RejectionCode = "VALIDATION_NOT_EXECUTED"
 	RejectValidationFailed      RejectionCode = "VALIDATION_FAILED"
@@ -503,6 +510,12 @@ func (h *Harness) verifySatisfiedDetailed(ctx context.Context, req agent.Request
 			}
 			if info, statErr := os.Stat(canonical); statErr == nil && info.IsDir() {
 				return false, SatisfactionRejection{Code: RejectDirectoryEvidence, Criterion: item.Criterion, Path: path, Detail: "evidence path is a directory; cite a file you read, never a directory, a package path, or a command"}
+			}
+			// SOP's own runtime artifacts (an earlier outcome, a decision audit, a
+			// published result) describe other runs. They are not repository proof for
+			// THIS task, so a citation of them is refused even though the read succeeded.
+			if h.tools.IsStatePath(canonical) {
+				return false, SatisfactionRejection{Code: RejectStateEvidencePath, Criterion: item.Criterion, Path: path, Detail: "SOP runtime state is not repository evidence; cite the inspected repository file"}
 			}
 			if !p.reads[canonical] {
 				return false, SatisfactionRejection{Code: RejectUnreadEvidencePath, Criterion: item.Criterion, Path: path, Detail: "evidence path was not read (or does not exist)"}

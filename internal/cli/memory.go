@@ -1,8 +1,10 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -27,6 +29,8 @@ func runMemory(args []string, stdout, stderr io.Writer, d deps) int {
 		return runMemoryAdd(args[1:], stdout, stderr, d)
 	case "list":
 		return runMemoryList(args[1:], stdout, stderr, d)
+	case "remove":
+		return runMemoryRemove(args[1:], stdout, stderr, d)
 	default:
 		fmt.Fprintf(stderr, "unknown memory command: %s\n", args[0])
 		fmt.Fprintln(stderr, memoryUsage)
@@ -34,7 +38,7 @@ func runMemory(args []string, stdout, stderr io.Writer, d deps) int {
 	}
 }
 
-const memoryUsage = "usage: sop memory enable|disable|status | sop memory add --decision <text> --reason <text> [--scope repository|project|architecture] [--source <id>] [--evidence <text>] | sop memory list [--scope <scope>]"
+const memoryUsage = "usage: sop memory enable|disable|status | sop memory add --decision <text> --reason <text> [--scope repository|project|architecture] [--source <id>] [--evidence <text>] | sop memory list [--scope <scope>] | sop memory remove --id <id>"
 
 // runMemoryAdd records one decision.
 func runMemoryAdd(args []string, stdout, stderr io.Writer, d deps) int {
@@ -74,7 +78,11 @@ func runMemoryAdd(args []string, stdout, stderr io.Writer, d deps) int {
 		source = "operator"
 	}
 
-	store := loadDecisionStore(dir)
+	store, err := loadDecisionStoreForWrite(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "memory add: %v\n", err)
+		return exitError
+	}
 	rec, err := store.Add(decisionmemory.Record{
 		Decision:   decision,
 		Scope:      scope,
@@ -135,6 +143,7 @@ func runMemoryList(args []string, stdout, stderr io.Writer, d deps) int {
 			fmt.Fprintf(stdout, "    evidence: %s\n", strings.Join(r.Evidence, "; "))
 		}
 		fmt.Fprintf(stdout, "    source: %s\n", r.Source)
+		fmt.Fprintf(stdout, "    id: %s\n", r.ID())
 	}
 	fmt.Fprintf(stdout, "%d applicable decision(s)\n", applicable)
 	if stale > 0 {
@@ -143,10 +152,44 @@ func runMemoryList(args []string, stdout, stderr io.Writer, d deps) int {
 	return exitOK
 }
 
+// runMemoryRemove retires exactly one decision by its ID (as printed by memory list).
+// An unknown ID fails and leaves the store untouched.
+func runMemoryRemove(args []string, stdout, stderr io.Writer, d deps) int {
+	flags, ok := parseMemoryFlags(args, stderr)
+	if !ok {
+		return exitUsage
+	}
+	id := strings.TrimSpace(flags["id"])
+	if id == "" || len(flags) != 1 {
+		fmt.Fprintln(stderr, "memory remove: --id is required and is the only flag")
+		fmt.Fprintln(stderr, memoryUsage)
+		return exitUsage
+	}
+	dir, ok := projectDir(d.getwd, stderr)
+	if !ok {
+		return exitError
+	}
+	store, err := loadDecisionStoreForWrite(dir)
+	if err != nil {
+		fmt.Fprintf(stderr, "memory remove: %v\n", err)
+		return exitError
+	}
+	if !store.Remove(id) {
+		fmt.Fprintf(stderr, "memory remove: no decision with id %s\n", id)
+		return exitError
+	}
+	if err := saveDecisionStore(dir, store); err != nil {
+		fmt.Fprintf(stderr, "memory remove: %v\n", err)
+		return exitError
+	}
+	fmt.Fprintf(stdout, "Removed decision %s\n", id)
+	return exitOK
+}
+
 // parseMemoryFlags parses --key value pairs. Unknown flags are rejected so a typo never
 // silently records a decision with missing provenance.
 func parseMemoryFlags(args []string, stderr io.Writer) (map[string]string, bool) {
-	known := map[string]bool{"decision": true, "reason": true, "scope": true, "source": true, "evidence": true}
+	known := map[string]bool{"decision": true, "reason": true, "scope": true, "source": true, "evidence": true, "id": true}
 	flags := map[string]string{}
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -189,6 +232,25 @@ func loadDecisionStore(dir string) *decisionmemory.Store {
 		return decisionmemory.New(0)
 	}
 	return store
+}
+
+// loadDecisionStoreForWrite loads the store for a command that rewrites it. Unlike
+// loadDecisionStore it refuses a file it cannot fully round-trip, because rewriting it
+// would silently drop the records it holds. A missing file is an empty store.
+func loadDecisionStoreForWrite(dir string) (*decisionmemory.Store, error) {
+	path := decisionStorePath(dir)
+	data, err := os.ReadFile(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		return decisionmemory.New(0), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	store, err := decisionmemory.UnmarshalStrict(data)
+	if err != nil {
+		return nil, fmt.Errorf("%s cannot be loaded (%v); refusing to overwrite it. Move it aside or repair it, then retry", path, err)
+	}
+	return store, nil
 }
 
 func saveDecisionStore(dir string, store *decisionmemory.Store) error {
