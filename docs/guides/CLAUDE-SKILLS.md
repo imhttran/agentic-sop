@@ -3,7 +3,7 @@
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`, `/sop-ci-fix`, `/sop-publish`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -103,6 +103,7 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 | `/sop-next-action` | _next safe action_ | **yes**  | report the next safe action (read-only by default); `execute` delegates to `sop run` |
 | `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
 | `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
+| `/sop-ci-fix` | _deterministic repair_ | no | repair formatting drift, moved doc links, and trivial merge conflicts |
 | `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
 | `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix |
 

@@ -70,6 +70,12 @@ var Commands = []Command{
 	// /sop-implement, sop run, and /sop-publish. It never edits the target repository.
 	{Name: "sop-rag-integrate", Capability: "plan", Delegation: "sop prompt --capability plan"},
 	{Name: "sop-cleanup", Capability: "", Delegation: "sop status"},
+	// A deterministic repair companion: it reproduces a failed push gate locally,
+	// formats exactly the files the gate named, corrects a documentation link whose
+	// target moved in the base branch, and resolves only merge conflicts the branch
+	// alone caused. Everything else stops for a human. Its shell examples are this
+	// repository's check scripts, Git, and Go, so the SOP-only invariant is waived.
+	{Name: "sop-ci-fix", Capability: "", Delegation: "sop status", UsesRepositoryScripts: true},
 	// A read-only "what should I do next" advisor with prepare and execute modes:
 	// it inspects SOP's own surfaces, delegates to sop run only when authorized, and
 	// fixes no capability.

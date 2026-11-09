@@ -64,6 +64,10 @@ Thin aliases in the same install expose one capability each:
                           run a report-only Go/Rust/mixed security scan through
                           SOP: detect content, select adapters, triage findings,
                           and report sanitized evidence (`sop security scan`)
+/sop-ci-fix <request>     repair a deterministic push failure: formatting drift,
+                          a documentation link that breaks only in the merge with
+                          the base branch, or a merge conflict the branch alone
+                          caused; everything else stops for a human
 /rag-schema <request>     RAG: inspect a pgvector schema and plan a safe,
                           operator-controlled embedding-dimension change
                           (capability: plan, read-only)
@@ -107,6 +111,13 @@ they verify the published target contains the intended commits, close eligible p
 through `sop plan historicalize`, preserve lifecycle evidence, and remove only
 fully-merged clean worktrees and local branches. That skill never infers completion
 from a merge, never marks a plan superseded, and never force-removes or rewrites.
+
+Explicit `/sop-ci-fix` requests repair only three mechanical failures: formatting
+drift, a documentation link whose target moved in the base branch, and a merge
+conflict caused by the branch alone. It reproduces the failure with `sop validate`
+and the repository's own check scripts, makes the smallest change, re-runs the same
+gate, and stops for a human on anything ambiguous. It never weakens a check, never
+bypasses the local gate, and never publishes.
 
 The `rag-*` aliases are RAG-domain skills: they fix the read-only `plan` or
 `design_tests` capability and add a pgvector/RAG checklist (schema inspection, a test
