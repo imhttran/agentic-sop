@@ -13,6 +13,7 @@ import (
 type provenanceCriterion struct {
 	ID       string `json:"ID"`
 	Required bool   `json:"Required"`
+	Boundary bool   `json:"Boundary,omitempty"`
 	Met      bool   `json:"Met"`
 }
 
@@ -104,6 +105,12 @@ func TestIngestProvenanceTamperedSuccessIsNotVerified(t *testing.T) {
 		{"no required criterion", func(r *provenanceReport) { r.Criteria = nil }},
 		{"optional criteria only", func(r *provenanceReport) {
 			r.Criteria = []provenanceCriterion{{ID: "criterion-1", Required: false, Met: true}}
+		}},
+		{"unmet boundary criterion", func(r *provenanceReport) {
+			r.Criteria = []provenanceCriterion{
+				{ID: "criterion-1", Required: true, Met: true},
+				{ID: "boundary-1", Required: false, Met: false, Boundary: true},
+			}
 		}},
 	}
 	for _, tc := range cases {

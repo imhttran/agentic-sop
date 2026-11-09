@@ -542,6 +542,7 @@ type runReport struct {
 		Criteria []struct {
 			ID          string `json:"ID"`
 			Required    bool   `json:"Required"`
+			Boundary    bool   `json:"Boundary"`
 			Met         bool   `json:"Met"`
 			Description string `json:"Description"`
 			Evidence    string `json:"Evidence"`
@@ -697,10 +698,11 @@ func IngestRunFor(runsDir, taskID, repository string) (OutcomeRecord, error) {
 
 // successCorroborated reports whether the report's own required criteria and validation
 // results agree with a claimed success. At least one required criterion must be declared
-// and every required criterion must be met, and at least one validation result must be
-// recorded and passing. An empty or optional-only criteria set cannot corroborate a
-// success, because the outcome verifier itself treats a report with no required criterion
-// as PARTIAL. Anything else leaves the claim uncorroborated.
+// and every required criterion must be met, every boundary criterion must be met, and at
+// least one validation result must be recorded and passing. An empty or optional-only
+// criteria set cannot corroborate a success, and an unmet boundary criterion blocks it
+// even when it is not required, because the outcome verifier treats that case as HOLD.
+// Anything else leaves the claim uncorroborated.
 func successCorroborated(rep runReport) bool {
 	if len(rep.Validation) == 0 {
 		return false
@@ -712,6 +714,9 @@ func successCorroborated(rep runReport) bool {
 	}
 	required := 0
 	for _, c := range rep.Outcome.Criteria {
+		if c.Boundary && !c.Met {
+			return false
+		}
 		if !c.Required {
 			continue
 		}
