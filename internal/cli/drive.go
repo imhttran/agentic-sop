@@ -730,6 +730,13 @@ func resumeActiveTask(ctx context.Context, dir string, cfg config.Config, a agen
 	}
 
 	task := active[0]
+	// A READY task is active (it occupies the execution slot), but it may already
+	// have a fully accepted outcome from the prior attempt. Resolve that evidence
+	// before the status-based resume action so an approved manual acceptance is
+	// finalized without restarting planning or implementation.
+	if handled, code := resumeAcceptedOutcome(ctx, dir, cfg, st, task, stdout, stderr); handled {
+		return code, task.ID
+	}
 	stage, hasStage := runpkg.Load(dir, task.ID)
 	action, ok := resume.ActionFor(task.Status)
 	if !ok {
@@ -1309,6 +1316,10 @@ func resumeAcceptedOutcome(ctx context.Context, dir string, cfg config.Config, s
 		return false, exitOK
 	}
 	if derived.Status == outcome.Verified {
+		if err := writeOutcomeArtifact(runpkg.At(runpkg.Dir(dir, task.ID)), derived); err != nil {
+			fmt.Fprintf(stderr, "run: persist accepted outcome: %v\n", err)
+			return true, exitError
+		}
 		if err := completeTask(saver, task); err != nil {
 			fmt.Fprintf(stderr, "run: accepted outcome: %v\n", err)
 			return true, exitError
@@ -1322,6 +1333,15 @@ func resumeAcceptedOutcome(ctx context.Context, dir string, cfg config.Config, s
 		return true, exitOK
 	}
 	if missing, waiting := manualAcceptanceWaiting(derived); waiting {
+		// Persist the freshly derived outcome before naming the acceptance command:
+		// the operator's next `sop outcome --accept` reads this artifact and binds the
+		// decision to its current content identity. Without this write, a content
+		// change would keep the old identity and the advertised recovery could never
+		// succeed.
+		if err := writeOutcomeArtifact(runpkg.At(runpkg.Dir(dir, task.ID)), derived); err != nil {
+			fmt.Fprintf(stderr, "run: persist refreshed outcome before acceptance: %v\n", err)
+			return true, exitError
+		}
 		fmt.Fprintf(stdout, "%s WAITING_FOR_ACCEPTANCE: the approved gate does not satisfy the required manual criteria %s; record each decision with `sop outcome %s --accept <criterion-id> --evidence <reviewed evidence> --by <designated approver>`\n", task.ID, strings.Join(missing, ", "), task.ID)
 		return true, exitApprovalBlocked
 	}
