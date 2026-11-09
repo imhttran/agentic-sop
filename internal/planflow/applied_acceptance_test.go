@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/imhttran/agentic-sop/internal/autonomy"
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 )
 
@@ -153,5 +155,85 @@ func TestReconcileRefusesAppliedAcceptanceWhoseDigestStillMatches(t *testing.T) 
 	}
 	if prov.Accepted {
 		t.Fatal("a refused acceptance wrote task-scoped provenance")
+	}
+}
+
+// TestReconcileExecutedPlanOnlyChangeNeedsAcceptance pins issue #273: a plan-only
+// (deliverable) edit to an executed task changes the digest its approval request is
+// bound to, so a plain reconcile must stop instead of silently rewriting plan.json
+// with no accepted-change record.
+func TestReconcileExecutedPlanOnlyChangeNeedsAcceptance(t *testing.T) {
+	dir := t.TempDir()
+	st := prepareForReconcile(t, dir, "PLAN.md", deliverablePlanDoc)
+	markExecuted(taskByID(t, st.tasks, "S001"))
+	write(t, dir, "PLAN.md", deliverablePlanDocChanged)
+	planPath := filepath.Join(dir, config.DirName, planFileName)
+	planBefore := read(t, planPath)
+
+	if _, err := reconcile(t, dir, "PLAN.md", st); err == nil || !strings.Contains(err.Error(), "S001") {
+		t.Fatalf("reconcile error = %v, want NEEDS_HUMAN naming S001", err)
+	}
+	if read(t, planPath) != planBefore {
+		t.Fatal("plan.json must be untouched on an unapproved executed plan-only change")
+	}
+	listed, err := inspect(t, dir, "PLAN.md", st)
+	if err != nil {
+		t.Fatalf("Inspect: %v", err)
+	}
+	if len(listed.ChangedExecutedMaterial) != 1 || len(listed.ChangedExecutedEquivalent) != 0 {
+		t.Fatalf("listing material %v equivalent %v, want S001 material only", listed.ChangedExecutedMaterial, listed.ChangedExecutedEquivalent)
+	}
+}
+
+// TestReconcilePlanOnlyChangeStillReconcilesSilently covers the two cases that must
+// not stop: a task that never executed, and a cosmetic-only deliverable edit (the
+// same emphasis folding every other field gets).
+func TestReconcilePlanOnlyChangeStillReconcilesSilently(t *testing.T) {
+	cosmetic := func(marker string) string {
+		return strings.Replace(deliverablePlanDoc, "`cmd/main.go` — the entry point", "the "+marker+"entry"+marker+" point", 1)
+	}
+	cases := map[string]struct {
+		before, after string
+		executed      bool
+	}{
+		"never executed":        {before: deliverablePlanDoc, after: deliverablePlanDocChanged},
+		"cosmetic and executed": {before: cosmetic("*"), after: cosmetic("_"), executed: true},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			dir := t.TempDir()
+			st := prepareForReconcile(t, dir, "PLAN.md", tc.before)
+			if tc.executed {
+				markExecuted(taskByID(t, st.tasks, "S001"))
+			}
+			write(t, dir, "PLAN.md", tc.after)
+			if _, err := reconcile(t, dir, "PLAN.md", st); err != nil {
+				t.Fatalf("reconcile: %v", err)
+			}
+		})
+	}
+}
+
+// TestReconcilePlanOnlyChangeIsNotAutoEquivalent keeps a permissive autonomy policy
+// from auto-reconciling a deliverable change as descriptive-only: deliverables become
+// required acceptance criteria.
+func TestReconcilePlanOnlyChangeIsNotAutoEquivalent(t *testing.T) {
+	dir := t.TempDir()
+	st := prepareForReconcile(t, dir, "PLAN.md", deliverablePlanDoc)
+	markExecuted(taskByID(t, st.tasks, "S001"))
+	write(t, dir, "PLAN.md", deliverablePlanDocChanged)
+
+	var seen []ExecutedChange
+	_, _ = Reconcile(context.Background(), ReconcileOptions{
+		Dir:        dir,
+		PlanSource: filepath.Join(dir, "PLAN.md"),
+		Store:      st,
+		AutoAcceptExecuted: func(c ExecutedChange) autonomy.Decision {
+			seen = append(seen, c)
+			return autonomy.Decision{}
+		},
+	})
+	if len(seen) != 1 || seen[0].Equivalent {
+		t.Fatalf("autonomy saw %+v, want one non-equivalent change for S001", seen)
 	}
 }
