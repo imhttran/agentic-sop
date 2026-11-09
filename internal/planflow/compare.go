@@ -366,8 +366,20 @@ func sameStage(a, b planner.Stage) bool {
 		sameAcceptanceCriteria(a.AcceptanceCriteria, b.AcceptanceCriteria) &&
 		sameAcceptanceChecks(a.AcceptanceChecks, b.AcceptanceChecks) &&
 		sameStringSet(a.Dependencies, b.Dependencies) &&
+		samePlanOnlyFields(a, b)
+}
+
+// samePlanOnlyFields compares the stage fields the domain.Task comparison
+// (sameTaskDefinition) does not check: kind, requires, deliverables, required
+// evidence, and the acceptance mapping. The approval digest covers them, so
+// reconcile needs them to tell a plan-only change from no change, with the same
+// cosmetic folding as every other field.
+func samePlanOnlyFields(a, b planner.Stage) bool {
+	return sameStageKind(a.Kind, b.Kind) &&
 		sameStringSet(a.Requires, b.Requires) &&
-		sameDeliverables(a.Deliverables, b.Deliverables)
+		sameDeliverables(a.Deliverables, b.Deliverables) &&
+		sameStringSet(a.RequiredEvidence, b.RequiredEvidence) &&
+		sameStringSet(mappingList(a.AcceptanceMapping), mappingList(b.AcceptanceMapping))
 }
 
 // sameDeliverables reports whether two deliverable lists are the same multiset of

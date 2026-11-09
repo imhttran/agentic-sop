@@ -807,16 +807,17 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 	if mode == reconcileInspect {
 		accept = nil
 	}
-	// The executable task model does not persist deliverables (or other plan-only
-	// fields). An --accept-changed task whose executable definition is unchanged can
-	// therefore be a plan-only change, or an already-applied change whose prior digest
-	// comes from a stale pending request. Record those acceptances explicitly; every
-	// other ID keeps the existing changed-task path.
-	applied, accept, err := appliedAcceptances(recorded, plan, active, desired, accept, opts.PriorDefinitionDigests)
+	// planOnly names stages that changed only in fields the task comparison does not
+	// check (for example deliverables); reconcileGraph treats those as changed when
+	// the task executed. An --accept-changed task that is otherwise unchanged can still
+	// be a cosmetic-only edit or an already-applied change whose prior digest comes
+	// from a stale pending request; appliedAcceptances records those explicitly.
+	planOnly := planOnlyChanges(recorded, plan)
+	applied, accept, err := appliedAcceptances(recorded, plan, planOnly, active, desired, accept, opts.PriorDefinitionDigests)
 	if err != nil {
 		return res, reconcilePlan{}, nil, nil, err
 	}
-	diff, err := reconcileGraph(rel, active, desired, acceptSet(accept), opts.AutoAcceptExecuted, mode)
+	diff, err := reconcileGraph(rel, active, desired, planOnly, acceptSet(accept), opts.AutoAcceptExecuted, mode)
 	if err != nil {
 		return res, reconcilePlan{}, nil, nil, err
 	}
@@ -832,8 +833,8 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 			DefinitionDigestAfter:  stageDigestByID(plan, id),
 		})
 	}
-	// Record plan-only/applied acceptances that were removed from the graph accept
-	// set because the executable task comparison already considered them unchanged.
+	// Record the cosmetic-only and already-applied acceptances that were removed from
+	// the graph accept set because the executable comparison considered them unchanged.
 	appliedIDs := make(map[string]bool, len(applied))
 	for id := range applied {
 		appliedIDs[id] = true
@@ -861,20 +862,21 @@ func reconcileDiff(ctx context.Context, opts ReconcileOptions, mode reconcileGra
 }
 
 // appliedAcceptances splits explicit --accept-changed IDs into the changed-task
-// acceptances reconcileGraph must handle and the plan-only/applied acceptances that
-// the executable task comparison cannot see. It returns a map from task ID to the
+// acceptances reconcileGraph must handle and the cosmetic-only or already-applied
+// acceptances the executable task comparison cannot see. It returns a map from task ID to the
 // definition digest before the accepted change; the returned accept slice contains
 // only the IDs left for reconcileGraph.
 //
 // A task qualifies only when it has execution history and its executable definition
-// matches the requested one. When the requested plan's stage digest differs from the
-// recorded plan's, the change is plan-only (for example a deliverable edit), so the
-// acceptance is recorded from the recorded digest to the requested digest. When the
-// two digests match, the change is already applied in the machine plan, so the
+// matches the requested one. A plan-only change (planOnly, for example a deliverable
+// edit) is left for reconcileGraph, which treats it as a changed executed task. When
+// the stage digests still differ otherwise (text the executable comparison folds as
+// cosmetic), the acceptance is recorded from the recorded digest to the requested
+// digest. When the two digests match, the change is already applied in the machine plan, so the
 // supplied prior digest (from a stale pending request) is the only usable "before"
 // value; it must differ from the current digest. Any other ID is left for
 // reconcileGraph, which preserves the existing changed-task validation and refusal.
-func appliedAcceptances(recorded, plan *planner.Plan, active, desired []*domain.Task, accept []string, prior map[string]string) (map[string]string, []string, error) {
+func appliedAcceptances(recorded, plan *planner.Plan, planOnly map[string]bool, active, desired []*domain.Task, accept []string, prior map[string]string) (map[string]string, []string, error) {
 	applied := make(map[string]string)
 	if len(accept) == 0 {
 		return applied, accept, nil
@@ -885,7 +887,7 @@ func appliedAcceptances(recorded, plan *planner.Plan, active, desired []*domain.
 	for _, id := range accept {
 		task, activeOK := activeByID[id]
 		desiredTask, desiredOK := desiredByID[id]
-		if !activeOK || !desiredOK || !hasExecution(task) || !sameTaskDefinition(task, desiredTask) {
+		if !activeOK || !desiredOK || !hasExecution(task) || !sameTaskDefinition(task, desiredTask) || planOnly[id] {
 			remaining = append(remaining, id)
 			continue
 		}
@@ -983,7 +985,7 @@ func desiredTasks(plan *planner.Plan) ([]*domain.Task, error) {
 // stops the call (an unapproved changed executed task, an executed task the plan
 // removes, or an approval naming neither is an error), while reconcileInspect
 // reports them in the result and mutates nothing.
-func reconcileGraph(source string, active, desired []*domain.Task, accept map[string]bool, autoAccept func(ExecutedChange) autonomy.Decision, mode reconcileGraphMode) (reconcilePlan, error) {
+func reconcileGraph(source string, active, desired []*domain.Task, planOnly map[string]bool, accept map[string]bool, autoAccept func(ExecutedChange) autonomy.Decision, mode reconcileGraphMode) (reconcilePlan, error) {
 	var out reconcilePlan
 
 	// kept holds executed tasks whose current definition survives because an
@@ -1012,11 +1014,16 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 			out.added = append(out.added, d.ID)
 			continue
 		}
-		if sameTaskDefinition(task, d) {
+		// A plan-only change still changes the definition an executed task's approval
+		// is bound to, so it is never "unchanged" for an executed task.
+		if sameTaskDefinition(task, d) && !(planOnly[d.ID] && hasExecution(task)) {
 			out.unchanged = append(out.unchanged, d.ID)
 			continue
 		}
 		if hasExecution(task) {
+			// Deliverables and other plan-only fields become acceptance criteria, so a
+			// plan-only change is never descriptive-only.
+			equiv := !planOnly[d.ID] && equivalentExecutedChange(task, d)
 			if accept[d.ID] {
 				out.upserts = append(out.upserts, redefineTask(task, d))
 				out.accepted = append(out.accepted, d.ID)
@@ -1025,7 +1032,7 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 			}
 			// A changed executed task is a candidate for automatic reconciliation when
 			// the autonomy policy authorizes it; otherwise it needs an explicit approval.
-			if rec, ok := autoReconcile(task, d, autoAccept); ok {
+			if rec, ok := autoReconcile(task, d, equiv, autoAccept); ok {
 				out.upserts = append(out.upserts, redefineTask(task, d))
 				out.autoReconciled = append(out.autoReconciled, rec)
 				reconciledExecuted[d.ID] = true
@@ -1038,7 +1045,7 @@ func reconcileGraph(source string, active, desired []*domain.Task, accept map[st
 				// real executable-semantics change) so a read-only consumer can decide
 				// whether a refresh preserves meaning.
 				out.changedExecuted = append(out.changedExecuted, d.ID)
-				if equivalentExecutedChange(task, d) {
+				if equiv {
 					out.changedExecutedEquiv = append(out.changedExecutedEquiv, d.ID)
 				} else {
 					out.changedExecutedMaterial = append(out.changedExecutedMaterial, d.ID)
@@ -1168,13 +1175,13 @@ func hasExecution(t *domain.Task) bool {
 // reports a provenance record and true only when the callback authorizes an
 // automatic reconciliation. A nil callback authorizes nothing, so a caller that
 // does not opt in keeps the explicit-approval behavior.
-func autoReconcile(cur, desired *domain.Task, autoAccept func(ExecutedChange) autonomy.Decision) (AutoReconciled, bool) {
+func autoReconcile(cur, desired *domain.Task, equivalent bool, autoAccept func(ExecutedChange) autonomy.Decision) (AutoReconciled, bool) {
 	if autoAccept == nil {
 		return AutoReconciled{}, false
 	}
 	change := ExecutedChange{
 		TaskID:     cur.ID,
-		Equivalent: equivalentExecutedChange(cur, desired),
+		Equivalent: equivalent,
 		Before:     definitionHash(cur),
 		After:      definitionHash(desired),
 	}
