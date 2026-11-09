@@ -4,6 +4,10 @@ Status: **REQUEST — no acceptance is recorded.** This document prepares the ex
 decision a designated approver must make. It does not record acceptance, does not
 change SOP state, and does not claim `VERIFIED`.
 
+**Post-closeout correction:** the plan has since been historicalized `COMPLETE`
+through the supported external-completion path; `COMPLETE` is a lifecycle state, not
+acceptance. See §Post-closeout correction (2026-11-09) below.
+
 Related: [llm02-disclosure.md](llm02-disclosure.md) §Live extraction,
 [llm02-campaign.json](llm02-campaign.json), and
 [PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md](../../plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md).
@@ -129,6 +133,40 @@ No step may be performed on the operator's behalf.
   outside the supported command.
 - Do not re-run the campaign merely to close paperwork; reuse the merged artifact.
 - Do not mark the plan complete or historicalized from this document.
+
+## Post-closeout correction (2026-11-09)
+
+The lifecycle state changed after this request was written. The supported
+external-completion path was used:
+
+- `sop task complete DISCLOSE-003 --external --commit d3830e35` in the
+  `llm02-disclosure` worktree, with validation `PASS`, recorded at
+  `2026-11-09T17:19:43Z`. The record is
+  `runs/DISCLOSE-003/external-completion.json`.
+- `sop plan historicalize` then recorded `HISTORICALIZED` / `COMPLETE` at
+  `2026-11-09T17:19:47Z`. The archive is preserved at
+  `.agent-sdlc/archive/worktree-evidence/plan-03-sop-llm02-sensitive-information-disclosure/`.
+
+This is a lifecycle completion, not acceptance evidence. External completion
+explicitly derives no acceptance evidence and clears any prior objective-level
+outcome. No `acceptance_decisions.jsonl` exists for `DISCLOSE-003`, and there is no
+`runs/DISCLOSE-003/outcome.json`.
+
+The supported `sop outcome --accept` interface cannot append acceptance to the
+historicalized plan. On a disposable copy of the preserved state it reports
+`task DISCLOSE-003 not found` and `outcome: no recorded outcome for DISCLOSE-003 in
+the latest run; run the task first`; no acceptance file is written. There is no
+active task or recorded outcome to bind a criterion decision to, and the plan must
+not be reopened.
+
+The earlier statement that `human.designated_approvers` was not configured is stale
+for the preserved state: the evidence `config.yaml` names `Tom Tran`. That does not
+create an acceptance record.
+
+The remaining decision is unchanged: a designated approver must accept the exact
+campaign artifact for `criterion-1`–`criterion-4` and `criterion-6`, or the manual
+acceptance stays incomplete. If the operator wants the acceptance record, it needs
+a separate governance decision; it cannot be repaired by editing state or archives.
 
 ## Exact next action
 
