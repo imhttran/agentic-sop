@@ -382,11 +382,11 @@ func missingDeliverables(spec *taskfile.Spec, dir string) []string {
 // remains a HOLD boundary.
 func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, cargoEnabled bool) *outcomeArtifact {
 	criteria := deliverableCriteria(spec, dir)
-	// Strict content binding (Plan 07 D4): a manual acceptance decision is bound
-	// to the exact repository content the operator reviewed. The identity is
-	// computed only when a manual criterion is mapped.
-	contentID, idErr := manualContentIdentity(spec, dir)
-	mappings := specCriterionMappings(spec, contentID)
+	// Parse the mappings first so mapped checks are known before the checks run.
+	// The content identity is filled in only AFTER every acceptance check has
+	// executed: a check may modify the tree (for example regenerate a fixture), and
+	// the manual decision must be bound to the content the verdict describes.
+	mappings := specCriterionMappings(spec, "")
 	mappedChecks := make(map[string]bool, len(mappings))
 	for _, m := range mappings {
 		if m.Kind == outcome.EvidenceCheck && m.CheckRef != "" {
@@ -422,6 +422,14 @@ func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, c
 	for i, c := range spec.AcceptanceCriteria {
 		criteria = append(criteria, outcome.Criterion{ID: fmt.Sprintf("criterion-%d", i+1), Required: true, Description: c})
 	}
+	// Strict content binding (Plan 07 D4): the identity is computed after the
+	// acceptance checks have run, so a check that rewrites repository files cannot
+	// leave a manual decision bound to the pre-check tree. It is computed only when
+	// a manual criterion is mapped.
+	contentID, idErr := manualContentIdentity(spec, dir)
+	for i := range mappings {
+		mappings[i].ContentIdentity = contentID
+	}
 	decisions, derr := readAcceptanceDecisions(dir, spec.ID)
 	if derr != nil {
 		// Acceptance decisions are evidence. A corrupted or unreadable audit must not
@@ -439,24 +447,31 @@ func deriveMappedOutcome(spec *taskfile.Spec, dir string, gate quality.Result, c
 	validation := outcome.ValidationResult{Passed: gate.Decision == quality.Pass, Reasons: gate.Reasons}
 	res := outcome.VerifyAcceptanceWithRecoveries(validation, criteria, mappings, checks, decisions, recoveries)
 	if derr != nil {
-		res.Status = outcome.Partial
-		res.Reasons = append(res.Reasons, "acceptance decisions could not be read: "+derr.Error())
+		downgradeUnverified(&res, "acceptance decisions could not be read: "+derr.Error())
 	}
 	if idErr != nil {
 		// An unavailable content identity cannot bind a manual decision. Fail the
-		// verdict closed rather than letting a legacy decision stand in for the
-		// unreviewed current content.
-		res.Status = outcome.Partial
-		res.Reasons = append(res.Reasons, "repository content identity unavailable: "+idErr.Error())
+		// verdict closed without downgrading a HOLD (an authority boundary), which is
+		// non-waivable.
+		downgradeUnverified(&res, "repository content identity unavailable: "+idErr.Error())
 	}
 	if rerr != nil {
-		res.Status = outcome.Partial
-		res.Reasons = append(res.Reasons, acceptanceRecoveryReadReason(rerr))
+		downgradeUnverified(&res, acceptanceRecoveryReadReason(rerr))
 	}
 	for _, c := range checks {
 		res.PropagateEvidence(c.Ref, c)
 	}
 	return &outcomeArtifact{Status: res.Status, Criteria: res.Criteria, Reasons: res.Reasons, Validation: res.Validation, Mappings: mappings, logs: logs}
+}
+
+// downgradeUnverified forces a non-VERIFIED verdict for an evidence read or
+// identity failure. It never replaces a HOLD: a boundary violation is an authority
+// boundary, not a waivable PARTIAL.
+func downgradeUnverified(res *outcome.Result, reason string) {
+	if res.Status != outcome.Hold {
+		res.Status = outcome.Partial
+	}
+	res.Reasons = append(res.Reasons, reason)
 }
 
 // checkResultOf projects an executed check onto outcome evidence. A failed check

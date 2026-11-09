@@ -221,6 +221,13 @@ found these authoritative sources and bindings:
   `TestLegacyDecisionWithoutContentIdentityRequiresReacceptance`, and
   `TestAcceptanceRecoveryFromAlreadyRecordedDecision` (a content-bound decision
   still survives the supported attempt-recovery path).
+- **Review follow-up (P1):** the identity is computed **after** every acceptance
+  check executes, so a check that rewrites repository files cannot leave a
+  decision bound to the pre-check tree. A fingerprint failure appends its
+  diagnostic without downgrading a HOLD, so an authority boundary remains
+  non-waivable. Verified by
+  `TestContentIdentityIsComputedAfterAcceptanceChecks` and
+  `TestContentIdentityFailurePreservesHold`.
 
 ## Deterministic fixture coverage
 
@@ -306,7 +313,10 @@ Run from the worktree root on macOS 26.6.2/arm64, Go 1.27.1.
 | `go test ./internal/toolharness/ -run TestSubprocessStateWriteIsOutsideFileToolBoundary -count=1`  | PASS (gap characterized)                               |
 | `go test ./internal/cli/ -run TestExternalCompletionClearsStaleOutcome -count=1`                   | PASS                                                   |
 | `go test ./internal/outcome/ -run TestManualDecisionContentBinding -count=1`                       | PASS                                                   |
-| `go test ./internal/cli/ -run 'TestOutcomeAccept                                                   | TestAcceptanceRecovery                                 | TestLegacyDecision' -count=1` | PASS |
+| `go test ./internal/cli/ -run TestOutcomeAccept -count=1`                                          | PASS                                                   |
+| `go test ./internal/cli/ -run TestAcceptanceRecovery -count=1`                                     | PASS                                                   |
+| `go test ./internal/cli/ -run TestLegacyDecision -count=1`                                         | PASS                                                   |
+| `go test ./internal/cli/ -run TestContentIdentity -count=1`                                        | PASS                                                   |
 | `go test ./internal/toolharness/... -count=1`                                                      | PASS                                                   |
 | `go test ./internal/ollamaagent/... -count=1`                                                      | PASS (66.5 s)                                          |
 | `go test ./internal/cli/... -count=1`                                                              | PASS (130.3 s)                                         |
