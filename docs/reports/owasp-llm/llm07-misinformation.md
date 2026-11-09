@@ -18,33 +18,33 @@ correctness of generated text.
 
 ## Executive status
 
-| Dimension | Result | Evidence |
-| --- | --- | --- |
-| IMPLEMENTED | Yes, on the branch (not merged) | Code and tests listed below |
-| ENABLED | Yes, in the default local lifecycle | No new flag; the tool-harness write boundary and the outcome-artifact reset are always active |
-| VERIFIED (deterministic) | Yes, macOS arm64 | `go build ./...`, `go vet ./...`, `go test ./...` all passed |
-| VERIFIED (live model) | `NOT_RUN` | No live-model campaign was required or run |
-| Linux verification | `NOT_RUN` | No Linux host was used |
-| Residual GAP | Manual decisions are bound to criterion text + attempt, not a commit/content hash; `run_command` subprocesses are outside the write boundary | Documented below |
+| Dimension                | Result                                                                                                                                       | Evidence                                                                                      |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| IMPLEMENTED              | Yes, on the branch (not merged)                                                                                                              | Code and tests listed below                                                                   |
+| ENABLED                  | Yes, in the default local lifecycle                                                                                                          | No new flag; the tool-harness write boundary and the outcome-artifact reset are always active |
+| VERIFIED (deterministic) | Yes, macOS arm64                                                                                                                             | `go build ./...`, `go vet ./...`, `go test ./...` all passed                                  |
+| VERIFIED (live model)    | `NOT_RUN`                                                                                                                                    | No live-model campaign was required or run                                                    |
+| Linux verification       | `NOT_RUN`                                                                                                                                    | No Linux host was used                                                                        |
+| Residual GAP             | Manual decisions are bound to criterion text + attempt, not a commit/content hash; `run_command` subprocesses are outside the write boundary | Documented below                                                                              |
 
 ## Authority chain (Plan 01 inventory, current implementation)
 
 Plan 01's authority inventory is the baseline. Re-inspecting the current checkout
 found these authoritative sources and bindings:
 
-| Claim source | Stored outcome / sink | Authoritative? | Binding |
-| --- | --- | --- | --- |
-| Model completion summary (`implementation.md`) | Run artifact only | No | Never read by `deriveGatedOutcome` |
-| Model `ALREADY_SATISFIED` object | `report.json` / `report.md` completion field | Only after `verifySatisfiedDetailed` accepts it | Invocation-local reads, executed validation, unchanged repository fingerprint, deliverables |
-| Model-selected evidence paths | `ALREADY_SATISFIED` acceptance evidence | No by itself | Path must have been read in **this** invocation; `.agent-sdlc` paths are refused |
-| Declared acceptance checks | `outcome.json` `check-N` criteria | Yes | Re-executed from the task spec on the current tree; `go test` requires a real passing test event |
-| Declared deliverables | `outcome.json` `deliverable-N` criteria | Yes | `os.Stat` on the declared paths in the current tree |
-| Manual acceptance decision | `acceptance_decisions.jsonl` → `outcome.json` | Only with an explicit decision | Designated approver, evidence text, timestamp, task, criterion text, manual-evidence text, attempt |
-| Waiver | `waivers.jsonl` → lifecycle | Only with an explicit grant | Designated approver, reason, timestamp, unmet required criterion |
-| Review findings | `review.json` → quality gate | Blocking input, never acceptance proof | Severity threshold; malformed review output is `NEEDS_HUMAN` |
-| Test summary | `validation.json` from `internal/testrunner` | Yes | Executed command, exit status, category; model prose is not read |
-| Historical / retrieved content | Prompt context (`advisory_retrieval`, handoff) | No | Not an input to the evidence resolver or transition |
-| Approval | `approval.json` written by SOP approval operations | Yes | Explicit `sop approve` / `sop outcome --accept`; model prose is never parsed |
+| Claim source                                   | Stored outcome / sink                              | Authoritative?                                  | Binding                                                                                            |
+| ---------------------------------------------- | -------------------------------------------------- | ----------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Model completion summary (`implementation.md`) | Run artifact only                                  | No                                              | Never read by `deriveGatedOutcome`                                                                 |
+| Model `ALREADY_SATISFIED` object               | `report.json` / `report.md` completion field       | Only after `verifySatisfiedDetailed` accepts it | Invocation-local reads, executed validation, unchanged repository fingerprint, deliverables        |
+| Model-selected evidence paths                  | `ALREADY_SATISFIED` acceptance evidence            | No by itself                                    | Path must have been read in **this** invocation; `.agent-sdlc` paths are refused                   |
+| Declared acceptance checks                     | `outcome.json` `check-N` criteria                  | Yes                                             | Re-executed from the task spec on the current tree; `go test` requires a real passing test event   |
+| Declared deliverables                          | `outcome.json` `deliverable-N` criteria            | Yes                                             | `os.Stat` on the declared paths in the current tree                                                |
+| Manual acceptance decision                     | `acceptance_decisions.jsonl` → `outcome.json`      | Only with an explicit decision                  | Designated approver, evidence text, timestamp, task, criterion text, manual-evidence text, attempt |
+| Waiver                                         | `waivers.jsonl` → lifecycle                        | Only with an explicit grant                     | Designated approver, reason, timestamp, unmet required criterion                                   |
+| Review findings                                | `review.json` → quality gate                       | Blocking input, never acceptance proof          | Severity threshold; malformed review output is `NEEDS_HUMAN`                                       |
+| Test summary                                   | `validation.json` from `internal/testrunner`       | Yes                                             | Executed command, exit status, category; model prose is not read                                   |
+| Historical / retrieved content                 | Prompt context (`advisory_retrieval`, handoff)     | No                                              | Not an input to the evidence resolver or transition                                                |
+| Approval                                       | `approval.json` written by SOP approval operations | Yes                                             | Explicit `sop approve` / `sop outcome --accept`; model prose is never parsed                       |
 
 ## Claim-to-decision traces
 
@@ -88,7 +88,7 @@ found these authoritative sources and bindings:
 
 6. **Model approval prose.**
    Approval is a durable record written only by `sop approve` / `sop outcome
-   --accept`; model prose is never parsed into a decision. A manual criterion with
+--accept`; model prose is never parsed into a decision. A manual criterion with
    no decision remains `PARTIAL`. Verified by
    `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`.
 
@@ -151,66 +151,66 @@ found these authoritative sources and bindings:
 
 ## Deterministic fixture coverage
 
-| Required fixture | Test | Result |
-| --- | --- | --- |
-| Model claims PASS when a required check failed | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck` | PASS |
-| Model claims PASS when a check never ran | `TestVerifySatisfiedDetailedRejectionCodes` (`validation_not_executed`); `TestOutcomeIntegrationDeliverableAloneIsPartial` | PASS |
-| Citation references nonexistent evidence | `TestVerifySatisfiedDetailedRejectionCodes` (`unread_evidence_path`) | PASS |
-| Evidence belongs to another task/attempt | `TestManualEvidenceRequiresDecision` (`stale-attempt`, `wrong-attempt`); `TestStateEvidencePath` | PASS |
-| Evidence refers to changed/invalidated content | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `TestAcceptanceRecoveryInvalidatesChangedCriterionOrEvidence` | PASS |
-| Model text claims approval without a decision | `TestModelApprovalClaimWithoutDecisionDoesNotAdvance` | PASS |
-| ALREADY_SATISFIED lacks required evidence | `TestAlreadySatisfiedRequiresObjectiveProof` | PASS |
-| Historical content replaces current verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck` | PASS |
-| Valid observed evidence still advances | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestVerifiedAlreadySatisfied` | PASS |
-| Supported manual acceptance still advances | `TestOutcomeAcceptRecordsDecision`; `TestManualEvidenceRequiresDecision` (accepting case) | PASS |
+| Required fixture                                 | Test                                                                                                                       | Result |
+| ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------- | ------ |
+| Model claims PASS when a required check failed   | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                    | PASS   |
+| Model claims PASS when a check never ran         | `TestVerifySatisfiedDetailedRejectionCodes` (`validation_not_executed`); `TestOutcomeIntegrationDeliverableAloneIsPartial` | PASS   |
+| Citation references nonexistent evidence         | `TestVerifySatisfiedDetailedRejectionCodes` (`unread_evidence_path`)                                                       | PASS   |
+| Evidence belongs to another task/attempt         | `TestManualEvidenceRequiresDecision` (`stale-attempt`, `wrong-attempt`); `TestStateEvidencePath`                           | PASS   |
+| Evidence refers to changed/invalidated content   | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `TestAcceptanceRecoveryInvalidatesChangedCriterionOrEvidence`         | PASS   |
+| Model text claims approval without a decision    | `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`                                                                      | PASS   |
+| ALREADY_SATISFIED lacks required evidence        | `TestAlreadySatisfiedRequiresObjectiveProof`                                                                               | PASS   |
+| Historical content replaces current verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`                                                                    | PASS   |
+| Valid observed evidence still advances           | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestVerifiedAlreadySatisfied`                                          | PASS   |
+| Supported manual acceptance still advances       | `TestOutcomeAcceptRecordsDecision`; `TestManualEvidenceRequiresDecision` (accepting case)                                  | PASS   |
 
 ## Criterion-to-evidence mapping
 
 ### GROUND-001
 
-| Criterion | Evidence | State |
-| --- | --- | --- |
-| Distinguish model assertions, observed tool results, accepted human evidence, verified task status | Trace table above; `internal/outcome/criteria.go`; `internal/ollamaagent/already_satisfied.go` | `VERIFIED` (deterministic) |
-| Identify content/commit, task, attempt, and policy binding | Trace table; `internal/verifcache` identity; `outcome.CriterionMapping.Attempt`; `AcceptanceDecision.Attempt` | `VERIFIED` for the implemented bindings; commit/content-hash binding for manual decisions is a `GAP` |
-| Deliver this report with concrete traces | This file | `IMPLEMENTED` |
+| Criterion                                                                                          | Evidence                                                                                                      | State                                                                                                |
+| -------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Distinguish model assertions, observed tool results, accepted human evidence, verified task status | Trace table above; `internal/outcome/criteria.go`; `internal/ollamaagent/already_satisfied.go`                | `VERIFIED` (deterministic)                                                                           |
+| Identify content/commit, task, attempt, and policy binding                                         | Trace table; `internal/verifcache` identity; `outcome.CriterionMapping.Attempt`; `AcceptanceDecision.Attempt` | `VERIFIED` for the implemented bindings; commit/content-hash binding for manual decisions is a `GAP` |
+| Deliver this report with concrete traces                                                           | This file                                                                                                     | `IMPLEMENTED`                                                                                        |
 
 ### GROUND-002
 
-| Criterion | Evidence | State |
-| --- | --- | --- |
-| Fabricated PASS text cannot override failed/missing checks | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestOutcomeIntegration*` | `VERIFIED` |
-| Wrong identity/invalidated content cannot satisfy the task | `TestManualEvidenceRequiresDecision`; `TestStateEvidencePath`; `TestFailedRunDoesNotExposePreviousVerifiedOutcome` | `VERIFIED` |
-| ALREADY_SATISFIED follows the existing contract | `TestAlreadySatisfiedRequiresObjectiveProof`; `TestVerifySatisfiedDetailedRejectionCodes` | `VERIFIED` |
-| Untrusted retrieved material cannot grant approval or replace verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestModelApprovalClaimWithoutDecisionDoesNotAdvance` | `VERIFIED` |
-| Valid observed evidence and manual acceptance still advance | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestOutcomeAcceptRecordsDecision` | `VERIFIED` |
-| Regression tests use the real outcome/transition path | `runInjectedCLI` → `runSingleTask` → `runStages` → `deriveGatedOutcome`; `CompleteWithEvidence` → `verifySatisfiedDetailed` | `VERIFIED` |
+| Criterion                                                                  | Evidence                                                                                                                    | State      |
+| -------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- | ---------- |
+| Fabricated PASS text cannot override failed/missing checks                 | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestOutcomeIntegration*`                                          | `VERIFIED` |
+| Wrong identity/invalidated content cannot satisfy the task                 | `TestManualEvidenceRequiresDecision`; `TestStateEvidencePath`; `TestFailedRunDoesNotExposePreviousVerifiedOutcome`          | `VERIFIED` |
+| ALREADY_SATISFIED follows the existing contract                            | `TestAlreadySatisfiedRequiresObjectiveProof`; `TestVerifySatisfiedDetailedRejectionCodes`                                   | `VERIFIED` |
+| Untrusted retrieved material cannot grant approval or replace verification | `TestModelPassClaimCannotOverrideFailedAcceptanceCheck`; `TestModelApprovalClaimWithoutDecisionDoesNotAdvance`              | `VERIFIED` |
+| Valid observed evidence and manual acceptance still advance                | `TestOutcomeIntegrationVerifiedWithExecutedCheck`; `TestOutcomeAcceptRecordsDecision`                                       | `VERIFIED` |
+| Regression tests use the real outcome/transition path                      | `runInjectedCLI` → `runSingleTask` → `runStages` → `deriveGatedOutcome`; `CompleteWithEvidence` → `verifySatisfiedDetailed` | `VERIFIED` |
 
 ### GROUND-003
 
-| Criterion | Evidence | State |
-| --- | --- | --- |
-| User-visible result and persisted lifecycle agree | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `sop verify` reads the cleared artifact | `VERIFIED` |
-| Missing checks are `NOT_RUN`, not implied PASS | `writeNoValidationResults`; `outcome.Verify` required `objective-acceptance` | `VERIFIED` (inspection + existing tests) |
-| Source references resolve to the recorded evidence identity | `STATE_EVIDENCE` rejection; `verifcache` identity tests | `VERIFIED` for the paths that declare an identity |
-| Required checks pass; PR documents before/after evidence and residual risk | This report; repository checks below | `VERIFIED` (deterministic) |
+| Criterion                                                                  | Evidence                                                                                     | State                                             |
+| -------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- | ------------------------------------------------- |
+| User-visible result and persisted lifecycle agree                          | `TestFailedRunDoesNotExposePreviousVerifiedOutcome`; `sop verify` reads the cleared artifact | `VERIFIED`                                        |
+| Missing checks are `NOT_RUN`, not implied PASS                             | `writeNoValidationResults`; `outcome.Verify` required `objective-acceptance`                 | `VERIFIED` (inspection + existing tests)          |
+| Source references resolve to the recorded evidence identity                | `STATE_EVIDENCE` rejection; `verifcache` identity tests                                      | `VERIFIED` for the paths that declare an identity |
+| Required checks pass; PR documents before/after evidence and residual risk | This report; repository checks below                                                         | `VERIFIED` (deterministic)                        |
 
 ## Commands and results
 
 Run from the worktree root on macOS 26.6.2/arm64, Go 1.27.1.
 
-| Command | Result |
-| --- | --- |
-| `go test ./internal/toolharness/... -run TestStateDirectoryIsWriteProtectedForModelTools -count=1` | PASS |
-| `go test ./internal/cli/... -run TestModelPassClaimCannotOverrideFailedAcceptanceCheck -count=1` | PASS |
-| `go test ./internal/cli/... -run TestModelApprovalClaimWithoutDecisionDoesNotAdvance -count=1` | PASS |
-| `go test ./internal/cli/... -run TestFailedRunDoesNotExposePreviousVerifiedOutcome -count=1` | PASS |
-| `go test ./internal/outcome/... -count=1` | PASS |
-| `go test ./internal/toolharness/... -count=1` | PASS |
-| `go test ./internal/ollamaagent/... -count=1` | PASS (66.5 s) |
-| `go test ./internal/cli/... -count=1` | PASS (130.3 s) |
-| `go build ./...` | PASS |
-| `go vet ./...` | PASS |
-| `go test ./...` | PASS (116 packages `ok`, no `FAIL`) |
+| Command                                                                                            | Result                              |
+| -------------------------------------------------------------------------------------------------- | ----------------------------------- |
+| `go test ./internal/toolharness/... -run TestStateDirectoryIsWriteProtectedForModelTools -count=1` | PASS                                |
+| `go test ./internal/cli/... -run TestModelPassClaimCannotOverrideFailedAcceptanceCheck -count=1`   | PASS                                |
+| `go test ./internal/cli/... -run TestModelApprovalClaimWithoutDecisionDoesNotAdvance -count=1`     | PASS                                |
+| `go test ./internal/cli/... -run TestFailedRunDoesNotExposePreviousVerifiedOutcome -count=1`       | PASS                                |
+| `go test ./internal/outcome/... -count=1`                                                          | PASS                                |
+| `go test ./internal/toolharness/... -count=1`                                                      | PASS                                |
+| `go test ./internal/ollamaagent/... -count=1`                                                      | PASS (66.5 s)                       |
+| `go test ./internal/cli/... -count=1`                                                              | PASS (130.3 s)                      |
+| `go build ./...`                                                                                   | PASS                                |
+| `go vet ./...`                                                                                     | PASS                                |
+| `go test ./...`                                                                                    | PASS (116 packages `ok`, no `FAIL`) |
 
 The full-suite log used for this report is the terminal capture for
 `go test ./...`; it was not committed (it is machine-local output). The plan's
@@ -219,9 +219,10 @@ acceptance checks are the focused commands in the table above.
 ## Revisions
 
 - Base: `9cf554e6b67a6c61588326adb4a76fd46bfe850d` (`origin/main`).
-- Branch: `security/llm07-misinformation`.
-- The change set is the branch diff against the base; the PR records the exact
-  head commit after the branch is pushed.
+- Change-set commit: `257b9b40` (`security/llm07-misinformation`).
+- Branch: `security/llm07-misinformation`; the PR records the final head.
+- The change set is the branch diff against the base; the verification commands
+  above were run on that change set on the platform named at the top.
 
 ## Residual limitations and gaps
 
