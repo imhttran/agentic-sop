@@ -2,7 +2,9 @@
 
 Status: `VERIFIED` for the merged execution controls on macOS and Linux CI; the
 validation-runner output fix is on the follow-up branch; the provider
-output-token cap now defaults to 16384 tokens per request.
+output-token cap now defaults to 16384 tokens per request, and each supported
+agent adapter rejects a provider-reported `length` truncation instead of
+accepting it as a complete response.
 Plan: `docs/plans/PLAN-06-SOP-LLM06-Unbounded-Consumption.md` (`plan-06-sop-llm06-unbounded-consumption`).
 Base commit: `360b96ef721526e58b89f7a7986849caa8a96080` (`origin/main` after the follow-up rebase).
 Merged code/verification commits: `400e4544`, `c8e00b1c`, `e656a8e7`.
@@ -62,7 +64,7 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | Validation command output | bytes / check | `internal/testrunner.Runner.MaxOutputBytes`; canonical context limit for prompt rendering | 10 MiB capture; 64 KiB per stream in the prompt | `limitedBuffer` at read; `boundedValidationStream` before rendering | Not persisted | Bounded at both read and prompt boundaries (follow-up) |
 | Provider request timeout | s / model call | `internal/agent/provider.go`; provider-specific timeout envs | 120 s | `http.Client.Timeout` | Not persisted | A provider may continue billing after the client cancels |
 | Provider response bound | bytes / model call | `internal/agent/provider.go` | 10 MiB | `io.LimitReader` in `postJSON` | Not persisted | The read is bounded; provider generation is not |
-| Provider output-token bound | tokens / request | `agent.DefaultMaxOutputTokens`; `SOP_AGENT_MAX_OUTPUT_TOKENS` overrides | 16384 | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | A response cut off at the cap is not detected as truncated |
+| Provider output-token bound | tokens / request | `agent.DefaultMaxOutputTokens`; `SOP_AGENT_MAX_OUTPUT_TOKENS` overrides | 16384 | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | A provider-reported `length` stop is rejected as incomplete (§2.9) |
 | Provider retry bound | attempts / chat turn | `internal/ollamaagent/ollama.go` | 3 (initial + 2) | `chatWithFormat` before any tool executes | Not persisted | Retries multiply provider calls but are fixed and bounded |
 | ACP frame bound | bytes / frame | `internal/acp` | 1 MiB | transport frame reader | Not persisted | Oversize frame is rejected |
 | ACP prompt bound | bytes / submission | `internal/acp` | 256 KiB | `PromptSubmission` | Not persisted | Rejected |
@@ -219,6 +221,34 @@ Evidence: `TestMaxOutputTokensDefaultsWhenUnset`,
 `TestProviderRejectsInvalidMaxOutputTokens`,
 `TestOllamaClientSendsOperatorMaxOutputTokens`.
 
+A provider that stops at that bound reports it explicitly. The adapters preserve
+that report instead of discarding it:
+
+- `internal/agent/openai.go` decodes `choices[].finish_reason` for the
+  OpenAI-compatible transport shared by `llamacpp`, `mlx`, and
+  `openai_compatible`.
+- `internal/agent/ollama.go` decodes `done_reason` for the single-prompt Ollama
+  provider.
+- `internal/ollamaagent/ollama.go` decodes `done_reason` for the in-process tool
+  loop and rejects the turn *before* `normalizeToolCalls`, so a partial native or
+  content tool call is never dispatched.
+- A `length` stop becomes `agent.TruncationError` (`internal/agent/agent.go`), a
+  deterministic error: the provider boundary does not retry it. The in-process
+  bridge (`internal/ollamaagent/bridge.go`) sets `Response.Truncated` and returns a
+  structured `failed` outcome carrying the reason, and
+  `internal/orchestration/worker_adapter.go` treats any truncated response as an
+  explicit failure. Truncated output therefore cannot establish task success.
+- Only the explicit `length` value is truncation. An absent reason and other
+  stop reasons keep their existing behavior.
+- None of the supported agent adapters streams: every request sets `stream:false`,
+  so there is no streaming path in which a stop reason could be lost.
+
+Evidence: `TestOpenAICompatibleRejectsLengthFinishReason`,
+`TestOllamaRejectsLengthDoneReason`,
+`TestNormalStopReasonsRemainAccepted`, `TestTruncatedToolCallIsNotDispatched`,
+`TestTruncatedFinalIsNotAcceptedAsSuccess`, `TestNormalDoneReasonStillCompletes`,
+`TestTruncatedPayloadFailsSafely`.
+
 ### 2.10 Validation output was captured and rendered without a bound
 
 `internal/testrunner` captured each check's stdout/stderr in an unbounded
@@ -261,6 +291,7 @@ Evidence: `TestRunBoundsCapturedOutput`,
 | Reported residual | Disposition | Evidence / decision |
 |---|---|---|
 | Default provider output-token cap | Decided by the operator; implemented | Unset `SOP_AGENT_MAX_OUTPUT_TOKENS` now sends `agent.DefaultMaxOutputTokens` (16384). Test: `TestMaxOutputTokensDefaultsWhenUnset`. |
+| Provider `length` truncation accepted as complete | Implemented and verified | `finish_reason`/`done_reason` `length` becomes `agent.TruncationError`; the in-process bridge marks `Response.Truncated` and returns a `failed` outcome, and the orchestration mapping refuses success. Tests: `TestOpenAICompatibleRejectsLengthFinishReason`, `TestOllamaRejectsLengthDoneReason`, `TestTruncatedToolCallIsNotDispatched`, `TestTruncatedFinalIsNotAcceptedAsSuccess`, `TestTruncatedPayloadFailsSafely`. |
 | Linux descendant termination | Required criterion satisfied | GitHub Actions run `42576841956`, job `129026456948` (`fmt, vet, build, test`, `ubuntu-26.04`, head `dfd135c`) passed `go test ./...` including the unix-tagged process-group and signal tests. |
 | Validation-runner output bound | Required criterion implemented and verified on the follow-up branch | `limitedBuffer` bounds each capture at 10 MiB with a retained tail for trailing `go test -json` completion events; `boundedValidationStream` bounds each rendered stream to the canonical 64 KiB context limit. Tests: `TestRunBoundsCapturedOutput`, `TestPostgresCompletionSurvivesCaptureBound`, `TestValidationFailureContextBoundsHugeOutput`. |
 | Snapshot restore policy | Explicitly out of scope for Plan 06's output-bound criterion | `toolharness.snapshot` is an internal undo-correctness mechanism, not model-visible output or a configured consumption limit. The allocation risk is recorded; bounding it needs a restore-completeness policy. |
@@ -316,6 +347,7 @@ All commands ran in the isolated worktree on `darwin/arm64`.
 |---|---|
 | `go build ./...` | PASS |
 | `go vet ./...` | PASS |
+| `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/orchestration/...` | PASS (truncation regression coverage) |
 | `go test -count=1 ./internal/agent/... ./internal/ollamaagent/... ./internal/mcp/... ./internal/toolharness/... ./internal/run/... ./internal/continuation/... ./internal/perf/...` | PASS |
 | `go test -count=1 ./internal/cli/... ./internal/testrunner/...` | PASS |
 | `go test -count=1 ./internal/failure/... ./internal/recovery/... ./internal/autonomy/... ./internal/domain/... ./internal/dqharness/... ./internal/hipcompare/...` | PASS |
@@ -329,10 +361,14 @@ process-group and signal tests.
 
 ## 6. Residual limitations and follow-up proposals
 
-1. **Truncation at the output-token cap is not detected.** The default cap is
-   16384 tokens per request. A response cut off at the cap (`finish_reason` /
-   `done_reason` `length`) is not reported as truncated, and the cap's interaction
-   with provider context windows is not measured.
+1. **Truncation is detected only where the provider reports it.** The supported
+   agent adapters (`internal/agent/openai.go`, `internal/agent/ollama.go`, and the
+   in-process `internal/ollamaagent/ollama.go`) reject a `length` stop. A custom
+   `SOP_AGENT_COMMAND` process that exits zero with partial stdout carries no
+   provider stop reason SOP can trust; the command boundary cannot infer it. A
+   provider-specific stop reason other than `length` is also not guessed at: it
+   needs an explicit mapping decision. The cap's interaction with provider context
+   windows remains unmeasured, and there is still no execution token budget.
 2. **No execution token budget.** Token usage is diagnostic; the execution circuit
    breakers are turns, tool calls, stale iterations, and lifecycle counts. A token
    budget would be a new policy control.

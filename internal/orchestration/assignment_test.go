@@ -113,6 +113,23 @@ func TestUnparsablePayloadFailsSafely(t *testing.T) {
 	}
 }
 
+// TestTruncatedPayloadFailsSafely asserts that a provider-reported truncation is
+// an explicit failure even when the response also carries a completed outcome.
+func TestTruncatedPayloadFailsSafely(t *testing.T) {
+	assignment := conformingAssignment()
+	result := FromAgentResponse(assignment, agent.Response{
+		Content:   "partial",
+		Truncated: true,
+		Outcome:   &agent.Outcome{Status: agent.OutcomeCompleted, Summary: "done"},
+	})
+	if result.Status != agent.OutcomeFailed || result.Progress.Complete {
+		t.Fatalf("status = %q complete=%v, want failed and incomplete", result.Status, result.Progress.Complete)
+	}
+	if !hasDiagnostic(result.Diagnostics, "output_truncated") {
+		t.Fatalf("diagnostics %v missing output_truncated", result.Diagnostics)
+	}
+}
+
 // TestAdapterTransportErrorIsFailure asserts a transport error surfaces as an
 // explicit failure result plus an error, never success.
 func TestAdapterTransportErrorIsFailure(t *testing.T) {

@@ -167,6 +167,12 @@ type Outcome struct {
 // reported one, a structured execution outcome.
 type Response struct {
 	Content string
+	// Truncated reports that the provider explicitly stopped at its
+	// output-token limit, so Content is incomplete. It is set by trusted
+	// provider/harness code from a provider-reported finish/stop reason, never
+	// parsed from model output, and a truncated response is never a successful
+	// completion.
+	Truncated bool
 	// VerifiedAlreadySatisfied is set only by a trusted executing harness, never
 	// parsed from model or command-provider JSON. The lifecycle still validates.
 	VerifiedAlreadySatisfied bool
@@ -183,6 +189,33 @@ type Response struct {
 	// slice means the provider observed that it changed nothing, so a bare
 	// "completed" from it is never taken as an already-done task.
 	ChangedFiles []string
+}
+
+// TruncationError reports that a provider stopped generating at its
+// output-token limit, so the response is incomplete. It is a provider-reported
+// fact (finish_reason/done_reason "length"), never inferred from prose. The
+// provider boundary does not retry it: repeating the same request under the same
+// cap is deterministic. Callers route it through their existing bounded
+// failure/recovery path.
+type TruncationError struct {
+	Provider   string
+	Capability Capability
+	// Limit is the output-token cap SOP sent, or zero when the caller sent none
+	// (a hand-built harness configuration).
+	Limit  int
+	Reason string
+}
+
+func (e *TruncationError) Error() string {
+	target := strings.TrimSpace(e.Provider)
+	if e.Capability != "" {
+		target += " " + string(e.Capability)
+	}
+	limit := ""
+	if e.Limit > 0 {
+		limit = fmt.Sprintf(" (output-token cap %d)", e.Limit)
+	}
+	return fmt.Sprintf("%s response was incomplete: the provider stopped at its output-token limit%s (stop reason %q)", target, limit, e.Reason)
 }
 
 // Agent performs a capability request. Implementations must not mutate the

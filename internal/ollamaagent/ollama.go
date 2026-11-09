@@ -67,6 +67,10 @@ var jsonFormatMode = json.RawMessage(`"json"`)
 type ollamaChatResponse struct {
 	Message chatMessage     `json:"message"`
 	Error   json.RawMessage `json:"error"`
+	// DoneReason is Ollama's stop reason for the turn. "length" means generation
+	// stopped at the output-token limit, so the turn is incomplete and must not be
+	// accepted as a final answer or used to dispatch a tool call.
+	DoneReason string `json:"done_reason"`
 	// PromptEvalCount and EvalCount are Ollama's input and output token counts.
 	// They are pointers so an absent report is distinguished from a measured zero.
 	PromptEvalCount *int `json:"prompt_eval_count"`
@@ -271,6 +275,16 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 		output = *out.EvalCount
 	}
 	perf.AddUsageWithReport(ctx, c.model, input, output, reported)
+	// A turn the provider cut off at its output-token limit is incomplete. It is
+	// rejected before normalizeToolCalls, so a partial tool call can never be
+	// dispatched and a partial final object can never be accepted as the answer.
+	if agent.OutputTokenLimited(out.DoneReason) {
+		return "", nil, &agent.TruncationError{
+			Provider: agent.ProviderOllama,
+			Limit:    c.maxOutputTokens,
+			Reason:   out.DoneReason,
+		}
+	}
 	// A native tool call with empty content is a valid turn, never an empty
 	// response: only content == "" with no tool calls is errEmptyResponse.
 	calls := normalizeToolCalls(out.Message.ToolCalls)
@@ -291,6 +305,12 @@ func retryableProviderError(err error) bool {
 	// A cancelled or expired context is terminal whatever wrapped it: retrying a
 	// request whose context is gone cannot succeed.
 	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return false
+	}
+	// A deterministic truncation is never retried: the same request under the same
+	// cap reproduces it. The caller routes it through its own bounded recovery.
+	var truncated *agent.TruncationError
+	if errors.As(err, &truncated) {
 		return false
 	}
 	if errors.Is(err, errEmptyResponse) {
