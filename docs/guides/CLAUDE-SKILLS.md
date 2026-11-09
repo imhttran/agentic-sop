@@ -3,7 +3,8 @@
 This guide shows how to install the SOP skills so Claude Code exposes the SOP
 commands `/sop`, `/sop-prompt`, `/sop-plan`, `/sop-review`, `/sop-diagnose`,
 `/sop-test`, `/sop-implement`, `/sop-end-to-end`, `/sop-historicalize`,
-`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`, `/sop-publish`, the RAG skills `/rag-schema`,
+`/sop-continue`, `/sop-next-action`, `/sop-browser-test`, `/sop-security-scan`,
+`/sop-publish`, `/sop-fix-conflicts`, the RAG skills `/rag-schema`,
 `/rag-test`, and `/rag-ingest`, and the RAG-integration advisor `/sop-rag-integrate`,
 and how each one calls SOP.
 
@@ -85,26 +86,32 @@ commands as a Claude Code **plugin** instead of (or as well as) personal skills,
 
 ## The commands
 
-| Command           | Capability          | Mutates? | Use for                                                  |
-| ----------------- | ------------------- | -------- | -------------------------------------------------------- |
-| `/sop`            | _general entry_     | no\*     | route a general request to the right capability          |
-| `/sop-prompt`     | _CLI default_       | no\*     | an ad-hoc request with no capability chosen              |
-| `/sop-plan`       | `plan`              | no       | plans, designs, approaches, comparisons                  |
-| `/sop-review`     | `review`            | no       | code, architecture, security, design review              |
-| `/sop-diagnose`   | `diagnose_failure`  | no       | build, test, lint, runtime, provider, CI failures        |
-| `/sop-test`       | `design_tests`      | no       | test plans, cases, acceptance coverage, edge cases       |
-| `/rag-schema`     | `plan`              | no       | pgvector schema inspection and a safe dimension change    |
-| `/rag-test`       | `design_tests`      | no       | RAG unit/race/integration/end-to-end test matrix          |
-| `/rag-ingest`     | `plan`              | no       | design a safe RAG ingestion pipeline                      |
-| `/sop-rag-integrate` | `plan`           | no       | assess a project's RAG suitability and plan its integration |
-| `/sop-implement`  | `implement`         | **yes**  | an explicit request to change the repository             |
-| `/sop-end-to-end` | _project execution_ | **yes**  | execute/resume a plan with `sop run`                     |
-| `/sop-continue`   | _plan continuation_ | **yes**  | continue an active plan: reconcile first, then `sop run` |
-| `/sop-next-action` | _next safe action_ | **yes**  | report the next safe action (read-only by default); `execute` delegates to `sop run` |
-| `/sop-browser-test` | _browser suite_    | no       | run, audit, and maintain the project's Playwright tests  |
-| `/sop-security-scan` | _security evidence_ | no     | report-only Go/Rust/mixed security scan and triage       |
-| `/sop-publish`    | _merge completion_  | **yes**  | complete an authorized merge/publish and clean up safely |
-| `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix |
+| Command                | Capability               | Mutates?      | Use for                                                                              |
+| ---------------------- | ------------------------ | ------------- | ------------------------------------------------------------------------------------ |
+| `/sop`                 | _general entry_          | no\*          | route a general request to the right capability                                      |
+| `/sop-prompt`          | _CLI default_            | no\*          | an ad-hoc request with no capability chosen                                          |
+| `/sop-plan`            | `plan`                   | no            | plans, designs, approaches, comparisons                                              |
+| `/sop-review`          | `review`                 | no            | code, architecture, security, design review                                          |
+| `/sop-diagnose`        | `diagnose_failure`       | no            | build, test, lint, runtime, provider, CI failures                                    |
+| `/sop-test`            | `design_tests`           | no            | test plans, cases, acceptance coverage, edge cases                                   |
+| `/rag-schema`          | `plan`                   | no            | pgvector schema inspection and a safe dimension change                               |
+| `/rag-test`            | `design_tests`           | no            | RAG unit/race/integration/end-to-end test matrix                                     |
+| `/rag-ingest`          | `plan`                   | no            | design a safe RAG ingestion pipeline                                                 |
+| `/sop-rag-integrate`   | `plan`                   | no            | assess a project's RAG suitability and plan its integration                          |
+| `/sop-implement`       | `implement`              | **yes**       | an explicit request to change the repository                                         |
+| `/sop-end-to-end`      | _project execution_      | **yes**       | execute/resume a plan with `sop run`                                                 |
+| `/sop-continue`        | _plan continuation_      | **yes**       | continue an active plan: reconcile first, then `sop run`                             |
+| `/sop-next-action`     | _next safe action_       | **yes**       | report the next safe action (read-only by default); `execute` delegates to `sop run` |
+| `/sop-browser-test`    | _browser suite_          | no            | run, audit, and maintain the project's Playwright tests                              |
+| `/sop-security-scan`   | _security evidence_      | no            | report-only Go/Rust/mixed security scan and triage                                   |
+| `/sop-publish`         | _merge completion_       | **yes**       | complete an authorized merge/publish and clean up safely                             |
+| `/sop-fix-conflicts`   | _merge conflicts_        | **yes**       | resolve an in-progress merge conflict when decidable                                 |
+| `/mcp-live-validation` | _MCP candidate workflow_ | **candidate** | prepare, deploy, and independently validate an MCP fix                               |
+
+`/sop-fix-conflicts` resolves an in-progress merge only when both sides' intent can
+be kept mechanically. It verifies the merged result and completes the merge locally,
+and it stops with the conflict markers intact when a resolution needs a product,
+security, or policy decision. It never publishes or rewrites history.
 
 `/mcp-live-validation` prepares an isolated candidate and, after approval, stops the
 verified baseline and starts the candidate. It never replaces the production binary or

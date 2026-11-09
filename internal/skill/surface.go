@@ -29,6 +29,13 @@ type Command struct {
 	// fail-closed, and contract checks; only the SOP-only shell-example invariant is
 	// waived, because its commands are the helper scripts, Git, Go, and local checks.
 	UsesRepositoryScripts bool
+	// ResolvesMergeConflicts marks the only command allowed to stage a resolved path
+	// and complete an in-progress merge. A conflict resolution exists only in the git
+	// index, so it cannot be expressed as an SOP capability; the direct-mutation check
+	// is narrowed to exactly `git add` and `git commit` for this command, and a
+	// dedicated test forbids publishing and history rewrites. Every other command
+	// keeps the full direct-mutation boundary.
+	ResolvesMergeConflicts bool
 }
 
 // Commands is the canonical SOP command surface. Every supported agent installs
@@ -79,6 +86,13 @@ var Commands = []Command{
 	// clean worktrees and branches. It fixes no capability; historicalization is
 	// the governed SOP call it delegates.
 	{Name: "sop-publish", Capability: "", Delegation: "sop plan historicalize"},
+	// A merge-conflict resolver for an in-progress merge: it reads both sides, edits
+	// only the conflicted paths, resolves a hunk only when both sides' intent can be
+	// preserved, verifies the merged result, and completes the merge locally. It is
+	// the one command allowed to stage and complete the merge because that result
+	// lives in the git index, not in a capability; it never publishes or rewrites
+	// history.
+	{Name: "sop-fix-conflicts", Capability: "", Delegation: "sop status", ResolvesMergeConflicts: true},
 }
 
 // Capabilities is the operator-facing capability vocabulary the CLI accepts
