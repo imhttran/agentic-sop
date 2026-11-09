@@ -62,8 +62,9 @@ type ollamaChatResponse struct {
 	Message chatMessage     `json:"message"`
 	Error   json.RawMessage `json:"error"`
 	// PromptEvalCount and EvalCount are Ollama's input and output token counts.
-	PromptEvalCount int `json:"prompt_eval_count"`
-	EvalCount       int `json:"eval_count"`
+	// They are pointers so an absent report is distinguished from a measured zero.
+	PromptEvalCount *int `json:"prompt_eval_count"`
+	EvalCount       *int `json:"eval_count"`
 }
 
 // errEmptyResponse is returned when the model produces no message content. It is
@@ -242,7 +243,15 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 	if detail := rawErrorMessage(out.Error); detail != "" {
 		return "", nil, fmt.Errorf("ollama: %s", detail)
 	}
-	perf.AddUsage(ctx, c.model, out.PromptEvalCount, out.EvalCount)
+	reported := out.PromptEvalCount != nil && out.EvalCount != nil
+	input, output := 0, 0
+	if out.PromptEvalCount != nil {
+		input = *out.PromptEvalCount
+	}
+	if out.EvalCount != nil {
+		output = *out.EvalCount
+	}
+	perf.AddUsageWithReport(ctx, c.model, input, output, reported)
 	// A native tool call with empty content is a valid turn, never an empty
 	// response: only content == "" with no tool calls is errEmptyResponse.
 	calls := normalizeToolCalls(out.Message.ToolCalls)

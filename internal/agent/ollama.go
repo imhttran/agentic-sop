@@ -91,13 +91,21 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 	var out struct {
 		Message         chatMessage     `json:"message"`
 		Error           json.RawMessage `json:"error"`
-		PromptEvalCount int             `json:"prompt_eval_count"`
-		EvalCount       int             `json:"eval_count"`
+		PromptEvalCount *int            `json:"prompt_eval_count"`
+		EvalCount       *int            `json:"eval_count"`
 	}
 	if err := postJSON(ctx, o.client, o.baseURL+"/api/chat", "", body, &out); err != nil {
 		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, withTimeoutHint(err, EnvOllamaTimeout))
 	}
-	perf.AddUsage(ctx, o.model, out.PromptEvalCount, out.EvalCount)
+	reported := out.PromptEvalCount != nil && out.EvalCount != nil
+	input, output := 0, 0
+	if out.PromptEvalCount != nil {
+		input = *out.PromptEvalCount
+	}
+	if out.EvalCount != nil {
+		output = *out.EvalCount
+	}
+	perf.AddUsageWithReport(ctx, o.model, input, output, reported)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("ollama %s: %s", request.Capability, detail)
 	}

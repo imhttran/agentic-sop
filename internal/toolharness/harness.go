@@ -204,6 +204,11 @@ type authorizedRoot struct {
 // A nil auditor discards audit records.
 func New(root string, cfg Config, auditor Auditor) *Harness {
 	canonical := canonicalDir(root)
+	if cfg.MaxOutputBytes <= 0 {
+		// A missing or malformed output bound must never disable the bound; the
+		// built-in default keeps every capture finite.
+		cfg.MaxOutputBytes = DefaultConfig().MaxOutputBytes
+	}
 	h := &Harness{
 		root:    canonical,
 		cfg:     cfg,
@@ -881,12 +886,12 @@ func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
 	cmd.Dir = dir
-	var buf bytes.Buffer
-	cmd.Stdout = &buf
-	cmd.Stderr = &buf
+	cap := newBoundedCapture(h.cfg.MaxOutputBytes)
+	cmd.Stdout = cap
+	cmd.Stderr = cap
 
 	runErr := cmd.Run()
-	out := truncate(buf.String(), h.cfg.MaxOutputBytes)
+	out := cap.String()
 	if errors.Is(runCtx.Err(), context.DeadlineExceeded) {
 		return out, false, out, -1, fmt.Errorf("command timed out after %s", h.cfg.CommandTimeout)
 	}

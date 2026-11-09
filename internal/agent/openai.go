@@ -142,14 +142,22 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 		} `json:"choices"`
 		Error json.RawMessage `json:"error"`
 		Usage struct {
-			PromptTokens     int `json:"prompt_tokens"`
-			CompletionTokens int `json:"completion_tokens"`
+			PromptTokens     *int `json:"prompt_tokens"`
+			CompletionTokens *int `json:"completion_tokens"`
 		} `json:"usage"`
 	}
 	if err := postJSON(ctx, c.client, c.baseURL+"/v1/chat/completions", c.apiKey, body, &out); err != nil {
 		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, withTimeoutHint(err, c.timeoutEnv()))
 	}
-	perf.AddUsage(ctx, c.model, out.Usage.PromptTokens, out.Usage.CompletionTokens)
+	reported := out.Usage.PromptTokens != nil && out.Usage.CompletionTokens != nil
+	input, output := 0, 0
+	if out.Usage.PromptTokens != nil {
+		input = *out.Usage.PromptTokens
+	}
+	if out.Usage.CompletionTokens != nil {
+		output = *out.Usage.CompletionTokens
+	}
+	perf.AddUsageWithReport(ctx, c.model, input, output, reported)
 	if detail := rawError(out.Error); detail != "" {
 		return Response{}, fmt.Errorf("%s %s: %s", c.id, request.Capability, detail)
 	}
