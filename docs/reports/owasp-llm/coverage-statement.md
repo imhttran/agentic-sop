@@ -75,9 +75,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The designated approver has not recorded Plan 03 per-criterion acceptance;
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
-  - The six-item residual-risk decision matrix recommends the hardlink options
-    (A bounded inode/path-identity denial, B accept the local residual, C bounded
-    hybrid); `INVESTIGATE` for
+  - The six-item residual-risk decision matrix leaves the hardlink disposition
+    pending Linux PR #376; it recommends `INVESTIGATE` for
     unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
     `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
