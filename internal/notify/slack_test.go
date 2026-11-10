@@ -159,6 +159,11 @@ func TestWebhookSlackPayloadCarriesNoURL(t *testing.T) {
 	if strings.Contains(string(stub.bodies[0]), "SECRET-TOKEN") {
 		t.Fatalf("payload leaked the webhook URL: %s", stub.bodies[0])
 	}
+	// Positive control: the same payload renders the event it describes, so the
+	// URL-redaction assertion is not passing on an empty or broken body.
+	if body := string(stub.bodies[0]); !strings.Contains(body, e.ID) || !strings.Contains(body, e.Outcome) {
+		t.Fatalf("payload did not render the event id and outcome: %s", body)
+	}
 }
 
 func TestNormalizePayloadStyle(t *testing.T) {

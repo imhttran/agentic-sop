@@ -63,6 +63,11 @@ func TestAcceptanceProducerContract(t *testing.T) {
 		if ev.Source == "" || ev.Section == "" || ev.DocumentHash == "" {
 			t.Fatalf("incomplete provenance: %+v", ev)
 		}
+		// Retrieve already rejects a mismatched chunk_hash; this records that an
+		// emitted hash was actually checked (PROPOSAL-RAG-EVIDENCE-HASH criterion 4).
+		if ev.ChunkHash != "" && !ev.ChunkVerified() {
+			t.Fatalf("chunk_hash emitted but not verified: %+v", ev)
+		}
 		if ev.RetrievalMethod == "" || ev.Rank <= 0 || ev.Text == "" {
 			t.Fatalf("incomplete evidence: %+v", ev)
 		}

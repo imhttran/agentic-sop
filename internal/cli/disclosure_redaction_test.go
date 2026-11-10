@@ -1,17 +1,24 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 	"github.com/imhttran/agentic-sop/internal/testrunner"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // TestCheckEvidenceRedactsCredentialShapes proves a persisted acceptance-check
 // log removes a credential-shaped canary even when the value is not present in the
 // environment. The shared check-output boundary previously redacted only exact
 // environment secret values.
+//
+// Positive control: the same log keeps the ordinary "budget exhausted" text.
 func TestCheckEvidenceRedactsCredentialShapes(t *testing.T) {
 	const canary = "sk-canary-not-a-real-secret"
 	rn, cr, report := failingCheckRun(t, `"auth=sk-canary-not-a-real-secret budget exhausted"`)
@@ -72,6 +79,88 @@ func TestRedactDiagnosticTextKeepsOrdinaryText(t *testing.T) {
 	const ordinary = "token budget exhausted; GET https://example.com/v1/status"
 	if got := redactDiagnosticText(ordinary); got != ordinary {
 		t.Fatalf("ordinary text changed: %q", got)
+	}
+}
+
+// TestToolOutputEnvCanaryObservation reconciles the previously reported .env
+// canary result. It reads a disposable synthetic .env through the real
+// toolharness read_file path and records whether the value reaches the
+// model-visible tool result and whether the harness audit persists it.
+//
+// The harness audit is not the only run sink: internal/cli/run.go writes model
+// output to implementation.md verbatim, so a model that echoes the tool result
+// can still put the value in a run artifact. This test therefore pins only the
+// two claims it can observe directly: the tool path returns the value (on this
+// revision) and the harness audit never records result content.
+func TestToolOutputEnvCanaryObservation(t *testing.T) {
+	const canary = "sk-llm02-env-canary-not-a-real-secret"
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("SOP_TEST_API_KEY="+canary+"\n"), 0o600); err != nil {
+		t.Fatalf("write synthetic .env: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "notes.txt"), []byte("ordinary repository content"), 0o600); err != nil {
+		t.Fatalf("write positive-control file: %v", err)
+	}
+
+	audit := toolharness.NewAuditLog(0)
+	h := toolharness.New(root, toolharness.DefaultConfig(), audit)
+
+	// Positive control: the same real path returns ordinary content, so a
+	// negative observation below is not a broken read path.
+	out, err := h.Run(context.Background(), toolharness.ToolReadFile, map[string]any{"path": "notes.txt"})
+	if err != nil {
+		t.Fatalf("positive-control read: %v", err)
+	}
+	if out != "ordinary repository content" {
+		t.Fatalf("positive-control read = %q, want ordinary content", out)
+	}
+
+	out, err = h.Run(context.Background(), toolharness.ToolReadFile, map[string]any{"path": ".env"})
+	if err != nil {
+		t.Fatalf("read synthetic .env: %v", err)
+	}
+	modelVisible := strings.Contains(out, canary)
+
+	records := audit.Records()
+	if len(records) != 2 {
+		t.Fatalf("audit recorded %d calls, want 2", len(records))
+	}
+	audited := false
+	for _, rec := range records {
+		if strings.Contains(rec.Request, ".env") || strings.Contains(rec.Request, "notes.txt") {
+			audited = true
+		}
+		if strings.Contains(rec.Request, canary) || strings.Contains(rec.Detail, canary) {
+			t.Fatalf("harness audit persisted tool result content: %+v", rec)
+		}
+	}
+	if !audited {
+		t.Fatal("harness audit did not record the tool calls")
+	}
+	t.Logf("llm02 tool-output canary: model_visible=%v harness_audit_contains_canary=false", modelVisible)
+}
+
+// TestRunArtifactPersistsModelOutputVerbatim records the retained persistence
+// path behind the .env canary reconciliation: model output is written to
+// implementation.md as produced, so a model that repeats a tool result can put
+// the value in a run artifact even though the harness audit does not. This is a
+// GAP observation, not a redaction control.
+func TestRunArtifactPersistsModelOutputVerbatim(t *testing.T) {
+	const canary = "sk-llm02-env-canary-not-a-real-secret"
+	rn, err := runpkg.Open(t.TempDir(), "LLM02-ARTIFACT")
+	if err != nil {
+		t.Fatalf("open run: %v", err)
+	}
+	content := "model output echoed the tool result: " + canary
+	if err := rn.Write("implementation.md", content); err != nil {
+		t.Fatalf("write implementation.md: %v", err)
+	}
+	data, err := os.ReadFile(filepath.Join(rn.Dir(), "implementation.md"))
+	if err != nil {
+		t.Fatalf("read implementation.md: %v", err)
+	}
+	if string(data) != content {
+		t.Fatalf("implementation.md = %q, want the model output verbatim", string(data))
 	}
 }
 

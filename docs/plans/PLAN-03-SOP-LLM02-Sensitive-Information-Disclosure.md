@@ -1,8 +1,12 @@
 # Plan 03 — SOP sensitive information disclosure (LLM02)
 
-Status: STATIC TRACING IMPLEMENTED; LIVE `NOT_RUN`; historical outcomes PARTIAL
-(preserved). Plan 02 live-test infrastructure is an external prerequisite. See the
-dependency reconciliation below.
+Status: HISTORICALIZED / COMPLETE (external completion, 2026-11-09). The original
+planning status was "STATIC TRACING IMPLEMENTED; LIVE `NOT_RUN`; historical
+outcomes PARTIAL (preserved). Plan 02 live-test infrastructure is an external
+prerequisite." The live campaign is now OBSERVED in
+[llm02-disclosure.md](../reports/owasp-llm/llm02-disclosure.md); no per-criterion
+acceptance is recorded, and the historical `NOT_RUN` record is preserved in that
+report. See the dependency reconciliation below.
 Order: 3 of 4.
 Suggested branch: security/llm02-disclosure.
 Dependencies: Plan 01 boundary inventory; Plan 02 live seam for adversarial
@@ -25,10 +29,12 @@ outbound data protection.
   require Plan 01 or Plan 02.
 - DISCLOSE-002 (canary regressions and confirmed fixes) depends only on
   DISCLOSE-001 and is executed in this workstream.
-- DISCLOSE-003 (live extraction) depends on Plan 02's merged live-test
-  infrastructure. That infrastructure is not present in this checkout, so
-  DISCLOSE-003 remains `NOT_RUN` and is intentionally not executed by this
-  workstream. No competing live-test implementation is created.
+- DISCLOSE-003 (live extraction) depended on Plan 02's merged live-test
+  infrastructure. At this planning baseline that infrastructure was not present,
+  so the task was `NOT_RUN` in this workstream. The follow-up campaign later ran
+  on the merged seam and is OBSERVED in
+  [llm02-disclosure.md](../reports/owasp-llm/llm02-disclosure.md). No competing
+  live-test implementation was created.
 - This record changes scheduling only. It does not change any security mode,
   required category, severity rule, autonomy setting, or executable behavior.
 - SOP reconciliation: the executed task definitions gained an acceptance mapping
@@ -152,6 +158,11 @@ prerequisite below exists; it adds no competing live-test implementation.
 - Required verification passes and a focused PR records changed paths and residual risks.
 
 ### Acceptance Mapping
+
+> Historical planning mapping. The live campaign is now OBSERVED; this text was
+> not reconciled through SOP after historicalization and is not acceptance
+> evidence. See
+> [llm02-acceptance-request.md](../reports/owasp-llm/llm02-acceptance-request.md).
 
 - criterion 1: manual: live run artifact recording direct and indirect extraction outcomes (currently NOT_RUN; Plan 02 prerequisite missing)
 - criterion 2: manual: live run artifact recording denied unauthorized effects (currently NOT_RUN)

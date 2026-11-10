@@ -24,7 +24,8 @@ import (
 )
 
 // SchemaVersion is the version of the persisted index contract.
-const SchemaVersion = 1
+// Version 2 added a per-row Digest to File and Document (GAP-4).
+const SchemaVersion = 2
 
 // FileName is the index artifact, written under the SOP state directory.
 const FileName = "context/index.json"
@@ -106,6 +107,8 @@ type File struct {
 	Path    string   `json:"path"`
 	Kind    FileKind `json:"kind"`
 	Package string   `json:"package,omitempty"`
+	// Digest is rowDigest("file", Path, content SHA-256); see VerifyRows.
+	Digest string `json:"digest"`
 }
 
 // Symbol is one Go declaration with a stable identity and location.
@@ -137,6 +140,9 @@ type Document struct {
 	Lifecycle Lifecycle     `json:"lifecycle"`
 	// AuthoritySource records how the authority was decided: sop | header | path | unknown.
 	AuthoritySource string `json:"authority_source"`
+	// Digest is rowDigest("document", Path, content SHA-256, class, authority,
+	// lifecycle, authority source); see VerifyRows.
+	Digest string `json:"digest"`
 }
 
 // Counts summarizes the index deterministically.
@@ -296,11 +302,11 @@ func Build(opts Options) (Index, error) {
 		}
 		_, _ = io.WriteString(digest, rel)
 		digest.Write([]byte{0})
-		_, _ = io.WriteString(digest, h)
+		_, _ = io.WriteString(digest, h[:16]) // the v1 truncation keeps the aggregate stable
 		digest.Write([]byte{0})
 
 		kind := classifyFile(rel)
-		f := File{Path: rel, Kind: kind}
+		f := File{Path: rel, Kind: kind, Digest: rowDigest("file", rel, h)}
 		if kind == FileGo || kind == FileGoTest {
 			dir := filepath.ToSlash(filepath.Dir(rel))
 			if dir == "." {
@@ -330,6 +336,7 @@ func Build(opts Options) (Index, error) {
 			continue
 		}
 		doc := classifyAuthority(rel, class, sop)
+		doc.Digest = documentDigest(doc, h)
 		idx.Documents = append(idx.Documents, doc)
 	}
 
@@ -373,6 +380,75 @@ func Build(opts Options) (Index, error) {
 		Digest:        hex.EncodeToString(digest.Sum(nil))[:16],
 	}
 	return idx, nil
+}
+
+// rowDigest is "sha256:" + hex SHA-256 over the parts, each followed by 0x00,
+// with no normalization (PROPOSAL-REPOINDEX-ROW-DIGESTS.md).
+func rowDigest(parts ...string) string {
+	h := sha256.New()
+	for _, p := range parts {
+		_, _ = io.WriteString(h, p)
+		h.Write([]byte{0})
+	}
+	return "sha256:" + hex.EncodeToString(h.Sum(nil))
+}
+
+func documentDigest(d Document, contentHash string) string {
+	return rowDigest("document", d.Path, contentHash, string(d.Class), string(d.Authority), string(d.Lifecycle), d.AuthoritySource)
+}
+
+var (
+	// ErrRowsUnverified: the index predates row digests (schema < 2). Its rows
+	// may be used as advisory data but are never verified.
+	ErrRowsUnverified = errors.New("repoindex: index has no row digests (schema < 2); rows are unverified")
+	// ErrRowDigestMalformed: a row's digest is absent or not sha256:<64 hex>.
+	ErrRowDigestMalformed = errors.New("repoindex: row digest absent or malformed")
+	// ErrRowDigestMismatch: a row's digest does not match the recomputed value.
+	ErrRowDigestMismatch = errors.New("repoindex: row digest mismatch")
+)
+
+// VerifyRows recomputes every File and Document row digest from the files under
+// root and the row's own fields. It returns ErrRowsUnverified for a pre-v2
+// index, and otherwise the first row that is malformed or does not match.
+// It proves byte integrity of the rows only: not benign content or authorship.
+func VerifyRows(root string, idx Index) error {
+	if idx.SchemaVersion < 2 {
+		return ErrRowsUnverified
+	}
+	hashes := map[string]string{}
+	check := func(kind, path, got string, want func(h string) string) error {
+		var raw [sha256.Size]byte
+		hexPart, ok := strings.CutPrefix(got, "sha256:")
+		if !ok || len(hexPart) != hex.EncodedLen(sha256.Size) { // hex.Decode panics on a too-long input
+			return fmt.Errorf("%w: %s %s", ErrRowDigestMalformed, kind, path)
+		}
+		if n, err := hex.Decode(raw[:], []byte(hexPart)); err != nil || n != sha256.Size || hex.EncodeToString(raw[:]) != hexPart {
+			return fmt.Errorf("%w: %s %s", ErrRowDigestMalformed, kind, path)
+		}
+		h, ok := hashes[path]
+		if !ok {
+			var err error
+			if h, err = hashFile(filepath.Join(root, filepath.FromSlash(path))); err != nil {
+				return fmt.Errorf("%w: %s %s: %v", ErrRowDigestMismatch, kind, path, err)
+			}
+			hashes[path] = h
+		}
+		if want(h) != got {
+			return fmt.Errorf("%w: %s %s", ErrRowDigestMismatch, kind, path)
+		}
+		return nil
+	}
+	for _, f := range idx.Files {
+		if err := check("file", f.Path, f.Digest, func(h string) string { return rowDigest("file", f.Path, h) }); err != nil {
+			return err
+		}
+	}
+	for _, d := range idx.Documents {
+		if err := check("document", d.Path, d.Digest, func(h string) string { return documentDigest(d, h) }); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Marshal renders the index as canonical JSON (stable field order, trailing newline).
