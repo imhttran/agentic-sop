@@ -359,7 +359,7 @@ func modulePath(path string) (string, error) {
 	return "", fmt.Errorf("repoindex: %s: no module directive", path)
 }
 
-// hashFile returns a truncated content hash, so index identity tracks content, not mtime.
+// hashFile returns the full hex SHA-256 of the file content, so index identity tracks content, not mtime.
 func hashFile(path string) (string, error) {
 	f, err := os.Open(path)
 	if err != nil {
@@ -370,7 +370,7 @@ func hashFile(path string) (string, error) {
 	if _, err := io.Copy(h, f); err != nil {
 		return "", fmt.Errorf("repoindex: hash %s: %w", path, err)
 	}
-	return hex.EncodeToString(h.Sum(nil))[:16], nil
+	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
 // countIndex summarizes the index.
