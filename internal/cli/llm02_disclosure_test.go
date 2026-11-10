@@ -528,7 +528,10 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"### Recorded bounded decision",
 		"### Evidence identity",
 		"### Plan 03 acceptance matrix",
-		"### Residual-risk disposition",
+		"### Residual-risk decision matrix (2026-11-10)",
+		"### Plan 03 acceptance reconciliation (2026-11-10)",
+		"### Remaining evidence gaps (2026-11-10)",
+		"### Proposed final LLM02 status (2026-11-10)",
 		"### Required human decisions",
 		"### Three separate claims",
 	} {
@@ -560,6 +563,11 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"c60e64cf543eb6efb62e1d6bc622c8da88812ab42aa3227f60c43775826c79ca",
 		"separate scoped evidence-acceptance decision",
 		"No residual risk is marked accepted",
+		"`INVESTIGATE`",
+		"`MITIGATE`",
+		"`ACCEPT_PROPOSED`",
+		"`TRANSFER_PROPOSED`",
+		"15 of 16",
 	} {
 		if !strings.Contains(normalized, claim) {
 			t.Errorf("acceptance request is missing the closeout claim %q", claim)
