@@ -18,9 +18,9 @@ fixes. The live campaign ran at `9c32e3d2bccb269aa0246b08158ddad5e8b25066` on
 Host: macOS `Darwin` arm64 for the live campaign; Linux `amd64` for the
 deterministic verification.
 Branch: `security/llm02-live-extraction` for the live campaign;
-`security/llm02-linux-verification` (stacked on
-`security/llm08-model-input-credentials` at `d9bcc7b`) for the Linux
-verification. The pre-policy baseline was `origin/main` `814f69c`.
+`security/llm02-linux-verification` (rebased onto `main` `3103529` after PR #337
+merged the A+B implementation) for the Linux verification. The pre-policy
+baseline was `origin/main` `814f69c`.
 
 This report traces sensitive information from inputs to model requests, tool
 effects, persisted evidence, and operator output. It closes three reproduced
@@ -320,9 +320,10 @@ credential-shape detector without representing a credential.
   `canary_visible=true` for `read_file` `.env`, `search_files`, `copy_file` +
   `read_file`, `git_diff`, and SAFE `run_command` `git show`; the ordinary
   `read_file` and `search_files` controls observed `canary_visible=false`.
-- **Post-policy branch:** `security/llm02-linux-verification`, stacked on
-  `security/llm08-model-input-credentials` at `d9bcc7b` (PR #337). The same five
-  paths were exercised through the real harness and model-message boundaries.
+- **Post-policy branch:** `security/llm02-linux-verification`, rebased onto
+  `main` `3103529`; the A+B implementation merged in PR #337 (`0200ad3f`). The
+  same five paths were exercised through the real harness and model-message
+  boundaries.
 - **Linux live extraction:** `NOT_RUN`. `TestLiveLLM02Campaign` is tagged
   `darwin && llm02_live`; no Linux LLM02 live campaign exists, and none was added
   here. Deterministic harness/model-boundary evidence is not live-model evidence.
