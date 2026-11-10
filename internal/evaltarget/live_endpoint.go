@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -119,6 +120,11 @@ type LocalDecider struct {
 	MaxOutputBytes int
 	// Client is the HTTP client used for the single local request.
 	Client *http.Client
+	// Socket is the Unix domain socket that transports the request to the fixed
+	// endpoint inside a live sandbox with no network route. Empty uses a direct
+	// TCP connection. The endpoint allowlist is still enforced: the socket is a
+	// transport to LiveEndpointURL, not a different endpoint.
+	Socket string
 }
 
 // ollamaRequest is the minimal local generation request body.
@@ -162,6 +168,17 @@ func (d LocalDecider) Decide(ctx context.Context) (string, error) {
 	// a caller. The shallow copy preserves the caller's transport and timeout.
 	enforced := *client
 	enforced.CheckRedirect = noRedirect
+	if socket := strings.TrimSpace(d.Socket); socket != "" {
+		// The sandbox has no network namespace route. The only permitted channel
+		// is the host-side proxy socket, which dials exactly LiveEndpointDialAddress.
+		enforced.Transport = &http.Transport{
+			Proxy: nil,
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var dialer net.Dialer
+				return dialer.DialContext(ctx, "unix", socket)
+			},
+		}
+	}
 	client = &enforced
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, LiveEndpointURL, bytes.NewReader(body))
 	if err != nil {

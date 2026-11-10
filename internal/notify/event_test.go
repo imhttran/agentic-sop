@@ -228,23 +228,26 @@ func TestNewEventRejectsBadInput(t *testing.T) {
 	}
 }
 
-// TestEventRenderingCarriesNoCredential asserts the notify package never
-// renders a credential-bearing value: the event payload carries only identity,
-// reason, next action, and the resolution command, and a credential value never
-// enters it.
-func TestEventRenderingCarriesNoCredential(t *testing.T) {
-	secret := "sk-live-DO-NOT-LEAK"
+// TestEventIdentityIsDigestAndCarriesOutcome proves the event id is a SHA-256
+// digest over identity fields and that the caller's outcome is carried
+// unchanged. It does not prove event-text DLP: Reason, NextAction, and Outcome
+// are caller-owned prose (see the Plan 03 residual risks). A caller that passes
+// a credential would carry it, as the data-flow trace records.
+func TestEventIdentityIsDigestAndCarriesOutcome(t *testing.T) {
 	p := completedParams()
 	p.Outcome = "task completed"
 	e, err := NewEvent(p)
 	if err != nil {
 		t.Fatalf("NewEvent: %v", err)
 	}
-	if strings.Contains(e.ID, secret) || strings.Contains(e.Outcome, secret) {
-		t.Fatalf("event rendered a credential: %+v", e)
+	if e.Outcome != p.Outcome {
+		t.Fatalf("outcome = %q, want the caller's text %q", e.Outcome, p.Outcome)
 	}
 	if len(e.ID) != 64 {
 		t.Fatalf("event id is not a SHA-256 hex digest: %q", e.ID)
+	}
+	if strings.Contains(e.ID, e.Outcome) {
+		t.Fatalf("event id contains the caller text: %q", e.ID)
 	}
 }
 

@@ -19,6 +19,15 @@ record were re-run at this revision. The live Slack send remains blocked; see
 [llm10-live-delivery.md](llm10-live-delivery.md) and the prepared
 [acceptance request](llm10-acceptance-request.md).
 
+The wrap-up merged in PR #328 as
+`35340774c16b10236b0ca0143cc0d07c85a8e6b3`. Full CI passed on the PR head
+`eaf34114a5fcfe96088986d8939309c1efc75ffa` (run
+[42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282));
+CodeQL passed on the same head (run
+[42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910)).
+The merge is not a lifecycle transition, and manual acceptance is still not
+recorded.
+
 This report treats model, tool, provider, and configured-command output as
 untrusted at each SOP-owned sink. It does not claim protection for a third-party
 terminal, editor, IDE, Slack client, or remote review renderer that SOP cannot
@@ -177,6 +186,18 @@ pull request.
 This re-verification does not include a live Slack message and does not change the
 `NOT_RUN` state of observed delivery or rendering.
 
+Full CI (PR #328): the repository ran on the PR head
+`eaf34114a5fcfe96088986d8939309c1efc75ffa` and passed.
+
+| Check | Result | Run |
+| --- | --- | --- |
+| `fmt, vet, build, test`; `race detector`; installer; Windows; Semgrep/Gitleaks/OSV; JEV and operator acceptance | `PASS` | [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) |
+| CodeQL analyze jobs | `PASS` | [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) |
+
+The earlier `NOT_RUN` for full CI was the pre-PR state; this is the verified
+post-PR result. The full CI does not include a live Slack send and does not create
+a manual acceptance record.
+
 Focused evidence paths:
 
 - `internal/cli/terminal.go` — terminal sink.
@@ -205,7 +226,7 @@ Focused evidence paths:
 | Sink-specific fix, no destructive global escaping of persisted data     | `IMPLEMENTED`                                                                  | Terminal sink at the console only; artifacts and JSON unchanged                                                                               |
 | Protocol data valid; diagnostics do not corrupt machine-readable output | `VERIFIED`                                                                     | `TestPromptJSONKeepsModelResultIntact`; MCP `json.Encoder`; ACP `json.Marshal`; diagnostics on stderr                                         |
 | Synthetic canaries stay contained                                       | `VERIFIED` (deterministic)                                                     | Control sequences removed from terminal and Slack bodies in tests; the default live test payload is not an adversarial case                   |
-| Required checks pass; PR records OS/client coverage                     | `NOT_RUN` for full CI; focused checks `PASS`                                   | This report records the exact host and path coverage; the PR triggers CI. A green local run or a merged PR is not a deployment claim.         |
+| Required checks pass; PR records OS/client coverage                     | `PASS` (automated CI); manual acceptance `GAP`                                 | Full CI [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) passed on `eaf34114`; the PR body records Linux `x86_64` and Darwin arm64 scope and the unverified external clients. The earlier `NOT_RUN` was the pre-PR state. Passing CI is evidence for this manual criterion, not an acceptance record. |
 | Cumulative OWASP report updated                                         | `IMPLEMENTED` (this PR)                                                        | `docs/reports/owasp-llm/README.md`                                                                                                            |
 | No full coverage inferred from plan/PR existence                        | `VERIFIED`                                                                     | The matrix separates `IMPLEMENTED`, `VERIFIED`, `NOT_RUN`, `GAP`, and `NOT_APPLICABLE`                                                        |
 
@@ -218,7 +239,7 @@ dimensions that the matrix keeps visible.
 | ----------------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Observed Slack delivery and rendering     | `NOT_RUN` | No authorization, no active channel, and no channel observation. See [llm10-live-delivery.md](llm10-live-delivery.md).                              |
 | Live send authorization                   | `GAP`     | No approval record naming `#sop-alert` and a test window.                                                                                            |
-| Manual acceptance by the designated approver | `GAP`  | No owning SOP plan state exists, so no recorded outcome or `sop outcome --accept` record exists. See [llm10-acceptance-request.md](llm10-acceptance-request.md). |
+| Manual acceptance by the designated approver | `GAP`  | No owning SOP plan state exists, so there is no recorded outcome or `sop outcome --accept` record. Passing CI is evidence for `OUTPUT-003` criterion 3, not acceptance. See [llm10-acceptance-request.md](llm10-acceptance-request.md). |
 | SOP lifecycle completion                  | `GAP`     | `sop status`, `sop plan historicalize --check`, and `sop continue --check` report `project is not initialized`. No transition is claimed.          |
 
 ## Residual risks and limitations
@@ -238,8 +259,11 @@ dimensions that the matrix keeps visible.
 ## Handoff
 
 - Display-sink handling is implemented for the SOP-owned CLI terminal and the Slack
-  payload encoder; loopback HTTP transport is verified. Observed Slack delivery and
+  payload encoder; loopback HTTP transport is verified. The wrap-up merged in PR
+  #328 (`35340774`) with full CI passing on `eaf34114`. Observed Slack delivery and
   rendering remain `NOT_RUN`, and manual acceptance is not recorded.
+- The merged documentation PR is not an SOP lifecycle transition: no owning plan
+  state exists, and no completion or historicalization is claimed.
 - No shell, path, database, or protocol violation was reproduced at the current
   baseline; those controls remain owned by their existing packages.
 - External client rendering, Slack auto-unfurl, and live Slack delivery remain

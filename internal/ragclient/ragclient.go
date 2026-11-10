@@ -13,6 +13,8 @@ package ragclient
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -39,6 +41,9 @@ const (
 	CodeUnauthorizedScope Code = "UNAUTHORIZED_SCOPE"
 	CodeUnsupportedSchema Code = "UNSUPPORTED_SCHEMA"
 	CodeInternal          Code = "INTERNAL"
+	// CodeEvidenceHashMismatch: an evidence item's chunk_hash does not match
+	// its text. The whole response is rejected.
+	CodeEvidenceHashMismatch Code = "EVIDENCE_HASH_MISMATCH"
 )
 
 // Error is a typed retrieval failure. It carries the contract code so a caller
@@ -83,13 +88,17 @@ type Request struct {
 
 // Evidence is one retrieved item: raw, attributed, untrusted evidence.
 type Evidence struct {
-	ID              string  `json:"id"`
-	Corpus          string  `json:"corpus"`
-	Source          string  `json:"source"`
-	DocumentHash    string  `json:"document_hash"`
-	Section         string  `json:"section"`
-	Page            int     `json:"page"`
-	Text            string  `json:"text"`
+	ID           string `json:"id"`
+	Corpus       string `json:"corpus"`
+	Source       string `json:"source"`
+	DocumentHash string `json:"document_hash"`
+	Section      string `json:"section"`
+	Page         int    `json:"page"`
+	Text         string `json:"text"`
+	// ChunkHash is optional: "sha256:" + lowercase hex SHA-256 of the exact
+	// Text bytes. When present it is recomputed and must match; when absent the
+	// item is unverified (see ChunkVerified), never verified.
+	ChunkHash       string  `json:"chunk_hash,omitempty"`
 	RetrievalMethod string  `json:"retrieval_method"`
 	Score           float64 `json:"score"`
 	Rank            int     `json:"rank"`
@@ -288,12 +297,42 @@ func (c *Client) decode(raw []byte, corpus string) (Response, error) {
 		if len(ev.Text) > c.cfg.MaxChunkBytes {
 			return Response{}, errf(CodeOversize, "evidence %d text %d bytes exceeds %d", i, len(ev.Text), c.cfg.MaxChunkBytes)
 		}
+		if err := checkChunkHash(i, *ev); err != nil {
+			return Response{}, err
+		}
 	}
 	if res.Status == "" {
 		res.Status = "OK"
 	}
 	// An empty result is a valid success, not a failure.
 	return res, nil
+}
+
+// ChunkVerified reports whether ev's text was checked against a producer
+// chunk_hash. decode rejects a mismatch, so a decoded item with a hash is
+// verified; one without a hash is unverified. document_hash is never verified.
+func (ev Evidence) ChunkVerified() bool { return ev.ChunkHash != "" }
+
+// checkChunkHash validates an optional chunk_hash against the exact text bytes.
+// A malformed value is CodeMalformed; a well-formed wrong value is
+// CodeEvidenceHashMismatch.
+func checkChunkHash(i int, ev Evidence) error {
+	if ev.ChunkHash == "" {
+		return nil
+	}
+	var want [sha256.Size]byte
+	hexPart, ok := strings.CutPrefix(ev.ChunkHash, "sha256:")
+	// The length check must come first: hex.Decode panics on a too-long input.
+	if !ok || len(hexPart) != hex.EncodedLen(sha256.Size) {
+		return errf(CodeMalformed, "evidence %d chunk_hash %q is not sha256:<64 lowercase hex>", i, ev.ChunkHash)
+	}
+	if n, err := hex.Decode(want[:], []byte(hexPart)); err != nil || n != sha256.Size || hex.EncodeToString(want[:]) != hexPart {
+		return errf(CodeMalformed, "evidence %d chunk_hash %q is not sha256:<64 lowercase hex>", i, ev.ChunkHash)
+	}
+	if sha256.Sum256([]byte(ev.Text)) != want {
+		return errf(CodeEvidenceHashMismatch, "evidence %d chunk_hash does not match its text", i)
+	}
+	return nil
 }
 
 func clampTopK(k, max int) int {

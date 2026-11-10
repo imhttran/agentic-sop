@@ -101,6 +101,7 @@ Field mapping from `rag-template` `retrieval.Document` and the schema:
 | `section` | `Document.Section` |
 | `page` | `Document.Page` (0 = unknown) |
 | `text` | `Document.Content` |
+| `chunk_hash` | optional: `"sha256:" + lowercase hex(SHA-256(text))` over the exact UTF-8 bytes of `text`, with no trim, newline, or Unicode normalization. SOP recomputes it and rejects the whole response with `EVIDENCE_HASH_MISMATCH` on a mismatch (`MALFORMED` for a value not of that form). Absent or empty means **unverified**, never verified. A producer MUST NOT emit it to a client older than this field: that client decodes with unknown fields disallowed |
 | `retrieval_method` | the pipeline stage that produced the item: `vector` \| `keyword` \| `hybrid` (derived from the stage; see §6) |
 | `score` | one of `Document.Similarity` / `KeywordScore` / `FusionScore` — never mixed |
 | `rank` | 1-based, stable position in the returned ordering (see §6) |
@@ -130,7 +131,9 @@ hash field. RAG-SOP-002 MUST:
 No new hash is invented; the existing ingestion fingerprint is projected. When a row's
 `content_hash` is NULL (legacy rows), the response carries `document_hash: ""` and SOP
 treats the item as **lower-confidence** (it is still untrusted evidence, never an
-identity for dedup against a hashed item).
+identity for dedup against a hashed item). `document_hash` covers the whole source
+document, not the returned chunk, so SOP carries it verbatim and never reports it as
+verified; only `chunk_hash` makes an evidence item checkable.
 
 ## 6. `retrieval_method` and `rank`
 
@@ -153,6 +156,7 @@ identity for dedup against a hashed item).
 | `OVERSIZE` | ceilings exceeded | fallback; never partial-parse |
 | `UNAUTHORIZED_SCOPE` | corpus not allowlisted / missing | denial; never widen scope |
 | `UNSUPPORTED_SCHEMA` | unknown `schema_version` | fallback + diagnostic |
+| `EVIDENCE_HASH_MISMATCH` | an item's `chunk_hash` does not match its `text` (client-side) | drop the whole response; never partial-parse |
 | `INTERNAL` | server-side failure | fallback; secret-free diagnostic |
 
 The client MUST map transport errors (non-zero exit, non-JSON stdout, connection refused,

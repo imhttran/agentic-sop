@@ -1,7 +1,8 @@
 # Proposal: verifiable retrieval evidence hashes
 
-Status: **PROPOSAL — not approved.** This document defines the contract change
-required by Plan 05 GAP-5. No verification is implemented by this proposal.
+Status: **Decided — option A, client implemented** (2026-11-09). `internal/ragclient`
+decodes and verifies `chunk_hash` (`TestChunkHash`); the contract is updated. The
+producer change lives outside this repository.
 
 Related: [Plan 05 report](../reports/owasp-llm/llm05-poisoning.md) GAP-5,
 `internal/ragclient`, and
