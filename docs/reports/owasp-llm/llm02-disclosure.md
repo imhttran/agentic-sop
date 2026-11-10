@@ -751,8 +751,8 @@ What this establishes and does not establish:
 | ------------------------------------------------ | ------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Repository file content read by the agent        | VERIFIED (narrow profile) / GAP                   | The Plan 08 A+B policy denies direct `read_file`, `search_files`, and `copy_file` source paths under the narrow credential profile; `.env.example`/`.env.sample` and ordinary source remain readable. Unknown-format secrets in ordinary files remain outside the classifier. The live `LLM02-DISCLOSE-CONTEXT` baseline remains historical; `TestToolOutputEnvCanaryDenied` records the current `.env` denial. The harness audit does not persist result content, but `implementation.md`/`result.md` persist model output verbatim. The Linux live tool-path campaign confirmed the `.env` read denial and the symlink copy denial; `LLM02-LIVE-HARDLINK` observed the hardlink alias gap.                                                                                                                                                                                                                           |
 | Tool output and command output seen by the model | VERIFIED (shapes) / GAP                           | The Plan 08 A+B policy redacts every model-bound tool result and error with the shared detector. Command output is covered by redaction only; `commandpolicy` is unchanged. Unknown-format secrets printed by a permitted command can still reach the model. The live `LLM02-DISCLOSE-VALIDATION` case confirmed that diagnostic output passed through the shared redaction composition did not expose the tested canaries. The Linux live tool-path campaign confirmed the shape redaction for `git_diff` and SAFE command output; `LLM02-LIVE-COMMAND-OPAQUE` and `LLM02-LIVE-DIFF-OPAQUE` observed the unknown-format gap.                                                                                                                                                                                                                                                                                          |
-| Hardlink / path alias                            | GAP / observed; C1 narrows content, not access    | A pre-existing hardlink with an ordinary name is not resolved by the lexical credential-path check. Pre-C1 `LLM02-LIVE-HARDLINK` delivered the opaque value to the model. The focused C1 verification (PR #373, revision `ed1ba11`, artifact SHA-256 `417599e2…`, 6 requests) shows the same path bypass, but C1 redacted known env values, exact inventory values, and contextual credential keys after the read (4 protected cases); one unlisted opaque value remained exposed and was reproduced. **Path authorization and C1 model-input redaction are separate controls.** The residual is not closed. The PR #376 review did not approve Option C as it stands; the review direction is a sandbox credential read-deny rule plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. |
-| SAFE `run_command` credential read               | GAP / code-path                                   | `go test` is `SAFE` (`internal/commandpolicy`), so model-written test code can read `$HOME` credential files directly or `os.Link` them into the repo. With the opt-in `run_command` sandbox on, reads of the fixed home credential list and `ln` from it are denied on macOS (`VERIFIED`) and hidden on Linux (`NOT_RUN`), and secret-named env vars are scrubbed; with it off (the default) the route is open. Separate from the hardlink item; not accepted.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
+| Hardlink / path alias                            | GAP / observed; C1 narrows content, not access    | A pre-existing hardlink with an ordinary name is not resolved by the lexical credential-path check. Pre-C1 `LLM02-LIVE-HARDLINK` delivered the opaque value to the model. The focused C1 verification (PR #373, revision `ed1ba11`, artifact SHA-256 `417599e2…`, 6 requests) shows the same path bypass, but C1 redacted known env values, exact inventory values, and contextual credential keys after the read (4 protected cases); one unlisted opaque value remained exposed and was reproduced. **Path authorization and C1 model-input redaction are separate controls.** The residual is not closed. The PR #376 review did not approve Option C as it stands; the review direction is a sandbox credential read-deny rule plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. |
+| SAFE `run_command` credential read               | GAP / code-path                                   | `go test` is `SAFE` (`internal/commandpolicy`), so model-written test code can read `$HOME` credential files directly or `os.Link` them into the repo. With the opt-in `run_command` sandbox on, reads of the fixed home credential list and `ln` from it are denied on macOS (`VERIFIED`) and hidden on Linux `amd64` (`VERIFIED` in PR #384), and secret-named env vars are scrubbed; with it off (the default) the route is open. Separate from the hardlink item; not accepted.                                                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | `diff.patch` and `implementation.md` evidence    | GAP / bounded                                     | These are persisted as evidence and are not rewritten. An operator should not place real credentials in the working tree or model output. The live campaign persisted raw model output, including a synthetic canary, in its artifact.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | Review findings and task input                   | VERIFIED (deterministic) / GAP for unknown prose  | Task and caller input are redacted by `userPrompt` with the shared model-input composition (PR #349); `TestUserPromptRedactsTaskAndInput` covers credential shapes and ordinary text. Unknown-format confidential prose remains outside general DLP; the live campaign predates the fix and did not re-run it.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
 | Retrieved-context injection                      | GAP / bounded                                     | The live campaign injected a synthetic retrieved record; the model refused one prompt and proposed an exfiltration in another. Actual retrieval is disabled in the routine configuration, and retrieval-scope enforcement is Plan 09's evidence, not this campaign's.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
@@ -812,7 +812,7 @@ environment unchanged.
 | Platform               | State                   | Mechanism                                                                                                                         |
 | ---------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
 | macOS arm64 (Seatbelt) | VERIFIED                | `(deny file-read* (subpath ...))` for directories and `(deny file-read* (literal ...))` for files, for the path and its real path |
-| Linux (bubblewrap)     | NOT_RUN (no Linux host) | `--tmpfs <dir>` and `--ro-bind /dev/null <file>`, after `--ro-bind / /`                                                           |
+| Linux (bubblewrap)     | VERIFIED (PR #384)      | `--tmpfs <dir>` and `--ro-bind /dev/null <file>`, after `--ro-bind / /`                                                           |
 
 Command and observed result (macOS arm64, 2026-11-10):
 
@@ -893,7 +893,13 @@ page size`).
   `read_file`, `search_files`, and `copy_file`, because those tools run in the SOP
   process, not the sandbox. `TestHardlinkAliasToolExposure` pins it; this work
   does not change it.
-- Linux: `NOT_RUN`; `--tmpfs` on a symlinked credential path is unverified there.
+- Linux `amd64`: `VERIFIED` for direct reads and symlinked credential paths in
+  PR #384 (artifact
+  [llm02-sandbox-credential-linux-campaign.json](llm02-sandbox-credential-linux-campaign.json),
+  SHA-256 `1baa836b…`, tested revision `c569cd51`). A pre-existing hardlink stays
+  readable inside the Linux sandbox; that bounded residual is accepted under
+  Option D
+  ([PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)).
 
 ## Final closeout (2026-11-10)
 
@@ -953,9 +959,10 @@ separate bounded decision without creating Plan 03 per-criterion acceptance.
 
 The Plan 03 acceptance matrix and the six-item residual-risk decision matrix are
 in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Decision packet
-(2026-11-10; corrected). The PR #376 review did not approve Option C as it
-stands; the review direction is a credential read-deny rule in the opt-in
-`run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. SAFE
+(2026-11-10; corrected). The PR #376 review did not approve Option C as
+proposed; the operator later approved Option C Phase 1 (PR #381, Linux
+`VERIFIED`). The review direction is a separate control, a credential read-deny rule in the opt-in
+`run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. SAFE
 `run_command` (`go test` is `SAFE`) can also read `$HOME` credential files
 directly; that is a separate, unaccepted residual. The other recommendations are
 `INVESTIGATE` for unknown-format
@@ -968,8 +975,8 @@ unknown-format proposal is
 C1 is now implemented opt-in (decision memory ID
 `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`) and covers
 exact inventory values, contextual credential keys, and approved known formats;
-unlisted/low-signal formats remain. No residual risk is marked accepted;
-residual-risk acceptance and full Plan 03 per-criterion acceptance remain
+unlisted/low-signal formats remain. Only the bounded subprocess hardlink alias is accepted (Option D, PR #387; see [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)); no other residual risk is accepted.
+Other residual-risk acceptance and full Plan 03 per-criterion acceptance remain
 `NEEDS_HUMAN`. The bounded evidence acceptance is recorded separately (decision
 memory ID
 `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`, bound to
@@ -1111,15 +1118,17 @@ cases, 1 positive control, and 1 unlisted-value residual.
   protected cases. C1 does not prevent file access.
 - **One unlisted opaque value remains exposed.** It had no inventory entry, no
   credential-like key, and no known format, and the model reproduced it.
-- **The residual is not closed.** The PR #376 review did not approve Option C as
-  it stands; the review direction is a credential read-deny rule in the opt-in
-  `run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. The
+- **The residual is not closed for file tools outside Phase 1.** The PR #376
+  review did not approve Option C as proposed; the operator later approved
+  Option C Phase 1 (PR #381), which denies aliases to protected workspace
+  credentials on Linux only. The review direction is a separate control, a credential read-deny rule in the opt-in
+  `run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see §Sandbox credential-read denial) and the `Nlink > 1` check is not. The
   residual is not accepted.
 - **Separate route:** SAFE `run_command` (`go test` is `SAFE`) can run
   model-written code that reads `$HOME` credential files directly or `os.Link`s
   them into the repo. With the opt-in
   sandbox off (the default) this works; with it on, macOS denies these reads and
-  the `ln` (Linux `NOT_RUN`). It is a separate, unaccepted residual.
+  the `ln`, and Linux `amd64` denies the direct reads and symlinks (PR #384). It is a separate, unaccepted residual.
 
 Artifact: `llm02-c1-hardlink-campaign.json`, SHA-256
 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`.

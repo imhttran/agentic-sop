@@ -157,16 +157,16 @@ live-producer claim.
   `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98` as a
   separate scoped decision; full Plan 03 per-criterion acceptance is
   `NEEDS_HUMAN`, and broader LLM02 coverage is `OPEN`. The residual-risk decision
-  matrix records that the PR #376 review did not approve Option C as it stands;
-  the review direction is a credential read-deny rule in the opt-in
-  `run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial) and the `Nlink > 1` check is not. A
+  matrix records that the PR #376 review did not approve Option C as proposed;
+  the operator later approved Option C Phase 1 (PR #381, Linux `VERIFIED`). The
+  review direction is a separate control: a credential read-deny rule in the opt-in
+  `run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial) and the `Nlink > 1` check is not. A
   separate residual is that SAFE `go test` can run model-written code that reads
-  `$HOME` credential files directly; with the sandbox off (the default) nothing restricts those reads; with it on, macOS denies them (Linux `NOT_RUN`). It is not accepted. The remaining
+  `$HOME` credential files directly; with the sandbox off (the default) nothing restricts those reads; with it on, macOS and Linux `amd64` deny them (PR #384). It is not accepted. The remaining
   recommendations are `INVESTIGATE` for
   unknown-format and artifact risks, `MITIGATE` for notification prose,
   `INVESTIGATE`/`ACCEPT_PROPOSED` for
-  retrieval/handoff, and `TRANSFER_PROPOSED` for provider retention; no residual
-  risk is accepted.
+  retrieval/handoff, and `TRANSFER_PROPOSED` for provider retention. Only the bounded subprocess hardlink alias is accepted (Option D, PR #387; see [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)); no other residual risk is accepted.
 - C1 unknown-format redaction is implemented opt-in and merged in PRs
   #361/#362/#364 (decision memory
   `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`; final code

@@ -198,12 +198,18 @@ explicitly derives no acceptance evidence and clears any prior objective-level
 outcome. No `acceptance_decisions.jsonl` exists for `DISCLOSE-003`, and there is no
 `runs/DISCLOSE-003/outcome.json`.
 
-The supported `sop outcome --accept` interface cannot append acceptance to the
-historicalized plan. On a disposable copy of the preserved state it reports
+Before PR #388, the task-level `sop outcome --accept` interface could not append
+acceptance to the historicalized plan. On a disposable copy of the preserved state it reports
 `task DISCLOSE-003 not found` and `outcome: no recorded outcome for DISCLOSE-003 in
 the latest run; run the task first`; no acceptance file is written. There is no
 active task or recorded outcome to bind a criterion decision to, and the plan must
 not be reopened.
+
+PR #388 adds a supported path for historicalized plans: `sop verify --plan
+<PLAN.md> --archive <dir>` reports per-criterion state, and `sop outcome --plan
+<PLAN.md> --archive <dir> --accept|--reject|--annotate|--run-check <criterion>`
+records a designated-approver decision bound to hashed evidence without
+reopening the archive. It has not yet been used for any Plan 03 criterion.
 
 The earlier statement that `human.designated_approvers` was not configured is stale
 for the preserved state: the evidence `config.yaml` names `Tom Tran`. That does not
@@ -437,13 +443,15 @@ accepted**. It was identified in the PR #376 review.
 - Before this change the opt-in `run_command` sandbox stopped neither route: it
   restricted writes and network, not reads. It now denies reads of the fixed
   home credential list and refuses `ln` from it on macOS (`VERIFIED`), hides
-  them with bubblewrap on Linux (`NOT_RUN`), and scrubs secret-named env vars.
+  them with bubblewrap on Linux (`VERIFIED` in PR #384), and scrubs secret-named env vars.
   With isolation off (the default) both routes stay open.
-- Implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`): a credential read-deny rule in the sandbox for `~/.ssh`, `~/.aws`, `~/.config/gh`, and similar folders,
-  plus a cheap `Nlink > 1` check. This blocks the direct read and the hardlink
-  route only when isolation is enabled.
-- Status: `GAP` / code-path finding from review; no live campaign. Not
-  accepted.
+- Implemented opt-in (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384): a credential read-deny rule in the sandbox for `~/.ssh`, `~/.aws`, `~/.config/gh`, and similar folders,
+  blocking the direct read when isolation is enabled. The `Nlink > 1` check is
+  not implemented, and a pre-existing hardlink stays readable inside the Linux
+  sandbox (bounded risk accepted under Option D; see
+  [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)).
+- Status: `GAP` while isolation is off (the default). Direct reads with
+  isolation off are not accepted.
 
 Priority rationale:
 
@@ -601,17 +609,17 @@ Option C decision history (do not revoke earlier approvals):
 - PR #376 merged the proposal as an investigation record. Its review did not
   approve Option C as proposed, because the threat model missed SAFE
   `run_command` reading `$HOME` credentials directly.
-- The repository operator then explicitly approved Option C Phase 1 (decision
-  memory `a01d2007…`, source `operator:option-c-phase1-2026-11-10`), and PR #381
+- The repository operator then explicitly approved Option C Phase 1 (decision-memory
+  repository `a01d2007…`, source `operator:option-c-phase1-2026-11-10`), and PR #381
   implemented it on Linux: hardlink aliases to protected workspace credentials
   are denied (`VERIFIED` on Linux; macOS and Windows are follow-ups). See
   [gap-register-20261109.md](gap-register-20261109.md).
 - The review's alternative is a separate control, not a replacement for Phase 1:
   the opt-in `run_command` sandbox credential read-deny is implemented (PRs #378
-  and #383; macOS `VERIFIED`, Linux `NOT_RUN`; see
+  and #383; macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see
   [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial),
   and the `Nlink > 1` check is not implemented.
-- No residual risk is accepted. The Linux workstream owns the focused test and
+- Only the bounded subprocess hardlink alias is accepted (Option D, PR #387; see [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)); no other residual risk is accepted. The Linux workstream owns the focused test and
   artifact; this request only integrates its result.
 
 ### Proposed final LLM02 status (2026-11-10)
@@ -623,7 +631,7 @@ Option C decision history (do not revoke earlier approvals):
 | Bounded evidence acceptance      | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`)                                                                                                                                                                                                                                                                                                                                           |
 | Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | C1 unknown-format redaction      | `IMPLEMENTED` opt-in (PRs #361/#362/#364); deterministic macOS verification at `d69e9f63` and Linux at `5ff526a`; bounded Linux live `PASS` (PR #370, `c5df5f0`, artifact `14e41eaf…`); focused hardlink verification `PASS` for 4 scoped cases with one unlisted residual (PR #373, `ed1ba11`, artifact `417599e2…`); hardlink path bypass not closed; no acceptance                                                                        |
-| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C Phase 1 approved and implemented on Linux (PR #381; macOS/Windows follow-ups), and the separate opt-in sandbox credential read-deny is implemented (macOS `VERIFIED`, Linux `NOT_RUN`; `Nlink > 1` not implemented); SAFE `run_command` credential read is a separate unaccepted residual; `INVESTIGATE` (unknown-format, artifact), `MITIGATE` (notification prose), and `TRANSFER_PROPOSED` (provider retention) remain pending |
+| Residual risks                   | Not accepted, except the Option D subprocess hardlink alias (PR #387); C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C Phase 1 approved and implemented on Linux (PR #381; macOS/Windows follow-ups), and the separate opt-in sandbox credential read-deny is implemented (macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; `Nlink > 1` not implemented); SAFE `run_command` credential read is a separate unaccepted residual; `INVESTIGATE` (unknown-format, artifact), `MITIGATE` (notification prose), and `TRANSFER_PROPOSED` (provider retention) remain pending |
 | Broader LLM02 security coverage  | `OPEN`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Final disposition                | Ready for operator disposition; not fully closed                                                                                                                                                                                                                                                                                                                                                                                             |
 
@@ -687,16 +695,16 @@ decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
   acceptable as demonstrated. Leaving it unaccepted is the default; treating it
   as met requires a waiver/risk decision for the missing live evidence.
 
-**Hardlink risk — Option C Phase 1 implemented on Linux; no residual accepted:**
+**Hardlink risk — Option C Phase 1 implemented on Linux; subprocess alias accepted under Option D:**
 
 - PR #376 merged as an investigation record; its review did not approve Option C
-  as proposed. The operator later approved Option C Phase 1 (decision memory
+  as proposed. The operator later approved Option C Phase 1 (decision-memory repository
   `a01d2007…`), and PR #381 implemented it on Linux (`VERIFIED`; macOS and
   Windows are follow-ups).
 - The opt-in sandbox credential read-deny rule is a separate control (macOS
-  `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md)
+  `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see [llm02-disclosure.md](llm02-disclosure.md)
   §Sandbox credential-read denial). The `Nlink > 1` check is not implemented.
-  This packet accepts no residual.
+  Only the bounded subprocess hardlink alias is accepted (Option D, PR #387; see [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)); no other residual risk is accepted.
 - The C1 hardlink evidence is integrated: 4 protected, 1 positive control, 1
   unlisted residual at `ed1ba11` (artifact `417599e2…`). Path authorization and
   C1 model-input redaction remain separate controls; C1 does not prevent file
@@ -704,7 +712,7 @@ decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
 
 **Other residual risks (risk decisions, not criterion acceptance):**
 
-- SAFE `run_command` credential read: enable the opt-in sandbox read-deny rule (implemented; macOS `VERIFIED`, Linux `NOT_RUN`) / accept. Separate from hardlink; not accepted.
+- SAFE `run_command` credential read: enable the opt-in sandbox read-deny rule (implemented; macOS `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384) / accept. Separate from hardlink; not accepted.
 - Unknown-format credentials: enable C1 / pursue C2 entropy / accept.
 - Artifact persistence: investigate / accept.
 - Notification prose: mitigate / accept.
