@@ -343,6 +343,15 @@ var knownFormatRules = []*regexp.Regexp{
 	regexp.MustCompile(`\bAIza[0-9A-Za-z_-]{35}\b`),
 	regexp.MustCompile(`\bSG\.[A-Za-z0-9_-]{16,}\.[A-Za-z0-9_-]{16,}\b`),
 	regexp.MustCompile(`\b(?:sk|rk|pk)_live_[A-Za-z0-9]{16,}\b`),
+	// Seven-format enhancement approved by the repository operator (decision
+	// memory repository c7f143fe...; source operator:llm02-seven-format-2026-11-10).
+	regexp.MustCompile(`\bya29\.[A-Za-z0-9_-]{20,}\b`),
+	regexp.MustCompile(`\bASIA[0-9A-Z]{16}\b`),
+	regexp.MustCompile(`\bsk_test_[A-Za-z0-9]{16,}\b`),
+	regexp.MustCompile(`\bwhsec_[A-Za-z0-9]{16,}\b`),
+	regexp.MustCompile(`\bdckr_pat_[A-Za-z0-9_-]{16,}\b`),
+	regexp.MustCompile(`\bAGE-SECRET-KEY-1[A-Z0-9]{20,}\b`),
+	regexp.MustCompile(`\brediss?://:[^@\s/]{8,}@[^\s"'<>]+`),
 }
 
 func knownFormats(text string, m Marker) string {
