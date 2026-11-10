@@ -612,7 +612,7 @@ Decision status after PR #376:
 | Bounded evidence acceptance      | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`)                                                                                                                                                                                                                                                                                                                                           |
 | Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | C1 unknown-format redaction      | `IMPLEMENTED` opt-in (PRs #361/#362/#364); deterministic macOS verification at `d69e9f63` and Linux at `5ff526a`; bounded Linux live `PASS` (PR #370, `c5df5f0`, artifact `14e41eaf…`); focused hardlink verification `PASS` for 4 scoped cases with one unlisted residual (PR #373, `ed1ba11`, artifact `417599e2…`); hardlink path bypass not closed; no acceptance                                                                        |
-| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C not approved after the #376 review, and the review direction (opt-in sandbox credential read-deny plus `Nlink > 1`) is not implemented; SAFE `run_command` credential read is a separate unaccepted residual; `INVESTIGATE` (unknown-format, artifact), `MITIGATE` (notification prose), and `TRANSFER_PROPOSED` (provider retention) remain pending |
+| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C Phase 1 was not approved as proposed; the revised opt-in sandbox credential read-deny plus `Nlink > 1` direction is materially different, is not implemented, and needs a new decision; the earlier C1 and bounded approvals remain unchanged; SAFE `run_command` credential read is a separate unaccepted residual; `INVESTIGATE` (unknown-format, artifact), `MITIGATE` (notification prose), and `TRANSFER_PROPOSED` (provider retention) remain pending |
 | Broader LLM02 security coverage  | `OPEN`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Final disposition                | Ready for operator disposition; not fully closed                                                                                                                                                                                                                                                                                                                                                                                             |
 
@@ -676,14 +676,27 @@ decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
   acceptable as demonstrated. Leaving it unaccepted is the default; treating it
   as met requires a waiver/risk decision for the missing live evidence.
 
-**Hardlink risk — Option C not approved; review direction not implemented:**
+**Option C decision history (do not revoke earlier approvals):**
 
-- The merged Linux proposal PR #376 (`security/llm02-hardlink-path-identity`,
-  `NOT_APPROVED`) is an investigation record. Its review concluded that Option C
-  should not be approved as it stands.
-- The review direction is a credential read-deny rule in the opt-in
-  `run_command` sandbox, plus a cheap `Nlink > 1` check. Not implemented. Do not
-  approve Option C or accept the residual in this packet.
+- Recorded earlier approvals remain in force for their scopes. C1 unknown-format
+  redaction (`e233daee…`) covers opt-in content redaction at the Ollama
+  tool-harness model-input boundary. Bounded evidence acceptance (`59d98698…`)
+  covers A+B plus PR #349 and the macOS/Linux tool-path evidence, and explicitly
+  excludes residual risks and the 16 criteria. Neither approves path identity or
+  sandbox reads.
+- PR #376 was approved to merge only as an investigation record. Its review did
+  not approve Option C Phase 1 as proposed: the threat model missed SAFE
+  `run_command` reading `$HOME` credentials directly.
+- The revised design — a credential read-deny rule in the opt-in `run_command`
+  sandbox plus a cheap `Nlink > 1` check — is materially different from Option C
+  Phase 1. It is not covered by any earlier approval, is not implemented, and
+  needs a new decision.
+- Any earlier approval of Option C Phase 1 is not revoked here; it is limited to
+  Phase 1 as proposed and does not extend to the revised design.
+- **Specific design decision still needed:** approve the revised direction
+  (opt-in sandbox credential read-deny plus a cheap `Nlink > 1` check), request a
+  different design, or decline it and accept the two residuals. No option is
+  approved.
 - The C1 hardlink evidence is integrated: 4 protected, 1 positive control, 1
   unlisted residual at `ed1ba11` (artifact `417599e2…`). Path authorization and
   C1 model-input redaction remain separate controls; C1 does not prevent file

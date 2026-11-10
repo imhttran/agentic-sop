@@ -70,8 +70,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     reads `$HOME` credential files directly, or `os.Link`s them into the repo.
     The opt-in `run_command` sandbox restricts writes and network, not reads, so
     this works with or without it. This is a separate, unaccepted residual. The
-    PR #376 review did not approve Option C; the review direction is a sandbox
-    credential read-deny rule plus a cheap `Nlink > 1` check, not implemented.
+    PR #376 review did not approve Option C Phase 1 as proposed; the revised
+    sandbox credential read-deny plus `Nlink > 1` direction is materially
+    different, is not implemented, and needs a new decision. The earlier C1 and
+    bounded approvals remain unchanged.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
@@ -82,8 +84,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
   - The six-item residual-risk decision matrix records that the PR #376 review
-    did not approve Option C as it stands, and that a SAFE `run_command`
-    credential read is a separate unaccepted residual; it recommends
+    did not approve Option C Phase 1 as proposed, and that a SAFE `run_command`
+    credential read is a separate unaccepted residual; the revised read-deny
+    plus `Nlink > 1` direction needs a new decision. It recommends
     `INVESTIGATE` for
     unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
