@@ -175,24 +175,26 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 
 ## Status
 
-### Current delivery notes (2026-11-09)
+### Current delivery notes (2026-11-10)
 
-- The security shift-left baseline and hardening are merged (PRs #260–#261);
-  project policy remains report-only and the existing deterministic quality gate
-  remains the only verdict authority.
-- All ten OWASP LLM workstreams now have merged implementation or evidence, but
-  this is an evidence matrix rather than a compliance certification. Plan 03's bounded
-  live campaign is observed and its lifecycle is complete; per-criterion acceptance is
-  still unrecorded. Plan 09 merged in PR #295, and its retrieval cancellation/deadline
-  finding was fixed in PR #298.
-- Provider requests carry a 16384-token default output cap (PR #294), and
-  provider-reported `length` truncation is rejected. Scanner child process groups are
-  terminated on timeout or cancellation (PR #320); monetary accounting remains a gap.
-- Repeated activation of a same-named plan now receives a distinct archive slot
-  (PR #322), preventing a later lifecycle transition from overwriting earlier evidence.
+- All ten OWASP LLM workstreams have merged implementation or evidence, but the
+  [evidence matrix](docs/reports/owasp-llm/README.md) is not a compliance
+  certification and preserves each bounded or unverified claim.
+- `run_command` has a default-off, fail-closed OS sandbox: Seatbelt on macOS
+  (PR #343) and bubblewrap on Linux (PR #354). PR #356 gives every isolated run a
+  throwaway Go build cache and keeps the shared module cache read-only.
+- Plan 03 has bounded macOS and Linux observations, model-input redaction, and
+  separately recorded bounded-evidence acceptance. C1 contextual redaction is
+  implemented but remains opt-in; full per-criterion acceptance and residual-risk
+  disposition remain open.
+- Plan 05 per-row digests and chunk-hash verification, Plan 04 scanner pins, and
+  Plan 09 retrieval-boundary reconciliation are merged. Live producer-side RAG
+  isolation remains `NOT_RUN`, and retrieval remains disabled by default.
+- Plan 10's scoped protections are implemented, verified, accepted, and
+  historicalized `COMPLETE`; Slack transport was delivered once, while client
+  rendering and channel binding remain unobserved.
 - These capabilities do not change governance authority: deterministic Go remains
   authoritative, and adapter availability does not authorize promotion or enablement.
-
 
 SOP V1 and the routing, provider, recovery, distribution, approval, agentic
 reliability, and context-efficiency layers are implemented, including recent
