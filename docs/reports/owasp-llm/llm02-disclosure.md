@@ -15,7 +15,10 @@ confirmed the A+B denial/redaction. A bounded Linux `amd64` live tool-path
 campaign then exercised the five paths with a real local model: 7 protected
 cases, 6 positive controls, and 4 residual exposures (unknown-format values and
 a hardlink alias) were observed. Linux live retrieval and notification sinks
-remain `NOT_RUN`.
+remain `NOT_RUN`. Bounded evidence acceptance is recorded in repository decision
+memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`;
+it is a separate scoped decision, not Plan 03 per-criterion acceptance.
 Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c` for the static trace and deterministic
 fixes. The macOS live campaign ran at
@@ -776,8 +779,9 @@ A+B policy. "Policy-blocked" means a fix needs a separate operator decision.
 
 ## Final closeout (2026-11-10)
 
-Status: **CLOSEOUT RECORD — Plan 03 acceptance remains `NEEDS_HUMAN`.** This
-section reconciles the evidence and does not record acceptance.
+Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; FULL PLAN 03 ACCEPTANCE
+REMAINS `NEEDS_HUMAN`.** This section reconciles the evidence and preserves the
+separate bounded decision without creating Plan 03 per-criterion acceptance.
 
 ### Final disposition
 
@@ -787,7 +791,8 @@ section reconciles the evidence and does not record acceptance.
 | `VERIFIED` | Deterministic and Linux live evidence for the five tool paths | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput`, `llm02-linux-campaign.json` |
 | `OBSERVED` | Four Linux residual exposures; macOS direct-context disclosure | §Linux live tool-path campaign (2026-11-10); `llm02-campaign.json` |
 | `NOT_RUN` | Linux live retrieval and notification; live re-run of #349 | §Residual investigation status (2026-11-10) |
-| `NEEDS_HUMAN` | Plan 03 per-criterion acceptance; residual-risk decisions | [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout (2026-11-10) |
+| `RECORDED` | Bounded evidence acceptance, separate from Plan 03 acceptance | Decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; source `operator:bounded-acceptance-2026-11-10`; bound to clean baseline `cc42a52` |
+| `NEEDS_HUMAN` | Full Plan 03 per-criterion acceptance; residual-risk acceptance | [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout (2026-11-10) |
 | `GAP` | Unknown-format values, hardlink alias, artifact persistence, retrieval/handoff/caller prose, provider retention, general DLP | §Residual risks and bounded claims; §Residual investigation status |
 
 ### Three separate claims
@@ -801,8 +806,9 @@ section reconciles the evidence and does not record acceptance.
    boundary tests. No for Linux live retrieval and notification and for a live
    re-run of the #349 prompt fix; those remain `NOT_RUN`.
 3. **Full LLM02 security coverage and governance acceptance are not established.**
-   Yes. The residual gaps above remain, and no per-criterion acceptance is
-   recorded.
+   Yes. The residual gaps above remain, and no Plan 03 per-criterion acceptance is
+   recorded. The separate bounded evidence acceptance is recorded in decision
+   memory and does not establish full category coverage.
 
 ### Tested revision and final baseline
 
@@ -823,7 +829,13 @@ section reconciles the evidence and does not record acceptance.
 
 The Plan 03 acceptance matrix and the item-by-item residual-risk disposition are
 in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
-(2026-11-10). No residual risk is marked accepted; acceptance is `NEEDS_HUMAN`.
+(2026-11-10). No residual risk is marked accepted; residual-risk acceptance and
+full Plan 03 per-criterion acceptance remain `NEEDS_HUMAN`. The bounded evidence
+acceptance is recorded separately (decision memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`, bound to
+clean baseline `cc42a52`). Later documentation commits change the repository
+identity, so `sop memory list` may report the entry as stale for a different
+state; staleness is not revocation.
 
 ### Non-claims
 

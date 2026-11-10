@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns) | Not general DLP; four Linux residual exposures; acceptance `NEEDS_HUMAN` |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED` | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; broader coverage `OPEN` |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -63,9 +63,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
-  - The designated approver has not recorded per-criterion acceptance; the final
-    closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE` is not
-    acceptance.
+  - Bounded evidence acceptance is `RECORDED` in repository decision memory ID
+    `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; it is a
+    separate scoped decision, not Plan 03 per-criterion acceptance.
+  - The designated approver has not recorded Plan 03 per-criterion acceptance;
+    the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
+    is not acceptance, and broader LLM02 coverage remains `OPEN`.
 
 ### LLM03 Supply Chain — partial
 
