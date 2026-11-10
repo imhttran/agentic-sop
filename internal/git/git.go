@@ -11,6 +11,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/worktreeevidence"
 )
 
 // Status describes whether the working tree has changes.
@@ -26,6 +28,10 @@ var (
 	ErrDetachedHead = errors.New("git: detached HEAD")
 	// ErrBranchExists is returned by CreateBranch when the branch already exists.
 	ErrBranchExists = errors.New("git: branch already exists")
+	// ErrWorktreeEvidenceNotPreserved is returned when an SOP-managed worktree
+	// removal would discard ignored .agent-sdlc lifecycle evidence without a
+	// verified archive under the main repository's worktree-evidence directory.
+	ErrWorktreeEvidenceNotPreserved = errors.New("git: worktree lifecycle evidence is not preserved")
 )
 
 // Adapter performs deterministic Git operations in a working directory.
@@ -398,14 +404,43 @@ func (a *Adapter) AddWorktree(ctx context.Context, path, branch string) error {
 
 // RemoveWorktree removes a linked worktree. It never forces removal of a
 // worktree with uncommitted changes.
+//
+// Before removal it verifies that any ignored .agent-sdlc lifecycle evidence in
+// the worktree has a byte-identical copy under the main repository's
+// .agent-sdlc/archive/worktree-evidence/<plan-id>/ directory. It refuses removal
+// when evidence exists but the archive is missing or does not match. This guard
+// covers SOP-managed removal through this adapter only; a direct
+// `git worktree remove` bypasses it and must preserve evidence itself.
 func (a *Adapter) RemoveWorktree(ctx context.Context, path string) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("worktree path is empty")
+	}
+	archiveRoot, err := a.worktreeEvidenceRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("remove worktree %s: %w", path, err)
+	}
+	if err := worktreeevidence.Verify(path, archiveRoot); err != nil {
+		return fmt.Errorf("remove worktree %s: %w: %v", path, ErrWorktreeEvidenceNotPreserved, err)
 	}
 	if _, err := run(ctx, a.dir, "worktree", "remove", path); err != nil {
 		return fmt.Errorf("remove worktree %s: %w", path, err)
 	}
 	return nil
+}
+
+// worktreeEvidenceRoot derives the existing worktree-evidence archive root from
+// the repository's common Git directory, which is the main checkout's .git even
+// when the operation runs from a linked worktree.
+func (a *Adapter) worktreeEvidenceRoot(ctx context.Context) (string, error) {
+	out, err := run(ctx, a.dir, "rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return "", fmt.Errorf("resolve git common dir: %w", err)
+	}
+	common := strings.TrimSpace(out)
+	if common == "" || filepath.Base(common) != ".git" {
+		return "", fmt.Errorf("resolve git common dir: unexpected %q", common)
+	}
+	return filepath.Join(filepath.Dir(common), worktreeevidence.StateDirName, "archive", worktreeevidence.ArchiveDirName), nil
 }
 
 func (a *Adapter) requireClean(ctx context.Context) error {

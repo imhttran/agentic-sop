@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/worktreeevidence"
 )
 
 func setGitEnv(t *testing.T) {
@@ -437,6 +438,95 @@ func TestAddAndRemoveWorktree(t *testing.T) {
 	}
 	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
 		t.Errorf("worktree directory still exists: %v", err)
+	}
+}
+
+// TestRemoveWorktreeRequiresPreservedIgnoredEvidence proves the SOP-managed
+// removal path refuses a Git-clean worktree whose ignored .agent-sdlc state has
+// no verified archive, then succeeds after worktreeevidence.Preserve.
+func TestRemoveWorktreeRequiresPreservedIgnoredEvidence(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	writeFile(t, dir, ".gitignore", ".agent-sdlc/\n")
+	runGit(t, dir, "add", ".gitignore")
+	runGit(t, dir, "commit", "-m", "ignore SOP state")
+
+	a := New(dir)
+	branch, err := TaskBranchName("T099", "Evidence Preservation")
+	if err != nil {
+		t.Fatalf("TaskBranchName: %v", err)
+	}
+	worktree := filepath.Join(t.TempDir(), "wt")
+	if err := a.AddWorktree(ctx, worktree, branch); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(worktree, ".agent-sdlc", "runs", "CONTEXT-001"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, worktree, ".agent-sdlc/plan.meta.json", `{"plan_id":"plan-evidence"}`)
+	writeFile(t, worktree, ".agent-sdlc/state.db", "state")
+	writeFile(t, worktree, ".agent-sdlc/runs/CONTEXT-001/trace.json", `{"stage":"PASSED"}`)
+	if got := strings.TrimSpace(runGit(t, worktree, "status", "--porcelain")); got != "" {
+		t.Fatalf("worktree is not Git-clean: %q", got)
+	}
+
+	if err := a.RemoveWorktree(ctx, worktree); !errors.Is(err, ErrWorktreeEvidenceNotPreserved) {
+		t.Fatalf("RemoveWorktree without archive err = %v, want ErrWorktreeEvidenceNotPreserved", err)
+	}
+	if _, err := os.Stat(worktree); err != nil {
+		t.Fatalf("worktree was removed despite missing evidence archive: %v", err)
+	}
+
+	archiveRoot := filepath.Join(dir, ".agent-sdlc", "archive", "worktree-evidence")
+	archive, err := worktreeevidence.Preserve(worktree, archiveRoot)
+	if err != nil {
+		t.Fatalf("Preserve: %v", err)
+	}
+	if want := filepath.Join(archiveRoot, "plan-evidence"); archive != want {
+		t.Fatalf("archive = %q, want %q", archive, want)
+	}
+	if err := a.RemoveWorktree(ctx, worktree); err != nil {
+		t.Fatalf("RemoveWorktree after preservation: %v", err)
+	}
+	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists after verified preservation: %v", err)
+	}
+	if got, err := os.ReadFile(filepath.Join(archive, "state.db")); err != nil || string(got) != "state" {
+		t.Fatalf("archived state.db = %q, err=%v", got, err)
+	}
+}
+
+// TestRemoveWorktreeAllowsIgnoredNonLifecycleConfig proves the guard blocks only
+// lifecycle evidence, not a tracked/ignored config-only .agent-sdlc directory.
+func TestRemoveWorktreeAllowsIgnoredNonLifecycleConfig(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	writeFile(t, dir, ".gitignore", ".agent-sdlc/\n")
+	runGit(t, dir, "add", ".gitignore")
+	runGit(t, dir, "commit", "-m", "ignore SOP state")
+
+	a := New(dir)
+	branch, err := TaskBranchName("T100", "Config Only")
+	if err != nil {
+		t.Fatalf("TaskBranchName: %v", err)
+	}
+	worktree := filepath.Join(t.TempDir(), "wt")
+	if err := a.AddWorktree(ctx, worktree, branch); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(worktree, ".agent-sdlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, worktree, ".agent-sdlc/config.yaml", "project:\n  name: demo\n")
+	writeFile(t, worktree, ".agent-sdlc/security-baseline.json", "{}\n")
+	if got := strings.TrimSpace(runGit(t, worktree, "status", "--porcelain")); got != "" {
+		t.Fatalf("worktree is not Git-clean: %q", got)
+	}
+	if err := a.RemoveWorktree(ctx, worktree); err != nil {
+		t.Fatalf("RemoveWorktree with config-only state: %v", err)
+	}
+	if _, err := os.Stat(worktree); !os.IsNotExist(err) {
+		t.Fatalf("worktree still exists: %v", err)
 	}
 }
 

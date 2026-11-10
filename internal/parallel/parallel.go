@@ -183,7 +183,9 @@ func (w *GitWorkspaces) Create(ctx context.Context, task *domain.Task) (string, 
 	return dir, nil
 }
 
-// Remove removes the task's worktree.
+// Remove removes the task's worktree. The Git adapter refuses removal when the
+// worktree holds ignored SOP lifecycle evidence without a verified
+// worktree-evidence archive; that error is returned, never ignored.
 func (w *GitWorkspaces) Remove(ctx context.Context, task *domain.Task) error {
 	dir, err := w.dir(task)
 	if err != nil {
