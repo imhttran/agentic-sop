@@ -130,6 +130,10 @@ var (
 	// database. It is exported so adapters and tests can classify a denial with
 	// errors.Is instead of string matching.
 	ErrProtectedPath = errors.New("refusing to access SOP state")
+	// ErrSensitivePath is the sentinel for a refusal to read, search, or copy a
+	// credential-bearing path under the approved model-input policy. It is a
+	// policy denial, not an execution failure, so the audit classifies it as one.
+	ErrSensitivePath = errors.New("refusing to expose a credential-bearing path")
 	// errUnauthorizedRoot is the sentinel for a root selector that does not name
 	// an authorized root: a model-supplied absolute path is never trusted on its
 	// own.
@@ -366,7 +370,8 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 // failure, using sentinel errors so classification does not depend on wording.
 func isDenial(err error) bool {
 	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath) ||
-		errors.Is(err, errUnauthorizedRoot) || errors.Is(err, errReadOnlyRoot)
+		errors.Is(err, ErrSensitivePath) || errors.Is(err, errUnauthorizedRoot) ||
+		errors.Is(err, errReadOnlyRoot)
 }
 
 // RecordDenied records a refusal the caller decided (for example a

@@ -2,9 +2,11 @@ package ollamaagent
 
 import (
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 	"github.com/imhttran/agentic-sop/internal/writing"
 )
@@ -248,9 +250,15 @@ func userPrompt(req agent.Request) string {
 
 // toolResultMessage renders a tool outcome for the next model turn. A tool error
 // is reported to the model (not fatal): the model can correct the call.
+//
+// This is the single model-bound rendering boundary for tool results. The result
+// and the error text both pass through the shared model-input redaction so a
+// credential-shaped value or a known secret environment value cannot enter the
+// model conversation, including through a failure diagnostic. It is not general
+// DLP; unknown formats remain a documented limit.
 func toolResultMessage(name, result string, err error) string {
 	if err != nil {
-		return fmt.Sprintf("Tool %q failed: %s\n\nContinue: fix the call or choose another tool.", name, err)
+		return fmt.Sprintf("Tool %q failed: %s\n\nContinue: fix the call or choose another tool.", name, redact.ModelInput(err.Error(), os.Environ()))
 	}
-	return fmt.Sprintf("Tool %q result:\n%s", name, result)
+	return fmt.Sprintf("Tool %q result:\n%s", name, redact.ModelInput(result, os.Environ()))
 }

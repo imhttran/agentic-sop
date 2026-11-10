@@ -2,6 +2,7 @@ package redact
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +37,26 @@ func TestShapesValues(t *testing.T) {
 				t.Errorf("ShapesValues(%q) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
+	}
+}
+
+// TestModelInputRedactsKnownEnvAndShapes is the shared detector control for the
+// model-input boundary: both a known environment value and a credential-shaped
+// value are removed, while ordinary diagnostic prose survives.
+func TestModelInputRedactsKnownEnvAndShapes(t *testing.T) {
+	env := []string{"SOP_TEST_API_KEY=env-secret-value-42"}
+	in := "token env-secret-value-42 auth=sk-canary-not-a-real-secret budget exhausted"
+	got := ModelInput(in, env)
+	for _, secret := range []string{"env-secret-value-42", "sk-canary-not-a-real-secret"} {
+		if strings.Contains(got, secret) {
+			t.Fatalf("ModelInput leaked %q: %q", secret, got)
+		}
+	}
+	if !strings.Contains(got, "[redacted]") || !strings.Contains(got, "budget exhausted") {
+		t.Fatalf("ModelInput = %q, want a redaction marker and the ordinary text", got)
+	}
+	if got := ModelInput("ordinary source content", env); got != "ordinary source content" {
+		t.Fatalf("ModelInput changed ordinary text: %q", got)
 	}
 }
 

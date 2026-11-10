@@ -1,13 +1,16 @@
 # LLM08 — Hidden context exposure (SOP Mac workstream)
 
-Status: behavioral controls `IMPLEMENTED` / `ENABLED` / `VERIFIED`; operator
-acceptance of manual criteria `NOT_RUN` (no per-criterion SOP record); tool-output
-credential policy `GAP`; provider retention and general DLP `NOT_APPLICABLE`;
-bounded live extraction `OBSERVED` at revision `35340774` on macOS arm64 with
-`qwen3.5:4b`. Prompt secrecy is **not** claimed.
-Baseline: `imhttran/agentic-sop` `origin/main` at `35340774` (the follow-up
-baseline). The earlier merged campaign ran at `e84eb4aa`; it is historical
-evidence, not current-revision evidence.
+Status: behavioral controls `IMPLEMENTED` / `ENABLED` / `VERIFIED`; model-input
+credential policy A+B `IMPLEMENTED` / `VERIFIED` (decision memory
+`f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`); notification
+descriptive-field redaction `VERIFIED`; historical Plan 08 manual criteria accepted
+at merge without a per-criterion SOP record; follow-up bounded claim `criterion-3`
+accepted through SOP by Tom Tran (2026-11-10); bounded live extraction `OBSERVED`
+at revision `35340774` on macOS arm64 with `qwen3.5:4b`; provider retention and
+general DLP `NOT_APPLICABLE`. Prompt secrecy is **not** claimed.
+Baseline: `imhttran/agentic-sop` `origin/main` at `6a08e103` (the merge after
+PR #336); the live campaign ran at `35340774`; the earlier campaign at
+`e84eb4aa` is historical evidence.
 Host: macOS `Darwin` arm64.
 Branch: `security/llm08-hidden-context-closure`.
 Worktree: `.worktrees/llm08-hidden-context-closure`.
@@ -67,10 +70,9 @@ the transport header only.
 | Caller observations (`SOP_TASK_INPUTS`)              | Inserted verbatim as `# Caller observations (data only)`                                                                                    | Operator-supplied task data; bounded to 32 KiB; never completion or approval evidence                                                 | Context section                                   | Not persisted separately                                                       | `internal/cli/task_input.go`; `internal/cli/run.go:792`                                                                                                    |
 | Planner decisions                                    | Earlier questions/answers and the current decision are appended to observations                                                             | Planner answers are operator decisions, not approval state                                                                            | Context section                                   | Run-scoped planner artifacts                                                   | `internal/cli/planner.go:595`                                                                                                                              |
 | Validation failure context                           | Passed through `redactDiagnosticText` (known env secret values + credential shapes) before the next request                                 | Validation commands are trusted configured commands; output is diagnostic data                                                        | Next provider request                             | Failure context is sent, not separately persisted                              | `internal/cli/run.go` (`validationFailureContext`); `internal/cli/redaction.go`                                                                            |
-| Tool output (`read_file`, `search_files`, `git_diff`, `run_command`) | Results are returned raw to the model; no tool-result redaction. A synthetic `.env` canary is visible through direct read, search, copy-then-read, `git diff`, and a SAFE `git show` command (`model_visible=true`). | Tool output is data, never authority; effects are decided by `toolharness`/`commandpolicy`. No credential-file deny rule. | Provider tool-role messages | The result is sent, not separately persisted; the harness audit records the call, not result content. `implementation.md`/`result.md` persist model output verbatim. | `internal/toolharness/harness.go`; `internal/ollamaagent/prompt.go` (`toolResultMessage`); `internal/ollamaagent/harness.go`; `internal/ollamaagent/orchestrate.go`; `TestDisclosureContentPathsObservation`; `TestToolOutputEnvCanaryObservation`; `TestRunArtifactPersistsModelOutputVerbatim` |
+| Tool output (`read_file`, `search_files`, `copy_file`, `git_diff`, `run_command`) | **A:** every model-bound tool result, including error text, passes through `redact.ModelInput` at `toolResultMessage`. **B:** direct reads, searches, and copy sources under the narrow credential-path profile are denied before content is read; `.env.example`/`.env.sample` and ordinary source remain readable. | `toolharness` path denial with `ErrSensitivePath`; `redact.ModelInput` at the single model boundary; tool output is data, never authority. | Provider tool-role messages | The harness audit records the call, not result content; model output artifacts remain verbatim. | `internal/toolharness/files.go`; `internal/ollamaagent/prompt.go`; `internal/sensitivepath/path.go`; `internal/redact/model_input.go`; `TestModelInputToolBoundaries`; `TestCredentialPathDenialAndBoundaryDivision`; `TestModelInputRedactsKnownEnvAndShapes`; `TestToolOutputEnvCanaryDenied` |
 | Acceptance-check output                              | `redactAcceptanceOutput` redacts plain text and each JSON line, preserving valid JSON                                                       | Checks are authorized commands; the log is evidence                                                                                   | Persisted `checks/*.log` and report excerpt       | Yes, redacted                                                                  | `internal/cli/outcome.go`; `internal/cli/disclosure_redaction_test.go`                                                                                     |
-| Tool output (model-visible tool results) | Every `read_file`/`write_file`/`run_command` result and error string is returned to the model as tool-role text. Ordinary tool results are **not** passed through `redactDiagnosticText`; only the validation-failure context is (`internal/cli/run.go:1850`). A disposable `.env` canary is returned to the model (`model_visible=true`). | Tool output is data, never authority; every effect is decided by `toolharness`/`commandpolicy` before it runs | Provider tool-role messages | The tool result is sent, not separately persisted; the harness audit records the call, not the result content (`in_artifacts=false`) | `internal/toolharness/harness.go`; `internal/cli/run.go` (`validationFailureContext`); `TestLLM08ToolOutputEnvCanary` |
-| Errors / logs / traces                               | Validation/acceptance diagnostics pass through `redactDiagnosticText`/`redactAcceptanceOutput`; ordinary tool error strings are returned raw (see §GAP); `activity.jsonl` carries one-line summaries; `trace.json` carries bounded non-secret text with enumerated labels only; acceptance logs pass through `redactAcceptanceOutput` | Display/observation only; no lifecycle authority                                                                                    | `activity.jsonl`, `trace.json`, `checks/*.log`    | Yes, run-scoped and redacted as cited                                          | `internal/runtrace/trace.go`; `internal/activity/activity.go`; `internal/ollamaagent/activity.go`; `internal/cli/redaction.go`; `internal/cli/outcome.go`   |
+| Errors / logs / traces                               | Validation/acceptance diagnostics pass through `redactDiagnosticText`/`redactAcceptanceOutput`; ordinary tool error strings are redacted at the model boundary by `redact.ModelInput`; `activity.jsonl` carries one-line summaries; `trace.json` carries bounded non-secret text with enumerated labels only; acceptance logs pass through `redactAcceptanceOutput` | Display/observation only; no lifecycle authority                                                                                    | `activity.jsonl`, `trace.json`, `checks/*.log`    | Yes, run-scoped and redacted as cited                                          | `internal/runtrace/trace.go`; `internal/activity/activity.go`; `internal/ollamaagent/activity.go`; `internal/cli/redaction.go`; `internal/cli/outcome.go`   |
 | Notifications (event envelope and delivery)          | `notify.Event` carries `ID`, `Kind`, `Project`, `JobID`, `TaskID`, `Attempt`, `Transition`, `Outcome`, `Reason`, `NextAction`, `ApprovalRequestID`, `ResolutionCommand`, `OccurredAt`; the webhook channel posts native event JSON or a Slack message and never a credential; Slack text is mrkdwn-escaped; endpoint/token text is scrubbed from webhook error strings before they reach `last_error` | Notification content is model/project-derived prose; sending it grants no authority; the configured webhook URL/file path are never serialized by the status document | External HTTP webhook (native or Slack payload) and SQLite outbox rows in `state.db` | **Persisted** in the durable outbox (SQLite `state.db`, `notification_deliveries` rows via `notifyOutbox`); **exported** to the configured webhook (native or Slack body); `last_error` is redacted by `sanitizeWebhookError`; status surfaces redact credential values | `internal/notify/event.go`; `internal/notify/dispatch.go`; `internal/notify/slack.go` (`EncodeSlackPayload`); `internal/notify/webhook.go` (`sanitizeWebhookError`); `internal/cli/notify.go` (`notifyOutbox`, `redactNotificationStatusDoc`); `internal/store` |
 | Artifacts (run directory)                            | `.agent-sdlc/runs/<id>/` holds `task.md`, `prompt.md`, `metadata.json`, `implementation.md`, `result.md`, `attempts/NNN.json`, `checks/*.log`, `activity.jsonl`, `trace.json`, `routing.json`; `prompt.md` is the operator prompt plus the task projection, not the system prompt or serialized request | Run-scoped evidence; artifacts are read-only observation from the model's perspective                                                | `.agent-sdlc/runs/<id>/`                          | Yes, run-scoped; none contains the system prompt or serialized request        | `internal/cli/run.go:816`; `internal/cli/prompt.go:687`; `internal/run/run.go`; `internal/run/attempt.go`                                                     |
 | ACP / controller diagnostics                         | `internal/acp/diagnostics.go` applies shared shape-aware redaction plus long opaque-blob redaction before any diagnostic text reaches the operator/client | Transport diagnostics; no lifecycle authority                                                                                        | Operator/client text                             | Not persisted                                                                  | `internal/acp/diagnostics.go`; `TestDiagnosticsRedactCredentials`                                                                                          |
@@ -103,7 +105,7 @@ executable. The prompt text alone never authorizes anything.
 | Writing style, response format, "preserve user changes"          | **Instruction only**                                                                   | System prompt text                                               | `internal/writing`; `writing_rule_test.go`                                                                        |
 | Output JSON contract                                             | **Instruction only** for shape; **executable** where a parsed outcome drives lifecycle | Harness parses the outcome; SOP validates                        | `internal/ollamaagent/prompt.go:208`                                                                              |
 | Validation-failure context redaction (known env secrets + credential shapes) | **Executable** | `redactDiagnosticText` in `internal/cli/redaction.go` runs on the validation-failure context before the next request; it does not run on ordinary tool results | `internal/cli/redaction.go`; `internal/cli/run.go` (`validationFailureContext`) |
-| Tool-output credential policy | **GAP — not implemented** | No harness rule denies credential-shaped files and no redaction runs on ordinary tool results; the `.env` canary is model-visible | `TestLLM08ToolOutputEnvCanary`; §GAP — credential files are model-visible through tool reads |
+| Model-input credential policy (A+B) | **Executable** | Direct `read_file`/`search_files`/`copy_file` source paths under the narrow credential profile are denied with `ErrSensitivePath`; the requested path and its resolved symlink target are both classified. Every model-bound tool result and error is redacted by `redact.ModelInput`. | `internal/toolharness/files.go`; `internal/sensitivepath/path.go`; `internal/ollamaagent/prompt.go`; `internal/redact/model_input.go`; `TestCredentialPathDenialAndBoundaryDivision`; `TestModelInputToolBoundaries` |
 | Notification credential non-serialization                        | **Executable**                                                                         | `redactNotificationStatusDoc` / `notificationCredentialValues` strip configured webhook URL and file path from every status document | `internal/cli/notify.go`                                                                                          |
 | Notification webhook error scrubbing                             | **Executable**                                                                         | `sanitizeWebhookError` removes the endpoint URL, host, userinfo, path, and query tokens from error text before it becomes `last_error` | `internal/notify/webhook.go`; `internal/notify/webhook_test.go`                                                   |
 | Notification payload carries no unredacted credential shape and is escaped | **Executable**                                                                         | `EncodeSlackPayload` renders only event fields and mrkdwn-escapes `<`/`>`/`&`; the native payload is the event JSON, whose descriptive fields are redacted | `internal/notify/slack.go`; `internal/notify/event.go`                                                             |
@@ -141,26 +143,29 @@ current-revision campaign at `35340774` recorded the same control outcomes, and
   `internal/redact` detector before persistence or delivery; event identity fields
   are unchanged. Model- or project-derived notification prose can still repeat
   confidential prose the same way model output can.
-- **Tool-output sink.** Ordinary model-visible tool results are returned as raw
-  tool-role text; `redactDiagnosticText` runs only on the validation-failure context.
-  A disposable `.env` canary is readable through the real `read_file` path
-  (`model_visible=true`) and is not written to a run artifact (`in_artifacts=false`).
-  This is recorded as a `GAP`: there is no credential-file deny rule and no
-  tool-output redaction. `activity.jsonl` and `trace.json` stay bounded and carry no
-  raw tool arguments or file contents.
+- **Tool-output sink.** Every model-bound tool result and error passes through
+  `redact.ModelInput` before entering a model message, and direct `read_file`,
+  `search_files`, and `copy_file` source paths under the narrow credential profile
+  are denied before content is read. The harness audit records the call, not the
+  result content; model output artifacts remain verbatim. `activity.jsonl` and
+  `trace.json` stay bounded and carry no raw tool arguments or file contents.
 - `sop report`, `sop result`, the controller, MCP, and ACP expose recorded status and
   evidence references, not raw prompts.
 
 ## Confirmed defects and fixes
 
-**One demonstrated defect was fixed; one gap remains.** The notification event
-constructor copied `Reason`, `NextAction`, and `Outcome` verbatim, so a
-credential-shaped approval reason or failure diagnostic could be persisted to the
-outbox and delivered to Slack or a webhook. `internal/notify/event.go` now applies the
-shared `internal/redact` detector to those descriptive fields before the event is
-persisted or delivered; event identity fields are unchanged. The tool-output `.env`
-canary is model-visible and is recorded as a `GAP` with options below; no tool-output
-policy was introduced.
+**Two demonstrated defects were fixed; bounded residual risks remain.** The
+notification event constructor copied `Reason`, `NextAction`, and `Outcome`
+verbatim, so a credential-shaped approval reason or failure diagnostic could be
+persisted to the outbox and delivered to Slack or a webhook. `internal/notify/event.go`
+now applies the shared `internal/redact` detector to those descriptive fields before
+the event is persisted or delivered; event identity fields are unchanged. The
+model-input credential policy A+B is implemented in this PR: direct credential paths
+are denied for read/search/copy-source, with both the requested path and its
+symlink-resolved target classified, and every model-bound tool result and error is
+redacted. The pre-policy `.env` canary observation is historical; unknown-format
+secrets, persisted model output, retrieval/handoff/caller inputs, and provider
+retention remain bounded gaps.
 
 The relevant controls were already implemented and verified by their owning plans:
 
@@ -198,44 +203,47 @@ defect.
 canary in all three fields; `TestLLM08PositiveControlDeliveredUnchanged` proves
 ordinary prose is unchanged. No new DLP layer is involved.
 
-### GAP — credential files are model-visible through tool reads (not fixed)
+## Tool-output credential policy (A+B implemented)
 
-`TestLLM08ToolOutputEnvCanary` writes a disposable synthetic `.env` under a temporary
-harness root and reads it through the real `read_file` path. Observed:
-`model_visible=true`, `in_artifacts=false`. A model tool can therefore copy a
-credential-shaped file under an authorized repository root into model context. The
-harness does not deny `.env` or other credential-named files, and ordinary tool
-results are not redacted. This is a policy gap, not an existing control.
+The operator approved and the implementation applies policy A+B:
 
-Options, smallest first:
+- **A. Model-bound redaction.** Every tool result and tool error rendered by
+  `toolResultMessage` passes through `redact.ModelInput` (known secret-named
+  environment values, then credential shapes) before it enters a model message.
+  This covers `read_file`, `search_files`, `git_diff`, `run_command`, and future
+  tools.
+- **B. Narrow credential-path denial.** `read_file`, `search_files`, and
+  `copy_file` source paths are denied by `internal/sensitivepath.IsToolReadDenied`
+  before content is read. The profile covers well-known credential files
+  (`.env`, `.npmrc`, `.netrc`, `.git-credentials`, `credentials*`, SSH private-key
+  names), credential directories (`.aws`, `.ssh`, `.kube`, `.gnupg`), and key
+  material (`.pem`, `.key`, `.p12`, `.pfx`, `.keystore`, `.jks`). `.env.example`
+  and `.env.sample` remain readable; ordinary source, including
+  `internal/secrets/manager.go`, remains readable.
+- `commandpolicy` is unchanged. `git diff`, `git show`, `git grep`, `git log`, and
+  `git cat-file` remain SAFE; their output is covered by A's redaction only.
+- The pre-policy observation that the canary was model-visible is preserved in the
+  decision record and the converted tests; it is no longer the current behavior for
+  the denied paths. The policy decision is recorded in
+  [PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md).
 
-1. Deny credential-named files (`.env`, `*.pem`, `id_*`) at the harness read boundary.
-2. Redact known environment values and credential shapes from tool results before the
-   next provider request.
-3. Accept repository content as model-visible and rely on operator discipline.
+**Remaining limits:** redaction is not general DLP. Unknown-format secrets in
+command output, diffs, or ordinary files can still reach the model.
+`implementation.md`/`result.md` persist model output verbatim. Retrieval, handoff
+capsules, `SOP_TASK_INPUTS`, and provider retention remain separate sinks. The
+decision record does not accept these risks or authorize artifact/notification
+changes.
 
-Recommendation: option 1, a narrow deterministic harness deny rule, because it is
-smaller than result redaction and does not alter ordinary engineering output. It
-requires the operator's confidentiality-policy decision; no code change is made here.
+**Verification:** `TestModelInputToolBoundaries`,
+`TestCredentialPathDenialAndBoundaryDivision`,
+`TestModelInputRedactsKnownEnvAndShapes`, and `TestToolOutputEnvCanaryDenied`.
 
-
-
-## Tool-output credential policy (decision required)
-
-The supported content paths do not share a credential-file exclusion. At `main`
-`c87e45f4`, a synthetic `.env` canary was observed in model-visible output through
-`read_file`, `search_files`, `copy_file` followed by `read_file`, `git_diff`, and a
-SAFE `run_command` (`git show :<staged path>`). The harness audit record did not
-contain the result body, and the positive controls confirmed ordinary source content
-remains readable. `implementation.md`/`result.md` still persist model output
-verbatim.
-
-This is a `GAP`, not an implemented control. The concrete policy options,
-recommendation, compatibility impact, and coverage limits are in
-[PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md).
-No policy is implemented here because Plan 08B `CONTEXT-005` requires an operator
-confidentiality-policy decision before adding a credential-file deny rule or
-ordinary tool-result redaction.
+| Claim | Evidence | State |
+| --- | --- | --- |
+| Direct credential paths are denied before content is read | `TestCredentialPathDenialAndBoundaryDivision`; `TestToolOutputEnvCanaryDenied` | VERIFIED |
+| Model-bound tool results and error text are redacted | `TestModelInputToolBoundaries`; `TestModelInputRedactsKnownEnvAndShapes` | VERIFIED |
+| Ordinary source and `.env.example`/`.env.sample` remain usable | `TestCredentialPathDenialAndBoundaryDivision`; `TestModelInputToolBoundaries` | VERIFIED |
+| Unknown-format secrets, artifacts, retrieval, handoff, caller inputs, and provider retention | §Residual risks and bounded claims; `TestRunArtifactPersistsModelOutputVerbatim` | GAP / bounded |
 
 ## Criterion-to-evidence mapping
 
@@ -289,7 +297,7 @@ acceptance evidence for a manual criterion.
 | --- | --- | --- |
 | Inventory covers notifications and tool output | §Context source and sink inventory; `TestOWASPLLM08ReportStructure` | VERIFIED (check 1) |
 | Notification credential shapes are redacted | `internal/notify/event.go`; `TestLLM08NotificationRedactsCredentialShapes`; `TestLLM08PositiveControlDeliveredUnchanged` | VERIFIED (check 1) |
-| Tool-output `.env` canary is observed and recorded as GAP | `TestLLM08ToolOutputEnvCanary`; §GAP — credential files are model-visible through tool reads | GAP (check 2; `model_visible=true`, `in_artifacts=false`) |
+| Model-input credential policy denies direct credential paths and redacts model-bound results | `TestCredentialPathDenialAndBoundaryDivision`; `TestModelInputToolBoundaries`; `TestModelInputRedactsKnownEnvAndShapes` | VERIFIED (check 2) |
 | Instruction disclosure cannot authorize or bypass verification | `TestLLM08AuthorityIndependence`; `TestLLM08InstructionDisclosureDoesNotBypassVerification` | VERIFIED (check 3) |
 
 ### Out-of-scope criteria (NOT_APPLICABLE)
@@ -330,26 +338,26 @@ go vet -tags "llm01_live llm08_live" ./internal/evaltarget
 Observed: all PASS. `TestOWASPLLM08ReportStructure` checks only the deliverable's
 section structure; it is not acceptance evidence for the manual criteria.
 
-### Model-input content-path observation (2026-11-09)
+### Model-input credential enforcement (2026-11-10)
 
-Baseline `origin/main` at `c87e45f4`, Darwin arm64, Go 1.27.1; configuration
+Baseline `origin/main` at `814f69c8`, Darwin arm64, Go 1.27.1; configuration
 `security.mode: report-only`, `security.evaluation.enabled: false`,
-`advisory_retrieval.enabled: false`, `agent.provider: ollama`. This is a deterministic
-observation, not a model call.
+`advisory_retrieval.enabled: false`, `agent.provider: ollama`. The enforcement tests
+are deterministic; the live campaign was reused, not re-run.
 
 ```sh
-go test ./internal/toolharness -run TestDisclosureContentPathsObservation -count=1 -v
-go test ./internal/cli -run 'TestToolOutputEnvCanaryObservation|TestRunArtifactPersistsModelOutputVerbatim' -count=1 -v
+go test ./internal/redact -run TestModelInput -count=1 -v
+go test ./internal/sensitivepath -count=1 -v
+go test ./internal/toolharness -run TestCredentialPathDenialAndBoundaryDivision -count=1 -v
+go test ./internal/ollamaagent -run TestModelInputToolBoundaries -count=1 -v
+go test ./internal/cli -run 'TestToolOutputEnvCanaryDenied|TestRunArtifactPersistsModelOutputVerbatim|TestOWASPLLM08ReportStructure|TestOWASPLLM08CampaignArtifact' -count=1 -v
 ```
 
-Observed: PASS. `TestDisclosureContentPathsObservation` logged `model_visible=true`
-for `read_file` of `.env`, `search_files`, `copy_file` followed by `read_file`,
-`git_diff`, and a SAFE `run_command` (`git show :<staged path>`); its ordinary-source
-positive controls passed, and the harness audit did not contain the result body.
-`TestToolOutputEnvCanaryObservation` logged `model_visible=true
-harness_audit_contains_canary=false`; `TestRunArtifactPersistsModelOutputVerbatim`
-confirmed the run artifact writer persists model output verbatim. These observations
-are evidence for the open policy decision, not protection evidence.
+Observed: all PASS. The path-denial cases returned `ErrSensitivePath`; the diff and
+command-output cases contained `[redacted]` rather than the synthetic value;
+ordinary source, `.env.example`, and `.env.sample` remained readable; the harness
+audit did not contain result content. `TestRunArtifactPersistsModelOutputVerbatim`
+confirms the separate artifact-persistence limit remains.
 
 CONTEXT-004 inventory refresh (`current revision of main`):
 
@@ -376,9 +384,10 @@ go vet ./...
 go test ./... -count=1
 ```
 
-Observed: all PASS. The `.env` canary probe logged
-`llm08 tool-output canary: model_visible=true in_artifacts=false`. The tool-output
-claim above is corrected to that observation.
+Observed: all PASS. The pre-policy `.env` probe logged
+`llm08 tool-output canary: model_visible=true in_artifacts=false`; the A+B policy now
+denies the direct credential path and redacts model-bound results
+(`TestToolOutputEnvCanaryDenied`).
 
 Bounded live campaign (opt-in tag, Plan 02 seam, local `qwen3.5:4b`):
 
@@ -505,17 +514,15 @@ DLP are outside SOP ownership.
   context requires it, and model output is persisted verbatim. A model can repeat
   that content into `implementation.md`; that is an evidence-retention property, not
   a hidden-prompt export.
-- **Tool and command output are not credential-filtered (`GAP`).** A synthetic
-  `.env` canary is model-visible through `read_file`, `search_files`, `copy_file`
-  then `read_file`, `git_diff`, and a SAFE `git show` command. In the follow-up probe
-  the tested `.env` canary was model-visible in the tested path
-  (`model_visible=true`) and absent from the inspected run artifacts
-  (`in_artifacts=false`); that observation is narrow and is not generalized to every
-  artifact, logging, or notification path. The harness audit does not persist the
-  result body, but model output artifacts persist verbatim. No credential-file policy
-  is implemented; the options and recommendation are in
-  [PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md)
-  and §GAP. A policy decision is required.
+- **Model-input credential controls are bounded.** Direct `read_file`,
+  `search_files`, and `copy_file` source paths under the narrow credential profile
+  are denied before content is read; the denial classifies both the requested path
+  and its symlink-resolved target, so a denied filename cannot be hidden behind an
+  ordinary target. Every model-bound tool result and error is redacted with the
+  shared detector. Ordinary source remains readable. Unknown-format secrets in
+  command output, diffs, or ordinary files can still reach the model; model output
+  artifacts remain verbatim; retrieval, handoff, caller inputs, and provider
+  retention are separate. No general DLP is claimed.
 - **Tool-schema secrecy is not access control.** All action controls are executable;
   knowing a tool name or argument shape does not authorize it.
 - **Provider retention and enterprise DLP are out of scope.** SOP controls what it

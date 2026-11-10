@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -82,17 +83,12 @@ func TestRedactDiagnosticTextKeepsOrdinaryText(t *testing.T) {
 	}
 }
 
-// TestToolOutputEnvCanaryObservation reconciles the previously reported .env
-// canary result. It reads a disposable synthetic .env through the real
-// toolharness read_file path and records whether the value reaches the
-// model-visible tool result and whether the harness audit persists it.
-//
-// The harness audit is not the only run sink: internal/cli/run.go writes model
-// output to implementation.md verbatim, so a model that echoes the tool result
-// can still put the value in a run artifact. This test therefore pins only the
-// two claims it can observe directly: the tool path returns the value (on this
-// revision) and the harness audit never records result content.
-func TestToolOutputEnvCanaryObservation(t *testing.T) {
+// TestToolOutputEnvCanaryDenied proves the approved narrow credential-path policy
+// denies a synthetic .env read before content reaches the tool result. The
+// ordinary-file control uses the same real path, and the harness audit records
+// the denial without result content. Artifact persistence remains a separate
+// limit covered by TestRunArtifactPersistsModelOutputVerbatim.
+func TestToolOutputEnvCanaryDenied(t *testing.T) {
 	const canary = "sk-llm02-env-canary-not-a-real-secret"
 	root := t.TempDir()
 	if err := os.WriteFile(filepath.Join(root, ".env"), []byte("SOP_TEST_API_KEY="+canary+"\n"), 0o600); err != nil {
@@ -105,8 +101,7 @@ func TestToolOutputEnvCanaryObservation(t *testing.T) {
 	audit := toolharness.NewAuditLog(0)
 	h := toolharness.New(root, toolharness.DefaultConfig(), audit)
 
-	// Positive control: the same real path returns ordinary content, so a
-	// negative observation below is not a broken read path.
+	// Positive control: the same real path returns ordinary content.
 	out, err := h.Run(context.Background(), toolharness.ToolReadFile, map[string]any{"path": "notes.txt"})
 	if err != nil {
 		t.Fatalf("positive-control read: %v", err)
@@ -116,28 +111,30 @@ func TestToolOutputEnvCanaryObservation(t *testing.T) {
 	}
 
 	out, err = h.Run(context.Background(), toolharness.ToolReadFile, map[string]any{"path": ".env"})
-	if err != nil {
-		t.Fatalf("read synthetic .env: %v", err)
+	if !errors.Is(err, toolharness.ErrSensitivePath) {
+		t.Fatalf("read synthetic .env err = %v, want ErrSensitivePath", err)
 	}
-	modelVisible := strings.Contains(out, canary)
+	if out != "" {
+		t.Fatalf("read synthetic .env returned content despite the denial: %q", out)
+	}
 
 	records := audit.Records()
 	if len(records) != 2 {
 		t.Fatalf("audit recorded %d calls, want 2", len(records))
 	}
-	audited := false
+	denied := false
 	for _, rec := range records {
-		if strings.Contains(rec.Request, ".env") || strings.Contains(rec.Request, "notes.txt") {
-			audited = true
+		if strings.Contains(rec.Request, ".env") && rec.Action == toolharness.ActionDeny {
+			denied = true
 		}
 		if strings.Contains(rec.Request, canary) || strings.Contains(rec.Detail, canary) {
-			t.Fatalf("harness audit persisted tool result content: %+v", rec)
+			t.Fatalf("harness audit persisted result content: %+v", rec)
 		}
 	}
-	if !audited {
-		t.Fatal("harness audit did not record the tool calls")
+	if !denied {
+		t.Fatal("harness audit did not record the .env denial")
 	}
-	t.Logf("llm02 tool-output canary: model_visible=%v harness_audit_contains_canary=false", modelVisible)
+	t.Logf("llm02 tool-output canary: credential_path_denied=true harness_audit_contains_canary=false")
 }
 
 // TestRunArtifactPersistsModelOutputVerbatim records the retained persistence
