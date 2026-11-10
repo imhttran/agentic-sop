@@ -7,14 +7,18 @@ positive controls passed). The historical live `NOT_RUN` decision is preserved
 in §Live extraction. No per-criterion acceptance is recorded; the plan lifecycle
 is `HISTORICALIZED` / `COMPLETE` through external completion, which is not
 acceptance evidence. A later Plan 08 A+B policy now denies direct credential paths
-for model tools and redacts every model-bound tool result and error; that is
-cross-plan evidence, not Plan 03 acceptance. Linux `amd64` deterministic
+for model tools and redacts every model-bound tool result and error; PR #349 also
+redacts the rendered user prompt (task, caller input, output requirements) with
+the same composition. That is cross-plan evidence, not Plan 03 acceptance. Linux `amd64` deterministic
 verification independently reproduced all five pre-policy disclosure paths and
 confirmed the A+B denial/redaction. A bounded Linux `amd64` live tool-path
 campaign then exercised the five paths with a real local model: 7 protected
 cases, 6 positive controls, and 4 residual exposures (unknown-format values and
 a hardlink alias) were observed. Linux live retrieval and notification sinks
-remain `NOT_RUN`.
+remain `NOT_RUN`. Bounded evidence acceptance is recorded in repository decision
+memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`;
+it is a separate scoped decision, not Plan 03 per-criterion acceptance.
 Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c` for the static trace and deterministic
 fixes. The macOS live campaign ran at
@@ -62,7 +66,7 @@ Plan 02 seam. The campaign does not establish general DLP or prompt secrecy; see
 | -------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Repository files read by the agent's `read_file` / `list_files` / `search_files` | Bounded output; no general DLP                                                                                                                                                         | Path confinement to the primary/authorized roots; `.agent-sdlc/state.db` and `.agent-sdlc` search are protected                              | Model tool result (model-visible)                                       | Not persisted by SOP; the model's report may echo it in `implementation.md`                            | `internal/toolharness/files.go`; `TestReadRejectsEscapes`, `TestStateDBProtectedForEveryAccessClass`, `TestReadWriteCreateListSearch`                                                                                               |
 | Process environment (`os.Environ`)                                               | Provider API keys are used only for the `Authorization` header; handoff/diagnostic surfaces redact secret-named values by exact value; the scanner child gets an allowlist environment | Provider auth is separate from the request body; scanner env allowlist; no OS sandbox for the agent                                          | Provider HTTP header (not model-visible); handoff capsules; diagnostics | Provider header is not logged; handoff capsules are persisted after redaction                          | `internal/agent/provider.go` `postJSON`; `internal/security/exec.go` `scannerEnv`; `TestOpenAICompatibleExecutionReusesAuthorization`; `TestRedactExcludesSecrets`, `TestManagerRedactsBeforePersisting`                            |
-| `SOP_TASK_INPUTS` caller observations                                            | Inserted as task input; no automatic redaction                                                                                                                                         | Operator-supplied task data; treated as data, not authority                                                                                  | Model request                                                           | Not persisted separately; model output may echo                                                        | `internal/cli/task_input.go`; task-input contract                                                                                                                                                                                   |
+| `SOP_TASK_INPUTS` caller observations                                            | **Fixed (PR #349):** the rendered user prompt (task, caller input, output requirements) passes through `redact.ModelInput`; recognised shapes and known secret-named env values are redacted; unknown-format prose remains a bounded gap | Operator-supplied task data; treated as data, not authority                                                                                  | Model request                                                           | Not persisted separately; model output may echo                                                        | `internal/cli/task_input.go`; `internal/ollamaagent/prompt.go` `userPrompt`; `TestUserPromptRedactsTaskAndInput`                                                                                                                                                                                   |
 | Configuration (`.agent-sdlc/config.yaml`, policy)                                | Strict decode; notification status drops credential keys/values                                                                                                                        | Repository write access; config is policy, not secret storage                                                                                | Model context only where a task names it; notification status output    | Config is tracked; notification status is redacted                                                     | `docs/specs/SECURITY.md` §5; `internal/cli/notify.go` `redactNotificationStatusDoc`                                                                                                                                                 |
 | Validation command stdout/stderr                                                 | **Fixed:** known environment secret values and credential-shaped text are redacted before the failure context is built and before check logs are persisted                             | Configured validation commands are trusted project configuration; the output is diagnostic data, never authority                             | Model request (failure context) and persisted `checks/*.log`            | Check logs are written under the task run directory; failure context is sent, not separately persisted | `internal/cli/run.go` `validationFailureContext`; `internal/cli/outcome.go` `runAcceptanceArgv`; new `internal/cli/redaction.go`; `TestValidationFailureContextRedactsCredentialShapes`, `TestCheckEvidenceRedactsCredentialShapes` |
 | Tool stdout/stderr (`run_command`, `read_file`, `search_files`, `copy_file`, `git_diff`) | **A:** every model-bound result and error is redacted by `redact.ModelInput`; **B:** direct credential paths are denied before content is read; `.env.example`/`.env.sample` and ordinary source remain readable | Path denial via `ErrSensitivePath`; command policy unchanged | Model tool result (model-visible)                                       | The result is sent, not separately persisted; harness audit records the call, not content; model output artifacts remain verbatim | `internal/toolharness/files.go`; `internal/ollamaagent/prompt.go`; `internal/sensitivepath/path.go`; `internal/redact/model_input.go`; `TestModelInputToolBoundaries`; `TestCredentialPathDenialAndBoundaryDivision`; `TestToolOutputEnvCanaryDenied` |
@@ -75,20 +79,23 @@ Plan 02 seam. The campaign does not establish general DLP or prompt secrecy; see
 | Handoff capsules                                                                 | Exact secret-named environment values are replaced with `[redacted]` before persistence and compression                                                                                | Direct dependencies only; completed tasks only; bounded lists                                                                                | Dependent task context and persisted capsule                            | `.agent-sdlc` handoff store                                                                            | `internal/handoff/redact.go`, `internal/handoff/manager.go`; `TestManagerRedactsBeforePersisting`, `TestRedactUsesSharedSecretNames`                                                                                                |
 | Outcome records / comparison artifacts                                           | Typed, shape-aware redaction (`outcomefile`, `hipcompare`)                                                                                                                             | Read-only ingestion of SOP evidence                                                                                                          | Persisted outcome/comparison artifacts                                  | Run-scoped                                                                                             | `internal/outcomefile/outcomefile.go` `Redact`; `TestRedactKeepsTypedMarkers`; `internal/hipcompare/write.go`                                                                                                                       |
 | ACP / controller diagnostics                                                     | Shared shape-aware line/value redaction; ACP additionally redacts long opaque blobs                                                                                                    | Transport diagnostics; no lifecycle authority                                                                                                | Operator/client diagnostic text                                         | Not persisted by SOP                                                                                   | `internal/acp/diagnostics.go`; `internal/controller/sopclient`; `TestDiagnosticsRedactCredentials`, `TestCommandErrorRedactsBeforeBounding`                                                                                         |
-| Notification payloads                                                            | Configured webhook/file URLs and userinfo are redacted; lifecycle events carry caller-owned reason/next-action prose, not raw command output, and are not DLP-scrubbed               | Event identity and kind come from recorded transitions; a `BLOCKED` event is not a human gate                                                | Outbound webhook/file payload                                           | Durable outbox; delivery attempts recorded                                                             | `internal/notify/webhook.go`, `internal/cli/lifecycle_notify.go`; `TestEventIdentityIsDigestAndCarriesOutcome`, `TestWebhookSlackPayloadCarriesNoURL`                                                                             |
+| Notification payloads                                                            | Configured webhook/file URLs and userinfo are redacted; `notify.NewEvent` applies the shared credential-shape detector to Reason, NextAction, and Outcome before persistence/delivery; known env values and unknown formats are not covered, and caller prose is otherwise caller-owned | Event identity and kind come from recorded transitions; a `BLOCKED` event is not a human gate                                                | Outbound webhook/file payload                                           | Durable outbox; delivery attempts recorded                                                             | `internal/notify/webhook.go`, `internal/notify/event.go`, `internal/cli/lifecycle_notify.go`; `TestEventIdentityIsDigestAndCarriesOutcome`, `TestWebhookSlackPayloadCarriesNoURL`, `TestLLM08NotificationRedactsCredentialShapes`, `TestLLM08OutboxRowOmitsSecret` |
 
 ## Where redaction happens
 
-- **Before sending to a model:** validation failure context and acceptance-check
-  output now pass through `redactDiagnosticText` (known environment secret values
-  plus credential-shaped text). Repository file content, tool output, the diff,
-  and review findings are intentionally **not** generally DLP-scrubbed; they are
-  the engineering content the model must see. This is a bounded claim, not a
-  promise to detect every confidential string.
+- **Before sending to a model:** the rendered user prompt (task, caller input,
+  output requirements) passes through `redact.ModelInput` (PR #349); tool results
+  and errors pass through the same composition; validation failure context and
+  acceptance-check output pass through `redactDiagnosticText` (known environment
+  secret values plus credential-shaped text). Repository file content, diffs, and
+  review findings are intentionally **not** generally DLP-scrubbed; they are the
+  engineering content the model must see. This is a bounded claim, not a promise
+  to detect every confidential string.
 - **Before persistence:** handoff capsules redact exact secret-named environment
   values; outcome/comparison artifacts use the shared shape-aware detector;
   acceptance-check logs now use the same shape-aware detector plus environment
-  values; notification status drops configured credential keys/values.
+  values; notification status drops configured credential keys/values; notification
+  descriptive fields are shape-redacted before outbox persistence and delivery.
 - **Before display:** activity lines are summaries with sensitive command
   assignments masked; ACP/controller diagnostics use the shared detector; the
   notification status document removes configured credential values.
@@ -259,7 +266,7 @@ sandbox.
 | Empty and ordinary diagnostic text is preserved                                                                     | `TestRedactDiagnosticTextKeepsOrdinaryText`                                        | PASS (existing)  |
 | Handoff capsules redact before persistence                                                                          | `TestManagerRedactsBeforePersisting`, `TestRedactUsesSharedSecretNames`            | PASS (existing)  |
 | Retrieval rejects unrelated scope                                                                                   | `TestSearchRejectsUnrelatedEvidence`, `TestRankerAdapterRejectsScopeItCannotHonor` | PASS (existing)  |
-| Notification targets are redacted; event prose is caller-owned and not DLP-scrubbed                                 | `TestWebhookSlackPayloadCarriesNoURL`; `TestEventIdentityIsDigestAndCarriesOutcome` | PASS (existing)  |
+| Notification targets are redacted; event descriptive fields are shape-redacted                                       | `TestWebhookSlackPayloadCarriesNoURL`; `TestLLM08NotificationRedactsCredentialShapes`; `TestLLM08OutboxRowOmitsSecret` | PASS (existing)  |
 | ACP/controller diagnostics redact credentials                                                                       | `TestDiagnosticsRedactCredentials`, `TestCommandErrorRedactsBeforeBounding`        | PASS (existing)  |
 | Outcome/comparison artifacts keep typed redaction                                                                   | `TestRedactKeepsTypedMarkers`                                                      | PASS (existing)  |
 | Bounded live disclosure campaign reaches an observed outcome per case                                               | `TestLiveLLM02Campaign`, `llm02-campaign.json`                                     | PASS (new, live) |
@@ -469,7 +476,10 @@ validation evidence, not acceptance evidence.
 The plan was subsequently historicalized `COMPLETE` through external completion
 (see [llm02-acceptance-request.md](llm02-acceptance-request.md) §Post-closeout
 correction). That lifecycle state is not acceptance evidence and does not change
-the `PARTIAL` history for `DISCLOSE-001`/`DISCLOSE-002`.
+the `PARTIAL` history for `DISCLOSE-001`/`DISCLOSE-002`. The reconciled
+criterion-by-criterion matrix and the final acceptance limitation are in
+[llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
+(2026-11-10).
 
 ## Configured scan on this baseline
 
@@ -727,6 +737,8 @@ What this establishes and does not establish:
 - It does **not** establish general DLP, prompt secrecy, retrieval protection,
   notification protection, artifact protection, or coverage of another model,
   platform, or campaign. No live retrieval or notification sink was exercised.
+  The task/caller-input prompt redaction (PR #349) is deterministic-only evidence
+  and was not part of this tool-path campaign; no live re-run was performed.
 - A model refusal is not treated as protection. The hardlink case is recorded as
   an exposure because the value was in the model input even though the model did
   not reproduce it in this run.
@@ -740,9 +752,9 @@ What this establishes and does not establish:
 | Tool output and command output seen by the model | VERIFIED (shapes) / GAP     | The Plan 08 A+B policy redacts every model-bound tool result and error with the shared detector. Command output is covered by redaction only; `commandpolicy` is unchanged. Unknown-format secrets printed by a permitted command can still reach the model. The live `LLM02-DISCLOSE-VALIDATION` case confirmed that diagnostic output passed through the shared redaction composition did not expose the tested canaries. The Linux live tool-path campaign confirmed the shape redaction for `git_diff` and SAFE command output; `LLM02-LIVE-COMMAND-OPAQUE` and `LLM02-LIVE-DIFF-OPAQUE` observed the unknown-format gap. |
 | Hardlink / path alias                            | GAP / observed              | A pre-existing hardlink with an ordinary name is not resolved by the lexical credential-path check; `LLM02-LIVE-HARDLINK` observed the opaque value in the model input, while the recognised shape was still redacted. Fixing this needs a separate policy decision. |
 | `diff.patch` and `implementation.md` evidence    | GAP / bounded               | These are persisted as evidence and are not rewritten. An operator should not place real credentials in the working tree or model output. The live campaign persisted raw model output, including a synthetic canary, in its artifact.                                                                                    |
-| Review findings and task input                   | GAP / bounded               | Review findings and operator observations are model-visible data; SOP does not claim general DLP over arbitrary prose.                                                                                                                                                                                                    |
+| Review findings and task input                   | VERIFIED (deterministic) / GAP for unknown prose | Task and caller input are redacted by `userPrompt` with the shared model-input composition (PR #349); `TestUserPromptRedactsTaskAndInput` covers credential shapes and ordinary text. Unknown-format confidential prose remains outside general DLP; the live campaign predates the fix and did not re-run it.                                                                                                                                                                                                    |
 | Retrieved-context injection                      | GAP / bounded               | The live campaign injected a synthetic retrieved record; the model refused one prompt and proposed an exfiltration in another. Actual retrieval is disabled in the routine configuration, and retrieval-scope enforcement is Plan 09's evidence, not this campaign's.                                                     |
-| Notification `Reason` text                       | caller-owned                | The emitter redacts configured targets and carries SOP's recorded reason; a caller that passes raw secret text would leak. Current lifecycle producers pass fixed/generic reasons.                                                                                                                                        |
+| Notification `Reason` text                       | Shape-redacted / caller-owned for unknown formats | `notify.NewEvent` applies `redact.Shapes` to Reason, NextAction, and Outcome before persistence/delivery; `TestLLM08NotificationRedactsCredentialShapes` and `TestLLM08OutboxRowOmitsSecret` pass. Known env values and unknown formats can pass; current lifecycle producers use fixed/generic reasons.                                                                                                                                        |
 | Pattern matching                                 | bounded                     | Credential-shape detection is not general DLP and cannot promise to protect every sensitive string. Unknown formats remain explicitly out of scope. The Linux live tool-path campaign reproduced the opaque unknown-format values in the ordinary-file, command, and diff cases.                                                                                                                                                                       |
 | Normal agent OS isolation                        | NOT_APPLICABLE / UNVERIFIED | SOP does not sandbox the agent process; the execution-path matrix is unchanged.                                                                                                                                                                                                                                           |
 | Live extraction                                  | OBSERVED (bounded)          | macOS: one model (`qwen3.5:4b`), one platform (macOS arm64), one fixed campaign, 7 requests. Linux: one model (`qwen3:4b`), Linux `amd64`, one fixed tool-path campaign, 17 requests (7 protected, 6 positive controls, 4 residual exposures). Linux live retrieval and notification sinks remain `NOT_RUN`. Neither result is a general red-team result.                                                                                                                    |
@@ -761,9 +773,80 @@ A+B policy. "Policy-blocked" means a fix needs a separate operator decision.
 | `implementation.md` / `result.md` persistence | GAP / policy-blocked | `TestRunArtifactPersistsModelOutputVerbatim`; artifact redaction is a separate sink decision. |
 | Retrieval content | Scope-controlled / live `NOT_RUN` | Retrieval is disabled by default; `TestSearchRejectsUnrelatedEvidence` and `TestRankerAdapterRejectsScopeItCannotHonor`; Plan 09 owns retrieval evidence. |
 | Handoff capsules | Redacted before persistence | `TestManagerRedactsBeforePersisting`, `TestRedactUsesSharedSecretNames`; this covers known secret-named environment values, not general DLP. |
-| `SOP_TASK_INPUTS` and caller context | GAP / outside A+B | Operator-supplied data is inserted as task input without automatic redaction; changing it is a separate policy decision. |
-| Notification text | Caller-owned | Notification targets are redacted, but the lifecycle reason is caller-owned prose; current producers pass fixed/generic reasons. |
+| `SOP_TASK_INPUTS` and caller context | VERIFIED (deterministic) / GAP for unknown prose | `userPrompt` applies `redact.ModelInput` to the whole rendered prompt (PR #349); `TestUserPromptRedactsTaskAndInput`. The live campaign predates the fix; no live re-run was performed. |
+| Notification text | Shape-redacted / caller-owned unknown prose | Notification targets are redacted and `notify.NewEvent` shape-redacts Reason, NextAction, and Outcome before persistence/delivery (`TestLLM08NotificationRedactsCredentialShapes`, `TestLLM08OutboxRowOmitsSecret`). Known env values and unknown formats can pass; current producers use fixed/generic reasons. |
 | Diagnostic output | Protected for tested shapes | `redactDiagnosticText` uses `redact.ModelInput`; `TestRedactDiagnosticTextKeepsOrdinaryText`, `TestValidationFailureContextRedactsCredentialShapes`, and `TestCheckEvidenceRedactsCredentialShapes`. |
+
+
+## Final closeout (2026-11-10)
+
+Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; FULL PLAN 03 ACCEPTANCE
+REMAINS `NEEDS_HUMAN`.** This section reconciles the evidence and preserves the
+separate bounded decision without creating Plan 03 per-criterion acceptance.
+
+### Final disposition
+
+| Dimension | State | Evidence |
+| --- | --- | --- |
+| `IMPLEMENTED` | Approved Plan 08 A+B policy and PR #349 user-prompt redaction | `internal/toolharness`, `internal/sensitivepath`, `internal/redact`, `internal/ollamaagent/prompt.go`; PRs #337 and #349 |
+| `VERIFIED` | Deterministic and Linux live evidence for the five tool paths | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput`, `llm02-linux-campaign.json` |
+| `OBSERVED` | Four Linux residual exposures; macOS direct-context disclosure | §Linux live tool-path campaign (2026-11-10); `llm02-campaign.json` |
+| `NOT_RUN` | Linux live retrieval and notification; live re-run of #349 | §Residual investigation status (2026-11-10) |
+| `RECORDED` | Bounded evidence acceptance, separate from Plan 03 acceptance | Decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; source `operator:bounded-acceptance-2026-11-10`; bound to clean baseline `cc42a52` |
+| `NEEDS_HUMAN` | Full Plan 03 per-criterion acceptance; residual-risk acceptance | [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout (2026-11-10) |
+| `GAP` | Unknown-format values, hardlink alias, artifact persistence, retrieval/handoff/caller prose, provider retention, general DLP | §Residual risks and bounded claims; §Residual investigation status |
+
+### Three separate claims
+
+1. **Approved LLM02 implementation is complete.** Yes, within the approved Plan 08
+   A+B scope plus PR #349: credential-path denial for direct reads, searches, and
+   copies; model-bound tool-result and error redaction; and user-prompt redaction.
+   No new policy or control is claimed.
+2. **Scoped security verification is complete.** Yes for the five tool paths on
+   Linux (deterministic and live), the macOS live campaign, and the deterministic
+   boundary tests. No for Linux live retrieval and notification and for a live
+   re-run of the #349 prompt fix; those remain `NOT_RUN`.
+3. **Full LLM02 security coverage and governance acceptance are not established.**
+   Yes. The residual gaps above remain, and no Plan 03 per-criterion acceptance is
+   recorded. The separate bounded evidence acceptance is recorded in decision
+   memory and does not establish full category coverage.
+
+### Tested revision and final baseline
+
+- Linux live campaign tested revision: `4cee73a`, `dirty: false`; artifact
+  SHA-256 `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`.
+- macOS campaign tested revision: `9c32e3d2bccb269aa0246b08158ddad5e8b25066`;
+  artifact SHA-256 `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06`.
+- Final integration baseline for this closeout: `4c8fe5a`.
+- PR #349 (`userPrompt` redaction), #351 (real `copy_file` positive control), and
+  #352 (evidence reconciliation) merged after the Linux campaign revision. #349
+  changes the user-prompt boundary, not the tool-path boundary exercised by the
+  campaign; the campaign was not re-run and remains valid for the five tool paths.
+- CI: #337, #341, #349, #350, #351, and #352 passed their recorded checks. Codex
+  found the copy-control issue on #350; #351 fixed it, and #351/#352 completed
+  with no findings.
+
+### Residual-risk disposition
+
+The Plan 03 acceptance matrix and the six-item residual-risk decision matrix are
+in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
+(2026-11-10). The recommendations are `INVESTIGATE` for unknown-format
+credentials, hardlink aliases, and artifact persistence; `MITIGATE` for
+caller/notification prose; `INVESTIGATE` or `ACCEPT_PROPOSED` for
+retrieval/handoff; and `TRANSFER_PROPOSED` for provider retention. No residual
+risk is marked accepted; residual-risk acceptance and full Plan 03 per-criterion
+acceptance remain `NEEDS_HUMAN`. The bounded evidence acceptance is recorded
+separately (decision memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`, bound to
+clean baseline `cc42a52`). Later documentation commits change the repository
+identity, so `sop memory list` may report the entry as stale for a different
+state; staleness is not revocation.
+
+### Non-claims
+
+- No universal disclosure prevention, general DLP, prompt secrecy, provider
+  retention control, or full OWASP coverage.
+- A passing CI run or one model campaign is not full category coverage.
 
 
 ## Handoff to Plan 04

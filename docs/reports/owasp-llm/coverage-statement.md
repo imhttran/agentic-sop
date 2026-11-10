@@ -17,11 +17,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + live campaign) | Not general DLP; fix not re-run live |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED` | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; residual recommendations pending; broader coverage `OPEN` |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
-| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS | Linux `run_command` isolation not implemented |
+| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS and Linux | Sandbox off by default; cold build cache per run |
 | LLM07 | Plan 08 / LLM08 | System Prompt Leakage (repo: Hidden Context Exposure) | Partial | Prompt secrecy is not claimed by design |
 | LLM08 | Plan 09 / LLM09 | Vector and Embedding Weaknesses | Covered for the shipped (disabled-by-default) path | Live RAG / PostgreSQL / embeddings `NOT_RUN` |
 | LLM09 | Plan 07 / LLM07 | Misinformation | Partial, by scope | Factual correctness of model output is out of scope |
@@ -46,18 +46,33 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   `copy_file` (Plan 08 A+B). Since the task-input fix, the whole user prompt
   (`userPrompt`: task, caller input, output requirements) passes the same
   model-input redaction (`TestUserPromptRedactsTaskAndInput`). Diagnostics and
-  notifications are redacted. A live extraction campaign ran 7 of 7 cases.
-  Evidence: [llm02-disclosure.md](llm02-disclosure.md).
+  notifications are redacted. A macOS live extraction campaign ran 7 of 7 cases;
+  a Linux live tool-path campaign ran 17 cases (7 protected, 6 positive controls,
+  4 residual exposures). Evidence: [llm02-disclosure.md](llm02-disclosure.md) and
+  [llm02-acceptance-request.md](llm02-acceptance-request.md).
 - **Not covered, and why:**
-  - The live campaign recorded disclosure of a credential-shaped canary placed
-    in context. That run predates the task-input fix and has not been re-run, so
-    the fix is verified deterministically only.
+  - The live campaigns predate the task-input fix; that fix is verified
+    deterministically only and was not re-run live.
   - Context that reaches the model by another route than the user prompt or a
     tool result (for example a system prompt) is not redacted.
   - Redaction is pattern-based, not general DLP, so secrets in an unknown
-    format can pass.
-  - Linux live is `NOT_RUN`.
-  - The designated approver has not recorded acceptance (an operator action).
+    format can pass. The Linux live campaign observed unknown-format values in an
+    ordinary file, SAFE command output, and a diff reaching the model.
+  - A pre-existing hardlink with an ordinary name bypassed the lexical credential
+    path denial; the recognised shape was still redacted.
+  - Linux live retrieval and notification sinks are `NOT_RUN`.
+  - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
+    provider retention remain separate boundaries.
+  - Bounded evidence acceptance is `RECORDED` in repository decision memory ID
+    `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; it is a
+    separate scoped decision, not Plan 03 per-criterion acceptance.
+  - The designated approver has not recorded Plan 03 per-criterion acceptance;
+    the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
+    is not acceptance, and broader LLM02 coverage remains `OPEN`.
+  - The six-item residual-risk decision matrix recommends `INVESTIGATE` for
+    unknown-format, hardlink, and artifact risks; `MITIGATE` for notification
+    prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
+    `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
 
 ### LLM03 Supply Chain — partial
 
@@ -102,20 +117,26 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Covered:**
   - Root and command policy, with read-only roots.
   - OS isolation on the replay and evaltarget paths, on both macOS and Linux.
-  - Since PR #343, `run_command` can run inside an opt-in Seatbelt sandbox
+  - Since PR #343 (macOS, Seatbelt) and the bubblewrap follow-up (Linux),
+    `run_command` can run inside an opt-in sandbox
     (`SOP_AGENT_RUN_COMMAND_ISOLATION=1`). In it, outbound network is blocked,
-    writes are limited to the root, temp and the Go caches, `.agent-sdlc/` is
-    denied, and it fails closed when no sandbox is available.
+    writes are limited to the root and temp, `.agent-sdlc/` is denied, and it
+    fails closed when no sandbox is available. Each run gets its own throwaway
+    build cache and the shared module cache is read-only, so one run cannot
+    poison a later run's Go caches.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 - **Not covered, and why:**
   - The sandbox is off by default.
-  - Linux has no `run_command` backend: with the switch on it refuses to run
-    the command rather than run it unsandboxed.
+  - On Linux the sandbox uses its own network namespace, so a test cannot
+    reach a server on the host's loopback; one it starts itself works. Host
+    Unix sockets under `/tmp` and `/run` are hidden; one elsewhere (for example
+    under `$HOME`) stays connectable.
   - The agent process itself runs outside SOP.
-  - The shared Go caches stay writable, so one run could poison the cache for
-    later runs.
+  - Every sandboxed build starts with a cold build cache (about 10 s for three
+    of this repository's packages), and a module missing from the module cache
+    cannot be downloaded inside the sandbox; run `go mod download` first.
 
 ### LLM07 System Prompt Leakage — partial, by design
 
@@ -149,7 +170,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Not covered, and why:** SOP checks that decisions rest on real evidence. It
   does not check that model prose is factually correct, which cannot be decided
   mechanically. A `run_command` subprocess can write SOP state unless the
-  opt-in sandbox is on, which is macOS only
+  opt-in sandbox is on (macOS and Linux)
   ([llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md)).
   Live-model and Linux runs are `NOT_RUN`.
 
@@ -179,7 +200,4 @@ These cannot be closed by code in this repository:
 
 ## Code follow-ups worth doing
 
-- A Linux (bubblewrap) backend for the `run_command` sandbox.
-- A per-run throwaway Go cache inside the sandbox, to close cross-run cache
-  poisoning.
 - Spend accounting before requests are sent, if a dollar cap is needed.

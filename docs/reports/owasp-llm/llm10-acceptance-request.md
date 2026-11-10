@@ -1,16 +1,17 @@
 # Plan 10 — acceptance and live-delivery request
 
-Status: **REQUEST — no acceptance is recorded, one authorized live transport probe
-has executed, its rendering is unobserved, and no SOP lifecycle transition is
-claimed.** This document prepares the exact decisions a designated approver must
-make. It does not manufacture an approver decision, an acceptance record, or a
-lifecycle transition.
+Status: **CLOSED — all six manual criteria are recorded and Plan 10 is
+historicalized with disposition `COMPLETE`.** This document is retained as the
+historical decision request and durable evidence index. The original Slack
+transport probe remains at `0200ad3f`; verification and acceptance were recorded at
+`afc92022`; the stage recovery used the merged binary from `3fc1b90f`. This
+document does not claim full LLM10 coverage; the documented limitations remain.
 
 Related: [llm10-output-handling.md](llm10-output-handling.md),
 [llm10-live-delivery.md](llm10-live-delivery.md), the cumulative
 [evidence matrix](README.md), the
 [gap register](gap-register-20261109.md), and
-[PLAN-10-SOP-LLM10-Improper-Output-Handling.md](../../plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md).
+[PLAN-10-SOP-LLM10-Improper-Output-Handling.md](../../history/plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md).
 
 ## What is complete
 
@@ -20,9 +21,9 @@ and preserved the original Linux `x86_64` record.
 
 | Task       | Criterion                                                                   | Type   | State                                        | Evidence                                                                                                                                                                                                                                                                                                                                                  |
 | ---------- | --------------------------------------------------------------------------- | ------ | -------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| OUTPUT-001 | 1 — sink inventory lists origin, parser, validation/encoding, effect, owner | manual | `IMPLEMENTED`                                | `llm10-output-handling.md` §Sink inventory                                                                                                                                                                                                                                                                                                                |
-| OUTPUT-001 | 2 — intentional shell execution separated from interpolation                | manual | `IMPLEMENTED`                                | §Intentional shell execution versus interpolation; `internal/toolharness`, `internal/git`, `internal/github`                                                                                                                                                                                                                                              |
-| OUTPUT-001 | 3 — terminal controls and owned-renderer fetching identified                | manual | `IMPLEMENTED`                                | §Terminal controls and resource fetching in owned renderers                                                                                                                                                                                                                                                                                               |
+| OUTPUT-001 | 1 — sink inventory lists origin, parser, validation/encoding, effect, owner | manual | `ACCEPTED`                                | `llm10-output-handling.md` §Sink inventory                                                                                                                                                                                                                                                                                                                |
+| OUTPUT-001 | 2 — intentional shell execution separated from interpolation                | manual | `ACCEPTED`                                | §Intentional shell execution versus interpolation; `internal/toolharness`, `internal/git`, `internal/github`                                                                                                                                                                                                                                              |
+| OUTPUT-001 | 3 — terminal controls and owned-renderer fetching identified                | manual | `ACCEPTED`                                | §Terminal controls and resource fetching in owned renderers                                                                                                                                                                                                                                                                                               |
 | OUTPUT-001 | 4 — report delivered                                                        | check  | `VERIFIED`                                   | The report is in this repository                                                                                                                                                                                                                                                                                                                          |
 | OUTPUT-002 | 1 — data arguments cannot become shell syntax                               | check  | `VERIFIED`                                   | `TestSplitCommandRejectsShellMetacharacters`                                                                                                                                                                                                                                                                                                              |
 | OUTPUT-002 | 2 — invalid structured operations cannot partially execute                  | check  | `VERIFIED`                                   | `TestDeniedOperationsCauseNoSideEffect`                                                                                                                                                                                                                                                                                                                   |
@@ -30,32 +31,26 @@ and preserved the original Linux `x86_64` record.
 | OUTPUT-002 | 4 — database data stays parameterized                                       | check  | `VERIFIED`                                   | `go test ./internal/store`                                                                                                                                                                                                                                                                                                                                |
 | OUTPUT-002 | 5 — owned display paths cannot execute terminal controls                    | check  | `VERIFIED`                                   | `go test ./internal/cli -run Terminal`                                                                                                                                                                                                                                                                                                                    |
 | OUTPUT-002 | 6 — protocol data remains valid; JSON result intact                         | check  | `VERIFIED`                                   | `TestPromptJSONKeepsModelResultIntact`                                                                                                                                                                                                                                                                                                                    |
-| OUTPUT-002 | 7 — sink-specific fixes, no destructive global escaping                     | manual | `IMPLEMENTED`                                | §Reproduced gaps and fixes; `TestPromptJSONKeepsModelResultIntact`                                                                                                                                                                                                                                                                                        |
+| OUTPUT-002 | 7 — sink-specific fixes, no destructive global escaping                     | manual | `ACCEPTED`                                | §Reproduced gaps and fixes; `TestPromptJSONKeepsModelResultIntact`                                                                                                                                                                                                                                                                                        |
 | OUTPUT-003 | 1 — protocol data valid; diagnostics do not corrupt output                  | check  | `VERIFIED`                                   | `TestPromptJSONKeepsModelResultIntact`; ACP/MCP tests                                                                                                                                                                                                                                                                                                     |
 | OUTPUT-003 | 2 — synthetic canaries contained in tested paths                            | check  | `VERIFIED`                                   | Terminal and Slack control tests                                                                                                                                                                                                                                                                                                                          |
-| OUTPUT-003 | 3 — required checks pass; PR records OS/client coverage                     | manual | automated CI `PASS`; manual acceptance `GAP` | Full CI [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) passed on `eaf34114`; the PR body records Linux `x86_64` and Darwin arm64 scope and the unverified external clients. Passing CI is evidence, not an acceptance record. |
+| OUTPUT-003 | 3 — required checks pass; PR records OS/client coverage | manual | `ACCEPTED` | The six decisions were recorded at `afc92022`; the PR/CI record covers Linux `x86_64` and Darwin arm64 CLI/ACP/MCP and the live Slack transport probe. PR-head CI `8f06afa0` passed; the merge-commit CI run was partially cancelled and is not claimed as a full pass. Third-party clients and Slack rendering remain unverified. |
 | OUTPUT-003 | 4 — cumulative matrix updated                                               | check  | `VERIFIED`                                   | `git grep "Improper Output Handling" docs/reports/owasp-llm/README.md`                                                                                                                                                                                                                                                                                    |
-| OUTPUT-003 | 5 — no full coverage inferred from plan/PR existence                        | manual | `IMPLEMENTED`                                | README §What this matrix does not claim                                                                                                                                                                                                                                                                                                                   |
+| OUTPUT-003 | 5 — no full coverage inferred from plan/PR existence                        | manual | `ACCEPTED`                                | README §What this matrix does not claim                                                                                                                                                                                                                                                                                                                   |
 
-## What is not complete
+## Acceptance and lifecycle complete
 
-1. **Observed Slack rendering — `NOT_OBSERVED`.** One authorized synthetic event
-   was delivered through the configured Slack webhook at `0200ad3f` (transport
-   `VERIFIED`, outbox `DELIVERED`, no retry). No authenticated Slack session was
-   available, so the rendered message, the bound channel name, and the absence of
-   pings remain unobserved. The HTTP 2xx distinction and the exact observation
-   needed are recorded in [llm10-live-delivery.md](llm10-live-delivery.md).
-2. **Manual acceptance — partially recorded.** In the local verification run at
-   `afc92022`, the designated approver recorded `OUTPUT-001` criteria 1–3. The
-   other three manual criteria (`OUTPUT-002` criterion 7; `OUTPUT-003` criteria 3
-   and 5) still have no decision record because those tasks have not reached their
-   own gates. The full CI passed for `OUTPUT-003` criterion 3; that is automated
-   evidence, not an acceptance record.
-3. **Owning SOP lifecycle state — local, not repository-owned.** A local owning
-   state exists in `.llm10-verify`: the plan is `ACTIVE`, `OUTPUT-001` is
-   `LOCAL_DONE`/`VERIFIED`, `OUTPUT-002` is parked at `NEEDS_HUMAN`, and
-   `OUTPUT-003` is `PLANNED`. The plan is not historicalized, and the state is not
-   committed to the repository. A merged PR is not lifecycle completion.
+1. **Manual acceptance — recorded.** All six manual criteria were accepted at
+   `afc92022` under the designated approver (Tom Tran), bound to content identity
+   `2d6a7c8f…`. The decisions are in `acceptance_decisions.jsonl`; the attempt
+   0→1 recoveries are in `acceptance_recoveries.jsonl`.
+2. **Lifecycle — historicalized `COMPLETE`.** The plan was archived at
+   `2026-11-10T04:02:39.918545Z` after the supported stage recovery. The archive
+   is `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`.
+3. **Remaining limitations.** Slack rendering and the `#sop-alert` binding remain
+   `NOT_OBSERVED`; external renderers, unfurl, Windows terminal behavior,
+   provider/tool output as model input, persisted Markdown rendering, and the
+   other documented limits remain. No full LLM10 coverage is claimed.
 
 ## Exact evidence identity
 
@@ -74,7 +69,11 @@ and preserved the original Linux `x86_64` record.
 | Transport evidence               | `internal/cli/notify_acceptance_test.go`, `internal/notify/webhook_test.go`                                                                                                                                                              |
 | Live probe                       | `0200ad3f77604d828acc90c3b1f9dab990e63042`, event `54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16`, `DELIVERED` on attempt 1 at `2026-11-10T02:33:17.836286Z`; see [llm10-live-delivery.md](llm10-live-delivery.md)    |
 | Live payload                     | The inert `& < >` probe fixture in [llm10-live-delivery.md](llm10-live-delivery.md) §Payload fixture; the default `sop notify test` payload was not used because it does not exercise escaping                                           |
-| Local verification run           | `afc9202290a6bb0a3a4ec09385f532c686b23b62` (origin/main at run start), Darwin arm64, content identity `2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`; `.llm10-verify/.agent-sdlc/` holds plan, task, run, outcome, and approval records; OUTPUT-001 accepted/VERIFIED, OUTPUT-002 at `NEEDS_HUMAN`, OUTPUT-003 `PLANNED` |
+| Verification and acceptance | `afc9202290a6bb0a3a4ec09385f532c686b23b62`, content identity `2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`; three `VERIFIED`/`LOCAL_DONE` tasks; six acceptances by Tom Tran (2026-11-10T03:26:23Z, 03:37:21Z, 03:39:47Z) |
+| Stage recovery | merged binary built from `3fc1b90f2dac461d0bac843ef198f49702a5f1e7` (PR #348); `sop task recover-stage` for OUTPUT-001..003; one audit each; task status, attempt, outcome, validation, and acceptance evidence unchanged |
+| Final disposition | `HISTORICALIZED`, disposition `COMPLETE`, recorded `2026-11-10T04:02:39.918545Z`; archive `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`; run evidence `.agent-sdlc/runs/OUTPUT-001..003/` |
+| CI provenance | PR-head `8f06afa0` CI passed; merge-commit CI for `3fc1b90f` was partially cancelled after a newer main push; cancelled checks are not claimed as passed |
+| External backup | workspace-local `llm10-closeout-backup-3fc1b90f/` with `pre-recovery/`, `pre-historicalize/`, and `post-closeout/` snapshots |
 
 ## Decision A — live Slack test and rendering observation
 
@@ -130,26 +129,20 @@ worktrees in this workspace own other plans
 `plan-09b-sop-llm09-retrieval-coverage-closure`). Before the local run, no Plan 10
 task, run, outcome, or approval record existed in a repository-owned checkout.
 
-The local verification run at `afc92022` now holds the owning state in
-`.llm10-verify` (preserved, not committed):
+The verification run at `afc92022` produced three `VERIFIED`/`LOCAL_DONE`
+tasks. After the supported stage recovery, the plan was historicalized
+`COMPLETE`:
 
 ```text
-sop status                       -> Plan ACTIVE; OUTPUT-001 LOCAL_DONE;
-                                    OUTPUT-002 PLANNED; OUTPUT-003 PLANNED
-sop approvals --json             -> OUTPUT-002 NEEDS_HUMAN, PENDING
-sop continue --check             -> APPROVAL_REQUIRED
-sop plan historicalize --check   -> Eligible: no (unresolved work;
-                                    unresolved verification: OUTPUT-001)
+sop status                       -> no active plan
+archive lifecycle.json           -> disposition COMPLETE
+sop plan historicalize --check   -> no active plan (already historicalized)
+sop approvals --json             -> { "version": 1, "approvals": [] }
 ```
 
-Consequently:
-
-- `sop outcome <task> --accept <criterion> --evidence <text> --by <approver>` is
-  usable only after the task has a run-derived outcome. It was used for
-  `OUTPUT-001`'s three manual criteria in the local run.
-- `sop plan historicalize` still cannot pass readiness: `OUTPUT-002`/`OUTPUT-003`
-  are unresolved, and the `OUTPUT-001` run-stage inconsistency described below
-  leaves its verification unresolved to the readiness check.
+The final archive is `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`.
+The run, acceptance, validation, and recovery evidence remains under
+`.agent-sdlc/runs/OUTPUT-001..003/`.
 
 The supported adoption and closeout limits, verified by code and tests and
 observed in the local run at `afc92022`:
@@ -183,25 +176,33 @@ observed in the local run at `afc92022`:
 
 The one-run description is not a supported closeout path. The observed per-task
 sequence at `afc9202290a6bb0a3a4ec09385f532c686b23b62` (content identity
-`2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`) was:
+`2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`) completed:
 
 1. `sop plan activate ...` installed three `PLANNED` verify-first tasks.
-2. The first `sop run` executed only `OUTPUT-001`. Validation passed, the
-   implementation agent was not invoked, and the outcome was `PARTIAL` because
+2. The first `sop run` executed only `OUTPUT-001`; validation passed, no
+   implementation agent was invoked, and the outcome was `PARTIAL` because
    `criterion-1..3` had no acceptance decisions. The run parked at `NEEDS_HUMAN`
-   with a pending approval and requeued `OUTPUT-001`; `OUTPUT-002` and
-   `OUTPUT-003` did not start.
+   and requeued `OUTPUT-001`.
 3. Three `sop outcome OUTPUT-001 --accept criterion-1|criterion-2|criterion-3`
-   decisions were recorded under the designated approver, bound to the run's
-   content identity. The acceptance recovery records bridged the reviewed
-   mapping attempt 0 to the task attempt 1.
-4. `sop approve OUTPUT-001` approved the pending gate. The next `sop run` resumed
-   `OUTPUT-001` from the accepted outcome: no implementation agent was invoked,
-   the task reached `LOCAL_DONE`, and its outcome became `VERIFIED`. That same run
-   then executed `OUTPUT-002` verify-first, whose validation passed with no
-   implementation agent; its outcome is `PARTIAL` because `criterion-7` has no
-   acceptance decision, and the run parked at `OUTPUT-002`'s `NEEDS_HUMAN` gate.
-5. `OUTPUT-003` remains `PLANNED`; it has no outcome.
+   decisions were recorded under the designated approver. The acceptance recovery
+   records bridged mapping attempt 0 to task attempt 1.
+4. `sop approve OUTPUT-001` approved the gate. The next `sop run` resumed
+   `OUTPUT-001` as `VERIFIED`/`LOCAL_DONE` without an implementation agent, then
+   executed `OUTPUT-002` verify-first. `OUTPUT-002` parked at its own
+   `NEEDS_HUMAN` gate.
+5. `sop outcome OUTPUT-002 --accept criterion-7`, `sop approve OUTPUT-002`, and
+   `sop run` completed `OUTPUT-002` as `VERIFIED` and advanced to `OUTPUT-003`.
+6. `sop outcome OUTPUT-003 --accept criterion-3|criterion-5`,
+   `sop approve OUTPUT-003`, and `sop run` completed `OUTPUT-003` as `VERIFIED`;
+   all three tasks were satisfied.
+7. The accepted-outcome stage defect left each run stage at
+   `WAITING_FOR_HUMAN`. PR #348 fixed the transition, and the already affected
+   records were repaired with the merged binary built from `3fc1b90f` using
+   `sop task recover-stage` for all three tasks. Each repair wrote one
+   `stage-recoveries.jsonl` audit record and preserved the task, attempt, outcome,
+   validation, and acceptance evidence.
+8. `sop plan historicalize` archived the plan as `COMPLETE` at
+   `2026-11-10T04:02:39.918545Z`.
 
 The closeout sequence is therefore iterative per task:
 
@@ -214,52 +215,51 @@ A single run plus six acceptances is not supported. Each dependent task starts
 only after the prior task's acceptance decisions are recorded and its gate is
 approved.
 
-Observed closure-readiness limit: after the accepted `OUTPUT-001` resumed as
-`VERIFIED`/`LOCAL_DONE`, its run `state.json` still records
-`stage: WAITING_FOR_HUMAN` (with `attempt.txt` still
-`PARTIAL|ACCEPTANCE|NEEDS_HUMAN`). `sop plan historicalize --check` therefore
-reports `Unresolved verification: OUTPUT-001` even though the task is satisfied.
-This is an observed lifecycle-record inconsistency, not evidence that the
-verification failed. It blocks eventual historicalization and requires a
-supported follow-up; records must not be patched by hand.
+Observed closure-readiness limit (resolved): after each accepted resume the run
+`state.json` still recorded `stage: WAITING_FOR_HUMAN` and `attempt.txt` remained
+`PARTIAL|ACCEPTANCE|NEEDS_HUMAN`, even though the task was `LOCAL_DONE` and its
+outcome `VERIFIED`. `sop plan historicalize --check` therefore reported
+`Unresolved verification`. PR #348 fixed the accepted-outcome transition to
+persist `PASSED` before completion, and `sop task recover-stage` repaired the
+already affected records. No records were manually edited.
 
-Consequently, no supported path adopts the original merged evidence and records
-the six manual acceptance decisions without new verify-first run evidence. The
-operator must choose one of:
+Consequently, the original merged evidence was not adopted as lifecycle closure;
+the operator authorized the iterative per-task verification and acceptance
+sequence above, followed by the supported stage recovery and historicalization.
+The plan is now `COMPLETE`. The remaining limitations are recorded in
+§What acceptance does and does not mean and the report's residual risks.
 
-- leave the plan unowned (current state; no lifecycle claim);
-- authorize the iterative per-task sequence above at the current revision, with
-  new lifecycle evidence bound to the current content; or
-- authorize external completion only, accepting that it cannot record the six
-  manual decisions and that plan closure would not prove them.
+## What acceptance does and does not mean
 
-This request does not perform any of those steps.
-
-## What acceptance would and would not mean
-
-- It would bind the named report sections and revision to the named manual criteria
-  for the recorded attempt.
-- It would **not** convert the passing CI run into an acceptance record; the run is
-  evidence for `OUTPUT-003` criterion 3.
-- It would **not** turn deterministic tests into live Slack rendering evidence; the
+- The six decisions bind the named report sections and revision to the named
+  manual criteria for the recorded attempt.
+- The decisions do **not** convert the passing CI run into an acceptance record;
+  the run is evidence for `OUTPUT-003` criterion 3.
+- They do **not** turn deterministic tests into live Slack rendering evidence; the
   separate transport probe is recorded in
   [llm10-live-delivery.md](llm10-live-delivery.md).
-- It would **not** prove third-party terminal, IDE, editor, or Markdown rendering.
-- It would **not** prove live Slack rendering, the channel binding, mention
-  behavior, or auto-unfurl. The transport delivery is already recorded separately
-  in [llm10-live-delivery.md](llm10-live-delivery.md).
-- It would **not** prove Windows behavior or a general content-sanitization/DLP
+- They do **not** prove third-party terminal, IDE, editor, or Markdown rendering.
+- They do **not** prove live Slack rendering, the channel binding, mention
+  behavior, or auto-unfurl. The transport delivery is recorded separately.
+- They do **not** prove Windows behavior or a general content-sanitization/DLP
   claim.
 
 ## Bounded security claim for the verified sinks
 
-On the verified SOP-owned sinks, SOP removes terminal control characters from
-console display, escapes `&`/`<`/`>` in Slack mrkdwn so angle-bracket mentions and
-masked links cannot be injected, keeps protocol output valid JSON, and retains the
-existing shell, path, SQL, and authorization boundaries. This is not a claim that
-all improper output handling is prevented.
+**LLM10 scoped protections implemented, verified, and accepted with documented
+limitations.** On the verified SOP-owned sinks, SOP removes terminal control
+characters from console display, escapes `&`/`<`/`>` in Slack mrkdwn so
+angle-bracket mentions and masked links cannot be injected, keeps protocol output
+valid JSON, and retains the existing shell, path, SQL, and authorization
+boundaries. One live Slack webhook transport delivery was confirmed. Slack
+rendering and the channel binding remain `NOT_OBSERVED`; external renderers,
+unfurl, Windows, provider/tool output as model input, and persisted-Markdown
+rendering remain limitations. This is not full LLM10 coverage.
 
 ## Must not
+
+These constraints governed the historical request. The decisions and
+historicalization were recorded through the supported commands.
 
 - Do not record an acceptance decision, an approver's signature, or an acceptance
   timestamp on the operator's behalf.
@@ -267,7 +267,8 @@ all improper output handling is prevented.
   explicit authorization.
 - Do not create or edit `state.db`, `outcome.json`, or the acceptance audit files
   outside the supported command.
-- Do not mark the plan complete or historicalized from this document.
+- Do not mark the plan complete or historicalized from this document alone; the
+  recorded decisions and supported stage recovery were required first.
 - Do not treat `sop plan complete` / `sop plan historicalize` readiness as proof of
   manual acceptance: those readiness checks do not read `acceptance_decisions.jsonl`.
 - Do not use `sop task complete --external` as a substitute for the six
@@ -278,11 +279,8 @@ all improper output handling is prevented.
 
 ## Exact next action
 
-Decision A's transport step is complete. The designated approver (`Tom Tran`, per
-`.agent-sdlc/config.yaml`) or another operator with channel access must observe the
-message in `#sop-alert` and record the channel name, visible text, absence of pings,
-and a permalink or screenshot. The approver must also answer Decision B (accept or
-decline the six manual criteria with the evidence text above), and separately decide
-whether to establish an owning SOP plan state via `sop run`. Until those records
-exist, Plan 10 keeps rendering `NOT_OBSERVED`, manual acceptance `GAP`, and lifecycle
-`GAP`.
+No further acceptance or lifecycle action remains: all six decisions are recorded,
+the plan is historicalized `COMPLETE`, and the archive and backup preserve the
+evidence. The remaining observation is Slack rendering and the `#sop-alert`
+channel binding, which remain `NOT_OBSERVED`; no notification should be resent. The
+other documented coverage limitations remain in force.

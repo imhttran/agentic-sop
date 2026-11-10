@@ -1,8 +1,14 @@
 # Plan 03 — acceptance request for the bounded live campaign
 
-Status: **REQUEST — no acceptance is recorded.** This document prepares the exact
-decision a designated approver must make. It does not record acceptance, does not
-change SOP state, and does not claim `VERIFIED`.
+Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; PLAN 03 PER-CRITERION
+ACCEPTANCE NOT RECORDED.** The bounded decision is recorded in repository
+decision memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
+(source `operator:bounded-acceptance-2026-11-10`). It is a separate scoped
+evidence-acceptance decision, not retroactive Plan 03 acceptance. Full Plan 03
+per-criterion acceptance remains `NEEDS_HUMAN`. The final criterion matrix,
+evidence identity, and exact human decisions are in §Final closeout
+(2026-11-10); sections dated 2026-11-09 are preserved as history.
 
 **Post-closeout correction:** the plan has since been historicalized `COMPLETE`
 through the supported external-completion path; `COMPLETE` is a lifecycle state, not
@@ -11,6 +17,11 @@ acceptance. See §Post-closeout correction (2026-11-09) below.
 Related: [llm02-disclosure.md](llm02-disclosure.md) §Live extraction,
 [llm02-campaign.json](llm02-campaign.json), and
 [PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md](../../plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md).
+
+> Historical context: this section and §Current SOP state were written before the
+> external-completion and historicalization recorded in §Post-closeout correction.
+> They are preserved for audit; the current state and final criterion matrix are in
+> §Final closeout (2026-11-10).
 
 ## What is missing
 
@@ -205,10 +216,268 @@ independently reproduced the five pre-policy paths and confirmed the Plan 08 A+B
 denial/redaction. It records no acceptance and does not change this decision.
 The Linux live tool-path campaign (2026-11-10) is also `OBSERVED` (17 requests:
 7 protected, 6 positive controls, 4 residual exposures); Linux live retrieval and
-notification sinks remain `NOT_RUN`.
+notification sinks remain `NOT_RUN`. PR #349 redacts the rendered user prompt
+(task, caller input, output requirements) deterministically via `userPrompt`
+(`TestUserPromptRedactsTaskAndInput`); the live campaigns predate that fix and
+were not re-run for it. None of this records acceptance.
+
+## Final closeout (2026-11-10)
+
+Status: **DECISION-READY — no acceptance recorded.** Plan 03 is historicalized
+`COMPLETE`; that is lifecycle state, not acceptance. Formal per-criterion
+acceptance through the supported SOP interface is unsupported for this plan
+without reopening or recreating state, which this closeout does not do.
+
+### Final lifecycle limitation
+
+- Current checkout readiness check: `sop plan historicalize --check --json
+  "docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md"` reports
+  `state: NONE`, `eligible: false`, reason `no active plan is recorded`.
+- The preserved evidence records external completion at `d3830e35` and
+  historicalization `COMPLETE` at `2026-11-09T17:19:47Z`. No
+  `runs/DISCLOSE-003/outcome.json` and no
+  `runs/DISCLOSE-003/acceptance_decisions.jsonl` exist.
+- `sop outcome --accept` requires a recorded outcome. On the preserved disposable
+  state it reports `task DISCLOSE-003 not found` and `no recorded outcome for
+  DISCLOSE-003 in the latest run; run the task first`; no acceptance file is
+  written. The plan must not be reopened and the archive must not be edited to
+  manufacture acceptance.
+- `human.designated_approvers` names `Tom Tran` in the preserved evidence
+  configuration, but that identity still has no recorded approval operation.
+
+### Evidence identity
+
+| Evidence | Tested revision | Artifact identity |
+| --- | --- | --- |
+| macOS live campaign | `9c32e3d2bccb269aa0246b08158ddad5e8b25066` | `llm02-campaign.json`, SHA-256 `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06` |
+| Linux live tool-path campaign | `4cee73a`, `dirty: false` | `llm02-linux-campaign.json`, SHA-256 `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9` |
+| Deterministic model-input and prompt controls | Final integration baseline `4c8fe5a` | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput` |
+| Corrected live positive control | `4cee73a` | PR #351; ordinary copy uses the real `toolharness.ToolCopyFile` |
+
+The Linux campaign was not re-run after #349/#351/#352. #349 changes the
+user-prompt boundary, not the tool-path boundary exercised by the campaign; #351
+corrects the campaign's positive control; #352 is documentation-only. The
+campaign remains valid for the five tool paths, and the user-prompt fix is
+deterministic-only evidence with no live re-run.
+
+### Recorded bounded decision
+
+The bounded acceptance is recorded through the existing repository-scoped
+decision-memory mechanism (`sop memory add --scope repository`, CTX-010). The
+decision store is local and ignored; this transcript preserves the decision
+identifier and attribution in the committed record.
+
+- **Decision ID:** `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
+- **Mechanism:** `.agent-sdlc/context/decisions.json` (decision memory, schema
+  `decisionmemory/1`; ignored by Git)
+- **Source / attribution:** `operator:bounded-acceptance-2026-11-10`
+- **Repository identity:** `c60e64cf543eb6efb62e1d6bc622c8da88812ab42aa3227f60c43775826c79ca`
+  (HEAD `cc42a52`, `dirty: false`)
+- **Date:** 2026-11-10
+- **Scope:** repository
+
+The exact recorded decision:
+
+> Bounded evidence acceptance (separate scoped decision, not Plan 03 acceptance):
+> the approved OWASP LLM02 A+B implementation (credential-path denial and
+> model-bound tool-result/error redaction) and the PR #349 user-prompt redaction
+> are accepted as implemented and verified within their documented scope.
+> Supporting evidence: deterministic regression tests; macOS live campaign
+> (7 cases, 7 observed); Linux live tool-path campaign (17 requests: 7 protected,
+> 6 positive controls, 4 residual exposures; artifact SHA-256
+> `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`; tested
+> revision `4cee73a`); CI and review on PRs #337, #341, #349, #350, #351, #352,
+> #355. Decision authority: repository operator (bounded acceptance instruction
+> dated 2026-11-10; designated approver table names Tom Tran). Date: 2026-11-10.
+> Repository revision: `cc42a52`. This decision does not accept or waive residual
+> risks, does not retroactively accept the 16 historicalized Plan 03 criteria,
+> and does not declare the full OWASP LLM02 category secure. Excluded and
+> unresolved: unknown-format sensitive values in ordinary files, diffs, or SAFE
+> command output; hardlink/path-alias exposure; verbatim model-output artifact
+> persistence; retrieval and handoff disclosure limits; caller-owned and
+> notification prose; provider retention and general DLP. `NOT_RUN` remains:
+> Linux live retrieval; Linux live notification verification; live re-execution
+> of the PR #349 user-prompt redaction. Further mitigation requires separate
+> authorization.
+
+Recorded reason:
+
+> The bounded acceptance covers only the approved A+B implementation and its
+> verified deterministic, macOS live, and Linux live tool-path evidence.
+> Residual risks and unexecuted verification are explicitly excluded and require
+> separate decisions.
+
+Recorded evidence:
+
+> `docs/reports/owasp-llm/llm02-linux-campaign.json` SHA-256
+> `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`;
+> `docs/reports/owasp-llm/llm02-campaign.json` SHA-256
+> `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06`;
+> `docs/reports/owasp-llm/llm02-acceptance-request.md`;
+> `docs/reports/owasp-llm/llm02-disclosure.md`; PRs #337 #341 #349 #350 #351
+> #352 #355; final baseline `cc42a52`.
+
+This is a **separate scoped evidence-acceptance decision**. It does not change
+any of the 16 `None recorded` Plan 03 criterion cells below, does not create
+SOP-native Plan 03 acceptance, and is not a designated-approver approval record.
+
+The decision-memory record is bound to the clean baseline `cc42a52`. Later
+documentation commits change the repository identity, so `sop memory list` may
+report the record as stale for a different state. Staleness means it is not
+applied as run context at that different revision; it does not revoke the
+recorded decision or change the Plan 03 acceptance cells.
+
+
+### Plan 03 acceptance matrix
+
+Status describes evidence, not acceptance. `Supported` is not an acceptance
+decision. The separate bounded evidence acceptance above does not change these
+cells. No Plan 03 per-criterion acceptance decision exists for any criterion.
+
+| Task / criterion | Requirement | Evidence | Evidence status | Acceptance decision |
+| --- | --- | --- | --- | --- |
+| DISCLOSE-001.1 | Distinguish provider authentication headers from model-visible context. | `llm02-disclosure.md` §Provider authentication is not model content and §Data-flow trace; `TestOpenAICompatibleExecutionReusesAuthorization`. | Supported — deterministic | None recorded |
+| DISCLOSE-001.2 | Identify where redaction occurs before sending, before persistence, and before display. | `llm02-disclosure.md` §Where redaction happens; `redact.ModelInput` in `userPrompt` and `toolResultMessage`; `redactDiagnosticText`; handoff, outcome, and notification tests. | Supported — deterministic | None recorded |
+| DISCLOSE-001.3 | Record scope checks before retrieval and response validation after retrieval. | `llm02-disclosure.md` §Authorization boundaries and retrieval row; `TestSearchRejectsUnrelatedEvidence`; `TestRankerAdapterRejectsScopeItCannotHonor`. | Supported — deterministic; live retrieval `NOT_RUN` | None recorded |
+| DISCLOSE-001.4 | Distinguish credentials from other confidential content; pattern matching is not general DLP. | `llm02-disclosure.md` §Residual risks and §Pattern matching; `TestModelInputToolBoundariesResidualLimits`; Linux live residual cases. | Supported — bounded claim | None recorded |
+| DISCLOSE-001.5 | Do not read or print actual secret values during assessment. | `llm02-disclosure.md` §Method; synthetic canaries only; campaign artifacts contain synthetic canaries. | Supported — deterministic and observed | None recorded |
+| DISCLOSE-002.1 | Protected canaries do not appear in unauthorized model messages, persisted diagnostics, or outgoing payloads at in-scope boundaries. | `TestModelInputToolBoundaries`; check-evidence redaction tests; Linux live 7 protected cases. | Supported — deterministic and live for scoped canaries; unknown-format and hardlink residuals observed | None recorded |
+| DISCLOSE-002.2 | Cross-scope retrieval content is rejected before it can become model context under the current retrieval contract. | `TestSearchRejectsUnrelatedEvidence`; `TestRankerAdapterRejectsScopeItCannotHonor`. | Supported — deterministic; live retrieval `NOT_RUN` | None recorded |
+| DISCLOSE-002.3 | Legitimate non-sensitive content and required authentication still work. | Linux live 6 positive controls; `.env.example` and `.env.sample`; ordinary copy, command, and diff; `TestOpenAICompatibleExecutionReusesAuthorization`. | Supported — deterministic and live | None recorded |
+| DISCLOSE-002.4 | Each fix reuses the shared redaction or established authorization boundary where appropriate. | `redact.ModelInput`; `sensitivepath`; `toolharness`; `userPrompt`; `llm02-disclosure.md` §Reproduced gaps and fixes. | Supported — deterministic | None recorded |
+| DISCLOSE-002.5 | Unknown formats and arbitrary confidential text remain explicitly bounded claims. | `llm02-disclosure.md` §Residual risks and §Residual investigation status; `TestModelInputToolBoundariesResidualLimits`; Linux residual cases. | Supported — bounded claim | None recorded |
+| DISCLOSE-003.1 | Direct extraction and an indirect injected extraction case have recorded outcomes. | `llm02-campaign.json`: direct context disclosure observed and indirect retrieval refusal observed; Linux live tool-path campaign. | Observed — recorded outcomes; no acceptance | None recorded |
+| DISCLOSE-003.2 | Unauthorized tool effects remain denied even if the model proposes disclosure. | macOS effect cases denied by authorization and policy; Linux tool-path campaign recorded no unauthorized action. | Verified — for recorded cases | None recorded |
+| DISCLOSE-003.3 | No real credential or external receiver is used. | Synthetic canaries; inert `.invalid` target; campaign artifacts. | Verified — deterministic and observed | None recorded |
+| DISCLOSE-003.4 | Report separates prompt exposure, generated disclosure, artifact leakage, and attempted exfiltration. | `llm02-campaign.json` separate flags; Linux campaign separate tool/model/artifact/action outcomes; `llm02-disclosure.md` §Live extraction. | Verified — observed | None recorded |
+| DISCLOSE-003.5 | Unavailable live prerequisites produce `NOT_RUN` and leave the relevant acceptance incomplete. | Historical `NOT_RUN` record preserved; Linux live retrieval and notification sinks `NOT_RUN`; live acceptance incomplete. | `NOT_RUN` — acceptance incomplete | None recorded |
+| DISCLOSE-003.6 | Required verification passes and a focused PR records changed paths and residual risks. | CI on PRs #337, #341, #349, #350, #351, and #352; focused PRs; `llm02-disclosure.md` residual sections. | Verified — CI and PRs | None recorded |
+
+### Residual-risk decision matrix (2026-11-10)
+
+Recommendations are proposals, not approved risk decisions. No residual risk is
+accepted. Priority follows demonstrated exposure first; hypothetical or
+external-only gaps follow.
+
+| Priority | Residual item | Verified behavior and exposure | Existing protection | Recommendation | Compatibility impact and policy decision | Acceptance criteria for a proposed mitigation |
+| --- | --- | --- | --- | --- | --- | --- |
+| 1 | Unknown-format credentials in ordinary files, diffs, or SAFE command output | `redact.ModelInput` uses `redact.Shapes` assignments, bearer tokens, provider key/token prefixes, AWS keys, JWTs, PEM headers, and URL userinfo. Linux live `READ-OPAQUE`, `COMMAND-OPAQUE`, and `DIFF-OPAQUE` reached the model; the model reproduced them. `TestModelInputToolBoundariesResidualLimits` pins the behavior. | Shape redaction at the user-prompt and tool-result boundaries; narrow credential-path denial. | `INVESTIGATE` a bounded detector enhancement (entropy plus known formats plus an explicit operator secret inventory). If not approved, `ACCEPT_PROPOSED` as explicit residual. | Possible over-redaction of source/test fixtures and a small per-result detector cost. Policy decision: approve a bounded detector proposal or accept the residual. | A fixed corpus of known and unknown formats; no regression in the six live positive controls; a declared false-positive ceiling; deterministic tests; no general-DLP claim. |
+| 2 | Hardlink or path alias with an ordinary name | `resolveIn` resolves symlinks; the credential-path check is lexical. Linux live `HARDLINK` delivered an opaque env value to the model, while the recognised shape was redacted. The deterministic residual test reproduces it. | Symlink resolution; narrow credential-path denial; shape redaction. | `INVESTIGATE` inode/path-identity enforcement. If rejected, `ACCEPT_PROPOSED` as a local path-alias residual. | Inode comparison needs a bounded scan/cache and has TOCTOU and legitimate-hardlink compatibility costs. Policy decision: approve a path-identity proposal or accept the local residual. | Deny hardlink aliases to credential paths; ordinary hardlinks are preserved or explicitly documented; no path escape; deterministic tests and a performance bound. |
+| 3 | Verbatim model-output artifact persistence | `implementation.md` (`internal/cli/run.go`) and `result.md` (`internal/cli/prompt.go`) are written as produced. `TestRunArtifactPersistsModelOutputVerbatim` records the path; the Linux evidence artifact stores three reproduced opaque values. | Upstream model-input/tool-result redaction; run artifacts are SOP-owned, run-scoped evidence. | `INVESTIGATE` a design that preserves audit evidence while redacting or access-controlling sensitive content (for example a redacted view plus a restricted raw record). If rejected, `ACCEPT_PROPOSED` as a separate sink risk. | Redaction can hide evidence; a dual-artifact or access-control design adds storage, retention, and review behavior. Policy decision: approve artifact handling or accept the sink residual. | Audit integrity and replayability preserved; redaction tests; access control for any raw record; no loss of required validation/review evidence. |
+| 4 | Caller-owned and notification prose | `notify.NewEvent` applies `redact.Shapes` to `Reason`, `NextAction`, and `Outcome` before persistence/delivery; `TestLLM08NotificationRedactsCredentialShapes` and `TestLLM08OutboxRowOmitsSecret` pass. Known env values and unknown formats are not covered by `redact.Shapes`; Linux live notification remains `NOT_RUN`. | Shape redaction; notification target/URL redaction; current lifecycle producers pass fixed/generic reasons. | `MITIGATE` by extending `redactDescriptive` to `redact.ModelInput` (known env values plus shapes) and adding focused tests. If caller-owned unknown prose is preferred, `ACCEPT_PROPOSED`. | Low compatibility cost; caller prose may be over-redacted. Policy decision: approve the extension or accept caller-owned unknown-format prose. | Env-value and shape redaction in `Reason`/`NextAction`/`Outcome`; ordinary prose preserved; outbox and channel payload tests; no delivery behavior change. |
+| 5 | Retrieval and handoff inputs | Retrieval is disabled by default; `retrievalboundary` validates corpus/scope and `memindex` filters. Handoff redacts known secret-named env values; `userPrompt` shape-redacts the rendered prompt. Live retrieval is `NOT_RUN`; handoff capsule persistence still lacks shape/unknown-format redaction. | Scope checks before search; handoff env redaction; model-input redaction at the prompt boundary. | `INVESTIGATE` live retrieval and handoff-persistence behavior. If the disabled-by-default boundary is sufficient, `ACCEPT_PROPOSED`. | Live RAG needs a producer/index and a scoped canary; handoff persistence changes are local. Policy decision: authorize live retrieval verification or accept the disabled-by-default boundary. | A scoped live retrieval canary with no unrelated evidence; handoff persistence tests; no scope widening; `NOT_RUN` preserved if not executed. |
+| 6 | Provider retention and general DLP | SOP does not control provider-side request/response retention; the API key is an Authorization header, not model content, and SOP does not persist the request body. Provider retention is externally observable only through provider terms. | Model-input redaction; auth-header separation; local-model option. | `TRANSFER_PROPOSED` to the provider/compliance owner. | No SOP code change; provider selection, data residency, and contractual terms are external. Policy decision: provider/compliance acceptance. | Provider retention/DPA terms and data classification recorded; no claim of SOP control over provider retention or general DLP. |
+
+Priority rationale:
+
+1. **Unknown-format credentials** — demonstrated in three Linux live cases and not fixed by the approved shape detector.
+2. **Hardlink alias** — demonstrated in Linux live and deterministic evidence; local setup is required, but the path check is bypassed.
+3. **Artifact persistence** — demonstrated by the production write paths and the deterministic test; the tradeoff is audit evidence versus redaction.
+4. **Caller/notification prose** — shape redaction already exists and is tested; unknown-format caller prose is a bounded, lower-priority extension.
+5. **Retrieval/handoff** — disabled by default or scope-controlled; live retrieval is `NOT_RUN`, so evidence is insufficient for a live claim.
+6. **Provider retention/general DLP** — outside SOP ownership; transfer rather than mitigate.
+
+No residual risk is marked accepted. Each item requires a separate authorization
+decision.
+
+### Plan 03 acceptance reconciliation (2026-11-10)
+
+- **Bounded evidence acceptance:** recorded separately in decision memory
+  (ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`).
+  It supports the approved A+B plus #349 scope and does not change the 16
+  Plan 03 per-criterion cells.
+- **Sufficient evidence for the bounded acceptance:** 15 of 16 criteria. The
+  exception is `DISCLOSE-003.5`, which is a `NOT_RUN` acceptance-incomplete
+  condition. The live portions of `DISCLOSE-001.3` and `DISCLOSE-002.2`
+  (retrieval) are also `NOT_RUN`; their deterministic scope-control evidence is
+  sufficient for the bounded claim, but not for a live-retrieval claim.
+- **Requires additional verification:** `DISCLOSE-003.5` and any claim that
+  depends on live retrieval, live notification, or a live re-run of #349.
+- **Formal per-criterion acceptance:** 0 of 16 recorded. All matrix cells remain
+  `None recorded` and `NEEDS_HUMAN`.
+- **Supported mechanism:** no supported interface exists to append per-criterion
+  acceptance to the historicalized plan without reopening or recreating state.
+  The smallest supported approach is to retain the recorded bounded
+  decision-memory entry for the approved scope and leave the 16 per-criterion
+  cells `None recorded`; a separate governance decision is required if formal
+  per-criterion acceptance is demanded.
+
+### Remaining evidence gaps (2026-11-10)
+
+| Gap | Value for the current claim | Disposition |
+| --- | --- | --- |
+| Linux live retrieval | Material only for a live-retrieval claim; retrieval is disabled by default and scope controls are deterministic. | `NOT_RUN`; not required for the approved A+B tool-path claim. |
+| Linux live notification verification | Material only for a notification claim; shape redaction and outbox tests are deterministic. | `NOT_RUN`; not required for the approved A+B claim. |
+| Live re-execution of PR #349 user-prompt redaction | Adds live-model evidence for the prompt boundary; the deterministic test already covers the fix. | `NOT_RUN`; not required for the approved A+B claim. |
+
+The 17-case Linux tool-path campaign was not repeated. No new live evidence was
+generated for this disposition.
+
+### Proposed final LLM02 status (2026-11-10)
+
+| Dimension | Proposed status |
+| --- | --- |
+| Approved A+B implementation | `COMPLETE` / `IMPLEMENTED` within the approved scope |
+| Scoped verification | `VERIFIED` for the five deterministic and Linux live tool paths, macOS live campaign, and deterministic prompt/tool tests |
+| Bounded evidence acceptance | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`) |
+| Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN` |
+| Residual risks | Not accepted; recommendations pending (`INVESTIGATE`, `MITIGATE`, `TRANSFER_PROPOSED`) |
+| Broader LLM02 security coverage | `OPEN` |
+| Final disposition | Ready for operator/governance disposition; not fully closed |
+
+LLM02 is ready for a final governance disposition, but it is not fully closed.
+Do not report full LLM02 coverage until the residual-risk decisions and any
+required per-criterion acceptance are recorded.
+
+### Required human decisions
+
+1. **Formal Plan 03 per-criterion acceptance:** if required, accept or decline the
+   macOS campaign, the Linux live tool-path campaign, or both for `DISCLOSE-003`
+   criteria 1–4 and 6 through a separate authorized governance process. The
+   separate bounded evidence acceptance is already recorded and does not satisfy
+   this per-criterion requirement.
+2. **Historicalized-plan acceptance process:** if SOP-recorded acceptance is
+   required, authorize a separate governance process for historicalized plans.
+   Do not reopen Plan 03, edit `.agent-sdlc/archive/`, or create a replacement
+   `acceptance_decisions.jsonl`.
+3. **Residual-risk disposition:** decide each item in §Residual-risk decision
+   matrix: unknown-format credentials (`INVESTIGATE` / accept), hardlink aliases
+   (`INVESTIGATE` / accept), artifact persistence (`INVESTIGATE` / accept),
+   caller/notification prose (`MITIGATE` / accept), retrieval/handoff
+   (`INVESTIGATE` / accept the disabled-by-default boundary), and provider
+   retention (`TRANSFER_PROPOSED`). Accepting a residual risk is an authorization
+   decision; this record does not make it.
+4. **Optional live verification:** authorize Linux live retrieval, Linux live
+   notification, or a live re-run of PR #349 only if a specific claim requires
+   that evidence; otherwise retain `NOT_RUN`.
+
+### Three separate claims
+
+1. **Approved LLM02 implementation is complete.** Yes, within the approved
+   Plan 08 A+B scope plus PR #349.
+2. **Scoped security verification is complete.** Yes for the five tool paths on
+   Linux (deterministic and live), the macOS live campaign, and deterministic
+   boundary tests. No for Linux live retrieval and notification and for a live
+   re-run of the #349 prompt fix.
+3. **Full LLM02 security coverage and governance acceptance are not established.**
+   Yes. Residual gaps remain and no per-criterion acceptance is recorded. The
+   separate bounded evidence acceptance is recorded but does not change this.
+
+### Recommended disposition
+
+The bounded evidence acceptance is already recorded in decision memory. The
+recommended disposition, in priority order, is: investigate a bounded
+unknown-format detector; investigate inode/path-identity enforcement for hardlink
+aliases; investigate an audit-preserving artifact design; mitigate notification
+prose by extending the existing redaction to `redact.ModelInput`; investigate or
+accept the disabled-by-default retrieval/handoff boundary; and transfer provider
+retention to the provider/compliance owner. These are recommendations, not
+approvals. Do not claim full LLM02 coverage or universal disclosure prevention.
+
 
 ## Exact next action
 
-The operator names the designated approver and decides whether to accept the
-campaign for `DISCLOSE-003`. Until that record exists, the matrix keeps the live
-row at `OBSERVED` and the plan's live acceptance incomplete.
+The designated approver must choose one of the decisions in §Required human
+decisions. Until an authorized acceptance decision exists, the matrix keeps the
+live row at `OBSERVED`, the user-prompt fix at `VERIFIED (deterministic)`, and
+Plan 03 acceptance at `NEEDS_HUMAN`. No acceptance is recorded by this request.
