@@ -56,11 +56,25 @@ func isolate(root string, argv []string) (wrapped []string, detail string, err e
 	if name == "seatbelt" {
 		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon))}
 	} else {
+		if err := refuseSymlinkedState(canon); err != nil {
+			return nil, "", err
+		}
 		args = bubblewrapArgs(canon, writableDirs(canon))
 	}
 	sum := sha256.Sum256([]byte(strings.Join(args, "\x00")))
 	detail = fmt.Sprintf("isolate=%s backend=%s root=%s profile=%s", name, tool, canon, hex.EncodeToString(sum[:]))
 	return append(append([]string{tool}, args...), argv...), detail, nil
+}
+
+// refuseSymlinkedState fails closed when <root>/.agent-sdlc is a symlink. The
+// root is writable inside the bubblewrap view, so the command could replace the
+// link itself and redirect SOP to a forged state dir. Seatbelt needs no such
+// check: it denies writes on the link path.
+func refuseSymlinkedState(root string) error {
+	if fi, err := os.Lstat(filepath.Join(root, ".agent-sdlc")); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: .agent-sdlc is a symlink", errIsolationUnavailable)
+	}
+	return nil
 }
 
 // bubblewrapArgs builds the Linux view: the host read-only, the writable dirs
@@ -78,9 +92,10 @@ func bubblewrapArgs(root string, writable []string) []string {
 		"--tmpfs", "/run",
 	}
 	for _, d := range writable {
-		// The private /tmp tmpfs is already writable, but the root is always
+		// The private /tmp and /run tmpfs mounts are already writable; binding a
+		// host path under them would re-expose host sockets. The root is always
 		// bound: a root under /tmp would otherwise be hidden by the tmpfs.
-		if d != root && (d == "/tmp" || strings.HasPrefix(d, "/tmp/")) {
+		if d != root && underAny(d, "/tmp", "/run", "/var/run") {
 			continue
 		}
 		// A bind needs an existing source; create a fresh cache dir (for
@@ -88,12 +103,12 @@ func bubblewrapArgs(root string, writable []string) []string {
 		_ = os.MkdirAll(d, 0o755)
 		args = append(args, "--bind-try", d, d)
 	}
-	// Mounted after the root bind so it wins; a symlinked state dir is mounted
-	// at its real target. A missing state dir gets an empty read-only tmpfs so
-	// the command cannot create one.
+	// Mounted after the root bind so it wins, and the mount point cannot be
+	// unlinked or renamed (isolate refuses a symlinked state dir). A missing
+	// state dir gets an empty read-only tmpfs so the command cannot create one.
 	state := filepath.Join(root, ".agent-sdlc")
-	if real, err := filepath.EvalSymlinks(state); err == nil {
-		args = append(args, "--ro-bind", real, real)
+	if _, err := os.Lstat(state); err == nil {
+		args = append(args, "--ro-bind", state, state)
 	} else {
 		args = append(args, "--tmpfs", state, "--remount-ro", state)
 	}
@@ -180,4 +195,14 @@ func seatbeltProfile(root string, writable []string) string {
 		fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", real)
 	}
 	return b.String()
+}
+
+// underAny reports whether p is one of dirs or below one of them.
+func underAny(p string, dirs ...string) bool {
+	for _, d := range dirs {
+		if p == d || strings.HasPrefix(p, d+"/") {
+			return true
+		}
+	}
+	return false
 }

@@ -68,9 +68,13 @@ Seatbelt profile:
 - the host is mounted read-only (`--ro-bind / /`);
 - `/tmp` and `/run` are private tmpfs mounts, which hides host sockets such as
   Docker's;
-- the root, the Go build cache and the module cache are bound read-write;
-- `<root>/.agent-sdlc` is mounted read-only after the root bind, at its real
-  target if it is a symlink; a missing state dir gets an empty read-only tmpfs;
+- the root, the Go build cache and the module cache are bound read-write
+  (paths under `/tmp`, `/run` or `/var/run` are not bound, so host sockets stay
+  hidden);
+- `<root>/.agent-sdlc` is mounted read-only after the root bind, so the mount
+  point cannot be unlinked or renamed; a symlinked state dir is refused (the
+  writable root would let the command replace the link), and a missing one gets
+  an empty read-only tmpfs;
 - `--unshare-net --unshare-pid --unshare-ipc --die-with-parent --new-session`.
 
 It fails closed: missing `bwrap` returns `errIsolationUnavailable` and the
@@ -80,8 +84,8 @@ Verification (2026-11-09, `golang:1.27` container on Linux arm64, bubblewrap
 0.12.0, unprivileged user):
 
 - `go test ./internal/toolharness -run 'Isolation|Bubblewrap'`: PASS. This covers
-  the root write reaching the host, the denied state-dir write (direct and
-  symlinked), the blocked outbound connection to 1.1.1.1:443, and the hidden
+  the root write reaching the host, the denied state-dir write, the refused
+  symlinked state dir, the blocked outbound connection to 1.1.1.1:443, and the hidden
   `/tmp` Unix socket.
 - The repository's own `go test` for `repoindex`, `security` and `testrunner`
   ran inside the generated view: PASS, with the module cache downloaded first.

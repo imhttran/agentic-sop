@@ -113,7 +113,12 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	if err := os.Symlink("real-state", filepath.Join(linked, ".agent-sdlc")); err != nil {
 		t.Fatal(err)
 	}
-	if err := sandboxed(t, linked, "echo forged > real-state/state.db"); err == nil {
+	if runtime.GOOS == "linux" {
+		// bubblewrap refuses a symlinked state dir outright.
+		if _, _, err := isolate(linked, []string{"true"}); !errors.Is(err, errIsolationUnavailable) {
+			t.Fatalf("symlinked state dir: err = %v, want errIsolationUnavailable", err)
+		}
+	} else if err := sandboxed(t, linked, "echo forged > real-state/state.db"); err == nil {
 		t.Fatal("a write to the symlinked state dir target succeeded")
 	}
 	// A cache dir that does not exist yet stays writable.
@@ -191,7 +196,7 @@ func TestBubblewrapArgsOrder(t *testing.T) {
 	root := t.TempDir()
 	writeRepoFile(t, root, ".agent-sdlc/state.db", "state")
 	canon, _ := filepath.EvalSymlinks(root)
-	got := strings.Join(bubblewrapArgs(canon, []string{canon, "/tmp/x"}), " ")
+	got := strings.Join(bubblewrapArgs(canon, []string{canon, "/tmp/x", "/run/user/1/cache"}), " ")
 	state, _ := filepath.EvalSymlinks(filepath.Join(canon, ".agent-sdlc"))
 	order := []string{"--ro-bind / /", "--tmpfs /tmp", "--tmpfs /run", "--bind-try " + canon + " " + canon, "--ro-bind " + state + " " + state, "--unshare-net", "--chdir " + canon, "--"}
 	at := 0
@@ -202,8 +207,21 @@ func TestBubblewrapArgsOrder(t *testing.T) {
 		}
 		at += i + len(want)
 	}
-	if strings.Contains(got, "/tmp/x") {
-		t.Fatalf("a /tmp path must not be bound over the private tmpfs:\n%s", got)
+	if strings.Contains(got, "/tmp/x") || strings.Contains(got, "/run/user") {
+		t.Fatalf("a /tmp or /run path must not be bound over the private tmpfs:\n%s", got)
+	}
+	// A symlinked state dir is refused: the writable root would let the
+	// command replace the link.
+	linked := t.TempDir()
+	writeRepoFile(t, linked, "real/state.db", "state")
+	if err := os.Symlink("real", filepath.Join(linked, ".agent-sdlc")); err != nil {
+		t.Fatal(err)
+	}
+	if err := refuseSymlinkedState(linked); !errors.Is(err, errIsolationUnavailable) {
+		t.Fatalf("symlinked state dir: err = %v, want errIsolationUnavailable", err)
+	}
+	if err := refuseSymlinkedState(root); err != nil {
+		t.Fatalf("real state dir refused: %v", err)
 	}
 	missing := strings.Join(bubblewrapArgs(t.TempDir(), nil), " ")
 	if !strings.Contains(missing, "--remount-ro") {
