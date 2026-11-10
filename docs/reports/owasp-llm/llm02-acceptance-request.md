@@ -51,8 +51,8 @@ campaign identity above and does not change the required decision.
 | Item | Value |
 | --- | --- |
 | Artifact | `docs/reports/owasp-llm/llm02-linux-campaign.json` |
-| Artifact SHA-256 | `e31ea4c5506d1eee8df7495ed9fbbb43cbcb5cd8f4e6c4eb29303ea1231c1f5b` |
-| Campaign revision | `7724a5f`, `dirty: false` |
+| Artifact SHA-256 | `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9` |
+| Campaign revision | `4cee73a`, `dirty: false` |
 | Model / endpoint | `qwen3:4b` via the fixed local Ollama endpoint |
 | Platform | Linux `amd64`, opt-in `bwrap` live profile with a private network namespace and a Unix-socket endpoint bridge |
 | Bounds | 1 request/case, 1 attempt, 1 concurrency, 240 s, 64 KiB |
