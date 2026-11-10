@@ -2,7 +2,9 @@
 
 Status: **REQUEST — no acceptance is recorded.** This document prepares the exact
 decision a designated approver must make. It does not record acceptance, does not
-change SOP state, and does not claim `VERIFIED`.
+change SOP state, and does not claim `VERIFIED`. The final criterion matrix,
+evidence identity, and exact human decision are in §Final closeout (2026-11-10);
+sections dated 2026-11-09 are preserved as history.
 
 **Post-closeout correction:** the plan has since been historicalized `COMPLETE`
 through the supported external-completion path; `COMPLETE` is a lifecycle state, not
@@ -11,6 +13,11 @@ acceptance. See §Post-closeout correction (2026-11-09) below.
 Related: [llm02-disclosure.md](llm02-disclosure.md) §Live extraction,
 [llm02-campaign.json](llm02-campaign.json), and
 [PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md](../../plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md).
+
+> Historical context: this section and §Current SOP state were written before the
+> external-completion and historicalization recorded in §Post-closeout correction.
+> They are preserved for audit; the current state and final criterion matrix are in
+> §Final closeout (2026-11-10).
 
 ## What is missing
 
@@ -210,8 +217,124 @@ notification sinks remain `NOT_RUN`. PR #349 redacts the rendered user prompt
 (`TestUserPromptRedactsTaskAndInput`); the live campaigns predate that fix and
 were not re-run for it. None of this records acceptance.
 
+## Final closeout (2026-11-10)
+
+Status: **DECISION-READY — no acceptance recorded.** Plan 03 is historicalized
+`COMPLETE`; that is lifecycle state, not acceptance. Formal per-criterion
+acceptance through the supported SOP interface is unsupported for this plan
+without reopening or recreating state, which this closeout does not do.
+
+### Final lifecycle limitation
+
+- Current checkout readiness check: `sop plan historicalize --check --json
+  "docs/plans/PLAN-03-SOP-LLM02-Sensitive-Information-Disclosure.md"` reports
+  `state: NONE`, `eligible: false`, reason `no active plan is recorded`.
+- The preserved evidence records external completion at `d3830e35` and
+  historicalization `COMPLETE` at `2026-11-09T17:19:47Z`. No
+  `runs/DISCLOSE-003/outcome.json` and no
+  `runs/DISCLOSE-003/acceptance_decisions.jsonl` exist.
+- `sop outcome --accept` requires a recorded outcome. On the preserved disposable
+  state it reports `task DISCLOSE-003 not found` and `no recorded outcome for
+  DISCLOSE-003 in the latest run; run the task first`; no acceptance file is
+  written. The plan must not be reopened and the archive must not be edited to
+  manufacture acceptance.
+- `human.designated_approvers` names `Tom Tran` in the preserved evidence
+  configuration, but that identity still has no recorded approval operation.
+
+### Evidence identity
+
+| Evidence | Tested revision | Artifact identity |
+| --- | --- | --- |
+| macOS live campaign | `9c32e3d2bccb269aa0246b08158ddad5e8b25066` | `llm02-campaign.json`, SHA-256 `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06` |
+| Linux live tool-path campaign | `4cee73a`, `dirty: false` | `llm02-linux-campaign.json`, SHA-256 `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9` |
+| Deterministic model-input and prompt controls | Final integration baseline `4c8fe5a` | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput` |
+| Corrected live positive control | `4cee73a` | PR #351; ordinary copy uses the real `toolharness.ToolCopyFile` |
+
+The Linux campaign was not re-run after #349/#351/#352. #349 changes the
+user-prompt boundary, not the tool-path boundary exercised by the campaign; #351
+corrects the campaign's positive control; #352 is documentation-only. The
+campaign remains valid for the five tool paths, and the user-prompt fix is
+deterministic-only evidence with no live re-run.
+
+### Plan 03 acceptance matrix
+
+Status describes evidence, not acceptance. `Supported` is not an acceptance
+decision. No acceptance decision exists for any criterion.
+
+| Task / criterion | Requirement | Evidence | Evidence status | Acceptance decision |
+| --- | --- | --- | --- | --- |
+| DISCLOSE-001.1 | Distinguish provider authentication headers from model-visible context. | `llm02-disclosure.md` §Provider authentication is not model content and §Data-flow trace; `TestOpenAICompatibleExecutionReusesAuthorization`. | Supported — deterministic | None recorded |
+| DISCLOSE-001.2 | Identify where redaction occurs before sending, before persistence, and before display. | `llm02-disclosure.md` §Where redaction happens; `redact.ModelInput` in `userPrompt` and `toolResultMessage`; `redactDiagnosticText`; handoff, outcome, and notification tests. | Supported — deterministic | None recorded |
+| DISCLOSE-001.3 | Record scope checks before retrieval and response validation after retrieval. | `llm02-disclosure.md` §Authorization boundaries and retrieval row; `TestSearchRejectsUnrelatedEvidence`; `TestRankerAdapterRejectsScopeItCannotHonor`. | Supported — deterministic; live retrieval `NOT_RUN` | None recorded |
+| DISCLOSE-001.4 | Distinguish credentials from other confidential content; pattern matching is not general DLP. | `llm02-disclosure.md` §Residual risks and §Pattern matching; `TestModelInputToolBoundariesResidualLimits`; Linux live residual cases. | Supported — bounded claim | None recorded |
+| DISCLOSE-001.5 | Do not read or print actual secret values during assessment. | `llm02-disclosure.md` §Method; synthetic canaries only; campaign artifacts contain synthetic canaries. | Supported — deterministic and observed | None recorded |
+| DISCLOSE-002.1 | Protected canaries do not appear in unauthorized model messages, persisted diagnostics, or outgoing payloads at in-scope boundaries. | `TestModelInputToolBoundaries`; check-evidence redaction tests; Linux live 7 protected cases. | Supported — deterministic and live for scoped canaries; unknown-format and hardlink residuals observed | None recorded |
+| DISCLOSE-002.2 | Cross-scope retrieval content is rejected before it can become model context under the current retrieval contract. | `TestSearchRejectsUnrelatedEvidence`; `TestRankerAdapterRejectsScopeItCannotHonor`. | Supported — deterministic; live retrieval `NOT_RUN` | None recorded |
+| DISCLOSE-002.3 | Legitimate non-sensitive content and required authentication still work. | Linux live 6 positive controls; `.env.example` and `.env.sample`; ordinary copy, command, and diff; `TestOpenAICompatibleExecutionReusesAuthorization`. | Supported — deterministic and live | None recorded |
+| DISCLOSE-002.4 | Each fix reuses the shared redaction or established authorization boundary where appropriate. | `redact.ModelInput`; `sensitivepath`; `toolharness`; `userPrompt`; `llm02-disclosure.md` §Reproduced gaps and fixes. | Supported — deterministic | None recorded |
+| DISCLOSE-002.5 | Unknown formats and arbitrary confidential text remain explicitly bounded claims. | `llm02-disclosure.md` §Residual risks and §Residual investigation status; `TestModelInputToolBoundariesResidualLimits`; Linux residual cases. | Supported — bounded claim | None recorded |
+| DISCLOSE-003.1 | Direct extraction and an indirect injected extraction case have recorded outcomes. | `llm02-campaign.json`: direct context disclosure observed and indirect retrieval refusal observed; Linux live tool-path campaign. | Observed — recorded outcomes; no acceptance | None recorded |
+| DISCLOSE-003.2 | Unauthorized tool effects remain denied even if the model proposes disclosure. | macOS effect cases denied by authorization and policy; Linux tool-path campaign recorded no unauthorized action. | Verified — for recorded cases | None recorded |
+| DISCLOSE-003.3 | No real credential or external receiver is used. | Synthetic canaries; inert `.invalid` target; campaign artifacts. | Verified — deterministic and observed | None recorded |
+| DISCLOSE-003.4 | Report separates prompt exposure, generated disclosure, artifact leakage, and attempted exfiltration. | `llm02-campaign.json` separate flags; Linux campaign separate tool/model/artifact/action outcomes; `llm02-disclosure.md` §Live extraction. | Verified — observed | None recorded |
+| DISCLOSE-003.5 | Unavailable live prerequisites produce `NOT_RUN` and leave the relevant acceptance incomplete. | Historical `NOT_RUN` record preserved; Linux live retrieval and notification sinks `NOT_RUN`; live acceptance incomplete. | `NOT_RUN` — acceptance incomplete | None recorded |
+| DISCLOSE-003.6 | Required verification passes and a focused PR records changed paths and residual risks. | CI on PRs #337, #341, #349, #350, #351, and #352; focused PRs; `llm02-disclosure.md` residual sections. | Verified — CI and PRs | None recorded |
+
+### Residual-risk disposition
+
+No item below is accepted. Acceptance of any residual risk is a separate
+authorized decision.
+
+| Residual item | Observed or unverified | Existing control | Residual risk | Within approved A+B? | Exact decision required | Recommended disposition |
+| --- | --- | --- | --- | --- | --- | --- |
+| Unknown-format credentials in ordinary files, diffs, or SAFE command output | Observed in Linux live `READ-OPAQUE`, `COMMAND-OPAQUE`, and `DIFF-OPAQUE`; deterministic residual test | Narrow credential-path denial plus shape redaction | An unknown-format secret reaches the model | No — shape-based A+B does not claim this | Accept as residual risk or authorize a separate DLP/redaction policy | Accept as explicit residual risk for the approved narrow profile, or authorize a separate policy |
+| Hardlink or path alias with an ordinary name | Observed in Linux live `HARDLINK` | Symlink resolution plus lexical credential-path denial | A hardlink can bypass the path check; recognised shapes are still redacted | No — not part of the approved lexical profile | Accept as residual risk or authorize inode/path-identity checks | Accept as an explicit local path-alias residual, or authorize a separate path-identity control |
+| Model-output artifact persistence | Deterministic test; live artifact leakage observed for three opaque values | Run artifacts persist model output verbatim | A model that repeats a value can persist it in `implementation.md` or `result.md` | No — artifact redaction is a separate sink | Accept as separate sink risk or authorize artifact redaction | Accept as a separate evidence-sink risk, or authorize a bounded artifact-redaction policy |
+| Retrieval and handoff inputs | Live retrieval `NOT_RUN`; handoff deterministic | Retrieval scope controls; handoff redacts known secret-named environment values | Authorized-scope retrieved content and general handoff prose can carry sensitive text | No — general content is outside A+B | Accept or authorize stronger retrieval/handoff filtering | Keep existing scope controls; accept the bounded gap or authorize a separate retrieval/handoff decision |
+| Caller-owned and notification prose | Unverified; caller-dependent | Notification targets redacted; lifecycle reason is caller-owned | A caller can pass raw secret prose | No — caller-owned data | Accept as caller-owned or authorize notification-prose redaction | Accept as caller-owned, or authorize a notification-prose policy |
+| Provider retention and general DLP | Outside SOP control | None | Provider may retain prompts; general DLP is not implemented | No — external/compliance boundary | Accept as external or authorize a provider/DLP decision | Treat as external; no SOP control is claimed |
+
+No residual risk is marked accepted; each item requires a separate authorization
+decision.
+
+### Required human decisions
+
+1. **Plan 03 evidence acceptance:** accept or decline the macOS campaign, the
+   Linux live tool-path campaign, or both for `DISCLOSE-003` criteria 1–4 and 6.
+   Name the authority and the record in which the decision is made. This document
+   does not make that decision.
+2. **Historicalized-plan acceptance process:** if SOP-recorded acceptance is
+   required, authorize a separate governance process for historicalized plans.
+   Do not reopen Plan 03, edit `.agent-sdlc/archive/`, or create a replacement
+   `acceptance_decisions.jsonl`.
+3. **Residual-risk disposition:** decide each item in §Residual-risk disposition.
+   Accepting a residual risk is an authorization decision; this record does not
+   make it.
+
+### Three separate claims
+
+1. **Approved LLM02 implementation is complete.** Yes, within the approved
+   Plan 08 A+B scope plus PR #349.
+2. **Scoped security verification is complete.** Yes for the five tool paths on
+   Linux (deterministic and live), the macOS live campaign, and deterministic
+   boundary tests. No for Linux live retrieval and notification and for a live
+   re-run of the #349 prompt fix.
+3. **Full LLM02 security coverage and governance acceptance are not established.**
+   Yes. Residual gaps remain and no per-criterion acceptance is recorded.
+
+### Recommended disposition
+
+Recommended, subject to the operator's decision: accept the approved
+implementation and scoped verification as sufficient for the approved A+B plus
+#349 scope; record the four observed residual exposures and the unverified sinks
+as accepted residual risk only if the operator explicitly decides to do so;
+otherwise leave acceptance incomplete. Do not claim full LLM02 coverage or
+universal disclosure prevention.
+
+
 ## Exact next action
 
-The operator names the designated approver and decides whether to accept the
-campaign for `DISCLOSE-003`. Until that record exists, the matrix keeps the live
-row at `OBSERVED` and the plan's live acceptance incomplete.
+The designated approver must choose one of the decisions in §Required human
+decisions. Until an authorized acceptance decision exists, the matrix keeps the
+live row at `OBSERVED`, the user-prompt fix at `VERIFIED (deterministic)`, and
+Plan 03 acceptance at `NEEDS_HUMAN`. No acceptance is recorded by this request.

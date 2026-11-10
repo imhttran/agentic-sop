@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + live campaign) | Not general DLP; fix not re-run live |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns) | Not general DLP; four Linux residual exposures; acceptance `NEEDS_HUMAN` |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -46,18 +46,26 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   `copy_file` (Plan 08 A+B). Since the task-input fix, the whole user prompt
   (`userPrompt`: task, caller input, output requirements) passes the same
   model-input redaction (`TestUserPromptRedactsTaskAndInput`). Diagnostics and
-  notifications are redacted. A live extraction campaign ran 7 of 7 cases.
-  Evidence: [llm02-disclosure.md](llm02-disclosure.md).
+  notifications are redacted. A macOS live extraction campaign ran 7 of 7 cases;
+  a Linux live tool-path campaign ran 17 cases (7 protected, 6 positive controls,
+  4 residual exposures). Evidence: [llm02-disclosure.md](llm02-disclosure.md) and
+  [llm02-acceptance-request.md](llm02-acceptance-request.md).
 - **Not covered, and why:**
-  - The live campaign recorded disclosure of a credential-shaped canary placed
-    in context. That run predates the task-input fix and has not been re-run, so
-    the fix is verified deterministically only.
+  - The live campaigns predate the task-input fix; that fix is verified
+    deterministically only and was not re-run live.
   - Context that reaches the model by another route than the user prompt or a
     tool result (for example a system prompt) is not redacted.
   - Redaction is pattern-based, not general DLP, so secrets in an unknown
-    format can pass.
-  - Linux live is `NOT_RUN`.
-  - The designated approver has not recorded acceptance (an operator action).
+    format can pass. The Linux live campaign observed unknown-format values in an
+    ordinary file, SAFE command output, and a diff reaching the model.
+  - A pre-existing hardlink with an ordinary name bypassed the lexical credential
+    path denial; the recognised shape was still redacted.
+  - Linux live retrieval and notification sinks are `NOT_RUN`.
+  - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
+    provider retention remain separate boundaries.
+  - The designated approver has not recorded per-criterion acceptance; the final
+    closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE` is not
+    acceptance.
 
 ### LLM03 Supply Chain — partial
 
