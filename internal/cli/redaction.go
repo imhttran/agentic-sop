@@ -5,7 +5,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/imhttran/agentic-sop/internal/handoff"
 	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
@@ -18,11 +17,7 @@ import (
 // rewrite the repository diff or implementation report: those are evidence, and
 // altering them could hide what actually happened.
 func redactDiagnosticText(s string) string {
-	if s == "" {
-		return s
-	}
-	s = handoff.Redact(s, os.Environ())
-	return redact.ShapesValues(s, redact.Fixed("[redacted]"))
+	return redact.ModelInput(s, os.Environ())
 }
 
 // redactAcceptanceOutput redacts captured acceptance-check output without

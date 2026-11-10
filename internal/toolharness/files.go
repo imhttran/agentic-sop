@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/sensitivepath"
 )
 
 // stateDBRel is SOP's workflow database, relative to the repository root. It is
@@ -35,6 +37,9 @@ func (h *Harness) readFile(args map[string]any) (string, error) {
 	p, err := h.resolveArg(args, "path", true, accessRead)
 	if err != nil {
 		return "", err
+	}
+	if sensitivepath.IsToolReadDenied(p.rel) {
+		return "", fmt.Errorf("%w: %s", ErrSensitivePath, p.rel)
 	}
 	info, err := os.Stat(p.abs)
 	if err != nil {
@@ -156,6 +161,9 @@ func (h *Harness) copyFile(args map[string]any) (string, error) {
 	src, err := h.resolveArg(map[string]any{"path": source, "root": args["source_root"]}, "path", true, accessRead)
 	if err != nil {
 		return "", err
+	}
+	if sensitivepath.IsToolReadDenied(src.rel) {
+		return "", fmt.Errorf("%w: %s", ErrSensitivePath, src.rel)
 	}
 	dst, err := h.resolveArg(map[string]any{"path": dest}, "path", true, accessWrite)
 	if err != nil {
@@ -293,6 +301,24 @@ func (h *Harness) listFiles(args map[string]any) (string, error) {
 	return b.String(), nil
 }
 
+// sensitiveToolRead reports whether a file under base is a credential-bearing
+// path denied by the approved model-input policy. It checks the lexical path and
+// the resolved symlink target, so a harmless link name cannot bypass the denial.
+// A target outside base is treated as sensitive for this read-only search.
+func (h *Harness) sensitiveToolRead(base, abs string) bool {
+	if sensitivepath.IsToolReadDenied(relFrom(base, abs)) {
+		return true
+	}
+	real, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return false
+	}
+	if !pathWithin(real, base) {
+		return true
+	}
+	return sensitivepath.IsToolReadDenied(relFrom(base, real))
+}
+
 // searchFiles reports matching lines under a starting path.
 func (h *Harness) searchFiles(args map[string]any) (string, error) {
 	pattern, _ := args["pattern"].(string)
@@ -304,6 +330,9 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	if sensitivepath.IsToolReadDenied(start.rel) {
+		return "", fmt.Errorf("%w: %s", ErrSensitivePath, start.rel)
+	}
 	base := start.root
 
 	var matches []string
@@ -312,12 +341,12 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 			return nil // skip unreadable entries
 		}
 		if d.IsDir() {
-			if p != start.abs && (d.Name() == ".git" || d.Name() == stateDirRel || h.sameAsStateDir(p)) {
+			if p != start.abs && (d.Name() == ".git" || d.Name() == stateDirRel || h.sameAsStateDir(p) || sensitivepath.IsToolReadDenied(relFrom(base, p))) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
-		if h.isProtectedPath(relFrom(base, p)) || h.isProtectedReal(p) {
+		if h.isProtectedPath(relFrom(base, p)) || h.isProtectedReal(p) || h.sensitiveToolRead(base, p) {
 			return nil
 		}
 		info, err := d.Info()

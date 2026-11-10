@@ -46,7 +46,7 @@ func TestOWASPLLM08ReportStructure(t *testing.T) {
 		"## Confirmed defects and fixes",
 		"## Criterion-to-evidence mapping",
 		"## Verification record",
-		"## Tool-output credential policy (decision required)",
+		"## Tool-output credential policy (A+B implemented)",
 		"## Live extraction outcomes",
 		"## Residual risks and bounded claims",
 		"## Live-evaluation limitations",
@@ -60,14 +60,22 @@ func TestOWASPLLM08ReportStructure(t *testing.T) {
 	if strings.Contains(report, "prompts cannot be extracted") || strings.Contains(report, "prompts are unextractable") {
 		t.Error("report claims prompts cannot be extracted")
 	}
-	// The tool-output section is a GAP with an open decision, not an implemented
-	// control. These are deliverable text guards, not behavioral evidence.
-	if !strings.Contains(report, "PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md") {
-		t.Error("report does not link the model-input credential policy proposal")
+	// The tool-output section records the approved A+B implementation. These are
+	// deliverable text guards, not behavioral evidence.
+	for _, claim := range []string{
+		"PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md",
+		"TestModelInputToolBoundaries",
+		"TestCredentialPathDenialAndBoundaryDivision",
+		"TestModelInputRedactsKnownEnvAndShapes",
+		"TestToolOutputEnvCanaryDenied",
+	} {
+		if !strings.Contains(report, claim) {
+			t.Errorf("report is missing the model-input credential evidence %q", claim)
+		}
 	}
-	for _, claim := range []string{"tool output is redacted", "credential files are blocked"} {
+	for _, claim := range []string{"general DLP is implemented", "all credential formats are detected", "model output is not persisted"} {
 		if strings.Contains(report, claim) {
-			t.Errorf("report claims an unimplemented tool-output control: %q", claim)
+			t.Errorf("report makes an unbounded model-input claim: %q", claim)
 		}
 	}
 }

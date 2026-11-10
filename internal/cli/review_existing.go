@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/git"
+	"github.com/imhttran/agentic-sop/internal/sensitivepath"
 )
 
 // Bounded committed-content review context.
@@ -170,58 +171,7 @@ func includeCommittedReviewPath(path string, reports ...string) bool {
 	if isSOPPath(clean, reports...) {
 		return false
 	}
-	return !isSensitiveReviewPath(clean)
-}
-
-// sensitiveReviewDirs are directories whose contents are never review context:
-// cloud, SSH, and similar credential stores.
-var sensitiveReviewDirs = map[string]bool{
-	".aws":    true,
-	".ssh":    true,
-	".kube":   true,
-	".gnupg":  true,
-	"secrets": true,
-}
-
-// sensitiveReviewExtensions are file extensions that denote key material.
-var sensitiveReviewExtensions = map[string]bool{
-	".pem": true, ".key": true, ".p12": true, ".pfx": true, ".keystore": true, ".jks": true,
-}
-
-// isSensitiveReviewPath reports whether a repository-relative path names a
-// sensitive file: a file in a credential directory, a well-known credential file
-// (.env, .npmrc, .netrc, an SSH private key, a credentials file), key material, or
-// a name that begins with "secret". It is deliberately conservative, because an
-// excluded path is merely absent from review context whereas an included secret
-// would be disclosed to a reviewer and to the review provider.
-func isSensitiveReviewPath(path string) bool {
-	slash := filepath.ToSlash(path)
-	segments := strings.Split(slash, "/")
-	for _, segment := range segments[:len(segments)-1] {
-		if sensitiveReviewDirs[strings.ToLower(segment)] {
-			return true
-		}
-	}
-	base := segments[len(segments)-1]
-	lower := strings.ToLower(base)
-	if sensitiveReviewDirs[lower] || sensitiveReviewExtensions[strings.ToLower(filepath.Ext(base))] {
-		return true
-	}
-	switch {
-	case lower == ".env", strings.HasPrefix(lower, ".env."):
-		return true
-	case lower == ".npmrc", lower == ".netrc", lower == ".git-credentials":
-		return true
-	case strings.HasPrefix(lower, "credentials"):
-		return true
-	case strings.HasPrefix(lower, "id_rsa"), strings.HasPrefix(lower, "id_dsa"),
-		strings.HasPrefix(lower, "id_ecdsa"), strings.HasPrefix(lower, "id_ed25519"):
-		return true
-	case strings.HasPrefix(lower, "secret"), strings.HasSuffix(lower, ".secret"),
-		strings.Contains(lower, ".secret."):
-		return true
-	}
-	return false
+	return !sensitivepath.IsReviewSensitive(clean)
 }
 
 // looksBinary mirrors the Git adapter's binary heuristic (a NUL byte in the first
