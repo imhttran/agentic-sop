@@ -159,10 +159,9 @@ live-producer claim.
   `NEEDS_HUMAN`, and broader LLM02 coverage is `OPEN`. The residual-risk decision
   matrix records that the PR #376 review did not approve Option C as it stands;
   the review direction is a credential read-deny rule in the opt-in
-  `run_command` sandbox plus a cheap `Nlink > 1` check, not implemented. A
+  `run_command` sandbox plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial) and the `Nlink > 1` check is not. A
   separate residual is that SAFE `go test` can run model-written code that reads
-  `$HOME` credential files directly; the sandbox restricts writes and network,
-  not reads, so it works with or without it. It is not accepted. The remaining
+  `$HOME` credential files directly; with the sandbox off (the default) nothing restricts those reads; with it on, macOS denies them (Linux `NOT_RUN`). It is not accepted. The remaining
   recommendations are `INVESTIGATE` for
   unknown-format and artifact risks, `MITIGATE` for notification prose,
   `INVESTIGATE`/`ACCEPT_PROPOSED` for

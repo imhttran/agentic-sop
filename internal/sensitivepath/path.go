@@ -10,6 +10,7 @@ package sensitivepath
 
 import (
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -35,9 +36,47 @@ var toolDirs = map[string]bool{
 	".gnupg": true,
 }
 
+// toolFiles are the well-known credential files denied to direct model content
+// tools and hidden from the run_command sandbox. They are ordinary files, so a
+// directory deny would not cover them.
+var toolFiles = map[string]bool{
+	".npmrc":           true,
+	".netrc":           true,
+	".git-credentials": true,
+}
+
 // keyExtensions denote key material. The list is shared by both profiles.
 var keyExtensions = map[string]bool{
 	".pem": true, ".key": true, ".p12": true, ".pfx": true, ".keystore": true, ".jks": true,
+}
+
+// HomeCredentialDirs returns the home-relative credential directories the
+// run_command sandbox hides. It reuses the directories denied to the direct
+// model tools and adds only command-line tool state (.config/gh,
+// .config/gcloud, .azure) that is not repository source. The result is sorted
+// so a sandbox profile is stable.
+func HomeCredentialDirs() []string {
+	dirs := make([]string, 0, len(toolDirs)+3)
+	for d := range toolDirs {
+		dirs = append(dirs, d)
+	}
+	dirs = append(dirs, ".config/gh", ".config/gcloud", ".azure")
+	sort.Strings(dirs)
+	return dirs
+}
+
+// HomeCredentialFiles returns the home-relative credential files the sandbox
+// hides: the well-known files denied to the direct model tools plus Docker's
+// registry credentials, Cargo's credential store, and pip's .pypirc. The result
+// is sorted so a sandbox profile is stable.
+func HomeCredentialFiles() []string {
+	files := make([]string, 0, len(toolFiles)+3)
+	for f := range toolFiles {
+		files = append(files, f)
+	}
+	files = append(files, ".docker/config.json", ".cargo/credentials.toml", ".pypirc")
+	sort.Strings(files)
+	return files
 }
 
 // IsReviewSensitive reports whether a repository-relative path must be excluded
@@ -62,7 +101,7 @@ func IsReviewSensitive(path string) bool {
 	switch {
 	case lower == ".env", strings.HasPrefix(lower, ".env."):
 		return true
-	case lower == ".npmrc", lower == ".netrc", lower == ".git-credentials":
+	case toolFiles[lower]:
 		return true
 	case strings.HasPrefix(lower, "credentials"):
 		return true
@@ -101,7 +140,7 @@ func IsToolReadDenied(path string) bool {
 		return false
 	case lower == ".env", strings.HasPrefix(lower, ".env."):
 		return true
-	case lower == ".npmrc", lower == ".netrc", lower == ".git-credentials":
+	case toolFiles[lower]:
 		return true
 	case strings.HasPrefix(lower, "credentials"):
 		return true
