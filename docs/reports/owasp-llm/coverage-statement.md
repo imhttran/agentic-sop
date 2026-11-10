@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for tool results (trace + live campaign) | Task/input context unredacted; not general DLP |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + live campaign) | Not general DLP; fix not re-run live |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -43,13 +43,17 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 - **Covered:** tool results and tool errors are redacted before they reach the
   model, and credential paths are denied for `read_file`, `search_files` and
-  `copy_file` (Plan 08 A+B). Diagnostics and notifications are redacted. A live
-  extraction campaign ran 7 of 7 cases. Evidence:
-  [llm02-disclosure.md](llm02-disclosure.md).
+  `copy_file` (Plan 08 A+B). Since the task-input fix, the whole user prompt
+  (`userPrompt`: task, caller input, output requirements) passes the same
+  model-input redaction (`TestUserPromptRedactsTaskAndInput`). Diagnostics and
+  notifications are redacted. A live extraction campaign ran 7 of 7 cases.
+  Evidence: [llm02-disclosure.md](llm02-disclosure.md).
 - **Not covered, and why:**
-  - Task and caller input (`req.Task`, `req.Input`), retrieval and handoff
-    context enter the prompt without redaction. The live campaign recorded
-    disclosure of a credential-shaped canary placed in that context.
+  - The live campaign recorded disclosure of a credential-shaped canary placed
+    in context. That run predates the task-input fix and has not been re-run, so
+    the fix is verified deterministically only.
+  - Context that reaches the model by another route than the user prompt or a
+    tool result (for example a system prompt) is not redacted.
   - Redaction is pattern-based, not general DLP, so secrets in an unknown
     format can pass.
   - Linux live is `NOT_RUN`.
