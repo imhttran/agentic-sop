@@ -313,6 +313,16 @@ bound (`finish_reason` / `done_reason` `length`) returns an incomplete response;
 SOP rejects it as a failure instead of accepting it as a complete answer or
 dispatching a partial tool call.
 
+`SOP_AGENT_MAX_TOTAL_TOKENS` is an optional per-run token budget: the input plus
+output tokens every model call under one task or prompt may use together. It is
+checked before each request. Once the provider-reported total reaches the budget,
+the next request is refused with `token budget exceeded`. When set, it fails
+closed if usage cannot be measured (a provider that did not report usage, or a
+run without usage accounting) and on a malformed or non-positive value. The
+request that crosses the budget still completes, so a run can exceed it by one
+request's input plus `SOP_AGENT_MAX_OUTPUT_TOKENS`. It caps tokens, not money.
+Unset means no budget.
+
 `SOP_AGENT_COMMAND_TIMEOUT` bounds one `SOP_AGENT_COMMAND` invocation with the same
 Go-duration syntax and `120s` default as the provider timeouts. The command's
 stdout is retained up to the shared 10 MiB response bound and its stderr is bounded

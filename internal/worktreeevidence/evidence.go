@@ -226,17 +226,24 @@ func outside(worktree, archive string) (bool, error) {
 	return !inside, nil
 }
 
+// canonical resolves symlinks on the deepest existing ancestor of path and
+// rejoins the rest, so a not-yet-created archive several levels deep compares
+// against the worktree in the same namespace (macOS /var -> /private/var).
 func canonical(path string) string {
-	if real, err := filepath.EvalSymlinks(path); err == nil {
-		return real
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		return path
 	}
-	if real, err := filepath.EvalSymlinks(filepath.Dir(path)); err == nil {
-		return filepath.Join(real, filepath.Base(path))
+	rest := ""
+	for cur := abs; ; cur = filepath.Dir(cur) {
+		if real, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(real, rest)
+		}
+		if filepath.Dir(cur) == cur {
+			return abs
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
 	}
-	if abs, err := filepath.Abs(path); err == nil {
-		return abs
-	}
-	return path
 }
 
 func copyTree(src, dst string) error {

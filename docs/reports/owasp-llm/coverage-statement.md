@@ -25,7 +25,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM07 | Plan 08 / LLM08 | System Prompt Leakage (repo: Hidden Context Exposure) | Partial | Prompt secrecy is not claimed by design |
 | LLM08 | Plan 09 / LLM09 | Vector and Embedding Weaknesses | Covered for the shipped (disabled-by-default) path | Live RAG / PostgreSQL / embeddings `NOT_RUN` |
 | LLM09 | Plan 07 / LLM07 | Misinformation | Partial, by scope | Factual correctness of model output is out of scope |
-| LLM10 | Plan 06 / LLM06 | Unbounded Consumption | Covered for time, output and process bounds | Dollar or spend caps do not exist |
+| LLM10 | Plan 06 / LLM06 | Unbounded Consumption | Covered for time, output, process and opt-in token budgets | No dollar cap (no pricing data) |
 
 ## Per risk
 
@@ -192,9 +192,16 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     and the test runner has a 30-minute default timeout.
 
   Evidence: [llm06-consumption.md](llm06-consumption.md).
-- **Not covered, and why:** SOP has no token or spend accounting that it
-  enforces before a request is sent, so no dollar-cap claim is made. Usage the
-  provider reports is recorded, not enforced.
+  - An opt-in per-run token budget, `SOP_AGENT_MAX_TOTAL_TOKENS`, is checked
+    before every model request. It refuses the request once the run's reported
+    input plus output tokens reach the budget, and fails closed when usage can't
+    be measured (`TestCheckTokenBudget`, `TestTokenBudgetRefusesBeforeDispatch`).
+- **Not covered, and why:**
+  - The budget is off by default.
+  - It is a token cap, not a dollar cap: SOP has no pricing data.
+  - It is checked before each request, so the request that crosses the budget
+    still completes. The overshoot is bounded by one request's input plus
+    `SOP_AGENT_MAX_OUTPUT_TOKENS`.
 
 ## Open items that need an operator
 
@@ -209,4 +216,5 @@ These cannot be closed by code in this repository:
 
 ## Code follow-ups worth doing
 
-- Spend accounting before requests are sent, if a dollar cap is needed.
+- A dollar cap, if needed: it would need per-model pricing on top of the token
+  budget.

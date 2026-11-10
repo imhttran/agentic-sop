@@ -135,6 +135,9 @@ func (c *OpenAICompatible) Generate(ctx context.Context, request Request) (Respo
 	if err := request.Validate(); err != nil {
 		return Response{}, err
 	}
+	if err := perf.CheckTokenBudget(ctx); err != nil {
+		return Response{}, fmt.Errorf("%s %s: %w", c.id, request.Capability, err)
+	}
 
 	body := chatRequest{
 		Model:     c.model,
