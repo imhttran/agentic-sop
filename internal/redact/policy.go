@@ -139,21 +139,36 @@ func credentialKey(key string) bool {
 // tokenValue, and secretKey covered while leaving ordinary words such as
 // secretary, keyboard, monkey, and publicKey untouched.
 func credentialKeySegmentsFrom(key string) []string {
+	seen := make(map[string]bool)
 	var segments []string
-	var current strings.Builder
-	flush := func() {
-		if current.Len() == 0 {
+	add := func(segment string) {
+		segment = strings.TrimRight(strings.ToLower(segment), "0123456789")
+		if segment == "" || seen[segment] {
 			return
 		}
-		segment := strings.TrimRight(strings.ToLower(current.String()), "0123456789")
-		if segment != "" {
-			segments = append(segments, segment)
+		seen[segment] = true
+		segments = append(segments, segment)
+	}
+
+	// Keep the original separator-delimited, case-normalized segments. This is
+	// what makes db_passWord and APIKey match the same way they did before the
+	// camel-case split was added.
+	for _, segment := range strings.FieldsFunc(key, func(r rune) bool { return !isKeyRune(r) }) {
+		add(segment)
+	}
+
+	// Add camel-case segments so tokenValue and secretKey are recognized even
+	// when there is no separator.
+	var current strings.Builder
+	flush := func() {
+		if current.Len() > 0 {
+			add(current.String())
+			current.Reset()
 		}
-		current.Reset()
 	}
 	runes := []rune(key)
 	for i, r := range runes {
-		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+		if !isKeyRune(r) {
 			flush()
 			continue
 		}
@@ -167,6 +182,10 @@ func credentialKeySegmentsFrom(key string) []string {
 	}
 	flush()
 	return segments
+}
+
+func isKeyRune(r rune) bool {
+	return r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9'
 }
 
 // contextualValues applies the bounded key-based rule line by line. It preserves

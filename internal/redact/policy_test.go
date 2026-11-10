@@ -21,6 +21,8 @@ func TestModelInputWithPolicyContextualKeys(t *testing.T) {
 		{"suffixed api key", "api_key2=opaque-live-value-42", "api_key2=[redacted]"},
 		{"camel token", "tokenValue=opaque-live-value-42", "tokenValue=[redacted]"},
 		{"camel secret key", "secretKey=opaque-live-value-42", "secretKey=[redacted]"},
+		{"mixed-case password", "db_passWord=opaque-live-value-42", "db_passWord=[redacted]"},
+		{"mixed-case api key", "apiKey=opaque-live-value-42", "apiKey=[redacted]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
