@@ -38,6 +38,7 @@ const (
 )
 
 func TestLiveLLM02C1HardlinkAliases(t *testing.T) {
+	t.Skip("historical pre-Option-C hardlink campaign; superseded by TestLiveLLM02OptionCPhase1")
 	if os.Getenv("SOP_LIVE_CHILD") == "1" {
 		runLLM02HardlinkChild(t)
 		return

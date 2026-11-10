@@ -1,9 +1,12 @@
 # Proposal — LLM02 hardlink/path-identity protection
 
-Status: **PROPOSAL — NOT_APPROVED. Decision required. No production enforcement is included.**
+Status: **APPROVED — Option C Phase 1 IMPLEMENTED and VERIFIED on Linux. macOS and Windows remain follow-ups.**
 Date: 2026-11-10.
-Baseline: `origin/main` at `53f4c10` (after PR #373).
+Baseline: `origin/main` at `823f753` (after PR #376); implementation tested at `4911f916`.
 Evidence: Linux `amd64`, Go 1.27.1.
+Decision memory: repository identity `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`,
+source `operator:option-c-phase1-2026-11-10` (recorded with `sop memory add`; it is bound to the
+pre-implementation state, so it may appear stale after implementation. Staleness is not revocation.)
 Related: [llm02-c1-hardlink-verification.md](../reports/owasp-llm/llm02-c1-hardlink-verification.md),
 [llm02-c1-hardlink-campaign.json](../reports/owasp-llm/llm02-c1-hardlink-campaign.json)
 (SHA-256 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`,
@@ -12,6 +15,29 @@ tested revision `ed1ba11`), [llm02-disclosure.md](../reports/owasp-llm/llm02-dis
 [gap-register-20261109.md](../reports/owasp-llm/gap-register-20261109.md),
 [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md),
 and PR #373.
+
+## Recorded authorization and implementation
+
+- **Decision:** `APPROVE_OPTION_C_PHASE_1`.
+- **Authority:** explicit repository-operator authorization in the implementation
+  instruction; recorded with `sop memory add --scope repository`.
+- **Decision-memory identity:** repository
+  `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`,
+  source `operator:option-c-phase1-2026-11-10`.
+- **Scope:** Linux Phase 1; `read_file`, `search_files`, and `copy_file` source;
+  bounded protected-inode registry, descriptor identity verification, and
+  merge-on-refresh. Existing A+B and C1 behavior is unchanged. No new
+  configuration or default was added. macOS and Windows are excluded follow-ups.
+- **Implementation:** [`internal/toolharness/identity.go`](../../internal/toolharness/identity.go),
+  wired into the three content tools in `internal/toolharness/files.go`.
+- **Tested revision:** `4911f916`.
+- **Live evidence:** [`llm02-option-c-phase1-campaign.json`](../reports/owasp-llm/llm02-option-c-phase1-campaign.json),
+  SHA-256 `fcc621ef272dbb12791facf9d2254c098816a1eb673176be5137fcac9f5bfc92`;
+  6 requests, 5 protected, 1 positive control, 0 residual; 5/5 confinement
+  probes.
+- **Residual risks:** not accepted. Ordinary-file unlisted values, outside-
+  workspace origins, tracked aliases through Git output, artifacts, retrieval,
+  notifications, provider retention, and general DLP remain outside this scope.
 
 ## Problem
 
@@ -278,7 +304,10 @@ Exact approval requested:
 > C1, artifacts, retrieval, notifications, provider behavior, or general DLP,
 > and it does not claim complete credential protection.
 
-Status: **NOT_APPROVED.** No implementation is included in this proposal.
+Status: **APPROVED and implemented on Linux Phase 1 at `4911f916`; macOS and
+Windows validation remain follow-ups.** The decision-memory record is the source
+of authority; this proposal remains the design record. The options below are
+retained as the evaluation history.
 
 ## Residual limitations
 

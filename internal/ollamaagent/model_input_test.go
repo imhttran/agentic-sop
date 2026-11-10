@@ -2,6 +2,7 @@ package ollamaagent
 
 import (
 	"context"
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -157,9 +158,9 @@ func runGitForTest(t *testing.T, dir string, args ...string) {
 // TestModelInputToolBoundariesResidualLimits pins the documented limits of the
 // approved A+B policy rather than claiming broader protection. It is an
 // observation test: an unknown-format value in an ordinary file, diff, or SAFE
-// command output still reaches the model, and a pre-existing hardlink with an
-// ordinary name bypasses the lexical credential-path denial. Recognised
-// credential shapes in those same paths are still redacted.
+// command output still reaches the model, while a pre-existing hardlink with an
+// ordinary name is now denied by the Option C Phase 1 identity policy.
+// Recognised credential shapes in the ordinary paths are still redacted.
 func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
 	const (
 		opaqueFile    = "opaque-live-value-42"
@@ -194,20 +195,16 @@ func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
 		t.Fatalf("the documented unknown-format gap is no longer observed; update the policy evidence: %q", msg)
 	}
 
-	// Documented limit: a hardlink with an ordinary name bypasses the lexical
-	// path denial. The recognised shape is still redacted at the model boundary,
-	// but the unknown-format value is not.
+	// The Option C Phase 1 identity policy denies a pre-existing hardlink with
+	// an ordinary name. This is a path-level refusal, not C1 redaction.
 	out, err = h.Run(ctx, toolharness.ToolReadFile, map[string]any{"path": "hardlink.txt"})
-	if err != nil {
-		t.Fatalf("read_file hardlink.txt: %v", err)
+	if !errors.Is(err, toolharness.ErrSensitivePath) {
+		t.Fatalf("read_file hardlink.txt: want identity denial, got err=%v out=%q", err, out)
+	}
+	if out != "" {
+		t.Fatalf("read_file hardlink.txt returned content despite the identity denial: %q", out)
 	}
 	msg := toolResultMessage(toolharness.ToolReadFile, out, err)
-	if strings.Contains(msg, llm08EnvCanary) {
-		t.Fatalf("recognised credential shape was not redacted through a hardlink: %q", msg)
-	}
-	if !strings.Contains(msg, opaqueEnv) {
-		t.Fatalf("the documented hardlink/unknown-format gap is no longer observed; update the policy evidence: %q", msg)
-	}
 
 	// Documented limit: diff content is covered by shape redaction only.
 	out, err = h.Run(ctx, toolharness.ToolGitDiff, nil)

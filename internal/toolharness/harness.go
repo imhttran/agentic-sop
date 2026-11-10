@@ -156,6 +156,11 @@ type Harness struct {
 	// isolation is the sandbox detail of the current run_command, for the audit.
 	isolation string
 
+	// identity is the bounded protected-inode registry used by the content
+	// tools to deny ordinary-name hardlink aliases. It is built lazily once per
+	// harness and merged after content writes.
+	identity *identityRegistry
+
 	// snaps holds each file's content from just before the current invocation
 	// first changed it, keyed by absolute path, so restore_file undoes only this
 	// invocation's edits (see BeginInvocation).
@@ -219,10 +224,11 @@ func New(root string, cfg Config, auditor Auditor) *Harness {
 		cfg.MaxOutputBytes = DefaultConfig().MaxOutputBytes
 	}
 	h := &Harness{
-		root:    canonical,
-		cfg:     cfg,
-		auditor: auditor,
-		roots:   []authorizedRoot{{path: canonical, mode: RootReadWrite, primary: true}},
+		root:     canonical,
+		cfg:      cfg,
+		auditor:  auditor,
+		identity: &identityRegistry{},
+		roots:    []authorizedRoot{{path: canonical, mode: RootReadWrite, primary: true}},
 	}
 	for _, r := range cfg.Roots {
 		p := canonicalDir(strings.TrimSpace(r.Path))
@@ -377,8 +383,9 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 // failure, using sentinel errors so classification does not depend on wording.
 func isDenial(err error) bool {
 	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath) ||
-		errors.Is(err, ErrSensitivePath) || errors.Is(err, errUnauthorizedRoot) ||
-		errors.Is(err, errReadOnlyRoot) || errors.Is(err, errIsolationUnavailable)
+		errors.Is(err, ErrSensitivePath) || errors.Is(err, ErrIdentityRegistryUnavailable) ||
+		errors.Is(err, errUnauthorizedRoot) || errors.Is(err, errReadOnlyRoot) ||
+		errors.Is(err, errIsolationUnavailable)
 }
 
 // RecordDenied records a refusal the caller decided (for example a
@@ -450,6 +457,9 @@ func (h *Harness) restoreFile(_ context.Context, args map[string]any) (string, e
 	if !ok {
 		return fmt.Sprintf("%s was not changed by this invocation; nothing to restore", p.rel), nil
 	}
+	if err := h.ensureIdentityRegistry(); err != nil {
+		return "", err
+	}
 	if !snap.exists {
 		if err := os.Remove(p.abs); err != nil && !os.IsNotExist(err) {
 			return "", fmt.Errorf("restore_file: %w", err)
@@ -459,6 +469,7 @@ func (h *Harness) restoreFile(_ context.Context, args map[string]any) (string, e
 	if err := os.WriteFile(p.abs, snap.data, snap.mode); err != nil {
 		return "", fmt.Errorf("restore_file: %w", err)
 	}
+	h.refreshIdentity(p)
 	return fmt.Sprintf("restored %s to its content before this invocation", p.rel), nil
 }
 

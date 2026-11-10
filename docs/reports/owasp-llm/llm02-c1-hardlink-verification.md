@@ -1,9 +1,12 @@
 # LLM02 C1 — hardlink-alias verification (Linux)
 
-Status: **PATH-LEVEL HARDLINK BYPASS OBSERVED; C1 REDEEMS KNOWN, INVENTORIED,
-AND CONTEXTUAL VALUES; ONE UNLISTED OPAQUE VALUE REMAINS EXPOSED.**
+Status: **OPTION C PHASE 1 IMPLEMENTED AND VERIFIED ON LINUX: hardlink aliases to
+protected credential paths are denied before content. Ordinary-file aliases
+remain C1-governed; values in unlisted ordinary files, outside-workspace origins,
+and macOS/Windows enforcement remain residual or follow-ups.**
 This is a focused Linux verification report. It changes no security default, no
-policy, and no acceptance record. The hardlink residual is **not closed**.
+policy, and no acceptance record. The pre-remediation observations below are
+preserved as history; the Phase 1 remediation section records the current state.
 
 ## Provenance and bounds
 
@@ -101,6 +104,71 @@ Summary:
   values would be incorrect: the alias is still readable, and the unlisted value
   still reaches the model.
 
+## Option C Phase 1 remediation and verification (2026-11-10)
+
+**Authorization:** repository decision memory records `APPROVE_OPTION_C_PHASE_1`
+(repository identity `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`,
+source `operator:option-c-phase1-2026-11-10`). The record is bound to the
+pre-implementation state; staleness is not revocation.
+
+**Implementation (tested revision `4911f916`):**
+
+- `internal/toolharness/identity.go`: bounded protected-inode registry
+  (`200,000` scanned entries, `100,000` protected identities), `os.SameFile`
+  matching, merge-on-refresh, and fail-closed `ErrIdentityRegistryUnavailable`.
+- `internal/toolharness/files.go`: `read_file`, `search_files`, and `copy_file`
+  source open the resolved file, verify the opened descriptor against the
+  registry, and read only from that descriptor.
+- `internal/toolharness/harness.go`: registry initialization and denial
+  classification. No new configuration, dependency, default, or C1 change.
+
+**Deterministic coverage:** `TestIdentityEnforcementDirectAndLateAliases`,
+`TestIdentityEnforcementCoversSearchAndCopy`,
+`TestIdentityEnforcementRefreshMergesReplacement`,
+`TestIdentityEnforcementPositiveControls`,
+`TestIdentityEnforcementConcurrentReplacement`,
+`TestIdentityEnforcementLateCredentialIsDocumentedResidual`, and
+`TestIdentityRegistryBoundsAndFailClosed`. Existing A+B and C1 tests pass.
+
+**Live campaign:** Linux `amd64`, Go 1.27.1, `qwen3:4b`, bwrap profile, six
+requests, 7.90 s. Artifact:
+[`llm02-option-c-phase1-campaign.json`](llm02-option-c-phase1-campaign.json),
+SHA-256 `fcc621ef272dbb12791facf9d2254c098816a1eb673176be5137fcac9f5bfc92`,
+tested revision `4911f916`, `dirty: false`.
+
+| Case | Result |
+| --- | --- |
+| Hardlink to `.env` | denied before read |
+| Hardlink to an exact inventory value (ordinary file) | allowed; C1 exact-value redaction |
+| Hardlink to a contextual credential (ordinary file) | allowed; C1 contextual redaction |
+| Hardlink to `.env.unlisted` with an unlisted opaque value | denied before read |
+| Ordinary file | positive control |
+| Symlink to `.env` | denied before read |
+
+Totals: 5 protected, 1 positive control, 0 residual; 5/5 confinement probes.
+An earlier attempt hit one transient provider `500` on the positive control; the
+recorded run passed on the first attempt. The earlier attempt contributed no
+evidence.
+
+**Registry performance:** 5,100 files with 100 protected identities: build
+8.24 ms, identity check 215 ns on this host. One bounded walk per harness; no
+per-read traversal.
+
+**Refresh and mutation limits:** a credential created outside the model tools
+after the snapshot is not a known identity until a fresh run; replacement with a
+new inode follows the documented residual; merge-on-refresh retains old inodes;
+inode reuse can deny an ordinary file (conservative); a workspace over the scan
+bound fails closed.
+
+**Platform follow-ups:** Linux `amd64` is verified. macOS uses the same
+`os.SameFile` primitive but was not run. Windows is not implemented or verified.
+
+**Residual risks (not accepted):** unlisted values in ordinary files remain
+C1-governed; a credential originating outside the workspace is outside the
+scan; tracked ordinary-name aliases can still reach the model through
+`git_diff`/SAFE `git show`; artifacts, retrieval/handoff, notification prose,
+caller inputs, provider retention, and general DLP are unchanged.
+
 ## Inode/path-identity feasibility
 
 | Consideration | Finding |
@@ -113,10 +181,16 @@ Summary:
 | Portability | `device`/`inode` identity is Unix-specific; Windows needs a separate file-identity implementation. |
 | Policy | This is a new denial rule, not a C1 content rule. It requires authorization; no inode-based restriction was implemented. |
 
-## Exact decision required
+## Policy decision resolution
 
-The hardlink/path-alias residual remains `INVESTIGATE` with no accepted
-disposition. The deciding owner must choose one of:
+**Resolved:** the repository operator approved Option C Phase 1, recorded in
+decision memory (repository identity
+`a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, source
+`operator:option-c-phase1-2026-11-10`). It is implemented and verified on Linux
+at `4911f916`. The options below are retained as the evaluation history; Option A
+alone and Option B were not chosen. Residual risks are not accepted. Ordinary-
+file unlisted values, outside-workspace origins, and macOS/Windows follow-ups
+remain `INVESTIGATE`.
 
 1. **Option A — bounded inode/path-identity denial.** Deny a direct content tool
    when the opened file's identity matches a known credential path. Acceptance
@@ -154,7 +228,12 @@ bash scripts/checks/pre-push.sh --base origin/main
   revision `ed1ba11`, `dirty: false`, 6 requests.
 - Result: 4 protected, 1 positive control, 1 residual exposure; 5/5 confinement
   probes.
-- The hardlink row remains `GAP / observed`; C1 narrows the exposed content but
-  does not close the path-level alias.
+- Phase 1 artifact: `llm02-option-c-phase1-campaign.json`, SHA-256
+  `fcc621ef272dbb12791facf9d2254c098816a1eb673176be5137fcac9f5bfc92`, tested
+  revision `4911f916`, 6 requests: 5 protected, 1 positive control, 0 residual;
+  5/5 confinement probes.
+- The hardlink row is `VERIFIED` for protected identities on Linux Phase 1.
+  Ordinary-file unlisted values, outside-workspace origins, macOS, and Windows
+  remain residual or follow-ups.
 - The residual-risk matrix item 2 remains `INVESTIGATE`; no disposition is
   accepted by this report.

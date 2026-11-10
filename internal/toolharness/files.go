@@ -50,33 +50,34 @@ func (h *Harness) readFile(args map[string]any) (string, error) {
 	if p.readDenied() {
 		return "", fmt.Errorf("%w: %s", ErrSensitivePath, p.rel)
 	}
-	info, err := os.Stat(p.abs)
+	f, err := h.openVerifiedContent(p.abs, p.rel)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	info, err := f.Stat()
 	if err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
 	if info.IsDir() {
 		return "", fmt.Errorf("read_file: %s is a directory", p.rel)
 	}
-	result, err := readFileBounded(p.abs, info.Size(), h.cfg.MaxOutputBytes)
+	result, err := readFileBoundedFile(f, info.Size(), h.cfg.MaxOutputBytes)
 	if err != nil {
 		return "", fmt.Errorf("read_file: %w", err)
 	}
 	return result, nil
 }
 
-// readFileBounded reads at most limit bytes plus one sentinel byte, so a large
-// file is never fully allocated before truncation. For a regular file the stat
-// size gives the exact truncated count; for a growing or special file the marker
+// readFileBoundedFile reads at most limit bytes plus one sentinel byte from the
+// already-verified descriptor, so the identity decision and the content read
+// cannot be separated by a path replacement. For a regular file the stat size
+// gives the exact truncated count; for a growing or special file the marker
 // reports the cut without claiming a total it did not measure.
-func readFileBounded(path string, size int64, limit int) (string, error) {
+func readFileBoundedFile(f *os.File, size int64, limit int) (string, error) {
 	if limit <= 0 {
 		limit = DefaultConfig().MaxOutputBytes
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
 	data, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
 	if err != nil {
 		return "", err
@@ -125,6 +126,7 @@ func (h *Harness) writeFile(args map[string]any, mustNotExist bool) (string, err
 	if err := os.WriteFile(p.abs, []byte(content), 0o644); err != nil {
 		return "", fmt.Errorf("write %s: %w", p.rel, err)
 	}
+	h.refreshIdentity(p)
 	return fmt.Sprintf("wrote %d bytes to %s", len(content), p.rel), nil
 }
 
@@ -188,7 +190,19 @@ func (h *Harness) copyFile(args map[string]any) (string, error) {
 	if info.IsDir() {
 		return "", fmt.Errorf("copy_file: %s is a directory", src.rel)
 	}
-	data, err := os.ReadFile(src.abs)
+	f, err := h.openVerifiedContent(src.abs, src.rel)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = f.Close() }()
+	info, err = f.Stat()
+	if err != nil {
+		return "", fmt.Errorf("copy_file: read %s: %w", src.rel, err)
+	}
+	if info.IsDir() {
+		return "", fmt.Errorf("copy_file: %s is a directory", src.rel)
+	}
+	data, err := io.ReadAll(f)
 	if err != nil {
 		return "", fmt.Errorf("copy_file: read %s: %w", src.rel, err)
 	}
@@ -205,6 +219,7 @@ func (h *Harness) copyFile(args map[string]any) (string, error) {
 	if err := os.WriteFile(dst.abs, data, 0o644); err != nil {
 		return "", fmt.Errorf("copy_file: write %s: %w", dst.rel, err)
 	}
+	h.refreshIdentity(dst)
 	return fmt.Sprintf("copied %d bytes from %s to %s", len(data), src.rel, dst.rel), nil
 }
 
@@ -244,6 +259,7 @@ func (h *Harness) rewriteFile(args map[string]any) (string, error) {
 		if err := os.WriteFile(p.abs, []byte(strings.ReplaceAll(text, from, to)), 0o644); err != nil {
 			return "", fmt.Errorf("rewrite_file: %w", err)
 		}
+		h.refreshIdentity(p)
 		return fmt.Sprintf("rewrote %d occurrence(s) of %q in %s", n, from, p.rel), nil
 	case strings.Contains(text, to):
 		return fmt.Sprintf("already rewritten: %s has no %q (idempotent no-op)", p.rel, from), nil
@@ -257,6 +273,12 @@ func (h *Harness) rewriteFile(args map[string]any) (string, error) {
 func (h *Harness) deleteFile(args map[string]any) (string, error) {
 	p, err := h.resolveArg(args, "path", true, accessWrite)
 	if err != nil {
+		return "", err
+	}
+	// Snapshot protected identities before a model mutation can remove a denied
+	// name. Otherwise delete_file(.env) before the first content read would let
+	// a pre-existing ordinary-name alias survive the scan.
+	if err := h.ensureIdentityRegistry(); err != nil {
 		return "", err
 	}
 	info, err := os.Lstat(p.abs)
@@ -358,12 +380,28 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 		if h.isProtectedPath(relFrom(base, p)) || h.isProtectedReal(p) || h.sensitiveToolRead(base, p) {
 			return nil
 		}
-		info, err := d.Info()
-		if err != nil || info.Size() > maxSearchFileBytes {
+		f, openErr := h.openVerifiedContent(p, relFrom(base, p))
+		if openErr != nil {
+			if errors.Is(openErr, ErrIdentityRegistryUnavailable) {
+				return openErr
+			}
+			// A denied alias or an ordinary unreadable entry (for example a
+			// dangling symlink) is skipped so one bad entry does not abort the
+			// whole search.
 			return nil
 		}
-		data, err := os.ReadFile(p)
-		if err != nil || bytes.IndexByte(data, 0) >= 0 {
+		info, statErr := f.Stat()
+		if statErr != nil {
+			_ = f.Close()
+			return nil
+		}
+		if info.IsDir() || info.Size() > maxSearchFileBytes {
+			_ = f.Close()
+			return nil
+		}
+		data, readErr := io.ReadAll(io.LimitReader(f, maxSearchFileBytes+1))
+		_ = f.Close()
+		if readErr != nil || len(data) > maxSearchFileBytes || bytes.IndexByte(data, 0) >= 0 {
 			return nil // unreadable or binary
 		}
 		for i, line := range strings.Split(string(data), "\n") {
