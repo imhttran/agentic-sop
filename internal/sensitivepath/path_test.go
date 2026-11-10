@@ -56,10 +56,12 @@ func TestEnvCredentialPaths(t *testing.T) {
 		"GNUPGHOME":                   "/env/gnupg",
 		"CLOUDSDK_CONFIG":             "/env/gcloud",
 		"GH_CONFIG_DIR":               "/env/gh",
+		"AZURE_CONFIG_DIR":            "/env/azure",
 		"XDG_CONFIG_HOME":             "/env/xdg",
 		"DOCKER_CONFIG":               "/env/docker",
 		"CARGO_HOME":                  "/env/cargo",
 		"NPM_CONFIG_USERCONFIG":       "/env/npmrc",
+		"NETRC":                       "/env/netrc",
 		"AWS_SHARED_CREDENTIALS_FILE": "/env/aws-creds",
 		"AWS_CONFIG_FILE":             "/env/aws-config",
 		"KUBECONFIG":                  "/env/kube1" + string(os.PathListSeparator) + "/env/kube2",
@@ -69,7 +71,7 @@ func TestEnvCredentialPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantDirs := []string{"/env/gnupg", "/env/gcloud", "/env/gh", "/env/xdg/gh", "/env/xdg/gcloud"}
+	wantDirs := []string{"/env/gnupg", "/env/gcloud", "/env/gh", "/env/azure", "/env/xdg/gh", "/env/xdg/gcloud"}
 	if !reflect.DeepEqual(dirs, wantDirs) {
 		t.Fatalf("dirs = %v, want %v", dirs, wantDirs)
 	}
@@ -77,7 +79,7 @@ func TestEnvCredentialPaths(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	wantFiles := []string{"/env/aws-config", "/env/aws-creds", "/env/cargo/credentials.toml", "/env/docker/config.json", "/env/kube1", "/env/kube2", "/env/npmrc"}
+	wantFiles := []string{"/env/aws-config", "/env/aws-creds", "/env/cargo/credentials", "/env/cargo/credentials.toml", "/env/docker/config.json", "/env/kube1", "/env/kube2", "/env/netrc", "/env/npmrc", "/env/xdg/git/credentials"}
 	if !reflect.DeepEqual(files, wantFiles) {
 		t.Fatalf("files = %v, want %v", files, wantFiles)
 	}

@@ -798,7 +798,7 @@ The fixed list also resolves the credential locations named by environment
 variables: `KUBECONFIG` (a path list), `DOCKER_CONFIG` (its `config.json`),
 `GNUPGHOME`, `CLOUDSDK_CONFIG`, `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` (its `gh` and
 `gcloud`), `CARGO_HOME` (`credentials.toml`), `NPM_CONFIG_USERCONFIG`,
-`AWS_SHARED_CREDENTIALS_FILE`, and `AWS_CONFIG_FILE`. Missing entries are skipped;
+`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AZURE_CONFIG_DIR`, `NETRC`, and `XDG_CONFIG_HOME/git/credentials`. Missing entries are skipped;
 a set but relative value fails closed like an unresolvable home.
 
 The child environment is scrubbed inside the sandbox: `sandboxEnv` drops every
@@ -884,6 +884,11 @@ found in the keychain.` (exit status 44). Denying `com.apple.securityd` or
   `pgrp`; `parent` and `ancestors` are unbound variables), and
   `(deny sysctl-read)` aborts the Go runtime (`fatal error: failed to get system
 page size`).
+- Writable-location rename (known limit, not fixed): the denies match paths. A
+  credential that lives inside a writable directory (the repository root or the
+  temp directory, for example `KUBECONFIG` pointing into the repo) can be renamed,
+  or its parent directory moved, and then read under the new path. Credentials
+  under `$HOME` are unaffected because the sandbox cannot write there.
 - A hardlink alias created _before_ the run remains readable through
   `read_file`, `search_files`, and `copy_file`, because those tools run in the SOP
   process, not the sandbox. `TestHardlinkAliasToolExposure` pins it; this work

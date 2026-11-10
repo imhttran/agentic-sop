@@ -85,7 +85,7 @@ func HomeCredentialFiles() []string {
 // the sandbox fails closed rather than guessing what it named.
 func EnvCredentialDirs(getenv func(string) string) ([]string, error) {
 	return envPaths(getenv, []envPath{
-		{name: "GNUPGHOME"}, {name: "CLOUDSDK_CONFIG"}, {name: "GH_CONFIG_DIR"},
+		{name: "GNUPGHOME"}, {name: "CLOUDSDK_CONFIG"}, {name: "GH_CONFIG_DIR"}, {name: "AZURE_CONFIG_DIR"},
 		{name: "XDG_CONFIG_HOME", rels: []string{"gh", "gcloud"}},
 	})
 }
@@ -95,9 +95,10 @@ func EnvCredentialDirs(getenv func(string) string) ([]string, error) {
 // value is an error, as with EnvCredentialDirs.
 func EnvCredentialFiles(getenv func(string) string) ([]string, error) {
 	files, err := envPaths(getenv, []envPath{
-		{name: "AWS_SHARED_CREDENTIALS_FILE"}, {name: "AWS_CONFIG_FILE"}, {name: "NPM_CONFIG_USERCONFIG"},
+		{name: "AWS_SHARED_CREDENTIALS_FILE"}, {name: "AWS_CONFIG_FILE"}, {name: "NPM_CONFIG_USERCONFIG"}, {name: "NETRC"},
+		{name: "XDG_CONFIG_HOME", rels: []string{"git/credentials"}},
 		{name: "DOCKER_CONFIG", rels: []string{"config.json"}},
-		{name: "CARGO_HOME", rels: []string{"credentials.toml"}},
+		{name: "CARGO_HOME", rels: []string{"credentials.toml", "credentials"}},
 	})
 	if err != nil {
 		return nil, err

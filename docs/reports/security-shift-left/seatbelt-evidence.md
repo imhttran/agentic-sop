@@ -161,7 +161,7 @@ print, copy, or hardlink a credential it cannot read.
 variables: `KUBECONFIG` (a path list), `DOCKER_CONFIG` (its `config.json`),
 `GNUPGHOME`, `CLOUDSDK_CONFIG`, `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` (its `gh` and
 `gcloud`), `CARGO_HOME` (`credentials.toml`), `NPM_CONFIG_USERCONFIG`,
-`AWS_SHARED_CREDENTIALS_FILE`, and `AWS_CONFIG_FILE`. Missing entries are skipped;
+`AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AZURE_CONFIG_DIR`, `NETRC`, and `XDG_CONFIG_HOME/git/credentials`. Missing entries are skipped;
 a set but relative value fails closed like an unresolvable home.
 
 The child environment is scrubbed: `sandboxEnv` drops every entry whose name
@@ -246,6 +246,12 @@ block it for any supported target: `self`, `same-sandbox`, `others`, `children`,
 and `pgrp` all parse and all still leaked; `parent` and `ancestors` are unbound
 variables. `(deny sysctl-read)` aborts the Go runtime (`fatal error: failed to
 get system page size`). No fix is applied.
+
+Writable-location rename: **known limit, not fixed.** The denies match paths, so
+a credential inside a writable directory (the repository root or the temp
+directory, for example `KUBECONFIG` pointing into the repo) can be renamed, or
+its parent directory moved, and then read. Credentials under `$HOME` are
+unaffected because the sandbox cannot write there.
 
 Residual measured, not fixed: a hardlink alias created before the run is still
 readable through `read_file`, because the file tools run in the SOP process, not

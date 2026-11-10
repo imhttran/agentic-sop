@@ -73,7 +73,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     credential-shaped env values, resolves the credential locations named by
     `KUBECONFIG`, `DOCKER_CONFIG`, `GNUPGHOME`, `CLOUDSDK_CONFIG`,
     `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `CARGO_HOME`, `NPM_CONFIG_USERCONFIG`,
-    `AWS_SHARED_CREDENTIALS_FILE`, and `AWS_CONFIG_FILE`, and denies the
+    `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AZURE_CONFIG_DIR`, `NETRC`, and `XDG_CONFIG_HOME/git/credentials`, and denies the
     `com.apple.SecurityServer` mach lookup so the Keychain is not reachable
     (Linux `NOT_RUN`). The read-deny rule is implemented opt-in (macOS
     `VERIFIED`, Linux `NOT_RUN`; see

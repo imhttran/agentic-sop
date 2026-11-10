@@ -143,6 +143,10 @@ type credentialPath struct {
 // are skipped: there is nothing to hide. A home directory that cannot be
 // resolved, or a set relative override, fails closed, matching the rest of the
 // sandbox, so the command never runs unsandboxed.
+// ponytail: the denies match paths, so a credential inside a writable dir (the
+// root or temp, for example KUBECONFIG pointing into the repo) can be renamed,
+// or its parent dir moved, and then read; failing closed on such paths would
+// close that if it ever matters.
 func homeCredentials() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
