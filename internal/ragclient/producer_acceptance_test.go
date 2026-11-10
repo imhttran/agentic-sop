@@ -32,8 +32,10 @@ func requireEnv(t *testing.T, name string) string {
 }
 
 // TestAcceptanceProducerContract runs the real rag-template retrieval producer
-// through this client and verifies the rag-retrieval/v1 contract and corpus
-// isolation end to end. It fails closed on any missing dependency.
+// through this client and verifies the rag-retrieval/v1 single-corpus contract and
+// allowlist rejection end to end. It does not create two disposable corpora or
+// overlapping canaries, so it does not establish cross-corpus producer isolation.
+// It fails closed on any missing dependency.
 func TestAcceptanceProducerContract(t *testing.T) {
 	exe := requireEnv(t, "RAG_PRODUCER")
 	requireEnv(t, "DATABASE_URL")
