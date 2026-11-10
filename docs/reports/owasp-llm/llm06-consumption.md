@@ -68,6 +68,7 @@ calls; `bytes` = captured output; `count` = lifecycle attempts.
 | RAG producer exec | s / request | `ragclient.Config.Timeout` | 3 s | `context.WithTimeout`; `procgroup.Bind` kills the group | Not persisted | Producer and its group on unix |
 | Provider request timeout | s / model call | `internal/agent/provider.go`; provider-specific timeout envs | 120 s | `http.Client.Timeout` | Not persisted | A provider may continue billing after the client cancels |
 | Provider response bound | bytes / model call | `internal/agent/provider.go` | 10 MiB | `io.LimitReader` in `postJSON` | Not persisted | The read is bounded; provider generation is not |
+| Run token budget | input+output tokens / task or prompt | `perf.CheckTokenBudget`; `SOP_AGENT_MAX_TOTAL_TOKENS` | unset (no budget) | before every model request in `agent` (OpenAI-compatible, Ollama) and `ollamaagent` | Not persisted | Fails closed when usage is unmeasurable; the crossing request still completes |
 | Provider output-token bound | tokens / request | `agent.DefaultMaxOutputTokens`; `SOP_AGENT_MAX_OUTPUT_TOKENS` overrides | 16384 | request construction before dispatch: `max_tokens` / `options.num_predict` | Not persisted | A provider-reported `length` stop is rejected as incomplete (§2.9) |
 | Provider retry bound | attempts / chat turn | `internal/ollamaagent/ollama.go` | 3 (initial + 2) | `chatWithFormat` before any tool executes | Not persisted | Retries multiply provider calls but are fixed and bounded |
 | ACP frame bound | bytes / frame | `internal/acp` | 1 MiB | transport frame reader | Not persisted | Oversize frame is rejected |
@@ -425,8 +426,10 @@ process-group and signal tests.
    counts `retrievalboundary.EstimateTokens` for the prompt and output, so the
    "missing provider usage is zero" concern does not apply to that path; in-flight
    requests are tracked as uncertain.
-7. **No monetary accounting.** There is no pricing table, pre-dispatch
-   reservation, or hard dollar cap. This report makes no monetary-cap claim.
+7. **No monetary accounting.** There is no pricing table or hard dollar cap.
+   The opt-in token budget (`SOP_AGENT_MAX_TOTAL_TOKENS`) is checked before each
+   request, but it counts tokens, not money, and does not reserve a request's
+   cost in advance. This report makes no monetary-cap claim.
 8. **No graceful escalation phase exists on unix.** The subprocess contract sends
    process-group SIGKILL on timeout or cancellation; it does not send SIGTERM first.
    `TestExecTimeoutKillsSigtermIgnoringDescendant` confirms a SIGTERM-ignoring

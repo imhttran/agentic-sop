@@ -103,6 +103,9 @@ func (o *Ollama) Generate(ctx context.Context, request Request) (Response, error
 		PromptEvalCount *int            `json:"prompt_eval_count"`
 		EvalCount       *int            `json:"eval_count"`
 	}
+	if err := perf.CheckTokenBudget(ctx); err != nil {
+		return Response{}, err
+	}
 	if err := postJSON(ctx, o.client, o.baseURL+"/api/chat", "", body, &out); err != nil {
 		return Response{}, fmt.Errorf("ollama %s: %w", request.Capability, withTimeoutHint(err, EnvOllamaTimeout))
 	}

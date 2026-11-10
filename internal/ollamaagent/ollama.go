@@ -223,6 +223,9 @@ func (c *ollamaClient) chatOnce(ctx context.Context, messages []chatMessage, for
 	// across several tool calls. The harness only consumes content and speaks a
 	// one-object-per-turn protocol, so reasoning is disabled: it is discarded
 	// anyway and otherwise produces unusable empty turns.
+	if err := perf.CheckTokenBudget(ctx); err != nil {
+		return "", nil, err
+	}
 	think := false
 	body, err := json.Marshal(ollamaChatRequest{
 		Model:    c.model,
