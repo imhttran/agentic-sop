@@ -184,9 +184,11 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   (PR #343) and bubblewrap on Linux (PR #354). PR #356 gives every isolated run a
   throwaway Go build cache and keeps the shared module cache read-only.
 - Plan 03 has bounded macOS and Linux observations, model-input redaction, and
-  separately recorded bounded-evidence acceptance. C1 contextual redaction is
-  implemented but remains opt-in; full per-criterion acceptance and residual-risk
-  disposition remain open.
+  separately recorded bounded-evidence acceptance. C1 contextual redaction plus seven
+  approved known credential formats are implemented but remain opt-in; full
+  per-criterion acceptance and unaccepted residual risks remain open.
+- Plan 08 notification events now redact exact environment-secret values and
+  credential-like resolution commands before persistence or delivery (PR #393).
 - Plan 05 per-row digests and chunk-hash verification, Plan 04 scanner pins, and
   Plan 09 retrieval-boundary reconciliation are merged. Live producer-side RAG
   isolation remains `NOT_RUN`, and retrieval remains disabled by default.
