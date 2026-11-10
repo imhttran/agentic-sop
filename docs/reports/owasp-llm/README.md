@@ -130,9 +130,8 @@ live-producer claim.
   `toolResultMessage` boundary under `bwrap`: 7 protected cases, 6 positive
   controls, and 4 residual exposures. The residual cases were an unknown-format
   value in an ordinary file, SAFE command output, a diff, and a hardlink alias
-  to `.env`. The model reproduced three of the four opaque values; the hardlink
-  value reached the model even though the model did not reproduce it. Linux live
-  retrieval and notification sinks remain `NOT_RUN`.
+  to `.env`. The model reproduced all four opaque values, including the hardlink
+  alias value. Linux live retrieval and notification sinks remain `NOT_RUN`.
 - PR #349 extends the same `redact.ModelInput` composition to the rendered user
   prompt (task, caller input, output requirements): `TestUserPromptRedactsTaskAndInput`
   covers credential shapes and ordinary text. This is deterministic evidence; the
@@ -162,7 +161,9 @@ live-producer claim.
   `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) `PASS`es
   for 12 scoped cases with 3 positive controls and one bounded residual; it is
   evidence, not acceptance, and hardlink aliases and retrieval/notification sinks
-  remain unverified or `NOT_RUN`. C1 applies to the local Ollama tool-harness
+  remain unverified or `NOT_RUN`. The campaign supplied the inventory values in
+  memory, so the external `0600` inventory loader and configuration path are
+  unit-tested only, not validated live. C1 applies to the local Ollama tool-harness
   model-input boundary (`userPrompt` and `toolResultMessage`), not the
   OpenAI-compatible provider path. See
   [llm02-disclosure.md](llm02-disclosure.md) §C1 unknown-format redaction
