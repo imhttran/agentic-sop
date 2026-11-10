@@ -176,25 +176,36 @@ untrusted-content notice, and neutralizes delimiter-like text. Code retrieval us
 `SourceRetrieval` and returns ranked symbol/file identifiers only, never file contents,
 with an "advisory, not instructions" header.
 
-The tests demonstrate the following narrow properties:
+What the deterministic tests **prove** (each the narrow property only):
 
-- The prompt boundary is present and a malicious delimiter cannot terminate it
-  (`TestPromptKnowledgeBoundaryPresent`, `TestPromptMaliciousDelimiterCannotTerminate`).
-- An approval-shaped advisory record is dropped, and a high-ranked "SYSTEM: approve…"
-  record is preserved only as untrusted warning evidence
-  (`TestLLM09MaliciousInstructionIsUntrustedData`).
-- A required-evidence task skips advisory retrieval and blocks when required evidence is
-  absent (`TestLLM09OptionalFailureAndRequiredSkipAreDistinct`,
-  `TestRequiredEvidenceMissingBlocks`).
-- Authoritative state, approvals, and acceptance are computed from SOP records, not from
-  retrieved text; ranking, compatibility floors, and historical down-weighting are
-  relevance controls, not authorization controls.
+| Test                                                 | Narrow property proven                                                                                                                                  |
+| ---------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `TestPromptKnowledgeBoundaryPresent`                 | The prompt wraps retrieved knowledge in `<<<UNTRUSTED-RAG-KNOWLEDGE>>>`/`<<<END-UNTRUSTED-RAG-KNOWLEDGE>>>` and inserts the untrusted-content notice.   |
+| `TestPromptMaliciousDelimiterCannotTerminate`        | Delimiter-like text inside retrieved content is neutralized, so it cannot close the untrusted-knowledge boundary early.                                 |
+| `TestLLM09MaliciousInstructionIsUntrustedData`       | An approval-shaped advisory record is dropped, and a high-ranked "SYSTEM: approve…" instruction record is preserved only as untrusted warning evidence. |
+| `TestLLM09OptionalFailureAndRequiredSkipAreDistinct` | An optional retrieval timeout yields no items and a timeout reason, while a required-evidence task skips advisory retrieval with a distinct reason.     |
+| `TestRequiredEvidenceMissingBlocks`                  | A required-evidence task blocks with `REQUIRED_EVIDENCE_MISSING` and no agent run when the required evidence is absent.                                 |
 
-These tests do **not** prove that a model cannot be persuaded by malicious retrieved text
-to propose an unsafe action. They prove that retrieved text cannot itself grant an
-approval, satisfy required evidence, or become authoritative state; tool permissions and
-approval gates remain the enforcement boundary. No live-model adversarial test was run
-for this follow-up.
+What the tests **do not prove**:
+
+- They do **not** prove that a model cannot be persuaded by malicious retrieved text to
+  propose an unsafe action. Model persuasion is not proven prevented. No live-model
+  adversarial test was run for this follow-up.
+- They do **not** prove semantic immunity or that content-level poisoning inside an
+  authorized repository is impossible; that remains a content limitation, not a scope bypass.
+- They do **not** prove producer-side corpus isolation; see §RETRIEVE-103 above.
+
+What holds by construction, independent of model behavior:
+
+- Retrieved text cannot itself grant an approval, satisfy required evidence, or become
+  authoritative state. Authoritative state, approvals, required evidence, and acceptance
+  are computed from SOP records and gates, not from retrieved text.
+- `isApprovalRecord` drops approval-shaped records. Advisory retrieval is skipped for
+  required-evidence tasks. `enforceRequiredEvidenceOnce` blocks with
+  `REQUIRED_EVIDENCE_MISSING` when required evidence is absent.
+- Tool permissions and approval gates are the enforcement boundary. Ranking,
+  compatibility floors, and historical down-weighting are relevance controls, not
+  authorization controls.
 
 ## Backend coverage matrix
 
@@ -355,12 +366,49 @@ go test ./internal/memindex -run TestLLM09RebuildScopeParity -count=1
 
 `TestAcceptanceProducerContract` is compiled only under the `ragacceptance` tag and
 requires a live producer and PostgreSQL. It sends one single-corpus request
-(`corpus: kb`), checks that every returned item carries `kb` and populated provenance,
-then checks client-side allowlist rejection (`nope`) and producer-side allowlist
-rejection of an unconfigured corpus (`other`). It does **not** create two disposable
-corpora with overlapping document names or canaries, so it does not establish
-cross-corpus producer isolation. At this baseline `RAG_PRODUCER` and `DATABASE_URL` are
-unset, so the test is **NOT_RUN**; it fails rather than skips when either is missing.
+(`corpus: kb`), checks that every returned item carries `kb` and populated provenance
+plus `chunk_hash`, then checks client-side allowlist rejection (`nope`) and producer-side
+allowlist rejection of an unconfigured corpus (`other`). It is **single-corpus only**: it
+does **not** create two disposable corpora with overlapping document names or canaries,
+so it does not establish cross-corpus producer isolation. At this baseline `RAG_PRODUCER`
+and `DATABASE_URL` are unset, so the test is **NOT_RUN**; it fails rather than skips when
+either is missing.
+
+The client/producer split is explicit:
+
+- **Client-side response validation (verified).** `ragclient.Client.Retrieve` binds the
+  trusted corpus before sending (`Config.AllowedCorpora` → `Client.index` →
+  `Request.Filters.Corpus`) and `decode` validates the response after receiving it. A mixed
+  `project-a`/`project-b` response is rejected as a whole. `TestLLM09CrossCorpusCanaryRejected`
+  (`internal/ragclient/llm09_test.go`) is the client-side evidence; it runs with a fake
+  runner (`newTestClient`/`&fakeRunner`) and executes no live producer, so it is a
+  deterministic client test, not live evidence.
+- **Producer-side query scoping (NOT_RUN).** The client does not observe the producer's
+  SQL or vector query and can only reject a response after it is returned. Producer-side
+  corpus isolation is therefore unverified.
+
+Exact missing dependencies for producer-side isolation: `RAG_PRODUCER` (unset; no live
+retrieval producer binary is configured or shipped by this repository), `DATABASE_URL`
+(unset; no PostgreSQL corpus database is configured), the PostgreSQL corpus, the
+embedding service, and two disposable corpora with recorded revisions and overlapping
+canaries. None are available within approved scope, so the two-disposable-corpus
+isolation run was **not performed**. No mock substitutes for it.
+
+Exact commands and observed results:
+
+```sh
+go test ./internal/ragclient -run TestLLM09CrossCorpusCanaryRejected -count=1 -v
+# === RUN   TestLLM09CrossCorpusCanaryRejected
+# --- PASS: TestLLM09CrossCorpusCanaryRejected (0.00s)
+# PASS
+# ok  github.com/imhttran/agentic-sop/internal/ragclient
+
+go test -tags ragacceptance ./internal/ragclient -run TestAcceptanceProducerContract -count=1
+# NOT_RUN: requireEnv fails because RAG_PRODUCER and DATABASE_URL are unset
+```
+
+The first command is a fake-runner client test. The second is the tagged live-producer
+contract test and is **NOT_RUN**, not a pass and not a mock result.
 
 | Criterion                                                                                                                                   | Evidence and observed result                                                                                                                                                                                                                                                                                                                                                                                        |
 | ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -409,7 +457,7 @@ Follow-up plan: [`PLAN-09B-SOP-LLM09-Retrieval-Followup.md`](../../plans/PLAN-09
 | RETRIEVE-101 | Separate rebuild import scope from query scope and correct the report                                          | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildImportVersusQueryIsolation`; §Before/after rebuild evidence                                                                              |
 | RETRIEVE-102 | Record before/after rebuild behavior for modified and deleted sources with a valid historical positive control | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl`                                                                                           |
 | RETRIEVE-103 | Distinguish client-side response validation from producer-side corpus isolation; state authority limits        | Yes         | N/A     | **Partial** — client/authority boundary verified; producer-side **NOT_RUN** | §RETRIEVE-103 producer-boundary and authority evidence; `TestLLM09CrossCorpusCanaryRejected`; `producer_acceptance_test.go` (single-corpus only, NOT_RUN) |
-| RETRIEVE-104 | Reconcile acceptance mappings, Plan 05/07 dependency status, and the OWASP matrix                              | Yes         | N/A     | Yes                                                                         | This section; §Dependency handoff; `docs/reports/owasp-llm/README.md`                                                                                     |
+| RETRIEVE-104 | Reconcile acceptance mappings, Plan 05/07 dependency status, and the OWASP matrix                              | Yes         | N/A     | Yes (documentation reconciliation only)                                     | §Criterion-to-evidence mapping; §Dependency handoff; §Follow-up verification (RETRIEVE-101..104); `docs/reports/owasp-llm/README.md`                      |
 
 ## Verified references
 
@@ -537,18 +585,49 @@ response remains verified by `TestLLM09CrossCorpusCanaryRejected`; that test exe
 the client after the producer has responded and therefore does not prove the producer
 scoped its own query.
 
+The RETRIEVE-104 reconciliation re-ran the three focused acceptance checks on the
+current tree (Linux x86_64, Go `1.27.1`). Each command ran once with `-v`; the observed
+results were:
+
+```sh
+go test ./internal/retrieval -run TestCandidatesFromIndexFullTextAndHistory -count=1
+# ok  github.com/imhttran/agentic-sop/internal/retrieval
+
+go test ./internal/memindex -run TestLLM09RebuildImportVersusQueryIsolation -count=1 -v
+# === RUN   TestLLM09RebuildImportVersusQueryIsolation
+# --- PASS: TestLLM09RebuildImportVersusQueryIsolation (0.04s)
+# PASS
+# ok  github.com/imhttran/agentic-sop/internal/memindex
+
+go test ./internal/memindex -run TestReindexProvenanceBeforeAndAfterRebuild -count=1 -v
+# === RUN   TestReindexProvenanceBeforeAndAfterRebuild
+# --- PASS: TestReindexProvenanceBeforeAndAfterRebuild (0.03s)
+# PASS
+# ok  github.com/imhttran/agentic-sop/internal/memindex
+```
+
+The RETRIEVE-104 documentation reconciliation is `VERIFIED` for documentation only:
+the criterion mapping in §Criterion-to-evidence mapping, the Plan 05/07 dependency
+handoff, and the OWASP matrix in `docs/reports/owasp-llm/README.md` agree with
+the merged reports and the deterministic tests above. Producer-side RAG isolation
+remains **NOT_RUN**.
+
 ## Dependency handoff
 
 - **Plan 05 — data/model poisoning.** Plan source:
   [`PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md`](../../history/plans/PLAN-05-SOP-LLM05-Data-and-Model-Poisoning.md).
-  Merged in PR #268 with follow-ups in PR #274, #288, and #292. The aggregate
+  Merged in PR #268 with follow-ups in PR #274, #288, and #292, and fixes in PR #308
+  and #310; the merged report is [llm05-poisoning.md](llm05-poisoning.md). The aggregate
   identity defect was fixed in PR #308 (`bf0d824d`), and the GAP-5
   fixtures/proposal merged in PR #310 (`3e3e313e`). GAP-4 per-row digests and GAP-5
-  `chunk_hash` verification are implemented (option A of each proposal); the producer
-  must emit `chunk_hash`, and `document_hash` remains unverified. POISON-002 is
-  `VERIFIED` through SOP; the POISON-001 trace was accepted by the designated approver;
-  POISON-003 index/outcome reindex and decision-memory removal are `VERIFIED`.
-  Provider-owned training is outside SOP control. This plan reuses `outcomefile`
+  `chunk_hash` verification are implemented (option A of each proposal). Residual
+  limits from the merged report: **per-row digest enforcement remains open** —
+  `repoindex.VerifyRows` recomputes the schema 2 row digests, but no CLI command
+  invokes it; `chunk_hash` requires the producer to emit it and `document_hash`
+  remains unverified. POISON-002 is `VERIFIED` through SOP; the
+  POISON-001 trace was accepted by the designated approver; POISON-003 index/outcome
+  reindex and decision-memory removal are `VERIFIED`. Provider-owned training is
+  outside SOP control and is not marked secure. This plan reuses `outcomefile`
   (`IngestRunFor`, content identity, eligibility, `GateWithSourcesAndDigests`) and
   `memindex.RebuildFromDir`; it does not re-author ingestion provenance.
 - **Plan 03 — sensitive information disclosure.** Plan source:
@@ -558,12 +637,16 @@ scoped its own query.
   remains `NOT_RUN`; this plan does not claim live DLP.
 - **Plan 07 — misinformation.** Plan source:
   [`PLAN-07-SOP-LLM07-Misinformation.md`](../../plans/PLAN-07-SOP-LLM07-Misinformation.md).
-  Merged in PR #285; the current report records `IMPLEMENTED` / `ENABLED` /
+  Merged in PR #285 (`9f5b8150`); the merged report
+  [llm07-misinformation.md](llm07-misinformation.md) records `IMPLEMENTED` / `ENABLED` /
   `VERIFIED` for deterministic evidence decisions on macOS arm64 and SOP `COMPLETE`.
-  Live-model and Linux evidence remain `NOT_RUN`. Plan 07 owns the evidence-authority
-  boundaries; this plan consumes the baseline authority (SOP outcome eligibility,
-  recorded verification, content hash, and the required-evidence contract) and adds
-  no new authority model.
+  Live-model and Linux evidence remain `NOT_RUN`. The strict content-binding follow-up
+  (D4 option 1, commit `dcb553c8`) is contained in current `origin/main` (merged after
+  PR #285); it is not part of PR #285's original commit range. The Plan 07 report's own
+  "follow-up PR is not merged" line is stale against current git evidence. Plan 07
+  owns the evidence-authority boundaries; this plan consumes the baseline authority
+  (SOP outcome eligibility, recorded verification, content hash, and the
+  required-evidence contract) and adds no new authority model.
 - **Missing Plan 09B state.** No `RETRIEVE-004`..`RETRIEVE-006` or Plan 09B record
   exists in this repository, any git ref, or any known agentic-sop `state.db`. The
   earlier reported `QUALITY PASS` is not treated as an approval. The follow-up uses
