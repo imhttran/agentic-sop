@@ -85,8 +85,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `5ff526a`; a bounded Linux `amd64` live campaign (PR #370, campaign revision
     `c5df5f0`, artifact SHA-256
     `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) `PASS`es
-    for 12 scoped cases with 3 positive controls and one bounded residual. C1
-    applies to the local Ollama tool-harness boundary (`userPrompt`,
+    for 12 scoped cases with 3 positive controls and one bounded residual. The
+    live campaign supplied inventory values in memory; external `0600` inventory
+    loading and the configuration path are unit-tested only, not validated live.
+    C1 applies to the local Ollama tool-harness boundary (`userPrompt`,
     `toolResultMessage`), not the OpenAI-compatible provider path. The repository
     configuration remains disabled, so the pre-C1 residual remains until an
     operator enables it, and hardlink aliases and retrieval/notification sinks

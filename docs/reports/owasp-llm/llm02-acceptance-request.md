@@ -487,9 +487,11 @@ Satisfied by the merged evidence:
 1. Deterministic build, vet, focused C1 tests, and the pre-push gate recorded
    `PASS` on Linux `amd64` at the campaign baseline `5ff526a`.
 2. A bounded opt-in C1 live campaign through the real Ollama tool harness with a
-   real local model and an external `0600` inventory. With C1 enabled, an
-   unknown-format value in an ordinary file, SAFE command output, and a diff were
-   redacted; an exact inventory value was redacted; and the ordinary-content,
+   real local model. The campaign supplied the inventory values in memory
+   (`redact.Policy{Enabled: true, Values: [...]}`), so it did not exercise the
+   external `0600` inventory loader or the configuration path. With C1 enabled,
+   an unknown-format value in an ordinary file, SAFE command output, and a diff
+   were redacted; the supplied value was redacted; and the ordinary-content,
    `.env.example` placeholder, and SAFE-command positive controls remained visible.
    Twelve scoped cases were protected, three positive controls passed, and the
    hardened assertions require each case to have executed before its result is
@@ -500,6 +502,10 @@ Satisfied by the merged evidence:
 
 Remaining untested (not covered by the merged campaign):
 
+- Live verification of external `0600` inventory loading and the
+  `config.RedactionPolicy` path is not exercised by this campaign; only
+  explicitly supplied in-memory values were tested live. Unit tests cover the
+  loader, but no live campaign validates that integration end to end.
 - Hardlink aliases under C1 remain unverified; the campaign does not test them,
   and they stay a documented residual.
 - Linux live retrieval and notification sinks remain `NOT_RUN`; do not extend the

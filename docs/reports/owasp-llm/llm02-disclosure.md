@@ -945,7 +945,10 @@ model-input boundary only — `userPrompt` and `toolResultMessage` (success and
 error) in `internal/ollamaagent`. The OpenAI-compatible provider request path is
 not a C1 boundary in the approved scope, and the system prompt is not redacted.
 A live C1 campaign must therefore exercise the Ollama tool harness, not the
-OpenAI-compatible path.
+OpenAI-compatible path. The merged live campaign supplied inventory values in
+memory (`redact.Policy{Enabled: true, Values: [...]}`); external `0600` inventory
+loading and the configuration path are covered by unit tests, not by live
+evidence.
 
 | Dimension                                 | Status                                                                                                                                                                                              | Evidence                                                                                                                                                                                                                              |
 | ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
