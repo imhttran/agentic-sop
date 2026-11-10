@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -153,7 +154,7 @@ func TestAcceptanceRecoveryAcrossApprovedAttempt(t *testing.T) {
 		t.Fatalf("recovery = %+v, want 0 -> %d for criterion-1", got, task.Attempt)
 	}
 	decisionAfter, err := readAcceptanceDecisions(dir, "T001")
-	if err != nil || len(decisionAfter) != 1 || decisionAfter[0] != decisionBefore[0] {
+	if err != nil || len(decisionAfter) != 1 || !reflect.DeepEqual(decisionAfter[0], decisionBefore[0]) {
 		t.Fatalf("the original decision was rewritten: before=%+v after=%+v err=%v", decisionBefore, decisionAfter, err)
 	}
 	if decisionAfter[0].Attempt != 0 {

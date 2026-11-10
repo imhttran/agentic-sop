@@ -468,10 +468,11 @@ Commands:
   resume    report the next legal action for interrupted work
   continue  check (read-only) whether the active plan is safe to continue via
             sop run: reconcile-before-continue (--check, --json)
-  verify    reprint a task's recorded per-criterion outcome verdict (read-only)
-  outcome   print a task's recorded outcome, or record a designated-approver,
-            criterion-scoped waiver: outcome <task-id> --waive <criterion>
-            --reason R --by NAME [--scope S]
+  verify    reprint a task's recorded per-criterion verdict, or a historicalized
+            plan's acceptance report: verify --plan <PLAN.md> [--archive <dir>] [--json]
+  outcome   print a task outcome, record a waiver, or record a historicalized
+            plan's manual decision, annotation, or check evidence:
+            outcome --plan <PLAN.md> --accept|--annotate|--run-check ...
   version   print the CLI version
   help      show this help
 `)
