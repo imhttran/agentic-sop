@@ -607,3 +607,23 @@ func TestWorkflowBranchCreationFailureLeavesReady(t *testing.T) {
 		t.Errorf("status = %s, want READY (unchanged)", task.Status)
 	}
 }
+
+func TestStatusPathsListsTrackedAndUntracked(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "README.md", "changed\n")
+	writeFile(t, dir, "new.txt", "brand new\n")
+
+	entries, err := New(dir).StatusPaths(context.Background())
+	if err != nil {
+		t.Fatalf("StatusPaths: %v", err)
+	}
+	got := map[string]bool{}
+	for _, e := range entries {
+		got[e.Path] = true
+	}
+	for _, want := range []string{"README.md", "new.txt"} {
+		if !got[want] {
+			t.Fatalf("StatusPaths missing %q: %+v", want, entries)
+		}
+	}
+}

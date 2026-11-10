@@ -27,6 +27,16 @@ const (
 	DecisionReject = "reject"
 )
 
+// EvidenceRef is one artifact the approver reviewed. Historical-plan decisions
+// require verified references; the recorder and the report recompute SHA256 from
+// the actual bytes rather than trusting a supplied value.
+type EvidenceRef struct {
+	Path     string `json:"path"`
+	SHA256   string `json:"sha256"`
+	Revision string `json:"revision,omitempty"`
+	Section  string `json:"section,omitempty"`
+}
+
 // CriterionMapping binds one acceptance criterion to its evidence. It is
 // operator-owned: it is never taken from a model response.
 type CriterionMapping struct {
@@ -48,6 +58,9 @@ type CriterionMapping struct {
 	// means the caller did not provide one (legacy callers); production outcome
 	// derivation always sets it when a manual criterion is mapped.
 	ContentIdentity string `json:"content_identity,omitempty"`
+	// PlanIdentity binds a historical-plan mapping to the immutable archived plan
+	// snapshot. Empty for task-level mappings.
+	PlanIdentity string `json:"plan_identity,omitempty"`
 }
 
 // CheckResult is the recorded execution of one acceptance check.
@@ -90,6 +103,16 @@ type AcceptanceDecision struct {
 	// carry the same non-empty identity; a legacy decision without one requires
 	// re-acceptance against the current content.
 	ContentIdentity string `json:"content_identity,omitempty"`
+	// PlanIdentity binds a historical-plan decision to the immutable archived plan
+	// snapshot. Empty for task-level decisions.
+	PlanIdentity string `json:"plan_identity,omitempty"`
+	// AnnotationID binds a historical-plan decision to the exact manual-evidence
+	// annotation the approver reviewed. Empty when the archived requirement text
+	// itself was accepted.
+	AnnotationID string `json:"annotation_id,omitempty"`
+	// EvidenceRefs are the artifacts whose bytes and hashes the approver reviewed.
+	// Historical-plan decisions require at least one verified reference.
+	EvidenceRefs []EvidenceRef `json:"evidence_refs,omitempty"`
 }
 
 // AcceptanceRecovery is an explicit, append-only record that a human-authorized
@@ -317,7 +340,14 @@ func decisionContentMatches(d AcceptanceDecision, m CriterionMapping) bool {
 		return false
 	}
 	if m.ContentIdentity != "" || d.ContentIdentity != "" {
-		return d.ContentIdentity != "" && d.ContentIdentity == m.ContentIdentity
+		if d.ContentIdentity == "" || d.ContentIdentity != m.ContentIdentity {
+			return false
+		}
+	}
+	if m.PlanIdentity != "" || d.PlanIdentity != "" {
+		if d.PlanIdentity == "" || d.PlanIdentity != m.PlanIdentity {
+			return false
+		}
 	}
 	return true
 }

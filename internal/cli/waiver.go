@@ -128,6 +128,11 @@ func recordedWaiverForTask(projectDir, taskID string) *outcome.Waiver {
 // strictly read-only: it reads the recorded outcome artifact and the append-only
 // waiver audit, and writes nothing — no lifecycle transition, no state mutation.
 func runVerify(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
+	for _, a := range args {
+		if a == "--plan" || strings.HasPrefix(a, "--plan=") {
+			return runHistoricalVerify(args, stdout, stderr, getwd)
+		}
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: sop verify <task-id>")
 		return exitUsage
@@ -155,6 +160,11 @@ func runVerify(args []string, stdout, stderr io.Writer, getwd func() (string, er
 // or a criterion that is not an unmet required criterion is rejected without writing
 // anything: a waiver is never implied and never silently applied.
 func runOutcome(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
+	for _, a := range args {
+		if a == "--plan" || strings.HasPrefix(a, "--plan=") {
+			return runHistoricalOutcome(args, stdout, stderr, getwd)
+		}
+	}
 	taskID, waive, reason, by, scope, accept, evidence := "", "", "", "", "", "", ""
 	for i := 0; i < len(args); i++ {
 		a := args[i]
