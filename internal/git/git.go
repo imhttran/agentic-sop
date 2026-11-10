@@ -403,7 +403,9 @@ func (a *Adapter) AddWorktree(ctx context.Context, path, branch string) error {
 }
 
 // RemoveWorktree removes a linked worktree. It never forces removal of a
-// worktree with uncommitted changes.
+// worktree with uncommitted changes. A relative path is resolved against the
+// adapter directory, the working directory Git runs in, so filesystem checks
+// and Git operate on the same worktree.
 //
 // Before removal it verifies that any ignored .agent-sdlc lifecycle evidence in
 // the worktree has a byte-identical copy under the main repository's
@@ -415,17 +417,36 @@ func (a *Adapter) RemoveWorktree(ctx context.Context, path string) error {
 	if strings.TrimSpace(path) == "" {
 		return errors.New("worktree path is empty")
 	}
-	archiveRoot, err := a.worktreeEvidenceRoot(ctx)
+	resolved, err := a.resolveWorktreePath(path)
 	if err != nil {
 		return fmt.Errorf("remove worktree %s: %w", path, err)
 	}
-	if err := worktreeevidence.Verify(path, archiveRoot); err != nil {
-		return fmt.Errorf("remove worktree %s: %w: %v", path, ErrWorktreeEvidenceNotPreserved, err)
+	archiveRoot, err := a.worktreeEvidenceRoot(ctx)
+	if err != nil {
+		return fmt.Errorf("remove worktree %s: %w", resolved, err)
 	}
-	if _, err := run(ctx, a.dir, "worktree", "remove", path); err != nil {
-		return fmt.Errorf("remove worktree %s: %w", path, err)
+	if err := worktreeevidence.Verify(resolved, archiveRoot); err != nil {
+		return fmt.Errorf("remove worktree %s: %w: %v", resolved, ErrWorktreeEvidenceNotPreserved, err)
+	}
+	if _, err := run(ctx, a.dir, "worktree", "remove", resolved); err != nil {
+		return fmt.Errorf("remove worktree %s: %w", resolved, err)
 	}
 	return nil
+}
+
+// resolveWorktreePath returns path as an absolute path. A relative path is
+// joined to the adapter directory because that is the working directory Git
+// runs in; resolving it against the process working directory instead would let
+// the evidence check inspect one location while Git removes another.
+func (a *Adapter) resolveWorktreePath(path string) (string, error) {
+	if filepath.IsAbs(path) {
+		return path, nil
+	}
+	dir, err := filepath.Abs(a.dir)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(dir, path), nil
 }
 
 // worktreeEvidenceRoot derives the existing worktree-evidence archive root from

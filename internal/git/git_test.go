@@ -530,6 +530,42 @@ func TestRemoveWorktreeAllowsIgnoredNonLifecycleConfig(t *testing.T) {
 	}
 }
 
+// TestRemoveWorktreeResolvesRelativePathAgainstAdapterDir proves a relative path
+// is verified against the same directory Git removes in. The adapter directory
+// is not the process working directory here, so resolving against the process
+// directory would find no evidence and remove the worktree unchecked.
+func TestRemoveWorktreeResolvesRelativePathAgainstAdapterDir(t *testing.T) {
+	ctx := context.Background()
+	dir := initRepo(t)
+	writeFile(t, dir, ".gitignore", ".agent-sdlc/\n")
+	runGit(t, dir, "add", ".gitignore")
+	runGit(t, dir, "commit", "-m", "ignore SOP state")
+
+	a := New(dir)
+	branch, err := TaskBranchName("T101", "Relative Evidence")
+	if err != nil {
+		t.Fatalf("TaskBranchName: %v", err)
+	}
+	if err := a.AddWorktree(ctx, filepath.Join(dir, "wt"), branch); err != nil {
+		t.Fatalf("AddWorktree: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "wt", ".agent-sdlc"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(dir, "wt"), ".agent-sdlc/plan.meta.json", `{"plan_id":"plan-relative"}`)
+	writeFile(t, filepath.Join(dir, "wt"), ".agent-sdlc/state.db", "state")
+	if got := strings.TrimSpace(runGit(t, filepath.Join(dir, "wt"), "status", "--porcelain")); got != "" {
+		t.Fatalf("worktree is not Git-clean: %q", got)
+	}
+
+	if err := a.RemoveWorktree(ctx, "wt"); !errors.Is(err, ErrWorktreeEvidenceNotPreserved) {
+		t.Fatalf("RemoveWorktree with relative path err = %v, want ErrWorktreeEvidenceNotPreserved", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "wt")); err != nil {
+		t.Fatalf("relative worktree was removed despite missing evidence archive: %v", err)
+	}
+}
+
 // TestWorkflowBranchCreationAdvancesState exercises the READY -> BRANCH_CREATED
 // sequence: state advances only after branch creation succeeds.
 func TestWorkflowBranchCreationAdvancesState(t *testing.T) {
