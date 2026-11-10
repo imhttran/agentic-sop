@@ -29,29 +29,94 @@ func (h *Harness) isolationRequested() bool {
 	return v == "1" || v == "true" || v == "yes"
 }
 
-// isolate wraps argv in sandbox-exec with a profile that denies network
-// (except loopback) and denies writes outside the root, temp, and Go caches,
-// and always denies writes under <root>/.agent-sdlc. It fails closed.
-// ponytail: macOS Seatbelt only; Linux (bubblewrap) and other platforms fail
-// closed until a backend is added.
+// isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
+// on Linux. Both deny outbound network (loopback stays usable), deny writes
+// outside the root, temp, and Go caches, and always deny writes under
+// <root>/.agent-sdlc. It fails closed: no backend means no run.
 func isolate(root string, argv []string) (wrapped []string, detail string, err error) {
-	if runtime.GOOS != "darwin" {
+	name, bin := "seatbelt", "sandbox-exec"
+	switch runtime.GOOS {
+	case "darwin":
+	case "linux":
+		name, bin = "bubblewrap", "bwrap"
+	default:
 		return nil, "", fmt.Errorf("%w: no sandbox backend on %s", errIsolationUnavailable, runtime.GOOS)
 	}
-	tool, err := exec.LookPath("sandbox-exec")
+	tool, err := exec.LookPath(bin)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: sandbox-exec not found", errIsolationUnavailable)
+		return nil, "", fmt.Errorf("%w: %s not found", errIsolationUnavailable, bin)
 	}
-	// Seatbelt matches real paths (/var -> /private/var), so canonicalize and
-	// fail closed when the root cannot be resolved.
+	// Both backends match real paths (/var -> /private/var on macOS), so
+	// canonicalize and fail closed when the root cannot be resolved.
 	canon, err := filepath.EvalSymlinks(root)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: cannot canonicalize root: %v", errIsolationUnavailable, err)
 	}
-	profile := seatbeltProfile(canon, writableDirs(canon))
-	sum := sha256.Sum256([]byte(profile))
-	detail = fmt.Sprintf("isolate=seatbelt backend=%s root=%s profile=%s", tool, canon, hex.EncodeToString(sum[:]))
-	return append([]string{tool, "-p", profile}, argv...), detail, nil
+	var args []string
+	if name == "seatbelt" {
+		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon))}
+	} else {
+		if err := refuseSymlinkedState(canon); err != nil {
+			return nil, "", err
+		}
+		args = bubblewrapArgs(canon, writableDirs(canon))
+	}
+	sum := sha256.Sum256([]byte(strings.Join(args, "\x00")))
+	detail = fmt.Sprintf("isolate=%s backend=%s root=%s profile=%s", name, tool, canon, hex.EncodeToString(sum[:]))
+	return append(append([]string{tool}, args...), argv...), detail, nil
+}
+
+// refuseSymlinkedState fails closed when <root>/.agent-sdlc is a symlink. The
+// root is writable inside the bubblewrap view, so the command could replace the
+// link itself and redirect SOP to a forged state dir. Seatbelt needs no such
+// check: it denies writes on the link path.
+func refuseSymlinkedState(root string) error {
+	if fi, err := os.Lstat(filepath.Join(root, ".agent-sdlc")); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("%w: .agent-sdlc is a symlink", errIsolationUnavailable)
+	}
+	return nil
+}
+
+// bubblewrapArgs builds the Linux view: the host read-only, the writable dirs
+// bound read-write, a private /tmp and an empty /run (hiding host sockets such
+// as Docker's), the SOP state dir read-only, and a private network namespace
+// in which only the sandbox's own loopback exists.
+// ponytail: a Unix socket outside /tmp and /run (for example under $HOME)
+// stays connectable; a deny-default view would close that.
+func bubblewrapArgs(root string, writable []string) []string {
+	args := []string{
+		"--ro-bind", "/", "/",
+		"--dev", "/dev",
+		"--proc", "/proc",
+		"--tmpfs", "/tmp",
+		"--tmpfs", "/run",
+	}
+	for _, d := range writable {
+		// The private /tmp and /run tmpfs mounts are already writable; binding a
+		// host path under them would re-expose host sockets. The root is always
+		// bound: a root under /tmp would otherwise be hidden by the tmpfs.
+		if d != root && underAny(d, "/tmp", "/run", "/var/run") {
+			continue
+		}
+		// A bind needs an existing source; create a fresh cache dir (for
+		// example a new GOCACHE) on the host first. The root already exists.
+		_ = os.MkdirAll(d, 0o755)
+		args = append(args, "--bind-try", d, d)
+	}
+	// Mounted after the root bind so it wins, and the mount point cannot be
+	// unlinked or renamed (isolate refuses a symlinked state dir). A missing
+	// state dir gets an empty read-only tmpfs so the command cannot create one.
+	state := filepath.Join(root, ".agent-sdlc")
+	if _, err := os.Lstat(state); err == nil {
+		args = append(args, "--ro-bind", state, state)
+	} else {
+		args = append(args, "--tmpfs", state, "--remount-ro", state)
+	}
+	return append(args,
+		"--unshare-net", "--unshare-pid", "--unshare-ipc",
+		"--die-with-parent", "--new-session",
+		"--chdir", root,
+		"--")
 }
 
 // writableDirs are the canonical directories a build or test needs to write.
@@ -59,7 +124,10 @@ func isolate(root string, argv []string) (wrapped []string, detail string, err e
 // existing ancestor plus the remainder; relative or unresolvable entries are
 // dropped (narrower, never wider).
 func writableDirs(root string) []string {
-	dirs := []string{root, os.TempDir(), "/private/tmp", "/private/var/folders"}
+	dirs := []string{root, os.TempDir()}
+	if runtime.GOOS == "darwin" {
+		dirs = append(dirs, "/private/tmp", "/private/var/folders")
+	}
 	// ponytail: the shared Go build/module caches stay writable so builds are
 	// not cold; a per-run throwaway GOCACHE/GOMODCACHE would remove cache
 	// poisoning across runs at the cost of speed.
@@ -91,8 +159,12 @@ func writableDirs(root string) []string {
 	return out
 }
 
-// systemAlias maps the macOS /var, /tmp and /etc symlinks to their real paths.
+// systemAlias maps the macOS /var, /tmp and /etc symlinks to their real paths
+// (they are real directories elsewhere).
 func systemAlias(p string) string {
+	if runtime.GOOS != "darwin" {
+		return p
+	}
 	for _, a := range []string{"/var", "/tmp", "/etc"} {
 		if p == a || strings.HasPrefix(p, a+"/") {
 			return "/private" + p
@@ -123,4 +195,14 @@ func seatbeltProfile(root string, writable []string) string {
 		fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", real)
 	}
 	return b.String()
+}
+
+// underAny reports whether p is one of dirs or below one of them.
+func underAny(p string, dirs ...string) bool {
+	for _, d := range dirs {
+		if p == d || strings.HasPrefix(p, d+"/") {
+			return true
+		}
+	}
+	return false
 }

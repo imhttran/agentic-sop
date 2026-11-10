@@ -21,7 +21,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
-| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS | Linux `run_command` isolation not implemented |
+| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS and Linux | Sandbox off by default; shared Go caches writable |
 | LLM07 | Plan 08 / LLM08 | System Prompt Leakage (repo: Hidden Context Exposure) | Partial | Prompt secrecy is not claimed by design |
 | LLM08 | Plan 09 / LLM09 | Vector and Embedding Weaknesses | Covered for the shipped (disabled-by-default) path | Live RAG / PostgreSQL / embeddings `NOT_RUN` |
 | LLM09 | Plan 07 / LLM07 | Misinformation | Partial, by scope | Factual correctness of model output is out of scope |
@@ -102,7 +102,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Covered:**
   - Root and command policy, with read-only roots.
   - OS isolation on the replay and evaltarget paths, on both macOS and Linux.
-  - Since PR #343, `run_command` can run inside an opt-in Seatbelt sandbox
+  - Since PR #343 (macOS, Seatbelt) and the bubblewrap follow-up (Linux),
+    `run_command` can run inside an opt-in sandbox
     (`SOP_AGENT_RUN_COMMAND_ISOLATION=1`). In it, outbound network is blocked,
     writes are limited to the root, temp and the Go caches, `.agent-sdlc/` is
     denied, and it fails closed when no sandbox is available.
@@ -111,8 +112,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
 - **Not covered, and why:**
   - The sandbox is off by default.
-  - Linux has no `run_command` backend: with the switch on it refuses to run
-    the command rather than run it unsandboxed.
+  - On Linux the sandbox uses its own network namespace, so a test cannot
+    reach a server on the host's loopback; one it starts itself works. Host
+    Unix sockets under `/tmp` and `/run` are hidden; one elsewhere (for example
+    under `$HOME`) stays connectable.
   - The agent process itself runs outside SOP.
   - The shared Go caches stay writable, so one run could poison the cache for
     later runs.
@@ -149,7 +152,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Not covered, and why:** SOP checks that decisions rest on real evidence. It
   does not check that model prose is factually correct, which cannot be decided
   mechanically. A `run_command` subprocess can write SOP state unless the
-  opt-in sandbox is on, which is macOS only
+  opt-in sandbox is on (macOS and Linux)
   ([llm07-state-write-detection-phase1.md](llm07-state-write-detection-phase1.md)).
   Live-model and Linux runs are `NOT_RUN`.
 
@@ -179,7 +182,6 @@ These cannot be closed by code in this repository:
 
 ## Code follow-ups worth doing
 
-- A Linux (bubblewrap) backend for the `run_command` sandbox.
 - A per-run throwaway Go cache inside the sandbox, to close cross-run cache
   poisoning.
 - Spend accounting before requests are sent, if a dollar cap is needed.
