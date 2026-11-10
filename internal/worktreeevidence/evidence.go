@@ -154,7 +154,9 @@ func Preserve(worktree, archiveRoot string) (string, error) {
 
 // Verify checks that every file in the worktree's .agent-sdlc is present with
 // identical content in the conventional archive. It returns nil when the
-// worktree holds no lifecycle evidence. The archive must be outside the worktree.
+// worktree holds no lifecycle evidence. The archive must be outside the worktree
+// and must not contain symlinks: a link back into the worktree would satisfy a
+// checksum without being an independent copy.
 func Verify(worktree, archiveRoot string) error {
 	has, err := HasLifecycleEvidence(worktree)
 	if err != nil {
@@ -275,12 +277,8 @@ func copyTree(src, dst string) error {
 }
 
 func verifyTree(src, dst string) error {
-	info, err := os.Stat(dst)
-	if err != nil {
+	if err := rejectArchiveLinks(dst); err != nil {
 		return err
-	}
-	if !info.IsDir() {
-		return fmt.Errorf("%s is not a directory", dst)
 	}
 	return filepath.WalkDir(src, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -300,7 +298,7 @@ func verifyTree(src, dst string) error {
 		target := filepath.Join(dst, rel)
 		switch {
 		case d.IsDir():
-			ti, err := os.Stat(target)
+			ti, err := os.Lstat(target)
 			if err != nil {
 				return err
 			}
@@ -326,6 +324,34 @@ func verifyTree(src, dst string) error {
 		default:
 			return fmt.Errorf("unsupported file type in SOP state: %s", path)
 		}
+	})
+}
+
+// rejectArchiveLinks refuses an archive tree that contains symlinks or special
+// files. Verification must read an independent copy; a symlink can point back
+// into the worktree and satisfy a checksum while leaving no preserved evidence.
+func rejectArchiveLinks(root string) error {
+	info, err := os.Lstat(root)
+	if err != nil {
+		return err
+	}
+	if info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("archive root %s is a symlink", root)
+	}
+	if !info.IsDir() {
+		return fmt.Errorf("%s is not a directory", root)
+	}
+	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.Type()&fs.ModeSymlink != 0 {
+			return fmt.Errorf("archive contains a symlink: %s", path)
+		}
+		if !d.IsDir() && !d.Type().IsRegular() {
+			return fmt.Errorf("archive contains an unsupported file: %s", path)
+		}
+		return nil
 	})
 }
 

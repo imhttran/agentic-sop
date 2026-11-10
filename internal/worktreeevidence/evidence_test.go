@@ -77,6 +77,51 @@ func TestVerifyRejectsMismatchedArchive(t *testing.T) {
 	}
 }
 
+// TestVerifyRejectsArchiveSymlinks proves a symlink inside the archive cannot
+// satisfy verification by pointing back into the worktree; it is not an
+// independent preserved copy.
+func TestVerifyRejectsArchiveSymlinks(t *testing.T) {
+	t.Run("file", func(t *testing.T) {
+		worktree := evidenceWorktree(t)
+		archiveRoot := filepath.Join(t.TempDir(), "archive")
+		archive, err := Preserve(worktree, archiveRoot)
+		if err != nil {
+			t.Fatalf("Preserve: %v", err)
+		}
+		target := filepath.Join(archive, "state.db")
+		if err := os.Remove(target); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(worktree, ".agent-sdlc", "state.db"), target); err != nil {
+			t.Fatal(err)
+		}
+		if err := Verify(worktree, archiveRoot); err == nil {
+			t.Fatal("Verify accepted an archive file symlink")
+		}
+		if _, err := Preserve(worktree, archiveRoot); err == nil {
+			t.Fatal("Preserve accepted an archive file symlink")
+		}
+	})
+
+	t.Run("directory", func(t *testing.T) {
+		worktree := evidenceWorktree(t)
+		archiveRoot := filepath.Join(t.TempDir(), "archive")
+		archive, err := Preserve(worktree, archiveRoot)
+		if err != nil {
+			t.Fatalf("Preserve: %v", err)
+		}
+		if err := os.RemoveAll(filepath.Join(archive, "runs")); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(filepath.Join(worktree, StateDirName, "runs"), filepath.Join(archive, "runs")); err != nil {
+			t.Fatal(err)
+		}
+		if err := Verify(worktree, archiveRoot); err == nil {
+			t.Fatal("Verify accepted an archive directory symlink")
+		}
+	})
+}
+
 func TestVerifyRequiresArchiveWhenEvidenceExists(t *testing.T) {
 	worktree := evidenceWorktree(t)
 	archiveRoot := filepath.Join(t.TempDir(), "archive")
