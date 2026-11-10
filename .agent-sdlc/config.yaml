@@ -94,6 +94,9 @@ security:
       protocol: builtin
       command: [semgrep]
       rules: .agent-sdlc/security-rules
+      # rules_dir_sha256 from scripts/security/semgrep-rules-manifest.json; update
+      # both together when the pinned rules commit changes.
+      rules_sha256: d90ff1b1729b740b1754f6b6ba8d1c9da8525136aa4a2345797f43e770fc5958
       languages: [go, rust]
       version: "1.183.0"
     - id: osv-scanner

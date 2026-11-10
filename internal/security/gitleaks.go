@@ -22,6 +22,7 @@ type gitleaksAdapter struct {
 	category     Category
 	command      []string
 	rules        string
+	rulesPin     string // optional rules_sha256; see checkRulesPin
 	version      string
 	configDigest string
 	exec         Executor
@@ -193,6 +194,11 @@ func (a *gitleaksAdapter) Scan(ctx context.Context, req Request) (Execution, err
 			return finish(exec, nil)
 		}
 		exec.Provenance.RulesIdentity = identity
+		if err := checkRulesPin(rules, identity, a.rulesPin); err != nil {
+			exec.Status = StatusFailed
+			exec.Diagnostics = []string{err.Error()}
+			return finish(exec, nil)
+		}
 	}
 
 	runCtx, cancel := scanContext(ctx, a.timeout)
