@@ -40,12 +40,14 @@ func ncTimeout() string {
 // sandboxed runs a shell snippet inside the run_command sandbox for root.
 func sandboxed(t *testing.T, root, script string) error {
 	t.Helper()
-	argv, _, err := isolate(root, []string{"sh", "-c", script})
+	argv, env, _, cleanup, err := isolate(root, []string{"sh", "-c", script})
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer cleanup()
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = root
+	cmd.Env = env
 	return cmd.Run()
 }
 
@@ -122,32 +124,11 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	}
 	if runtime.GOOS == "linux" {
 		// bubblewrap refuses a symlinked state dir outright.
-		if _, _, err := isolate(linked, []string{"true"}); !errors.Is(err, errIsolationUnavailable) {
+		if _, _, _, _, err := isolate(linked, []string{"true"}); !errors.Is(err, errIsolationUnavailable) {
 			t.Fatalf("symlinked state dir: err = %v, want errIsolationUnavailable", err)
 		}
 	} else if err := sandboxed(t, linked, "echo forged > real-state/state.db"); err == nil {
 		t.Fatal("a write to the symlinked state dir target succeeded")
-	}
-	// A cache dir that does not exist yet stays writable.
-	fresh := filepath.Join(t.TempDir(), "new", "gocache")
-	t.Setenv("GOCACHE", fresh)
-	found := false
-	for _, d := range writableDirs(root) {
-		found = found || strings.HasSuffix(d, filepath.Join("new", "gocache"))
-	}
-	if !found {
-		t.Fatalf("fresh GOCACHE %s dropped from writable dirs", fresh)
-	}
-	// A cache path through a planted symlink is dropped, not followed.
-	planted := filepath.Join(t.TempDir(), "planted")
-	if err := os.Symlink(t.TempDir(), planted); err != nil {
-		t.Fatal(err)
-	}
-	t.Setenv("GOCACHE", filepath.Join(planted, "cache"))
-	for _, d := range writableDirs(root) {
-		if strings.HasSuffix(d, "cache") && !strings.Contains(d, "go-build") {
-			t.Fatalf("cache path through a symlink kept as %s", d)
-		}
 	}
 	home, _ := os.UserHomeDir()
 	if err := sandboxed(t, root, "touch "+filepath.Join(home, ".sop-isolation-probe")); err == nil {
@@ -233,5 +214,60 @@ func TestBubblewrapArgsOrder(t *testing.T) {
 	missing := strings.Join(bubblewrapArgs(t.TempDir(), nil), " ")
 	if !strings.Contains(missing, "--remount-ro") {
 		t.Fatalf("a missing state dir must get a read-only tmpfs:\n%s", missing)
+	}
+}
+
+// Each sandboxed run gets its own GOCACHE, removed afterwards, and the shared
+// module cache is read-only, so one run cannot poison a later run's caches.
+func TestRunCommandIsolationThrowawayGoCache(t *testing.T) {
+	needSandbox(t)
+	root := t.TempDir()
+	run := func() string {
+		if err := sandboxed(t, root, `printf %s "$GOCACHE" > gocache.txt`); err != nil {
+			t.Fatal(err)
+		}
+		b, err := os.ReadFile(filepath.Join(root, "gocache.txt"))
+		if err != nil || len(b) == 0 {
+			t.Fatalf("GOCACHE not set in the sandbox: %q, %v", b, err)
+		}
+		return string(b)
+	}
+	first, second := run(), run()
+	if first == second {
+		t.Fatalf("two runs shared GOCACHE %s", first)
+	}
+	if _, err := os.Stat(first); !os.IsNotExist(err) {
+		t.Fatalf("throwaway GOCACHE %s survived its run: %v", first, err)
+	}
+	out, err := exec.Command("go", "env", "GOMODCACHE").Output()
+	modcache := strings.TrimSpace(string(out))
+	if err != nil || modcache == "" {
+		t.Skip("no module cache to check")
+	}
+	if err := os.MkdirAll(modcache, 0o755); err != nil {
+		t.Skip("module cache not creatable here")
+	}
+	probe := filepath.Join(modcache, "sop-isolation-probe")
+	if err := sandboxed(t, root, "touch "+probe); err == nil {
+		os.Remove(probe)
+		t.Fatal("the shared module cache was writable from the sandbox")
+	}
+}
+
+// The policy-checked argv follows the sandbox prefix unchanged: nothing (such
+// as an env wrapper) sits between them that could reinterpret argv[0].
+func TestIsolateKeepsArgvVerbatim(t *testing.T) {
+	needSandbox(t)
+	argv := []string{"GOFLAGS=-x", "go", "version"}
+	wrapped, env, _, cleanup, err := isolate(t.TempDir(), argv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if got := wrapped[len(wrapped)-len(argv):]; strings.Join(got, " ") != strings.Join(argv, " ") || wrapped[len(wrapped)-len(argv)-1] == "env" {
+		t.Fatalf("argv not passed verbatim after the sandbox prefix: %q", wrapped)
+	}
+	if !strings.Contains(strings.Join(env, "\n"), "GOCACHE=") {
+		t.Fatal("GOCACHE must be set through the environment")
 	}
 }

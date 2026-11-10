@@ -21,7 +21,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
-| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS and Linux | Sandbox off by default; shared Go caches writable |
+| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS and Linux | Sandbox off by default; cold build cache per run |
 | LLM07 | Plan 08 / LLM08 | System Prompt Leakage (repo: Hidden Context Exposure) | Partial | Prompt secrecy is not claimed by design |
 | LLM08 | Plan 09 / LLM09 | Vector and Embedding Weaknesses | Covered for the shipped (disabled-by-default) path | Live RAG / PostgreSQL / embeddings `NOT_RUN` |
 | LLM09 | Plan 07 / LLM07 | Misinformation | Partial, by scope | Factual correctness of model output is out of scope |
@@ -113,8 +113,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Since PR #343 (macOS, Seatbelt) and the bubblewrap follow-up (Linux),
     `run_command` can run inside an opt-in sandbox
     (`SOP_AGENT_RUN_COMMAND_ISOLATION=1`). In it, outbound network is blocked,
-    writes are limited to the root, temp and the Go caches, `.agent-sdlc/` is
-    denied, and it fails closed when no sandbox is available.
+    writes are limited to the root and temp, `.agent-sdlc/` is denied, and it
+    fails closed when no sandbox is available. Each run gets its own throwaway
+    build cache and the shared module cache is read-only, so one run cannot
+    poison a later run's Go caches.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
@@ -125,8 +127,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     Unix sockets under `/tmp` and `/run` are hidden; one elsewhere (for example
     under `$HOME`) stays connectable.
   - The agent process itself runs outside SOP.
-  - The shared Go caches stay writable, so one run could poison the cache for
-    later runs.
+  - Every sandboxed build starts with a cold build cache (about 10 s for three
+    of this repository's packages), and a module missing from the module cache
+    cannot be downloaded inside the sandbox; run `go mod download` first.
 
 ### LLM07 System Prompt Leakage — partial, by design
 
@@ -190,6 +193,4 @@ These cannot be closed by code in this repository:
 
 ## Code follow-ups worth doing
 
-- A per-run throwaway Go cache inside the sandbox, to close cross-run cache
-  poisoning.
 - Spend accounting before requests are sent, if a dollar cap is needed.

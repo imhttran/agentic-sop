@@ -68,9 +68,9 @@ Seatbelt profile:
 - the host is mounted read-only (`--ro-bind / /`);
 - `/tmp` and `/run` are private tmpfs mounts, which hides host sockets such as
   Docker's;
-- the root, the Go build cache and the module cache are bound read-write
-  (paths under `/tmp`, `/run` or `/var/run` are not bound, so host sockets stay
-  hidden);
+- only the root is bound read-write (paths under `/tmp`, `/run` or `/var/run`
+  are never bound, so host sockets stay hidden); each run's `GOCACHE` is a fresh
+  dir in the private `/tmp`, and the shared module cache stays read-only;
 - `<root>/.agent-sdlc` is mounted read-only after the root bind, so the mount
   point cannot be unlinked or renamed; a symlinked state dir is refused (the
   writable root would let the command replace the link), and a missing one gets
@@ -106,3 +106,14 @@ Limits:
   `TestBubblewrapArgsOrder` runs there.
 - The sandbox has its own network namespace, so the host's loopback is
   unreachable.
+
+### Throwaway Go cache (follow-up)
+
+Each sandboxed run sets `GOCACHE` to a fresh dir that is removed after the
+command exits. The module cache is no longer writable: `go.sum` verifies its
+contents, so sharing it read-only is safe.
+`TestRunCommandIsolationThrowawayGoCache` checks that two runs get different
+caches, that a run's cache is deleted afterwards, and that writing into
+`GOMODCACHE` fails. The repository's own `go test` for `repoindex`, `security`
+and `testrunner` passed inside the view with a cold build cache (11 s, Linux
+arm64 container, bwrap 0.12.0).
