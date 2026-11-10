@@ -125,6 +125,11 @@ type LocalDecider struct {
 	// TCP connection. The endpoint allowlist is still enforced: the socket is a
 	// transport to LiveEndpointURL, not a different endpoint.
 	Socket string
+	// Think optionally controls Ollama's thinking mode for models that support it.
+	// A nil value leaves the provider default unchanged. The bounded live campaign
+	// sets false for a reasoning model so the single JSON response is not consumed
+	// by hidden reasoning tokens.
+	Think *bool
 }
 
 // ollamaRequest is the minimal local generation request body.
@@ -133,6 +138,7 @@ type ollamaRequest struct {
 	Prompt string `json:"prompt"`
 	Stream bool   `json:"stream"`
 	Format string `json:"format,omitempty"`
+	Think  *bool  `json:"think,omitempty"`
 }
 
 // ollamaResponse is the minimal local generation response body.
@@ -156,7 +162,7 @@ func (d LocalDecider) Decide(ctx context.Context) (string, error) {
 	if model == "" {
 		model = LiveDefaultModel
 	}
-	body, err := json.Marshal(ollamaRequest{Model: model, Prompt: d.Prompt, Stream: false, Format: "json"})
+	body, err := json.Marshal(ollamaRequest{Model: model, Prompt: d.Prompt, Stream: false, Format: "json", Think: d.Think})
 	if err != nil {
 		return "", err
 	}
