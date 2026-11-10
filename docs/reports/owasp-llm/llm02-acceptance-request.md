@@ -1,10 +1,14 @@
 # Plan 03 — acceptance request for the bounded live campaign
 
-Status: **REQUEST — no acceptance is recorded.** This document prepares the exact
-decision a designated approver must make. It does not record acceptance, does not
-change SOP state, and does not claim `VERIFIED`. The final criterion matrix,
-evidence identity, and exact human decision are in §Final closeout (2026-11-10);
-sections dated 2026-11-09 are preserved as history.
+Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; PLAN 03 PER-CRITERION
+ACCEPTANCE NOT RECORDED.** The bounded decision is recorded in repository
+decision memory ID
+`59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
+(source `operator:bounded-acceptance-2026-11-10`). It is a separate scoped
+evidence-acceptance decision, not retroactive Plan 03 acceptance. Full Plan 03
+per-criterion acceptance remains `NEEDS_HUMAN`. The final criterion matrix,
+evidence identity, and exact human decisions are in §Final closeout
+(2026-11-10); sections dated 2026-11-09 are preserved as history.
 
 **Post-closeout correction:** the plan has since been historicalized `COMPLETE`
 through the supported external-completion path; `COMPLETE` is a lifecycle state, not
@@ -256,10 +260,79 @@ corrects the campaign's positive control; #352 is documentation-only. The
 campaign remains valid for the five tool paths, and the user-prompt fix is
 deterministic-only evidence with no live re-run.
 
+### Recorded bounded decision
+
+The bounded acceptance is recorded through the existing repository-scoped
+decision-memory mechanism (`sop memory add --scope repository`, CTX-010). The
+decision store is local and ignored; this transcript preserves the decision
+identifier and attribution in the committed record.
+
+- **Decision ID:** `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
+- **Mechanism:** `.agent-sdlc/context/decisions.json` (decision memory, schema
+  `decisionmemory/1`; ignored by Git)
+- **Source / attribution:** `operator:bounded-acceptance-2026-11-10`
+- **Repository identity:** `c60e64cf543eb6efb62e1d6bc622c8da88812ab42aa3227f60c43775826c79ca`
+  (HEAD `cc42a52`, `dirty: false`)
+- **Date:** 2026-11-10
+- **Scope:** repository
+
+The exact recorded decision:
+
+> Bounded evidence acceptance (separate scoped decision, not Plan 03 acceptance):
+> the approved OWASP LLM02 A+B implementation (credential-path denial and
+> model-bound tool-result/error redaction) and the PR #349 user-prompt redaction
+> are accepted as implemented and verified within their documented scope.
+> Supporting evidence: deterministic regression tests; macOS live campaign
+> (7 cases, 7 observed); Linux live tool-path campaign (17 requests: 7 protected,
+> 6 positive controls, 4 residual exposures; artifact SHA-256
+> `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`; tested
+> revision `4cee73a`); CI and review on PRs #337, #341, #349, #350, #351, #352,
+> #355. Decision authority: repository operator (bounded acceptance instruction
+> dated 2026-11-10; designated approver table names Tom Tran). Date: 2026-11-10.
+> Repository revision: `cc42a52`. This decision does not accept or waive residual
+> risks, does not retroactively accept the 16 historicalized Plan 03 criteria,
+> and does not declare the full OWASP LLM02 category secure. Excluded and
+> unresolved: unknown-format sensitive values in ordinary files, diffs, or SAFE
+> command output; hardlink/path-alias exposure; verbatim model-output artifact
+> persistence; retrieval and handoff disclosure limits; caller-owned and
+> notification prose; provider retention and general DLP. `NOT_RUN` remains:
+> Linux live retrieval; Linux live notification verification; live re-execution
+> of the PR #349 user-prompt redaction. Further mitigation requires separate
+> authorization.
+
+Recorded reason:
+
+> The bounded acceptance covers only the approved A+B implementation and its
+> verified deterministic, macOS live, and Linux live tool-path evidence.
+> Residual risks and unexecuted verification are explicitly excluded and require
+> separate decisions.
+
+Recorded evidence:
+
+> `docs/reports/owasp-llm/llm02-linux-campaign.json` SHA-256
+> `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`;
+> `docs/reports/owasp-llm/llm02-campaign.json` SHA-256
+> `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06`;
+> `docs/reports/owasp-llm/llm02-acceptance-request.md`;
+> `docs/reports/owasp-llm/llm02-disclosure.md`; PRs #337 #341 #349 #350 #351
+> #352 #355; final baseline `cc42a52`.
+
+This is a **separate scoped evidence-acceptance decision**. It does not change
+any of the 16 `None recorded` Plan 03 criterion cells below, does not create
+SOP-native Plan 03 acceptance, and is not a designated-approver approval record.
+
+The decision-memory record is bound to the clean baseline `cc42a52`. Later
+documentation commits change the repository identity, so `sop memory list` may
+report the record as stale for a different state. Staleness means it is not
+applied as run context at that different revision; it does not revoke the
+recorded decision or change the Plan 03 acceptance cells.
+
+
 ### Plan 03 acceptance matrix
 
 Status describes evidence, not acceptance. `Supported` is not an acceptance
-decision. No acceptance decision exists for any criterion.
+decision. The separate bounded evidence acceptance above does not change these
+cells. No Plan 03 per-criterion acceptance decision exists for any criterion.
 
 | Task / criterion | Requirement | Evidence | Evidence status | Acceptance decision |
 | --- | --- | --- | --- | --- |
@@ -299,10 +372,11 @@ decision.
 
 ### Required human decisions
 
-1. **Plan 03 evidence acceptance:** accept or decline the macOS campaign, the
-   Linux live tool-path campaign, or both for `DISCLOSE-003` criteria 1–4 and 6.
-   Name the authority and the record in which the decision is made. This document
-   does not make that decision.
+1. **Formal Plan 03 per-criterion acceptance:** if required, accept or decline the
+   macOS campaign, the Linux live tool-path campaign, or both for `DISCLOSE-003`
+   criteria 1–4 and 6 through a separate authorized governance process. The
+   separate bounded evidence acceptance is already recorded and does not satisfy
+   this per-criterion requirement.
 2. **Historicalized-plan acceptance process:** if SOP-recorded acceptance is
    required, authorize a separate governance process for historicalized plans.
    Do not reopen Plan 03, edit `.agent-sdlc/archive/`, or create a replacement
@@ -324,12 +398,12 @@ decision.
 
 ### Recommended disposition
 
-Recommended, subject to the operator's decision: accept the approved
-implementation and scoped verification as sufficient for the approved A+B plus
-#349 scope; record the four observed residual exposures and the unverified sinks
-as accepted residual risk only if the operator explicitly decides to do so;
-otherwise leave acceptance incomplete. Do not claim full LLM02 coverage or
-universal disclosure prevention.
+The bounded evidence acceptance is already recorded in decision memory. The
+remaining recommendation, subject to the operator's decision, is: accept the four
+observed residual exposures and the unverified sinks as residual risk only if the
+operator explicitly decides to do so; otherwise leave them open. Formal Plan 03
+per-criterion acceptance remains separately `NEEDS_HUMAN`. Do not claim full LLM02
+coverage or universal disclosure prevention.
 
 
 ## Exact next action

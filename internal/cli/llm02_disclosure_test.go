@@ -92,6 +92,9 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"`SOP_TASK_INPUTS` and caller context",
 		"Plan 03 acceptance matrix",
 		"NEEDS_HUMAN",
+		"Bounded evidence acceptance",
+		"RECORDED",
+		"59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98",
 		"Residual-risk disposition",
 		"Three separate claims",
 		"4c8fe5a",
@@ -522,6 +525,7 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 	for _, section := range []string{
 		"## Final closeout (2026-11-10)",
 		"### Final lifecycle limitation",
+		"### Recorded bounded decision",
 		"### Evidence identity",
 		"### Plan 03 acceptance matrix",
 		"### Residual-risk disposition",
@@ -551,6 +555,10 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06",
 		"4cee73a",
 		"4c8fe5a",
+		"59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98",
+		"operator:bounded-acceptance-2026-11-10",
+		"c60e64cf543eb6efb62e1d6bc622c8da88812ab42aa3227f60c43775826c79ca",
+		"separate scoped evidence-acceptance decision",
 		"No residual risk is marked accepted",
 	} {
 		if !strings.Contains(normalized, claim) {
@@ -561,6 +569,8 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"acceptance has been recorded",
 		"all residual risks are accepted",
 		"Plan 03 was reopened",
+		"All 16 Plan 03 criteria are accepted",
+		"LLM02 is fully closed",
 	} {
 		if strings.Contains(normalized, claim) {
 			t.Errorf("acceptance request makes an unsupported acceptance claim: %q", claim)
