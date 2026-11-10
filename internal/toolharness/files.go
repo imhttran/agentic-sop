@@ -275,6 +275,12 @@ func (h *Harness) deleteFile(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// Snapshot protected identities before a model mutation can remove a denied
+	// name. Otherwise delete_file(.env) before the first content read would let
+	// a pre-existing ordinary-name alias survive the scan.
+	if err := h.ensureIdentityRegistry(); err != nil {
+		return "", err
+	}
 	info, err := os.Lstat(p.abs)
 	if err != nil {
 		return "", fmt.Errorf("delete_file: %w", err)
@@ -376,15 +382,18 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 		}
 		f, openErr := h.openVerifiedContent(p, relFrom(base, p))
 		if openErr != nil {
-			if errors.Is(openErr, ErrSensitivePath) {
-				return nil
+			if errors.Is(openErr, ErrIdentityRegistryUnavailable) {
+				return openErr
 			}
-			return openErr
+			// A denied alias or an ordinary unreadable entry (for example a
+			// dangling symlink) is skipped so one bad entry does not abort the
+			// whole search.
+			return nil
 		}
 		info, statErr := f.Stat()
 		if statErr != nil {
 			_ = f.Close()
-			return statErr
+			return nil
 		}
 		if info.IsDir() || info.Size() > maxSearchFileBytes {
 			_ = f.Close()

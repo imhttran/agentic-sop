@@ -224,3 +224,36 @@ func TestIdentityRegistryBoundsAndFailClosed(t *testing.T) {
 		}
 	})
 }
+
+func TestIdentityEnforcementDeleteBeforeFirstRead(t *testing.T) {
+	root := hardlinkFixture(t)
+	if err := os.Link(filepath.Join(root, ".env"), filepath.Join(root, "alias.txt")); err != nil {
+		t.Fatal(err)
+	}
+	h := New(root, DefaultConfig(), NewAuditLog(0))
+	ctx := context.Background()
+
+	// The registry must be initialized before a model mutation can remove the
+	// denied name; otherwise the alias survives the later scan.
+	if _, err := h.Run(ctx, ToolDeleteFile, map[string]any{"path": ".env"}); err != nil {
+		t.Fatalf("delete .env: %v", err)
+	}
+	readDenied(t, h, "alias.txt")
+}
+
+func TestSearchSkipsUnreadableOrdinaryEntries(t *testing.T) {
+	root := hardlinkFixture(t)
+	writeProbeFile(t, root, "searchable.txt", "searchable-marker\n")
+	if err := os.Symlink("missing-target", filepath.Join(root, "dangling.txt")); err != nil {
+		t.Fatal(err)
+	}
+	h := New(root, DefaultConfig(), NewAuditLog(0))
+
+	out, err := h.Run(context.Background(), ToolSearchFiles, map[string]any{"path": ".", "pattern": "searchable-marker"})
+	if err != nil {
+		t.Fatalf("search_files aborted on an unreadable ordinary entry: %v", err)
+	}
+	if !strings.Contains(out, "searchable.txt") {
+		t.Fatalf("search did not return the readable match: %q", out)
+	}
+}

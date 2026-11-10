@@ -457,6 +457,9 @@ func (h *Harness) restoreFile(_ context.Context, args map[string]any) (string, e
 	if !ok {
 		return fmt.Sprintf("%s was not changed by this invocation; nothing to restore", p.rel), nil
 	}
+	if err := h.ensureIdentityRegistry(); err != nil {
+		return "", err
+	}
 	if !snap.exists {
 		if err := os.Remove(p.abs); err != nil && !os.IsNotExist(err) {
 			return "", fmt.Errorf("restore_file: %w", err)
