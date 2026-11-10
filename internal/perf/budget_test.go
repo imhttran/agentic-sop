@@ -33,6 +33,11 @@ func TestCheckTokenBudget(t *testing.T) {
 	if err := CheckTokenBudget(unreported); !errors.Is(err, ErrTokenBudgetExceeded) {
 		t.Fatalf("unreported usage: err = %v, want refusal", err)
 	}
+	negative := WithUsage(context.Background(), &Usage{})
+	AddUsage(negative, "m", -5000, 10)
+	if err := CheckTokenBudget(negative); !errors.Is(err, ErrTokenBudgetExceeded) {
+		t.Fatalf("negative usage report: err = %v, want refusal", err)
+	}
 	if err := CheckTokenBudget(context.Background()); !errors.Is(err, ErrTokenBudgetExceeded) {
 		t.Fatalf("no usage accounting: err = %v, want refusal", err)
 	}

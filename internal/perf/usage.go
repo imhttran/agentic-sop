@@ -65,7 +65,9 @@ func AddUsageWithReport(ctx context.Context, model string, input, output int, re
 	}
 	t := u.byModel[model]
 	t.Calls++
-	if reported {
+	// A negative count is not a usable report: counting it would lower the
+	// total and let a run slip under its token budget.
+	if reported && input >= 0 && output >= 0 {
 		t.Input += int64(input)
 		t.Output += int64(output)
 	} else {
