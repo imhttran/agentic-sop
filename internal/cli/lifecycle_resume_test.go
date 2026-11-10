@@ -1,10 +1,15 @@
 package cli
 
 import (
+	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/outcome"
+	runpkg "github.com/imhttran/agentic-sop/internal/run"
 )
 
 // TestAcceptedOutcomeResumeDoesNotRestartCompletedTask reproduces the Plan 09
@@ -42,6 +47,160 @@ func TestAcceptedOutcomeResumeDoesNotRestartCompletedTask(t *testing.T) {
 	}
 	if task := recoveryTask(t, dir, "T001"); task.Status != domain.LOCAL_DONE {
 		t.Fatalf("T001 status = %s, want LOCAL_DONE", task.Status)
+	}
+	if stage, ok := runpkg.Load(dir, "T001"); !ok || stage != runpkg.Passed {
+		t.Fatalf("T001 run stage = %q (ok=%v), want %q", stage, ok, runpkg.Passed)
+	}
+	if out, err := readOutcomeArtifact(dir, "T001"); err != nil || out == nil || out.Status != outcome.Verified {
+		t.Fatalf("T001 outcome = %+v, err=%v, want VERIFIED", out, err)
+	}
+	if code, stdout, stderr := runCLI(t, dir, "plan", "historicalize", "--check"); code != exitOK {
+		t.Fatalf("historicalize --check after accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+}
+
+// TestTaskRecoverStageRepairsLegacyAcceptedStage proves the narrow recovery path
+// repairs the pre-fix accepted-outcome stage without touching the task, outcome,
+// validation, or acceptance evidence, and restores historicalization eligibility.
+func TestTaskRecoverStageRepairsLegacyAcceptedStage(t *testing.T) {
+	dir, a := manualRecoveryFixture(t)
+	firstManualRun(t, dir, a)
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed docs/review.md", "--by", "operator"); code != exitOK {
+		t.Fatalf("accept: code=%d stderr=%s", code, stderr)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve: code=%d stderr=%s", code, stderr)
+	}
+	if code, stdout, stderr := runInjectedCLI(t, dir, resumeTestDiff, a, "run"); code != exitOK {
+		t.Fatalf("accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+
+	// Simulate the legacy defect: the accepted task completed but its run stage
+	// remained at the original human gate.
+	if err := runpkg.SetStageOnExisting(dir, "T001", runpkg.WaitingForHuman); err != nil {
+		t.Fatalf("simulate legacy stage: %v", err)
+	}
+	before := recoveryTask(t, dir, "T001")
+
+	code, stdout, stderr := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "legacy accepted-outcome stage")
+	if code != exitOK {
+		t.Fatalf("recover-stage: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if stage, ok := runpkg.Load(dir, "T001"); !ok || stage != runpkg.Passed {
+		t.Fatalf("recovered run stage = %q (ok=%v), want %q", stage, ok, runpkg.Passed)
+	}
+	after := recoveryTask(t, dir, "T001")
+	if after.Status != before.Status || after.Attempt != before.Attempt {
+		t.Fatalf("recovery changed task state: before=%s/%d after=%s/%d", before.Status, before.Attempt, after.Status, after.Attempt)
+	}
+	out, err := readOutcomeArtifact(dir, "T001")
+	if err != nil || out == nil || out.Status != outcome.Verified {
+		t.Fatalf("recovery changed outcome: %+v err=%v", out, err)
+	}
+
+	records, err := readJSONL[stageRecovery](filepath.Join(runpkg.Dir(dir, "T001"), "stage-recoveries.jsonl"))
+	if err != nil {
+		t.Fatalf("read stage recoveries: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("stage recovery records = %d, want 1", len(records))
+	}
+	rec := records[0]
+	if rec.ID == "" || rec.Version != stageRecoveryVersion || rec.Task != "T001" || rec.FromStage != string(runpkg.WaitingForHuman) || rec.ToStage != string(runpkg.Passed) || rec.OutcomeStatus != string(outcome.Verified) || rec.Validation != "passed" || rec.By != "operator" || rec.Reason != "legacy accepted-outcome stage" || rec.ContentIdentity == "" || len(rec.Criteria) != 1 || rec.Criteria[0] != "criterion-1" || rec.RecordedAt == "" {
+		t.Fatalf("unexpected stage recovery record: %+v", rec)
+	}
+
+	// Idempotent: a second repair is a no-op and records nothing new.
+	if code, _, stderr := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "repeat"); code != exitOK {
+		t.Fatalf("second recover-stage: code=%d stderr=%s", code, stderr)
+	}
+	records, err = readJSONL[stageRecovery](filepath.Join(runpkg.Dir(dir, "T001"), "stage-recoveries.jsonl"))
+	if err != nil || len(records) != 1 {
+		t.Fatalf("second recovery duplicated the audit: records=%d err=%v", len(records), err)
+	}
+
+	if code, stdout, stderr := runCLI(t, dir, "plan", "historicalize", "--check"); code != exitOK {
+		t.Fatalf("historicalize --check after recovery: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+}
+
+// TestTaskRecoverStageRefusesUnexpectedStage proves the recovery is not a generic
+// stage-write escape hatch.
+func TestTaskRecoverStageRefusesUnexpectedStage(t *testing.T) {
+	dir, a := manualRecoveryFixture(t)
+	firstManualRun(t, dir, a)
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed docs/review.md", "--by", "operator"); code != exitOK {
+		t.Fatalf("accept: code=%d stderr=%s", code, stderr)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve: code=%d stderr=%s", code, stderr)
+	}
+	if code, stdout, stderr := runInjectedCLI(t, dir, resumeTestDiff, a, "run"); code != exitOK {
+		t.Fatalf("accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if err := runpkg.SetStageOnExisting(dir, "T001", runpkg.Failed); err != nil {
+		t.Fatalf("set unexpected stage: %v", err)
+	}
+	if code, _, _ := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "unexpected"); code == exitOK {
+		t.Fatal("recover-stage accepted a non-WAITING_FOR_HUMAN stage")
+	}
+	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), "stage-recoveries.jsonl")); err == nil {
+		t.Fatal("recover-stage wrote an audit record after refusing")
+	}
+}
+
+// TestTaskRecoverStageFinishesInterruptedAudit proves an audit-write failure after
+// the stage transition is recoverable: the pending marker preserves the intended
+// record, and a retry appends it exactly once.
+func TestTaskRecoverStageFinishesInterruptedAudit(t *testing.T) {
+	dir, a := manualRecoveryFixture(t)
+	firstManualRun(t, dir, a)
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed docs/review.md", "--by", "operator"); code != exitOK {
+		t.Fatalf("accept: code=%d stderr=%s", code, stderr)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve: code=%d stderr=%s", code, stderr)
+	}
+	if code, stdout, stderr := runInjectedCLI(t, dir, resumeTestDiff, a, "run"); code != exitOK {
+		t.Fatalf("accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if err := runpkg.SetStageOnExisting(dir, "T001", runpkg.WaitingForHuman); err != nil {
+		t.Fatalf("simulate legacy stage: %v", err)
+	}
+
+	original := appendStageRecoveryRecord
+	calls := 0
+	appendStageRecoveryRecord = func(path string, rec any) error {
+		calls++
+		if calls == 1 {
+			return errors.New("injected audit failure")
+		}
+		return original(path, rec)
+	}
+	defer func() { appendStageRecoveryRecord = original }()
+
+	if code, _, _ := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "interrupted audit"); code == exitOK {
+		t.Fatal("recover-stage reported success despite the injected audit failure")
+	}
+	if stage, ok := runpkg.Load(dir, "T001"); !ok || stage != runpkg.Passed {
+		t.Fatalf("stage after audit failure = %q (ok=%v), want %q", stage, ok, runpkg.Passed)
+	}
+	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryPendingName)); err != nil {
+		t.Fatalf("pending recovery marker missing after audit failure: %v", err)
+	}
+
+	if code, stdout, stderr := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "finish audit"); code != exitOK {
+		t.Fatalf("retry recover-stage: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	records, err := readJSONL[stageRecovery](filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryAuditName))
+	if err != nil || len(records) != 1 {
+		t.Fatalf("recovered audit records = %d err=%v, want 1", len(records), err)
+	}
+	if records[0].ID == "" || records[0].Task != "T001" || records[0].Reason != "interrupted audit" {
+		t.Fatalf("unexpected recovered audit record: %+v", records[0])
+	}
+	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryPendingName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("pending recovery marker remains after successful retry: %v", err)
 	}
 }
 

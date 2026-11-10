@@ -421,7 +421,8 @@ Commands:
   init      initialize project state (.agent-sdlc/state.db)
   status    list persisted tasks (--detailed adds dependencies and attempts)
   task <id> show details; task complete <id> --external records an external completion;
-            task skip <id> --reason R --evidence F marks it NOT_REQUIRED
+            task skip <id> --reason R --evidence F marks it NOT_REQUIRED;
+            task recover-stage <id> --by NAME --reason R repairs a stale accepted-outcome run stage
   question  show a planner question, or list questions (question list [--state S])
   answer    record a planner answer (records ANSWERED only; never applies or approves)
   planner   planner continuation: ask | status | continue (opt-in; SPIKE-004)
