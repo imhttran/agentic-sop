@@ -266,7 +266,7 @@ func TestLiveIsolationLinuxCancelsProcessGroup(t *testing.T) {
 // TestProbeEndpointTimesOut proves the endpoint probe cannot hang when the
 // endpoint accepts a connection but never returns HTTP headers.
 func TestProbeEndpointTimesOut(t *testing.T) {
-	socket := filepath.Join(t.TempDir(), "stall.sock")
+	socket := filepath.Join(t.TempDir(), "p.sock")
 	listener, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatal(err)

@@ -36,13 +36,15 @@ func isolationCommand(ctx context.Context, root, dir string, argv, env []string)
 // liveSocketPrefix is the prefix of the Unix domain socket the Linux live
 // sandbox uses to reach the fixed endpoint. Each invocation uses a unique path
 // in the writable case root, so an asynchronously closing earlier listener can
-// never unlink a replacement socket.
-const liveSocketPrefix = ".sop-live-"
+// never unlink a replacement socket. The name is deliberately short: the case
+// root can be long (for example a /dev/shm test directory), and Linux's
+// sockaddr_un.sun_path limit is 108 bytes including the terminator.
+const liveSocketPrefix = ".s-"
 
 var liveSocketSeq atomic.Uint64
 
 func liveSocketPath(root string) string {
-	return filepath.Join(root, fmt.Sprintf("%s%d-%d.sock", liveSocketPrefix, os.Getpid(), liveSocketSeq.Add(1)))
+	return filepath.Join(root, fmt.Sprintf("%s%x.sock", liveSocketPrefix, liveSocketSeq.Add(1)))
 }
 
 // liveIsolationCommand is the opt-in, evaluation-only live variant. It keeps the
