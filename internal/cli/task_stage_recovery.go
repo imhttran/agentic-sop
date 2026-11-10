@@ -1,14 +1,20 @@
 package cli
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/durablefs"
 	"github.com/imhttran/agentic-sop/internal/outcome"
 	"github.com/imhttran/agentic-sop/internal/quality"
 	runpkg "github.com/imhttran/agentic-sop/internal/run"
@@ -19,10 +25,20 @@ import (
 // audit written beside a repaired run's other artifacts.
 const stageRecoveryVersion = 1
 
+const (
+	// stageRecoveryAuditName is the append-only audit of completed stage repairs.
+	stageRecoveryAuditName = "stage-recoveries.jsonl"
+	// stageRecoveryPendingName marks a repair whose stage may already be PASSED but
+	// whose audit append has not yet succeeded. It lets a retry finish the audit
+	// without duplicating a record.
+	stageRecoveryPendingName = "stage-recovery.pending.json"
+)
+
 // stageRecovery records one explicit, auditable repair of a stale accepted-outcome
 // run stage. It is diagnostic provenance only: it never changes the task status,
 // attempt, outcome, acceptance decisions, or validation evidence.
 type stageRecovery struct {
+	ID              string   `json:"id"`
 	Version         int      `json:"version"`
 	Task            string   `json:"task"`
 	FromStage       string   `json:"from_stage"`
@@ -36,6 +52,10 @@ type stageRecovery struct {
 	RecordedAt      string   `json:"recorded_at"`
 }
 
+// appendStageRecoveryRecord is the audit append seam. Tests replace it to exercise
+// an interrupted audit without changing production behavior.
+var appendStageRecoveryRecord = appendJSONL
+
 const taskRecoverStageUsage = "usage: sop task recover-stage <task-id> --by NAME --reason R"
 
 // runTaskRecoverStage repairs the legacy accepted-outcome run-stage defect without
@@ -45,6 +65,12 @@ const taskRecoverStageUsage = "usage: sop task recover-stage <task-id> --by NAME
 // WAITING_FOR_HUMAN. The accepted outcome is re-derived against the current repository
 // content so stale acceptance bindings fail closed. Only the existing non-destructive
 // PASSED stage checkpoint is written, plus an append-only audit record.
+//
+// The repair is two-phase: a pending marker is written before the stage changes, and
+// the audit record is appended after. If the audit append fails, the stage is already
+// PASSED but the pending marker remains; a retry sees PASSED plus the marker, appends
+// the missing record once, and removes the marker. A retry after a stage-write failure
+// reuses the same pending record and completes the transition.
 func runTaskRecoverStage(args []string, stdout, stderr io.Writer, getwd func() (string, error)) int {
 	id, by, reason, ok := parseTaskRecoverStageArgs(args, stderr)
 	if !ok {
@@ -100,8 +126,39 @@ func runTaskRecoverStage(args []string, stdout, stderr io.Writer, getwd func() (
 		fmt.Fprintf(stderr, "task recover-stage: %s has no persisted run state\n", id)
 		return exitError
 	}
+
+	rec := runpkg.At(runpkg.Dir(dir, id))
+	auditPath := filepath.Join(rec.Dir(), stageRecoveryAuditName)
+	pendingPath := filepath.Join(rec.Dir(), stageRecoveryPendingName)
+	existing, err := readJSONL[stageRecovery](auditPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "task recover-stage: read recovery audit: %v\n", err)
+		return exitError
+	}
+	pending, pendingOK, err := readStageRecoveryPending(pendingPath)
+	if err != nil {
+		fmt.Fprintf(stderr, "task recover-stage: %v\n", err)
+		return exitError
+	}
+
 	if stage == runpkg.Passed {
-		fmt.Fprintf(stdout, "task %s: run stage is already %s; no recovery recorded\n", id, runpkg.Passed)
+		if !pendingOK {
+			fmt.Fprintf(stdout, "task %s: run stage is already %s; no recovery recorded\n", id, runpkg.Passed)
+			return exitOK
+		}
+		if pending.Task != id {
+			fmt.Fprintf(stderr, "task recover-stage: pending recovery belongs to %s, not %s\n", pending.Task, id)
+			return exitError
+		}
+		if err := appendStageRecoveryIfMissing(auditPath, existing, pending); err != nil {
+			fmt.Fprintf(stderr, "task recover-stage: finish interrupted audit: %v\n", err)
+			return exitError
+		}
+		if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+			fmt.Fprintf(stderr, "task recover-stage: recovery audit recorded, but the pending marker was not removed: %v; retry to finish\n", err)
+			return exitError
+		}
+		fmt.Fprintf(stdout, "task %s: completed interrupted stage-recovery audit\n", id)
 		return exitOK
 	}
 	if stage != runpkg.WaitingForHuman {
@@ -109,7 +166,6 @@ func runTaskRecoverStage(args []string, stdout, stderr io.Writer, getwd func() (
 		return exitError
 	}
 
-	rec := runpkg.At(runpkg.Dir(dir, id))
 	req, ok := rec.Approval()
 	if !ok || req.Status != domain.ApprovalApproved {
 		fmt.Fprintf(stderr, "task recover-stage: %s has no APPROVED approval gate; refusing recovery\n", id)
@@ -161,12 +217,8 @@ func runTaskRecoverStage(args []string, stdout, stderr io.Writer, getwd func() (
 		return exitError
 	}
 
-	if err := runpkg.SetStageOnExisting(dir, id, runpkg.Passed); err != nil {
-		fmt.Fprintf(stderr, "task recover-stage: persist stage: %v\n", err)
-		return exitError
-	}
-
 	record := stageRecovery{
+		ID:              stageRecoveryID(id, string(runpkg.WaitingForHuman), string(runpkg.Passed), identity, criteria),
 		Version:         stageRecoveryVersion,
 		Task:            id,
 		FromStage:       string(runpkg.WaitingForHuman),
@@ -179,14 +231,85 @@ func runTaskRecoverStage(args []string, stdout, stderr io.Writer, getwd func() (
 		By:              by,
 		RecordedAt:      time.Now().UTC().Format(time.RFC3339),
 	}
-	if err := appendJSONL(filepath.Join(rec.Dir(), "stage-recoveries.jsonl"), record); err != nil {
-		fmt.Fprintf(stdout, "warning: stage-recovery audit not persisted: %v\n", err)
+	if pendingOK {
+		if pending.Task != id || pending.ID != record.ID || pending.ContentIdentity != identity || strings.Join(pending.Criteria, "\x00") != strings.Join(criteria, "\x00") {
+			fmt.Fprintf(stderr, "task recover-stage: pending recovery does not match the current content; re-run required\n")
+			return exitError
+		}
+		record = pending
+	} else {
+		if err := writeStageRecoveryPending(pendingPath, record); err != nil {
+			fmt.Fprintf(stderr, "task recover-stage: record pending recovery: %v\n", err)
+			return exitError
+		}
+	}
+
+	if err := runpkg.SetStageOnExisting(dir, id, runpkg.Passed); err != nil {
+		fmt.Fprintf(stderr, "task recover-stage: persist stage: %v\n", err)
+		return exitError
+	}
+	if err := appendStageRecoveryIfMissing(auditPath, existing, record); err != nil {
+		fmt.Fprintf(stderr, "task recover-stage: stage repaired, but the recovery audit was not persisted: %v; retry to finish the audit\n", err)
+		return exitError
+	}
+	if err := os.Remove(pendingPath); err != nil && !errors.Is(err, os.ErrNotExist) {
+		fmt.Fprintf(stderr, "task recover-stage: stage repaired and audit recorded, but the pending marker was not removed: %v; retry to finish\n", err)
+		return exitError
 	}
 
 	fmt.Fprintf(stdout, "task %s: run stage repaired %s -> %s (outcome %s)\n", id, runpkg.WaitingForHuman, runpkg.Passed, out.Status)
 	fmt.Fprintf(stdout, "  by: %s\n", by)
 	fmt.Fprintf(stdout, "  reason: %s\n", reason)
 	return exitOK
+}
+
+// stageRecoveryID is the stable idempotency key for one repair of a task's recorded
+// outcome to the terminal PASSED stage. It deliberately excludes reason/by so a
+// retry with different operator prose still recognizes the same repair.
+func stageRecoveryID(task, from, to, identity string, criteria []string) string {
+	h := sha256.New()
+	fmt.Fprintf(h, "task=%s\nfrom=%s\nto=%s\nidentity=%s\ncriteria=%s\n", task, from, to, identity, strings.Join(criteria, "\x00"))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+// appendStageRecoveryIfMissing appends rec once. A record with the same idempotency
+// key already present is not duplicated.
+func appendStageRecoveryIfMissing(path string, existing []stageRecovery, rec stageRecovery) error {
+	for _, r := range existing {
+		if r.ID == rec.ID {
+			return nil
+		}
+	}
+	return appendStageRecoveryRecord(path, rec)
+}
+
+// writeStageRecoveryPending durably records the intended repair before the stage
+// changes, so an audit-write failure is recoverable by a retry.
+func writeStageRecoveryPending(path string, rec stageRecovery) error {
+	data, err := json.MarshalIndent(rec, "", "  ")
+	if err != nil {
+		return fmt.Errorf("encode pending recovery: %w", err)
+	}
+	return durablefs.WriteFile(path, append(data, '\n'))
+}
+
+// readStageRecoveryPending reads a pending repair marker, or reports it absent.
+func readStageRecoveryPending(path string) (stageRecovery, bool, error) {
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return stageRecovery{}, false, nil
+	}
+	if err != nil {
+		return stageRecovery{}, false, err
+	}
+	var rec stageRecovery
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return stageRecovery{}, false, fmt.Errorf("parse pending stage recovery: %w", err)
+	}
+	if strings.TrimSpace(rec.ID) == "" || strings.TrimSpace(rec.Task) == "" {
+		return stageRecovery{}, false, errors.New("pending stage recovery is incomplete")
+	}
+	return rec, true, nil
 }
 
 // parseTaskRecoverStageArgs parses

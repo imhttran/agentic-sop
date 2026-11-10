@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -105,7 +106,7 @@ func TestTaskRecoverStageRepairsLegacyAcceptedStage(t *testing.T) {
 		t.Fatalf("stage recovery records = %d, want 1", len(records))
 	}
 	rec := records[0]
-	if rec.Version != stageRecoveryVersion || rec.Task != "T001" || rec.FromStage != string(runpkg.WaitingForHuman) || rec.ToStage != string(runpkg.Passed) || rec.OutcomeStatus != string(outcome.Verified) || rec.Validation != "passed" || rec.By != "operator" || rec.Reason != "legacy accepted-outcome stage" || rec.ContentIdentity == "" || len(rec.Criteria) != 1 || rec.Criteria[0] != "criterion-1" || rec.RecordedAt == "" {
+	if rec.ID == "" || rec.Version != stageRecoveryVersion || rec.Task != "T001" || rec.FromStage != string(runpkg.WaitingForHuman) || rec.ToStage != string(runpkg.Passed) || rec.OutcomeStatus != string(outcome.Verified) || rec.Validation != "passed" || rec.By != "operator" || rec.Reason != "legacy accepted-outcome stage" || rec.ContentIdentity == "" || len(rec.Criteria) != 1 || rec.Criteria[0] != "criterion-1" || rec.RecordedAt == "" {
 		t.Fatalf("unexpected stage recovery record: %+v", rec)
 	}
 
@@ -145,6 +146,61 @@ func TestTaskRecoverStageRefusesUnexpectedStage(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), "stage-recoveries.jsonl")); err == nil {
 		t.Fatal("recover-stage wrote an audit record after refusing")
+	}
+}
+
+// TestTaskRecoverStageFinishesInterruptedAudit proves an audit-write failure after
+// the stage transition is recoverable: the pending marker preserves the intended
+// record, and a retry appends it exactly once.
+func TestTaskRecoverStageFinishesInterruptedAudit(t *testing.T) {
+	dir, a := manualRecoveryFixture(t)
+	firstManualRun(t, dir, a)
+	if code, _, stderr := runCLI(t, dir, "outcome", "T001", "--accept", "criterion-1", "--evidence", "reviewed docs/review.md", "--by", "operator"); code != exitOK {
+		t.Fatalf("accept: code=%d stderr=%s", code, stderr)
+	}
+	if code, _, stderr := runCLI(t, dir, "approve", "T001", "--by", "operator"); code != exitOK {
+		t.Fatalf("approve: code=%d stderr=%s", code, stderr)
+	}
+	if code, stdout, stderr := runInjectedCLI(t, dir, resumeTestDiff, a, "run"); code != exitOK {
+		t.Fatalf("accepted resume: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	if err := runpkg.SetStageOnExisting(dir, "T001", runpkg.WaitingForHuman); err != nil {
+		t.Fatalf("simulate legacy stage: %v", err)
+	}
+
+	original := appendStageRecoveryRecord
+	calls := 0
+	appendStageRecoveryRecord = func(path string, rec any) error {
+		calls++
+		if calls == 1 {
+			return errors.New("injected audit failure")
+		}
+		return original(path, rec)
+	}
+	defer func() { appendStageRecoveryRecord = original }()
+
+	if code, _, _ := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "interrupted audit"); code == exitOK {
+		t.Fatal("recover-stage reported success despite the injected audit failure")
+	}
+	if stage, ok := runpkg.Load(dir, "T001"); !ok || stage != runpkg.Passed {
+		t.Fatalf("stage after audit failure = %q (ok=%v), want %q", stage, ok, runpkg.Passed)
+	}
+	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryPendingName)); err != nil {
+		t.Fatalf("pending recovery marker missing after audit failure: %v", err)
+	}
+
+	if code, stdout, stderr := runCLI(t, dir, "task", "recover-stage", "T001", "--by", "operator", "--reason", "finish audit"); code != exitOK {
+		t.Fatalf("retry recover-stage: code=%d stdout=%s stderr=%s", code, stdout, stderr)
+	}
+	records, err := readJSONL[stageRecovery](filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryAuditName))
+	if err != nil || len(records) != 1 {
+		t.Fatalf("recovered audit records = %d err=%v, want 1", len(records), err)
+	}
+	if records[0].ID == "" || records[0].Task != "T001" || records[0].Reason != "interrupted audit" {
+		t.Fatalf("unexpected recovered audit record: %+v", records[0])
+	}
+	if _, err := os.Stat(filepath.Join(runpkg.Dir(dir, "T001"), stageRecoveryPendingName)); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("pending recovery marker remains after successful retry: %v", err)
 	}
 }
 
