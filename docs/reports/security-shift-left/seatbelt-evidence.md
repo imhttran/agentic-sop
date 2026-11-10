@@ -102,3 +102,36 @@ is covered by the dqharness test above.
 - Linux Bubblewrap runtime isolation was not executed on this host; see
   [bubblewrap-verification.md](bubblewrap-verification.md).
 - No platform-independent claim is made.
+
+## run_command opt-in sandbox (LLM03)
+
+Implements [PROPOSAL-RUN-COMMAND-ISOLATION](../../plans/PROPOSAL-RUN-COMMAND-ISOLATION.md)
+for macOS. `SOP_AGENT_RUN_COMMAND_ISOLATION=1` (or `Config.IsolateCommands`)
+makes `toolharness` wrap each `run_command` in `sandbox-exec` after the command
+policy check. Off by default.
+
+- **Profile** (`internal/toolharness/isolation.go`): allow-default; `deny network*`
+  except loopback bind/inbound and loopback remote; `deny file-write*` except the
+  canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, the user cache
+  dir (default GOCACHE), GOCACHE/GOMODCACHE, and `/dev/null`; a final
+  `deny file-write*` on `<root>/.agent-sdlc` (a later deny overrides the root allow).
+- **Fail closed:** a non-darwin host, missing `sandbox-exec`, or an
+  uncanonicalizable root returns `errIsolationUnavailable`, audited as a denial;
+  the command never runs unsandboxed.
+- **Audit:** a successful isolated run records
+  `isolate=seatbelt backend=<path> root=<root> profile=<sha256>` in Detail.
+
+Verification (macOS arm64, 2026-11-09):
+
+- `go test ./internal/toolharness -run Isolation`: PASS, including the state-dir write
+  denial, the write outside the allowed dirs, the blocked outbound TCP connection to
+  1.1.1.1:443, and the allowed loopback connection.
+- The repository's own `go test` for `internal/toolharness`, `repoindex`, `security`
+  and `testrunner` ran inside the generated profile: PASS.
+- `touch .agent-sdlc/forged` under the profile: `Operation not permitted`.
+- Found while testing: `(allow network* (local ip "localhost:*"))` also matches
+  outbound sockets, so the profile keys only bind/inbound on the local address.
+
+Limits: Linux has no `run_command` backend yet (NOT_RUN, fails closed). Seatbelt
+cannot nest, so the tests skip inside another sandbox. The outbound-deny test is
+only meaningful on a host with network access.
