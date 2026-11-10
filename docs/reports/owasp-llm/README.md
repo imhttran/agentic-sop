@@ -31,8 +31,9 @@ macOS arm64 at `d69e9f63` and recorded `PASS` on Linux `amd64` at campaign
 baseline `5ff526a`. A bounded Linux `amd64` C1 live campaign (PR #370, campaign
 revision `c5df5f0` on `5ff526a`, artifact SHA-256
 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) `PASS`es
-for 12 scoped cases with 3 positive controls and one bounded residual; it is
-evidence, not acceptance.
+for 12 scoped cases with 3 positive controls and one bounded residual. The
+recorded run required 16 requests (attempt 2) and passed all 5 confinement
+probes; it is evidence, not acceptance.
 
 Plan 10 completed its lifecycle. The wrap-up merged in PR #328 (`35340774`) with
 full CI on `eaf34114`, and the live-evidence reconciliation merged in PR #339
