@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
 // Task and caller input reach the model through userPrompt, so they pass the
@@ -148,5 +150,92 @@ func runGitForTest(t *testing.T, dir string, args ...string) {
 	cmd.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL="+os.DevNull)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git %v: %v\n%s", args, err, out)
+	}
+}
+
+// TestModelInputToolBoundariesResidualLimits pins the documented limits of the
+// approved A+B policy rather than claiming broader protection. It is an
+// observation test: an unknown-format value in an ordinary file, diff, or SAFE
+// command output still reaches the model, and a pre-existing hardlink with an
+// ordinary name bypasses the lexical credential-path denial. Recognised
+// credential shapes in those same paths are still redacted.
+func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
+	const (
+		opaqueFile    = "opaque-live-value-42"
+		opaqueEnv     = "opaque-env-value-43"
+		diffCanary    = "sk-llm02-limit-diff-not-a-real-secret"
+		commandCanary = "sk-llm02-limit-command-not-a-real-secret"
+	)
+	dir := t.TempDir()
+	gitInit(t, dir)
+	writeFile(t, dir, ".env", "SOP_TEST_API_KEY="+llm08EnvCanary+"\nSOP_OPAQUE_SECRET="+opaqueEnv+"\n")
+	writeFile(t, dir, "opaque.txt", "opaque_secret="+opaqueFile+"\n")
+	writeFile(t, dir, "credentials-tracked.txt", "SOP_TEST_API_KEY="+commandCanary+"\n")
+	writeFile(t, dir, "tracked-diff.txt", "before\n")
+	writeFile(t, dir, "opaque-tracked.txt", "opaque_secret="+opaqueFile+"\n")
+	runGitForTest(t, dir, "add", "credentials-tracked.txt", "tracked-diff.txt", "opaque-tracked.txt")
+	writeFile(t, dir, "tracked-diff.txt", "after token="+diffCanary+"\n")
+	writeFile(t, dir, "opaque-tracked.txt", "opaque_secret="+opaqueFile+"-worktree\n")
+	if err := os.Link(filepath.Join(dir, ".env"), filepath.Join(dir, "hardlink.txt")); err != nil {
+		t.Fatalf("create hardlink: %v", err)
+	}
+
+	h := toolharness.New(dir, toolharness.DefaultConfig(), toolharness.NewAuditLog(0))
+	ctx := context.Background()
+
+	// Documented limit: an ordinary, non-denied file with an unknown-format
+	// secret is model-visible.
+	out, err := h.Run(ctx, toolharness.ToolReadFile, map[string]any{"path": "opaque.txt"})
+	if err != nil {
+		t.Fatalf("read_file opaque.txt: %v", err)
+	}
+	if msg := toolResultMessage(toolharness.ToolReadFile, out, err); !strings.Contains(msg, opaqueFile) {
+		t.Fatalf("the documented unknown-format gap is no longer observed; update the policy evidence: %q", msg)
+	}
+
+	// Documented limit: a hardlink with an ordinary name bypasses the lexical
+	// path denial. The recognised shape is still redacted at the model boundary,
+	// but the unknown-format value is not.
+	out, err = h.Run(ctx, toolharness.ToolReadFile, map[string]any{"path": "hardlink.txt"})
+	if err != nil {
+		t.Fatalf("read_file hardlink.txt: %v", err)
+	}
+	msg := toolResultMessage(toolharness.ToolReadFile, out, err)
+	if strings.Contains(msg, llm08EnvCanary) {
+		t.Fatalf("recognised credential shape was not redacted through a hardlink: %q", msg)
+	}
+	if !strings.Contains(msg, opaqueEnv) {
+		t.Fatalf("the documented hardlink/unknown-format gap is no longer observed; update the policy evidence: %q", msg)
+	}
+
+	// Documented limit: diff content is covered by shape redaction only.
+	out, err = h.Run(ctx, toolharness.ToolGitDiff, nil)
+	if err != nil {
+		t.Fatalf("git_diff: %v", err)
+	}
+	msg = toolResultMessage(toolharness.ToolGitDiff, out, err)
+	if strings.Contains(msg, diffCanary) {
+		t.Fatalf("recognised diff credential shape was not redacted: %q", msg)
+	}
+	if !strings.Contains(msg, opaqueFile) {
+		t.Fatalf("the documented diff/unknown-format gap is no longer observed; update the policy evidence: %q", msg)
+	}
+
+	// Documented limit: SAFE command output is covered by shape redaction only.
+	out, err = h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": "git show :opaque-tracked.txt"})
+	if err != nil {
+		t.Fatalf("run_command opaque: %v", err)
+	}
+	msg = toolResultMessage(toolharness.ToolRunCommand, out, err)
+	if !strings.Contains(msg, opaqueFile) {
+		t.Fatalf("the documented command/unknown-format gap is no longer observed; update the policy evidence: %q", msg)
+	}
+
+	out, err = h.Run(ctx, toolharness.ToolRunCommand, map[string]any{"command": "git show :credentials-tracked.txt"})
+	if err != nil {
+		t.Fatalf("run_command command canary: %v", err)
+	}
+	if msg := toolResultMessage(toolharness.ToolRunCommand, out, err); strings.Contains(msg, commandCanary) {
+		t.Fatalf("recognised command credential shape was not redacted: %q", msg)
 	}
 }

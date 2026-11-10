@@ -38,3 +38,42 @@ func TestLocalDeciderDoesNotFollowRedirect(t *testing.T) {
 		t.Fatalf("requests = %d, want exactly 1 (a redirect must not be followed)", requests)
 	}
 }
+
+// TestLocalDeciderSendsExplicitThinkOption proves the optional Ollama thinking
+// control is carried in the request body only when the caller sets it. The live
+// campaign needs think=false so a reasoning model does not spend its bounded
+// output on hidden reasoning instead of the one JSON response.
+func TestLocalDeciderSendsExplicitThinkOption(t *testing.T) {
+	think := false
+	var body string
+	client := &http.Client{
+		Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			data, err := io.ReadAll(req.Body)
+			if err != nil {
+				return nil, err
+			}
+			body = string(data)
+			return &http.Response{
+				StatusCode: http.StatusOK,
+				Body:       io.NopCloser(strings.NewReader(`{"response":"{\"ok\":true}","done":true}`)),
+				Request:    req,
+			}, nil
+		}),
+	}
+	d := LocalDecider{Endpoint: LiveEndpointURL, Model: "fixture-model", Prompt: "p", Client: client, Think: &think}
+	if _, err := d.Decide(context.Background()); err != nil {
+		t.Fatalf("Decide: %v", err)
+	}
+	if !strings.Contains(body, `"think":false`) {
+		t.Fatalf("request body does not carry think=false: %s", body)
+	}
+
+	body = ""
+	d.Think = nil
+	if _, err := d.Decide(context.Background()); err != nil {
+		t.Fatalf("Decide without think: %v", err)
+	}
+	if strings.Contains(body, `"think"`) {
+		t.Fatalf("request body carries think when the caller did not set it: %s", body)
+	}
+}
