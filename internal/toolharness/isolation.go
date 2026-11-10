@@ -57,13 +57,15 @@ func isolate(root string, argv []string) (wrapped, env []string, detail string, 
 }
 
 // sandboxEnv is the child environment: the inherited environment without any
-// credential-named variable, plus this run's GOCACHE. IsSecretName is the
-// shared vocabulary; it matches substrings, so a few harmless names such as
-// SSH_AUTH_SOCK are dropped too. Isolation-off callers keep os.Environ().
+// credential-named variable or credential-shaped value, plus this run's
+// GOCACHE. IsSecretName and Shapes are the shared vocabulary; names match as
+// substrings and values by shape, so a few harmless entries are dropped too.
+// Isolation-off callers keep os.Environ().
 func sandboxEnv(cache string) (env []string, dropped int) {
+	marker := redact.Fixed("[redacted]")
 	for _, kv := range os.Environ() {
-		name, _, _ := strings.Cut(kv, "=")
-		if redact.IsSecretName(name) {
+		name, value, _ := strings.Cut(kv, "=")
+		if redact.IsSecretName(name) || redact.Shapes(value, marker) != value {
 			dropped++
 			continue
 		}
@@ -137,9 +139,14 @@ type credentialPath struct {
 }
 
 // homeCredentials resolves the fixed credential locations under the user's home
-// directory. Entries that do not exist are skipped: there is nothing to hide.
-// A home directory that cannot be resolved fails closed, matching the rest of
-// the sandbox, so the command never runs unsandboxed.
+// directory and those named by environment variables. Entries that do not exist
+// are skipped: there is nothing to hide. A home directory that cannot be
+// resolved, or a set relative override, fails closed, matching the rest of the
+// sandbox, so the command never runs unsandboxed.
+// ponytail: the denies match paths, so a credential inside a writable dir (the
+// root or temp, for example KUBECONFIG pointing into the repo) can be renamed,
+// or its parent dir moved, and then read; failing closed on such paths would
+// close that if it ever matters.
 func homeCredentials() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -149,8 +156,7 @@ func homeCredentials() ([]credentialPath, error) {
 		return nil, fmt.Errorf("%w: cannot resolve home directory", errIsolationUnavailable)
 	}
 	var out []credentialPath
-	add := func(rel string, dir bool) {
-		p := filepath.Join(home, rel)
+	add := func(p string, dir bool) {
 		if _, err := os.Lstat(p); err != nil {
 			return
 		}
@@ -162,9 +168,23 @@ func homeCredentials() ([]credentialPath, error) {
 		}
 	}
 	for _, d := range sensitivepath.HomeCredentialDirs() {
-		add(d, true)
+		add(filepath.Join(home, d), true)
 	}
 	for _, f := range sensitivepath.HomeCredentialFiles() {
+		add(filepath.Join(home, f), false)
+	}
+	envDirs, err := sensitivepath.EnvCredentialDirs(os.Getenv)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errIsolationUnavailable, err)
+	}
+	envFiles, err := sensitivepath.EnvCredentialFiles(os.Getenv)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", errIsolationUnavailable, err)
+	}
+	for _, d := range envDirs {
+		add(d, true)
+	}
+	for _, f := range envFiles {
 		add(f, false)
 	}
 	return out, nil
@@ -265,6 +285,11 @@ func systemAlias(p string) string {
 func seatbeltProfile(root string, writable []string, denyRead []credentialPath) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n(deny network*)\n")
+	// The login keychain is reached through the SecurityServer system service,
+	// not by a file read. Deny the lookup so a sandboxed `security` cannot read
+	// stored tokens. Certificate verification uses trustd instead, so it is
+	// unaffected (measured with a public chain under this rule).
+	b.WriteString("(deny mach-lookup (global-name \"com.apple.SecurityServer\"))\n")
 	// (local ip ...) on network* would also match outbound sockets, so only
 	// bind/inbound are keyed on the local address.
 	b.WriteString("(allow network-bind network-inbound (local ip \"localhost:*\"))\n(allow network* (remote ip \"localhost:*\"))\n")

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // needSandbox skips unless this host can actually start the platform sandbox
@@ -260,6 +261,84 @@ func TestHomeCredentialsFailsClosedWithoutHome(t *testing.T) {
 	}
 }
 
+// A credential-shaped value is dropped even when its variable name is ordinary:
+// DATABASE_URL with URL userinfo is not passed to the sandbox, while the same
+// URL without a credential, GOFLAGS, PATH, and HOME are.
+func TestSandboxEnvDropsCredentialValues(t *testing.T) {
+	has := func(env []string, name string) bool {
+		for _, kv := range env {
+			if strings.HasPrefix(kv, name+"=") {
+				return true
+			}
+		}
+		return false
+	}
+	t.Setenv("GOFLAGS", "-mod=mod")
+
+	t.Setenv("DATABASE_URL", "postgres://user:pass@host/db")
+	env, _ := sandboxEnv("cache")
+	if has(env, "DATABASE_URL") {
+		t.Fatalf("DATABASE_URL with userinfo reached the sandbox")
+	}
+
+	t.Setenv("DATABASE_URL", "postgres://host/db")
+	env, _ = sandboxEnv("cache")
+	if !has(env, "DATABASE_URL") {
+		t.Fatalf("DATABASE_URL without a credential was dropped")
+	}
+	for _, name := range []string{"GOFLAGS", "PATH", "HOME"} {
+		if !has(env, name) {
+			t.Errorf("%s was dropped", name)
+		}
+	}
+}
+
+// The fixed list also covers the credential locations environment variables
+// name, and a set relative value fails closed.
+func TestHomeCredentialsIncludeEnvOverrides(t *testing.T) {
+	root := t.TempDir()
+	t.Setenv("HOME", fakeHomeUnder(t, root))
+	dir := filepath.Join(root, "override-gpg")
+	writeRepoFile(t, root, "override-gpg/secret", "x")
+	one, two := filepath.Join(root, "kube-one"), filepath.Join(root, "kube-two")
+	writeRepoFile(t, root, "kube-one", "x")
+	writeRepoFile(t, root, "kube-two", "x")
+	t.Setenv("GNUPGHOME", dir)
+	t.Setenv("KUBECONFIG", one+string(os.PathListSeparator)+two)
+
+	got, err := homeCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Overrides resolve symlinks first (on macOS /var is /private/var), so the
+	// expected entries are the real paths.
+	want := map[string]bool{}
+	for p, isDir := range map[string]bool{dir: true, one: false, two: false} {
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[real] = isDir
+	}
+	for _, c := range got {
+		if dirKind, ok := want[c.path]; ok && dirKind != c.dir {
+			t.Errorf("%s dir = %v, want %v", c.path, c.dir, dirKind)
+		}
+		delete(want, c.path)
+	}
+	for p := range want {
+		t.Errorf("missing env credential path %s in %v", p, got)
+	}
+}
+
+func TestHomeCredentialsFailsClosedOnRelativeOverride(t *testing.T) {
+	t.Setenv("HOME", fakeHomeUnder(t, t.TempDir()))
+	t.Setenv("GNUPGHOME", "relative/gnupg")
+	if _, err := homeCredentials(); !errors.Is(err, errIsolationUnavailable) {
+		t.Fatalf("err = %v, want errIsolationUnavailable", err)
+	}
+}
+
 // A sandboxed command cannot read a credential file, and an ordinary file under
 // the same home still reads. The home is a temp dir, never the real one.
 // fakeHomeUnder places the fake HOME inside the repository root. On Linux the
@@ -318,6 +397,79 @@ func TestRunCommandIsolationDeniesCredentialHardlink(t *testing.T) {
 	out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(alias))
 	if err == nil || strings.Contains(out, "sop-credential-canary") {
 		t.Fatalf("hardlink alias readable: out=%q err=%v", out, err)
+	}
+}
+
+// A credential reached through an environment-variable override is denied just
+// like one under HOME, while an ordinary neighbour stays readable.
+func TestRunCommandIsolationDeniesEnvOverrideCredentials(t *testing.T) {
+	needSandbox(t)
+	root := t.TempDir()
+	t.Setenv("HOME", fakeHomeUnder(t, root))
+	gpg := filepath.Join(root, "override-gpg")
+	writeRepoFile(t, root, "override-gpg/secret", "override-canary")
+	one, two := filepath.Join(root, "kube-one"), filepath.Join(root, "kube-two")
+	writeRepoFile(t, root, "kube-one", "override-canary")
+	writeRepoFile(t, root, "kube-two", "override-canary")
+	writeRepoFile(t, root, "override-ordinary.txt", "ordinary-override-content")
+	t.Setenv("GNUPGHOME", gpg)
+	t.Setenv("KUBECONFIG", one+string(os.PathListSeparator)+two)
+
+	for _, p := range []string{filepath.Join(gpg, "secret"), one, two} {
+		out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(p))
+		if err == nil || strings.Contains(out, "override-canary") {
+			t.Fatalf("override credential %s read: out=%q err=%v", p, out, err)
+		}
+	}
+	out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(filepath.Join(root, "override-ordinary.txt")))
+	if err != nil || !strings.Contains(out, "ordinary-override-content") {
+		t.Fatalf("ordinary neighbour read failed: out=%q err=%v", out, err)
+	}
+}
+
+// The macOS Keychain is reached through a system service, not a file read; a
+// temporary keychain proves the mach-lookup deny does the work (the keychain
+// file lives under the sandbox root and is not otherwise denied).
+func TestRunCommandIsolationDeniesKeychainAccess(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("the keychain probe uses the macOS security CLI")
+	}
+	needSandbox(t)
+	root := t.TempDir()
+	keychain := filepath.Join(root, "probe.keychain")
+	const password = "sop-probe-password"
+	const canary = "keychain-canary"
+
+	security := func(args ...string) {
+		t.Helper()
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if out, err := exec.CommandContext(ctx, "security", args...).CombinedOutput(); err != nil {
+			t.Fatalf("security %v: %v: %s", args, err, out)
+		}
+	}
+	security("create-keychain", "-p", password, keychain)
+	defer func() { _ = exec.Command("security", "delete-keychain", keychain).Run() }()
+	security("unlock-keychain", "-p", password, keychain)
+	security("add-generic-password", "-a", "sop", "-s", "sop-probe", "-w", canary, "-T", "/usr/bin/security", keychain)
+
+	out, err := sandboxedOutput(t, root, "security find-generic-password -s sop-probe -w "+strconv.Quote(keychain))
+	if err == nil {
+		t.Fatalf("a sandboxed keychain read succeeded: %q", out)
+	}
+	if strings.Contains(out, canary) {
+		t.Fatalf("keychain canary leaked: %q", out)
+	}
+	// Positive control: the sandbox still runs after the service deny.
+	if out, err := sandboxedOutput(t, root, "go version"); err != nil || !strings.Contains(out, "go version") {
+		t.Fatalf("sandboxed go version: out=%q err=%v", out, err)
+	}
+}
+
+func TestSeatbeltProfileDeniesKeychainService(t *testing.T) {
+	profile := seatbeltProfile("/repo", []string{"/repo"}, nil)
+	if !strings.Contains(profile, `(deny mach-lookup (global-name "com.apple.SecurityServer"))`) {
+		t.Fatalf("profile does not deny the keychain service:\n%s", profile)
 	}
 }
 
@@ -404,6 +556,7 @@ func TestRunCommandIsolationThrowawayGoCache(t *testing.T) {
 func TestIsolateScrubsSecretEnv(t *testing.T) {
 	needSandbox(t)
 	t.Setenv("SOP_TEST_API_KEY", "sop-env-canary")
+	t.Setenv("DATABASE_URL", "postgres://user:pass@host/db")
 	t.Setenv("GOFLAGS", "-mod=mod")
 	root := t.TempDir()
 
@@ -422,6 +575,9 @@ func TestIsolateScrubsSecretEnv(t *testing.T) {
 	text := string(out)
 	if strings.Contains(text, "SOP_TEST_API_KEY") || strings.Contains(text, "sop-env-canary") {
 		t.Fatalf("a credential-named variable reached the sandbox:\n%s", text)
+	}
+	if strings.Contains(text, "DATABASE_URL") || strings.Contains(text, "postgres://user:pass") {
+		t.Fatalf("a credential-shaped value reached the sandbox:\n%s", text)
 	}
 	hasEnv := func(name string) bool {
 		for _, line := range strings.Split(text, "\n") {

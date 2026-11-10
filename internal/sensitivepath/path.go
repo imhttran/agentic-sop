@@ -9,6 +9,9 @@
 package sensitivepath
 
 import (
+	"errors"
+	"fmt"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -77,6 +80,104 @@ func HomeCredentialFiles() []string {
 	files = append(files, ".docker/config.json", ".cargo/credentials.toml", ".pypirc")
 	sort.Strings(files)
 	return files
+}
+
+// EnvCredentialDirs returns credential directories named by environment
+// variables, resolved to absolute paths. A set but relative value is an error:
+// the sandbox fails closed rather than guessing what it named.
+func EnvCredentialDirs(getenv func(string) string) ([]string, error) {
+	return envPaths(getenv, []envPath{
+		{name: "GNUPGHOME"}, {name: "CLOUDSDK_CONFIG"}, {name: "GH_CONFIG_DIR"}, {name: "AZURE_CONFIG_DIR"},
+		{name: "XDG_CONFIG_HOME", rels: []string{"gh", "gcloud"}},
+	})
+}
+
+// EnvCredentialFiles returns credential files named by environment variables
+// (including a KUBECONFIG list), resolved to absolute paths. A set but relative
+// value is an error, as with EnvCredentialDirs.
+func EnvCredentialFiles(getenv func(string) string) ([]string, error) {
+	files, err := envPaths(getenv, []envPath{
+		{name: "AWS_SHARED_CREDENTIALS_FILE"}, {name: "AWS_CONFIG_FILE"}, {name: "NPM_CONFIG_USERCONFIG"}, {name: "NETRC"},
+		{name: "XDG_CONFIG_HOME", rels: []string{"git/credentials"}},
+		{name: "DOCKER_CONFIG", rels: []string{"config.json"}},
+		{name: "CARGO_HOME", rels: []string{"credentials.toml", "credentials"}},
+	})
+	if err != nil {
+		return nil, err
+	}
+	if kube := strings.TrimSpace(getenv("KUBECONFIG")); kube != "" {
+		for _, p := range filepath.SplitList(kube) {
+			p = strings.TrimSpace(p)
+			if p == "" {
+				continue
+			}
+			if !filepath.IsAbs(p) {
+				return nil, fmt.Errorf("KUBECONFIG entry is not absolute: %q", p)
+			}
+			real, err := resolveExisting("KUBECONFIG", p)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, real)
+		}
+	}
+	sort.Strings(files)
+	return files, nil
+}
+
+// envPath names one credential location: the variable's value itself, or, when
+// rels is set, each rel joined under that value.
+type envPath struct {
+	name string
+	rels []string
+}
+
+// envPaths resolves each set variable in specs; unset ones are skipped.
+func envPaths(getenv func(string) string, specs []envPath) ([]string, error) {
+	var out []string
+	for _, s := range specs {
+		p, err := absoluteEnv(getenv, s.name)
+		if err != nil {
+			return nil, err
+		}
+		if p == "" {
+			continue
+		}
+		if len(s.rels) == 0 {
+			out = append(out, p)
+		}
+		for _, rel := range s.rels {
+			out = append(out, filepath.Join(p, rel))
+		}
+	}
+	return out, nil
+}
+
+// absoluteEnv returns the resolved absolute value of name, or "" when unset.
+func absoluteEnv(getenv func(string) string, name string) (string, error) {
+	v := strings.TrimSpace(getenv(name))
+	if v == "" {
+		return "", nil
+	}
+	if !filepath.IsAbs(v) {
+		return "", fmt.Errorf("%s is not absolute: %q", name, v)
+	}
+	return resolveExisting(name, v)
+}
+
+// resolveExisting resolves symlinks in p before any lexical cleaning:
+// filepath.Clean would apply "link/.." to the text, naming a different object
+// than the kernel opens. A path that does not exist is returned unchanged (the
+// caller skips missing entries); any other resolution error fails closed.
+func resolveExisting(name, p string) (string, error) {
+	real, err := filepath.EvalSymlinks(p)
+	if err == nil {
+		return real, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return p, nil
+	}
+	return "", fmt.Errorf("%s cannot be resolved: %q: %v", name, p, err)
 }
 
 // IsReviewSensitive reports whether a repository-relative path must be excluded
