@@ -98,9 +98,14 @@ acceptance criteria were accepted; no acceptance decision exists.
    campaign baseline `5ff526a`; a bounded Linux live campaign `PASS`es for 12
    scoped cases with one bounded residual (PR #370, campaign revision `c5df5f0`,
    artifact SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`).
-   Hardlink aliases under C1 and Linux live retrieval/notification remain
-   unverified or `NOT_RUN` (see `llm02-acceptance-request.md` §C1 reconciliation
-   and required Linux evidence). No residual risk is recorded as accepted.
+   Hardlink aliases under C1 are `OBSERVED` (4 protected, 1 positive control,
+   1 residual at `ed1ba11`; artifact SHA-256
+   `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`);
+   Linux live retrieval/notification remain `NOT_RUN`. The hardlink/path-identity
+   feasibility proposal is
+   [PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md](../../plans/PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md)
+   (status `NOT_APPROVED`; recommends bounded Option C). No residual risk is
+   recorded as accepted.
 3. **Optional evidence extensions** — Slack rendering/channel binding, Linux live
    retrieval/notification, and live producer-side RAG isolation remain unobserved or
    `NOT_RUN`. Run them only if a specific claim requires that evidence.
