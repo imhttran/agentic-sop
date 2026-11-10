@@ -14,7 +14,9 @@ The historical `dqharness` replay run below was **NOT_RUN** on the original
 macOS host. The opt-in `run_command` LLM03 sandbox, including the PR #378
 home-credential read-deny policy, is **VERIFIED on Linux `amd64`** in
 [Credential read-deny — Linux amd64 verification](#credential-read-deny--linux-amd64-verification-2026-11-10).
-The replay suite remains `NOT_RUN` on that macOS host.
+The replay suite remains `NOT_RUN` on that macOS host. The pre-existing
+subprocess hardlink alias is `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS
+(BOUNDED)` by the Option D decision; it is not fixed.
 
 The macOS Seatbelt runtime results that did run are in
 [seatbelt-evidence.md](seatbelt-evidence.md).
@@ -110,7 +112,8 @@ Limits:
   unreachable.
 - A pre-existing hardlink alias to a credential remains readable inside the
   sandbox (verified 2026-11-10). Path-based masking does not close inode
-  aliases; that is a separate path-identity policy question.
+  aliases. This bounded residual is
+  `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`; it is not fixed.
 - Isolation is off by default. With it off, the credential read succeeds and
   A+B redaction is the only model-bound control.
 
@@ -167,7 +170,17 @@ bash scripts/checks/pre-push.sh --base origin/main
 The last two are deliberately separate results. With isolation off (the default),
 the file is read and A+B redacts only the model-bound text. With isolation on, a
 pre-existing ordinary-name hardlink shares the credential inode, so the path
-masking does not hide it. That path-identity limitation remains open.
+masking does not hide it. That path-identity limitation is
+`RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`; it is not fixed.
+
+Disposition:
+
+| Dimension | Status |
+| --- | --- |
+| Direct credential paths and symlinks, isolation on | `MITIGATED` |
+| Linux process-level denial evidence | `VERIFIED` (PRs #378/#384; artifact above) |
+| Pre-existing subprocess hardlink alias | `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` (decision `APPROVE_OPTION_D_SUBPROCESS_HARDLINK`, repository `a01d2007…`, source `operator:option-d-subprocess-hardlink-2026-11-10`) |
+| Direct reads with isolation off and other LLM02 risks | `OPEN` |
 
 Nested execution note: the live evaluation harness now provides private `/tmp`
 and `/run` mount points so the opt-in inner `run_command` sandbox can start
