@@ -855,12 +855,14 @@ state; staleness is not revocation.
 
 ## C1 unknown-format redaction implementation (2026-11-10)
 
-Status: **IMPLEMENTED (opt-in), merged through PRs #361/#362/#364;
-DETERMINISTIC verification recorded on macOS arm64 at the final merged revision
-`d69e9f63`; Linux deterministic re-verification of the final C1 code and C1 Linux
-live verification are `NOT_RUN`.** The repository configuration was not changed
-to enable the feature; the previous default behavior remains until an operator
-enables C1.
+Status: **IMPLEMENTED (opt-in), merged through PRs #361/#362/#364; DETERMINISTIC
+verification `PASS` on macOS arm64 at `d69e9f63` and recorded `PASS` on Linux
+`amd64` at campaign baseline `5ff526a`; a bounded Linux `amd64` live campaign
+`PASS`es for the 12 scoped C1 cases, with 3 positive controls and one bounded
+residual.** The live campaign is evidence, not acceptance: no residual risk is
+accepted and Plan 03 per-criterion acceptance remains `0/16` / `NEEDS_HUMAN`. The
+repository configuration was not changed to enable the feature; the previous
+default behavior remains until an operator enables C1.
 
 ### Authorization
 
@@ -888,8 +890,9 @@ Merged state: PR #361 (`720e1f2e`) implemented the opt-in policy, PR #362
 (`637b3e37`) restored suffixed and plural credential-key coverage, and PR #364
 (`85a754d4`) preserved separator-delimited key segments when camel-case
 splitting was added. The final merged C1 code is `internal/redact/policy.go` at
-`85a754d4`, contained unchanged in `main` at `d69e9f63`. PR #364 changed code and
-tests only; this section is the documentation reconciliation for it.
+`85a754d4`, contained unchanged in campaign baseline `5ff526a` and `main` at
+`b61af152`. PR #364 changed code and tests only; this section is the
+documentation reconciliation for it.
 
 - `internal/redact.Policy` and `ModelInputWithPolicy`: the zero policy is the
   previous composition. When enabled, exact inventory values are redacted first,
@@ -942,20 +945,32 @@ model-input boundary only — `userPrompt` and `toolResultMessage` (success and
 error) in `internal/ollamaagent`. The OpenAI-compatible provider request path is
 not a C1 boundary in the approved scope, and the system prompt is not redacted.
 A live C1 campaign must therefore exercise the Ollama tool harness, not the
-OpenAI-compatible path.
+OpenAI-compatible path. The merged live campaign supplied inventory values in
+memory (`redact.Policy{Enabled: true, Values: [...]}`); external `0600` inventory
+loading and the configuration path are covered by unit tests, not by live
+evidence.
 
-| Dimension                                 | Status                                                                                                                  | Evidence                                                                                                                                                                                                                              |
-| ----------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| C1 implementation                         | `COMPLETE` / `IMPLEMENTED` opt-in, merged in PRs #361/#362/#364 (final code `85a754d4`, unchanged in `main` `d69e9f63`) | `internal/redact/policy.go`, `inventory.go`, `internal/config/redaction.go`                                                                                                                                                           |
-| Deterministic verification, macOS arm64   | `PASS` at the final merged revision `d69e9f63`, Go 1.27.1                                                               | `go build ./...`; `go vet` on the redact/config/ollamaagent/cli/cmd packages; `go test ./internal/redact ./internal/config ./internal/ollamaagent`; the `TestRedactionPolicyFromProject` and `TestOWASPLLM02` tests in `internal/cli` |
-| Deterministic verification, Linux `amd64` | `PENDING` for the final merged revision                                                                                 | The earlier Linux run (below) predates the PR #364 separator-segment change; it is not a claim about the final code                                                                                                                   |
-| C1 Linux live-model campaign              | `NOT_RUN`                                                                                                               | No C1-enabled live campaign exists; the 17-case Linux campaign is the pre-C1 baseline                                                                                                                                                 |
-| Residual disclosure risks                 | Unchanged six-item matrix; none accepted                                                                                | `llm02-acceptance-request.md` §Residual-risk decision matrix                                                                                                                                                                          |
-| Formal Plan 03 per-criterion acceptance   | `0/16`; `NEEDS_HUMAN`                                                                                                   | `llm02-acceptance-request.md` §Plan 03 acceptance matrix                                                                                                                                                                              |
+| Dimension                                 | Status                                                                                                                                                                                              | Evidence                                                                                                                                                                                                                              |
+| ----------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1 implementation                         | `COMPLETE` / `IMPLEMENTED` opt-in, merged in PRs #361/#362/#364 (final code `85a754d4`, unchanged in `main` `b61af152`)                                                                             | `internal/redact/policy.go`, `inventory.go`, `internal/config/redaction.go`                                                                                                                                                           |
+| Deterministic verification, macOS arm64   | `PASS` at the final merged revision `d69e9f63`, Go 1.27.1                                                                                                                                           | `go build ./...`; `go vet` on the redact/config/ollamaagent/cli/cmd packages; `go test ./internal/redact ./internal/config ./internal/ollamaagent`; the `TestRedactionPolicyFromProject` and `TestOWASPLLM02` tests in `internal/cli` |
+| Deterministic verification, Linux `amd64` | `PASS` recorded at campaign baseline `5ff526a` (final C1 code `85a754d4`)                                                                                                                           | `llm02-c1-live-verification.md` §Validation commands: focused C1 tests, `go build`, `go vet`, and pre-push pass                                                                                                                       |
+| C1 Linux live-model campaign              | `PASS` for 12 scoped cases, 3 positive controls, 1 bounded residual (campaign revision `c5df5f0` on `5ff526a`; artifact SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) | `llm02-c1-live-verification.md`, `llm02-c1-linux-campaign.json`                                                                                                                                                                       |
+| Residual disclosure risks                 | Unchanged six-item matrix; none accepted                                                                                                                                                            | `llm02-acceptance-request.md` §Residual-risk decision matrix                                                                                                                                                                          |
+| Formal Plan 03 per-criterion acceptance   | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                               | `llm02-acceptance-request.md` §Plan 03 acceptance matrix                                                                                                                                                                              |
 
-The exact Linux evidence required for final C1 reconciliation is listed in
+Revision separation and remaining untested scope are reconciled in
 [llm02-acceptance-request.md](llm02-acceptance-request.md) §C1 reconciliation and
 required Linux evidence. This section records no acceptance.
+
+### C1 provenance (revision separation)
+
+| Layer                            | Revision                                                                                                            | Notes                                                        |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------ |
+| Implementation                   | `85a754d4` (PR #364), on #361 `720e1f2e` and #362 `637b3e37`                                                        | The C1 code under test; unchanged in the campaign baseline   |
+| Campaign                         | test-only commit `c5df5f0` on `origin/main` `5ff526a`, `dirty: false`                                               | Baseline `5ff526a` contains #361/#362/#364 and #368          |
+| Documentation head               | this follow-up documentation PR (branch `docs/llm02-c1-closeout`)                                                   | Records the merged campaign; no code or campaign change      |
+| Historical campaign (superseded) | #368 at `ee1e317` on `d69e9f6`; artifact SHA-256 `9e4b56f799f3de67723014880c51fb779809fee5a752429b1faaf9f192abf959` | Preserved as provenance; superseded by #370's hardened rerun |
 
 ### Linux verification (C1 implementation revision; predates PR #364)
 
@@ -996,9 +1011,10 @@ inventory, do not have a credential-like key, and do not match an approved known
 format still pass; hardlink aliases, artifact persistence, retrieval/handoff,
 notification prose, provider retention, and general DLP are unchanged. The
 feature is opt-in, so the repository's default configuration remains at the
-pre-C1 residual until an operator enables it. C1 has deterministic evidence
-only: no C1-enabled live-model campaign exists, and the earlier Linux live
-tool-path campaign remains the pre-C1 baseline.
+pre-C1 residual until an operator enables it. C1 now has deterministic and
+bounded live evidence, but the live campaign's one bounded residual confirms
+that a value outside the inventory, without a credential-like key, and without
+an approved known format still reaches the model; C1 is not general DLP.
 
 ## Handoff to Plan 04
 

@@ -9,8 +9,9 @@ evidence-acceptance decision, not retroactive Plan 03 acceptance. The C1
 unknown-format redaction policy is separately authorized in decision memory ID
 `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1` and is
 implemented opt-in (merged in PRs #361/#362/#364; deterministic macOS
-verification at `d69e9f63`; C1 Linux live verification `NOT_RUN`). Full Plan 03
-per-criterion acceptance remains `NEEDS_HUMAN`.
+verification at `d69e9f63`; a bounded Linux C1 live campaign `PASS`es for 12
+scoped cases with one bounded residual, PR #370). The live campaign is evidence,
+not acceptance. Full Plan 03 per-criterion acceptance remains `NEEDS_HUMAN`.
 The final criterion matrix,
 evidence identity, and exact human decisions are in §Final closeout
 (2026-11-10); sections dated 2026-11-09 are preserved as history.
@@ -353,12 +354,14 @@ from the bounded evidence acceptance:
   retention, general DLP.
 - **Implementation status:** `IMPLEMENTED` (opt-in), merged in PRs #361
   (`720e1f2e`), #362 (`637b3e37`), and #364 (`85a754d4`); the final C1 code is
-  `85a754d4`, contained unchanged in `main` `d69e9f63`. Deterministic
-  verification is `PASS` on macOS arm64 at `d69e9f63`; Linux `amd64`
-  re-verification of the final C1 code is `PENDING` (the recorded Linux run
-  predates PR #364); C1 Linux live-model verification is `NOT_RUN`. The
-  repository configuration remains disabled. Exact remaining Linux evidence is
-  in §C1 reconciliation and required Linux evidence.
+  `85a754d4`, contained unchanged in `main` `b61af152`. Deterministic
+  verification is `PASS` on macOS arm64 at `d69e9f63` and recorded `PASS` on Linux
+  `amd64` at campaign baseline `5ff526a`. A bounded Linux `amd64` live campaign
+  (PR #370, campaign revision `c5df5f0` on `5ff526a`, artifact SHA-256
+  `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) `PASS`es
+  for 12 scoped cases with one bounded residual; it is evidence, not acceptance.
+  The repository configuration remains disabled. See §C1 reconciliation and
+  required Linux evidence.
 - **Staleness:** the decision-memory entry is bound to the clean baseline
   `20bea32`; later implementation/documentation commits change the identity, so
   `sop memory list` may report it stale for a different state. Staleness is not
@@ -449,72 +452,82 @@ decision.
 The 17-case Linux tool-path campaign was not repeated. No new live evidence was
 generated for this disposition.
 
-### C1 reconciliation and required Linux evidence (2026-11-10)
+### C1 reconciliation and required Linux evidence (2026-11-10; updated for merged evidence)
 
-This subsection reconciles the merged C1 implementation with the evidence and
-lists the exact Linux work still needed. It records no acceptance, creates no
-acceptance record, and does not change the 16 Plan 03 per-criterion cells.
+This subsection reconciles the merged C1 implementation with the evidence. It
+records no acceptance, creates no acceptance record, and does not change the 16
+Plan 03 per-criterion cells.
 
 Separated status:
 
-| Dimension                               | Status                                                                                                                 |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
-| C1 implementation completion            | `COMPLETE` / `IMPLEMENTED` opt-in (PRs #361, #362, #364; final code `85a754d4`, unchanged in `main` `d69e9f63`)        |
-| C1 deterministic verification           | macOS arm64 `PASS` at `d69e9f63`; Linux `amd64` `PENDING` for the final code (the recorded Linux run predates PR #364) |
-| C1 Linux live verification              | `NOT_RUN`                                                                                                              |
-| Remaining residual disclosure risks     | Six-item matrix unchanged; none accepted                                                                               |
-| Formal Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                  |
+| Dimension                               | Status                                                                                                                                                                                                                                       |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C1 implementation completion            | `COMPLETE` / `IMPLEMENTED` opt-in (PRs #361, #362, #364; final code `85a754d4`, unchanged in `main` `b61af152`)                                                                                                                              |
+| C1 deterministic verification           | macOS arm64 `PASS` at `d69e9f63`; Linux `amd64` `PASS` recorded in the campaign report at baseline `5ff526a` (final C1 code `85a754d4`)                                                                                                      |
+| C1 Linux live verification              | `PASS` for 12 scoped cases, 3 positive controls, 1 bounded residual (PR #370, campaign revision `c5df5f0` on `5ff526a`; artifact `llm02-c1-linux-campaign.json`, SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) |
+| Remaining residual disclosure risks     | Six-item matrix unchanged; none accepted                                                                                                                                                                                                     |
+| Formal Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                                        |
 
 Scope boundary: C1 applies to the local Ollama tool-harness model-input
 boundary (`userPrompt` and `toolResultMessage`, success and error). The
 OpenAI-compatible provider request path and the system prompt are outside the
-approved C1 scope, so a C1 live campaign must use the Ollama tool harness.
+approved C1 scope; the live campaign exercised the Ollama tool harness.
 
-Exact Linux evidence required for final reconciliation:
+Revision separation:
 
-1. Deterministic re-run at the final merged C1 revision (`main` `d69e9f63` or a
-   descendant containing `85a754d4`). Record host, Go version, and revision:
+| Layer                            | Revision                                                                                                            | Notes                                                                                                            |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| Implementation                   | `85a754d4` (PR #364), on #361 `720e1f2e` and #362 `637b3e37`                                                        | The C1 code under test; unchanged in the campaign baseline                                                       |
+| Campaign                         | test-only commit `c5df5f0` on `origin/main` `5ff526a`, `dirty: false`                                               | Recorded run is attempt 2 (16 requests, 29.09 s); attempt 1 hit one provider `500` and produced no evidence used |
+| Documentation head               | this follow-up documentation PR (branch `docs/llm02-c1-closeout`)                                                   | Records the merged campaign; no code or campaign change                                                          |
+| Historical campaign (superseded) | #368 at `ee1e317` on `d69e9f6`; artifact SHA-256 `9e4b56f799f3de67723014880c51fb779809fee5a752429b1faaf9f192abf959` | Preserved as provenance; superseded by #370's hardened rerun                                                     |
 
-   ```sh
-   go build ./...
-   go vet ./internal/redact ./internal/config ./internal/ollamaagent ./internal/cli ./cmd/sop-ollama-agent
-   go test ./internal/redact ./internal/config ./internal/ollamaagent -count=1
-   go test ./internal/cli -run 'TestRedactionPolicyFromProject|TestOWASPLLM02' -count=1
-   bash scripts/checks/pre-push.sh --base origin/main
-   ```
+Satisfied by the merged evidence:
 
+1. Deterministic build, vet, focused C1 tests, and the pre-push gate recorded
+   `PASS` on Linux `amd64` at the campaign baseline `5ff526a`.
 2. A bounded opt-in C1 live campaign through the real Ollama tool harness with a
-   real local model, C1 enabled from an external `0600` inventory, one request
-   per case, fixed bounds, and a recorded artifact with model, endpoint,
-   platform, revision, and SHA-256. It must show, at minimum: an unknown-format
-   value in an ordinary file, SAFE command output, and a diff are redacted with
-   C1 enabled; an exact inventory value is redacted; and the ordinary-content,
-   `.env.example`/`.env.sample` placeholder, public-key, `secretary`, `keyboard`,
-   and `monkey` positive controls remain intact.
-3. A recorded confirmation that the repository default configuration stays
-   disabled, and that with C1 disabled the pre-C1 residual is preserved (no
-   silent behavior change).
-4. A statement of whether the hardlink alias case remains exposed with C1
-   enabled; the inventory/contextual rules may or may not catch it.
-5. Explicit `NOT_RUN` (or fresh evidence) for Linux live retrieval and
-   notification sinks; do not extend the C1 claim to them.
+   real local model. The campaign supplied the inventory values in memory
+   (`redact.Policy{Enabled: true, Values: [...]}`), so it did not exercise the
+   external `0600` inventory loader or the configuration path. With C1 enabled,
+   an unknown-format value in an ordinary file, SAFE command output, and a diff
+   were redacted; the supplied value was redacted; and the ordinary-content,
+   `.env.example` placeholder, and SAFE-command positive controls remained visible.
+   Twelve scoped cases were protected, three positive controls passed, and the
+   hardened assertions require each case to have executed before its result is
+   accepted.
+3. The repository default configuration remains disabled (no `redaction` block is
+   committed); the campaign enabled C1 explicitly, so default behavior is
+   unchanged and the pre-C1 residual remains when the feature is off.
 
-Until items 1 and 2 exist, C1 stays `IMPLEMENTED` with deterministic macOS
-verification only, and C1 Linux live verification stays `NOT_RUN`. No acceptance
-decision is implied by this list.
+Remaining untested (not covered by the merged campaign):
+
+- Live verification of external `0600` inventory loading and the
+  `config.RedactionPolicy` path is not exercised by this campaign; only
+  explicitly supplied in-memory values were tested live. Unit tests cover the
+  loader, but no live campaign validates that integration end to end.
+- Hardlink aliases under C1 remain unverified; the campaign does not test them,
+  and they stay a documented residual.
+- Linux live retrieval and notification sinks remain `NOT_RUN`; do not extend the
+  C1 claim to them.
+- The campaign is one model (`qwen3:4b`), one Linux `amd64` host, and one recorded
+  run per case; it is not general DLP or universal disclosure prevention.
+
+The live campaign `PASS` is evidence, not acceptance. No residual risk is
+accepted, and Plan 03 per-criterion acceptance remains `0/16` / `NEEDS_HUMAN`.
 
 ### Proposed final LLM02 status (2026-11-10)
 
-| Dimension                        | Proposed status                                                                                                                                                                     |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Approved A+B implementation      | `COMPLETE` / `IMPLEMENTED` within the approved scope                                                                                                                                |
-| Scoped verification              | `VERIFIED` for the five deterministic and Linux live tool paths, macOS live campaign, and deterministic prompt/tool tests                                                           |
-| Bounded evidence acceptance      | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`)                                                                                  |
-| Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                               |
-| C1 unknown-format redaction      | `IMPLEMENTED` opt-in (PRs #361/#362/#364); deterministic macOS verification at `d69e9f63`; Linux deterministic re-verification of the final code `PENDING`; C1 Linux live `NOT_RUN` |
-| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in), other recommendations pending (`INVESTIGATE`, `MITIGATE`, `TRANSFER_PROPOSED`)                                |
-| Broader LLM02 security coverage  | `OPEN`                                                                                                                                                                              |
-| Final disposition                | Ready for operator/governance disposition; not fully closed                                                                                                                         |
+| Dimension                        | Proposed status                                                                                                                                                                                                             |
+| -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Approved A+B implementation      | `COMPLETE` / `IMPLEMENTED` within the approved scope                                                                                                                                                                        |
+| Scoped verification              | `VERIFIED` for the five deterministic and Linux live tool paths, macOS live campaign, and deterministic prompt/tool tests                                                                                                   |
+| Bounded evidence acceptance      | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`)                                                                                                                          |
+| Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                       |
+| C1 unknown-format redaction      | `IMPLEMENTED` opt-in (PRs #361/#362/#364); deterministic macOS verification at `d69e9f63` and Linux at `5ff526a`; bounded Linux live `PASS` (PR #370, `c5df5f0`, artifact `14e41eaf…`); one bounded residual; no acceptance |
+| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in), other recommendations pending (`INVESTIGATE`, `MITIGATE`, `TRANSFER_PROPOSED`)                                                                        |
+| Broader LLM02 security coverage  | `OPEN`                                                                                                                                                                                                                      |
+| Final disposition                | Ready for operator/governance disposition; not fully closed                                                                                                                                                                 |
 
 LLM02 is ready for a final governance disposition, but it is not fully closed.
 Do not report full LLM02 coverage until the residual-risk decisions and any
@@ -533,8 +546,9 @@ required per-criterion acceptance are recorded.
    `acceptance_decisions.jsonl`.
 3. **Residual-risk disposition:** decide each item in §Residual-risk decision
    matrix: C1 unknown-format mitigation is implemented opt-in and merged in PRs
-   #361/#362/#364 (decide whether to enable it in project configuration, pursue
-   C2 entropy, or accept the residual; C1 Linux live verification is `NOT_RUN`);
+   #361/#362/#364, with a bounded Linux live campaign `PASS` (PR #370) and one
+   bounded residual (decide whether to enable it in project configuration, pursue
+   C2 entropy, or accept the residual);
    hardlink aliases (`INVESTIGATE` / accept), artifact persistence (`INVESTIGATE` /
    accept), caller/notification prose (`MITIGATE` / accept), retrieval/handoff
    (`INVESTIGATE` / accept the disabled-by-default boundary), and provider
