@@ -1,8 +1,13 @@
 # Proposal — LLM08 model-input credential policy
 
-Status: **PROPOSAL — decision required. No executable policy change is included.**
-Date: 2026-11-09.
-Baseline: `origin/main` at `c87e45f4d3777756ba7bd9bd8f62fd9b0cb3aaad`, after PR #333.
+Status: **APPROVED and IMPLEMENTED — A+B.** Decision memory
+`f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`, recorded at
+`origin/main` `814f69c8`. Implementation branch:
+`security/llm08-model-input-credentials`. This file remains the decision record; it
+does not accept residual risks or authorize artifact/notification changes.
+Date: 2026-11-09 (proposal); 2026-11-10 (decision and implementation).
+Baseline: `origin/main` at `c87e45f4d3777756ba7bd9bd8f62fd9b0cb3aaad` for the
+proposal; the decision was recorded at `814f69c8`.
 Platform: macOS arm64; Go 1.27.1. Configuration: `security.mode: report-only`,
 `security.evaluation.enabled: false`, `advisory_retrieval.enabled: false`,
 `agent.provider: ollama`.
@@ -13,10 +18,29 @@ Related evidence: Plan 03 [llm02-disclosure.md](../reports/owasp-llm/llm02-discl
 Plan 08B `CONTEXT-005` GAP record (uncommitted in its own worktree); and the current
 Plan 08 matrix row.
 
+## Decision record
+
+The operator approved A+B in the implementation thread. The authorization was
+recorded with the supported decision-memory command (`sop memory add`) at
+`814f69c8`, scope `repository`, source
+`docs/plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md`, decision ID
+`f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`.
+
+Approved scope:
+
+1. Redact every model-bound tool result, including error text, with
+   `redact.ModelInput` at the single `toolResultMessage` boundary.
+2. Deny direct `read_file`, `search_files`, and `copy_file` source paths under the
+   narrow credential-path profile, preserving `.env.example`/`.env.sample`.
+3. Leave `commandpolicy` unchanged.
+
+The authorization does not accept residual risks, resolve Plan 03 acceptance,
+authorize artifact or notification changes, or authorize merge.
+
 ## Problem
 
-SOP currently lets a model read credential-bearing repository content through
-several supported tool paths. The previously reported `.env` canary result is
+At the pre-policy baseline, SOP let a model read credential-bearing repository
+content through several supported tool paths. The previously reported `.env` canary result is
 confirmed:
 
 - `model_visible=true` through the real `read_file` path.
@@ -25,10 +49,9 @@ confirmed:
 - `implementation.md` and `result.md` persist model output verbatim, so a model that
   repeats the tool result can still put the value in a run artifact.
 
-A read_file-only fix is not comprehensive. At the proposal baseline,
-`internal/toolharness/disclosure_content_paths_test.go` observed the same synthetic
-canary through five distinct supported paths (`go test ./internal/toolharness -run
-TestDisclosureContentPathsObservation -count=1 -v`):
+A read_file-only fix is not comprehensive. The pre-policy observation (now
+converted to enforcement tests) showed the same synthetic canary through five
+distinct supported paths:
 
 | Path | How content reaches the model | Observed |
 | --- | --- | --- |
@@ -38,9 +61,10 @@ TestDisclosureContentPathsObservation -count=1 -v`):
 | `git_diff` | Tracked-file diff body | `model_visible=true` |
 | `run_command` with a SAFE `git show :path` | Command stdout | `model_visible=true` |
 
-The same test's positive controls confirm ordinary source content remains visible
-through `read_file` and `search_files`, and its audit assertion confirms the harness
-audit records the call but not the result body. No real credential was used.
+The pre-policy positive controls confirmed ordinary source content remained visible
+through `read_file` and `search_files`, and the audit assertion confirmed the harness
+audit records the call but not the result body. No real credential was used. The
+enforcement tests now assert denial or redaction for each path.
 
 ## Existing controls and precedent
 
@@ -62,10 +86,12 @@ audit records the call but not the result body. No real credential was used.
 - `commandpolicy.Classify` treats `git diff`, `git show`, `git grep`, `git log`, and
   `git cat-file` as SAFE. `cat` is not SAFE and is denied unless an approval exists.
 
-There is **no recorded decision** authorizing a general credential-file deny rule or
-ordinary tool-result redaction. The active Plan 08B `CONTEXT-005` task deliberately
-records the tool-output `.env` canary as a `GAP` with options and says: do not
-implement a new confidentiality policy or general DLP without that decision.
+At the proposal stage there was **no recorded decision** authorizing a
+credential-file deny rule or ordinary tool-result redaction. The Plan 08B
+`CONTEXT-005` task deliberately recorded the tool-output `.env` canary as a `GAP` and
+required an operator confidentiality-policy decision before implementation. The
+operator has since approved A+B; §Decision record and §Decision recorded below are the
+satisfaction of that gate.
 
 ## Policy options
 
@@ -193,51 +219,43 @@ Adopt **A + B** as one narrow, existing-boundary policy:
 - `copy_file` must be covered as a source path; otherwise the copy-then-read path
   defeats a read-only rule.
 
-## Test plan for the authorized implementation
+## Implemented tests and evidence
 
-The baseline `TestDisclosureContentPathsObservation` currently asserts the gap
-(canary visible through all five paths). The authorized implementation must invert
-those assertions to require blocking/redaction and keep the ordinary-source positive
-controls.
+The pre-policy observation test was converted to enforcement tests:
 
-1. **Detector positive control:** a deliberately exposed synthetic `sk-…` canary is
-   replaced with `[redacted]`; ordinary text survives.
-2. **Model-input paths:** synthetic canaries are blocked or redacted through
-   `read_file`, `search_files`, `copy_file`+`read_file`, `git_diff`, and
-   `run_command` `git show`.
-3. **Positive controls:** ordinary source files remain readable and searchable;
-   `.env.example`/`.env.sample` are not denied; a non-secret Slack/webhook payload
-   remains intact if notification behavior is touched (it is not in this policy).
-4. **Separate measurements:** assert model visibility, harness-audit persistence, and
-   run-artifact persistence independently. A false `in_artifacts` must not be reported
-   as artifact protection.
-5. **No real credentials:** disposable synthetic fixtures only; no external receiver.
-6. **Required gates:** focused package tests, `go vet ./...`, `go build ./...`,
-   `go test ./... -count=1`, and the repository pre-push link/format check.
+- `TestCredentialPathDenialAndBoundaryDivision` (`internal/toolharness`) proves
+  direct `read_file`, `search_files`, and `copy_file` source denial, template and
+  ordinary-source positive controls, symlink resolution, and the boundary division
+  for `git_diff`/command output.
+- `TestModelInputToolBoundaries` (`internal/ollamaagent`) proves model-bound
+  redaction for `git_diff` and SAFE command output, denial messages for the three
+  path-denied tools, an ordinary-source control, and a redacted denial error.
+- `TestModelInputRedactsKnownEnvAndShapes` (`internal/redact`) is the detector
+  positive control.
+- `TestToolOutputEnvCanaryDenied` (`internal/cli`) proves the `.env` denial and the
+  audit separation.
+- `TestRunArtifactPersistsModelOutputVerbatim` preserves the separate artifact
+  persistence limit.
 
-## Decision required
+Observed on Darwin arm64, Go 1.27.1: all passed; the path-denial cases returned
+`ErrSensitivePath`, the diff/command cases contained `[redacted]` instead of the
+synthetic value, and ordinary source, `.env.example`, and `.env.sample` remained
+readable. The full `go vet ./...`, `go build ./...`, `go test ./... -count=1`, and
+pre-push checks passed.
 
-The operator/security owner must choose one:
+## Decision recorded
 
-- **A+B (recommended):** redact every model-bound tool result and deny direct
-  credential-path reads/searches/copy sources with the narrow profile.
-- **A only:** tool-result redaction, no path denial. Lower compatibility impact,
-  higher residual risk for arbitrary secrets in credential files.
-- **B only:** credential-path denial, no tool-result redaction. Direct reads are
-  protected, but command output and diffs remain exposed.
-- **Accept the gap:** no change; record the residual risk explicitly.
-- **C or E:** request the separate command-output or artifact-redaction decision.
-
-Until that decision is recorded, no executable policy change is authorized. The
-baseline observation test and this proposal are evidence for the decision, not
-acceptance of the risk.
+A+B was approved and recorded as described in §Decision record. The alternatives
+(A-only, B-only, accept the gap, or a separate command/artifact decision) were not
+selected. The residual limits remain explicit in the Plan 08 report and §Coverage
+limits; they are not accepted by this decision.
 
 ## SOP governance note
 
-The active Plan 08B worktree has `CONTEXT-004`, `CONTEXT-005`, and `CONTEXT-006`
-`LOCAL_DONE`; `CONTEXT-007` is `PLANNED` and parked at a `NEEDS_HUMAN` approval gate
-(`approval.json`, kind `NEEDS_HUMAN`, reason: required manual acceptance evidence for
-`criterion-3` is missing). That gate is about Plan 08B's bounded-claim acceptance, not
-this policy. This proposal does not modify that worktree, approve that gate, create a
-new SOP plan, or edit state/archives. The policy implementation should be scheduled
-only after the operator records the decision above.
+The owning Plan 08B worktree advanced to `091ae029` with `CONTEXT-004`,
+`CONTEXT-005`, `CONTEXT-006`, and `CONTEXT-007` `LOCAL_DONE`. Its `CONTEXT-007`
+approval records were inconsistent at the last read (`approval.json` DECLINED while
+the latest `approval-history.json` entry was PENDING). That worktree is being driven
+concurrently and was not modified or approved by this implementation. The policy
+authorization is recorded in the implementation worktree's decision memory; it is not
+Plan 08B acceptance, Plan 03 acceptance, or a merge authorization.
