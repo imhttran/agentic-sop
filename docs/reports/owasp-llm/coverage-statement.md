@@ -74,9 +74,8 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `KUBECONFIG`, `DOCKER_CONFIG`, `GNUPGHOME`, `CLOUDSDK_CONFIG`,
     `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `CARGO_HOME`, `NPM_CONFIG_USERCONFIG`,
     `AWS_SHARED_CREDENTIALS_FILE`, `AWS_CONFIG_FILE`, `AZURE_CONFIG_DIR`, `NETRC`, and `XDG_CONFIG_HOME/git/credentials`, and denies the
-    `com.apple.SecurityServer` mach lookup so the Keychain is not reachable
-    (Linux `NOT_RUN`). The read-deny rule is implemented opt-in (macOS
-    `VERIFIED`, Linux `NOT_RUN`; see
+    `com.apple.SecurityServer` mach lookup so the Keychain is not reachable. The read-deny rule is implemented opt-in (macOS
+    `VERIFIED`, Linux `amd64` `VERIFIED` in PR #384; see
     [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
     Still open on macOS: the parent process environment is readable with
     `kern.procargs2` (measured; `process-info*` does not cover it), and a
@@ -94,12 +93,13 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
   - The six-item residual-risk decision matrix records that the PR #376 review
-    did not approve Option C as it stands, and that a SAFE `run_command`
-    credential read is a separate unaccepted residual; it recommends
+    did not approve Option C as proposed, that the operator later approved
+    Option C Phase 1 (PR #381, Linux `VERIFIED`), and that a SAFE `run_command`
+    credential read with isolation off is a separate unaccepted residual; it recommends
     `INVESTIGATE` for
     unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
-    `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
+    `TRANSFER_PROPOSED` for provider retention. Only the bounded subprocess hardlink alias is accepted (Option D, PR #387; see [PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md](../../plans/PROPOSAL-LLM02-SUBPROCESS-HARDLINK.md)); no other residual risk is accepted.
     The unknown-format proposal is
     [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md);
     C1 is now implemented opt-in (decision memory

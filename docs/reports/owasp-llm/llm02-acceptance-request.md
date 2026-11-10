@@ -198,12 +198,18 @@ explicitly derives no acceptance evidence and clears any prior objective-level
 outcome. No `acceptance_decisions.jsonl` exists for `DISCLOSE-003`, and there is no
 `runs/DISCLOSE-003/outcome.json`.
 
-The supported `sop outcome --accept` interface cannot append acceptance to the
-historicalized plan. On a disposable copy of the preserved state it reports
+Before PR #388, the task-level `sop outcome --accept` interface could not append
+acceptance to the historicalized plan. On a disposable copy of the preserved state it reports
 `task DISCLOSE-003 not found` and `outcome: no recorded outcome for DISCLOSE-003 in
 the latest run; run the task first`; no acceptance file is written. There is no
 active task or recorded outcome to bind a criterion decision to, and the plan must
 not be reopened.
+
+PR #388 adds a supported path for historicalized plans: `sop verify --plan
+<PLAN.md> --archive <dir>` reports per-criterion state, and `sop outcome --plan
+<PLAN.md> --archive <dir> --accept|--reject|--annotate|--run-check <criterion>`
+records a designated-approver decision bound to hashed evidence without
+reopening the archive. It has not yet been used for any Plan 03 criterion.
 
 The earlier statement that `human.designated_approvers` was not configured is stale
 for the preserved state: the evidence `config.yaml` names `Tom Tran`. That does not
@@ -637,8 +643,8 @@ Option C decision history (do not revoke earlier approvals):
 - PR #376 merged the proposal as an investigation record. Its review did not
   approve Option C as proposed, because the threat model missed SAFE
   `run_command` reading `$HOME` credentials directly.
-- The repository operator then explicitly approved Option C Phase 1 (decision
-  memory `a01d2007…`, source `operator:option-c-phase1-2026-11-10`), and PR #381
+- The repository operator then explicitly approved Option C Phase 1 (decision-memory
+  repository `a01d2007…`, source `operator:option-c-phase1-2026-11-10`), and PR #381
   implemented it on Linux: hardlink aliases to protected workspace credentials
   are denied (`VERIFIED` on Linux; macOS and Windows are follow-ups). See
   [gap-register-20261109.md](gap-register-20261109.md).
@@ -749,7 +755,7 @@ without an approval bypass. Neither has been run for acceptance.
 **Hardlink risk — Option C Phase 1 implemented on Linux; the file-tool alias remains unaccepted:**
 
 - PR #376 merged as an investigation record; its review did not approve Option C
-  as proposed. The operator later approved Option C Phase 1 (decision memory
+  as proposed. The operator later approved Option C Phase 1 (decision-memory repository
   `a01d2007…`), and PR #381 implemented it on Linux (`VERIFIED`; macOS and
   Windows are follow-ups).
 - The opt-in sandbox credential read-deny rule is a separate control (macOS
