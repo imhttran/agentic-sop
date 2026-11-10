@@ -99,6 +99,9 @@ type Config struct {
 	// bounded and truncation-marked). It is how a caller that opts a task into raw
 	// output owns that evidence; it never changes the tool result.
 	EvidenceSink func(CommandEvidence)
+	// IsolateCommands, when true, runs run_command inside the OS sandbox (see
+	// IsolationEnv). It fails closed when no backend is available.
+	IsolateCommands bool
 }
 
 // CommandEvidence is one executed command's captured evidence for a task that
@@ -150,6 +153,8 @@ type Harness struct {
 	roots   []authorizedRoot // primary root first, then authorized external roots
 	cfg     Config
 	auditor Auditor
+	// isolation is the sandbox detail of the current run_command, for the audit.
+	isolation string
 
 	// snaps holds each file's content from just before the current invocation
 	// first changed it, keyed by absolute path, so restore_file undoes only this
@@ -305,6 +310,7 @@ func (h *Harness) Root() string { return h.root }
 // decision and the outcome. A policy denial is returned as an error but is
 // audited as a denial, so refusals are as visible as executions.
 func (h *Harness) Run(ctx context.Context, name string, args map[string]any) (string, error) {
+	h.isolation = ""
 	result, err := h.dispatch(ctx, name, args)
 	h.audit(name, args, result, err)
 	return result, err
@@ -354,6 +360,7 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 	switch {
 	case err == nil:
 		rec.Outcome = OutcomeOK
+		rec.Detail = h.isolation
 	case isDenial(err):
 		rec.Action = ActionDeny
 		rec.Outcome = OutcomeDenied
@@ -371,7 +378,7 @@ func (h *Harness) audit(name string, args map[string]any, result string, err err
 func isDenial(err error) bool {
 	return errors.Is(err, errCommandNotAllowed) || errors.Is(err, ErrProtectedPath) ||
 		errors.Is(err, ErrSensitivePath) || errors.Is(err, errUnauthorizedRoot) ||
-		errors.Is(err, errReadOnlyRoot)
+		errors.Is(err, errReadOnlyRoot) || errors.Is(err, errIsolationUnavailable)
 }
 
 // RecordDenied records a refusal the caller decided (for example a
@@ -626,7 +633,13 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	if err := h.checkCommandIn(root, argv); err != nil {
 		return "", false, err
 	}
-	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, argv)
+	run := argv
+	if h.isolationRequested() {
+		if run, h.isolation, err = isolate(root.path, argv); err != nil {
+			return "", false, err
+		}
+	}
+	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run)
 	if err == nil && noTestsMatched(argv, result) {
 		result += "\n" + noTestMatchDiagnostic
 	}
