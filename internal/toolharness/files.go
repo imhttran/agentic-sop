@@ -27,9 +27,18 @@ const stateDirRel = ".agent-sdlc"
 // resolvedPath is a tool argument resolved to a canonical path inside the
 // repository, together with its repository-relative, slash-separated form.
 type resolvedPath struct {
-	abs  string // canonical absolute path
-	rel  string // path relative to the authorized root, slash-separated
-	root string // the authorized root the path was resolved against
+	abs       string // canonical absolute path
+	rel       string // path relative to the authorized root, slash-separated, after symlink resolution
+	requested string // the requested path, cleaned and slash-separated, before symlink resolution
+	root      string // the authorized root the path was resolved against
+}
+
+// readDenied reports whether the requested path or its resolved target names a
+// credential-bearing path. Both are checked so a symlink cannot hide a denied
+// filename or directory behind an ordinary target, nor an ordinary name behind a
+// denied target.
+func (p resolvedPath) readDenied() bool {
+	return sensitivepath.IsToolReadDenied(p.requested) || sensitivepath.IsToolReadDenied(p.rel)
 }
 
 // readFile returns the file's contents, bounded by maxBytes.
@@ -38,7 +47,7 @@ func (h *Harness) readFile(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if sensitivepath.IsToolReadDenied(p.rel) {
+	if p.readDenied() {
 		return "", fmt.Errorf("%w: %s", ErrSensitivePath, p.rel)
 	}
 	info, err := os.Stat(p.abs)
@@ -162,7 +171,7 @@ func (h *Harness) copyFile(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if sensitivepath.IsToolReadDenied(src.rel) {
+	if src.readDenied() {
 		return "", fmt.Errorf("%w: %s", ErrSensitivePath, src.rel)
 	}
 	dst, err := h.resolveArg(map[string]any{"path": dest}, "path", true, accessWrite)
@@ -330,7 +339,7 @@ func (h *Harness) searchFiles(args map[string]any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if sensitivepath.IsToolReadDenied(start.rel) {
+	if start.readDenied() {
 		return "", fmt.Errorf("%w: %s", ErrSensitivePath, start.rel)
 	}
 	base := start.root
@@ -415,6 +424,7 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 	if strings.ContainsRune(raw, 0) {
 		return resolvedPath{}, errors.New("path contains a NUL byte")
 	}
+	requested := filepath.ToSlash(filepath.Clean(raw))
 	abs := raw
 	if !filepath.IsAbs(abs) {
 		abs = filepath.Join(root.path, abs)
@@ -442,7 +452,7 @@ func (h *Harness) resolveIn(root authorizedRoot, raw string, access accessClass)
 	if access == accessWrite && h.inStateDir(real) {
 		return resolvedPath{}, fmt.Errorf("%w: %s is SOP state and cannot be written by model tools", ErrProtectedPath, raw)
 	}
-	return resolvedPath{abs: real, rel: rel, root: root.path}, nil
+	return resolvedPath{abs: real, rel: rel, requested: requested, root: root.path}, nil
 }
 
 // isProtectedPath reports whether rel names SOP's state database. It compares

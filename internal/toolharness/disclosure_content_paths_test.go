@@ -98,6 +98,30 @@ func TestCredentialPathDenialAndBoundaryDivision(t *testing.T) {
 		t.Logf("symlink test skipped: %v", err)
 	}
 
+	// Symlink bypass in the other direction: a denied requested name that resolves
+	// to an ordinary target. The requested path and the resolved target are both
+	// classified, so symlink resolution cannot erase the denied filename.
+	write("config/local-values", llm08Ordinary+"\n")
+	if err := os.MkdirAll(filepath.Join(root, "bypass"), 0o755); err != nil {
+		t.Fatalf("mkdir bypass: %v", err)
+	}
+	if err := os.Symlink("../config/local-values", filepath.Join(root, "bypass", ".env")); err == nil {
+		if _, err := h.Run(ctx, ToolReadFile, map[string]any{"path": "bypass/.env"}); !errors.Is(err, ErrSensitivePath) {
+			t.Fatalf("read_file through a denied-name symlink err = %v, want ErrSensitivePath", err)
+		}
+		if _, err := h.Run(ctx, ToolCopyFile, map[string]any{"source": "bypass/.env", "dest": "bypass-copied.txt"}); !errors.Is(err, ErrSensitivePath) {
+			t.Fatalf("copy_file through a denied-name symlink err = %v, want ErrSensitivePath", err)
+		}
+		if _, err := h.Run(ctx, ToolSearchFiles, map[string]any{"path": "bypass/.env", "pattern": llm08Ordinary}); !errors.Is(err, ErrSensitivePath) {
+			t.Fatalf("search_files through a denied-name symlink err = %v, want ErrSensitivePath", err)
+		}
+	} else {
+		t.Logf("symlink target test skipped: %v", err)
+	}
+	if got, gerr := h.Run(ctx, ToolReadFile, map[string]any{"path": "config/local-values"}); gerr != nil || !strings.Contains(got, llm08Ordinary) {
+		t.Fatalf("ordinary target read = %q, err=%v", got, gerr)
+	}
+
 	// B: copy source is denied; no ordinary-name copy is created.
 	if _, err := h.Run(ctx, ToolCopyFile, map[string]any{"source": ".env", "dest": "copied.txt"}); !errors.Is(err, ErrSensitivePath) {
 		t.Fatalf("copy_file .env err = %v, want ErrSensitivePath", err)
