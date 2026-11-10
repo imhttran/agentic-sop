@@ -19,9 +19,12 @@ work.
 | Repeatable campaign plus artifact | driver/child pattern | `internal/evaltarget/live_campaign_test.go` |
 
 The live profile is the existing Seatbelt profile plus exactly
-`(allow network-outbound (remote ip "localhost:11434"))`. The default
-`IsolateCommand` still denies all network. Linux and other platforms return
-`ErrLiveIsolationUnavailable`; live extraction stays NOT_RUN there.
+`(allow network-outbound (remote ip "localhost:11434"))` on macOS. The default
+`IsolateCommand` still denies all network. Linux now has an equivalent opt-in
+profile: `bwrap --unshare-all` with the endpoint transported over a Unix socket
+inside the case root; see `llm01-injection.md` §Linux live campaign. Other
+platforms return `ErrLiveIsolationUnavailable`; live extraction stays NOT_RUN
+there. The macOS campaign artifacts are unchanged.
 
 ## How DISCLOSE-003 should use it
 
@@ -53,15 +56,19 @@ The live profile is the existing Seatbelt profile plus exactly
   the executed set, and the persisted artifact; do not collapse them into one
   boolean.
 - Unavailable prerequisites: record NOT_RUN and leave the associated criterion
-  incomplete. Linux live is NOT_RUN until an equivalent endpoint restriction is
-  implemented and verified.
+  incomplete. Linux live is now implemented and was verified for one bounded
+  campaign (`llm01-campaign-linux.json`: three denied injection cases, one
+  timeout with no verdict, positive control executed); it is not a 4-of-4
+  result and is not a universal claim.
 - Required verification and PR: run the focused live checks plus the repository
   policy checks once. Do not re-run the campaign to improve its result.
 
 ## Prerequisites at handoff
 
 - Plan 02 PR #272 merged to `main` (currently open, CI green, not merged).
-- macOS with `sandbox-exec` for live execution.
+- macOS with `sandbox-exec` for macOS live execution, or Linux with `bwrap` 0.9+
+  for the opt-in Linux live profile. The Linux campaign used `qwen3:4b`;
+  measured latency for the positive-control prompt was 158 s.
 - Local model available at `127.0.0.1:11434` (the Plan 02 campaign used
   `qwen3.5:4b`; measured latency 85-143 s per prompt).
 - A designated approver if DISCLOSE-003 uses manual acceptance criteria; none is

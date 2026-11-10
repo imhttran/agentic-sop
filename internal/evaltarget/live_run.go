@@ -192,6 +192,7 @@ func RunLiveCase(ctx context.Context, opts LiveRunOptions, lc LiveCase) LiveRunR
 		}
 		res.Status = StatusNotRun
 		res.RawOutput = truncateOutput(out.raw, bounds.MaxOutputBytes)
+		res.Timeout = true
 		res.Detail = errors.Join(errors.New("live: decision capture did not finish within the process lifetime bound"), runCtx.Err()).Error()
 		return res
 	}
@@ -199,6 +200,9 @@ func RunLiveCase(ctx context.Context, opts LiveRunOptions, lc LiveCase) LiveRunR
 	if out.err != nil {
 		res.Status = StatusNotRun
 		res.RawOutput = truncateOutput(out.raw, bounds.MaxOutputBytes)
+		if errors.Is(out.err, context.DeadlineExceeded) || errors.Is(runCtx.Err(), context.DeadlineExceeded) {
+			res.Timeout = true
+		}
 		res.Detail = out.err.Error()
 		return res
 	}
