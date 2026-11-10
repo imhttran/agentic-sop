@@ -20,6 +20,7 @@ type semgrepAdapter struct {
 	category     Category
 	command      []string
 	rules        string
+	rulesPin     string // optional rules_sha256; see checkRulesPin
 	languages    []Language
 	version      string
 	configDigest string
@@ -119,6 +120,12 @@ func (a *semgrepAdapter) Scan(ctx context.Context, req Request) (Execution, erro
 		return finish(exec, nil)
 	}
 	exec.Provenance.RulesIdentity = identity
+	if err := checkRulesPin(rules, identity, a.rulesPin); err != nil {
+		exec.Status = StatusFailed
+		exec.Coverage = CoverageUnknown
+		exec.Diagnostics = []string{err.Error()}
+		return finish(exec, nil)
+	}
 
 	// Semgrep may scan a file named on the command line even when it matches
 	// --exclude, so declared exclusions are applied to changed-file targets here.

@@ -545,6 +545,9 @@ func validateSecurityAdapterConfigs(s SecurityConfig, enabledOnly bool) error {
 		if a.RulesSHA256 != "" && strings.TrimSpace(a.Rules) == "" {
 			return fmt.Errorf("config: security adapter %q sets rules_sha256 without rules", id)
 		}
+		if a.RulesSHA256 != "" && (protocol != SecurityProtocolBuiltin || (strings.ToLower(id) != "semgrep" && strings.ToLower(id) != "gitleaks")) {
+			return fmt.Errorf("config: security adapter %q: rules_sha256 applies only to the built-in semgrep and gitleaks adapters", id)
+		}
 		if strings.TrimSpace(a.Lockfile) != "" {
 			if err := validateSecurityLockfileValue(a.Lockfile); err != nil {
 				return fmt.Errorf("config: security adapter %q: %w", id, err)
