@@ -43,6 +43,30 @@ The artifact also records its confinement probes (`endpoint_reachable`,
 `other_loopback_denied`, `non_loopback_denied`, `filesystem_outside_denied`,
 `secret_env_scrubbed`).
 
+## Additional Linux live tool-path evidence (2026-11-10)
+
+This section is evidence, not acceptance. It does not replace the macOS
+campaign identity above and does not change the required decision.
+
+| Item | Value |
+| --- | --- |
+| Artifact | `docs/reports/owasp-llm/llm02-linux-campaign.json` |
+| Artifact SHA-256 | `e31ea4c5506d1eee8df7495ed9fbbb43cbcb5cd8f4e6c4eb29303ea1231c1f5b` |
+| Campaign revision | `7724a5f`, `dirty: false` |
+| Model / endpoint | `qwen3:4b` via the fixed local Ollama endpoint |
+| Platform | Linux `amd64`, opt-in `bwrap` live profile with a private network namespace and a Unix-socket endpoint bridge |
+| Bounds | 1 request/case, 1 attempt, 1 concurrency, 240 s, 64 KiB |
+| Requests | 17, all observed |
+| Results | 7 protected cases, 6 positive controls, 4 residual exposures |
+| Report section | `llm02-disclosure.md` §Linux live tool-path campaign (2026-11-10) |
+
+The residual exposures are an unknown-format value in an ordinary file, SAFE
+command output, a diff, and a hardlink alias to `.env`. The campaign does not
+establish general DLP, retrieval protection, notification protection, artifact
+protection, or coverage of another model or platform. The Plan 03 acceptance
+decision remains exactly as stated above.
+
+
 ## Current SOP state (read-only, verified 2026-11-09)
 
 Checked in the existing `llm02-disclosure` worktree without modifying it:
@@ -121,8 +145,9 @@ No step may be performed on the operator's behalf.
 - It would bind the named evidence to the named criteria for the recorded attempt.
 - It would **not** turn the campaign into general DLP, prompt secrecy, a red-team
   result, or coverage of another model, provider, or operating system.
-- Linux live extraction remains `NOT_RUN`. Model-visible repository content and
-  persisted model output remain explicit bounded gaps.
+- The Linux live tool-path campaign is `OBSERVED` for the five tool paths, but
+  Linux live retrieval and notification sinks remain `NOT_RUN`. Model-visible
+  repository content and persisted model output remain explicit bounded gaps.
 
 ## Must not
 
@@ -177,8 +202,10 @@ and notification-prose claims. It did not record acceptance. See
 The later Linux `amd64` deterministic verification (2026-11-09, see
 [llm02-disclosure.md](llm02-disclosure.md) §Linux independent verification)
 independently reproduced the five pre-policy paths and confirmed the Plan 08 A+B
-denial/redaction. It records no acceptance and does not change this decision;
-Linux live extraction remains `NOT_RUN`.
+denial/redaction. It records no acceptance and does not change this decision.
+The Linux live tool-path campaign (2026-11-10) is also `OBSERVED` (17 requests:
+7 protected, 6 positive controls, 4 residual exposures); Linux live retrieval and
+notification sinks remain `NOT_RUN`.
 
 ## Exact next action
 
