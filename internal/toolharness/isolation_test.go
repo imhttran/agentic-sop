@@ -40,6 +40,13 @@ func ncTimeout() string {
 // sandboxed runs a shell snippet inside the run_command sandbox for root.
 func sandboxed(t *testing.T, root, script string) error {
 	t.Helper()
+	_, err := sandboxedOutput(t, root, script)
+	return err
+}
+
+// sandboxedOutput is sandboxed with the child's combined output.
+func sandboxedOutput(t *testing.T, root, script string) (string, error) {
+	t.Helper()
 	argv, env, _, cleanup, err := isolate(root, []string{"sh", "-c", script})
 	if err != nil {
 		t.Fatal(err)
@@ -48,7 +55,8 @@ func sandboxed(t *testing.T, root, script string) error {
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = root
 	cmd.Env = env
-	return cmd.Run()
+	out, err := cmd.CombinedOutput()
+	return string(out), err
 }
 
 func TestRunCommandIsolationOffKeepsExecCapturedPath(t *testing.T) {
@@ -177,6 +185,142 @@ func TestRunCommandIsolationDeniesNetwork(t *testing.T) {
 	}
 }
 
+// The sandbox hides the fixed home-relative credential locations: a subpath
+// deny for directories, a literal deny for files, and both the path and its
+// real path. Bubblewrap replaces a directory with an empty tmpfs and a file
+// with /dev/null after the root bind.
+func TestSandboxHidesHomeCredentials(t *testing.T) {
+	creds := []credentialPath{
+		{path: "/home/u/.ssh", dir: true},
+		{path: "/home/u/.netrc", dir: false},
+	}
+	profile := seatbeltProfile("/repo", []string{"/repo"}, creds)
+	for _, want := range []string{
+		`(deny file-read* (subpath "/home/u/.ssh"))`,
+		`(deny file-read* (literal "/home/u/.netrc"))`,
+	} {
+		if !strings.Contains(profile, want) {
+			t.Fatalf("profile missing %q:\n%s", want, profile)
+		}
+	}
+	args := strings.Join(bubblewrapArgs("/repo", nil, creds), " ")
+	for _, want := range []string{"--tmpfs /home/u/.ssh", "--ro-bind /dev/null /home/u/.netrc"} {
+		if !strings.Contains(args, want) {
+			t.Fatalf("bwrap args missing %q:\n%s", want, args)
+		}
+	}
+	if strings.Index(args, "--ro-bind / /") > strings.Index(args, "--tmpfs /home/u/.ssh") {
+		t.Fatalf("credential mounts must come after the root bind:\n%s", args)
+	}
+}
+
+// The fixed list resolves against the user's home, skips entries that do not
+// exist, and adds the real path of each existing entry.
+func TestHomeCredentialsResolveExistingEntries(t *testing.T) {
+	home := t.TempDir()
+	writeRepoFile(t, home, ".ssh/probe", "x")
+	writeRepoFile(t, home, ".netrc", "x")
+	t.Setenv("HOME", home)
+
+	got, err := homeCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	have := map[string]bool{}
+	for _, c := range got {
+		have[c.path] = true
+	}
+	for _, rel := range []string{".ssh", ".netrc"} {
+		p := filepath.Join(home, rel)
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, want := range []string{p, real} {
+			if !have[want] {
+				t.Errorf("missing %q in %v", want, got)
+			}
+		}
+	}
+	if have[filepath.Join(home, ".aws")] {
+		t.Errorf("a missing credential directory was not skipped: %v", got)
+	}
+}
+
+// A home directory that cannot be resolved fails closed instead of leaving the
+// command unsandboxed.
+func TestHomeCredentialsFailsClosedWithoutHome(t *testing.T) {
+	// Cover the Unix and Windows home variables so the failure is not
+	// platform-specific.
+	for _, key := range []string{"HOME", "USERPROFILE", "HOMEDRIVE", "HOMEPATH"} {
+		t.Setenv(key, "")
+	}
+	if _, err := homeCredentials(); !errors.Is(err, errIsolationUnavailable) {
+		t.Fatalf("err = %v, want errIsolationUnavailable", err)
+	}
+}
+
+// A sandboxed command cannot read a credential file, and an ordinary file under
+// the same home still reads. The home is a temp dir, never the real one.
+// fakeHomeUnder places the fake HOME inside the repository root. On Linux the
+// sandbox mounts a private tmpfs over /tmp and binds only the root back, so a
+// home elsewhere under /tmp would be hidden before credential masking applies,
+// and the positive control could not see it either.
+func fakeHomeUnder(t *testing.T, root string) string {
+	t.Helper()
+	home := filepath.Join(root, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
+func TestRunCommandIsolationDeniesCredentialRead(t *testing.T) {
+	needSandbox(t)
+	root := t.TempDir()
+	home := fakeHomeUnder(t, root)
+	writeRepoFile(t, home, ".ssh/probe", "sop-credential-canary")
+	writeRepoFile(t, home, "notes.txt", "ordinary-home-content")
+	t.Setenv("HOME", home)
+
+	out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(filepath.Join(home, ".ssh", "probe")))
+	if err == nil {
+		t.Fatalf("reading a credential file succeeded: %q", out)
+	}
+	if strings.Contains(out, "sop-credential-canary") {
+		t.Fatalf("credential canary leaked: %q", out)
+	}
+
+	// Positive control: an ordinary home file is still readable.
+	out, err = sandboxedOutput(t, root, "cat "+strconv.Quote(filepath.Join(home, "notes.txt")))
+	if err != nil || !strings.Contains(out, "ordinary-home-content") {
+		t.Fatalf("ordinary home read failed: out=%q err=%v", out, err)
+	}
+}
+
+// A sandboxed command must not turn a credential into a readable alias. This
+// measures whether Seatbelt checks the link source: either ln is refused, or the
+// created alias cannot be read. The result is logged so the evidence records
+// which behavior this host exhibits.
+func TestRunCommandIsolationDeniesCredentialHardlink(t *testing.T) {
+	needSandbox(t)
+	root := t.TempDir()
+	home := fakeHomeUnder(t, root)
+	writeRepoFile(t, home, ".ssh/probe", "sop-credential-canary")
+	t.Setenv("HOME", home)
+	alias := filepath.Join(root, "alias.txt")
+
+	if out, err := sandboxedOutput(t, root, "ln "+strconv.Quote(filepath.Join(home, ".ssh", "probe"))+" "+strconv.Quote(alias)); err != nil {
+		t.Logf("os.Link refused inside the sandbox (%v); output: %q", err, out)
+		return
+	}
+	t.Logf("os.Link succeeded inside the sandbox; the alias must still be unreadable")
+	out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(alias))
+	if err == nil || strings.Contains(out, "sop-credential-canary") {
+		t.Fatalf("hardlink alias readable: out=%q err=%v", out, err)
+	}
+}
+
 // The bubblewrap view: host read-only first, private /tmp and /run, the state
 // dir mounted read-only after the writable root bind (so it wins), and a
 // private network namespace. Deterministic, so it runs on every platform.
@@ -184,7 +328,7 @@ func TestBubblewrapArgsOrder(t *testing.T) {
 	root := t.TempDir()
 	writeRepoFile(t, root, ".agent-sdlc/state.db", "state")
 	canon, _ := filepath.EvalSymlinks(root)
-	got := strings.Join(bubblewrapArgs(canon, []string{canon, "/tmp/x", "/run/user/1/cache"}), " ")
+	got := strings.Join(bubblewrapArgs(canon, []string{canon, "/tmp/x", "/run/user/1/cache"}, nil), " ")
 	state, _ := filepath.EvalSymlinks(filepath.Join(canon, ".agent-sdlc"))
 	order := []string{"--ro-bind / /", "--tmpfs /tmp", "--tmpfs /run", "--bind-try " + canon + " " + canon, "--ro-bind " + state + " " + state, "--unshare-net", "--chdir " + canon, "--"}
 	at := 0
@@ -211,7 +355,7 @@ func TestBubblewrapArgsOrder(t *testing.T) {
 	if err := refuseSymlinkedState(root); err != nil {
 		t.Fatalf("real state dir refused: %v", err)
 	}
-	missing := strings.Join(bubblewrapArgs(t.TempDir(), nil), " ")
+	missing := strings.Join(bubblewrapArgs(t.TempDir(), nil, nil), " ")
 	if !strings.Contains(missing, "--remount-ro") {
 		t.Fatalf("a missing state dir must get a read-only tmpfs:\n%s", missing)
 	}
@@ -251,6 +395,65 @@ func TestRunCommandIsolationThrowawayGoCache(t *testing.T) {
 	if err := sandboxed(t, root, "touch "+probe); err == nil {
 		os.Remove(probe)
 		t.Fatal("the shared module cache was writable from the sandbox")
+	}
+}
+
+// The sandboxed child gets the inherited environment without credential-named
+// variables, plus this run's GOCACHE override. Ordinary variables and the Go
+// toolchain stay, so go test still runs.
+func TestIsolateScrubsSecretEnv(t *testing.T) {
+	needSandbox(t)
+	t.Setenv("SOP_TEST_API_KEY", "sop-env-canary")
+	t.Setenv("GOFLAGS", "-mod=mod")
+	root := t.TempDir()
+
+	argv, env, detail, cleanup, err := isolate(root, []string{"sh", "-c", "env"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.Dir = root
+	cmd.Env = env
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("sandboxed env: %v: %s", err, out)
+	}
+	text := string(out)
+	if strings.Contains(text, "SOP_TEST_API_KEY") || strings.Contains(text, "sop-env-canary") {
+		t.Fatalf("a credential-named variable reached the sandbox:\n%s", text)
+	}
+	hasEnv := func(name string) bool {
+		for _, line := range strings.Split(text, "\n") {
+			if strings.HasPrefix(line, name+"=") {
+				return true
+			}
+		}
+		return false
+	}
+	for _, name := range []string{"GOFLAGS", "HOME", "PATH", "GOCACHE"} {
+		if !hasEnv(name) {
+			t.Errorf("sandboxed env missing %s:\n%s", name, text)
+		}
+	}
+	if !strings.Contains(text, "GOFLAGS=-mod=mod\n") {
+		t.Errorf("GOFLAGS value changed:\n%s", text)
+	}
+	// The GOCACHE line must be this run's override, not an inherited value.
+	var cacheLine string
+	for _, kv := range env {
+		if strings.HasPrefix(kv, "GOCACHE=") {
+			cacheLine = kv + "\n"
+		}
+	}
+	if cacheLine == "" || !strings.Contains(text, cacheLine) {
+		t.Errorf("sandboxed env does not carry the run GOCACHE %q:\n%s", cacheLine, text)
+	}
+	if !strings.Contains(detail, "scrubbed_env=") {
+		t.Errorf("audit detail does not record the dropped count: %q", detail)
+	}
+	if out, err := sandboxedOutput(t, root, "go version"); err != nil || !strings.Contains(out, "go version") {
+		t.Fatalf("sandboxed go version: out=%q err=%v", out, err)
 	}
 }
 

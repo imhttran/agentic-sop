@@ -10,6 +10,9 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/redact"
+	"github.com/imhttran/agentic-sop/internal/sensitivepath"
 )
 
 // IsolationEnv opts run_command into the OS sandbox (LLM03,
@@ -31,13 +34,16 @@ func (h *Harness) isolationRequested() bool {
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
 // on Linux. Both deny outbound network (loopback stays usable), deny writes
-// outside the root and temp, and always deny writes under <root>/.agent-sdlc.
+// outside the root and temp, deny reading the user's home credential
+// locations, and always deny writes under <root>/.agent-sdlc.
 // Each run gets its own throwaway GOCACHE, and the shared module cache is
 // read-only (go.sum verifies its content), so one run cannot poison the Go
 // caches of a later run. The caller must call cleanup after the command
 // exits. GOCACHE is returned as extra environment for the child, never put on
-// the command line, so policy-checked argv cannot be reinterpreted. It fails
-// closed: no backend means no run.
+// the command line, so policy-checked argv cannot be reinterpreted. The child
+// environment drops credential-named variables: the sandbox already denies
+// network and credential reads, so a sandboxed command cannot use them. It
+// fails closed: no backend means no run.
 // ponytail: every sandboxed build starts with a cold build cache; seeding it
 // from a trusted snapshot would make it warm again.
 func isolate(root string, argv []string) (wrapped, env []string, detail string, cleanup func(), err error) {
@@ -45,9 +51,25 @@ func isolate(root string, argv []string) (wrapped, env []string, detail string, 
 	if err != nil {
 		return nil, nil, "", nil, err
 	}
-	// Both sandbox-exec and bwrap (no --clearenv) pass the environment through.
-	env = append(os.Environ(), "GOCACHE="+cache)
+	env, dropped := sandboxEnv(cache)
+	detail += fmt.Sprintf(" scrubbed_env=%d", dropped)
 	return append(prefix, argv...), env, detail, func() { _ = os.RemoveAll(cache) }, nil
+}
+
+// sandboxEnv is the child environment: the inherited environment without any
+// credential-named variable, plus this run's GOCACHE. IsSecretName is the
+// shared vocabulary; it matches substrings, so a few harmless names such as
+// SSH_AUTH_SOCK are dropped too. Isolation-off callers keep os.Environ().
+func sandboxEnv(cache string) (env []string, dropped int) {
+	for _, kv := range os.Environ() {
+		name, _, _ := strings.Cut(kv, "=")
+		if redact.IsSecretName(name) {
+			dropped++
+			continue
+		}
+		env = append(env, kv)
+	}
+	return append(env, "GOCACHE="+cache), dropped
 }
 
 // sandboxArgv builds the sandbox prefix and a fresh build-cache dir for one run.
@@ -70,14 +92,20 @@ func sandboxArgv(root string) (prefix []string, detail, cache string, err error)
 	if err != nil {
 		return nil, "", "", fmt.Errorf("%w: cannot canonicalize root: %v", errIsolationUnavailable, err)
 	}
+	// Credential reads are denied only when the sandbox runs; an unresolvable
+	// home fails closed here rather than leaving the command unsandboxed.
+	denyRead, err := homeCredentials()
+	if err != nil {
+		return nil, "", "", err
+	}
 	var args []string
 	if name == "seatbelt" {
-		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon))}
+		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon), denyRead)}
 	} else {
 		if err := refuseSymlinkedState(canon); err != nil {
 			return nil, "", "", err
 		}
-		args = bubblewrapArgs(canon, writableDirs(canon))
+		args = bubblewrapArgs(canon, writableDirs(canon), denyRead)
 	}
 	// Under the temp dir, which both backends keep writable (on Linux it is
 	// the sandbox's private /tmp, so the host dir only reserves the name).
@@ -100,13 +128,55 @@ func refuseSymlinkedState(root string) error {
 	return nil
 }
 
+// credentialPath is one home-relative credential location resolved to an
+// absolute path that exists on this host. dir selects a subpath deny (the whole
+// directory) rather than a literal one (a single file).
+type credentialPath struct {
+	path string
+	dir  bool
+}
+
+// homeCredentials resolves the fixed credential locations under the user's home
+// directory. Entries that do not exist are skipped: there is nothing to hide.
+// A home directory that cannot be resolved fails closed, matching the rest of
+// the sandbox, so the command never runs unsandboxed.
+func homeCredentials() ([]credentialPath, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, fmt.Errorf("%w: cannot resolve home directory: %v", errIsolationUnavailable, err)
+	}
+	if strings.TrimSpace(home) == "" {
+		return nil, fmt.Errorf("%w: cannot resolve home directory", errIsolationUnavailable)
+	}
+	var out []credentialPath
+	add := func(rel string, dir bool) {
+		p := filepath.Join(home, rel)
+		if _, err := os.Lstat(p); err != nil {
+			return
+		}
+		out = append(out, credentialPath{path: p, dir: dir})
+		// Deny the real path too, as the state dir does: a symlinked home or
+		// credential directory would otherwise resolve outside the deny.
+		if real, err := evalExisting(p); err == nil && real != p {
+			out = append(out, credentialPath{path: real, dir: dir})
+		}
+	}
+	for _, d := range sensitivepath.HomeCredentialDirs() {
+		add(d, true)
+	}
+	for _, f := range sensitivepath.HomeCredentialFiles() {
+		add(f, false)
+	}
+	return out, nil
+}
+
 // bubblewrapArgs builds the Linux view: the host read-only, the writable dirs
 // bound read-write, a private /tmp and an empty /run (hiding host sockets such
 // as Docker's), the SOP state dir read-only, and a private network namespace
 // in which only the sandbox's own loopback exists.
 // ponytail: a Unix socket outside /tmp and /run (for example under $HOME)
 // stays connectable; a deny-default view would close that.
-func bubblewrapArgs(root string, writable []string) []string {
+func bubblewrapArgs(root string, writable []string, denyRead []credentialPath) []string {
 	args := []string{
 		"--ro-bind", "/", "/",
 		"--dev", "/dev",
@@ -122,6 +192,16 @@ func bubblewrapArgs(root string, writable []string) []string {
 			continue
 		}
 		args = append(args, "--bind-try", d, d)
+	}
+	// Hidden after the root and writable binds so the empty directory (or
+	// /dev/null) wins. Only existing entries are passed, and they exist in the
+	// read-only root view, so the mount point is always present.
+	for _, c := range denyRead {
+		if c.dir {
+			args = append(args, "--tmpfs", c.path)
+		} else {
+			args = append(args, "--ro-bind", "/dev/null", c.path)
+		}
 	}
 	// Mounted after the root bind so it wins, and the mount point cannot be
 	// unlinked or renamed (isolate refuses a symlinked state dir). A missing
@@ -178,9 +258,11 @@ func systemAlias(p string) string {
 }
 
 // seatbeltProfile is allow-default with network and file-write denied, then
-// re-allowed for loopback and the writable dirs. The SOP state deny comes last
-// so it wins over the root allow.
-func seatbeltProfile(root string, writable []string) string {
+// re-allowed for loopback and the writable dirs. Credential reads are denied
+// outright: because no file-read allow follows, the deny wins over the default
+// for the command that could print, copy, or hardlink the content. The SOP
+// state deny comes last so it wins over the root allow.
+func seatbeltProfile(root string, writable []string, denyRead []credentialPath) string {
 	var b strings.Builder
 	b.WriteString("(version 1)\n(allow default)\n(deny network*)\n")
 	// (local ip ...) on network* would also match outbound sockets, so only
@@ -197,6 +279,13 @@ func seatbeltProfile(root string, writable []string) string {
 	fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", state)
 	if real, err := evalExisting(state); err == nil && real != state {
 		fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", real)
+	}
+	for _, c := range denyRead {
+		if c.dir {
+			fmt.Fprintf(&b, "(deny file-read* (subpath %q))\n", c.path)
+		} else {
+			fmt.Fprintf(&b, "(deny file-read* (literal %q))\n", c.path)
+		}
 	}
 	return b.String()
 }
