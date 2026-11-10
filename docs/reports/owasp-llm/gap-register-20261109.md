@@ -133,7 +133,7 @@ acceptance criteria were accepted; no acceptance decision exists.
    `c7f143fe3b1f3e79308f6f9bcdaf7657a17cae36107739e54a1700d90a83366b`, source
    `operator:llm02-seven-format-2026-11-10`; artifact
    `llm02-seven-format-campaign.json`, SHA-256
-   `c7f4afbdbffcc5fb820fb69efe3e3e879eba43fe827f86ae11f3ed3c7dadced6`). The
+   `316ac2e87f13719c16eaf79b3ceff83f5841b0f9e8033360a59d9f1a22078553`). The
    context-free residual remains `NOT_APPROVED` / open; no acceptance is
    recorded.
 

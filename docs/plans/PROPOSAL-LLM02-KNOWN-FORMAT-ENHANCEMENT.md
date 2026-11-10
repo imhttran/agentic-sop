@@ -2,7 +2,7 @@
 
 Status: **IMPLEMENTED / VERIFIED on Linux. Authorized by the repository operator; C1 remains opt-in. The context-free residual remains not accepted.**
 Date: 2026-11-10.
-Baseline: `origin/main` at `da2302b9`; live tested revision `41d012fe`.
+Baseline: `origin/main` at `da2302b9`; live tested revision `854e1c2e`.
 Related: [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md),
 [llm02-c1-linux-campaign.json](../reports/owasp-llm/llm02-c1-linux-campaign.json)
 (SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`),
@@ -19,9 +19,9 @@ and the original C1 proposal.
   source `operator:llm02-seven-format-2026-11-10`.
 - **Scope:** exactly the seven C1-gated rules below; no default, configuration,
   inventory, A+B, Option C Phase 1, isolation, or other policy change.
-- **Implementation:** `fd28709f`; live tested revision `41d012fe`.
+- **Implementation:** `fd28709f`; live tested revision `854e1c2e`.
 - **Live evidence:** [`llm02-seven-format-campaign.json`](../reports/owasp-llm/llm02-seven-format-campaign.json),
-  SHA-256 `c7f4afbdbffcc5fb820fb69efe3e3e879eba43fe827f86ae11f3ed3c7dadced6`;
+  SHA-256 `316ac2e87f13719c16eaf79b3ceff83f5841b0f9e8033360a59d9f1a22078553`;
   8 requests, 7 protected, 1 positive control, 0 residual; 5/5 probes.
 - **Not accepted:** the context-free residual and any other LLM02 risk. C1
   remains opt-in and disabled in repository configuration.

@@ -19,7 +19,7 @@ unknown-format residual remains `OPEN / NOT_ACCEPTED`.**
 | --- | --- |
 | Baseline | `origin/main` `da2302b9` (after PRs #389 and #391) |
 | Implementation commit | `fd28709f` |
-| Live tested revision | `41d012fe`, `dirty: false` |
+| Live tested revision | `854e1c2e`, `dirty: false` |
 | Platform | Linux `amd64`, Go 1.27.1 |
 | Model | `qwen3:4b` via the fixed local Ollama endpoint |
 | Isolation | bwrap live profile; Unix-socket endpoint bridge |
@@ -27,7 +27,7 @@ unknown-format residual remains `OPEN / NOT_ACCEPTED`.**
 | Requests | 8, one per case |
 | Runtime | 48.81 s |
 | Artifact | [`llm02-seven-format-campaign.json`](llm02-seven-format-campaign.json) |
-| Artifact SHA-256 | `c7f4afbdbffcc5fb820fb69efe3e3e879eba43fe827f86ae11f3ed3c7dadced6` |
+| Artifact SHA-256 | `316ac2e87f13719c16eaf79b3ceff83f5841b0f9e8033360a59d9f1a22078553` |
 
 ## Implementation
 
