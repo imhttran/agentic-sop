@@ -10,18 +10,22 @@ policy, and no acceptance record. The hardlink residual is **not closed**.
 | Item | Value |
 | --- | --- |
 | Repository baseline | `origin/main` `5aba800` (after PRs #361, #362, #364, #368, #370, #372) |
-| Campaign commit | `1e7e888` (test-only commit on `5aba800`), `dirty: false` |
+| Campaign commit | `ed1ba11` (test-only commit on `5aba800`), `dirty: false` |
 | Platform | Linux `amd64`, Go 1.27.1 |
 | Model | `qwen3:4b` via the fixed local Ollama endpoint |
 | Isolation | `bwrap` private mount/process/network namespaces; fixed endpoint only through the Unix-socket bridge |
 | Bounds | 1 attempt/case, 1 request/case, concurrency 1, 240 s, 64 KiB |
 | Requests | 6, one per case; no retries |
-| Runtime | 18.32 s |
+| Runtime | 6.87 s |
 | Artifact | [`llm02-c1-hardlink-campaign.json`](llm02-c1-hardlink-campaign.json) |
-| Artifact SHA-256 | `76d76541888a67d5a1065154f8a763328e8db7650a31ca56dd34c49a4053a7a7` |
+| Artifact SHA-256 | `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3` |
 
 The earlier 17-case Linux tool-path campaign (`31c059b2…`) and the 16-case C1
 campaign (`14e41eaf…`) are unchanged and were not re-run.
+
+A Windows-only skip was added to the deterministic test after the first
+campaign run; the recorded campaign was re-run at the final test revision. The
+skip does not change the Linux code path or any outcome.
 
 ## Security boundary
 
@@ -146,8 +150,8 @@ bash scripts/checks/pre-push.sh --base origin/main
 ## Evidence needed by the Mac workstream
 
 - Artifact: `llm02-c1-hardlink-campaign.json`, SHA-256
-  `76d76541888a67d5a1065154f8a763328e8db7650a31ca56dd34c49a4053a7a7`, tested
-  revision `1e7e888`, `dirty: false`, 6 requests.
+  `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`, tested
+  revision `ed1ba11`, `dirty: false`, 6 requests.
 - Result: 4 protected, 1 positive control, 1 residual exposure; 5/5 confinement
   probes.
 - The hardlink row remains `GAP / observed`; C1 narrows the exposed content but
