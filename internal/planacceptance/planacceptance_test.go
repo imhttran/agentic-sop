@@ -486,3 +486,146 @@ func TestArchivedHistoricalObservationIsNotInferred(t *testing.T) {
 		t.Fatalf("stale = %d, want 0 (no observation flag survives the archive)", rep.Counts.Stale)
 	}
 }
+
+func TestDecisionReversalAppendsNewRecord(t *testing.T) {
+	f := newFixture(t)
+	ctx := f.context(t)
+	designated := []string{"Approver"}
+	ref := f.ref(t)
+	m, _ := FindMapping(ctx, "STAGE-C.criterion-1")
+
+	base := outcome.AcceptanceDecision{
+		CriterionID:  m.CriterionID,
+		Evidence:     "same evidence",
+		Approver:     "Approver",
+		EvidenceRefs: []outcome.EvidenceRef{ref},
+	}
+	reject := base
+	reject.Decision = outcome.DecisionReject
+	if _, err := RecordDecision(ctx, reject, designated); err != nil {
+		t.Fatalf("RecordDecision reject: %v", err)
+	}
+	accept := base
+	accept.Decision = outcome.DecisionAccept
+	if _, err := RecordDecision(ctx, accept, designated); err != nil {
+		t.Fatalf("RecordDecision accept: %v", err)
+	}
+	rep, err := Evaluate(ctx, designated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statusFor(rep, m.CriterionID); got != StatusManuallyAccepted {
+		t.Fatalf("status after accept = %s, want manually-accepted", got)
+	}
+
+	// Repeating the older rejection must append, not be suppressed by the earlier
+	// matching record, so the newest verdict (reject) actually takes effect.
+	if _, err := RecordDecision(ctx, reject, designated); err != nil {
+		t.Fatalf("RecordDecision second reject: %v", err)
+	}
+	decisions, err := ReadDecisions(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(decisions) != 3 {
+		t.Fatalf("decision records = %d, want 3", len(decisions))
+	}
+	rep, err = Evaluate(ctx, designated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statusFor(rep, m.CriterionID); got != StatusRejected {
+		t.Fatalf("status after repeat reject = %s, want rejected", got)
+	}
+}
+
+func TestDisplayAliasIsCanonicalized(t *testing.T) {
+	f := newFixture(t)
+	ctx := f.context(t)
+	designated := []string{"Approver"}
+	ref := f.ref(t)
+	m, _ := FindMapping(ctx, "STAGE-C.criterion-1")
+
+	stored, err := RecordDecision(ctx, outcome.AcceptanceDecision{
+		CriterionID:  "STAGE-C.1", // display alias, not the canonical ID
+		Decision:     outcome.DecisionAccept,
+		Evidence:     "e",
+		Approver:     "Approver",
+		EvidenceRefs: []outcome.EvidenceRef{ref},
+	}, designated)
+	if err != nil {
+		t.Fatalf("RecordDecision with alias: %v", err)
+	}
+	if stored.CriterionID != m.CriterionID {
+		t.Fatalf("stored criterion = %q, want canonical %q", stored.CriterionID, m.CriterionID)
+	}
+	rep, err := Evaluate(ctx, designated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statusFor(rep, m.CriterionID); got != StatusManuallyAccepted {
+		t.Fatalf("status = %s, want manually-accepted", got)
+	}
+
+	check, _ := FindMapping(ctx, "STAGE-B.criterion-1")
+	recorded, err := RecordCheck(ctx, CheckEvidence{
+		CriterionID: "STAGE-B.1", CheckRef: check.CheckRef, Command: check.Command,
+		Argv: []string{"git", "rev-parse", "HEAD"}, Class: "SAFE", Executed: true,
+		Passed: true, TestedRevision: "abc123", SourceUnchanged: true,
+	})
+	if err != nil {
+		t.Fatalf("RecordCheck with alias: %v", err)
+	}
+	if recorded.CriterionID != check.CriterionID {
+		t.Fatalf("stored check criterion = %q, want canonical %q", recorded.CriterionID, check.CriterionID)
+	}
+	rep, err = Evaluate(ctx, designated)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := statusFor(rep, check.CriterionID); got != StatusCheckPassed {
+		t.Fatalf("check status = %s, want check-passed", got)
+	}
+}
+
+func TestStructurallyInvalidLedgerRecordsFailClosed(t *testing.T) {
+	for _, bad := range []string{"null", "{}"} {
+		t.Run(bad, func(t *testing.T) {
+			f := newFixture(t)
+			ctx := f.context(t)
+			ref := f.ref(t)
+			m, _ := FindMapping(ctx, "STAGE-C.criterion-1")
+			if _, err := RecordDecision(ctx, outcome.AcceptanceDecision{
+				CriterionID: m.CriterionID, Decision: outcome.DecisionAccept,
+				Evidence: "e", Approver: "Approver", EvidenceRefs: []outcome.EvidenceRef{ref},
+			}, []string{"Approver"}); err != nil {
+				t.Fatalf("RecordDecision: %v", err)
+			}
+			path := filepath.Join(ctx.LedgerDir, "decisions.jsonl")
+			fh, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := fh.WriteString(bad + "\n"); err != nil {
+				t.Fatal(err)
+			}
+			if err := fh.Close(); err != nil {
+				t.Fatal(err)
+			}
+
+			rep, err := Evaluate(ctx, []string{"Approver"})
+			if err != nil {
+				t.Fatalf("Evaluate: %v", err)
+			}
+			if rep.Corrupt == nil {
+				t.Fatal("structurally invalid record was not reported as corrupt")
+			}
+			if _, err := RecordDecision(ctx, outcome.AcceptanceDecision{
+				CriterionID: m.CriterionID, Decision: outcome.DecisionReject,
+				Evidence: "e2", Approver: "Approver", EvidenceRefs: []outcome.EvidenceRef{ref},
+			}, []string{"Approver"}); err == nil {
+				t.Fatal("decision was appended after a structurally invalid ledger")
+			}
+		})
+	}
+}

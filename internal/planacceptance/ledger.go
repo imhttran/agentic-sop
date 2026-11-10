@@ -83,25 +83,29 @@ func decisionsPath(ctx *Context) string   { return filepath.Join(ctx.LedgerDir, 
 func annotationsPath(ctx *Context) string { return filepath.Join(ctx.LedgerDir, annotationsFile) }
 func checksPath(ctx *Context) string      { return filepath.Join(ctx.LedgerDir, checksFile) }
 
-// ReadDecisions returns the plan-scoped decisions, failing closed on any corrupt
-// or unterminated record.
+// ReadDecisions returns the plan-scoped decisions, failing closed on any corrupt,
+// malformed, or unterminated record.
 func ReadDecisions(ctx *Context) ([]outcome.AcceptanceDecision, error) {
-	return readStrictJSONL[outcome.AcceptanceDecision](decisionsPath(ctx))
+	return readStrictJSONL(decisionsPath(ctx), validateDecisionRecord)
 }
 
 // ReadAnnotations returns the plan-scoped annotations, failing closed on any
-// corrupt or unterminated record.
+// corrupt, malformed, or unterminated record.
 func ReadAnnotations(ctx *Context) ([]Annotation, error) {
-	return readStrictJSONL[Annotation](annotationsPath(ctx))
+	return readStrictJSONL(annotationsPath(ctx), validateAnnotationRecord)
 }
 
-// ReadChecks returns the plan-scoped check evidence, failing closed on any corrupt
-// or unterminated record.
+// ReadChecks returns the plan-scoped check evidence, failing closed on any corrupt,
+// malformed, or unterminated record.
 func ReadChecks(ctx *Context) ([]CheckEvidence, error) {
-	return readStrictJSONL[CheckEvidence](checksPath(ctx))
+	return readStrictJSONL(checksPath(ctx), validateCheckRecord)
 }
 
-func readStrictJSONL[T any](path string) ([]T, error) {
+// readStrictJSONL rejects malformed records as well as bad JSON. A syntactically
+// valid `null` or `{}` unmarshals into a zero-valued record; without the required
+// structural check it would be skipped by the evaluator and could silently leave
+// an older accepted verdict in force.
+func readStrictJSONL[T any](path string, validate func(T) error) ([]T, error) {
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -125,6 +129,9 @@ func readStrictJSONL[T any](path string) ([]T, error) {
 		if err := json.Unmarshal([]byte(line), &rec); err != nil {
 			return nil, &CorruptError{Path: path, Line: i + 1, Err: err}
 		}
+		if err := validate(rec); err != nil {
+			return nil, &CorruptError{Path: path, Line: i + 1, Err: fmt.Errorf("invalid record: %w", err)}
+		}
 		records = append(records, rec)
 	}
 	return records, nil
@@ -134,18 +141,18 @@ func countLines(data []byte) int {
 	return strings.Count(string(data), "\n") + 1
 }
 
-func ensureAppendable(path string) error {
-	if _, err := readStrictJSONL[json.RawMessage](path); err != nil {
+func ensureAppendable[T any](path string, validate func(T) error) error {
+	if _, err := readStrictJSONL(path, validate); err != nil {
 		return err
 	}
 	return nil
 }
 
-func appendRecord(path string, rec any) error {
+func appendRecord[T any](path string, rec T, validate func(T) error) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return err
 	}
-	if err := ensureAppendable(path); err != nil {
+	if err := ensureAppendable(path, validate); err != nil {
 		return err
 	}
 	data, err := json.Marshal(rec)
@@ -170,6 +177,62 @@ func withProjectLock(projectDir string, fn func() error) error {
 	}
 	defer lock.Release()
 	return fn()
+}
+
+// validateDecisionRecord rejects a zero-valued or structurally incomplete
+// decision record so a malformed line cannot stand in for a real decision.
+func validateDecisionRecord(d outcome.AcceptanceDecision) error {
+	switch {
+	case strings.TrimSpace(d.CriterionID) == "":
+		return errors.New("missing criterion_id")
+	case strings.TrimSpace(d.Decision) == "":
+		return errors.New("missing decision")
+	case strings.TrimSpace(d.Approver) == "":
+		return errors.New("missing approver")
+	case strings.TrimSpace(d.PlanIdentity) == "":
+		return errors.New("missing plan_identity")
+	}
+	return nil
+}
+
+func validateAnnotationRecord(a Annotation) error {
+	switch {
+	case strings.TrimSpace(a.Kind) == "":
+		return errors.New("missing kind")
+	case strings.TrimSpace(a.ID) == "":
+		return errors.New("missing id")
+	case strings.TrimSpace(a.PlanIdentity) == "":
+		return errors.New("missing plan_identity")
+	case strings.TrimSpace(a.CriterionID) == "":
+		return errors.New("missing criterion_id")
+	case strings.TrimSpace(a.Approver) == "":
+		return errors.New("missing approver")
+	case strings.TrimSpace(a.ReviewedEvidence) == "":
+		return errors.New("missing reviewed_evidence")
+	case strings.TrimSpace(a.Reason) == "":
+		return errors.New("missing reason")
+	}
+	return nil
+}
+
+func validateCheckRecord(c CheckEvidence) error {
+	switch {
+	case strings.TrimSpace(c.Kind) == "":
+		return errors.New("missing kind")
+	case strings.TrimSpace(c.PlanIdentity) == "":
+		return errors.New("missing plan_identity")
+	case strings.TrimSpace(c.CriterionID) == "":
+		return errors.New("missing criterion_id")
+	case strings.TrimSpace(c.CheckRef) == "":
+		return errors.New("missing check_ref")
+	case strings.TrimSpace(c.Command) == "":
+		return errors.New("missing command")
+	case strings.TrimSpace(c.Class) == "":
+		return errors.New("missing class")
+	case strings.TrimSpace(c.TestedRevision) == "":
+		return errors.New("missing tested_revision")
+	}
+	return nil
 }
 
 // WriteCheckLog stores the redacted full output under the plan-scoped audit and

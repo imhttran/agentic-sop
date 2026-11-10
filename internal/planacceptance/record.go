@@ -53,7 +53,7 @@ func RecordAnnotation(ctx *Context, ann Annotation, designated []string) (Annota
 				return nil
 			}
 		}
-		if err := appendRecord(annotationsPath(ctx), ann); err != nil {
+		if err := appendRecord(annotationsPath(ctx), ann, validateAnnotationRecord); err != nil {
 			return err
 		}
 		stored = ann
@@ -100,6 +100,9 @@ func RecordDecision(ctx *Context, d outcome.AcceptanceDecision, designated []str
 	if !ok {
 		return outcome.AcceptanceDecision{}, fmt.Errorf("criterion %q is not in the archived plan", d.CriterionID)
 	}
+	// A display alias resolves to the canonical mapping; store the canonical ID so
+	// validation, deduplication, and reporting all compare like with like.
+	d.CriterionID = m.CriterionID
 	if m.Kind != outcome.EvidenceManual {
 		return outcome.AcceptanceDecision{}, fmt.Errorf("criterion %q is check-mapped; manual acceptance is not allowed", d.CriterionID)
 	}
@@ -155,13 +158,14 @@ func RecordDecision(ctx *Context, d outcome.AcceptanceDecision, designated []str
 		if err != nil {
 			return err
 		}
-		for _, old := range existing {
-			if sameDecision(old, d) {
-				stored = old
-				return nil
-			}
+		// Only the latest applicable decision makes this append idempotent. An older
+		// matching record must not suppress a new decision that reverses the verdict
+		// (for example reject, accept, then reject again).
+		if latest, ok := latestDecisionFor(d.CriterionID, d.PlanIdentity, existing); ok && sameDecision(latest, d) {
+			stored = latest
+			return nil
 		}
-		if err := appendRecord(decisionsPath(ctx), d); err != nil {
+		if err := appendRecord(decisionsPath(ctx), d, validateDecisionRecord); err != nil {
 			return err
 		}
 		stored = d
@@ -198,6 +202,7 @@ func RecordCheck(ctx *Context, c CheckEvidence) (CheckEvidence, error) {
 	if m.Kind != outcome.EvidenceCheck {
 		return CheckEvidence{}, fmt.Errorf("criterion %q is not check-mapped", c.CriterionID)
 	}
+	c.CriterionID = m.CriterionID
 	if c.CheckRef != m.CheckRef || c.Command != m.Command {
 		return CheckEvidence{}, fmt.Errorf("check evidence does not match the archived check for %q", c.CriterionID)
 	}
@@ -219,7 +224,7 @@ func RecordCheck(ctx *Context, c CheckEvidence) (CheckEvidence, error) {
 		if _, err := ReadChecks(ctx); err != nil {
 			return err
 		}
-		return appendRecord(checksPath(ctx), c)
+		return appendRecord(checksPath(ctx), c, validateCheckRecord)
 	})
 	if err != nil {
 		return CheckEvidence{}, err
