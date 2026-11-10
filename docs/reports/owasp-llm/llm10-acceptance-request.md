@@ -11,7 +11,7 @@ Related: [llm10-output-handling.md](llm10-output-handling.md),
 [llm10-live-delivery.md](llm10-live-delivery.md), the cumulative
 [evidence matrix](README.md), the
 [gap register](gap-register-20261109.md), and
-[PLAN-10-SOP-LLM10-Improper-Output-Handling.md](../../plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md).
+[PLAN-10-SOP-LLM10-Improper-Output-Handling.md](../../history/plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md).
 
 ## What is complete
 
