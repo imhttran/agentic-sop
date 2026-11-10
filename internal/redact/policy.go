@@ -78,17 +78,25 @@ var credentialKeySegments = map[string]bool{
 	"token":         true,
 	"tokens":        true,
 	"password":      true,
+	"passwords":     true,
 	"passwd":        true,
+	"passwds":       true,
 	"credential":    true,
 	"credentials":   true,
 	"auth":          true,
 	"authorization": true,
 	"apikey":        true,
+	"apikeys":       true,
 	"accesskey":     true,
+	"accesskeys":    true,
 	"privatekey":    true,
+	"privatekeys":   true,
 	"clientsecret":  true,
+	"clientsecrets": true,
 	"secretkey":     true,
+	"secretkeys":    true,
 	"key":           true,
+	"keys":          true,
 }
 
 // publicKeySegments suppress redaction for public key material, which is not a
@@ -105,13 +113,11 @@ var publicKeySegments = map[string]bool{
 // auth_token, and client_secret match, while secretary, keyboard, monkey, and
 // public_key do not.
 func credentialKey(key string) bool {
-	lower := strings.ToLower(strings.Trim(strings.TrimSpace(key), "\"'"))
-	if lower == "" {
+	trimmed := strings.Trim(strings.TrimSpace(key), "\"'")
+	if trimmed == "" {
 		return false
 	}
-	segments := strings.FieldsFunc(lower, func(r rune) bool {
-		return !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9')
-	})
+	segments := credentialKeySegmentsFrom(trimmed)
 	hasPublic := false
 	hasCredential := false
 	for _, segment := range segments {
@@ -126,6 +132,41 @@ func credentialKey(key string) bool {
 		return false
 	}
 	return hasCredential
+}
+
+// credentialKeySegmentsFrom splits a key on separators and camelCase boundaries,
+// then trims trailing digits from each segment. This keeps password1, api_key2,
+// tokenValue, and secretKey covered while leaving ordinary words such as
+// secretary, keyboard, monkey, and publicKey untouched.
+func credentialKeySegmentsFrom(key string) []string {
+	var segments []string
+	var current strings.Builder
+	flush := func() {
+		if current.Len() == 0 {
+			return
+		}
+		segment := strings.TrimRight(strings.ToLower(current.String()), "0123456789")
+		if segment != "" {
+			segments = append(segments, segment)
+		}
+		current.Reset()
+	}
+	runes := []rune(key)
+	for i, r := range runes {
+		if !(r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9') {
+			flush()
+			continue
+		}
+		if current.Len() > 0 && r >= 'A' && r <= 'Z' {
+			prev := runes[i-1]
+			if prev >= 'a' && prev <= 'z' || prev >= '0' && prev <= '9' {
+				flush()
+			}
+		}
+		current.WriteRune(r)
+	}
+	flush()
+	return segments
 }
 
 // contextualValues applies the bounded key-based rule line by line. It preserves

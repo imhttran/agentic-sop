@@ -17,6 +17,10 @@ func TestModelInputWithPolicyContextualKeys(t *testing.T) {
 		{"spaced assignment", `opaque_secret = "value with spaces"`, `opaque_secret = "[redacted]"`},
 		{"export", "export OPAQUE_SECRET=opaque-live-value-42", "export OPAQUE_SECRET=[redacted]"},
 		{"authorization", "Authorization: Bearer abcdefghijkl", "Authorization: Bearer [redacted]"},
+		{"suffixed password", "password1=opaque-live-value-42", "password1=[redacted]"},
+		{"suffixed api key", "api_key2=opaque-live-value-42", "api_key2=[redacted]"},
+		{"camel token", "tokenValue=opaque-live-value-42", "tokenValue=[redacted]"},
+		{"camel secret key", "secretKey=opaque-live-value-42", "secretKey=[redacted]"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -31,9 +35,11 @@ func TestModelInputWithPolicyContextualFalsePositives(t *testing.T) {
 	p := Policy{Enabled: true}
 	for _, in := range []string{
 		"secretary=Jane",
+		"secretary1=Jane",
 		"keyboard=us",
 		"monkey=banana",
 		"public_key=abc123",
+		"publicKey=abc123",
 		"ssh_public_key=abc123",
 		"https://example.com/path",
 		"GET https://example.com/v1/status -> 200",
