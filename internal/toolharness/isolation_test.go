@@ -123,4 +123,14 @@ func TestRunCommandIsolationDeniesNetwork(t *testing.T) {
 	if err := sandboxed(t, root, "nc -z -G 2 1.1.1.1 443"); err == nil {
 		t.Fatal("an outbound connection succeeded")
 	}
+	// A host Unix socket (e.g. a Docker or agent socket) is not reachable.
+	sock := filepath.Join(os.TempDir(), "sop-iso-"+strconv.Itoa(os.Getpid())+".sock")
+	ul, err := net.Listen("unix", sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer ul.Close()
+	if err := sandboxed(t, root, "nc -z -U "+sock); err == nil {
+		t.Fatal("a Unix-socket connection succeeded")
+	}
 }

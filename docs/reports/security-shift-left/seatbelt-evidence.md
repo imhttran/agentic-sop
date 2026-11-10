@@ -111,9 +111,9 @@ makes `toolharness` wrap each `run_command` in `sandbox-exec` after the command
 policy check. Off by default.
 
 - **Profile** (`internal/toolharness/isolation.go`): allow-default; `deny network*`
-  except loopback bind/inbound and loopback remote; `deny file-write*` except the
-  canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, the user cache
-  dir (default GOCACHE), GOCACHE/GOMODCACHE, and `/dev/null`; a final
+  except loopback bind/inbound and loopback remote (host Unix sockets are denied); `deny file-write*` except the
+  canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, the default Go
+  build cache, GOCACHE/GOMODCACHE, and `/dev/null`; a final
   `deny file-write*` on `<root>/.agent-sdlc` (a later deny overrides the root allow).
 - **Fail closed:** a non-darwin host, missing `sandbox-exec`, or an
   uncanonicalizable root returns `errIsolationUnavailable`, audited as a denial;
@@ -132,6 +132,10 @@ Verification (macOS arm64, 2026-11-09):
 - Found while testing: `(allow network* (local ip "localhost:*"))` also matches
   outbound sockets, so the profile keys only bind/inbound on the local address.
 
-Limits: Linux has no `run_command` backend yet (NOT_RUN, fails closed). Seatbelt
+Probed escapes: `launchctl submit` and `osascript do shell script` children stay
+sandboxed (`.agent-sdlc` write: `Operation not permitted`).
+
+Limits: the Go build and module caches are shared and writable, so cache poisoning
+across runs is not excluded (a per-run throwaway cache would close it). Linux has no `run_command` backend yet (NOT_RUN, fails closed). Seatbelt
 cannot nest, so the tests skip inside another sandbox. The outbound-deny test is
 only meaningful on a host with network access.

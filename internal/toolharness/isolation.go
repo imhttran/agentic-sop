@@ -58,8 +58,11 @@ func isolate(root string, argv []string) (wrapped []string, detail string, err e
 // Unresolvable entries are dropped (narrower, never wider).
 func writableDirs(root string) []string {
 	dirs := []string{root, os.TempDir(), "/private/tmp", "/private/var/folders"}
-	if c, err := os.UserCacheDir(); err == nil { // default GOCACHE lives here
-		dirs = append(dirs, c)
+	// ponytail: the shared Go build/module caches stay writable so builds are
+	// not cold; a per-run throwaway GOCACHE/GOMODCACHE would remove cache
+	// poisoning across runs at the cost of speed.
+	if c, err := os.UserCacheDir(); err == nil { // default GOCACHE
+		dirs = append(dirs, filepath.Join(c, "go-build"))
 	}
 	for _, k := range []string{"GOCACHE", "GOMODCACHE"} {
 		if v := os.Getenv(k); v != "" {
@@ -89,7 +92,6 @@ func seatbeltProfile(root string, writable []string) string {
 	// (local ip ...) on network* would also match outbound sockets, so only
 	// bind/inbound are keyed on the local address.
 	b.WriteString("(allow network-bind network-inbound (local ip \"localhost:*\"))\n(allow network* (remote ip \"localhost:*\"))\n")
-	b.WriteString("(allow network* (remote unix-socket))\n")
 	b.WriteString("(deny file-write*)\n")
 	for _, d := range writable {
 		fmt.Fprintf(&b, "(allow file-write* (subpath %q))\n", d)
