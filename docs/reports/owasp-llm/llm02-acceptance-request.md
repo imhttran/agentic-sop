@@ -205,7 +205,10 @@ independently reproduced the five pre-policy paths and confirmed the Plan 08 A+B
 denial/redaction. It records no acceptance and does not change this decision.
 The Linux live tool-path campaign (2026-11-10) is also `OBSERVED` (17 requests:
 7 protected, 6 positive controls, 4 residual exposures); Linux live retrieval and
-notification sinks remain `NOT_RUN`.
+notification sinks remain `NOT_RUN`. PR #349 redacts the rendered user prompt
+(task, caller input, output requirements) deterministically via `userPrompt`
+(`TestUserPromptRedactsTaskAndInput`); the live campaigns predate that fix and
+were not re-run for it. None of this records acceptance.
 
 ## Exact next action
 
