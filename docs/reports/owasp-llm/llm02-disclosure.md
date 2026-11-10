@@ -198,6 +198,12 @@ audit," not "not in any run artifact." The observation is independent of the
 unmerged Plan 08 branch; the Plan 03 test is in this worktree and uses only a
 synthetic canary.
 
+The concrete model-input credential policy options, recommendation, compatibility
+impact, and the exact decision are in
+[PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md).
+No policy is implemented here; Plan 03's missing approver acceptance remains a
+separate gate.
+
 ## Verification record
 
 Commands run in this worktree on macOS arm64:

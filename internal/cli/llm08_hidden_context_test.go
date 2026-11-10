@@ -46,6 +46,7 @@ func TestOWASPLLM08ReportStructure(t *testing.T) {
 		"## Confirmed defects and fixes",
 		"## Criterion-to-evidence mapping",
 		"## Verification record",
+		"## Tool-output credential policy (decision required)",
 		"## Live extraction outcomes",
 		"## Residual risks and bounded claims",
 		"## Live-evaluation limitations",
@@ -58,6 +59,16 @@ func TestOWASPLLM08ReportStructure(t *testing.T) {
 	// bounded-claim text assertion for the deliverable, not behavioral evidence.
 	if strings.Contains(report, "prompts cannot be extracted") || strings.Contains(report, "prompts are unextractable") {
 		t.Error("report claims prompts cannot be extracted")
+	}
+	// The tool-output section is a GAP with an open decision, not an implemented
+	// control. These are deliverable text guards, not behavioral evidence.
+	if !strings.Contains(report, "PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md") {
+		t.Error("report does not link the model-input credential policy proposal")
+	}
+	for _, claim := range []string{"tool output is redacted", "credential files are blocked"} {
+		if strings.Contains(report, claim) {
+			t.Errorf("report claims an unimplemented tool-output control: %q", claim)
+		}
 	}
 }
 
