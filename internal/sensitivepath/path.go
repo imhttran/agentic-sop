@@ -9,7 +9,9 @@
 package sensitivepath
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -112,7 +114,11 @@ func EnvCredentialFiles(getenv func(string) string) ([]string, error) {
 			if !filepath.IsAbs(p) {
 				return nil, fmt.Errorf("KUBECONFIG entry is not absolute: %q", p)
 			}
-			files = append(files, filepath.Clean(p))
+			real, err := resolveExisting("KUBECONFIG", p)
+			if err != nil {
+				return nil, err
+			}
+			files = append(files, real)
 		}
 	}
 	sort.Strings(files)
@@ -147,7 +153,7 @@ func envPaths(getenv func(string) string, specs []envPath) ([]string, error) {
 	return out, nil
 }
 
-// absoluteEnv returns the cleaned absolute value of name, or "" when unset.
+// absoluteEnv returns the resolved absolute value of name, or "" when unset.
 func absoluteEnv(getenv func(string) string, name string) (string, error) {
 	v := strings.TrimSpace(getenv(name))
 	if v == "" {
@@ -156,7 +162,22 @@ func absoluteEnv(getenv func(string) string, name string) (string, error) {
 	if !filepath.IsAbs(v) {
 		return "", fmt.Errorf("%s is not absolute: %q", name, v)
 	}
-	return filepath.Clean(v), nil
+	return resolveExisting(name, v)
+}
+
+// resolveExisting resolves symlinks in p before any lexical cleaning:
+// filepath.Clean would apply "link/.." to the text, naming a different object
+// than the kernel opens. A path that does not exist is returned unchanged (the
+// caller skips missing entries); any other resolution error fails closed.
+func resolveExisting(name, p string) (string, error) {
+	real, err := filepath.EvalSymlinks(p)
+	if err == nil {
+		return real, nil
+	}
+	if errors.Is(err, fs.ErrNotExist) {
+		return p, nil
+	}
+	return "", fmt.Errorf("%s cannot be resolved: %q: %v", name, p, err)
 }
 
 // IsReviewSensitive reports whether a repository-relative path must be excluded
