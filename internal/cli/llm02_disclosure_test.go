@@ -58,6 +58,7 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"### Linux independent verification",
 		"### Linux live tool-path campaign",
 		"### Residual investigation status",
+		"## Final closeout",
 	} {
 		if !strings.Contains(report, section) {
 			t.Errorf("report is missing required section %q", section)
@@ -89,6 +90,11 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"LLM02-LIVE-HARDLINK",
 		"Hardlink alias with an ordinary name",
 		"`SOP_TASK_INPUTS` and caller context",
+		"Plan 03 acceptance matrix",
+		"NEEDS_HUMAN",
+		"Residual-risk disposition",
+		"Three separate claims",
+		"4c8fe5a",
 	} {
 		if !strings.Contains(normalized, claim) {
 			t.Errorf("report is missing the reconciled claim %q", claim)
@@ -104,6 +110,8 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"zero residual disclosure",
 		"all credential formats are detected",
 		"general DLP is implemented",
+		"acceptance has been recorded",
+		"all residual risks are accepted",
 	} {
 		if strings.Contains(report, claim) {
 			t.Errorf("report makes an unbounded claim: %q", claim)
@@ -498,6 +506,64 @@ func TestOWASPLLM02LinuxCampaignArtifact(t *testing.T) {
 	for _, marker := range []string{"sk-llm02-live-", "opaque-live-value-42", "opaque-env-value-43"} {
 		if !strings.Contains(string(data), marker) {
 			t.Errorf("Linux campaign artifact does not identify its synthetic canary %q", marker)
+		}
+	}
+}
+
+// TestOWASPLLM02AcceptanceRequest validates the decision-ready closeout matrix.
+// It is a document-structure guard, not an acceptance record.
+func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
+	data, err := os.ReadFile(llm02DocPath("llm02-acceptance-request.md"))
+	if err != nil {
+		t.Fatalf("read LLM02 acceptance request: %v", err)
+	}
+	report := string(data)
+	normalized := strings.Join(strings.Fields(report), " ")
+	for _, section := range []string{
+		"## Final closeout (2026-11-10)",
+		"### Final lifecycle limitation",
+		"### Evidence identity",
+		"### Plan 03 acceptance matrix",
+		"### Residual-risk disposition",
+		"### Required human decisions",
+		"### Three separate claims",
+	} {
+		if !strings.Contains(report, section) {
+			t.Errorf("acceptance request is missing required section %q", section)
+		}
+	}
+	for _, criterion := range []string{
+		"DISCLOSE-001.1", "DISCLOSE-001.2", "DISCLOSE-001.3", "DISCLOSE-001.4", "DISCLOSE-001.5",
+		"DISCLOSE-002.1", "DISCLOSE-002.2", "DISCLOSE-002.3", "DISCLOSE-002.4", "DISCLOSE-002.5",
+		"DISCLOSE-003.1", "DISCLOSE-003.2", "DISCLOSE-003.3", "DISCLOSE-003.4", "DISCLOSE-003.5", "DISCLOSE-003.6",
+	} {
+		if !strings.Contains(report, criterion) {
+			t.Errorf("acceptance request is missing criterion %s", criterion)
+		}
+	}
+	if strings.Count(report, "None recorded") < 16 {
+		t.Errorf("acceptance request records %d 'None recorded' decisions, want at least 16", strings.Count(report, "None recorded"))
+	}
+	for _, claim := range []string{
+		"NEEDS_HUMAN",
+		"Formal per-criterion acceptance through the supported SOP interface is unsupported",
+		"31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9",
+		"0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06",
+		"4cee73a",
+		"4c8fe5a",
+		"No residual risk is marked accepted",
+	} {
+		if !strings.Contains(normalized, claim) {
+			t.Errorf("acceptance request is missing the closeout claim %q", claim)
+		}
+	}
+	for _, claim := range []string{
+		"acceptance has been recorded",
+		"all residual risks are accepted",
+		"Plan 03 was reopened",
+	} {
+		if strings.Contains(normalized, claim) {
+			t.Errorf("acceptance request makes an unsupported acceptance claim: %q", claim)
 		}
 	}
 }

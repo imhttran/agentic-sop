@@ -472,7 +472,10 @@ validation evidence, not acceptance evidence.
 The plan was subsequently historicalized `COMPLETE` through external completion
 (see [llm02-acceptance-request.md](llm02-acceptance-request.md) §Post-closeout
 correction). That lifecycle state is not acceptance evidence and does not change
-the `PARTIAL` history for `DISCLOSE-001`/`DISCLOSE-002`.
+the `PARTIAL` history for `DISCLOSE-001`/`DISCLOSE-002`. The reconciled
+criterion-by-criterion matrix and the final acceptance limitation are in
+[llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
+(2026-11-10).
 
 ## Configured scan on this baseline
 
@@ -769,6 +772,64 @@ A+B policy. "Policy-blocked" means a fix needs a separate operator decision.
 | `SOP_TASK_INPUTS` and caller context | VERIFIED (deterministic) / GAP for unknown prose | `userPrompt` applies `redact.ModelInput` to the whole rendered prompt (PR #349); `TestUserPromptRedactsTaskAndInput`. The live campaign predates the fix; no live re-run was performed. |
 | Notification text | Caller-owned | Notification targets are redacted, but the lifecycle reason is caller-owned prose; current producers pass fixed/generic reasons. |
 | Diagnostic output | Protected for tested shapes | `redactDiagnosticText` uses `redact.ModelInput`; `TestRedactDiagnosticTextKeepsOrdinaryText`, `TestValidationFailureContextRedactsCredentialShapes`, and `TestCheckEvidenceRedactsCredentialShapes`. |
+
+
+## Final closeout (2026-11-10)
+
+Status: **CLOSEOUT RECORD — Plan 03 acceptance remains `NEEDS_HUMAN`.** This
+section reconciles the evidence and does not record acceptance.
+
+### Final disposition
+
+| Dimension | State | Evidence |
+| --- | --- | --- |
+| `IMPLEMENTED` | Approved Plan 08 A+B policy and PR #349 user-prompt redaction | `internal/toolharness`, `internal/sensitivepath`, `internal/redact`, `internal/ollamaagent/prompt.go`; PRs #337 and #349 |
+| `VERIFIED` | Deterministic and Linux live evidence for the five tool paths | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput`, `llm02-linux-campaign.json` |
+| `OBSERVED` | Four Linux residual exposures; macOS direct-context disclosure | §Linux live tool-path campaign (2026-11-10); `llm02-campaign.json` |
+| `NOT_RUN` | Linux live retrieval and notification; live re-run of #349 | §Residual investigation status (2026-11-10) |
+| `NEEDS_HUMAN` | Plan 03 per-criterion acceptance; residual-risk decisions | [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout (2026-11-10) |
+| `GAP` | Unknown-format values, hardlink alias, artifact persistence, retrieval/handoff/caller prose, provider retention, general DLP | §Residual risks and bounded claims; §Residual investigation status |
+
+### Three separate claims
+
+1. **Approved LLM02 implementation is complete.** Yes, within the approved Plan 08
+   A+B scope plus PR #349: credential-path denial for direct reads, searches, and
+   copies; model-bound tool-result and error redaction; and user-prompt redaction.
+   No new policy or control is claimed.
+2. **Scoped security verification is complete.** Yes for the five tool paths on
+   Linux (deterministic and live), the macOS live campaign, and the deterministic
+   boundary tests. No for Linux live retrieval and notification and for a live
+   re-run of the #349 prompt fix; those remain `NOT_RUN`.
+3. **Full LLM02 security coverage and governance acceptance are not established.**
+   Yes. The residual gaps above remain, and no per-criterion acceptance is
+   recorded.
+
+### Tested revision and final baseline
+
+- Linux live campaign tested revision: `4cee73a`, `dirty: false`; artifact
+  SHA-256 `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`.
+- macOS campaign tested revision: `9c32e3d2bccb269aa0246b08158ddad5e8b25066`;
+  artifact SHA-256 `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06`.
+- Final integration baseline for this closeout: `4c8fe5a`.
+- PR #349 (`userPrompt` redaction), #351 (real `copy_file` positive control), and
+  #352 (evidence reconciliation) merged after the Linux campaign revision. #349
+  changes the user-prompt boundary, not the tool-path boundary exercised by the
+  campaign; the campaign was not re-run and remains valid for the five tool paths.
+- CI: #337, #341, #349, #350, #351, and #352 passed their recorded checks. Codex
+  found the copy-control issue on #350; #351 fixed it, and #351/#352 completed
+  with no findings.
+
+### Residual-risk disposition
+
+The Plan 03 acceptance matrix and the item-by-item residual-risk disposition are
+in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
+(2026-11-10). No residual risk is marked accepted; acceptance is `NEEDS_HUMAN`.
+
+### Non-claims
+
+- No universal disclosure prevention, general DLP, prompt secrecy, provider
+  retention control, or full OWASP coverage.
+- A passing CI run or one model campaign is not full category coverage.
 
 
 ## Handoff to Plan 04
