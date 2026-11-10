@@ -59,7 +59,7 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 	policy := policyFor(req.Capability, h.cfg.EffectiveBudget()) // read-only tools
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
-		{Role: "user", Content: userPrompt(req)},
+		{Role: "user", Content: userPromptWithPolicy(req, h.cfg.Redaction)},
 	}
 
 	var (
@@ -173,13 +173,13 @@ func (h *Harness) executeTwoPhase(ctx context.Context, req agent.Request, tp two
 				denied := fmt.Sprintf("tool %q is not available for %s; allowed tools: %s", name, req.Capability, describeTools(policy))
 				h.tools.RecordDenied(name, args, denied)
 				h.recordTwoPhaseTurn(req, tp.discoverLabel, discovery, name, summary)
-				detail = toolResultMessage(name, "", errors.New(denied))
+				detail = toolResultMessageWithPolicy(name, "", errors.New(denied), h.cfg.Redaction)
 			} else {
 				result, toolErr := h.tools.Run(ctx, name, args)
 				discovered++
 				recordToolActivity(ctx, name, args, "")
 				h.recordTwoPhaseTurn(req, tp.discoverLabel, discovery, name, summary)
-				detail = toolResultMessage(name, result, toolErr)
+				detail = toolResultMessageWithPolicy(name, result, toolErr, h.cfg.Redaction)
 			}
 			// The soft wrap-up nudge rides on the tool result so the transcript
 			// keeps alternating assistant/user turns; it disables nothing.
@@ -321,7 +321,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 	policy := policyFor(req.Capability, b) // all tools; IMPLEMENT may mutate
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
-		{Role: "user", Content: userPrompt(req)},
+		{Role: "user", Content: userPromptWithPolicy(req, h.cfg.Redaction)},
 	}
 
 	st := newExecutionState()
@@ -524,7 +524,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			}
 			messages = append(messages,
 				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + "\n\n" + implementDeliverableInstruction(deliverables)},
+				chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction) + "\n\n" + implementDeliverableInstruction(deliverables)},
 			)
 			continue
 		}
@@ -547,7 +547,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 			}
 			messages = append(messages,
 				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + recoverySuffix(recovery)},
+				chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction) + recoverySuffix(recovery)},
 			)
 			continue
 		}
@@ -737,7 +737,7 @@ func (h *Harness) executePhased(ctx context.Context, req agent.Request, ev *muta
 		if !st.mutationObserved && proof.baseline != "" && len(advice) > 0 {
 			advice = append(advice, alreadySatisfiedInstruction)
 		}
-		content := toolResultMessage(name, result, toolErr)
+		content := toolResultMessageWithPolicy(name, result, toolErr, h.cfg.Redaction)
 		for _, a := range advice {
 			content += "\n\n" + a
 		}

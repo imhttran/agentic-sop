@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED` | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; residual recommendations pending; broader coverage `OPEN` |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -75,7 +75,13 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
     The unknown-format proposal is
     [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md);
-    it recommends C1 and requires an explicit policy decision.
+    C1 is now implemented opt-in (decision memory
+    `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`).
+  - C1 unknown-format redaction covers exact inventory values, contextual
+    credential keys, and approved known formats; deterministic tests cover
+    placeholders, fail-closed inventory, and the real harness/user-prompt wiring.
+    The repository configuration remains disabled, so the pre-C1 residual
+    remains until an operator enables it.
 
 ### LLM03 Supply Chain — partial
 

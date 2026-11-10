@@ -199,6 +199,11 @@ type Config struct {
 	// omitted block resolves to channel none, so existing behavior is unchanged;
 	// see notifications.go. The block carries no credentials.
 	Notifications Notifications `yaml:"notifications"`
+	// Redaction is the optional, disabled-by-default LLM02 C1 model-input
+	// redaction policy. An omitted block leaves existing behavior unchanged; see
+	// redaction.go. It carries no secret values, only a path to an external
+	// operator-owned inventory.
+	Redaction Redaction `yaml:"redaction"`
 }
 
 // Output is the optional response-output policy. Responses selects the default
@@ -896,6 +901,7 @@ func (c *Config) applyDefaults() {
 	// local profile) before validation, so an enabled block with an omitted
 	// profile, data_handling, or provider cannot fail on a value it never wrote.
 	c.applySecurityEvalDefaults()
+	c.applyRedactionDefaults()
 }
 
 // Validate reports the first policy violation in the configuration.
@@ -976,6 +982,9 @@ func (c *Config) Validate() error {
 		return err
 	}
 	if err := c.validateNotifications(); err != nil {
+		return err
+	}
+	if err := c.validateRedaction(); err != nil {
 		return err
 	}
 	return nil

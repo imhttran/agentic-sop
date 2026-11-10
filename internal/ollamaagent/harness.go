@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -21,6 +22,13 @@ import (
 // For PLAN and REVIEW, which expect their own JSON schema, it returns an error so
 // SOP records an agent failure instead of a malformed document.
 func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() (string, error)) error {
+	return RunWithPolicy(ctx, in, out, errOut, getwd, redact.Policy{})
+}
+
+// RunWithPolicy is Run with the loaded LLM02 C1 model-input policy. The command
+// entry point resolves the project configuration and external inventory and
+// passes the resulting policy here; the zero policy preserves previous behavior.
+func RunWithPolicy(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() (string, error), policy redact.Policy) error {
 	var req agent.Request
 	if err := json.NewDecoder(in).Decode(&req); err != nil {
 		return fmt.Errorf("parse request: %w", err)
@@ -33,6 +41,7 @@ func Run(ctx context.Context, in io.Reader, out, errOut io.Writer, getwd func() 
 	if err != nil {
 		return err
 	}
+	cfg.Redaction = policy
 	root, err := getwd()
 	if err != nil {
 		return fmt.Errorf("determine repository root: %w", err)
@@ -371,7 +380,7 @@ func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, e
 	policy := policyFor(req.Capability, h.cfg.EffectiveBudget())
 	messages := []chatMessage{
 		{Role: "system", Content: systemPrompt(req, policy, h.tools.Root(), h.cfg.Roots)},
-		{Role: "user", Content: userPrompt(req)},
+		{Role: "user", Content: userPromptWithPolicy(req, h.cfg.Redaction)},
 	}
 
 	var (
@@ -430,7 +439,7 @@ func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, e
 			}
 			messages = append(messages,
 				chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-				chatMessage{Role: "user", Content: toolResultMessage(name, "", errors.New(detail)) + recoverySuffix(recovery)},
+				chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, "", errors.New(detail), h.cfg.Redaction) + recoverySuffix(recovery)},
 			)
 			continue
 		}
@@ -449,7 +458,7 @@ func (h *Harness) executeLoop(ctx context.Context, req agent.Request) (string, e
 		}
 		messages = append(messages,
 			chatMessage{Role: "assistant", Content: assistantEcho(name, args, raw)},
-			chatMessage{Role: "user", Content: toolResultMessage(name, result, toolErr) + recoverySuffix(recovery)},
+			chatMessage{Role: "user", Content: toolResultMessageWithPolicy(name, result, toolErr, h.cfg.Redaction) + recoverySuffix(recovery)},
 		)
 	}
 	return "", h.limitError(req, policy, lastTool, lastReq)
