@@ -398,6 +398,12 @@ func runHistoricalVerify(args []string, stdout, stderr io.Writer, getwd func() (
 			rev = fmt.Sprintf(" (tested revision %s)", cr.Revision)
 		}
 		fmt.Fprintf(stdout, "  %-28s [%-6s] %s%s: %s\n", cr.Mapping.CriterionID, kind, cr.Status, rev, cr.Evidence)
+		if cr.ArchivedEvidence != "" {
+			fmt.Fprintf(stdout, "      archived evidence: %s\n", cr.ArchivedEvidence)
+		}
+		if cr.ReviewedEvidence != "" {
+			fmt.Fprintf(stdout, "      reviewed evidence: %s\n", cr.ReviewedEvidence)
+		}
 	}
 	return exitOK
 }

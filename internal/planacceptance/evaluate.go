@@ -30,10 +30,12 @@ const (
 
 // CriterionReport is one evaluated historical criterion.
 type CriterionReport struct {
-	Mapping  Mapping         `json:"mapping"`
-	Status   CriterionStatus `json:"status"`
-	Evidence string          `json:"evidence"`
-	Revision string          `json:"revision,omitempty"`
+	Mapping          Mapping         `json:"mapping"`
+	Status           CriterionStatus `json:"status"`
+	Evidence         string          `json:"evidence"`
+	ArchivedEvidence string          `json:"archived_evidence,omitempty"`
+	ReviewedEvidence string          `json:"reviewed_evidence,omitempty"`
+	Revision         string          `json:"revision,omitempty"`
 }
 
 // Report is the deterministic historical-plan acceptance report.
@@ -161,7 +163,16 @@ func Evaluate(ctx *Context, designated []string) (*Report, error) {
 		case StatusCheckPassed:
 			evidence = fmt.Sprintf("passed; tested revision %s", rev)
 		}
-		rep.Criteria = append(rep.Criteria, CriterionReport{Mapping: m, Status: status, Evidence: evidence, Revision: rev})
+		cr := CriterionReport{Mapping: m, Status: status, Evidence: evidence, Revision: rev}
+		if m.Kind == outcome.EvidenceManual {
+			cr.ArchivedEvidence = m.ManualEvidence
+			if d, ok := latestDecisionFor(m.CriterionID, ctx.PlanIdentity, decisions); ok && d.AnnotationID != "" {
+				if ann, ok := findAnnotation(annotations, d.AnnotationID); ok {
+					cr.ReviewedEvidence = ann.ReviewedEvidence
+				}
+			}
+		}
+		rep.Criteria = append(rep.Criteria, cr)
 	}
 	for rev := range seen {
 		rep.CheckRevisions = append(rep.CheckRevisions, rev)
@@ -336,6 +347,9 @@ func findAnnotation(annotations []Annotation, id string) (Annotation, bool) {
 
 func validateAnnotation(ctx *Context, m Mapping, ann Annotation, d outcome.AcceptanceDecision) error {
 	archivedHash := sha256Hex(m.ManualEvidence)
+	if annotationIdentity(ann) != ann.ID {
+		return errors.New("annotation identity does not match its content")
+	}
 	if ann.ID != d.AnnotationID {
 		return errors.New("decision annotation id does not match the annotation")
 	}
