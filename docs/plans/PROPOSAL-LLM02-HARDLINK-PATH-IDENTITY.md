@@ -2,7 +2,7 @@
 
 Status: **APPROVED — Option C Phase 1 IMPLEMENTED and VERIFIED on Linux. macOS and Windows remain follow-ups.**
 Date: 2026-11-10.
-Baseline: `origin/main` at `823f753` (after PR #376); implementation tested at `d0b33de`.
+Baseline: `origin/main` at `823f753` (after PR #376); implementation tested at `4911f916`.
 Evidence: Linux `amd64`, Go 1.27.1.
 Decision memory: repository identity `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`,
 source `operator:option-c-phase1-2026-11-10` (recorded with `sop memory add`; it is bound to the
@@ -30,9 +30,9 @@ and PR #373.
   configuration or default was added. macOS and Windows are excluded follow-ups.
 - **Implementation:** [`internal/toolharness/identity.go`](../../internal/toolharness/identity.go),
   wired into the three content tools in `internal/toolharness/files.go`.
-- **Tested revision:** `d0b33de`.
+- **Tested revision:** `4911f916`.
 - **Live evidence:** [`llm02-option-c-phase1-campaign.json`](../reports/owasp-llm/llm02-option-c-phase1-campaign.json),
-  SHA-256 `fa735aadc3b7543d8b33bc41348ae57d8bb3dcff9ae3bfb53c2942697006ffc3`;
+  SHA-256 `fcc621ef272dbb12791facf9d2254c098816a1eb673176be5137fcac9f5bfc92`;
   6 requests, 5 protected, 1 positive control, 0 residual; 5/5 confinement
   probes.
 - **Residual risks:** not accepted. Ordinary-file unlisted values, outside-
@@ -304,7 +304,7 @@ Exact approval requested:
 > C1, artifacts, retrieval, notifications, provider behavior, or general DLP,
 > and it does not claim complete credential protection.
 
-Status: **APPROVED and implemented on Linux Phase 1 at `d0b33de`; macOS and
+Status: **APPROVED and implemented on Linux Phase 1 at `4911f916`; macOS and
 Windows validation remain follow-ups.** The decision-memory record is the source
 of authority; this proposal remains the design record. The options below are
 retained as the evaluation history.

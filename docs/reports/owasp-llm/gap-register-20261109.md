@@ -99,9 +99,9 @@ acceptance criteria were accepted; no acceptance decision exists.
    scoped cases with one bounded residual (PR #370, campaign revision `c5df5f0`,
    artifact SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`).
    Hardlink aliases to protected credential paths are `VERIFIED` as denied on
-   Linux Phase 1 (implementation `d0b33de`; artifact
+   Linux Phase 1 (implementation `4911f916`; artifact
    `llm02-option-c-phase1-campaign.json`, SHA-256
-   `fa735aadc3b7543d8b33bc41348ae57d8bb3dcff9ae3bfb53c2942697006ffc3`;
+   `fcc621ef272dbb12791facf9d2254c098816a1eb673176be5137fcac9f5bfc92`;
    6 requests: 5 protected, 1 positive control, 0 residual). Ordinary-file
    aliases remain C1-governed; unlisted values in ordinary files,
    outside-workspace origins, macOS, and Windows remain residual or follow-ups.
@@ -114,7 +114,7 @@ acceptance criteria were accepted; no acceptance decision exists.
    retrieval/notification, and live producer-side RAG isolation remain unobserved or
    `NOT_RUN`. Run them only if a specific claim requires that evidence.
 
-Decided and implemented: per-row index digests (option A, schema 2), RAG `chunk_hash` (option A), and scanner pins (option B), see rows 1–3; and **LLM08 model-input credential policy A+B** (decision memory `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`), with independent Linux `amd64` deterministic and live tool-path verification of the five LLM02 paths. C1 unknown-format redaction is implemented opt-in and merged in PRs #361/#362/#364 (decision memory `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`; final code `85a754d4`), with deterministic macOS verification at `d69e9f63`, Linux deterministic verification recorded `PASS` at campaign baseline `5ff526a`, a bounded Linux live `PASS` for 12 scoped cases with one bounded residual (PR #370, `c5df5f0`), and the repository configuration disabled. The A+B policy decision remains closed; the residual limits are recorded in the Plan 08 report. LLM02 Option C Phase 1 hardlink identity enforcement is implemented and verified on Linux (decision-memory repository `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, implementation `d0b33de`, artifact `fa735aad…`).
+Decided and implemented: per-row index digests (option A, schema 2), RAG `chunk_hash` (option A), and scanner pins (option B), see rows 1–3; and **LLM08 model-input credential policy A+B** (decision memory `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`), with independent Linux `amd64` deterministic and live tool-path verification of the five LLM02 paths. C1 unknown-format redaction is implemented opt-in and merged in PRs #361/#362/#364 (decision memory `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`; final code `85a754d4`), with deterministic macOS verification at `d69e9f63`, Linux deterministic verification recorded `PASS` at campaign baseline `5ff526a`, a bounded Linux live `PASS` for 12 scoped cases with one bounded residual (PR #370, `c5df5f0`), and the repository configuration disabled. The A+B policy decision remains closed; the residual limits are recorded in the Plan 08 report. LLM02 Option C Phase 1 hardlink identity enforcement is implemented and verified on Linux (decision-memory repository `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, implementation `4911f916`, artifact `fcc621ef…`).
 
 ## Cross-cutting boundaries (unchanged)
 
