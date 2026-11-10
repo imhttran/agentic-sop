@@ -10,7 +10,7 @@ task's outcome.
 
 ```yaml
 notifications:
-  channel: none        # none | file | webhook
+  channel: none # none | file | webhook
   file:
     path: .agent-sdlc/notifications/events.jsonl
   webhook:
@@ -51,12 +51,12 @@ Slack incoming webhooks post a fixed body; select it with
 
 `sop notify status` reports one of:
 
-| Availability | Meaning |
-| --- | --- |
-| `unavailable` | no channel is configured (or the configured one lacks its required setting) |
-| `configured_unverified` | a channel is configured, but no delivery has been confirmed |
-| `active` | at least one delivery was confirmed on the current channel |
-| `unknown` | delivery state could not be read |
+| Availability            | Meaning                                                                     |
+| ----------------------- | --------------------------------------------------------------------------- |
+| `unavailable`           | no channel is configured (or the configured one lacks its required setting) |
+| `configured_unverified` | a channel is configured, but no delivery has been confirmed                 |
+| `active`                | at least one delivery was confirmed on the current channel                  |
+| `unknown`               | delivery state could not be read                                            |
 
 ### Recorded operator-local verification
 
@@ -87,10 +87,42 @@ attempt one test event; only a confirmed acknowledgement moves the channel to
   to `max_delay_ms`. A delivery that spends its attempts is recorded `EXHAUSTED` and
   is never retried again.
 
+## Credential redaction
+
+Notification text is derived from lifecycle records, model prose, and tool output,
+so it is redacted **before** the event is persisted or delivered:
+
+- `Reason`, `NextAction`, `Outcome`, and `ResolutionCommand` pass through the shared
+  redaction package (`internal/redact`). The credential-shape detector runs first,
+  then exact values of secret-named environment variables; both use the
+  `[REDACTED]` marker. That order matters: a known value can be an assignment key
+  or token prefix, so replacing it first would disarm the shape match and leave the
+  credential exposed.
+- The environment is read once at the CLI producer boundary. `notify.NewEvent`
+  receives the extracted values and never reads the process environment, so the
+  domain constructor stays deterministic. The values are not stored on the event,
+  serialized, or logged.
+- Redaction runs before the outbox row is written, so a retry or a later drain
+  cannot reintroduce the value.
+- A credential-free resolution command is kept exactly as supplied. When redaction
+  removes a credential from a command, the rendered command is annotated
+  `(credential redacted; not directly executable)`: rebuild the command from the
+  gate instead of pasting it.
+- Event identity, deduplication, approval binding, and retry behavior are unchanged.
+  Redaction touches descriptive fields only, and the event id hashes identity
+  fields.
+
+Redaction is bounded. It does not attempt general DLP: an unlisted value with no
+credential shape, arbitrary confidential prose, and a credential hidden by
+encoding can still reach a configured channel. Existing outbox rows are not
+rewritten.
+
 ## What is never exposed
 
-No credential is written to an event, a log, an artifact, or status output. Status
-reports only the non-secret channel settings.
+No configured credential is written to an event, a log, an artifact, or status
+output. Status reports only the non-secret channel settings. Notification text is
+redacted as described above; that redaction is bounded, so it is not a general DLP
+guarantee.
 
 ## Operator runbook
 
@@ -121,3 +153,5 @@ status check is scheduled until scheduling succeeds.
   job started by a process that cannot pass its job identity is reported as `ended`.
 - No production channel is enabled by this feature. Enabling one is an operator
   decision.
+- Redaction does not detect an arbitrary secret, and it does not rewrite events
+  already persisted before it ran.

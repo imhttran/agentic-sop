@@ -2,6 +2,7 @@ package cli
 
 import (
 	"errors"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/domain"
 	"github.com/imhttran/agentic-sop/internal/notify"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/store"
 )
 
@@ -40,15 +42,26 @@ func setLifecycleSink(s EventSink) EventSink {
 // best-effort provenance: a store that cannot be opened or a transition the
 // emitter rejects yields no event and never changes the run outcome.
 func emitTransition(projectDir string, req EmitRequest) (notify.Event, bool, error) {
+	emitter := func(sink EventSink) *LifecycleEmitter {
+		return &LifecycleEmitter{Sink: sink, Secrets: notificationRedactionSecrets()}
+	}
 	if lifecycleSink != nil {
-		return NewLifecycleEmitter(lifecycleSink).Emit(req)
+		return emitter(lifecycleSink).Emit(req)
 	}
 	outbox, err := openLifecycleOutbox(projectDir)
 	if err != nil {
 		return notify.Event{}, false, err
 	}
 	defer outbox.Close()
-	return NewLifecycleEmitter(outbox).Emit(req)
+	return emitter(outbox).Emit(req)
+}
+
+// notificationRedactionSecrets returns the exact secret values NewEvent removes
+// from notification text. The environment is read at this CLI edge, not in the
+// notify domain package, so NewEvent stays deterministic; the values are passed to
+// the constructor and are never persisted with the event.
+func notificationRedactionSecrets() []string {
+	return redact.EnvSecrets(os.Environ())
 }
 
 // emitTransitionApprovalJob emits the waiting_for_human event for a task parked
