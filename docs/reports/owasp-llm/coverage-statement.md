@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `b61af152` (2026-11-10, LLM02 C1 live evidence).
+**As of:** `main` at `53f4c101` (2026-11-10, LLM02 C1 hardlink verification).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -25,7 +25,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                         | Prompt secrecy is not claimed by design                                                                                                                                   |
 | LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                              | Live RAG / PostgreSQL / embeddings `NOT_RUN`                                                                                                                              |
 | LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                               | Factual correctness of model output is out of scope                                                                                                                       |
-| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time, output, process and opt-in token budgets                                                                                                                                                                      | No dollar cap (no pricing data)                                                                                                                                           |
+| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                    | No dollar cap (no pricing data); some subprocess paths lack process-group termination                                                                                     |
 
 ## Per risk
 
@@ -132,9 +132,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 - **Not covered, and why:** rendering in third-party terminals and IDEs,
   persisted Markdown, and Slack unfurl are outside SOP. How Slack rendered the
-  message was not observed. Manual acceptance is pending with the approver.
+  message was not observed. All six Plan 10 manual criteria were accepted, and
+  Plan 10 was historicalized `COMPLETE`; one Slack transport event was
+  `DELIVERED` on attempt 1. Slack rendering and channel binding remain unobserved.
 
-### LLM06 Excessive Agency — covered by policy, with an opt-in macOS sandbox
+### LLM06 Excessive Agency — covered by policy, with opt-in sandboxing on macOS and Linux
 
 - **Covered:**
   - Root and command policy, with read-only roots.
@@ -203,8 +205,17 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 - **Covered:**
   - Read and output bounds, and a default cap on provider output tokens.
   - Per-command timeouts, MCP frame bounds and atomic continuation accounting.
-  - Since PR #327, every external subprocess path kills its whole process group,
-    and the test runner has a 30-minute default timeout.
+  - Process-group termination covers the paths that bind `internal/procgroup`
+    (test runner, handoff, HIP comparison command path, outcome/acceptance
+    commands, review OCR, and RAG client) and packages with their own `Setpgid`
+    helpers (`agent`, `security`, `toolharness`, `evaltarget`,
+    `controller/sopclient`, and `decision/commandprofile`). It is not universal:
+    `internal/decision/command/command.go`,
+    `internal/decisionadapter/providers/julia/runner.go`, `internal/git`,
+    `internal/github`, and `internal/hipcompare/changes.go` use
+    `exec.CommandContext` without a process group, so a timeout kills only the
+    direct child (or sets no group). The test runner has a 30-minute default
+    timeout.
 
   Evidence: [llm06-consumption.md](llm06-consumption.md).
   - An opt-in per-run token budget, `SOP_AGENT_MAX_TOTAL_TOKENS`, is checked
@@ -225,7 +236,7 @@ These cannot be closed by code in this repository:
 
 1. Plan 03 acceptance of the live campaign artifact
    ([llm02-acceptance-request.md](llm02-acceptance-request.md)).
-2. Plan 10 manual acceptance and Slack rendering observation
+2. Plan 10 Slack rendering and channel-binding observation
    ([llm10-acceptance-request.md](llm10-acceptance-request.md)).
 3. Linux live runs for Plans 03, 07 and 08, and a live RAG deployment for
    Plan 09.
