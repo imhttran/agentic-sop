@@ -3,9 +3,10 @@
 Status: two reproduced display-sink gaps `IMPLEMENTED` and `VERIFIED` for the
 SOP-owned CLI terminal and the Slack payload encoder; loopback HTTP transport and
 one live Slack webhook delivery `VERIFIED`; observed Slack rendering
-`NOT_OBSERVED`; manual acceptance not recorded. Shell, path, database, and protocol
-boundaries were inspected and their existing controls confirmed. No owning SOP
-plan state exists for this plan, so this report claims no lifecycle transition.
+`NOT_OBSERVED`; manual acceptance partially recorded (`OUTPUT-001` criteria 1–3
+only). Shell, path, database, and protocol boundaries were inspected and their
+existing controls confirmed. A local owning SOP state exists in `.llm10-verify`
+(not repository-owned), so this report claims no lifecycle transition.
 
 Baseline (original): `imhttran/agentic-sop` `main` at
 `24be0687b0ac0dec5e2e69584be67f1795c0f6f1`, merged with `main` at `985472a`
@@ -292,9 +293,9 @@ dimensions that the matrix keeps visible.
 | Live Slack delivery (transport)              | `VERIFIED` (once)             | One authorized synthetic event was delivered through the configured webhook at `0200ad3f`; the outbox recorded `DELIVERED` on attempt 1 with `delivered=1`, `pending=0`, `exhausted=0`. See [llm10-live-delivery.md](llm10-live-delivery.md).                                                                                                  |
 | Observed Slack rendering                     | `NOT_OBSERVED`                | No authenticated Slack session was available on the test host. The channel name, visible text, and absence of pings remain a human observation.                                                                                                                                                                                                |
 | Live send authorization                      | `RECORDED` (task instruction) | The operator commissioning this work authorized one synthetic notification to `#sop-alert`; no separate signed approval reference exists in the repository.                                                                                                                                                                                    |
-| Manual acceptance by the designated approver | `GAP`                         | No owning SOP plan state exists, so there is no recorded outcome or `sop outcome --accept` record. Passing CI and the live transport probe are evidence, not acceptance. See [llm10-acceptance-request.md](llm10-acceptance-request.md).                                                                                                       |
+| Manual acceptance by the designated approver | `PARTIAL`                     | `OUTPUT-001` criteria 1–3 were accepted in the local verification run at `afc92022` by the designated approver, bound to content identity `2d6a7c8f…`. `OUTPUT-002` criterion 7 and `OUTPUT-003` criteria 3 and 5 remain unaccepted because those tasks have not reached their own gates. Passing CI and the live transport probe are evidence, not acceptance. See [llm10-acceptance-request.md](llm10-acceptance-request.md). |
 | Manual-acceptance binding                    | `LIMITATION`                  | `sop outcome --accept` requires a run-derived `outcome.json` with a manual mapping and repository content identity. `sop task complete --external` clears `outcome.json`, so external completion cannot bind the six decisions. Plan closure does not read `acceptance_decisions.jsonl`; readiness alone is not acceptance.                    |
-| SOP lifecycle completion                     | `GAP`                         | The owning main checkout and the disposable probe worktree both report no active plan: `sop plan historicalize --check` returns `Eligible: no` with reason `no active plan is recorded`; `sop continue --check` returns `RECONCILE_FAILED`, `HUMAN_REVIEW_REQUIRED`, and `0 tasks`; `sop approvals --json` is empty. No transition is claimed. |
+| SOP lifecycle completion                     | `LOCAL / GAP`                 | A local owning state exists in `.llm10-verify` (not repository-owned): plan `ACTIVE`, `OUTPUT-001` `LOCAL_DONE`/`VERIFIED`, `OUTPUT-002` parked at `NEEDS_HUMAN`, `OUTPUT-003` `PLANNED`. `sop continue --check` returns `APPROVAL_REQUIRED`; `sop plan historicalize --check` is ineligible for unresolved work and `Unresolved verification: OUTPUT-001`. The `OUTPUT-001` run stage remains `WAITING_FOR_HUMAN`, an observed record inconsistency; records were not patched by hand. No completion or historicalization is claimed. |
 
 ## Residual risks and limitations
 

@@ -45,11 +45,17 @@ and preserved the original Linux `x86_64` record.
    available, so the rendered message, the bound channel name, and the absence of
    pings remain unobserved. The HTTP 2xx distinction and the exact observation
    needed are recorded in [llm10-live-delivery.md](llm10-live-delivery.md).
-2. **Manual acceptance — not recorded.** The six manual criteria above have no
-   designated-approver decision record. The full CI passed for `OUTPUT-003`
-   criterion 3; that is automated evidence, not an acceptance record.
-3. **Owning SOP lifecycle state — absent.** No checkout holds Plan 10 state. A
-   merged PR is not lifecycle completion.
+2. **Manual acceptance — partially recorded.** In the local verification run at
+   `afc92022`, the designated approver recorded `OUTPUT-001` criteria 1–3. The
+   other three manual criteria (`OUTPUT-002` criterion 7; `OUTPUT-003` criteria 3
+   and 5) still have no decision record because those tasks have not reached their
+   own gates. The full CI passed for `OUTPUT-003` criterion 3; that is automated
+   evidence, not an acceptance record.
+3. **Owning SOP lifecycle state — local, not repository-owned.** A local owning
+   state exists in `.llm10-verify`: the plan is `ACTIVE`, `OUTPUT-001` is
+   `LOCAL_DONE`/`VERIFIED`, `OUTPUT-002` is parked at `NEEDS_HUMAN`, and
+   `OUTPUT-003` is `PLANNED`. The plan is not historicalized, and the state is not
+   committed to the repository. A merged PR is not lifecycle completion.
 
 ## Exact evidence identity
 
@@ -68,6 +74,7 @@ and preserved the original Linux `x86_64` record.
 | Transport evidence               | `internal/cli/notify_acceptance_test.go`, `internal/notify/webhook_test.go`                                                                                                                                                              |
 | Live probe                       | `0200ad3f77604d828acc90c3b1f9dab990e63042`, event `54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16`, `DELIVERED` on attempt 1 at `2026-11-10T02:33:17.836286Z`; see [llm10-live-delivery.md](llm10-live-delivery.md)    |
 | Live payload                     | The inert `& < >` probe fixture in [llm10-live-delivery.md](llm10-live-delivery.md) §Payload fixture; the default `sop notify test` payload was not used because it does not exercise escaping                                           |
+| Local verification run           | `afc9202290a6bb0a3a4ec09385f532c686b23b62` (origin/main at run start), Darwin arm64, content identity `2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`; `.llm10-verify/.agent-sdlc/` holds plan, task, run, outcome, and approval records; OUTPUT-001 accepted/VERIFIED, OUTPUT-002 at `NEEDS_HUMAN`, OUTPUT-003 `PLANNED` |
 
 ## Decision A — live Slack test and rendering observation
 
@@ -107,8 +114,8 @@ Proposed evidence text (draft, not applied):
 
 ## Lifecycle state and supported interface
 
-Read-only checks at the live-probe revision `0200ad3f` (disposable worktree) and
-in the owning main checkout:
+Before the local verification run, read-only checks at the live-probe revision
+`0200ad3f` (disposable worktree) and in the owning main checkout were:
 
 ```text
 sop status                       -> exit 0, no tasks; no active plan
@@ -120,18 +127,32 @@ sop approvals --json             -> { "version": 1, "approvals": [] }
 The main checkout's `plan.meta.json` has no plan identity; the initialized SOP
 worktrees in this workspace own other plans
 (`plan-08b-sop-llm08-hidden-context-closure`,
-`plan-09b-sop-llm09-retrieval-coverage-closure`). No Plan 10 task, run, outcome, or
-approval record exists.
+`plan-09b-sop-llm09-retrieval-coverage-closure`). Before the local run, no Plan 10
+task, run, outcome, or approval record existed in a repository-owned checkout.
+
+The local verification run at `afc92022` now holds the owning state in
+`.llm10-verify` (preserved, not committed):
+
+```text
+sop status                       -> Plan ACTIVE; OUTPUT-001 LOCAL_DONE;
+                                    OUTPUT-002 PLANNED; OUTPUT-003 PLANNED
+sop approvals --json             -> OUTPUT-002 NEEDS_HUMAN, PENDING
+sop continue --check             -> APPROVAL_REQUIRED
+sop plan historicalize --check   -> Eligible: no (unresolved work;
+                                    unresolved verification: OUTPUT-001)
+```
 
 Consequently:
 
-- `sop outcome <task> --accept <criterion> --evidence <text> --by <approver>`
-  cannot be used: it requires a recorded outcome and a mapped manual criterion.
-- `sop plan historicalize` cannot pass readiness: it requires an active plan with
-  satisfied tasks and verification evidence.
+- `sop outcome <task> --accept <criterion> --evidence <text> --by <approver>` is
+  usable only after the task has a run-derived outcome. It was used for
+  `OUTPUT-001`'s three manual criteria in the local run.
+- `sop plan historicalize` still cannot pass readiness: `OUTPUT-002`/`OUTPUT-003`
+  are unresolved, and the `OUTPUT-001` run-stage inconsistency described below
+  leaves its verification unresolved to the readiness check.
 
-The supported adoption and closeout limits, verified by code and tests but not
-executed against this plan:
+The supported adoption and closeout limits, verified by code and tests and
+observed in the local run at `afc92022`:
 
 1. `sop plan activate docs/plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md`
    installs the plan's task graph as ACTIVE. For this well-formed plan it needs no
@@ -160,14 +181,55 @@ executed against this plan:
    manual criteria were accepted; the operator must confirm the acceptance records
    separately before closure.
 
-Consequently, no supported path adopts the original merged evidence and records the
-six manual acceptance decisions without a new verify-first run. The operator must
-choose one of:
+The one-run description is not a supported closeout path. The observed per-task
+sequence at `afc9202290a6bb0a3a4ec09385f532c686b23b62` (content identity
+`2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`) was:
+
+1. `sop plan activate ...` installed three `PLANNED` verify-first tasks.
+2. The first `sop run` executed only `OUTPUT-001`. Validation passed, the
+   implementation agent was not invoked, and the outcome was `PARTIAL` because
+   `criterion-1..3` had no acceptance decisions. The run parked at `NEEDS_HUMAN`
+   with a pending approval and requeued `OUTPUT-001`; `OUTPUT-002` and
+   `OUTPUT-003` did not start.
+3. Three `sop outcome OUTPUT-001 --accept criterion-1|criterion-2|criterion-3`
+   decisions were recorded under the designated approver, bound to the run's
+   content identity. The acceptance recovery records bridged the reviewed
+   mapping attempt 0 to the task attempt 1.
+4. `sop approve OUTPUT-001` approved the pending gate. The next `sop run` resumed
+   `OUTPUT-001` from the accepted outcome: no implementation agent was invoked,
+   the task reached `LOCAL_DONE`, and its outcome became `VERIFIED`. That same run
+   then executed `OUTPUT-002` verify-first, whose validation passed with no
+   implementation agent; its outcome is `PARTIAL` because `criterion-7` has no
+   acceptance decision, and the run parked at `OUTPUT-002`'s `NEEDS_HUMAN` gate.
+5. `OUTPUT-003` remains `PLANNED`; it has no outcome.
+
+The closeout sequence is therefore iterative per task:
+
+```text
+run -> record that task's manual acceptances -> approve its gate -> run again
+    to resume/complete it and advance to the next task -> repeat
+```
+
+A single run plus six acceptances is not supported. Each dependent task starts
+only after the prior task's acceptance decisions are recorded and its gate is
+approved.
+
+Observed closure-readiness limit: after the accepted `OUTPUT-001` resumed as
+`VERIFIED`/`LOCAL_DONE`, its run `state.json` still records
+`stage: WAITING_FOR_HUMAN` (with `attempt.txt` still
+`PARTIAL|ACCEPTANCE|NEEDS_HUMAN`). `sop plan historicalize --check` therefore
+reports `Unresolved verification: OUTPUT-001` even though the task is satisfied.
+This is an observed lifecycle-record inconsistency, not evidence that the
+verification failed. It blocks eventual historicalization and requires a
+supported follow-up; records must not be patched by hand.
+
+Consequently, no supported path adopts the original merged evidence and records
+the six manual acceptance decisions without new verify-first run evidence. The
+operator must choose one of:
 
 - leave the plan unowned (current state; no lifecycle claim);
-- authorize a new verify-first `sop run` at the current revision, then record the six
-  `sop outcome --accept` decisions, then complete/historicalize (new lifecycle
-  evidence bound to the current content); or
+- authorize the iterative per-task sequence above at the current revision, with
+  new lifecycle evidence bound to the current content; or
 - authorize external completion only, accepting that it cannot record the six
   manual decisions and that plan closure would not prove them.
 
