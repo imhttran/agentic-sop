@@ -120,7 +120,9 @@ from ordinary repository content.
   approved C1 vocabulary and requires a separate authorization; provider formats
   change over time, so the list can become stale.
 - **Verdict:** a reasonable **optional** follow-up, not a solution to the
-  unknown-format residual.
+  unknown-format residual. Implementation-ready specification:
+  [PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md](PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md)
+  (status `NEEDS_HUMAN`; no production change).
 
 ### Option C — constrained entropy detection
 
