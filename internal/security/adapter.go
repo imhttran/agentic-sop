@@ -129,6 +129,9 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 	category := Category(strings.ToLower(strings.TrimSpace(raw.Category)))
 	command := append([]string(nil), raw.Command...)
 	configDigest := adapterConfigDigest(raw)
+	if raw.BinarySHA256 != "" || raw.RulesSHA256 != "" {
+		opts.Executor = pinnedExecutor{inner: opts.Executor, binarySHA256: raw.BinarySHA256, rules: raw.Rules, rulesSHA256: raw.RulesSHA256}
+	}
 	switch strings.ToLower(strings.TrimSpace(raw.Protocol)) {
 	case "", config.SecurityProtocolBuiltin:
 		switch id {
@@ -197,6 +200,10 @@ func adapterConfigDigest(raw config.SecurityAdapterConfig) string {
 	_, _ = io.WriteString(hash, boolIdentity(raw.Enabled)+"\x00")
 	_, _ = io.WriteString(hash, boolIdentity(raw.RepositoryWide)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Version))
+	// Pins are part of the resume identity: changing one re-executes the scan.
+	if raw.BinarySHA256 != "" || raw.RulesSHA256 != "" {
+		_, _ = io.WriteString(hash, "\x00"+raw.BinarySHA256+"\x00"+raw.RulesSHA256)
+	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
 

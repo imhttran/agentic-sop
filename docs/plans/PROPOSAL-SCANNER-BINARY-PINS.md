@@ -1,8 +1,8 @@
 # Proposal: execution-time integrity for local scanner binaries
 
-Status: **PROPOSAL — not approved.** This document defines the decision Plan 04
-needs for a writable, long-lived local tools directory. It is not a contract
-violation under the current specification.
+Status: **Decided — option B, implemented** (2026-11-09) as optional
+`binary_sha256` and `rules_sha256` per adapter (`internal/security/pinned.go`). The
+repository enables the rules pin; binary pins are platform-specific and opt-in.
 
 Related: [Plan 04 report](../reports/owasp-llm/llm04-supply-chain.md) (GAP-01 and
 the residual "scanner binary runtime hash is not re-checked"),
