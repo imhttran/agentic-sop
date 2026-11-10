@@ -24,6 +24,7 @@ import (
 
 	"github.com/imhttran/agentic-sop/internal/agent"
 	"github.com/imhttran/agentic-sop/internal/budget"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -109,6 +110,10 @@ type Config struct {
 	// the shared tool harness. It is off unless the project explicitly enables it;
 	// the harness still classifies every Cargo command before execution.
 	CargoAgentToolEnabled bool
+	// Redaction is the optional LLM02 C1 model-input policy. The zero value
+	// preserves the previous behavior; a loaded policy is passed by the
+	// composition root from the project configuration and external inventory.
+	Redaction redact.Policy
 }
 
 // EffectiveBudget returns the budget this harness enforces. A Config that was

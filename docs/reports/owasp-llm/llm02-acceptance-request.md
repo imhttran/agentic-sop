@@ -5,8 +5,11 @@ ACCEPTANCE NOT RECORDED.** The bounded decision is recorded in repository
 decision memory ID
 `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`
 (source `operator:bounded-acceptance-2026-11-10`). It is a separate scoped
-evidence-acceptance decision, not retroactive Plan 03 acceptance. Full Plan 03
-per-criterion acceptance remains `NEEDS_HUMAN`. The final criterion matrix,
+evidence-acceptance decision, not retroactive Plan 03 acceptance. The C1
+unknown-format redaction policy is separately authorized in decision memory ID
+`e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1` and is
+implemented opt-in. Full Plan 03 per-criterion acceptance remains `NEEDS_HUMAN`.
+The final criterion matrix,
 evidence identity, and exact human decisions are in §Final closeout
 (2026-11-10); sections dated 2026-11-09 are preserved as history.
 
@@ -328,6 +331,34 @@ applied as run context at that different revision; it does not revoke the
 recorded decision or change the Plan 03 acceptance cells.
 
 
+### Recorded C1 authorization
+
+The C1 unknown-format policy is recorded separately from Plan 03 acceptance and
+from the bounded evidence acceptance:
+
+- **Decision ID:** `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`
+- **Source / attribution:** `operator:c1-approval-2026-11-10`
+- **Repository identity:** `44e3b2cfca9a455d1f1982faa8103f54260b9787918bf136d2600054ee6d9428`
+  (baseline `20bea32`, `dirty: false`)
+- **Proposal:** [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md)
+- **Design record:** https://github.com/imhttran/agentic-sop/pull/360
+- **Scope:** opt-in explicit sensitive-value inventory plus bounded contextual
+  credential-key and approved known-format detection at `toolResultMessage` and
+  `userPrompt`.
+- **Inventory:** external, regular file, `0600`, no symlink following, loaded once
+  at startup; missing/malformed/insecure files fail closed when enabled.
+- **Detection:** exact values, contextual credential keys, approved known
+  formats; entropy disabled.
+- **Exclusions:** artifacts, retrieval, handoff, notifications, provider
+  retention, general DLP.
+- **Implementation status:** `IMPLEMENTED` (opt-in) / `VERIFIED` deterministically
+  on Linux. The repository configuration remains disabled.
+- **Staleness:** the decision-memory entry is bound to the clean baseline
+  `20bea32`; later implementation/documentation commits change the identity, so
+  `sop memory list` may report it stale for a different state. Staleness is not
+  revocation.
+
+
 ### Plan 03 acceptance matrix
 
 Status describes evidence, not acceptance. `Supported` is not an acceptance
@@ -361,7 +392,7 @@ external-only gaps follow.
 
 | Priority | Residual item | Verified behavior and exposure | Existing protection | Recommendation | Compatibility impact and policy decision | Acceptance criteria for a proposed mitigation |
 | --- | --- | --- | --- | --- | --- | --- |
-| 1 | Unknown-format credentials in ordinary files, diffs, or SAFE command output | `redact.ModelInput` uses `redact.Shapes` assignments, bearer tokens, provider key/token prefixes, AWS keys, JWTs, PEM headers, and URL userinfo. Linux live `READ-OPAQUE`, `COMMAND-OPAQUE`, and `DIFF-OPAQUE` reached the model; the model reproduced them. `TestModelInputToolBoundariesResidualLimits` pins the behavior. | Shape redaction at the user-prompt and tool-result boundaries; narrow credential-path denial. | `INVESTIGATE` a bounded detector enhancement. A decision-ready proposal in [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md) recommends **C1** (explicit inventory plus contextual key/known-format detection, no entropy); approval required. If not approved, `ACCEPT_PROPOSED` as explicit residual. | Possible over-redaction of source/test fixtures and a small per-result detector cost. Policy decision: approve a bounded detector proposal or accept the residual. | A fixed corpus of known and unknown formats; no regression in the six live positive controls; a declared false-positive ceiling; deterministic tests; no general-DLP claim. |
+| 1 | Unknown-format credentials in ordinary files, diffs, or SAFE command output | Pre-C1, `redact.ModelInput` used only known env values and shapes; Linux live `READ-OPAQUE`, `COMMAND-OPAQUE`, and `DIFF-OPAQUE` reached the model and the model reproduced them. C1 is now implemented opt-in: exact inventory values, a precise assignment rule, contextual credential keys, and approved known formats. `TestModelInputWithPolicyRedactsUnknownFormats` and the real-harness wiring test pass. With C1 disabled, the pre-C1 residual remains. | A+B shape/path redaction plus C1 (external inventory + contextual keys/known formats; no entropy). | `MITIGATE` — C1 implemented and authorized (decision memory `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`), opt-in. Remaining decision: enable it in project configuration, pursue C2 entropy, or accept the residual. | C1 config/inventory lifecycle; no default behavior change; possible over-redaction of credential-like keys, with placeholder exemptions. | Implemented tests: exact inventory, contextual positives/negatives, known formats, placeholder/positive controls, fail-closed inventory, real harness/user-prompt wiring, and default-disabled behavior. |
 | 2 | Hardlink or path alias with an ordinary name | `resolveIn` resolves symlinks; the credential-path check is lexical. Linux live `HARDLINK` delivered an opaque env value to the model, while the recognised shape was redacted. The deterministic residual test reproduces it. | Symlink resolution; narrow credential-path denial; shape redaction. | `INVESTIGATE` inode/path-identity enforcement. If rejected, `ACCEPT_PROPOSED` as a local path-alias residual. | Inode comparison needs a bounded scan/cache and has TOCTOU and legitimate-hardlink compatibility costs. Policy decision: approve a path-identity proposal or accept the local residual. | Deny hardlink aliases to credential paths; ordinary hardlinks are preserved or explicitly documented; no path escape; deterministic tests and a performance bound. |
 | 3 | Verbatim model-output artifact persistence | `implementation.md` (`internal/cli/run.go`) and `result.md` (`internal/cli/prompt.go`) are written as produced. `TestRunArtifactPersistsModelOutputVerbatim` records the path; the Linux evidence artifact stores three reproduced opaque values. | Upstream model-input/tool-result redaction; run artifacts are SOP-owned, run-scoped evidence. | `INVESTIGATE` a design that preserves audit evidence while redacting or access-controlling sensitive content (for example a redacted view plus a restricted raw record). If rejected, `ACCEPT_PROPOSED` as a separate sink risk. | Redaction can hide evidence; a dual-artifact or access-control design adds storage, retention, and review behavior. Policy decision: approve artifact handling or accept the sink residual. | Audit integrity and replayability preserved; redaction tests; access control for any raw record; no loss of required validation/review evidence. |
 | 4 | Caller-owned and notification prose | `notify.NewEvent` applies `redact.Shapes` to `Reason`, `NextAction`, and `Outcome` before persistence/delivery; `TestLLM08NotificationRedactsCredentialShapes` and `TestLLM08OutboxRowOmitsSecret` pass. Known env values and unknown formats are not covered by `redact.Shapes`; Linux live notification remains `NOT_RUN`. | Shape redaction; notification target/URL redaction; current lifecycle producers pass fixed/generic reasons. | `MITIGATE` by extending `redactDescriptive` to `redact.ModelInput` (known env values plus shapes) and adding focused tests. If caller-owned unknown prose is preferred, `ACCEPT_PROPOSED`. | Low compatibility cost; caller prose may be over-redacted. Policy decision: approve the extension or accept caller-owned unknown-format prose. | Env-value and shape redaction in `Reason`/`NextAction`/`Outcome`; ordinary prose preserved; outbox and channel payload tests; no delivery behavior change. |
@@ -370,7 +401,7 @@ external-only gaps follow.
 
 Priority rationale:
 
-1. **Unknown-format credentials** — demonstrated in three Linux live cases and not fixed by the approved shape detector.
+1. **Unknown-format credentials** — demonstrated in three Linux live cases. C1 is implemented opt-in and verified deterministically; the pre-C1 residual remains when the feature is disabled, and formats outside inventory/context/known formats remain even when enabled.
 2. **Hardlink alias** — demonstrated in Linux live and deterministic evidence; local setup is required, but the path check is bypassed.
 3. **Artifact persistence** — demonstrated by the production write paths and the deterministic test; the tradeoff is audit evidence versus redaction.
 4. **Caller/notification prose** — shape redaction already exists and is tested; unknown-format caller prose is a bounded, lower-priority extension.
@@ -421,7 +452,7 @@ generated for this disposition.
 | Scoped verification | `VERIFIED` for the five deterministic and Linux live tool paths, macOS live campaign, and deterministic prompt/tool tests |
 | Bounded evidence acceptance | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`) |
 | Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN` |
-| Residual risks | Not accepted; recommendations pending (`INVESTIGATE`, `MITIGATE`, `TRANSFER_PROPOSED`) |
+| Residual risks | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in), other recommendations pending (`INVESTIGATE`, `MITIGATE`, `TRANSFER_PROPOSED`) |
 | Broader LLM02 security coverage | `OPEN` |
 | Final disposition | Ready for operator/governance disposition; not fully closed |
 
@@ -441,10 +472,10 @@ required per-criterion acceptance are recorded.
    Do not reopen Plan 03, edit `.agent-sdlc/archive/`, or create a replacement
    `acceptance_decisions.jsonl`.
 3. **Residual-risk disposition:** decide each item in §Residual-risk decision
-   matrix: unknown-format credentials (choose C1 recommended, C2, A, B1, B2, or
-   D in PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md), hardlink aliases
-   (`INVESTIGATE` / accept), artifact persistence (`INVESTIGATE` / accept),
-   caller/notification prose (`MITIGATE` / accept), retrieval/handoff
+   matrix: C1 unknown-format mitigation is implemented opt-in (decide whether to
+   enable it in project configuration, pursue C2 entropy, or accept the residual);
+   hardlink aliases (`INVESTIGATE` / accept), artifact persistence (`INVESTIGATE` /
+   accept), caller/notification prose (`MITIGATE` / accept), retrieval/handoff
    (`INVESTIGATE` / accept the disabled-by-default boundary), and provider
    retention (`TRANSFER_PROPOSED`). Accepting a residual risk is an authorization
    decision; this record does not make it.

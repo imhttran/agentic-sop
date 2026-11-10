@@ -16,11 +16,14 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/imhttran/agentic-sop/internal/config"
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // Version identifiers. They are set at build time by the install workflow with
@@ -39,8 +42,32 @@ func main() {
 		fmt.Print(ollamaagent.VersionReport(version, sourceRevision))
 		return
 	}
-	if err := ollamaagent.Run(context.Background(), os.Stdin, os.Stdout, os.Stderr, os.Getwd); err != nil {
+	dir, err := os.Getwd()
+	if err != nil {
 		fmt.Fprintf(os.Stderr, "sop-ollama-agent: %v\n", err)
 		os.Exit(1)
 	}
+	policy, err := redactionPolicy(dir)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "sop-ollama-agent: %v\n", err)
+		os.Exit(1)
+	}
+	if err := ollamaagent.RunWithPolicy(context.Background(), os.Stdin, os.Stdout, os.Stderr, os.Getwd, policy); err != nil {
+		fmt.Fprintf(os.Stderr, "sop-ollama-agent: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+// redactionPolicy loads the opt-in LLM02 C1 policy from the project
+// configuration. A missing configuration keeps the zero policy; an enabled but
+// invalid inventory fails closed before any model request.
+func redactionPolicy(dir string) (redact.Policy, error) {
+	cfg, err := config.LoadDir(dir)
+	if errors.Is(err, config.ErrNotFound) {
+		return redact.Policy{}, nil
+	}
+	if err != nil {
+		return redact.Policy{}, err
+	}
+	return cfg.RedactionPolicy(dir)
 }

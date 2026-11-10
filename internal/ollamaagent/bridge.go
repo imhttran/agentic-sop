@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
 // NativeAgent is the in-process form of the Ollama tool harness: it satisfies
@@ -43,11 +44,19 @@ func NewNativeAgent(cfg Config, root string, diag io.Writer) *NativeAgent {
 // cargoAgentToolEnabled is the project's independent cargo.agent_tool permission;
 // it is passed through to the shared tool harness unchanged.
 func NativeAgentFromEnv(configuredModel string, cargoAgentToolEnabled bool) (*NativeAgent, error) {
+	return NativeAgentFromEnvWithPolicy(configuredModel, cargoAgentToolEnabled, redact.Policy{})
+}
+
+// NativeAgentFromEnvWithPolicy is NativeAgentFromEnv with the loaded LLM02 C1
+// model-input policy. The composition root resolves the project configuration
+// and external inventory; the agent layer receives only the resulting policy.
+func NativeAgentFromEnvWithPolicy(configuredModel string, cargoAgentToolEnabled bool, policy redact.Policy) (*NativeAgent, error) {
 	cfg, err := ConfigFromEnv()
 	if err != nil {
 		return nil, err
 	}
 	cfg.CargoAgentToolEnabled = cargoAgentToolEnabled
+	cfg.Redaction = policy
 	if model := strings.TrimSpace(os.Getenv(agent.EnvAgentModel)); model != "" {
 		cfg.Model = model
 	} else if strings.TrimSpace(os.Getenv(agent.EnvOllamaModel)) == "" {

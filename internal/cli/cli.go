@@ -22,6 +22,7 @@ import (
 	"github.com/imhttran/agentic-sop/internal/ollamaagent"
 	"github.com/imhttran/agentic-sop/internal/planflow"
 	"github.com/imhttran/agentic-sop/internal/recovery"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/resume"
 )
 
@@ -177,7 +178,12 @@ func defaultDeps() deps {
 				// the working tree, with all capabilities (including IMPLEMENT and
 				// FIX). SOP remains the workflow authority; the loop owns only
 				// tool-bounded execution.
-				a, err := ollamaagent.NativeAgentFromEnv(model, cargoAgentTool)
+				dir, _ := os.Getwd()
+				policy, err := redactionPolicyFromProject(dir)
+				if err != nil {
+					return nil, err
+				}
+				a, err := ollamaagent.NativeAgentFromEnvWithPolicy(model, cargoAgentTool, policy)
 				if err != nil {
 					return nil, err
 				}
@@ -513,4 +519,18 @@ func configuredAgent(projectDir string) (harness, provider, modelName string, er
 		return "", "", "", err
 	}
 	return cfg.Agent.Harness, cfg.Agent.Provider, cfg.Agent.Model, nil
+}
+
+// redactionPolicyFromProject loads the opt-in LLM02 C1 policy from the project
+// configuration. A missing configuration keeps the zero policy, so existing
+// projects are unchanged; an enabled but invalid inventory fails closed.
+func redactionPolicyFromProject(dir string) (redact.Policy, error) {
+	cfg, err := config.LoadDir(dir)
+	if errors.Is(err, config.ErrNotFound) {
+		return redact.Policy{}, nil
+	}
+	if err != nil {
+		return redact.Policy{}, err
+	}
+	return cfg.RedactionPolicy(dir)
 }

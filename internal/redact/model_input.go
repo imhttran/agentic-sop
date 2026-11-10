@@ -8,9 +8,5 @@ package redact
 // It is deliberately bounded: it does not attempt general DLP and cannot
 // recognise arbitrary confidential prose or unknown credential formats.
 func ModelInput(content string, env []string) string {
-	if content == "" {
-		return content
-	}
-	content = Values(content, EnvSecrets(env), Fixed("[redacted]"))
-	return ShapesValues(content, Fixed("[redacted]"))
+	return ModelInputWithPolicy(content, env, Policy{})
 }

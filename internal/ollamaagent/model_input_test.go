@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/imhttran/agentic-sop/internal/agent"
+	"github.com/imhttran/agentic-sop/internal/redact"
 	"github.com/imhttran/agentic-sop/internal/toolharness"
 )
 
@@ -237,5 +238,139 @@ func TestModelInputToolBoundariesResidualLimits(t *testing.T) {
 	}
 	if msg := toolResultMessage(toolharness.ToolRunCommand, out, err); strings.Contains(msg, commandCanary) {
 		t.Fatalf("recognised command credential shape was not redacted: %q", msg)
+	}
+}
+
+// TestModelInputWithPolicyRedactsUnknownFormats is the C1 integration test. It
+// exercises the real tool harness and the actual model-input rendering functions
+// for an ordinary file, a diff, and SAFE command output, plus an exact inventory
+// value and ordinary positive controls. The default functions are asserted to
+// retain the pre-C1 behavior.
+func TestModelInputWithPolicyRedactsUnknownFormats(t *testing.T) {
+	const (
+		opaque   = "opaque-live-value-42"
+		bare     = "bare-opaque-value-88"
+		ordinary = "ordinary-source-marker"
+	)
+	dir := t.TempDir()
+	gitInit(t, dir)
+	writeFile(t, dir, "opaque.txt", "opaque_secret="+opaque+"\n")
+	writeFile(t, dir, "bare.txt", "the value is "+bare+"\n")
+	writeFile(t, dir, "notes.txt", ordinary+" ordinary repository content\n")
+	writeFile(t, dir, ".env.example", "SOP_TEST_API_KEY=replace-me\n")
+	writeFile(t, dir, "opaque-tracked.txt", "opaque_secret="+opaque+"\n")
+	writeFile(t, dir, "tracked-diff.txt", "before\n")
+	runGitForTest(t, dir, "add", "opaque-tracked.txt", "tracked-diff.txt", "notes.txt", ".env.example")
+	writeFile(t, dir, "opaque-tracked.txt", "opaque_secret="+opaque+"-worktree\n")
+	writeFile(t, dir, "tracked-diff.txt", "after token="+opaque+"\n")
+
+	h := toolharness.New(dir, toolharness.DefaultConfig(), toolharness.NewAuditLog(0))
+	ctx := context.Background()
+	policy := redact.Policy{Enabled: true, Values: []string{bare}}
+
+	render := func(tool string, args map[string]any) string {
+		t.Helper()
+		out, err := h.Run(ctx, tool, args)
+		if err != nil {
+			t.Fatalf("%s: %v", tool, err)
+		}
+		return toolResultMessageWithPolicy(tool, out, err, policy)
+	}
+
+	for _, tc := range []struct {
+		name string
+		tool string
+		args map[string]any
+	}{
+		{"ordinary file", toolharness.ToolReadFile, map[string]any{"path": "opaque.txt"}},
+		{"git diff", toolharness.ToolGitDiff, nil},
+		{"SAFE command", toolharness.ToolRunCommand, map[string]any{"command": "git show :opaque-tracked.txt"}},
+		{"inventory value", toolharness.ToolReadFile, map[string]any{"path": "bare.txt"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			msg := render(tc.tool, tc.args)
+			for _, forbidden := range []string{opaque, bare} {
+				if strings.Contains(msg, forbidden) {
+					t.Fatalf("model-bound content leaked %q:\n%s", forbidden, msg)
+				}
+			}
+			if !strings.Contains(msg, "[redacted]") {
+				t.Fatalf("model-bound content has no redaction marker:\n%s", msg)
+			}
+		})
+	}
+
+	// Positive controls: ordinary content and the documented template survive.
+	if msg := render(toolharness.ToolReadFile, map[string]any{"path": "notes.txt"}); !strings.Contains(msg, ordinary) {
+		t.Fatalf("ordinary content was redacted:\n%s", msg)
+	}
+	if msg := render(toolharness.ToolReadFile, map[string]any{"path": ".env.example"}); !strings.Contains(msg, "replace-me") {
+		t.Fatalf("template content was redacted:\n%s", msg)
+	}
+
+	// Default behavior is unchanged: the same raw content still reaches the
+	// default model-input renderer when C1 is disabled.
+	out, err := h.Run(ctx, toolharness.ToolReadFile, map[string]any{"path": "opaque.txt"})
+	if err != nil {
+		t.Fatalf("read opaque.txt: %v", err)
+	}
+	if msg := toolResultMessage(toolharness.ToolReadFile, out, err); !strings.Contains(msg, opaque) {
+		t.Fatalf("default behavior changed; expected the pre-C1 unknown-format value:\n%s", msg)
+	}
+}
+
+// TestUserPromptWithPolicyRedactsUnknownFormats proves the task and caller input
+// use the same C1 policy. The default userPrompt retains the pre-C1 behavior.
+func TestUserPromptWithPolicyRedactsUnknownFormats(t *testing.T) {
+	const canary = "opaque-live-value-42"
+	req := agent.Request{
+		Task:  "fix opaque_secret=" + canary,
+		Input: "context auth_token=" + canary,
+	}
+	policy := redact.Policy{Enabled: true}
+	got := userPromptWithPolicy(req, policy)
+	if strings.Contains(got, canary) {
+		t.Fatalf("user prompt leaked the unknown-format value:\n%s", got)
+	}
+	if !strings.Contains(got, "[redacted]") || !strings.Contains(got, "fix") {
+		t.Fatalf("user prompt lost the marker or ordinary text:\n%s", got)
+	}
+	if !strings.Contains(userPrompt(req), canary) {
+		t.Fatalf("default userPrompt behavior changed; expected the pre-C1 value")
+	}
+}
+
+// TestHarnessUsesC1RedactionPolicy proves the loaded policy is actually wired
+// through the real agent loop: the first user prompt and the tool-result message
+// both use it. This complements the direct render-function tests.
+func TestHarnessUsesC1RedactionPolicy(t *testing.T) {
+	const canary = "opaque-live-value-42"
+	dir := t.TempDir()
+	gitInit(t, dir)
+	writeFile(t, dir, "opaque.txt", "opaque_secret="+canary+"\n")
+
+	fake, srv := newFakeOllama(t,
+		`{"tool":"read_file","args":{"path":"opaque.txt"}}`,
+		`{"status":"completed","summary":"done","changes_expected":false}`,
+	)
+	cfg := testConfig(srv.URL)
+	cfg.Redaction = redact.Policy{Enabled: true}
+	req := implementRequest()
+	req.Input = "context auth_token=" + canary
+	if _, err := New(cfg, dir).Execute(context.Background(), req); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if fake.count() < 2 {
+		t.Fatalf("chat calls = %d, want at least 2", fake.count())
+	}
+	if prompt := messageText(fake.request(0)); strings.Contains(prompt, canary) {
+		t.Fatalf("first user prompt leaked the unknown-format value:\n%s", prompt)
+	}
+	got := lastToolResult(t, fake.request(1))
+	if strings.Contains(got, canary) {
+		t.Fatalf("tool result leaked the unknown-format value:\n%s", got)
+	}
+	if !strings.Contains(got, "[redacted]") {
+		t.Fatalf("tool result has no redaction marker:\n%s", got)
 	}
 }
