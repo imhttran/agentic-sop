@@ -92,6 +92,25 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(root, ".agent-sdlc/state.db")); string(b) != "state" {
 		t.Fatalf("state.db changed: %q", b)
 	}
+	// A symlinked state dir is denied at its real path too.
+	linked := t.TempDir()
+	writeRepoFile(t, linked, "real-state/state.db", "state")
+	if err := os.Symlink("real-state", filepath.Join(linked, ".agent-sdlc")); err != nil {
+		t.Fatal(err)
+	}
+	if err := sandboxed(t, linked, "echo forged > real-state/state.db"); err == nil {
+		t.Fatal("a write to the symlinked state dir target succeeded")
+	}
+	// A cache dir that does not exist yet stays writable.
+	fresh := filepath.Join(t.TempDir(), "new", "gocache")
+	t.Setenv("GOCACHE", fresh)
+	found := false
+	for _, d := range writableDirs(root) {
+		found = found || strings.HasSuffix(d, filepath.Join("new", "gocache"))
+	}
+	if !found {
+		t.Fatalf("fresh GOCACHE %s dropped from writable dirs", fresh)
+	}
 	home, _ := os.UserHomeDir()
 	if err := sandboxed(t, root, "touch "+filepath.Join(home, ".sop-isolation-probe")); err == nil {
 		os.Remove(filepath.Join(home, ".sop-isolation-probe"))

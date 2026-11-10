@@ -55,7 +55,9 @@ func isolate(root string, argv []string) (wrapped []string, detail string, err e
 }
 
 // writableDirs are the canonical directories a build or test needs to write.
-// Unresolvable entries are dropped (narrower, never wider).
+// A path that does not exist yet (a fresh GOCACHE) keeps its canonical
+// existing ancestor plus the remainder; relative or unresolvable entries are
+// dropped (narrower, never wider).
 func writableDirs(root string) []string {
 	dirs := []string{root, os.TempDir(), "/private/tmp", "/private/var/folders"}
 	// ponytail: the shared Go build/module caches stay writable so builds are
@@ -76,7 +78,10 @@ func writableDirs(root string) []string {
 	}
 	var out []string
 	for _, d := range dirs {
-		if c, err := filepath.EvalSymlinks(d); err == nil {
+		if !filepath.IsAbs(d) {
+			continue
+		}
+		if c, err := evalExisting(d); err == nil {
 			out = append(out, c)
 		}
 	}
@@ -97,6 +102,12 @@ func seatbeltProfile(root string, writable []string) string {
 		fmt.Fprintf(&b, "(allow file-write* (subpath %q))\n", d)
 	}
 	b.WriteString("(allow file-write-data (literal \"/dev/null\"))\n")
-	fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", filepath.Join(root, ".agent-sdlc"))
+	// Deny both the path and its target: a symlinked .agent-sdlc would
+	// otherwise resolve to a real path the root allow still covers.
+	state := filepath.Join(root, ".agent-sdlc")
+	fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", state)
+	if real, err := evalExisting(state); err == nil && real != state {
+		fmt.Fprintf(&b, "(deny file-write* (subpath %q))\n", real)
+	}
 	return b.String()
 }
