@@ -1,27 +1,30 @@
 # Proposal — LLM02 known credential-format enhancement
 
-Status: **NEEDS_HUMAN — approval required before production enforcement. No detector change is implemented.**
+Status: **IMPLEMENTED / VERIFIED on Linux. Authorized by the repository operator; C1 remains opt-in. The context-free residual remains not accepted.**
 Date: 2026-11-10.
-Baseline: `origin/main` at `88584709` (after PR #389).
+Baseline: `origin/main` at `da2302b9`; live tested revision `41d012fe`.
 Related: [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md),
 [llm02-c1-linux-campaign.json](../reports/owasp-llm/llm02-c1-linux-campaign.json)
 (SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`),
 [gap-register-20261109.md](../reports/owasp-llm/gap-register-20261109.md), PR #389,
 and the original C1 proposal.
 
-## Authorization status
+## Authorization and implementation
 
-**No existing recorded decision explicitly authorizes these seven formats.**
+**Authorized and implemented.** The repository operator recorded
+`APPROVE_LLM02_SEVEN_FORMAT_ENHANCEMENT` on 2026-11-10.
 
-- The C1 decision authorized the C1 mechanism and the known-format list in the
-  original implementation; the seven values below were not in that list.
-- PR #389 merged the assessment and recommended `ACCEPT_PROPOSED` for the
-  context-free residual; it did **not** authorize a detector change.
-- The merged implementation still exposes the seven formats (tests below).
-- Therefore this proposal is `NEEDS_HUMAN`; production behavior is unchanged.
-
-This proposal does **not** accept the context-free unknown-format residual. That
-is a separate decision.
+- **Decision-memory identity:** repository
+  `c7f143fe3b1f3e79308f6f9bcdaf7657a17cae36107739e54a1700d90a83366b`,
+  source `operator:llm02-seven-format-2026-11-10`.
+- **Scope:** exactly the seven C1-gated rules below; no default, configuration,
+  inventory, A+B, Option C Phase 1, isolation, or other policy change.
+- **Implementation:** `fd28709f`; live tested revision `41d012fe`.
+- **Live evidence:** [`llm02-seven-format-campaign.json`](../reports/owasp-llm/llm02-seven-format-campaign.json),
+  SHA-256 `c7f4afbdbffcc5fb820fb69efe3e3e879eba43fe827f86ae11f3ed3c7dadced6`;
+  8 requests, 7 protected, 1 positive control, 0 residual; 5/5 probes.
+- **Not accepted:** the context-free residual and any other LLM02 risk. C1
+  remains opt-in and disabled in repository configuration.
 
 ## Scope: seven formats
 
@@ -38,52 +41,38 @@ is a separate decision.
 Matching is prefix- and length-constrained. There is no unrestricted substring
 scan, no entropy rule, and no heuristic scoring.
 
-## Prepared evidence (test-only)
+## Verification
 
-`internal/redact/known_format_enhancement_test.go` contains the candidate rules
-as **test-only** patterns; they are not wired into production.
+The seven rules are now production rules in `internal/redact/policy.go`
+`knownFormatRules`; the test-only candidate copy was removed.
 
-- `TestSevenFormatProposedPatterns`: all seven match in ordinary-file, Git-diff,
-  command-output, and prompt-like text.
-- `TestSevenFormatProposedPatternsRejectNegativeControls`: malformed/truncated
-  values, ordinary identifiers, Git SHA, UUID, SHA-256, base64, source paths, and
-  a normal `redis://user:password@host` URI remain unchanged.
-- `TestSevenFormatsCurrentlyUnredacted`: production still leaves all seven
-  unchanged with C1 enabled — the current gap.
-- `TestSevenFormatsC1DisabledUnchanged`: all seven remain unchanged with C1
-  disabled, preserving the opt-in boundary.
-- `TestSevenFormatNegativeControlsRemainUnchanged`: permanent false-positive
-  guard.
-- `internal/ollamaagent/known_format_prompt_pending_test.go`: the prompt boundary
-  still exposes a seven-format value today; flip this test after implementation.
+- `TestSevenFormatsRedactedWithC1`: all seven are redacted in ordinary-file,
+  Git-diff, command-output, and prompt-like text.
+- `TestSevenFormatsC1DisabledUnchanged`: C1 disabled leaves all seven unchanged.
+- `TestSevenFormatNegativeControlsRemainUnchanged`: malformed/truncated values,
+  ordinary identifiers, Git SHA, UUID, SHA-256, base64, and source paths remain
+  unchanged.
+- `TestSevenFormatRedisUserInfoUnchangedBehavior`: normal `user:password` Redis
+  URIs keep the existing A+B behavior.
+- `TestSevenFormatPromptRedacted`: the prompt boundary redacts with C1 enabled
+  and is unchanged when disabled.
+- Existing A+B, C1, Option C Phase 1, and run_command isolation suites pass.
+- Live: 8 requests, 7 protected, 1 positive control, 0 residual; 5/5 probes;
+  artifact link/hash above. The artifact stores synthetic raw tool results; no
+  model-output canary was persisted.
 
-Results: `go test ./internal/redact ./internal/ollamaagent -run 'TestSevenFormat'`
-passes. The candidate corpus completes in milliseconds.
+## Implementation
 
-## Implementation preparation
+- Appended exactly the seven regexes above to `knownFormatRules` in
+  `internal/redact/policy.go`; the list is used only when C1 is enabled.
+- Default A+B behavior, configuration, inventory, Option C Phase 1, run_command
+  isolation, and artifact behavior are unchanged.
+- No new configuration or mode. Rollback is removing the seven lines.
+- Performance: the assessment corpus completes in milliseconds; no measurable
+  regression.
+- False negatives/positives remain as documented in the scope table.
 
-Smallest change once approved:
-
-- Append the seven regexes to `knownFormatRules` in
-  `internal/redact/policy.go`. That list is used only when C1 is enabled.
-- Keep `ModelInput` (A+B defaults) unchanged. C1-disabled behavior is unchanged.
-- No new configuration, inventory change, or new mode.
-- No change to `sensitivepath`, Option C Phase 1, run_command isolation, A+B, or
-  artifact behavior.
-- Rollback: remove the seven lines; no state or migration.
-- Performance: seven additional regexes over model-bound text; the assessment
-  corpus completes in milliseconds and no measurable regression is expected.
-- False negatives: formats outside this list, context-free values, and short
-  Redis passwords remain.
-- False positives: the negative corpus is the guard; the prefixes are
-  distinctive and length-constrained.
-
-After approval, the implementation test change is to delete the test-only rule
-copy, move the seven regexes into `policy.go`, and flip
-`TestSevenFormatsCurrentlyUnredacted` and `TestSevenFormatPromptPending` to
-assert redaction while keeping the negative controls.
-
-## Exact approval requested
+## Recorded approval
 
 > Approve adding exactly these seven C1-gated known-format rules to
 > `internal/redact/policy.go` `knownFormatRules`: `ya29.` OAuth tokens, `ASIA`
@@ -95,9 +84,9 @@ assert redaction while keeping the negative controls.
 > other security policy remain unchanged. This approval does not accept the
 > context-free unknown-format residual.
 
-Status: **NEEDS_HUMAN. No production detector change.**
+Status: **RECORDED and IMPLEMENTED.** The decision identity and scope are above.
 
-## Acceptance criteria after approval
+## Acceptance criteria and status
 
 1. Only the seven rules above are added; no general scanning or entropy.
 2. C1 disabled leaves all seven unredacted.
@@ -116,10 +105,16 @@ Status: **NEEDS_HUMAN. No production detector change.**
 9. The context-free residual remains a separate decision; do not claim it is
    mitigated or accepted.
 
+All seven-format implementation criteria are satisfied by the deterministic
+suite and the bounded live campaign. The context-free residual remains
+`OPEN / NOT_ACCEPTED`.
+
 ## Residual limitations
 
+- The seven provider formats are mitigated when C1 is enabled; C1 remains
+  opt-in and disabled by default.
 - Context-free opaque values and arbitrary confidential repository content
-  remain outside reliable detection.
+  remain outside reliable detection (`OPEN / NOT_ACCEPTED`).
 - Provider formats outside these seven, short Redis passwords, and changed
   provider prefixes remain exposed.
 - The Redis rule redacts the whole URI, including the host.

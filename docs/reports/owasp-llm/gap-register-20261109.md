@@ -127,11 +127,14 @@ acceptance criteria were accepted; no acceptance decision exists.
    assessment is
    [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md)
    (status `NOT_APPROVED`; recommends `ACCEPT_PROPOSED` for context-free values;
-   35-case corpus: 20 redacted, 8 missing/residual; entropy rejected; seven
-   provider-format gaps are an optional narrow follow-up). The seven-format
-   enhancement specification is
-   [PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md](../../plans/PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md)
-   (status `NEEDS_HUMAN`; no production detector change). No acceptance is
+   35-case corpus: 27 redacted, 1 context-free residual, 7 ordinary controls;
+   entropy rejected). The seven-format enhancement is `IMPLEMENTED` / `VERIFIED`
+   under decision `APPROVE_LLM02_SEVEN_FORMAT_ENHANCEMENT` (repository
+   `c7f143fe3b1f3e79308f6f9bcdaf7657a17cae36107739e54a1700d90a83366b`, source
+   `operator:llm02-seven-format-2026-11-10`; artifact
+   `llm02-seven-format-campaign.json`, SHA-256
+   `c7f4afbdbffcc5fb820fb69efe3e3e879eba43fe827f86ae11f3ed3c7dadced6`). The
+   context-free residual remains `NOT_APPROVED` / open; no acceptance is
    recorded.
 
 3. **SAFE `run_command` credential read** — separate from the hardlink item.

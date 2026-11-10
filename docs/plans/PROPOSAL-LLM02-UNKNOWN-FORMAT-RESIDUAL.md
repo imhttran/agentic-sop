@@ -52,12 +52,13 @@ The merged evidence already records the boundary:
 `ModelInputWithPolicy` with synthetic values; `internal/ollamaagent/unknown_format_prompt_test.go`
 checks the prompt composition. This is an assessment, not a production change.
 
-**35 cases: 20 redacted, 8 known missing/residual, 7 ordinary controls.**
+**35 cases: 27 redacted, 1 context-free residual, 7 ordinary controls.**
 
 Covered today:
 
 - C1 known formats: `glpat-`, `npm_`, `pypi-`, `shpat_`, `ghs_`, `ghu_`, `AIza`,
-  `SG.`, `sk_live_`.
+  `SG.`, `sk_live_`, plus the seven approved provider formats (`ya29.`, `ASIA`,
+  `sk_test_`, `whsec_`, `dckr_pat_`, `AGE-SECRET-KEY-1`, empty-user Redis URIs).
 - A+B shapes: `ghp_`, `github_pat_`, `xox[abprs]-`, `AKIA...`, JWT, PEM,
   URL userinfo, Bearer.
 - C1 contextual keys: `opaque_secret`, `api_key`, `db_passWord`, and the rest of
@@ -67,21 +68,17 @@ Covered today:
 - C1-only formats are not redacted when C1 is disabled, confirming the opt-in
   boundary.
 
+The seven provider conventions are now implemented and verified by the
+seven-format enhancement; they are no longer part of the residual.
+
 Still unredacted today:
 
 | Value class | Example | Why |
 | --- | --- | --- |
-| Google OAuth access token | `ya29.…` | No approved known format |
-| AWS temporary access key ID | `ASIA…` | Only `AKIA…` is a shape |
-| Stripe test key | `sk_test_…` | Only `_live_` is a known format |
-| Stripe webhook secret | `whsec_…` | No approved format |
-| Docker PAT | `dckr_pat_…` | No approved format |
-| age secret key | `AGE-SECRET-KEY-1…` | No approved format |
-| Redis URI with empty user | `redis://:pass@host` | URL-userinfo shape requires a user |
 | Context-free opaque value | `Zx9K2mQ7…` or `boundary-residual-value-99` | No key, shape, format, or inventory entry |
 
-The first seven are **known provider conventions**; the last is the genuine
-unknown-format residual. They are different decisions.
+This is the genuine unknown-format residual. The provider-format and
+context-free decisions were separate; only the provider formats were implemented.
 
 ## Entropy assessment
 
@@ -119,10 +116,10 @@ from ordinary repository content.
 - **Weaknesses:** it does not address the context-free residual; it expands the
   approved C1 vocabulary and requires a separate authorization; provider formats
   change over time, so the list can become stale.
-- **Verdict:** a reasonable **optional** follow-up, not a solution to the
-  unknown-format residual. Implementation-ready specification:
+- **Verdict:** implemented and verified in the authorized seven-format
+  enhancement; it does not address the context-free residual.
   [PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md](PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md)
-  (status `NEEDS_HUMAN`; no production change).
+  records the implementation and Linux live evidence.
 
 ### Option C — constrained entropy detection
 
@@ -155,9 +152,8 @@ Rationale:
 - The C1 inventory already provides an exact control for values the operator can
   identify; that is the smallest actionable next step, and it is operational
   rather than new enforcement.
-- The seven provider-format gaps are a separate, bounded Option B decision. They
-  are worth considering, but adding them does not close the unknown-format
-  residual and is not required to make the residual decision.
+- The seven provider formats are now implemented under the separate Option B
+  authorization. They do not close the context-free residual.
 
 This recommendation does **not** record acceptance. Acceptance requires the
 operator decision below.
