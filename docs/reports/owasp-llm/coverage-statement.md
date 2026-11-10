@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered (trace + live campaign) | Not general DLP; acceptance not recorded |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for tool results (trace + live campaign) | Task/input context unredacted; not general DLP |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -41,13 +41,19 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 ### LLM02 Sensitive Information Disclosure — covered, bounded
 
-- **Covered:** redaction and authorization at every model-visible boundary.
-  Credential-path denial and model-input redaction come from Plan 08 A+B. A live
+- **Covered:** tool results and tool errors are redacted before they reach the
+  model, and credential paths are denied for `read_file`, `search_files` and
+  `copy_file` (Plan 08 A+B). Diagnostics and notifications are redacted. A live
   extraction campaign ran 7 of 7 cases. Evidence:
   [llm02-disclosure.md](llm02-disclosure.md).
-- **Not covered, and why:** redaction is pattern-based, not general DLP, so
-  secrets in an unknown format can pass. Linux live is `NOT_RUN`. The
-  designated approver has not recorded acceptance (an operator action).
+- **Not covered, and why:**
+  - Task and caller input (`req.Task`, `req.Input`), retrieval and handoff
+    context enter the prompt without redaction. The live campaign recorded
+    disclosure of a credential-shaped canary placed in that context.
+  - Redaction is pattern-based, not general DLP, so secrets in an unknown
+    format can pass.
+  - Linux live is `NOT_RUN`.
+  - The designated approver has not recorded acceptance (an operator action).
 
 ### LLM03 Supply Chain — partial
 
