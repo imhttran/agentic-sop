@@ -310,7 +310,16 @@ func TestHomeCredentialsIncludeEnvOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := map[string]bool{dir: true, one: false, two: false}
+	// Overrides resolve symlinks first (on macOS /var is /private/var), so the
+	// expected entries are the real paths.
+	want := map[string]bool{}
+	for p, isDir := range map[string]bool{dir: true, one: false, two: false} {
+		real, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		want[real] = isDir
+	}
 	for _, c := range got {
 		if dirKind, ok := want[c.path]; ok && dirKind != c.dir {
 			t.Errorf("%s dir = %v, want %v", c.path, c.dir, dirKind)
