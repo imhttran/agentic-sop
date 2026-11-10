@@ -160,8 +160,9 @@ notification event constructor copied `Reason`, `NextAction`, and `Outcome`
 verbatim, so a credential-shaped approval reason or failure diagnostic could be
 persisted to the outbox and delivered to Slack or a webhook. `internal/notify/event.go`
 now applies the shared `internal/redact` vocabulary to the descriptive fields before
-the event is persisted or delivered: exact secret-named environment values are
-replaced first, then credential shapes, and `ResolutionCommand` is covered too.
+the event is persisted or delivered: the credential-shape detector runs first,
+then exact secret-named environment values are replaced, and `ResolutionCommand` is
+covered too.
 Event identity fields are unchanged. The
 model-input credential policy A+B is implemented in this PR: direct credential paths
 are denied for read/search/copy-source, with both the requested path and its
@@ -202,14 +203,17 @@ defect.
 `Reason`, `NextAction`, `Outcome`, and `ResolutionCommand` in `NewEvent`, before
 the outbox write or the channel send:
 
-- `redact.Values` replaces every exact value the caller supplies through
+- `redact.Shapes` replaces credential-shaped text with `[REDACTED]` against the
+  original text.
+- `redact.Values` then replaces every exact value the caller supplies through
   `Params.Secrets`. The CLI producer extracts those values with
   `redact.EnvSecrets(os.Environ())` at the lifecycle seam
   (`internal/cli/lifecycle_notify_emit.go`) and injects them through
   `notify.Params` / `LifecycleEmitter.Secrets`; the domain constructor never reads
   the process environment. The raw collection is never stored on the event,
-  serialized, or logged.
-- `redact.Shapes` then replaces credential-shaped text with `[REDACTED]`.
+  serialized, or logged. Shapes run first deliberately: a known value can be an
+  assignment key or token prefix, and replacing it first would disarm the shape
+  match and leave the credential it covered exposed.
 - A credential-free resolution command is preserved exactly. When redaction removes
   a credential from one, the rendered command is annotated
   `(credential redacted; not directly executable)` so it is not mistaken for a
@@ -228,7 +232,8 @@ covers an ordinary command. `TestLLM08KnownSecretValuesRedactedInEveryKind` cove
 completed, failed, and waiting_for_human events with an unshaped environment value;
 `TestLLM08KnownSecretValuePreservesIdentity` and
 `TestLLM08EventSerializationOmitsKnownSecretValues` cover identity and
-non-serialization. `TestLLM08LifecycleEmissionsRedactExactEnvSecret` and
+non-serialization. `TestLLM08KnownSecretValueCannotDisarmShapeDetection` proves a
+known value cannot weaken a shape match. `TestLLM08LifecycleEmissionsRedactExactEnvSecret` and
 `TestLLM08PersistedOutboxAndDeliveredPayloadOmitEnvSecret` drive the production
 producer seam and prove the value is absent from the persisted outbox row and the
 file-channel payload. No new DLP layer is involved.

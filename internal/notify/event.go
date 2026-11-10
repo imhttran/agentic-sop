@@ -32,9 +32,11 @@ const redactionMarker = "[REDACTED]"
 const redactedCommandNote = " (credential redacted; not directly executable)"
 
 // redactDescriptive applies the shared redaction vocabulary to the event's
-// descriptive text before NewEvent returns. Exact values the caller supplied
-// (typically the values of secret-named environment variables) are replaced
-// first, then the shared credential-shape detector runs. Every outbox row and
+// descriptive text before NewEvent returns. The credential-shape detector runs
+// first, then exact values the caller supplied (typically the values of
+// secret-named environment variables). That order matters: an exact value can be
+// a credential key or token prefix, so replacing it before shape detection would
+// disarm the detector and expose the value the shape matched. Every outbox row and
 // every channel payload therefore carries already-redacted text. Identity fields
 // are untouched, so the event id is unchanged.
 //
@@ -44,7 +46,7 @@ const redactedCommandNote = " (credential redacted; not directly executable)"
 func redactDescriptive(e *Event, secrets []string) {
 	m := redact.Fixed(redactionMarker)
 	redactText := func(s string) string {
-		return redact.Shapes(redact.Values(s, secrets, m), m)
+		return redact.Values(redact.Shapes(s, m), secrets, m)
 	}
 	e.Reason = redactText(e.Reason)
 	e.NextAction = redactText(e.NextAction)

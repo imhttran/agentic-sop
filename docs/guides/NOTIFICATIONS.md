@@ -93,9 +93,11 @@ Notification text is derived from lifecycle records, model prose, and tool outpu
 so it is redacted **before** the event is persisted or delivered:
 
 - `Reason`, `NextAction`, `Outcome`, and `ResolutionCommand` pass through the shared
-  redaction package (`internal/redact`). Exact values of secret-named environment
-  variables are replaced first, then credential-shaped text; both use the
-  `[REDACTED]` marker.
+  redaction package (`internal/redact`). The credential-shape detector runs first,
+  then exact values of secret-named environment variables; both use the
+  `[REDACTED]` marker. That order matters: a known value can be an assignment key
+  or token prefix, so replacing it first would disarm the shape match and leave the
+  credential exposed.
 - The environment is read once at the CLI producer boundary. `notify.NewEvent`
   receives the extracted values and never reads the process environment, so the
   domain constructor stays deterministic. The values are not stored on the event,

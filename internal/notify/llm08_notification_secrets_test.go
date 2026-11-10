@@ -187,6 +187,41 @@ func TestLLM08AdapterPayloadsOmitKnownSecretValues(t *testing.T) {
 	}
 }
 
+// TestLLM08KnownSecretValueCannotDisarmShapeDetection proves the composition runs
+// the shape detector against the original text. Replacing an exact value first
+// would turn an assignment key or token prefix into a marker, disarm the detector,
+// and leave the credential that the shape matched exposed.
+func TestLLM08KnownSecretValueCannotDisarmShapeDetection(t *testing.T) {
+	t.Run("assignment key overlap", func(t *testing.T) {
+		p := completedParams()
+		p.Outcome = "login with password=actual-production-credential"
+		p.Secrets = []string{"password"}
+		e, err := NewEvent(p)
+		if err != nil {
+			t.Fatalf("NewEvent: %v", err)
+		}
+		if strings.Contains(e.Outcome, "actual-production-credential") {
+			t.Fatalf("exact-value replacement disarmed the assignment shape: %q", e.Outcome)
+		}
+		if !strings.Contains(e.Outcome, redactionMarker) {
+			t.Fatalf("assignment was not marked as redacted: %q", e.Outcome)
+		}
+	})
+
+	t.Run("token prefix overlap", func(t *testing.T) {
+		p := completedParams()
+		p.Outcome = "credential ghp_ABCDEFGHIJKLMNOPQRSTUVWXYZ012345"
+		p.Secrets = []string{"ghp_"}
+		e, err := NewEvent(p)
+		if err != nil {
+			t.Fatalf("NewEvent: %v", err)
+		}
+		if strings.Contains(e.Outcome, "ABCDEFGHIJKLMNOPQRSTUVWXYZ012345") {
+			t.Fatalf("exact-value replacement disarmed the token shape: %q", e.Outcome)
+		}
+	})
+}
+
 // TestLLM08KnownSecretValuePreservesIdentity proves exact-value redaction does not
 // change the deterministic event id or the approval binding.
 func TestLLM08KnownSecretValuePreservesIdentity(t *testing.T) {
