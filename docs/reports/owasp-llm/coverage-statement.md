@@ -66,6 +66,12 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     inventoried, and contextual values after the read (4 protected cases), but
     the alias remains readable and one unlisted opaque value reached the model.
     **Path authorization and model-input redaction are separate controls.**
+  - SAFE `run_command` (`go test` is `SAFE`) can run model-written code that
+    reads `$HOME` credential files directly, or `os.Link`s them into the repo.
+    The opt-in `run_command` sandbox restricts writes and network, not reads, so
+    this works with or without it. This is a separate, unaccepted residual. The
+    PR #376 review did not approve Option C; the review direction is a sandbox
+    credential read-deny rule plus a cheap `Nlink > 1` check, not implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
@@ -75,8 +81,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The designated approver has not recorded Plan 03 per-criterion acceptance;
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
-  - The six-item residual-risk decision matrix leaves the hardlink disposition
-    pending an approval decision on the merged PR #376 proposal; it recommends `INVESTIGATE` for
+  - The six-item residual-risk decision matrix records that the PR #376 review
+    did not approve Option C as it stands, and that a SAFE `run_command`
+    credential read is a separate unaccepted residual; it recommends
+    `INVESTIGATE` for
     unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
     `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
