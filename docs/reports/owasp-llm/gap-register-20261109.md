@@ -120,7 +120,13 @@ acceptance criteria were accepted; no acceptance decision exists.
    `Nlink > 1` check — is a separate control; the read-deny rule is implemented
    opt-in (macOS `VERIFIED`, Linux `NOT_RUN`) and `Nlink > 1` is not. It does not
    replace Phase 1, and no residual risk is recorded as accepted. Linux live
-   retrieval/notification remain `NOT_RUN`.
+   retrieval/notification remain `NOT_RUN`. The unknown-format residual
+   assessment is
+   [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md)
+   (status `NOT_APPROVED`; recommends `ACCEPT_PROPOSED` for context-free values;
+   35-case corpus: 20 redacted, 8 missing/residual; entropy rejected; seven
+   provider-format gaps are an optional narrow follow-up). No acceptance is
+   recorded.
 
 3. **SAFE `run_command` credential read** — separate from the hardlink item.
    `go test` is classified `SAFE`, so model-written test code can read `$HOME`
