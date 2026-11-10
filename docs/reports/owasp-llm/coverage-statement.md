@@ -17,7 +17,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 | OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
 | --- | --- | --- | --- | --- |
 | LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED` | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; broader coverage `OPEN` |
+| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED` | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; residual recommendations pending; broader coverage `OPEN` |
 | LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
 | LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
 | LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
@@ -69,6 +69,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The designated approver has not recorded Plan 03 per-criterion acceptance;
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
+  - The six-item residual-risk decision matrix recommends `INVESTIGATE` for
+    unknown-format, hardlink, and artifact risks; `MITIGATE` for notification
+    prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
+    `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
 
 ### LLM03 Supply Chain — partial
 
