@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sync/atomic"
 )
 
 func isolationAvailable() bool {
@@ -32,10 +33,17 @@ func isolationCommand(ctx context.Context, root, dir string, argv, env []string)
 	return cmd, nil
 }
 
-// liveSocketName is the Unix domain socket the Linux live sandbox uses to reach
-// the fixed endpoint. It lives in the writable case root, so the sandbox can read
-// and connect to it while every TCP destination remains unreachable.
-const liveSocketName = ".sop-live.sock"
+// liveSocketPrefix is the prefix of the Unix domain socket the Linux live
+// sandbox uses to reach the fixed endpoint. Each invocation uses a unique path
+// in the writable case root, so an asynchronously closing earlier listener can
+// never unlink a replacement socket.
+const liveSocketPrefix = ".sop-live-"
+
+var liveSocketSeq atomic.Uint64
+
+func liveSocketPath(root string) string {
+	return filepath.Join(root, fmt.Sprintf("%s%d-%d.sock", liveSocketPrefix, os.Getpid(), liveSocketSeq.Add(1)))
+}
 
 // liveIsolationCommand is the opt-in, evaluation-only live variant. It keeps the
 // same private mount, environment, and process namespace as isolationCommand and
@@ -50,9 +58,9 @@ func liveIsolationCommand(ctx context.Context, root, dir string, argv, env []str
 	if err != nil {
 		return nil, ErrIsolationUnavailable
 	}
-	socketPath := filepath.Join(root, liveSocketName)
+	socketPath := liveSocketPath(root)
 	// The root is the caller's disposable case directory. Removing a stale socket
-	// from an earlier run prevents EADDRINUSE without touching any other path.
+	// at this unique path prevents EADDRINUSE without touching any other path.
 	_ = os.Remove(socketPath)
 	listener, err := net.Listen("unix", socketPath)
 	if err != nil {

@@ -17,19 +17,29 @@ import (
 	"time"
 )
 
+// liveProbeTimeout bounds the endpoint probe so an endpoint that accepts a
+// connection but stalls before returning HTTP headers fails the probe instead of
+// hanging the campaign before its bounded cases start.
+const liveProbeTimeout = 5 * time.Second
+
 // probeEndpoint performs a minimal HTTP request through the live endpoint socket.
 // It proves the model endpoint is reachable through the only permitted channel,
 // without issuing an inference request.
-func probeEndpoint() error {
+func probeEndpoint() error { return probeEndpointWithTimeout(liveProbeTimeout) }
+
+func probeEndpointWithTimeout(timeout time.Duration) error {
 	socket := strings.TrimSpace(os.Getenv(LiveSocketEnv))
 	if socket == "" {
 		return fmt.Errorf("live endpoint socket is not configured")
 	}
-	conn, err := net.Dial("unix", socket)
+	conn, err := net.DialTimeout("unix", socket, timeout)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = conn.Close() }()
+	if err := conn.SetDeadline(time.Now().Add(timeout)); err != nil {
+		return err
+	}
 	if _, err := fmt.Fprintf(conn, "GET /api/tags HTTP/1.1\r\nHost: %s\r\nConnection: close\r\n\r\n", LiveEndpointDialAddress); err != nil {
 		return err
 	}
@@ -251,6 +261,93 @@ func TestLiveIsolationLinuxCancelsProcessGroup(t *testing.T) {
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
+}
+
+// TestProbeEndpointTimesOut proves the endpoint probe cannot hang when the
+// endpoint accepts a connection but never returns HTTP headers.
+func TestProbeEndpointTimesOut(t *testing.T) {
+	socket := filepath.Join(t.TempDir(), "stall.sock")
+	listener, err := net.Listen("unix", socket)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = listener.Close() }()
+	accepted := make(chan net.Conn, 1)
+	go func() {
+		conn, err := listener.Accept()
+		if err == nil {
+			accepted <- conn
+		}
+	}()
+
+	t.Setenv(LiveSocketEnv, socket)
+	start := time.Now()
+	err = probeEndpointWithTimeout(200 * time.Millisecond)
+	elapsed := time.Since(start)
+	if err == nil {
+		t.Fatal("a stalled endpoint probe succeeded")
+	}
+	if elapsed > 2*time.Second {
+		t.Fatalf("probe took %s, want a bounded failure", elapsed)
+	}
+	select {
+	case conn := <-accepted:
+		_ = conn.Close()
+	case <-time.After(time.Second):
+	}
+}
+
+// TestLiveIsolationLinuxUsesUniqueSocketPaths proves sequential live invocations
+// on the same case root do not reuse a socket path. Without unique paths, closing
+// an earlier listener can unlink the replacement listener's socket.
+func TestLiveIsolationLinuxUsesUniqueSocketPaths(t *testing.T) {
+	if !IsolationAvailable() {
+		t.Skip("bwrap is not available")
+	}
+	root := t.TempDir()
+	env := IsolateEnv(os.Environ(), "")
+
+	ctx1, cancel1 := context.WithCancel(context.Background())
+	cmd1, err := IsolateLiveCommand(ctx1, root, []string{"/bin/true"}, env, root)
+	if err != nil {
+		cancel1()
+		t.Fatal(err)
+	}
+	path1 := liveSocketFromEnv(cmd1.Env)
+	cancel1()
+
+	ctx2, cancel2 := context.WithCancel(context.Background())
+	defer cancel2()
+	cmd2, err := IsolateLiveCommand(ctx2, root, []string{"/bin/true"}, env, root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path2 := liveSocketFromEnv(cmd2.Env)
+	if path1 == "" || path2 == "" {
+		t.Fatalf("socket paths missing: %q %q", path1, path2)
+	}
+	if path1 == path2 {
+		t.Fatalf("live invocations reused the socket path %q", path1)
+	}
+
+	// Let the first listener's asynchronous close run; it must not unlink the
+	// replacement socket.
+	time.Sleep(100 * time.Millisecond)
+	conn, err := net.DialTimeout("unix", path2, time.Second)
+	if err != nil {
+		t.Fatalf("replacement socket %q is unreachable: %v", path2, err)
+	}
+	_ = conn.Close()
+}
+
+func liveSocketFromEnv(env []string) string {
+	prefix := LiveSocketEnv + "="
+	for _, kv := range env {
+		if strings.HasPrefix(kv, prefix) {
+			return strings.TrimPrefix(kv, prefix)
+		}
+	}
+	return ""
 }
 
 // processesWithMarker returns the command lines under /proc that contain marker.

@@ -275,10 +275,13 @@ campaign.
   created inside the case root; a host-side proxy in the test process accepts
   connections and dials exactly `127.0.0.1:11434`. The live decider uses that
   socket through `LocalDecider.Socket`, so direct TCP to the endpoint and every
-  other destination remain denied by the network namespace. The caller cancels
-  the live context to release the proxy listener. Other platforms still return
-  `ErrLiveIsolationUnavailable`; host networking is never used as a substitute for
-  endpoint confinement.
+  other destination remain denied by the network namespace. Each invocation uses
+  a unique socket path, so an asynchronously closing listener cannot unlink a
+  replacement; the endpoint probe applies a bounded read deadline, so an
+  unresponsive endpoint fails the probe instead of hanging the campaign. The
+  caller cancels the live context to release the proxy listener. Other platforms
+  still return `ErrLiveIsolationUnavailable`; host networking is never used as a
+  substitute for endpoint confinement.
 
 OS-boundary verification (`TestLiveIsolationDarwin`, macOS arm64, PASS):
 
