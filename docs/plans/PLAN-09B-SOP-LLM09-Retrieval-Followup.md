@@ -187,7 +187,7 @@ coverage, semantic immunity, production vector coverage, or live producer eviden
 
 ### Deliverables
 
-- `docs/reports/owasp-llm/llm09-retrieval.md` — §Criterion-to-evidence mapping (partial/corrected rebuild mapping), §Dependency handoff (Plan 05 per-row enforcement open; Plan 07 D4 contained in `origin/main`), §Limitations, and §Follow-up verification (RETRIEVE-101..104).
+- `docs/reports/owasp-llm/llm09-retrieval.md` — §Criterion-to-evidence mapping (partial/corrected rebuild mapping), §Dependency handoff (Plan 05 per-row enforcement open; Plan 07 D4 contained in the current merged baseline), §Limitations, and §Follow-up verification (RETRIEVE-101..104).
 - `docs/reports/owasp-llm/README.md` — refreshed Plan 09 row and Plan 05/07 boundary wording, including Plan 05 per-row enforcement open and Plan 07 D4 merged-state reconciliation.
 
 ### Acceptance Criteria
