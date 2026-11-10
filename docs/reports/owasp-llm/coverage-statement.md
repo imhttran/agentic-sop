@@ -80,9 +80,10 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
     Still open on macOS: the parent process environment is readable with
     `kern.procargs2` (measured; `process-info*` does not cover it), and a
-    pre-existing hardlink alias remains readable through `read_file`. This is a
-    separate, unaccepted residual. The PR #376 review did not approve Option C;
-    the `Nlink > 1` check is not implemented.
+    pre-existing hardlink alias remains readable through `read_file` (Option C
+    Phase 1, PR #381, denies aliases to protected workspace credentials on Linux
+    only). This is a separate, unaccepted residual; the `Nlink > 1` check is not
+    implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
