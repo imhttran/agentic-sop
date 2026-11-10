@@ -200,7 +200,7 @@ func runLLM02SevenFormatChild(t *testing.T) {
 	}
 	repo := filepath.Join(root, "repo")
 	for _, tc := range sevenFormatLiveValues {
-		writeFile(t, repo, tc.file, "credential: "+tc.value+"\n")
+		writeFile(t, repo, tc.file, "value: "+tc.value+"\n")
 	}
 	writeFile(t, repo, "notes.txt", llm02LiveOrdinary+" ordinary repository content\n")
 
