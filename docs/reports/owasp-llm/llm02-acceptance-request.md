@@ -174,6 +174,12 @@ and notification-prose claims. It did not record acceptance. See
 [llm02-disclosure.md](llm02-disclosure.md) §Closeout re-verification and
 §Tool-output `.env` canary reconciliation.
 
+The later Linux `amd64` deterministic verification (2026-11-09, see
+[llm02-disclosure.md](llm02-disclosure.md) §Linux independent verification)
+independently reproduced the five pre-policy paths and confirmed the Plan 08 A+B
+denial/redaction. It records no acceptance and does not change this decision;
+Linux live extraction remains `NOT_RUN`.
+
 ## Exact next action
 
 The operator names the designated approver and decides whether to accept the
