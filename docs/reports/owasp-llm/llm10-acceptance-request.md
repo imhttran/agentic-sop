@@ -130,16 +130,46 @@ Consequently:
 - `sop plan historicalize` cannot pass readiness: it requires an active plan with
   satisfied tasks and verification evidence.
 
-The supported path, if the operator wants a SOP acceptance record, is operator-owned:
+The supported adoption and closeout limits, verified by code and tests but not
+executed against this plan:
 
-1. Decide whether to establish an owning SOP state for this plan (for example by
-   running it through `sop run` against the existing merged evidence). This may
-   re-execute verify-first tasks; it is a separate governed decision.
-2. Record the task outcomes through the lifecycle against the existing evidence.
-3. Record one `sop outcome --accept` per manual criterion, naming the report section
-   and revision.
-4. Historicalize only when SOP readiness and the acceptance decisions are both
-   satisfied.
+1. `sop plan activate docs/plans/PLAN-10-SOP-LLM10-Improper-Output-Handling.md`
+   installs the plan's task graph as ACTIVE. For this well-formed plan it needs no
+   model and records no task attempt. A deterministic compile produces three
+   `PLANNED` tasks (`OUTPUT-001..003`), all `verify-first`, with dependencies
+   `OUTPUT-001 -> OUTPUT-002 -> OUTPUT-003`. Activation binds no existing evidence.
+2. `sop task complete <task-id> --external --commit <sha>` marks a task `LOCAL_DONE`
+   and writes `external-completion.json` (source `external`, the implementation
+   commit, repository head, validation `PASS`, recorded by explicit operator
+   action). It runs the configured validation, records no model run or attempt, and
+   distinguishes external work from a SOP execution. It also clears `outcome.json`.
+3. `sop outcome <task-id> --accept ...` requires a run-derived `outcome.json` with a
+   manual-evidence mapping and repository `content_identity`. It cannot bind to an
+   `external-completion.json`; after external completion it fails with "no recorded
+   outcome ... run the task first".
+4. `sop run` on this verify-first plan executes a new task attempt and re-runs the
+   configured validation and acceptance checks at the current tree. It can complete
+   without an implementation-agent call when validation passes, and it derives
+   `outcome.json` with the manual mappings and current content identity. This is the
+   only supported precursor to `sop outcome --accept`, but it produces new lifecycle
+   evidence, not the original merged evidence at `0200ad3f`.
+5. `sop plan complete` / `sop plan historicalize` check satisfied tasks, pending
+   approvals, and verification evidence (a passed run, an external-completion
+   record, or a not-required disposition). They do not read
+   `acceptance_decisions.jsonl`. Readiness alone therefore does not prove the six
+   manual criteria were accepted; the operator must confirm the acceptance records
+   separately before closure.
+
+Consequently, no supported path adopts the original merged evidence and records the
+six manual acceptance decisions without a new verify-first run. The operator must
+choose one of:
+
+- leave the plan unowned (current state; no lifecycle claim);
+- authorize a new verify-first `sop run` at the current revision, then record the six
+  `sop outcome --accept` decisions, then complete/historicalize (new lifecycle
+  evidence bound to the current content); or
+- authorize external completion only, accepting that it cannot record the six
+  manual decisions and that plan closure would not prove them.
 
 This request does not perform any of those steps.
 
@@ -176,6 +206,11 @@ all improper output handling is prevented.
 - Do not create or edit `state.db`, `outcome.json`, or the acceptance audit files
   outside the supported command.
 - Do not mark the plan complete or historicalized from this document.
+- Do not treat `sop plan complete` / `sop plan historicalize` readiness as proof of
+  manual acceptance: those readiness checks do not read `acceptance_decisions.jsonl`.
+- Do not use `sop task complete --external` as a substitute for the six
+  `sop outcome --accept` decisions; external completion clears `outcome.json` and
+  cannot bind them.
 - Do not treat a merged PR, a green local test, or a 2xx response as lifecycle
   completion or observed Slack rendering.
 
