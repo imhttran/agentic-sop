@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -27,6 +28,9 @@ import (
 // Synthetic canaries only. The inventory is an external 0600 file outside the
 // repository, loaded through the production inventory loader.
 func TestC1HardlinkAliasModelInput(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("C1 inventory loading is Unix-only; hardlink C1 coverage runs on Unix")
+	}
 	const (
 		shapeValue      = "sk-hardlink-shape-not-a-real-secret"
 		envOpaqueValue  = "hardlink-env-opaque-value-41"
