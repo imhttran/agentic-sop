@@ -4,6 +4,7 @@ package toolharness
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -21,7 +22,7 @@ import (
 // which lifecycle events invalidate a snapshot registry, how the existing file
 // tools behave, and the bounded cost of a workspace scan.
 
-type protectedIdentity struct {
+type probeProtectedIdentity struct {
 	rel  string
 	info fs.FileInfo
 }
@@ -39,9 +40,9 @@ func writeProbeFile(t *testing.T, dir, name, content string) {
 // buildIdentityRegistry walks the workspace once and records the identity of
 // every lexically denied credential path. The cost is bounded by the walk and
 // the number of denied paths, not by the number of credential values.
-func buildIdentityRegistry(t *testing.T, root string) ([]protectedIdentity, error) {
+func buildIdentityRegistry(t *testing.T, root string) ([]probeProtectedIdentity, error) {
 	t.Helper()
-	var registry []protectedIdentity
+	var registry []probeProtectedIdentity
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -64,13 +65,13 @@ func buildIdentityRegistry(t *testing.T, root string) ([]protectedIdentity, erro
 		if infoErr != nil {
 			return nil
 		}
-		registry = append(registry, protectedIdentity{rel: rel, info: info})
+		registry = append(registry, probeProtectedIdentity{rel: rel, info: info})
 		return nil
 	})
 	return registry, err
 }
 
-func matchProtectedIdentity(registry []protectedIdentity, info fs.FileInfo) (string, bool) {
+func matchProtectedIdentity(registry []probeProtectedIdentity, info fs.FileInfo) (string, bool) {
 	for _, entry := range registry {
 		if os.SameFile(entry.info, info) {
 			return entry.rel, true
@@ -79,7 +80,7 @@ func matchProtectedIdentity(registry []protectedIdentity, info fs.FileInfo) (str
 	return "", false
 }
 
-func openAndMatch(t *testing.T, path string, registry []protectedIdentity) (string, bool) {
+func openAndMatch(t *testing.T, path string, registry []probeProtectedIdentity) (string, bool) {
 	t.Helper()
 	f, err := os.Open(path)
 	if err != nil {
@@ -190,7 +191,7 @@ func TestHardlinkIdentityFeasibility(t *testing.T) {
 		_, keptOld := openAndMatch(t, filepath.Join(root, "original-link.txt"), refreshed)
 		t.Logf("replace-style refresh kept the old inode: %t", keptOld)
 
-		merged := append(append([]protectedIdentity(nil), registry...), refreshed...)
+		merged := append(append([]probeProtectedIdentity(nil), registry...), refreshed...)
 		if _, ok := openAndMatch(t, filepath.Join(root, "original-link.txt"), merged); !ok {
 			t.Fatal("a merged registry lost the preserved original inode")
 		}
@@ -267,7 +268,7 @@ func TestHardlinkIdentityFeasibility(t *testing.T) {
 	})
 }
 
-func TestHardlinkAliasToolExposure(t *testing.T) {
+func TestHardlinkAliasToolDenial(t *testing.T) {
 	root := hardlinkFixture(t)
 	const canary = "hardlink-identity-canary-60"
 	if err := os.Link(filepath.Join(root, ".env"), filepath.Join(root, "alias.txt")); err != nil {
@@ -277,25 +278,27 @@ func TestHardlinkAliasToolExposure(t *testing.T) {
 	ctx := context.Background()
 
 	out, err := h.Run(ctx, ToolReadFile, map[string]any{"path": "alias.txt"})
-	if err != nil || !strings.Contains(out, canary) {
-		t.Fatalf("read_file alias: err=%v out=%q", err, out)
+	if !errors.Is(err, ErrSensitivePath) || out != "" {
+		t.Fatalf("read_file alias: want identity denial, got err=%v out=%q", err, out)
 	}
 
 	out, err = h.Run(ctx, ToolSearchFiles, map[string]any{"path": ".", "pattern": canary})
-	if err != nil || !strings.Contains(out, canary) {
-		t.Fatalf("search_files alias: err=%v out=%q", err, out)
+	if err != nil {
+		t.Fatalf("search_files alias: %v", err)
 	}
-	if !strings.Contains(out, "alias.txt") {
-		t.Fatalf("search_files did not report the ordinary alias path: %q", out)
+	if strings.Contains(out, canary) || strings.Contains(out, "alias.txt") {
+		t.Fatalf("search_files exposed the protected alias: %q", out)
+	}
+	if out != "(no matches)" {
+		t.Fatalf("search_files returned %q, want no matches", out)
 	}
 
 	out, err = h.Run(ctx, ToolCopyFile, map[string]any{"source": "alias.txt", "dest": "copied.txt"})
-	if err != nil {
-		t.Fatalf("copy_file alias: %v", err)
+	if !errors.Is(err, ErrSensitivePath) || out != "" {
+		t.Fatalf("copy_file alias: want identity denial, got err=%v out=%q", err, out)
 	}
-	copied, err := os.ReadFile(filepath.Join(root, "copied.txt"))
-	if err != nil || !strings.Contains(string(copied), canary) {
-		t.Fatalf("copy_file did not copy the protected content: err=%v out=%q", err, copied)
+	if _, statErr := os.Stat(filepath.Join(root, "copied.txt")); !os.IsNotExist(statErr) {
+		t.Fatalf("copy_file created a destination despite the identity denial: %v", statErr)
 	}
 }
 

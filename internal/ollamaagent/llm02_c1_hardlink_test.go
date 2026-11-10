@@ -20,10 +20,12 @@ import (
 //  2. Raw tool output: did the harness return the synthetic content at all?
 //  3. Model-input redaction: did C1 keep the content out of the model boundary?
 //
-// The alias is expected to bypass the lexical credential-path check, because
-// hardlinks share an inode rather than a resolved path. C1 is then the only
-// content control: shape and contextual rules plus exact inventory values are
-// redacted, while an unlisted opaque value remains a documented residual.
+// An alias to a lexically denied file is now refused by the Option C Phase 1
+// identity policy before content is returned. Aliases to ordinary files (an
+// inventory value, a contextual credential, or an unlisted value) are not
+// protected identities; C1 is their content control: shape and contextual
+// rules plus exact inventory values are redacted, while an unlisted opaque
+// value remains a documented residual.
 //
 // Synthetic canaries only. The inventory is an external 0600 file outside the
 // repository, loaded through the production inventory loader.
@@ -90,17 +92,17 @@ func TestC1HardlinkAliasModelInput(t *testing.T) {
 		return toolResultMessageWithPolicy(toolharness.ToolReadFile, out, runErr, policy)
 	}
 
-	t.Run("hardlink to .env is path-allowed and C1-redacted", func(t *testing.T) {
+	t.Run("hardlink to .env is denied at the path level", func(t *testing.T) {
 		out, runErr := read("alias-env.txt")
-		if runErr != nil {
-			t.Fatalf("hardlink alias to .env was refused at the path level: %v", runErr)
+		if !errors.Is(runErr, toolharness.ErrSensitivePath) {
+			t.Fatalf("hardlink alias to .env: want identity denial, got out=%q err=%v", out, runErr)
+		}
+		if out != "" {
+			t.Fatalf("hardlink alias to .env returned content: %q", out)
 		}
 		for _, canary := range []string{shapeValue, envOpaqueValue} {
-			if !strings.Contains(out, canary) {
-				t.Fatalf("raw tool output did not contain %q; the alias path was not exercised: %q", canary, out)
-			}
-			if msg := modelInput(out, nil); strings.Contains(msg, canary) {
-				t.Fatalf("C1 left %q in the model-bound input: %q", canary, msg)
+			if msg := modelInput(out, runErr); strings.Contains(msg, canary) {
+				t.Fatalf("identity denial exposed %q: %q", canary, msg)
 			}
 		}
 	})
@@ -193,6 +195,11 @@ func TestC1HardlinkAliasModelInput(t *testing.T) {
 		msg = toolResultMessageWithPolicy(toolharness.ToolReadFile, out, runErr, redact.Policy{})
 		if !strings.Contains(msg, inventoryValue) {
 			t.Fatalf("default policy applied an inventory value: %q", msg)
+		}
+
+		out, runErr = read("alias-env.txt")
+		if !errors.Is(runErr, toolharness.ErrSensitivePath) {
+			t.Fatalf("identity denial must not depend on C1: out=%q err=%v", out, runErr)
 		}
 	})
 }
