@@ -16,7 +16,24 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/internal/domain"
+	"github.com/imhttran/agentic-sop/internal/redact"
 )
+
+// redactionMarker renders the replacement for a credential-shaped descriptive
+// field. Descriptive text (Reason, NextAction, Outcome) can include model-derived
+// prose and tool output, so it passes through the shared credential-shape detector
+// before the event is persisted or delivered.
+const redactionMarker = "[REDACTED]"
+
+// redactDescriptive applies the shared credential-shape detector to the event's
+// descriptive text. It runs before NewEvent returns, so every outbox row and every
+// channel payload carries already-redacted text. Identity fields are untouched.
+func redactDescriptive(e *Event) {
+	m := redact.Fixed(redactionMarker)
+	e.Reason = redact.Shapes(e.Reason, m)
+	e.NextAction = redact.Shapes(e.NextAction, m)
+	e.Outcome = redact.Shapes(e.Outcome, m)
+}
 
 // Version is the notification event schema version this build emits and
 // understands. A consumer uses it to interpret the payload without guessing.
@@ -177,6 +194,10 @@ func NewEvent(p Params) (Event, error) {
 	if err := e.validatePayload(p); err != nil {
 		return Event{}, err
 	}
+	// Descriptive text is redacted before the event leaves the constructor, so no
+	// outbox row or channel payload carries a credential shape. The identity
+	// fields are unchanged, so the event id is unchanged.
+	redactDescriptive(&e)
 	e.ID = identity(e)
 	return e, nil
 }
