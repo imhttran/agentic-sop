@@ -9,9 +9,9 @@ import (
 )
 
 // This file is an assessment corpus for the remaining unknown-format residual.
-// It records what the merged A+B/C1 detector does and does not redact; it does
-// not change production detection. Missing-format cases are expected to remain
-// unredacted until a separate detector decision is approved.
+// It records what the merged A+B/C1 detector does and does not redact. The seven
+// approved provider formats are now enforced by C1; the context-free opaque
+// value remains the assessed residual.
 
 func TestUnknownFormatAssessmentCorpus(t *testing.T) {
 	policy := Policy{Enabled: true}
@@ -48,13 +48,13 @@ func TestUnknownFormatAssessmentCorpus(t *testing.T) {
 		{"mixed-key", "db_passWord=Zx9K2mQ7pL4vN8rT1wY6bC3dF5gH0jS2", true, "c1-contextual"},
 
 		// Demonstrated missing conventions (expected unredacted today).
-		{"google-oauth", "value: ya29.a0AfH6SMBexampleexampleexampleexample", false, "missing-format"},
-		{"aws-session-key", "value: ASIAABCDEFGHIJKLMNOP", false, "missing-format"},
-		{"stripe-test", "value: sk_test_abcdefghijklmnop", false, "missing-format"},
-		{"stripe-webhook", "value: whsec_abcdefghijklmnopqrst", false, "missing-format"},
-		{"docker-pat", "value: dckr_pat_abcdefghijklmnopqrst", false, "missing-format"},
-		{"age-secret", "value: AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", false, "missing-format"},
-		{"redis-empty-user", "value: redis://:secretpassword@cache.example:6379/0", false, "missing-format"},
+		{"google-oauth", "value: ya29.a0AfH6SMBexampleexampleexampleexample", true, "c1-seven-format"},
+		{"aws-session-key", "value: ASIAABCDEFGHIJKLMNOP", true, "c1-seven-format"},
+		{"stripe-test", "value: sk_test_abcdefghijklmnop", true, "c1-seven-format"},
+		{"stripe-webhook", "value: whsec_abcdefghijklmnopqrst", true, "c1-seven-format"},
+		{"docker-pat", "value: dckr_pat_abcdefghijklmnopqrst", true, "c1-seven-format"},
+		{"age-secret", "value: AGE-SECRET-KEY-1ABCDEFGHIJKLMNOPQRSTUVWXYZ012345", true, "c1-seven-format"},
+		{"redis-empty-user", "value: redis://:secretpassword@cache.example:6379/0", true, "c1-seven-format"},
 		{"context-free-base64", "value: Zx9K2mQ7pL4vN8rT1wY6bC3dF5gH0jS2", false, "context-free"},
 
 		// Ordinary content controls.

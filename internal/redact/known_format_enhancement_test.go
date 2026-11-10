@@ -2,25 +2,13 @@ package redact
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 	"testing"
 )
 
-// Test-only candidate patterns for the seven-format enhancement. They are not
-// wired into production. The current gap tests document the NEEDS_HUMAN state;
-// the proposed-pattern tests prove the bounded rules would detect the intended
-// values and reject the negative controls once authorized.
-
-var proposedSevenFormatRules = []*regexp.Regexp{
-	regexp.MustCompile(`\bya29\.[A-Za-z0-9_-]{20,}\b`),
-	regexp.MustCompile(`\bASIA[0-9A-Z]{16}\b`),
-	regexp.MustCompile(`\bsk_test_[A-Za-z0-9]{16,}\b`),
-	regexp.MustCompile(`\bwhsec_[A-Za-z0-9]{16,}\b`),
-	regexp.MustCompile(`\bdckr_pat_[A-Za-z0-9_-]{16,}\b`),
-	regexp.MustCompile(`\bAGE-SECRET-KEY-1[A-Z0-9]{20,}\b`),
-	regexp.MustCompile(`\brediss?://:[^@\s/]{8,}@[^\s"'<>]+`),
-}
+// Enforcement coverage for the seven-format C1 enhancement approved by the
+// repository operator (decision memory repository c7f143fe...; source
+// operator:llm02-seven-format-2026-11-10).
 
 type sevenFormatValue struct {
 	name  string
@@ -59,14 +47,7 @@ var sevenFormatNegative = []string{
 	"maxIdentityScanEntries",
 }
 
-func proposedSevenFormatRedact(s string) string {
-	for _, re := range proposedSevenFormatRules {
-		s = re.ReplaceAllString(s, "[redacted]")
-	}
-	return s
-}
-
-func TestSevenFormatProposedPatterns(t *testing.T) {
+func TestSevenFormatsRedactedWithC1(t *testing.T) {
 	contexts := []struct {
 		name   string
 		format string
@@ -80,46 +61,19 @@ func TestSevenFormatProposedPatterns(t *testing.T) {
 		for _, ctx := range contexts {
 			t.Run(tc.name+"/"+ctx.name, func(t *testing.T) {
 				input := fmt.Sprintf(ctx.format, tc.value)
-				got := proposedSevenFormatRedact(input)
+				got := ModelInputWithPolicy(input, nil, Policy{Enabled: true})
 				if got == input || !strings.Contains(got, "[redacted]") {
-					t.Fatalf("candidate pattern did not redact %s: %q", tc.name, got)
+					t.Fatalf("C1 did not redact %s: %q", tc.name, got)
 				}
 				if strings.Contains(got, tc.value) {
-					t.Fatalf("candidate pattern left the value in place: %q", got)
+					t.Fatalf("C1 left the value in place: %q", got)
 				}
 			})
 		}
 	}
 }
 
-func TestSevenFormatProposedPatternsRejectNegativeControls(t *testing.T) {
-	for _, value := range sevenFormatNegative {
-		input := "value: " + value
-		if got := proposedSevenFormatRedact(input); got != input {
-			t.Fatalf("candidate pattern matched a negative control %q: %q", value, got)
-		}
-	}
-	// The empty-user Redis rule must not match a normal user:password URI.
-	const userInfo = "value: redis://user:password@cache.example:6379/0"
-	if got := proposedSevenFormatRedact(userInfo); got != userInfo {
-		t.Fatalf("candidate Redis rule matched a non-empty user URI: %q", got)
-	}
-}
-
-// TestSevenFormatsCurrentlyUnredacted records the NEEDS_HUMAN gap. When the
-// seven patterns are authorized and wired into production, this test must be
-// updated to assert redaction instead.
-func TestSevenFormatsCurrentlyUnredacted(t *testing.T) {
-	for _, tc := range sevenFormatValid {
-		input := "value: " + tc.value
-		if got := ModelInputWithPolicy(input, nil, Policy{Enabled: true}); got != input {
-			t.Fatalf("%s is already redacted; update the approval status and this test: %q", tc.name, got)
-		}
-	}
-}
-
-// C1 is opt-in; with it disabled, the seven formats must remain unchanged even
-// after a future implementation.
+// C1 is opt-in; with it disabled, the seven formats must remain unchanged.
 func TestSevenFormatsC1DisabledUnchanged(t *testing.T) {
 	for _, tc := range sevenFormatValid {
 		input := "value: " + tc.value
@@ -129,13 +83,22 @@ func TestSevenFormatsC1DisabledUnchanged(t *testing.T) {
 	}
 }
 
-// Malformed, truncated, and ordinary identifiers must remain unchanged; this is
-// a permanent negative-control guard for the future implementation.
+// Malformed, truncated, and ordinary identifiers must remain unchanged.
 func TestSevenFormatNegativeControlsRemainUnchanged(t *testing.T) {
 	for _, value := range sevenFormatNegative {
 		input := "value: " + value
 		if got := ModelInputWithPolicy(input, nil, Policy{Enabled: true}); got != input {
 			t.Fatalf("negative control %q was redacted: %q", value, got)
 		}
+	}
+}
+
+// A normal user:password Redis URI is covered by the existing A+B URL-userinfo
+// shape; the new empty-user rule must not change that behavior.
+func TestSevenFormatRedisUserInfoUnchangedBehavior(t *testing.T) {
+	const input = "value: redis://user:password@cache.example:6379/0"
+	got := ModelInputWithPolicy(input, nil, Policy{Enabled: true})
+	if !strings.Contains(got, "[redacted]") {
+		t.Fatalf("the existing URL-userinfo redaction did not apply: %q", got)
 	}
 }
