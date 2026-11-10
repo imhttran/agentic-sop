@@ -836,8 +836,8 @@ separate bounded decision without creating Plan 03 per-criterion acceptance.
 
 The Plan 03 acceptance matrix and the six-item residual-risk decision matrix are
 in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Decision packet
-(2026-11-10; corrected). The hardlink/path-alias disposition is pending the open
-Linux path-identity proposal in PR #376. The other recommendations are
+(2026-11-10; corrected). The hardlink/path-alias disposition is pending an
+explicit approval decision on the merged PR #376 proposal. The other recommendations are
 `INVESTIGATE` for unknown-format
 credentials and artifact persistence;
 `MITIGATE` for
@@ -991,9 +991,9 @@ cases, 1 positive control, and 1 unlisted-value residual.
   protected cases. C1 does not prevent file access.
 - **One unlisted opaque value remains exposed.** It had no inventory entry, no
   credential-like key, and no known format, and the model reproduced it.
-- **The residual is not closed.** The path-identity disposition is pending the
-  open Linux proposal PR #376 (`NOT_APPROVED`); no option is approved, and the
-  residual is not accepted.
+- **The residual is not closed.** The path-identity disposition is pending an
+  explicit approval decision on the merged PR #376 proposal (`NOT_APPROVED`);
+  no option is approved, and the residual is not accepted.
 
 Artifact: `llm02-c1-hardlink-campaign.json`, SHA-256
 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`.

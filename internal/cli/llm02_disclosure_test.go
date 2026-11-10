@@ -580,7 +580,7 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"`TRANSFER_PROPOSED`",
 		"Verified recording mechanism (no new process)",
 		"Partial criteria (do not blanket-accept)",
-		"pending the Linux #376 outcome",
+		"pending an approval decision on the merged PR #376 proposal",
 		"Required vs optional additional evidence",
 	} {
 		if !strings.Contains(normalized, claim) {
