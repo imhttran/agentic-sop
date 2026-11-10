@@ -118,8 +118,9 @@ Limits:
 
 PR #378's home-credential read-deny was verified on Linux `amd64` (Go 1.27.1,
 bubblewrap 0.9.0, unprivileged user) with a synthetic canary and a fake `HOME`
-under the repository fixture. The tests execute the real bubblewrap sandbox; they
-do not infer filesystem denial from model-input redaction.
+under the repository fixture. The tests execute the real bubblewrap sandbox; they do not infer filesystem denial
+from model-input redaction. The live driver also requires the expected process-level
+denial marker and no raw canary for protected cases.
 
 Deterministic:
 
@@ -142,8 +143,8 @@ Deterministic:
 
 Live (five-case focused campaign; artifact
 [`llm02-sandbox-credential-linux-campaign.json`](../owasp-llm/llm02-sandbox-credential-linux-campaign.json),
-SHA-256 `3c93b63f662de0121ee9e62784adadafd9d6fef61f167ef51a104b3c94a799ac`,
-tested revision `73ca4132`, 5 requests, 64 s):
+SHA-256 `1baa836ba7511d73dc79c907e6e6af01d86ca62936d634d08c1687b8ddb661f3`,
+tested revision `c569cd51`, 5 requests, 59 s):
 
 | Case | Result |
 | --- | --- |
