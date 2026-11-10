@@ -90,6 +90,11 @@ func bwrapArgs(root, dir string, argv []string) []string {
 		"--new-session",
 		"--proc", "/proc",
 		"--dev", "/dev",
+		// Private tmpfs mounts make the live view complete enough for a nested
+		// opt-in run_command sandbox, which needs /tmp and /run mount points.
+		// They remain ephemeral and expose no host content.
+		"--tmpfs", "/tmp",
+		"--tmpfs", "/run",
 		"--bind", root, root,
 		"--chdir", dir,
 	}
