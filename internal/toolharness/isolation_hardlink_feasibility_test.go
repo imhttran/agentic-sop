@@ -98,21 +98,42 @@ func scanAliasesForProbe(root string, protected map[string]string) (map[string]s
 	return aliases, err
 }
 
-// visibleTempBase creates a temporary directory outside /tmp so the sandbox's
-// private /tmp does not hide it. The parent of the repository is used because
-// it is on the host filesystem and read-only-visible inside the sandbox.
+// visibleTempBase creates a temporary directory outside the sandbox's private
+// /tmp and /run mounts. The repository parent is not enough: a checkout beneath
+// /tmp would be hidden with the rest of that tree. Try /var/tmp, the repository
+// parent, and the user's home, and skip when none is visible.
 func visibleTempBase(t *testing.T) string {
 	t.Helper()
-	wd, err := os.Getwd()
-	if err != nil {
-		t.Skipf("cannot determine working directory: %v", err)
+	var candidates []string
+	candidates = append(candidates, "/var/tmp")
+	if wd, err := os.Getwd(); err == nil {
+		candidates = append(candidates, filepath.Join(wd, "..", "..", ".."))
 	}
-	base, err := os.MkdirTemp(filepath.Join(wd, "..", "..", ".."), ".sop-hardlink-probe-")
-	if err != nil {
-		t.Skipf("cannot create a visible temporary base: %v", err)
+	if home, err := os.UserHomeDir(); err == nil {
+		candidates = append(candidates, home)
 	}
-	t.Cleanup(func() { _ = os.RemoveAll(base) })
-	return base
+	for _, dir := range candidates {
+		real, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			continue
+		}
+		if underAny(real, "/tmp", "/run", "/var/run") {
+			continue
+		}
+		base, err := os.MkdirTemp(real, ".sop-hardlink-probe-")
+		if err != nil {
+			continue
+		}
+		realBase, err := filepath.EvalSymlinks(base)
+		if err != nil || underAny(realBase, "/tmp", "/run", "/var/run") {
+			_ = os.RemoveAll(base)
+			continue
+		}
+		t.Cleanup(func() { _ = os.RemoveAll(base) })
+		return base
+	}
+	t.Skip("no sandbox-visible temporary base outside /tmp and /run")
+	return ""
 }
 
 func TestSubprocessHardlinkOutsideWorkspaceVisible(t *testing.T) {
