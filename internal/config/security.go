@@ -113,6 +113,15 @@ type SecurityAdapterConfig struct {
 	// Version is the expected/pinned scanner version recorded as provenance. It is
 	// descriptive unless an adapter chooses to enforce it.
 	Version string `yaml:"version"`
+	// BinarySHA256 optionally pins the resolved scanner executable (64 lowercase
+	// hex). When set it is checked immediately before every execution and a
+	// mismatch fails closed. It must come from a verified acquisition (the
+	// committed fetch manifest), never from hashing the local installation.
+	BinarySHA256 string `yaml:"binary_sha256"`
+	// RulesSHA256 optionally pins the Rules path's digest (64 lowercase hex, the
+	// directory digest the fetch manifest records as rules_dir_sha256). When set,
+	// a mismatch fails closed before the scanner starts.
+	RulesSHA256 string `yaml:"rules_sha256"`
 }
 
 // Security categories.
@@ -528,6 +537,17 @@ func validateSecurityAdapterConfigs(s SecurityConfig, enabledOnly bool) error {
 		if err := validateSecurityStaleValue(a.Stale); err != nil {
 			return fmt.Errorf("config: security adapter %q: %w", id, err)
 		}
+		for field, v := range map[string]string{"binary_sha256": a.BinarySHA256, "rules_sha256": a.RulesSHA256} {
+			if v != "" && !isSHA256Hex(v) {
+				return fmt.Errorf("config: security adapter %q %s must be 64 lowercase hex characters", id, field)
+			}
+		}
+		if a.RulesSHA256 != "" && strings.TrimSpace(a.Rules) == "" {
+			return fmt.Errorf("config: security adapter %q sets rules_sha256 without rules", id)
+		}
+		if a.RulesSHA256 != "" && (protocol != SecurityProtocolBuiltin || (strings.ToLower(id) != "semgrep" && strings.ToLower(id) != "gitleaks")) {
+			return fmt.Errorf("config: security adapter %q: rules_sha256 applies only to the built-in semgrep and gitleaks adapters", id)
+		}
 		if strings.TrimSpace(a.Lockfile) != "" {
 			if err := validateSecurityLockfileValue(a.Lockfile); err != nil {
 				return fmt.Errorf("config: security adapter %q: %w", id, err)
@@ -805,4 +825,9 @@ func (c *Config) validateSecurity() error {
 		}
 	}
 	return nil
+}
+
+// isSHA256Hex reports whether v is exactly 64 lowercase hex characters.
+func isSHA256Hex(v string) bool {
+	return len(v) == 64 && strings.Trim(v, "0123456789abcdef") == ""
 }

@@ -129,13 +129,16 @@ func BuildAdapter(raw config.SecurityAdapterConfig, opts BuildOptions) (Adapter,
 	category := Category(strings.ToLower(strings.TrimSpace(raw.Category)))
 	command := append([]string(nil), raw.Command...)
 	configDigest := adapterConfigDigest(raw)
+	if raw.BinarySHA256 != "" {
+		opts.Executor = pinnedExecutor{inner: opts.Executor, binarySHA256: raw.BinarySHA256}
+	}
 	switch strings.ToLower(strings.TrimSpace(raw.Protocol)) {
 	case "", config.SecurityProtocolBuiltin:
 		switch id {
 		case "semgrep":
-			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, languages: descriptorLanguages(raw, id), version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+			return &semgrepAdapter{id: id, category: category, command: command, rules: raw.Rules, rulesPin: raw.RulesSHA256, languages: descriptorLanguages(raw, id), version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "gitleaks":
-			return &gitleaksAdapter{id: id, category: category, command: command, rules: raw.Rules, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
+			return &gitleaksAdapter{id: id, category: category, command: command, rules: raw.Rules, rulesPin: raw.RulesSHA256, version: raw.Version, configDigest: configDigest, exec: opts.Executor, timeout: opts.Timeout, maxOutput: opts.MaxOutputBytes}, nil
 		case "cargo-audit":
 			return &cargoAuditAdapter{
 				id:           id,
@@ -197,6 +200,10 @@ func adapterConfigDigest(raw config.SecurityAdapterConfig) string {
 	_, _ = io.WriteString(hash, boolIdentity(raw.Enabled)+"\x00")
 	_, _ = io.WriteString(hash, boolIdentity(raw.RepositoryWide)+"\x00")
 	_, _ = io.WriteString(hash, strings.TrimSpace(raw.Version))
+	// Pins are part of the resume identity: changing one re-executes the scan.
+	if raw.BinarySHA256 != "" || raw.RulesSHA256 != "" {
+		_, _ = io.WriteString(hash, "\x00"+raw.BinarySHA256+"\x00"+raw.RulesSHA256)
+	}
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
