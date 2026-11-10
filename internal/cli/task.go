@@ -25,9 +25,13 @@ func runTask(args []string, stdout, stderr io.Writer, getwd func() (string, erro
 	if len(args) >= 1 && args[0] == "skip" {
 		return runTaskSkip(args[1:], stdout, stderr, getwd)
 	}
+	if len(args) >= 1 && args[0] == "recover-stage" {
+		return runTaskRecoverStage(args[1:], stdout, stderr, getwd)
+	}
 	if len(args) != 1 {
 		fmt.Fprintln(stderr, "usage: sop task <task-id>")
 		fmt.Fprintln(stderr, "       sop task complete <task-id> --external [--commit <sha>]")
+		fmt.Fprintln(stderr, "       sop task recover-stage <task-id> --by NAME --reason R")
 		fmt.Fprintln(stderr, "       "+strings.TrimPrefix(taskSkipUsage, "usage: "))
 		return exitUsage
 	}

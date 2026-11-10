@@ -1320,6 +1320,14 @@ func resumeAcceptedOutcome(ctx context.Context, dir string, cfg config.Config, s
 			fmt.Fprintf(stderr, "run: persist accepted outcome: %v\n", err)
 			return true, exitError
 		}
+		// The accepted-outcome path bypasses runStages' terminal transition. Reuse the
+		// existing non-destructive stage checkpoint so the same PASSED stage the normal
+		// lifecycle records is persisted before completing the task, and closure
+		// readiness cannot see a satisfied task with a stale WAITING_FOR_HUMAN stage.
+		if err := runpkg.SetStageOnExisting(dir, task.ID, runpkg.Passed); err != nil {
+			fmt.Fprintf(stderr, "run: persist accepted stage: %v\n", err)
+			return true, exitError
+		}
 		if err := completeTask(saver, task); err != nil {
 			fmt.Fprintf(stderr, "run: accepted outcome: %v\n", err)
 			return true, exitError
