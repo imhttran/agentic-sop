@@ -168,6 +168,12 @@ campaign artifact for `criterion-1`–`criterion-4` and `criterion-6`, or the ma
 acceptance stays incomplete. If the operator wants the acceptance record, it needs
 a separate governance decision; it cannot be repaired by editing state or archives.
 
+The later closeout re-verification at `main` `466a92c2` re-ran the focused
+deterministic checks, reused the same artifact, and reconciled the `.env` canary
+and notification-prose claims. It did not record acceptance. See
+[llm02-disclosure.md](llm02-disclosure.md) §Closeout re-verification and
+§Tool-output `.env` canary reconciliation.
+
 ## Exact next action
 
 The operator names the designated approver and decides whether to accept the
