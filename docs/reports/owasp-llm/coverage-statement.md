@@ -68,10 +68,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     **Path authorization and model-input redaction are separate controls.**
   - SAFE `run_command` (`go test` is `SAFE`) can run model-written code that
     reads `$HOME` credential files directly, or `os.Link`s them into the repo.
-    The opt-in `run_command` sandbox restricts writes and network, not reads, so
-    this works with or without it. This is a separate, unaccepted residual. The
+    With the opt-in `run_command` sandbox off (the default), this works; with it on, macOS denies these reads and the `ln`, and secret-named env vars are scrubbed (Linux `NOT_RUN`). This is a separate, unaccepted residual. The
     PR #376 review did not approve Option C; the review direction is a sandbox
-    credential read-deny rule plus a cheap `Nlink > 1` check, not implemented.
+    credential read-deny rule plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial) and the `Nlink > 1` check is not.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
