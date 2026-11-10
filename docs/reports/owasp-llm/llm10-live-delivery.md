@@ -1,263 +1,235 @@
-# Plan 10 — prepared live Slack delivery test
+# Plan 10 — live Slack delivery probe
 
-Status: **PREPARED, NOT AUTHORIZED, NOT RUN — BLOCKED ON OPERATOR.** No message was
-sent by this work, and no channel was enabled. The prompt that produced this
-document authorizes preparation and a request for approval, not an external send.
-
-The Plan 10 wrap-up merged in PR #328 as
-`35340774c16b10236b0ca0143cc0d07c85a8e6b3`; it did not enable the channel or send a
-message, so this test remains `NOT_RUN`.
+Status: **DELIVERY EXECUTED ONCE (transport confirmed); RENDERING NOT OBSERVED.**
+One synthetic notification was accepted by the configured Slack webhook on
+2026-11-10T02:33:17Z. The durable outbox recorded `DELIVERED` on attempt 1 with no
+retry and no exhausted delivery. No authenticated Slack session was available on
+the test host, so the rendered message, the bound channel name, and the absence of
+pings were not observed. A 2xx response is not a rendering claim.
 
 Related: [llm10-output-handling.md](llm10-output-handling.md) (Plan 10),
 [llm10-acceptance-request.md](llm10-acceptance-request.md),
 [NOTIFICATIONS.md](../../guides/NOTIFICATIONS.md), and the cumulative
 [evidence matrix](README.md).
 
-## Environment check at the wrap-up (2026-11-09T22:58Z)
+## Tested revision and host
 
-Checked read-only; no configuration was changed and no state was initialized.
+| Item                | Value                                                                                                                                                                                           |
+| ------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Repository revision | `0200ad3f77604d828acc90c3b1f9dab990e63042` (`origin/main`)                                                                                                                                      |
+| Host                | Darwin arm64, Go 1.27.1                                                                                                                                                                         |
+| Binary              | built from the tested revision with `go build ./cmd/sop`                                                                                                                                        |
+| Sink code           | `internal/notify/slack.go`, `internal/notify/webhook.go`, `internal/cli/terminal.go`, `internal/cli/cli.go`, and `internal/cli/activity.go` are unchanged since the wrap-up revision `ed9ec2dc` |
+| Earlier records     | The original Linux `x86_64` verification and the `ed9ec2dc` Darwin re-verification remain historical; this probe is a separate live observation at `0200ad3f`                                   |
 
-| Check                             | Observation                                                                                                                                                                                                                                                                           |
-| --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Repository revision               | `main` at `ed9ec2dc215eaa0b31a13eb49dbe2938d253c913`                                                                                                                                                                                                                                  |
-| Host                              | Darwin arm64, Go 1.27.1                                                                                                                                                                                                                                                               |
-| Active notification channel       | `notifications` block absent from `.agent-sdlc/config.yaml`; `sop notify status --json` in the main checkout reports `channel: none`, `availability: unavailable`, `webhook_configured: false`                                                                                        |
-| Delivery counters (main checkout) | `delivered: 3`, `pending: 0`, `exhausted: 0` — historical records from the 2026-10-29 operator-local verification, **not** Plan 10 live evidence                                                                                                                                      |
-| Webhook value                     | The main checkout's gitignored `.env` contains `SOP_NOTIFY_WEBHOOK_URL`. Only the scheme and host were inspected (`https://hooks.slack.com/…`, four path segments, no userinfo, no query). The URL value was never printed, copied into this record, or passed as a command argument. |
-| Channel binding                   | A Slack incoming-webhook URL does not encode the channel name. The `#sop-alert` binding cannot be confirmed from configuration; only the operator can confirm it.                                                                                                                     |
-| State in the wrap-up worktree     | No `.agent-sdlc/state.db`. `sop notify status --json` reports `project is not initialized; run sop init`. `sop init` was not run.                                                                                                                                                     |
-| SOP binary                        | `sop version` reports `sop dev`                                                                                                                                                                                                                                                       |
-| Authorization record              | None found in the repository, the checked SOP artifacts, or PR #313 (including its review comment).                                                                                                                                                                                   |
+The `internal/notify` package did change after `ed9ec2dc` for the unrelated LLM08
+work (the event `Nonce` identity discriminator and redaction tests). The Slack
+encoder and webhook transport did not change. The live probe exercised the
+current encoder at `0200ad3f`, not the `ed9ec2dc` binary.
 
-Read-only status snapshot from the main checkout (its own state, not Plan 10 live
-evidence; the document carries no credential):
+## Authorization and configuration
+
+The operator commissioning this task explicitly authorized one synthetic test
+notification through SOP's existing Slack notification path to `#sop-alert`, using
+the existing configured credentials and inert content. That task instruction is
+the authorization record; no separate signed approval reference exists in the
+repository.
+
+The probe ran in a disposable Git worktree, not in the owning checkout:
+
+- `notifications.channel: webhook` and `notifications.webhook.payload: slack` were
+  enabled in the worktree's `.agent-sdlc/config.yaml` for the test only;
+- the gitignored `.env` was copied from the main checkout, used without printing,
+  and never staged or committed;
+- the temporary channel settings were reverted before the documentation commit.
+
+The worktree's `.agent-sdlc/state.db` is disposable probe state. It is not an
+owning SOP plan state, and it records no Plan 10 task, run, outcome, or approval.
+
+The webhook value was not printed, copied into this record, or passed as a command
+argument. Only the presence and the `https://hooks.slack.com/services/` prefix were
+checked. A Slack incoming-webhook URL does not encode the channel name, so the
+`#sop-alert` binding is the operator's assertion, not a value SOP can verify.
+
+## Commands and delivery result
+
+The probe used the existing `sop notify drain` delivery path. The producer was a
+one-shot, untracked fixture that used the existing `notify.NewEvent`,
+`notify.EncodeSlackPayload`, and `store.EnqueueNotification` APIs; it added no
+product command or policy layer.
+
+```sh
+sop notify status --json     # pre-send
+# one-shot fixture: enqueue the synthetic event into the durable outbox
+sop notify drain             # existing bounded drain; performs the delivery
+sop notify status --json     # post-send
+```
+
+Pre-send status (before the fixture was enqueued):
 
 ```json
 {
   "active": false,
-  "availability": "unavailable",
-  "channel": "none",
-  "delivered": 3,
-  "deliveries": { "DELIVERED": 3 },
+  "availability": "configured_unverified",
+  "channel": "webhook",
+  "delivered": 0,
+  "deliveries": {},
   "exhausted": 0,
   "file_configured": false,
   "pending": 0,
-  "reason": "Notifications are unavailable: no channel is configured. Configure notifications.channel before relying on delivery.",
-  "webhook_configured": false
+  "reason": "No delivery has been confirmed yet: configuration alone does not prove the channel works. Run `sop notify test`.",
+  "webhook_configured": true
 }
 ```
 
-No pre-send/post-send status pair exists, because no send was authorized.
-
-Because `notifications.channel` is `none`, the `.env` webhook is not active: the
-loader resolves `SOP_NOTIFY_WEBHOOK_URL` only when the channel is `webhook`
-(`internal/config/notifications.go`). Enabling the channel or changing the payload
-to `slack` is an operator configuration change and is **not** performed here.
-
-## What is already verified locally (synthetic data)
-
-Original run on Darwin arm64 at `main` `93c72857`:
-
-```sh
-go test ./internal/notify ./internal/cli -run 'Notify|Webhook|AcceptanceNotify' -count=1
-```
-
-Observed: `ok github.com/imhttran/agentic-sop/internal/notify` and
-`ok github.com/imhttran/agentic-sop/internal/cli`.
-
-Wrap-up re-run on Darwin arm64 at `main` `ed9ec2dc` (2026-11-09T22:58Z): the same
-paths pass, including `TestEncodeSlackPayloadEscapesMrkdwn`,
-`TestAcceptanceNotifyTestDeliversToLocalReceiver`, and the webhook
-response-classification tests.
-
-| Evidence                                                | Test                                                                                         |
-| ------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
-| Slack payload shape (`text`, event id)                  | `TestEncodeSlackPayloadHasTextAndEventID`                                                    |
-| Mrkdwn escaping (`&`, `<`, `>`)                         | `TestEncodeSlackPayloadEscapesMrkdwn`                                                        |
-| Native payload unchanged                                | `TestWebhookNativePayloadUnchanged`                                                          |
-| 2xx / 4xx / 5xx classification and idempotency header   | `TestWebhookSlackPayloadClassifiesResponses`, `TestWebhookSendsIdempotencyKey`               |
-| No URL in the payload                                   | `TestWebhookSlackPayloadCarriesNoURL`                                                        |
-| Bounded retry/backoff                                   | `internal/notify/dispatch_test.go`                                                           |
-| **Real loopback HTTP transport** from `sop notify test` | `TestAcceptanceNotifyTestDeliversToLocalReceiver` (`internal/cli/notify_acceptance_test.go`) |
-
-`NOTIFICATIONS.md` also records an operator-local Slack delivery on 2026-10-29
-(`active`, `delivered=3`). That record verifies one local configuration; it does
-**not** name `#sop-alert` and it is not this Plan's live evidence.
-
-## The destination
-
-The repository does not record `#sop-alert`. A Slack channel is bound only by the
-configured incoming-webhook URL, resolved in this order:
-
-1. `notifications.webhook.url` in `config.yaml`,
-2. `SOP_NOTIFY_WEBHOOK_URL` in the process environment,
-3. `SOP_NOTIFY_WEBHOOK_URL` in the project's gitignored `.env`.
-
-Steps 2 and 3 apply only when `notifications.channel` is `webhook`. The operator
-must confirm which channel the bound webhook posts to. Never print, echo, or pass
-the URL as a command argument; the documented `.env` procedure keeps it out of
-tracked files and shell history.
-
-No channel is enabled by default, and this work does not enable one.
-
-## Authorization required before any send
-
-All of the following must be true, and recorded:
-
-- an explicit operator approval naming the **exact bound channel** (`#sop-alert`)
-  and the test window;
-- egress from this host to `hooks.slack.com` is permitted;
-- `notifications.channel: webhook` is enabled and
-  `notifications.webhook.payload: slack` is set by the operator;
-- a pre-send `sop notify status --json` snapshot showing `pending: 0`
-  (`configured_unverified`); `sop notify test` runs a bounded drain with the
-  default limit of 50, so a non-empty outbox would also attempt other due
-  deliveries, not only the synthetic test event;
-- the message content is synthetic: no real secret, no customer data, no
-  `@channel`/`@here`, no external or exfiltration link;
-- the operator is watching the channel (or will supply a permalink/screenshot)
-  to confirm rendering and absence of pings.
-
-The Plan 10 execution contract originally said "no live Slack message". PR #313
-prepared a separately authorized exception. The send is not performed by the
-wrap-up; it requires the explicit approval above.
-
-### Exact authorization request (operator-owned)
-
-> I request authorization for **one** synthetic notification send from this
-> host:
->
-> - **Channel:** the Slack incoming webhook bound to `#sop-alert`
-> - **Window:** `<UTC start> – <UTC end>` (to be filled in by the approver)
-> - **Content:** the default `sop notify test` event shown below; no mentions, no
->   real secret, no external or exfiltration link
-> - **Effect:** one POST per attempt to the configured webhook. Delivery is
->   at-least-once with bounded retry and no receiver-side deduplication guarantee:
->   a lost acknowledgement, timeout, or 5xx can produce a second visible message.
->   A retry is not a second acceptance event, but it may be a second visible
->   message.
-> - **Observation:** the operator confirms the channel name, the visible text,
->   the rendering, and the absence of pings, and provides a permalink or
->   screenshot
-> - **Not done before approval:** enabling `notifications.channel: webhook`,
->   changing `notifications.webhook.payload` to `slack`, or running
->   `sop notify test`
->
-> Authorization reference: `<approver name and reference>`.
-
-## Exact synthetic payload
-
-The default test event is the only prepared live payload. It is a real lifecycle
-event with a fresh 8-byte nonce, so each explicit invocation gets a distinct event
-id; a retry of one delivery keeps the recorded id.
-
-| Field       | Value                                                                                                                                        |
-| ----------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| Kind        | `completed`                                                                                                                                  |
-| Project     | `agentic-sop`                                                                                                                                |
-| Attempt     | `1`                                                                                                                                          |
-| Transition  | `NOTIFY_TEST`                                                                                                                                |
-| Outcome     | `notification test event`                                                                                                                    |
-| Next action | `no action required; this event confirms the notification channel is reachable`                                                              |
-| Event id    | fresh 64-hex SHA-256 per invocation (sample generated locally, not sent: `3059750357a62a60dc663e3cb204542b74f63aeedd9bd6d376abddcb225f1352`) |
-
-Rendered Slack `text` (the default payload contains no `&`, `<`, or `>`, so the
-mrkdwn escaping leaves it byte-identical to this template):
+After the fixture was enqueued, status reported `PENDING: 1` and `pending: 1`.
+The drain result:
 
 ```text
-SOP completed in agentic-sop: event <event-id> (attempt 1, NOTIFY_TEST)
-outcome: notification test event
-next: no action required; this event confirms the notification channel is reachable
+Drain: claimed=1 delivered=1 retried=0 exhausted=0
 ```
 
-This payload is not adversarial. It does not carry a mention, a masked link, a
-control character, or an external URL, so an observed delivery of it **does not**
-prove that those cases are neutralized in Slack. The deterministic
-`TestEncodeSlackPayloadEscapesMrkdwn` covers the encoder for `<!channel>`,
-`<https://…|link>`, and `&`. A separate live adversarial case would need its own
-explicit authorization.
+Post-send status:
 
-## Minimal live test (do not run without the authorization above)
-
-```sh
-sop notify status --json     # pre-send snapshot; record the exact availability
-sop notify test              # enqueues one synthetic event, then runs a bounded drain
-sop notify status --json     # post-send snapshot: availability and counts
+```json
+{
+  "active": true,
+  "availability": "active",
+  "channel": "webhook",
+  "delivered": 1,
+  "deliveries": { "DELIVERED": 1 },
+  "exhausted": 0,
+  "file_configured": false,
+  "pending": 0,
+  "reason": "",
+  "webhook_configured": true
+}
 ```
 
-The status counters are global across recorded deliveries, not scoped to the
-current channel. A prior confirmed delivery on another channel can make
-`availability` report `active` before this webhook channel has delivered. Record
-the snapshot as SOP's recorded state; do not treat `active` alone as proof for the
-current channel. This is a status-reporting limitation, not a Plan 10 sink repair.
+The durable rows agree with the CLI output:
 
-The test event carries a fresh 8-byte nonce and `transition=NOTIFY_TEST`. A
-confirmed delivery prints `Test event <id> delivered (confirmed by channel
-webhook).`
+| Row                        | Observed value                                                     |
+| -------------------------- | ------------------------------------------------------------------ |
+| Event id                   | `54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16` |
+| Event kind / transition    | `completed` / `NOTIFY_TEST`                                        |
+| Event outcome              | `LLM10 synthetic probe & <probe> > done`                           |
+| Event next action          | `no action required; & <probe> > are inert`                        |
+| Event recorded             | `2026-11-10T02:33:15.559453Z`                                      |
+| Delivery channel / status  | `webhook` / `DELIVERED`                                            |
+| Delivery attempt / maximum | `1` / `3`                                                          |
+| Delivery `last_error`      | empty                                                              |
+| Delivery `delivered_at`    | `2026-11-10T02:33:17.836286Z`                                      |
 
-`sop notify test` calls the bounded drain with the default limit of 50, so it can
-also attempt other due deliveries. Confirm `pending: 0` in the pre-send snapshot,
-or drain/isolate the outbox first, so the approval covers only the synthetic event.
-A retry of the test delivery can produce a second visible message; that is the
-documented at-least-once behavior.
+## Payload fixture
 
-## What each observation proves
+The live payload contained `&`, `<`, and `>` in both the outcome and the next
+action, so it exercised the mrkdwn escaping that the deterministic tests cover.
+It contained no mention, no credential, no real secret, no external URL, and no
+external or tracking link.
 
-| Observation                                        | Proves                                                                               | Does not prove                                                                      |
-| -------------------------------------------------- | ------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- |
-| HTTP 2xx                                           | The endpoint accepted the POST (`AckConfirmed`)                                      | That the endpoint is the intended Slack channel, or that Slack rendered the message |
-| HTTP 4xx                                           | The endpoint rejected the POST (`AckRejected`)                                       | Anything about rendering                                                            |
-| HTTP 5xx / timeout                                 | `AckAmbiguous`; a retry may duplicate on a receiver that ignores the idempotency key | Delivery                                                                            |
-| Slack message visible in `#sop-alert`              | End-to-end delivery and rendering for that message                                   | Future deliveries, other channels, other platforms, or adversarial payload handling |
-| Post-send `delivered`/`pending`/`exhausted` counts | SOP's recorded transport state                                                       | Slack-side rendering or mention behavior                                            |
+Source event fields:
+
+```text
+outcome: LLM10 synthetic probe & <probe> > done
+next: no action required; & <probe> > are inert
+```
+
+The encoder's Slack `text` (decoded from the JSON body) was:
+
+```text
+SOP completed in agentic-sop: event 54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16 (attempt 1, NOTIFY_TEST)
+outcome: LLM10 synthetic probe &amp; &lt;probe&gt; &gt; done
+next: no action required; &amp; &lt;probe&gt; &gt; are inert
+```
+
+The transmitted JSON body is the following (Go's JSON encoder also writes `&` as
+the equivalent `\u0026`, which is valid JSON for the same character):
+
+```json
+{
+  "text": "SOP completed in agentic-sop: event 54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16 (attempt 1, NOTIFY_TEST)\noutcome: LLM10 synthetic probe \u0026amp; \u0026lt;probe\u0026gt; \u0026gt; done\nnext: no action required; \u0026amp; \u0026lt;probe\u0026gt; \u0026gt; are inert",
+  "blocks": [
+    {
+      "type": "section",
+      "text": {
+        "type": "mrkdwn",
+        "text": "SOP completed in agentic-sop: event 54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16 (attempt 1, NOTIFY_TEST)\noutcome: LLM10 synthetic probe \u0026amp; \u0026lt;probe\u0026gt; \u0026gt; done\nnext: no action required; \u0026amp; \u0026lt;probe\u0026gt; \u0026gt; are inert"
+      }
+    }
+  ]
+}
+```
+
+The escaping chain is deliberate: `slackMrkdwn` turns `& < >` into
+`&amp; &lt; &gt;`, and JSON encoding then writes the remaining `&` as `\u0026`.
+Slack decodes the JSON to the `&amp;`/`&lt;`/`&gt;` form and its mrkdwn parser
+decodes those entities back to the original visible characters. The fixture shows
+the bytes SOP sent; only a human looking at the channel can confirm how Slack
+rendered them.
+
+## Delivery versus rendering
+
+| Observation                               | Result                                    | What it establishes                                                 | What it does not establish                                                                 |
+| ----------------------------------------- | ----------------------------------------- | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| HTTP 2xx from the configured endpoint     | observed (`AckConfirmed`)                 | The endpoint accepted the POST                                      | That the endpoint is the intended `#sop-alert` webhook, or that Slack rendered the message |
+| Durable outbox status                     | `DELIVERED`, attempt 1, no retry          | SOP recorded one confirmed transport delivery                       | Slack-side rendering, mention behavior, or unfurl behavior                                 |
+| `delivered=1`, `pending=0`, `exhausted=0` | observed                                  | SOP's recorded transport state                                      | The channel identity or a visible message                                                  |
+| Payload fixture                           | escaped `&amp;`/`&lt;`/`&gt;` for `& < >` | The encoder escaped the mrkdwn-sensitive characters before the POST | That a client decoded or rendered the entities as intended                                 |
+| Slack message visible in `#sop-alert`     | **not observed**                          | —                                                                   | Nothing about delivery or rendering was inferred without it                                |
 
 The webhook client drains and discards the response body, so Slack's own `ok`
-response is not inspected. A wrong-but-valid webhook can still return 2xx. Only the
-operator looking at the channel can confirm the destination and rendering.
+response was not inspected. A wrong-but-valid webhook can still return 2xx. Only a
+human looking at the channel can confirm the destination and the rendered text.
 
-## Evidence record to capture (no secrets)
+## What this probe changes in the evidence state
 
-- UTC timestamp and the approved test window;
-- repository commit `ed9ec2dc` (or the commit of the sending build) and
-  `sop version`;
-- channel identity as confirmed by the operator (name only, never the URL);
-- pre-send `sop notify status --json` (availability, counts, `webhook_configured`);
-- source/binary revision and the event id from `sop notify test`;
-- HTTP status class and the delivery counters after the send;
-- a `#sop-alert` permalink or screenshot showing the rendered synthetic message and
-  the absence of mentions;
-- the operator's name and the authorization reference.
+- Live Slack **transport**: `VERIFIED` once at `0200ad3f` for the configured
+  webhook, with one event delivered on attempt 1 and no retry.
+- Live Slack **rendering**: `NOT_OBSERVED`. No authenticated Slack session existed
+  on the test host: `https://app.slack.com/client` redirected to the workspace
+  sign-in page. No channel history, message, permalink, or screenshot was
+  available.
+- Channel binding to `#sop-alert`: `NOT_CONFIRMED` by SOP; the operator named the
+  channel in the authorization.
+- The deterministic encoder and loopback transport evidence is unchanged and is
+  not replaced by this probe.
 
-## Constraints
+## Exact observation still needed
 
-- Never print or commit the webhook URL; `NOTIFICATIONS.md` documents the
-  `read -rs` → `.env` path.
-- Keep the body free of mention and link syntax even though mrkdwn escaping
-  neutralizes `<!channel>` and `<url|text>`.
-- Delivery is at-least-once; a retry is not a second acceptance event.
-- Slack may auto-unfurl a bare URL; that fetch belongs to Slack, not SOP.
+A human with access to `#sop-alert` must confirm all of the following for the
+message carrying event id
+`54795db078313f7f440560a5a8e2f6b28c7a1a17d3b232c25c656919ed7eec16`:
+
+1. the channel is `#sop-alert`;
+2. the visible message shows the literal text
+   `outcome: LLM10 synthetic probe & <probe> > done` and
+   `next: no action required; & <probe> > are inert` (not raw `&amp;`/`&lt;`
+   entities, and not a hyperlink);
+3. no mention or notification ping occurred;
+4. a permalink or screenshot is supplied for the record.
+
+If the message is not visible, the configured webhook may be bound to a different
+channel. Do not send another notification without a new explicit authorization;
+the delivery already recorded above is the one authorized test.
 
 ## Residual limits (unchanged)
 
 - Observed Slack rendering is a point-in-time human observation, not an automated
-  check.
+  check. This probe did not obtain that observation.
 - Third-party client rendering and auto-unfurl remain external.
 - Slack still interprets non-angular mrkdwn formatting and emoji shortcodes; the
   encoder neutralizes mentions and masked links, not all formatting.
 - Windows terminal behavior remains `NOT_RUN`.
 - Unicode bidi/format characters are bounded by the existing terminal handling,
   not removed.
+- The probe used one platform (`Darwin arm64`) and one configured webhook. It does
+  not generalize to other channels, workspaces, clients, or operating systems.
 
 ## Not claimed
 
-- No live delivery, no channel enablement, and no rendering claim until the
-  authorized test above is executed and recorded.
-- No claim that the default test event verifies adversarial escaping.
-
-## Exact next action
-
-The designated approver answers the authorization request in §Exact authorization
-request, naming `#sop-alert` and the test window. The operator then enables the
-`webhook` channel with the `slack` payload, runs the three commands above, captures
-the evidence block, and supplies the channel observation. Until then, Plan 10 live
-delivery stays `NOT_RUN`.
+- No claim that Slack rendered the message correctly, or that the channel is
+  `#sop-alert`, until the observation above is recorded.
+- No claim that the probe covers all adversarial payloads, mentions, masked links,
+  control characters, or unfurl behavior.
+- No manual acceptance, SOP lifecycle transition, or plan completion is implied by
+  this transport evidence.
