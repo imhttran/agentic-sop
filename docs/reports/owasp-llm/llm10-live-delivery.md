@@ -22,6 +22,12 @@ Related: [llm10-output-handling.md](llm10-output-handling.md) (Plan 10),
 | Sink code           | `internal/notify/slack.go`, `internal/notify/webhook.go`, `internal/cli/terminal.go`, `internal/cli/cli.go`, and `internal/cli/activity.go` are unchanged since the wrap-up revision `ed9ec2dc` |
 | Earlier records     | The original Linux `x86_64` verification and the `ed9ec2dc` Darwin re-verification remain historical; this probe is a separate live observation at `0200ad3f`                                   |
 
+The live-evidence reconciliation merged in PR #339 as
+`cfca31075078f5ef3d53bbd48a0ae1dec4bdd79c` from head
+`6ea8d68f49b7c31364db74dff34596e1fd33fc54`; full CI and CodeQL passed on the
+head. The merge records this transport result on `main`; it does not change the
+`NOT_OBSERVED` rendering state.
+
 The `internal/notify` package did change after `ed9ec2dc` for the unrelated LLM08
 work (the event `Nonce` identity discriminator and redaction tests). The Slack
 encoder and webhook transport did not change. The live probe exercised the

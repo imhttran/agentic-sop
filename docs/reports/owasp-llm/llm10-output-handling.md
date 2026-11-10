@@ -39,6 +39,15 @@ CodeQL passed on the same head (run
 The merge is not a lifecycle transition, and manual acceptance is still not
 recorded.
 
+The live-evidence reconciliation merged in PR #339 as
+`cfca31075078f5ef3d53bbd48a0ae1dec4bdd79c` from head
+`6ea8d68f49b7c31364db74dff34596e1fd33fc54`. Full CI and CodeQL passed on that
+head (runs
+[42744614438](https://github.com/imhttran/agentic-sop/actions/runs/42744614438)
+and [42744611900](https://github.com/imhttran/agentic-sop/actions/runs/42744611900)).
+The merge is not a lifecycle transition, records no manual acceptance, and does
+not change the `NOT_OBSERVED` rendering state.
+
 This report treats model, tool, provider, and configured-command output as
 untrusted at each SOP-owned sink. It does not claim protection for a third-party
 terminal, editor, IDE, Slack client, or remote review renderer that SOP cannot
