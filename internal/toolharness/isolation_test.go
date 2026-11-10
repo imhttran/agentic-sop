@@ -107,6 +107,13 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	if b, _ := os.ReadFile(filepath.Join(root, ".agent-sdlc/state.db")); string(b) != "state" {
 		t.Fatalf("state.db changed: %q", b)
 	}
+	// Replacing the state dir itself (move it aside, plant a forged one) fails.
+	if err := sandboxed(t, root, "mv .agent-sdlc moved && mkdir .agent-sdlc && echo forged > .agent-sdlc/state.db"); err == nil {
+		t.Fatal("the state dir was replaced from inside the sandbox")
+	}
+	if b, _ := os.ReadFile(filepath.Join(root, ".agent-sdlc/state.db")); string(b) != "state" {
+		t.Fatalf("state.db after replacement attempt: %q", b)
+	}
 	// A symlinked state dir is denied at its real path too.
 	linked := t.TempDir()
 	writeRepoFile(t, linked, "real-state/state.db", "state")
