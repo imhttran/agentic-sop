@@ -201,8 +201,10 @@ func TestLLM09DeletedSourceExcluded(t *testing.T) {
 	}
 }
 
-// TestLLM09RebuildScopeParity proves a rebuild preserves the scope: after a rebuild the
-// other project's records remain invisible and in-scope records are still returned.
+// TestLLM09RebuildScopeParity proves a scoped query preserves the scope: after a
+// rebuild the other project's records remain invisible and in-scope records are still
+// returned. It does not prove import isolation; see
+// TestLLM09RebuildImportVersusQueryIsolation for the direct row-count check.
 func TestLLM09RebuildScopeParity(t *testing.T) {
 	root := t.TempDir()
 	recA := llm09Record("R-A", "project-alpha", "rebuild CANARY-ALPHA retry fix")
@@ -224,5 +226,199 @@ func TestLLM09RebuildScopeParity(t *testing.T) {
 	}
 	if llm09Contains(got, "R-B") {
 		t.Fatalf("cross-repository record leaked after rebuild: %v", llm09IDs(got))
+	}
+}
+
+// TestLLM09RebuildImportVersusQueryIsolation separates two properties that the
+// earlier parity test conflated: (1) RebuildFromDir imports every eligible record in
+// the outcomes directory it is given, without applying a repository filter, and
+// (2) Index.Search enforces the trusted repository at query time. A shared outcomes
+// directory therefore imports cross-repository rows that a scoped query cannot return;
+// a workspace-local outcomes directory imports only that workspace's rows.
+func TestLLM09RebuildImportVersusQueryIsolation(t *testing.T) {
+	root := t.TempDir()
+	outcomes := filepath.Join(root, "outcomes")
+	srcDir := filepath.Join(root, "sources")
+
+	writeRecord := func(rec outcomefile.OutcomeRecord, name, body string) {
+		t.Helper()
+		path, digest := llm09Sources(t, srcDir, name, body)
+		rec.SourceArtifacts = []string{filepath.ToSlash(path)}
+		rec.SourceDigests = map[string]string{filepath.ToSlash(path): digest}
+		if _, _, err := outcomefile.Write(outcomes, rec); err != nil {
+			t.Fatalf("write outcome %s: %v", rec.RecordID, err)
+		}
+	}
+
+	recA := llm09Record("IMP-A", "project-alpha", "import isolation shared-name CANARY-ALPHA retry fix")
+	recB := llm09Record("IMP-B", "project-beta", "import isolation shared-name CANARY-BETA retry fix")
+	writeRecord(recA, "alpha-shared.txt", "alpha")
+	writeRecord(recB, "beta-shared.txt", "beta")
+
+	ix, err := Open(filepath.Join(root, "shared-index.db"))
+	if err != nil {
+		t.Fatalf("open shared index: %v", err)
+	}
+	defer ix.Close()
+
+	rep, err := ix.RebuildFromDir(context.Background(), outcomes)
+	if err != nil {
+		t.Fatalf("rebuild shared outcomes: %v", err)
+	}
+	if rep.Indexed != 2 {
+		t.Fatalf("rebuild imported %d rows, want 2: import is directory-scoped, not repository-scoped", rep.Indexed)
+	}
+	st, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatalf("shared status: %v", err)
+	}
+	if st.Records != 2 {
+		t.Fatalf("shared index holds %d rows, want 2", st.Records)
+	}
+	// Measure the imported rows directly from the records table, independent of
+	// Index.Search: the shared index physically holds both repositories' rows.
+	sharedRows, err := ix.HashRows(context.Background())
+	if err != nil {
+		t.Fatalf("shared hash rows: %v", err)
+	}
+	if _, ok := sharedRows["IMP-A"]; !ok {
+		t.Fatalf("shared index is missing in-scope row IMP-A: %v", sharedRows)
+	}
+	if _, ok := sharedRows["IMP-B"]; !ok {
+		t.Fatalf("shared index did not import cross-repository row IMP-B: %v", sharedRows)
+	}
+
+	// The cross-repository row is physically present, but a scoped query must not
+	// return it. This is query isolation, not import isolation.
+	got := llm09Retrieve(t, ix, outcomes, "project-alpha", "import isolation CANARY-ALPHA CANARY-BETA retry fix")
+	if !llm09Contains(got, "IMP-A") {
+		t.Fatalf("in-scope record missing from shared index query: %v", llm09IDs(got))
+	}
+	if llm09Contains(got, "IMP-B") {
+		t.Fatalf("cross-repository record returned from shared index: %v", llm09IDs(got))
+	}
+
+	// A per-workspace outcomes directory gives the import-isolation property: only
+	// alpha's row is imported into alpha's index.
+	alphaOutcomes := filepath.Join(root, "alpha-outcomes")
+	if _, _, err := outcomefile.Write(alphaOutcomes, recA); err != nil {
+		t.Fatalf("write alpha outcome: %v", err)
+	}
+	ixA, err := Open(filepath.Join(root, "alpha-index.db"))
+	if err != nil {
+		t.Fatalf("open alpha index: %v", err)
+	}
+	defer ixA.Close()
+	repA, err := ixA.RebuildFromDir(context.Background(), alphaOutcomes)
+	if err != nil {
+		t.Fatalf("rebuild alpha outcomes: %v", err)
+	}
+	if repA.Indexed != 1 {
+		t.Fatalf("alpha-only rebuild imported %d rows, want 1", repA.Indexed)
+	}
+	stA, err := ixA.Status(context.Background())
+	if err != nil {
+		t.Fatalf("alpha status: %v", err)
+	}
+	if stA.Records != 1 {
+		t.Fatalf("alpha index holds %d rows, want 1", stA.Records)
+	}
+	alphaRows, err := ixA.HashRows(context.Background())
+	if err != nil {
+		t.Fatalf("alpha hash rows: %v", err)
+	}
+	if len(alphaRows) != 1 {
+		t.Fatalf("alpha index imported %d rows, want 1: %v", len(alphaRows), alphaRows)
+	}
+	if _, ok := alphaRows["IMP-A"]; !ok {
+		t.Fatalf("alpha index is missing its own row IMP-A: %v", alphaRows)
+	}
+	if _, ok := alphaRows["IMP-B"]; ok {
+		t.Fatalf("alpha-only directory imported cross-repository row IMP-B: %v", alphaRows)
+	}
+	gotA := llm09Retrieve(t, ixA, alphaOutcomes, "project-alpha", "import isolation CANARY-ALPHA CANARY-BETA retry fix")
+	if !llm09Contains(gotA, "IMP-A") || llm09Contains(gotA, "IMP-B") {
+		t.Fatalf("alpha-only index query = %v, want only IMP-A", llm09IDs(gotA))
+	}
+}
+
+// TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl proves the rebuild
+// lifecycle on synthetic fixtures: after a source is modified and another is deleted,
+// the gated read path and a subsequent rebuild exclude both while a valid historical
+// record remains retrievable as the positive control.
+func TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl(t *testing.T) {
+	root := t.TempDir()
+	outcomes := filepath.Join(root, "outcomes")
+	srcDir := filepath.Join(root, "sources")
+
+	writeRecord := func(rec outcomefile.OutcomeRecord, name, body string) {
+		t.Helper()
+		path, digest := llm09Sources(t, srcDir, name, body)
+		rec.SourceArtifacts = []string{filepath.ToSlash(path)}
+		rec.SourceDigests = map[string]string{filepath.ToSlash(path): digest}
+		if _, _, err := outcomefile.Write(outcomes, rec); err != nil {
+			t.Fatalf("write outcome %s: %v", rec.RecordID, err)
+		}
+	}
+
+	writeRecord(llm09Record("HIST-KEEP", "project-alpha", "rebuild lifecycle CANARY-KEEP retry fix"), "keep.txt", "keep content")
+	writeRecord(llm09Record("HIST-MOD", "project-alpha", "rebuild lifecycle CANARY-MOD retry fix"), "mod.txt", "original content")
+	writeRecord(llm09Record("HIST-DEL", "project-alpha", "rebuild lifecycle CANARY-DEL retry fix"), "del.txt", "deleted content")
+
+	ix, err := Open(filepath.Join(root, "index.db"))
+	if err != nil {
+		t.Fatalf("open index: %v", err)
+	}
+	defer ix.Close()
+
+	rep, err := ix.RebuildFromDir(context.Background(), outcomes)
+	if err != nil {
+		t.Fatalf("initial rebuild: %v", err)
+	}
+	if rep.Indexed != 3 {
+		t.Fatalf("initial rebuild indexed %d, want 3", rep.Indexed)
+	}
+	if got := llm09Retrieve(t, ix, outcomes, "project-alpha", "rebuild lifecycle retry fix"); len(got) != 3 {
+		t.Fatalf("initial query = %v, want all three synthetic records", llm09IDs(got))
+	}
+
+	if err := os.WriteFile(filepath.Join(srcDir, "mod.txt"), []byte("tampered content"), 0o644); err != nil {
+		t.Fatalf("modify source: %v", err)
+	}
+	if err := os.Remove(filepath.Join(srcDir, "del.txt")); err != nil {
+		t.Fatalf("delete source: %v", err)
+	}
+
+	// Before rebuild: the gated read path excludes the modified and deleted sources
+	// while the untouched historical record remains the positive control.
+	got := llm09Retrieve(t, ix, outcomes, "project-alpha", "rebuild lifecycle retry fix")
+	if !llm09Contains(got, "HIST-KEEP") {
+		t.Fatalf("valid historical control missing before rebuild: %v", llm09IDs(got))
+	}
+	if llm09Contains(got, "HIST-MOD") || llm09Contains(got, "HIST-DEL") {
+		t.Fatalf("stale source still returned before rebuild: %v", llm09IDs(got))
+	}
+
+	// After rebuild: the source-aware gate keeps only the valid historical record.
+	rep, err = ix.RebuildFromDir(context.Background(), outcomes)
+	if err != nil {
+		t.Fatalf("rebuild after source changes: %v", err)
+	}
+	if rep.Indexed != 1 || rep.Excluded != 2 {
+		t.Fatalf("rebuild = %+v, want 1 indexed and 2 excluded", rep)
+	}
+	st, err := ix.Status(context.Background())
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if st.Records != 1 {
+		t.Fatalf("rebuilt index holds %d rows, want 1", st.Records)
+	}
+	got = llm09Retrieve(t, ix, outcomes, "project-alpha", "rebuild lifecycle retry fix")
+	if !llm09Contains(got, "HIST-KEEP") {
+		t.Fatalf("valid historical control missing after rebuild: %v", llm09IDs(got))
+	}
+	if llm09Contains(got, "HIST-MOD") || llm09Contains(got, "HIST-DEL") {
+		t.Fatalf("stale source still returned after rebuild: %v", llm09IDs(got))
 	}
 }

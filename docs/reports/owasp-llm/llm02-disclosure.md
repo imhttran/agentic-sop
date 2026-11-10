@@ -905,9 +905,11 @@ revocation and the ID/transcript remain the record.
   `RunWithPolicy`, `toolResultMessageWithPolicy`, and `userPromptWithPolicy`.
   The CLI composition root and `cmd/sop-ollama-agent` load the policy once.
 - Contextual keys include `opaque_secret`, `api_key`, `auth_token`,
-  `client_secret`, and the bounded credential vocabulary. Public-key names are
-  excluded. `.env.example`/`.env.sample` placeholders such as `replace-me` remain
-  visible.
+  `client_secret`, and the bounded credential vocabulary. Numeric and camel-case
+  suffixes remain covered (`password1`, `api_key2`, `tokenValue`, `secretKey`),
+  while ordinary words such as `secretary`, `keyboard`, `monkey`, and
+  `publicKey` remain unredacted. Public-key names are excluded.
+  `.env.example`/`.env.sample` placeholders such as `replace-me` remain visible.
 - No entropy rule is implemented.
 
 Proposed configuration (not enabled in this repository):
