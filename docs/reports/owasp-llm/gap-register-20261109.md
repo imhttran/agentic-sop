@@ -125,7 +125,10 @@ acceptance criteria were accepted; no acceptance decision exists.
    [PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-RESIDUAL.md)
    (status `NOT_APPROVED`; recommends `ACCEPT_PROPOSED` for context-free values;
    35-case corpus: 20 redacted, 8 missing/residual; entropy rejected; seven
-   provider-format gaps are an optional narrow follow-up). No acceptance is
+   provider-format gaps are an optional narrow follow-up). The seven-format
+   enhancement specification is
+   [PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md](../../plans/PROPOSAL-LLM02-KNOWN-FORMAT-ENHANCEMENT.md)
+   (status `NEEDS_HUMAN`; no production detector change). No acceptance is
    recorded.
 
 3. **SAFE `run_command` credential read** — separate from the hardlink item.
