@@ -635,9 +635,11 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 	}
 	run := argv
 	if h.isolationRequested() {
-		if run, h.isolation, err = isolate(root.path, argv); err != nil {
+		var cleanup func()
+		if run, h.isolation, cleanup, err = isolate(root.path, argv); err != nil {
 			return "", false, err
 		}
+		defer cleanup()
 	}
 	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run)
 	if err == nil && noTestsMatched(argv, result) {

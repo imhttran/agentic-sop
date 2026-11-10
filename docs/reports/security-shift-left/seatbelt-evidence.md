@@ -112,8 +112,8 @@ policy check. Off by default.
 
 - **Profile** (`internal/toolharness/isolation.go`): allow-default; `deny network*`
   except loopback bind/inbound and loopback remote (host Unix sockets are denied); `deny file-write*` except the
-  canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, the default Go
-  build cache, GOCACHE/GOMODCACHE, and `/dev/null`; a final
+  canonical root, TMPDIR, `/private/tmp`, `/private/var/folders`, and `/dev/null`
+  (each run's `GOCACHE` is a fresh temp dir; the module cache is read-only); a final
   `deny file-write*` on `<root>/.agent-sdlc` (a later deny overrides the root allow).
 - **Fail closed:** a non-darwin host, missing `sandbox-exec`, or an
   uncanonicalizable root returns `errIsolationUnavailable`, audited as a denial;
@@ -135,7 +135,13 @@ Verification (macOS arm64, 2026-11-09):
 Probed escapes: `launchctl submit` and `osascript do shell script` children stay
 sandboxed (`.agent-sdlc` write: `Operation not permitted`).
 
-Limits: the Go build and module caches are shared and writable, so cache poisoning
-across runs is not excluded (a per-run throwaway cache would close it). Linux has no `run_command` backend yet (NOT_RUN, fails closed). Seatbelt
+Throwaway Go cache (follow-up): each run gets its own `GOCACHE`, removed after the
+command exits, and writes into `GOMODCACHE` are denied, so one run cannot poison a
+later run's caches (`TestRunCommandIsolationThrowawayGoCache`). The repository's own
+`go test` for `repoindex`, `security` and `testrunner` passed under the profile
+with a cold build cache in 10 s.
+
+Limits: Linux uses the bubblewrap backend
+([bubblewrap-verification.md](bubblewrap-verification.md#run_command-opt-in-sandbox-llm03)). Seatbelt
 cannot nest, so the tests skip inside another sandbox. The outbound-deny test is
 only meaningful on a host with network access.

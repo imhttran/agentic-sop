@@ -31,39 +31,59 @@ func (h *Harness) isolationRequested() bool {
 
 // isolate wraps argv in the platform sandbox: Seatbelt on macOS, bubblewrap
 // on Linux. Both deny outbound network (loopback stays usable), deny writes
-// outside the root, temp, and Go caches, and always deny writes under
-// <root>/.agent-sdlc. It fails closed: no backend means no run.
-func isolate(root string, argv []string) (wrapped []string, detail string, err error) {
+// outside the root and temp, and always deny writes under <root>/.agent-sdlc.
+// Each run gets its own throwaway GOCACHE, and the shared module cache is
+// read-only (go.sum verifies its content), so one run cannot poison the Go
+// caches of a later run. The caller must call cleanup after the command
+// exits. It fails closed: no backend means no run.
+// ponytail: every sandboxed build starts with a cold build cache; seeding it
+// from a trusted snapshot would make it warm again.
+func isolate(root string, argv []string) (wrapped []string, detail string, cleanup func(), err error) {
+	wrapped, detail, cache, err := sandboxArgv(root)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	cleanup = func() { _ = os.RemoveAll(cache) }
+	return append(append(wrapped, "env", "GOCACHE="+cache), argv...), detail, cleanup, nil
+}
+
+// sandboxArgv builds the sandbox prefix and a fresh build-cache dir for one run.
+func sandboxArgv(root string) (prefix []string, detail, cache string, err error) {
 	name, bin := "seatbelt", "sandbox-exec"
 	switch runtime.GOOS {
 	case "darwin":
 	case "linux":
 		name, bin = "bubblewrap", "bwrap"
 	default:
-		return nil, "", fmt.Errorf("%w: no sandbox backend on %s", errIsolationUnavailable, runtime.GOOS)
+		return nil, "", "", fmt.Errorf("%w: no sandbox backend on %s", errIsolationUnavailable, runtime.GOOS)
 	}
 	tool, err := exec.LookPath(bin)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: %s not found", errIsolationUnavailable, bin)
+		return nil, "", "", fmt.Errorf("%w: %s not found", errIsolationUnavailable, bin)
 	}
 	// Both backends match real paths (/var -> /private/var on macOS), so
 	// canonicalize and fail closed when the root cannot be resolved.
 	canon, err := filepath.EvalSymlinks(root)
 	if err != nil {
-		return nil, "", fmt.Errorf("%w: cannot canonicalize root: %v", errIsolationUnavailable, err)
+		return nil, "", "", fmt.Errorf("%w: cannot canonicalize root: %v", errIsolationUnavailable, err)
 	}
 	var args []string
 	if name == "seatbelt" {
 		args = []string{"-p", seatbeltProfile(canon, writableDirs(canon))}
 	} else {
 		if err := refuseSymlinkedState(canon); err != nil {
-			return nil, "", err
+			return nil, "", "", err
 		}
 		args = bubblewrapArgs(canon, writableDirs(canon))
 	}
+	// Under the temp dir, which both backends keep writable (on Linux it is
+	// the sandbox's private /tmp, so the host dir only reserves the name).
+	if cache, err = os.MkdirTemp("", "sop-gocache-"); err != nil {
+		return nil, "", "", fmt.Errorf("%w: cannot create build cache: %v", errIsolationUnavailable, err)
+	}
 	sum := sha256.Sum256([]byte(strings.Join(args, "\x00")))
 	detail = fmt.Sprintf("isolate=%s backend=%s root=%s profile=%s", name, tool, canon, hex.EncodeToString(sum[:]))
-	return append(append([]string{tool}, args...), argv...), detail, nil
+	return append([]string{tool}, args...), detail, cache, nil
 }
 
 // refuseSymlinkedState fails closed when <root>/.agent-sdlc is a symlink. The
@@ -98,9 +118,6 @@ func bubblewrapArgs(root string, writable []string) []string {
 		if d != root && underAny(d, "/tmp", "/run", "/var/run") {
 			continue
 		}
-		// A bind needs an existing source; create a fresh cache dir (for
-		// example a new GOCACHE) on the host first. The root already exists.
-		_ = os.MkdirAll(d, 0o755)
 		args = append(args, "--bind-try", d, d)
 	}
 	// Mounted after the root bind so it wins, and the mount point cannot be
@@ -119,30 +136,14 @@ func bubblewrapArgs(root string, writable []string) []string {
 		"--")
 }
 
-// writableDirs are the canonical directories a build or test needs to write.
-// A path that does not exist yet (a fresh GOCACHE) keeps its canonical
-// existing ancestor plus the remainder; relative or unresolvable entries are
-// dropped (narrower, never wider).
+// writableDirs are the canonical directories a build or test needs to write:
+// the root and the temp dirs (the per-run GOCACHE lives under them). The Go
+// caches are deliberately absent. Relative or unresolvable entries are dropped
+// (narrower, never wider).
 func writableDirs(root string) []string {
 	dirs := []string{root, os.TempDir()}
 	if runtime.GOOS == "darwin" {
 		dirs = append(dirs, "/private/tmp", "/private/var/folders")
-	}
-	// ponytail: the shared Go build/module caches stay writable so builds are
-	// not cold; a per-run throwaway GOCACHE/GOMODCACHE would remove cache
-	// poisoning across runs at the cost of speed.
-	if c, err := os.UserCacheDir(); err == nil { // default GOCACHE
-		dirs = append(dirs, filepath.Join(c, "go-build"))
-	}
-	for _, k := range []string{"GOCACHE", "GOMODCACHE"} {
-		if v := os.Getenv(k); v != "" {
-			dirs = append(dirs, v)
-		}
-	}
-	if gopath := os.Getenv("GOPATH"); gopath != "" {
-		dirs = append(dirs, filepath.Join(gopath, "pkg", "mod"))
-	} else if home, err := os.UserHomeDir(); err == nil {
-		dirs = append(dirs, filepath.Join(home, "go", "pkg", "mod"))
 	}
 	out := []string{root}
 	for _, d := range dirs[1:] {
