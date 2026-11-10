@@ -20,7 +20,7 @@ Baseline: `imhttran/agentic-sop` `main` at
 fixes. The macOS live campaign ran at
 `9c32e3d2bccb269aa0246b08158ddad5e8b25066` on
 `security/llm02-live-extraction`. The Linux live tool-path campaign ran at
-`5912f11` on `security/llm02-linux-live`.
+`7724a5f` on `security/llm02-linux-live`.
 Host: macOS `Darwin` arm64 for the macOS live campaign; Linux `amd64` for the
 deterministic and Linux live verification.
 Branch: `security/llm02-live-extraction` for the macOS live campaign;
@@ -394,12 +394,12 @@ Command:
 go test -tags llm02_live ./internal/ollamaagent -run '^TestLiveLLM02LinuxToolPaths$' -count=1 -v -timeout 1800s
 ```
 
-Observed: `PASS` (54.83 s), 17 requests, one attempt per case, `qwen3:4b` on
-Linux `amd64`, revision `5912f11`, `dirty: false`. The artifact records 7
+Observed: `PASS` (46.87 s), 17 requests, one attempt per case, `qwen3:4b` on
+Linux `amd64`, revision `7724a5f`, `dirty: false`. The artifact records 7
 protected cases, 6 positive controls, and 4 residual exposures; all five
 probes (direct TCP denial, non-loopback denial, filesystem-outside denial,
 environment scrub, and the Unix-socket endpoint) passed. Artifact SHA-256:
-`fd52a76f2979899055ad5d486ef39ea4040c970ebef5333368a9420c81f55306`.
+`e31ea4c5506d1eee8df7495ed9fbbb43cbcb5cd8f4e6c4eb29303ea1231c1f5b`.
 
 The deterministic residual-limit regression was also run:
 
@@ -658,7 +658,7 @@ real local `qwen3:4b` model. One request per case, one attempt, no retry.
 
 Provenance and bounds:
 
-- Tested revision: `5912f11` on `security/llm02-linux-live`; `dirty: false`.
+- Tested revision: `7724a5f` on `security/llm02-linux-live`; `dirty: false`.
 - Platform: Linux `amd64`, Go 1.27.1, `qwen3:4b` served by the fixed local Ollama
   endpoint. The model ran with `think=false` so its bounded output is the JSON
   response, not hidden reasoning.
@@ -667,9 +667,9 @@ Provenance and bounds:
   `127.0.0.1:11434`, `1.1.1.1:443`, and filesystem access outside the case root
   were denied; `OPENAI_API_KEY` was scrubbed.
 - Bounds: 1 attempt, 1 request per case, concurrency 1, 240 s process lifetime,
-  64 KiB output; 17 requests; 54.83 s wall time.
+  64 KiB output; 17 requests; 46.87 s wall time.
 - Artifact: [`llm02-linux-campaign.json`](llm02-linux-campaign.json), SHA-256
-  `fd52a76f2979899055ad5d486ef39ea4040c970ebef5333368a9420c81f55306`.
+  `e31ea4c5506d1eee8df7495ed9fbbb43cbcb5cd8f4e6c4eb29303ea1231c1f5b`.
 - Synthetic canaries only; no real credential, external receiver, or production
   write.
 
