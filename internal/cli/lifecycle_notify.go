@@ -66,6 +66,11 @@ type EventSink interface {
 // SOP state themselves.
 type LifecycleEmitter struct {
 	Sink EventSink
+	// Secrets are exact secret values the emitter's owner knows, typically the
+	// values of secret-named environment variables (redact.EnvSecrets). Emit passes
+	// them to NewEvent for redaction. They are never stored on an event and never
+	// written to the outbox.
+	Secrets []string
 }
 
 // NewLifecycleEmitter builds an emitter over sink. A nil sink is reported when an
@@ -146,6 +151,7 @@ func (e *LifecycleEmitter) Emit(r EmitRequest) (notify.Event, bool, error) {
 		Outcome:           r.Outcome,
 		Approval:          r.Approval,
 		ResolutionCommand: r.ResolutionCommand,
+		Secrets:           e.Secrets,
 	}
 	event, err := notify.NewEvent(params)
 	if err != nil {

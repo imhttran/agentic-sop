@@ -19,20 +19,43 @@ import (
 	"github.com/imhttran/agentic-sop/internal/redact"
 )
 
-// redactionMarker renders the replacement for a credential-shaped descriptive
-// field. Descriptive text (Reason, NextAction, Outcome) can include model-derived
-// prose and tool output, so it passes through the shared credential-shape detector
-// before the event is persisted or delivered.
+// redactionMarker renders the replacement for a removed secret. Descriptive text
+// (Reason, NextAction, Outcome) can include model-derived prose and tool output,
+// so it passes through the shared credential detector before the event is
+// persisted or delivered.
 const redactionMarker = "[REDACTED]"
 
-// redactDescriptive applies the shared credential-shape detector to the event's
-// descriptive text. It runs before NewEvent returns, so every outbox row and every
-// channel payload carries already-redacted text. Identity fields are untouched.
-func redactDescriptive(e *Event) {
+// redactedCommandNote follows a resolution command whose credential was removed.
+// The displayed text is evidence of the gate, not a runnable instruction: the
+// replacement is not the recorded value, so the command must be rebuilt from the
+// gate rather than pasted.
+const redactedCommandNote = " (credential redacted; not directly executable)"
+
+// redactDescriptive applies the shared redaction vocabulary to the event's
+// descriptive text before NewEvent returns. Exact values the caller supplied
+// (typically the values of secret-named environment variables) are replaced
+// first, then the shared credential-shape detector runs. Every outbox row and
+// every channel payload therefore carries already-redacted text. Identity fields
+// are untouched, so the event id is unchanged.
+//
+// The notify package never reads the process environment. A producer extracts the
+// exact values with redact.EnvSecrets and supplies them through Params, which keeps
+// NewEvent deterministic and keeps the raw collection off the Event.
+func redactDescriptive(e *Event, secrets []string) {
 	m := redact.Fixed(redactionMarker)
-	e.Reason = redact.Shapes(e.Reason, m)
-	e.NextAction = redact.Shapes(e.NextAction, m)
-	e.Outcome = redact.Shapes(e.Outcome, m)
+	redactText := func(s string) string {
+		return redact.Shapes(redact.Values(s, secrets, m), m)
+	}
+	e.Reason = redactText(e.Reason)
+	e.NextAction = redactText(e.NextAction)
+	e.Outcome = redactText(e.Outcome)
+	// A credential-free resolution command is preserved exactly. When redaction
+	// removes a credential, the rendered command no longer matches the recorded
+	// gate, so it is marked as not directly executable rather than presented as a
+	// runnable instruction.
+	if command := redactText(e.ResolutionCommand); command != e.ResolutionCommand {
+		e.ResolutionCommand = command + redactedCommandNote
+	}
 }
 
 // Version is the notification event schema version this build emits and
@@ -82,6 +105,8 @@ func KindStrings() []string {
 // id. The descriptive fields (Reason, NextAction, ApprovalRequestID,
 // ResolutionCommand, OccurredAt) are outside the hash: a replay may differ in
 // occurrence time and human-readable text and still describe the same event.
+// Reason, NextAction, Outcome, and ResolutionCommand are redacted by NewEvent,
+// which never changes the id.
 type Event struct {
 	// Version is the event schema version (always Version for a new event).
 	Version int `json:"version"`
@@ -143,6 +168,12 @@ type Params struct {
 	// ResolutionCommand is the command that resolves the human gate. Required for
 	// a waiting_for_human event.
 	ResolutionCommand string
+	// Secrets are exact secret values the caller already knows. A producer supplies
+	// the values of secret-named environment variables here (redact.EnvSecrets) so
+	// NewEvent can remove them without reading the process environment. The values
+	// are used only for redaction: they are never stored on the Event, serialized,
+	// or logged, and the event id does not depend on them.
+	Secrets []string
 	// Nonce is an optional identity discriminator for a repeated synthetic event.
 	// It participates in the event id and in nothing else: it is not stored as a
 	// payload field and never reaches a channel. A caller that emits the same
@@ -195,9 +226,9 @@ func NewEvent(p Params) (Event, error) {
 		return Event{}, err
 	}
 	// Descriptive text is redacted before the event leaves the constructor, so no
-	// outbox row or channel payload carries a credential shape. The identity
-	// fields are unchanged, so the event id is unchanged.
-	redactDescriptive(&e)
+	// outbox row or channel payload carries a known secret value or a credential
+	// shape. The identity fields are unchanged, so the event id is unchanged.
+	redactDescriptive(&e, p.Secrets)
 	e.ID = identity(e)
 	return e, nil
 }
