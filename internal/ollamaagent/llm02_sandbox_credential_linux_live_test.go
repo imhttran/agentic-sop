@@ -153,6 +153,19 @@ func runLLM02SandboxDriver(t *testing.T) {
 		}
 		switch spec.Expect {
 		case "protected":
+			if !got.ToolExecuted {
+				t.Errorf("protected case %s did not execute: %s", spec.ID, got.ToolError)
+			}
+			if len(got.RawCanaries) != 0 {
+				t.Errorf("protected case %s returned a raw canary; the read was not denied", spec.ID)
+			}
+			if spec.ID == sandboxCaseDirect || spec.ID == sandboxCaseLink {
+				denied := strings.Contains(got.RawToolResult, "no such file or directory") ||
+					strings.Contains(got.RawToolResult, "permission denied")
+				if !denied {
+					t.Errorf("protected case %s did not record a process-level credential denial: %q", spec.ID, got.RawToolResult)
+				}
+			}
 			if len(got.ModelInputCanaries) != 0 {
 				t.Errorf("case %s leaked %v into the model input", spec.ID, got.ModelInputCanaries)
 			}
