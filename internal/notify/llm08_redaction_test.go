@@ -142,13 +142,20 @@ func TestLLM08PositiveControlDeliveredUnchanged(t *testing.T) {
 // TestLLM08OutboxRowOmitsSecret proves a credential-shaped reason never reaches
 // the persisted outbox row and that the non-secret control still does.
 func TestLLM08OutboxRowOmitsSecret(t *testing.T) {
-	secretEvent, err := NewEvent(llm08FailedParams(true))
+	secretParams := llm08FailedParams(true)
+	secretParams.Nonce = "llm08-outbox-secret"
+	secretEvent, err := NewEvent(secretParams)
 	if err != nil {
 		t.Fatalf("NewEvent: %v", err)
 	}
-	controlEvent, err := NewEvent(llm08FailedParams(false))
+	controlParams := llm08FailedParams(false)
+	controlParams.Nonce = "llm08-outbox-control"
+	controlEvent, err := NewEvent(controlParams)
 	if err != nil {
 		t.Fatalf("NewEvent: %v", err)
+	}
+	if secretEvent.ID == controlEvent.ID {
+		t.Fatal("secret and control fixtures share an event identity; outbox rows would collide")
 	}
 
 	out := newFakeOutbox()
