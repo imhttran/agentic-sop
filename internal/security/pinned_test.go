@@ -58,6 +58,21 @@ func TestPinnedExecutor(t *testing.T) {
 		t.Fatalf("missing executable: runs=%d err=%v, want ErrUnavailable and no run", n, err)
 	}
 
+	// The rules path resolves against the scan dir, like the adapters do.
+	if n, err := run(pinnedExecutor{rules: "rules", rulesSHA256: rulesHash}, bin); err != nil || n != 1 {
+		t.Fatalf("relative rules path: runs=%d err=%v, want one run", n, err)
+	}
+	// A symlink the digest would skip, but the scanner would follow, fails closed.
+	if err := os.Symlink(bin, filepath.Join(rules, "extra.yaml")); err != nil {
+		t.Fatal(err)
+	}
+	if n, err := run(pinnedExecutor{rules: rules, rulesSHA256: rulesHash}, bin); err == nil || !strings.Contains(err.Error(), "not a regular file") || n != 0 {
+		t.Fatalf("symlink in rules: runs=%d err=%v, want refusal and no run", n, err)
+	}
+	if err := os.Remove(filepath.Join(rules, "extra.yaml")); err != nil {
+		t.Fatal(err)
+	}
+
 	if err := os.WriteFile(filepath.Join(rules, "r.yaml"), []byte("rules: [] \n"), 0o644); err != nil {
 		t.Fatal(err)
 	}

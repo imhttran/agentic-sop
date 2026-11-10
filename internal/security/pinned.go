@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -78,7 +79,14 @@ func (p pinnedExecutor) check(dir string, argv []string) ([]string, error) {
 		argv = append([]string{path}, argv[1:]...)
 	}
 	if p.rulesSHA256 != "" {
-		got, err := rulesIdentity(p.rules)
+		// Resolve exactly as the adapters do (relative to the scan dir), and refuse
+		// a tree the digest cannot see: rulesIdentity skips non-regular entries,
+		// but the scanner would follow a symlink to unhashed content.
+		rules := joinPath(dir, p.rules)
+		got, err := regularTree(rules)
+		if err == nil {
+			got, err = rulesIdentity(rules)
+		}
 		if err != nil {
 			return nil, fmt.Errorf("rules pin: cannot read the rules: %s", SanitizeText(err.Error(), MaxDiagnosticBytes))
 		}
@@ -87,6 +95,20 @@ func (p pinnedExecutor) check(dir string, argv []string) ([]string, error) {
 		}
 	}
 	return argv, nil
+}
+
+// regularTree returns an error if path is a symlink or contains any entry that
+// is neither a directory nor a regular file.
+func regularTree(path string) (string, error) {
+	return "", filepath.WalkDir(path, func(p string, entry fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() && !entry.Type().IsRegular() {
+			return fmt.Errorf("%s is not a regular file", filepath.Base(p))
+		}
+		return nil
+	})
 }
 
 func fileSHA256(path string) (string, error) {
