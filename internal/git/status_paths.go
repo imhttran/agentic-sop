@@ -23,9 +23,13 @@ func (a *Adapter) StatusPaths(ctx context.Context) ([]StatusEntry, error) {
 	if err != nil {
 		return nil, fmt.Errorf("status paths: %w", err)
 	}
+	tokens := strings.Split(out, "\x00")
 	var entries []StatusEntry
-	for _, token := range strings.Split(out, "\x00") {
-		if token == "" || len(token) < 4 {
+	for i := 0; i < len(tokens); i++ {
+		token := tokens[i]
+		// A status entry is "XY <path>"; anything shorter or without the spacer is
+		// not an entry (for example the bare source path of a rename record).
+		if len(token) < 4 || token[2] != ' ' {
 			continue
 		}
 		status := token[:2]
@@ -34,6 +38,14 @@ func (a *Adapter) StatusPaths(ctx context.Context) ([]StatusEntry, error) {
 			continue
 		}
 		entries = append(entries, StatusEntry{Status: status, Path: path})
+		// With -z a rename or copy is "XY <new>\0<old>\0"; the original path is
+		// the next NUL-separated token and carries no status prefix.
+		if strings.ContainsAny(status, "RC") && i+1 < len(tokens) {
+			if old := tokens[i+1]; old != "" {
+				entries = append(entries, StatusEntry{Status: status, Path: old})
+			}
+			i++
+		}
 	}
 	return entries, nil
 }

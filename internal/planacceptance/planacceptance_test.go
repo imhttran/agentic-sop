@@ -629,3 +629,13 @@ func TestStructurallyInvalidLedgerRecordsFailClosed(t *testing.T) {
 		})
 	}
 }
+
+func TestExplicitArchiveMustMatchRequestedPlan(t *testing.T) {
+	f := newFixture(t)
+	if _, err := LoadContext(f.dir, "docs/plans/PLAN-OTHER.md", f.archiveRoot); err == nil {
+		t.Fatal("LoadContext accepted an archive belonging to a different plan source")
+	}
+	if _, err := LoadContext(f.dir, f.source, f.archiveRoot); err != nil {
+		t.Fatalf("LoadContext rejected the matching source: %v", err)
+	}
+}

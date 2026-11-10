@@ -627,3 +627,30 @@ func TestStatusPathsListsTrackedAndUntracked(t *testing.T) {
 		}
 	}
 }
+
+func TestStatusPathsSeparatesRenameSource(t *testing.T) {
+	dir := initRepo(t)
+	writeFile(t, dir, "long-original-name.go", "package x\n")
+	runGit(t, dir, "add", "long-original-name.go")
+	runGit(t, dir, "commit", "-m", "add source")
+	runGit(t, dir, "mv", "long-original-name.go", "renamed.go")
+
+	entries, err := New(dir).StatusPaths(context.Background())
+	if err != nil {
+		t.Fatalf("StatusPaths: %v", err)
+	}
+	got := map[string]string{}
+	for _, e := range entries {
+		got[e.Path] = e.Status
+	}
+	for _, want := range []string{"renamed.go", "long-original-name.go"} {
+		if _, ok := got[want]; !ok {
+			t.Fatalf("StatusPaths missing %q: %+v", want, entries)
+		}
+	}
+	for path := range got {
+		if path != "renamed.go" && path != "long-original-name.go" {
+			t.Fatalf("StatusPaths invented entry %q: %+v", path, entries)
+		}
+	}
+}

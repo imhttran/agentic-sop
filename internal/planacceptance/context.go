@@ -97,6 +97,9 @@ func resolveArchive(projectDir, source, override string) (planflow.ArchiveRecord
 		if err != nil {
 			return planflow.ArchiveRecord{}, err
 		}
+		if err := requireMatchingSource(projectDir, rec, source); err != nil {
+			return planflow.ArchiveRecord{}, err
+		}
 		rec.RunsDir = inferRunsDir(root, projectDir)
 		return rec, nil
 	}
@@ -105,10 +108,56 @@ func resolveArchive(projectDir, source, override string) (planflow.ArchiveRecord
 		if err != nil {
 			return planflow.ArchiveRecord{}, err
 		}
+		if err := requireMatchingSource(projectDir, rec, source); err != nil {
+			return planflow.ArchiveRecord{}, err
+		}
 		rec.RunsDir = filepath.Join(root, "runs")
 		return rec, nil
 	}
 	return planflow.ArchiveRecord{}, fmt.Errorf("archive %s does not contain plan.json or archive/plan.json", root)
+}
+
+// requireMatchingSource rejects an explicit --archive that belongs to a
+// different plan than the one requested, so a stale or mistyped archive argument
+// cannot record a decision against the wrong plan.
+func requireMatchingSource(projectDir string, rec planflow.ArchiveRecord, requested string) error {
+	if samePlanSource(projectDir, rec.Source, requested) {
+		return nil
+	}
+	return fmt.Errorf("archive %s belongs to plan source %s, not %s", rec.ArchiveDir, rec.Source, normalizeSource(requested))
+}
+
+// samePlanSource reports whether an archived plan source and a requested plan
+// path identify the same plan. Both are compared after slash normalization; an
+// absolute path is also compared relative to the project.
+func samePlanSource(projectDir, archived, requested string) bool {
+	a := normalizeSource(archived)
+	b := normalizeSource(requested)
+	if a == "" || b == "" {
+		return false
+	}
+	if a == b {
+		return true
+	}
+	if filepath.IsAbs(requested) {
+		if rel, err := filepath.Rel(projectDir, requested); err == nil && normalizeSource(rel) == a {
+			return true
+		}
+	}
+	if filepath.IsAbs(archived) {
+		if rel, err := filepath.Rel(projectDir, archived); err == nil && normalizeSource(rel) == b {
+			return true
+		}
+	}
+	return false
+}
+
+func normalizeSource(s string) string {
+	s = filepath.ToSlash(filepath.Clean(strings.TrimSpace(s)))
+	if s == "." {
+		return ""
+	}
+	return strings.TrimPrefix(s, "./")
 }
 
 func inferRunsDir(archiveDir, projectDir string) string {
