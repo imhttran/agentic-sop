@@ -52,6 +52,10 @@ audit records the call but not the result body. No real credential was used.
 - `internal/cli/review_existing.go` `isSensitiveReviewPath` already excludes a
   conservative credential-path vocabulary from **review context only**. It is not
   applied to `read_file`, `search_files`, `copy_file`, `git_diff`, or commands.
+- `docs/specs/SECURITY.md` §5 states that SOP MUST NOT expose secrets to agent
+  prompts unnecessarily. That is a principle, not the specific decision required
+  here: it does not define credential-file paths, tool-result redaction,
+  command-output coverage, or the compatibility rule.
 - `internal/toolharness` is the single tool execution boundary; `internal/ollamaagent`
   `toolResultMessage` is the single rendering boundary before a tool result becomes a
   model message.
