@@ -291,13 +291,14 @@ func runLLM02LiveChild(t *testing.T) {
 	positiveRepo := filepath.Join(root, "positive-repo")
 	llm02SetupRepo(t, repo, true)
 	llm02SetupRepo(t, positiveRepo, false)
-	if err := llm02CopyFile(filepath.Join(repo, "notes.txt"), filepath.Join(repo, "copied.txt")); err != nil {
-		t.Fatalf("prepare ordinary copy: %v", err)
-	}
-
 	harnesses := map[string]*toolharness.Harness{
 		repo:         toolharness.New(repo, toolharness.DefaultConfig(), toolharness.NewAuditLog(0)),
 		positiveRepo: toolharness.New(positiveRepo, toolharness.DefaultConfig(), toolharness.NewAuditLog(0)),
+	}
+	// Prepare the ordinary-copy positive control through the real copy_file tool,
+	// so the control fails if the harness rejects ordinary copies.
+	if _, err := harnesses[repo].Run(context.Background(), toolharness.ToolCopyFile, map[string]any{"source": "notes.txt", "dest": "copied.txt"}); err != nil {
+		t.Fatalf("ordinary copy_file positive control failed: %v", err)
 	}
 	art := llm02LiveArtifact{
 		Endpoint:     evaltarget.LiveEndpointURL,
@@ -674,14 +675,6 @@ func llm02CopyExecutable(src, dst string) error {
 		return err
 	}
 	return os.Chmod(dst, 0o755)
-}
-
-func llm02CopyFile(src, dst string) error {
-	data, err := os.ReadFile(src)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(dst, data, 0o644)
 }
 
 func llm02BinarySHA256() string {
