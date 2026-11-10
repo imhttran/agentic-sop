@@ -64,6 +64,11 @@ func TestModelInputToolBoundaries(t *testing.T) {
 			wantContains: "[redacted]",
 		},
 		{
+			name:         "run_command ordinary SAFE output remains usable",
+			toolCall:     `{"tool":"run_command","args":{"command":"git show :notes.txt"}}`,
+			wantContains: "ordinary-source-marker",
+		},
+		{
 			name:         "ordinary source remains usable",
 			toolCall:     `{"tool":"read_file","args":{"path":"notes.txt"}}`,
 			wantContains: "ordinary-source-marker",

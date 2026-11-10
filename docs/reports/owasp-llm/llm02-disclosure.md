@@ -8,13 +8,19 @@ in §Live extraction. No per-criterion acceptance is recorded; the plan lifecycl
 is `HISTORICALIZED` / `COMPLETE` through external completion, which is not
 acceptance evidence. A later Plan 08 A+B policy now denies direct credential paths
 for model tools and redacts every model-bound tool result and error; that is
-cross-plan evidence, not Plan 03 acceptance.
+cross-plan evidence, not Plan 03 acceptance. Linux `amd64` deterministic
+verification independently reproduced all five pre-policy disclosure paths and
+confirmed the A+B denial/redaction; Linux live extraction remains `NOT_RUN`.
 Baseline: `imhttran/agentic-sop` `main` at
 `0750e8be0cf5f318a173abb34c2b752ac131521c` for the static trace and deterministic
 fixes. The live campaign ran at `9c32e3d2bccb269aa0246b08158ddad5e8b25066` on
 `security/llm02-live-extraction`.
-Host: macOS `Darwin` arm64.
-Branch: `security/llm02-live-extraction`.
+Host: macOS `Darwin` arm64 for the live campaign; Linux `amd64` for the
+deterministic verification.
+Branch: `security/llm02-live-extraction` for the live campaign;
+`security/llm02-linux-verification` (rebased onto `main` `3103529` after PR #337
+merged the A+B implementation) for the Linux verification. The pre-policy
+baseline was `origin/main` `814f69c`.
 
 This report traces sensitive information from inputs to model requests, tool
 effects, persisted evidence, and operator output. It closes three reproduced
@@ -236,6 +242,8 @@ sandbox.
 | ------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | ---------------- |
 | Plan 03 acceptance checks (`internal/cli`, `internal/agent`, retrieval/handoff/notification/ACP/controller/outcome) | Plan 03 §DISCLOSE-002 Acceptance Checks                                            | PASS             |
 | Configured build, vet, and full test suite                                                                          | `go build ./...`, `go vet ./...`, `go test ./... -count=1`                         | PASS             |
+| Linux focused build, vet, and LLM02 tests                                                                           | §Linux focused verification                                                       | PASS             |
+| Linux full `go test ./...`                                                                                          | Configured repository gate; delegated to PR CI                                    | NOT_RUN          |
 | Exact environment secrets are redacted from check logs                                                              | `TestCheckEvidenceRedactsSecrets`                                                  | PASS (existing)  |
 | Credential-shaped text is redacted from check logs                                                                  | `TestCheckEvidenceRedactsCredentialShapes`                                         | PASS (existing)  |
 | Model-visible validation failure redacts env secrets and shapes                                                     | `TestValidationFailureContextRedactsCredentialShapes`                              | PASS (existing)  |
@@ -281,6 +289,94 @@ artifact and report checks also PASS. The Plan 08 enforcement tests
 links), `go vet ./...`, `go build ./...`, and `go test ./... -count=1`. These are
 implementation/evidence checks; they do not create the missing per-criterion
 acceptance.
+
+### Linux focused verification (2026-11-09)
+
+Platform: Linux `amd64`, Go 1.27.1. The pre-policy reproduction and post-policy
+enforcement commands are recorded in §Linux independent verification. Local
+results:
+
+- `go build ./...`: PASS.
+- `go vet ./...`: PASS.
+- Focused tests: `internal/toolharness`, `internal/ollamaagent`, `internal/redact`,
+  `internal/sensitivepath`, the LLM02-focused `internal/cli` set, and
+  `internal/agent`/`internal/retrievalboundary`/`internal/memindex`/
+  `internal/handoff`/`internal/notify`/`internal/acp`/
+  `internal/controller/sopclient`/`internal/outcomefile`: PASS.
+- Full `go test ./...`: **NOT_RUN locally**. The suite covers 131 packages and the
+  full `internal/cli` package alone exceeds 300 s on this host. The configured
+  repository gate is delegated to PR CI. `NOT_RUN` is not a PASS.
+
+### Linux independent verification (2026-11-09)
+
+This verification is separate from the macOS live campaign and from the macOS
+implementation verification in PR #337. It used synthetic canary strings only and
+did not read, print, commit, or transmit a real credential. The canaries are
+disposable `sk-...-not-a-real-secret` placeholders that exercise the shared
+credential-shape detector without representing a credential.
+
+- **Pre-policy baseline:** `origin/main` `814f69c` does not contain A+B. On Linux
+  `amd64`, Go 1.27.1, `TestDisclosureContentPathsObservation` observed
+  `canary_visible=true` for `read_file` `.env`, `search_files`, `copy_file` +
+  `read_file`, `git_diff`, and SAFE `run_command` `git show`; the ordinary
+  `read_file` and `search_files` controls observed `canary_visible=false`.
+- **Post-policy branch:** `security/llm02-linux-verification`, rebased onto
+  `main` `3103529`; the A+B implementation merged in PR #337 (`0200ad3f`). The
+  same five paths were exercised through the real harness and model-message
+  boundaries.
+- **Linux live extraction:** `NOT_RUN`. `TestLiveLLM02Campaign` is tagged
+  `darwin && llm02_live`; no Linux LLM02 live campaign exists, and none was added
+  here. Deterministic harness/model-boundary evidence is not live-model evidence.
+
+| Path | Trust boundary | Enforcement point | Observed after A+B | Remains exploitable? |
+| --- | --- | --- | --- | --- |
+| `read_file` `.env` | Model tool argument → harness | `files.go` `readFile` after `resolveIn` canonicalizes and resolves symlinks; `readDenied` classifies both the requested path and the resolved target | `ErrSensitivePath`; no content returned | No for the approved narrow profile. An unknown-format secret in an ordinary, non-listed file is outside B and outside A if it has no recognised shape. |
+| `search_files` | Model tool argument → harness | `files.go` `searchFiles` start-path denial plus per-entry `sensitiveToolRead` (lexical and resolved symlink target) | Credential paths are denied or skipped; the canary is absent from output | No for the approved narrow profile; same ordinary-file shape limit as above. |
+| `copy_file` + `read_file` | Model tool argument → harness | `files.go` `copyFile` source denial after `resolveIn` using `readDenied` (requested and resolved source paths); the destination remains an ordinary path | `ErrSensitivePath`; no copy created | No for the approved narrow profile; a pre-existing hardlink with an ordinary name is not resolved by the lexical check. |
+| `git_diff` | Tool result → model message | `ollamaagent.toolResultMessage` → `redact.ModelInput` | Known secret environment values and credential shapes become `[redacted]` | Yes for unknown-format secrets and arbitrary confidential prose; `commandpolicy` is unchanged and no path filtering is claimed. |
+| SAFE `run_command` (`git show :path`) | Tool result → model message | `ollamaagent.toolResultMessage` → `redact.ModelInput` | Same redaction; ordinary SAFE output is preserved | Yes for unknown-format secrets and arbitrary confidential prose; command arguments are not path-filtered. |
+
+Positive controls observed on Linux:
+
+- `.env.example` and `.env.sample` remain readable; an ordinary source file remains
+  readable and searchable.
+- `copy_file` of an ordinary file still copies exact bytes.
+- A SAFE `git show :notes.txt` still returns ordinary output to the model.
+- The denied-command error path still reports a usable failure message while a
+  credential-shaped canary in the command is redacted.
+- The harness audit records the call or denial, not result content; `trace.json`
+  and activity lines remain content-free.
+
+Synthetic evidence and commands (Linux `amd64`, Go 1.27.1):
+
+```sh
+# Pre-policy reproduction at origin/main 814f69c
+go test ./internal/toolharness -run TestDisclosureContentPathsObservation -count=1 -v
+
+# Post-policy enforcement and positive controls
+go test ./internal/toolharness -run 'TestCredentialPathDenialAndBoundaryDivision|TestLLM02LinuxPositiveControlsAndSymlinkDenial' -count=1 -v
+go test ./internal/ollamaagent -run TestModelInputToolBoundaries -count=1 -v
+go test ./internal/redact -run TestModelInput -count=1 -v
+go test ./internal/sensitivepath -count=1 -v
+go test ./internal/cli -run 'TestRedactDiagnosticText|TestToolOutputEnvCanaryDenied|TestRunArtifactPersistsModelOutputVerbatim|TestOWASPLLM02|TestCheckEvidenceRedacts|TestValidationFailureContextRedacts' -count=1 -v
+go test ./internal/agent ./internal/retrievalboundary ./internal/memindex ./internal/handoff ./internal/notify ./internal/acp ./internal/controller/sopclient ./internal/outcomefile -count=1
+```
+
+Observed: the pre-policy observation PASSed with the five `canary_visible=true`
+lines; the post-policy enforcement, detector, report, and package checks PASSed.
+The repository-wide build, vet, and test result is recorded in §Verification
+record.
+
+Boundaries preserved by this Linux verification:
+
+- It does not change `commandpolicy`, the sandbox posture, security mode,
+  required categories, routing, approval gates, or SOP plan state.
+- It does not authorize artifact redaction. `implementation.md` and `result.md`
+  still persist model output verbatim;
+  `TestRunArtifactPersistsModelOutputVerbatim` records that separate
+  policy-blocked limit.
+- It does not record per-criterion Plan 03 acceptance.
+
 
 ## Acceptance mapping and PARTIAL semantics
 
@@ -529,7 +625,7 @@ run had occurred.
 | Notification `Reason` text                       | caller-owned                | The emitter redacts configured targets and carries SOP's recorded reason; a caller that passes raw secret text would leak. Current lifecycle producers pass fixed/generic reasons.                                                                                                                                        |
 | Pattern matching                                 | bounded                     | Credential-shape detection is not general DLP and cannot promise to protect every sensitive string. Unknown formats remain explicitly out of scope.                                                                                                                                                                       |
 | Normal agent OS isolation                        | NOT_APPLICABLE / UNVERIFIED | SOP does not sandbox the agent process; the execution-path matrix is unchanged.                                                                                                                                                                                                                                           |
-| Live extraction                                  | OBSERVED (bounded)          | One model (`qwen3.5:4b`), one platform (macOS arm64), one fixed campaign, 7 requests. Linux live remains `NOT_RUN`; the result is not a general red-team result.                                                                                                                                                          |
+| Live extraction                                  | OBSERVED (bounded)          | One model (`qwen3.5:4b`), one platform (macOS arm64), one fixed campaign, 7 requests. Linux live remains `NOT_RUN`; Linux `amd64` deterministic verification covers the five tool paths but is not live-model evidence. The result is not a general red-team result.                                                                                                                    |
 
 ## Handoff to Plan 04
 
@@ -545,9 +641,12 @@ The confirmed inventory observations are:
   live campaign reproduced a synthetic credential-shaped value from context and
   persisted it in model output; Plan 04 should not treat such values as secret
   merely because they reached the model.
-- The tool-output `.env` canary is model-visible; the harness audit does not
-  persist result content, but model output remains a persistence route. This is a
-  GAP, not a fix; Plan 04 should not treat tool output as redacted.
+- Direct credential paths under the approved narrow profile are denied and every
+  model-bound tool result and error is redacted. Unknown-format secrets and
+  command/diff path filtering remain bounded gaps; the pre-policy `.env` canary
+  was model-visible, and `TestToolOutputEnvCanaryDenied` records the current
+  denial. Plan 04 should not treat tool output as general DLP or artifact
+  protection.
 - The only attempted external effects were denied by SOP's real authorization or
   command-policy controls; the allowed positive control wrote one inert recorded
   effect and no real receiver was contacted.

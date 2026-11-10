@@ -55,6 +55,7 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"## Handoff to Plan 04",
 		"### Tool-output `.env` canary reconciliation",
 		"### Closeout re-verification",
+		"### Linux independent verification",
 	} {
 		if !strings.Contains(report, section) {
 			t.Errorf("report is missing required section %q", section)
@@ -73,6 +74,8 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"TestModelInputToolBoundaries",
 		"TestCredentialPathDenialAndBoundaryDivision",
 		"redact.ModelInput",
+		"TestLLM02LinuxPositiveControlsAndSymlinkDenial",
+		"**Linux live extraction:** `NOT_RUN`",
 	} {
 		if !strings.Contains(normalized, claim) {
 			t.Errorf("report is missing the reconciled claim %q", claim)
@@ -82,6 +85,8 @@ func TestOWASPLLM02ReportStructure(t *testing.T) {
 		"provides general DLP",
 		"complete OWASP",
 		"all models are protected",
+		"Linux live extraction PASS",
+		"Linux live is verified",
 	} {
 		if strings.Contains(report, claim) {
 			t.Errorf("report makes an unbounded claim: %q", claim)
