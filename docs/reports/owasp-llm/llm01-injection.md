@@ -241,7 +241,7 @@ ok  github.com/imhttran/agentic-sop/internal/evaltarget  (12 tests)
 Observed Linux focused tests (Linux x86_64, this worktree):
 
 ```text
-go test ./internal/evaltarget -run 'TestLive|TestLinux' -count=1
+go test ./internal/evaltarget -run 'TestLive|TestLinux|TestProbeEndpointTimesOut' -count=1
 ok  github.com/imhttran/agentic-sop/internal/evaltarget
 ```
 
