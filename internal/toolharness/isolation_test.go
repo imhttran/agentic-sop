@@ -262,13 +262,26 @@ func TestHomeCredentialsFailsClosedWithoutHome(t *testing.T) {
 
 // A sandboxed command cannot read a credential file, and an ordinary file under
 // the same home still reads. The home is a temp dir, never the real one.
+// fakeHomeUnder places the fake HOME inside the repository root. On Linux the
+// sandbox mounts a private tmpfs over /tmp and binds only the root back, so a
+// home elsewhere under /tmp would be hidden before credential masking applies,
+// and the positive control could not see it either.
+func fakeHomeUnder(t *testing.T, root string) string {
+	t.Helper()
+	home := filepath.Join(root, "home")
+	if err := os.MkdirAll(home, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return home
+}
+
 func TestRunCommandIsolationDeniesCredentialRead(t *testing.T) {
 	needSandbox(t)
-	home := t.TempDir()
+	root := t.TempDir()
+	home := fakeHomeUnder(t, root)
 	writeRepoFile(t, home, ".ssh/probe", "sop-credential-canary")
 	writeRepoFile(t, home, "notes.txt", "ordinary-home-content")
 	t.Setenv("HOME", home)
-	root := t.TempDir()
 
 	out, err := sandboxedOutput(t, root, "cat "+strconv.Quote(filepath.Join(home, ".ssh", "probe")))
 	if err == nil {
@@ -291,10 +304,10 @@ func TestRunCommandIsolationDeniesCredentialRead(t *testing.T) {
 // which behavior this host exhibits.
 func TestRunCommandIsolationDeniesCredentialHardlink(t *testing.T) {
 	needSandbox(t)
-	home := t.TempDir()
+	root := t.TempDir()
+	home := fakeHomeUnder(t, root)
 	writeRepoFile(t, home, ".ssh/probe", "sop-credential-canary")
 	t.Setenv("HOME", home)
-	root := t.TempDir()
 	alias := filepath.Join(root, "alias.txt")
 
 	if out, err := sandboxedOutput(t, root, "ln "+strconv.Quote(filepath.Join(home, ".ssh", "probe"))+" "+strconv.Quote(alias)); err != nil {
