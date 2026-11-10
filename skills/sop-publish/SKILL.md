@@ -224,6 +224,16 @@ git merge-base --is-ancestor <worktree-head> <published-target>
 git worktree remove <path>                # never --force
 ```
 
+A Git-clean worktree is not proof that it holds no evidence: `.agent-sdlc` is
+ignored, so `git status --short` stays empty while state, run, and approval
+records are still present.
+
+The Go `RemoveWorktree` path enforces this for SOP-managed removals: it refuses
+to remove a worktree whose ignored `.agent-sdlc` lifecycle evidence has no
+byte-identical archive under `.agent-sdlc/archive/worktree-evidence/<plan-id>/`.
+A direct `git worktree remove` bypasses that guard and must perform the evidence
+copy and verification above manually.
+
 Never use force removal. A dirty worktree, an unmerged branch, or an ambiguous
 result is retained and reported with its reason.
 

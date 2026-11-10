@@ -339,6 +339,10 @@ func (g gitWorktrees) Create(ctx context.Context, path, commit, branch string) e
 	return runGit(ctx, g.dir, "worktree", "add", "-b", branch, path, commit)
 }
 
+// Remove uses the disposable evaluation worktree lifecycle directly. These
+// arms do not initialize SOP lifecycle state, so this path intentionally bypasses
+// git.Adapter.RemoveWorktree's evidence-preservation guard. A direct
+// `git worktree remove` remains outside that enforcement.
 func (g gitWorktrees) Remove(ctx context.Context, path string) error {
 	return runGit(ctx, g.dir, "worktree", "remove", "--force", path)
 }
