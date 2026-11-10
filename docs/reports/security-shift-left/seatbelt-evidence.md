@@ -141,7 +141,79 @@ later run's caches (`TestRunCommandIsolationThrowawayGoCache`). The repository's
 `go test` for `repoindex`, `security` and `testrunner` passed under the profile
 with a cold build cache in 10 s.
 
+### Credential read denial (LLM02)
+
+Baseline `origin/main` `823f753dfd931361b37cd9ac2b92e366d2e16ce9`, macOS arm64.
+The profile also denies reading a fixed set of home-relative credential
+locations. The names reuse `internal/sensitivepath` (`toolDirs` `.aws`, `.ssh`,
+`.kube`, `.gnupg`; files `.netrc`, `.git-credentials`, `.npmrc`) and add only
+`.config/gh`, `.config/gcloud`, `.azure`, `.docker/config.json`,
+`.cargo/credentials.toml`, and `.pypirc`; no new configuration option exists.
+Missing entries are skipped, and an unresolvable home directory fails closed with
+`errIsolationUnavailable` so the command never runs unsandboxed. Seatbelt emits
+`(deny file-read* (subpath ...))` for directories and
+`(deny file-read* (literal ...))` for files, for the path and its real path
+(the same `EvalSymlinks` treatment as the state dir). Because the profile is
+allow-default and no `file-read` allow follows, the deny wins: the command cannot
+print, copy, or hardlink a credential it cannot read.
+
+The child environment is also scrubbed: `sandboxEnv` drops every entry whose
+name matches `redact.IsSecretName` (the shared vocabulary) before adding the
+per-run `GOCACHE` override, and the audit detail records `scrubbed_env=<n>`
+(names only). Isolation-off runs keep the inherited environment unchanged.
+
+Verification:
+
+```sh
+go test ./internal/toolharness/ -run 'TestSandboxHidesHomeCredentials|TestHomeCredentials|TestRunCommandIsolationDeniesCredential|TestIsolateScrubsSecretEnv' -v -count=1
+```
+
+Observed: 6 PASS.
+
+- `TestRunCommandIsolationDeniesCredentialRead` — a sandboxed
+  `cat "$HOME/.ssh/probe"` failed, the canary did not appear in the captured
+  output, and an ordinary file under the same fake `HOME` still read successfully.
+  The test sets `HOME` to a temp dir; the real home is never touched.
+- `TestRunCommandIsolationDeniesCredentialHardlink` — Seatbelt also checks the
+  link source, so `ln` never creates the alias. Measured output:
+  `ln: .../.ssh/probe: Operation not permitted` (exit status 1). Because the link
+  is refused, there is no alias to read; the branch that would have to prove a
+  created alias is unreadable did not run on this host.
+- `TestIsolateScrubsSecretEnv` — a sandboxed `env` has no `SOP_TEST_API_KEY`,
+  keeps `GOFLAGS`, `HOME`, `PATH`, and the run's `GOCACHE` override, and a
+  sandboxed `go version` still runs.
+- `TestSandboxHidesHomeCredentials` and `TestHomeCredentialsResolveExistingEntries`
+  are deterministic profile/resolution tests and do not need a backend.
+  `TestHomeCredentialsFailsClosedWithoutHome` confirms an empty `HOME` returns
+  `errIsolationUnavailable`.
+
+Environment variables: scrubbed inside the sandbox (`redact.IsSecretName`);
+inherited unchanged when isolation is off. In the measured shell, 15 names were
+dropped (names only): `DEEPSEEK_API_KEY`, `DOCKERHUB_TOKEN`,
+`FIRECRAWL_API_KEY`, `GEMINI_API_KEY`, `GITHUB_PERSONAL_ACCESS_TOKEN`,
+`GOOGLE_AI_API_KEY`, `HUGGINGFACE_API_KEY`, `KITCHEN_TOKEN`,
+`LLAMACPP_API_KEY`, `OLLAMA_API_KEY`, `OLMX_API_KEY`, `OPENAI_API_KEY`,
+`SOP_CONTROLLER_TOKEN`, `SOP_OMLX_API_KEY`, `SSH_AUTH_SOCK`. The substring
+matcher also drops harmless names such as `SSH_AUTH_SOCK` (and would drop
+`TERM_SESSION_ID`); no Go toolchain variable used by `go test` matches except
+`GOAUTH`, which only affects network module fetches that the sandbox denies
+anyway.
+
+Residual measured, not fixed: a hardlink alias created before the run is still
+readable through `read_file`, because the file tools run in the SOP process, not
+the sandbox.
+
+Known limit: the macOS Keychain is reached through the `security` CLI and a
+system service, not by file reads, so the read-deny rules do not cover it.
+Measured in the sandbox: `security find-generic-password -s sop-nonexistent-probe`
+returned `security: SecKeychainSearchCopyNext: The specified item could not be
+found in the keychain.` (exit status 44). That reply proves the service was
+reachable; it is not a denial.
+
 Limits: Linux uses the bubblewrap backend
-([bubblewrap-verification.md](bubblewrap-verification.md#run_command-opt-in-sandbox-llm03)). Seatbelt
+([bubblewrap-verification.md](bubblewrap-verification.md#run_command-opt-in-sandbox-llm03)); the
+equivalent `--tmpfs <dir>` / `--ro-bind /dev/null <file>` hiding is `NOT_RUN` on
+this host because `bwrap` is absent, and `--tmpfs` on a symlinked credential path
+is unverified there. Seatbelt
 cannot nest, so the tests skip inside another sandbox. The outbound-deny test is
 only meaningful on a host with network access.

@@ -104,6 +104,8 @@ acceptance criteria were accepted; no acceptance decision exists.
    Hardlink aliases under C1 are `OBSERVED` (4 protected, 1 positive control,
    1 residual at `ed1ba11`; artifact SHA-256
    `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`);
+   aliases created by sandboxed code are now blocked on macOS (the opt-in `run_command`
+   sandbox denies credential reads, so `ln` is refused; Linux `NOT_RUN`); pre-existing aliases are not.
    Linux live retrieval/notification remain `NOT_RUN`. The hardlink/path-identity
    feasibility proposal is
    [PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md](../../plans/PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md)

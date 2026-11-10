@@ -780,6 +780,79 @@ A+B policy. "Policy-blocked" means a fix needs a separate operator decision.
 | Notification text                                 | Shape-redacted / caller-owned unknown prose      | Notification targets are redacted and `notify.NewEvent` shape-redacts Reason, NextAction, and Outcome before persistence/delivery (`TestLLM08NotificationRedactsCredentialShapes`, `TestLLM08OutboxRowOmitsSecret`). Known env values and unknown formats can pass; current producers use fixed/generic reasons.                                                                       |
 | Diagnostic output                                 | Protected for tested shapes                      | `redactDiagnosticText` uses `redact.ModelInput`; `TestRedactDiagnosticTextKeepsOrdinaryText`, `TestValidationFailureContextRedactsCredentialShapes`, and `TestCheckEvidenceRedactsCredentialShapes`.                                                                                                                                                                                   |
 
+### Sandbox credential-read denial (2026-11-10)
+
+The opt-in `run_command` sandbox (`SOP_AGENT_RUN_COMMAND_ISOLATION=1` or
+`Config.IsolateCommands`) now also denies reads of a fixed set of home-relative
+credential locations, so a sandboxed command cannot print, copy, or hardlink
+them. This is sandbox-only: the default (isolation off) is unchanged and no new
+configuration option exists. The locations reuse the `internal/sensitivepath`
+names (directories `.aws`, `.ssh`, `.kube`, `.gnupg`; files `.netrc`,
+`.git-credentials`, `.npmrc`) and add only `.config/gh`, `.config/gcloud`,
+`.azure`, `.docker/config.json`, `.cargo/credentials.toml`, and `.pypirc`.
+Missing entries are skipped; an unresolvable home
+directory fails closed like a missing sandbox backend. Baseline `origin/main`
+`823f753dfd931361b37cd9ac2b92e366d2e16ce9`.
+
+The child environment is scrubbed inside the sandbox: `sandboxEnv` drops every
+entry whose name matches `redact.IsSecretName` before adding the per-run
+`GOCACHE` override, and the audit detail records `scrubbed_env=<n>` (names
+only). Isolation-off runs keep the inherited environment unchanged.
+
+| Platform               | State                   | Mechanism                                                                                                                         |
+| ---------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| macOS arm64 (Seatbelt) | VERIFIED                | `(deny file-read* (subpath ...))` for directories and `(deny file-read* (literal ...))` for files, for the path and its real path |
+| Linux (bubblewrap)     | NOT_RUN (no Linux host) | `--tmpfs <dir>` and `--ro-bind /dev/null <file>`, after `--ro-bind / /`                                                           |
+
+Command and observed result (macOS arm64, 2026-11-10):
+
+```sh
+go test ./internal/toolharness/ -run 'TestSandboxHidesHomeCredentials|TestHomeCredentials|TestRunCommandIsolationDeniesCredential|TestIsolateScrubsSecretEnv' -v -count=1
+```
+
+Observed: 6 PASS.
+
+- `TestRunCommandIsolationDeniesCredentialRead` — a sandboxed `cat` of
+  `$HOME/.ssh/probe` failed and the canary was absent from the captured output;
+  an ordinary file under the same fake `HOME` read successfully (positive
+  control). The real home is never touched.
+- `TestRunCommandIsolationDeniesCredentialHardlink` — Seatbelt checks the link
+  source and refused `ln`: `ln: .../.ssh/probe: Operation not permitted`
+  (exit status 1). No alias is created; the "created alias is unreadable" branch
+  did not run on this host.
+- `TestIsolateScrubsSecretEnv` — a sandboxed `env` has no `SOP_TEST_API_KEY`,
+  keeps `GOFLAGS`, `HOME`, `PATH`, and the run's `GOCACHE` override, and a
+  sandboxed `go version` still runs.
+- `TestSandboxHidesHomeCredentials` and `TestHomeCredentialsResolveExistingEntries`
+  are deterministic and need no backend; `TestHomeCredentialsFailsClosedWithoutHome`
+  confirms an empty `HOME` returns `errIsolationUnavailable`.
+
+This closes the _sandboxed-command_ path to a credential file, not the general
+hardlink/path-identity residual. Measured and unchanged:
+
+- Environment variables: **scrubbed inside the sandbox; inherited unchanged when
+  isolation is off.** In the measured shell, 15 names were dropped (names only):
+  `DEEPSEEK_API_KEY`, `DOCKERHUB_TOKEN`, `FIRECRAWL_API_KEY`, `GEMINI_API_KEY`,
+  `GITHUB_PERSONAL_ACCESS_TOKEN`, `GOOGLE_AI_API_KEY`, `HUGGINGFACE_API_KEY`,
+  `KITCHEN_TOKEN`, `LLAMACPP_API_KEY`, `OLLAMA_API_KEY`, `OLMX_API_KEY`,
+  `OPENAI_API_KEY`, `SOP_CONTROLLER_TOKEN`, `SOP_OMLX_API_KEY`, `SSH_AUTH_SOCK`.
+  The substring matcher also drops harmless names such as `SSH_AUTH_SOCK` (and
+  would drop `TERM_SESSION_ID`); no Go toolchain variable used by `go test`
+  matches except `GOAUTH`, which only affects network module fetches that the
+  sandbox denies anyway.
+- A hardlink alias created _before_ the run remains readable through
+  `read_file`, `search_files`, and `copy_file`, because those tools run in the SOP
+  process, not the sandbox. `TestHardlinkAliasToolExposure` pins it; this work
+  does not change it.
+- Known limit: the macOS Keychain is reached through the `security` CLI and a
+  system service, not by file reads, so the read-deny rules do not cover it.
+  Measured in the sandbox:
+  `security find-generic-password -s sop-nonexistent-probe` returned
+  `security: SecKeychainSearchCopyNext: The specified item could not be found in
+  the keychain.` (exit status 44) — the service was reachable, which is not a
+  denial.
+- Linux: `NOT_RUN`; `--tmpfs` on a symlinked credential path is unverified there.
+
 ## Final closeout (2026-11-10)
 
 Status: **BOUNDED EVIDENCE ACCEPTANCE RECORDED; FULL PLAN 03 ACCEPTANCE
