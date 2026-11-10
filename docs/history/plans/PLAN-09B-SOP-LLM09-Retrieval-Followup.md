@@ -1,10 +1,11 @@
 # Plan 09B — SOP LLM09 retrieval follow-up (import scope, rebuild evidence, producer boundary)
 
-Status: PROPOSED for SOP execution; not merged.
+Status: COMPLETE — bounded LLM09 retrieval follow-up; merged in PR #363.
 Date: 2026-11-09 (America/Chicago).
 Series: follow-up to Plan 09 (LLM09 vector and embedding weaknesses).
 Suggested branch: security/llm09-retrieval-followup.
-Suggested repository path: docs/plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md.
+Suggested repository path: docs/history/plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md.
+Archive record: SOP plan `plan-09b-sop-llm09-retrieval-followup` reached `COMPLETE` and is archived at `.agent-sdlc/archive/plan-09b-sop-llm09-retrieval-followup/`. PR #363 merged as `e90ecf9761c65222d15464319e1d25f5e6a42453`. `RETRIEVE-101..104` reached `LOCAL_DONE`/`VERIFIED`; historical acceptance is bound to the recorded attempts/content identities, not to the merge commit. Producer-side RAG isolation remains `NOT_RUN`; production vector coverage is `NOT_APPLICABLE`; residual risks remain unresolved.
 
 ## Project
 
