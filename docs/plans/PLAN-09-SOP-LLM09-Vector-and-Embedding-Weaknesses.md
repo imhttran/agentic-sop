@@ -1,6 +1,6 @@
 # Plan 09 — SOP Vector and embedding weaknesses (LLM09)
 
-Status: EXECUTED 3/3 and merged in PR #295; the original task text is preserved. The retrieval cancellation/deadline follow-up is PR #298. Rebuild import-versus-query evidence and dependency reconciliation are in `PLAN-09B-SOP-LLM09-Retrieval-Followup.md`.
+Status: EXECUTED 3/3 and merged in PR #295; the original task text is preserved. The retrieval cancellation/deadline follow-up is PR #298. Rebuild import-versus-query evidence and dependency reconciliation are in the archived follow-up plan `docs/history/plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md` (merged in PR #363).
 Date: 2026-11-08 (America/Chicago); schema adaptation 2026-11-09 (UTC).
 Series: next six plans after Plans 01–04; numbering follows category order, not mandatory execution order.
 Suggested branch: security/llm09-retrieval.

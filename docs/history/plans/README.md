@@ -11,6 +11,7 @@ directory.
 ## Plan records
 
 - [PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md](PHASE-8-CONTEXT-EXECUTION-EFFICIENCY.md) — read for the original Phase 8 --- Context & Execution Efficiency scope, tasks, and recorded disposition.
+- [PLAN-09B-SOP-LLM09-Retrieval-Followup.md](PLAN-09B-SOP-LLM09-Retrieval-Followup.md) — bounded LLM09 retrieval follow-up; SOP plan `plan-09b-sop-llm09-retrieval-followup` disposition `COMPLETE`; merged in PR #363 (`e90ecf97`). `RETRIEVE-101..104` `LOCAL_DONE`/`VERIFIED`; producer-side RAG isolation `NOT_RUN`, production vector coverage `NOT_APPLICABLE`, residual risks unresolved. Historical acceptance is revision-bound, not bound to the merge commit.
 - [PLAN-Agent-Harness-V2.md](PLAN-Agent-Harness-V2.md) — read for the original Agent Harness V2 scope, tasks, and recorded disposition.
 - [PLAN-Automatic-Blocked-Task-Recovery.md](PLAN-Automatic-Blocked-Task-Recovery.md) — read for the original PLAN — Automatic Blocked-Task Recovery scope, tasks, and recorded disposition.
 - [PLAN-Executore-Integration.md](PLAN-Executore-Integration.md) — read for the original four-stage planner–executor integration scope, tasks, and recorded disposition.
