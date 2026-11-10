@@ -788,28 +788,29 @@ separate bounded decision without creating Plan 03 per-criterion acceptance.
 
 | Dimension | State | Evidence |
 | --- | --- | --- |
-| `IMPLEMENTED` | Approved Plan 08 A+B policy and PR #349 user-prompt redaction | `internal/toolharness`, `internal/sensitivepath`, `internal/redact`, `internal/ollamaagent/prompt.go`; PRs #337 and #349 |
-| `VERIFIED` | Deterministic and Linux live evidence for the five tool paths | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput`, `llm02-linux-campaign.json` |
+| `IMPLEMENTED` | Approved Plan 08 A+B policy, PR #349 user-prompt redaction, and C1 opt-in unknown-format redaction | `internal/toolharness`, `internal/sensitivepath`, `internal/redact` (`ModelInputWithPolicy`, `inventory.go`), `internal/config/redaction.go`, `internal/ollamaagent/prompt.go`; PRs #337, #349, and the C1 decision `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1` |
+| `VERIFIED` | Deterministic and Linux live evidence for the five tool paths; deterministic C1 tests | `TestModelInputToolBoundaries`, `TestModelInputToolBoundariesResidualLimits`, `TestCredentialPathDenialAndBoundaryDivision`, `TestUserPromptRedactsTaskAndInput`, `TestModelInputWithPolicyRedactsUnknownFormats`, `TestHarnessUsesC1RedactionPolicy`, `llm02-linux-campaign.json` |
 | `OBSERVED` | Four Linux residual exposures; macOS direct-context disclosure | §Linux live tool-path campaign (2026-11-10); `llm02-campaign.json` |
 | `NOT_RUN` | Linux live retrieval and notification; live re-run of #349 | §Residual investigation status (2026-11-10) |
 | `RECORDED` | Bounded evidence acceptance, separate from Plan 03 acceptance | Decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`; source `operator:bounded-acceptance-2026-11-10`; bound to clean baseline `cc42a52` |
 | `NEEDS_HUMAN` | Full Plan 03 per-criterion acceptance; residual-risk acceptance | [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout (2026-11-10) |
-| `GAP` | Unknown-format values, hardlink alias, artifact persistence, retrieval/handoff/caller prose, provider retention, general DLP | §Residual risks and bounded claims; §Residual investigation status |
+| `GAP` | Unknown-format values outside C1, hardlink alias, artifact persistence, retrieval/handoff/caller prose, provider retention, general DLP | §Residual risks and bounded claims; §Residual investigation status; C1 is opt-in and does not cover unlisted/low-signal formats |
 
 ### Three separate claims
 
 1. **Approved LLM02 implementation is complete.** Yes, within the approved Plan 08
-   A+B scope plus PR #349: credential-path denial for direct reads, searches, and
-   copies; model-bound tool-result and error redaction; and user-prompt redaction.
-   No new policy or control is claimed.
+   A+B scope, PR #349 user-prompt redaction, and the opt-in C1 policy:
+   credential-path denial for direct reads, searches, and copies; model-bound
+   tool-result and error redaction; user-prompt redaction; and bounded
+   unknown-format redaction when C1 is enabled. No general-DLP claim is made.
 2. **Scoped security verification is complete.** Yes for the five tool paths on
    Linux (deterministic and live), the macOS live campaign, and the deterministic
    boundary tests. No for Linux live retrieval and notification and for a live
    re-run of the #349 prompt fix; those remain `NOT_RUN`.
 3. **Full LLM02 security coverage and governance acceptance are not established.**
-   Yes. The residual gaps above remain, and no Plan 03 per-criterion acceptance is
-   recorded. The separate bounded evidence acceptance is recorded in decision
-   memory and does not establish full category coverage.
+   Yes. The residual gaps above remain, C1 is opt-in and bounded, and no Plan 03
+   per-criterion acceptance is recorded. The separate bounded evidence acceptance
+   is recorded in decision memory and does not establish full category coverage.
 
 ### Tested revision and final baseline
 
@@ -817,7 +818,9 @@ separate bounded decision without creating Plan 03 per-criterion acceptance.
   SHA-256 `31c059b28590eb8e39e6c00e298f624b20f8a51fbefafb6fd885e5a2ffbc16a9`.
 - macOS campaign tested revision: `9c32e3d2bccb269aa0246b08158ddad5e8b25066`;
   artifact SHA-256 `0c8cc0ff132482db7a531bd197473c11066ae28c6d4ba35a912aa25a7292ad06`.
-- Final integration baseline for this closeout: `4c8fe5a`.
+- Final integration baseline for the earlier closeout: `4c8fe5a`. The C1
+  implementation baseline is `20bea32`; the C1 decision memory entry is bound to
+  that clean baseline.
 - PR #349 (`userPrompt` redaction), #351 (real `copy_file` positive control), and
   #352 (evidence reconciliation) merged after the Linux campaign revision. #349
   changes the user-prompt boundary, not the tool-path boundary exercised by the
@@ -833,13 +836,22 @@ in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
 (2026-11-10). The recommendations are `INVESTIGATE` for unknown-format
 credentials, hardlink aliases, and artifact persistence; `MITIGATE` for
 caller/notification prose; `INVESTIGATE` or `ACCEPT_PROPOSED` for
-retrieval/handoff; and `TRANSFER_PROPOSED` for provider retention. No residual
-risk is marked accepted; residual-risk acceptance and full Plan 03 per-criterion
-acceptance remain `NEEDS_HUMAN`. The bounded evidence acceptance is recorded
-separately (decision memory ID
+retrieval/handoff; and `TRANSFER_PROPOSED` for provider retention. The
+unknown-format proposal is
+[PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md);
+C1 is now implemented opt-in (decision memory ID
+`e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`) and covers
+exact inventory values, contextual credential keys, and approved known formats;
+unlisted/low-signal formats remain. No residual risk is marked accepted;
+residual-risk acceptance and full Plan 03 per-criterion acceptance remain
+`NEEDS_HUMAN`. The bounded evidence acceptance is recorded separately (decision
+memory ID
 `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`, bound to
 clean baseline `cc42a52`). Later documentation commits change the repository
-identity, so `sop memory list` may report the entry as stale for a different
+identity, so `sop memory list` may report the entries as stale for a different
+state; staleness is not revocation.
+clean baseline `cc42a52`). Later documentation commits change the repository
+identity, so `sop memory list` may report the entries as stale for a different
 state; staleness is not revocation.
 
 ### Non-claims
@@ -847,6 +859,105 @@ state; staleness is not revocation.
 - No universal disclosure prevention, general DLP, prompt secrecy, provider
   retention control, or full OWASP coverage.
 - A passing CI run or one model campaign is not full category coverage.
+
+
+## C1 unknown-format redaction implementation (2026-11-10)
+
+Status: **IMPLEMENTED (opt-in) / VERIFIED deterministically on Linux.** The
+repository configuration was not changed to enable the feature; the previous
+default behavior remains until an operator enables C1.
+
+### Authorization
+
+- Decision memory ID:
+  `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`
+- Source / attribution: `operator:c1-approval-2026-11-10`
+- Design record: https://github.com/imhttran/agentic-sop/pull/360
+- Repository identity:
+  `44e3b2cfca9a455d1f1982faa8103f54260b9787918bf136d2600054ee6d9428`
+  (baseline `20bea32`, `dirty: false`)
+- Scope: explicit sensitive-value inventory plus bounded contextual
+  credential-key and approved known-format detection at `toolResultMessage` and
+  `userPrompt`.
+- Exclusions: artifacts, retrieval, handoff, notifications, provider retention,
+  general DLP, and entropy-based detection.
+
+The decision-memory entry is bound to the clean baseline `20bea32`. Later
+implementation and documentation commits change the repository identity, so
+`sop memory list` may report it as stale for a different state; staleness is not
+revocation and the ID/transcript remain the record.
+
+### Implementation
+
+- `internal/redact.Policy` and `ModelInputWithPolicy`: the zero policy is the
+  previous composition. When enabled, exact inventory values are redacted first,
+  then a precise assignment rule, bounded contextual credential keys, and the
+  approved known formats. The default `ModelInput` remains unchanged.
+- `internal/redact/inventory.go`: external regular file, `0600`, no symlink
+  following, bounded count/line sizes, one load at startup, fail closed on any
+  error, and no value in errors or logs.
+- `internal/config/redaction.go`: opt-in `redaction` block with
+  `enabled`, `inventory_path`, `max_values`, `min_value_bytes`, and
+  `max_value_bytes`. The path must be absolute or `~/` and must resolve outside
+  the repository; enabled invalid/missing/insecure files fail at policy
+  construction.
+- `internal/ollamaagent`: `Config.Redaction`, `NativeAgentFromEnvWithPolicy`,
+  `RunWithPolicy`, `toolResultMessageWithPolicy`, and `userPromptWithPolicy`.
+  The CLI composition root and `cmd/sop-ollama-agent` load the policy once.
+- Contextual keys include `opaque_secret`, `api_key`, `auth_token`,
+  `client_secret`, and the bounded credential vocabulary. Public-key names are
+  excluded. `.env.example`/`.env.sample` placeholders such as `replace-me` remain
+  visible.
+- No entropy rule is implemented.
+
+Proposed configuration (not enabled in this repository):
+
+```yaml
+redaction:
+  enabled: false
+  inventory_path: "~/.config/sop/sensitive-values.txt"
+  max_values: 256
+  min_value_bytes: 8
+  max_value_bytes: 4096
+```
+
+### Linux verification
+
+Commands run on Linux `amd64`, Go 1.27.1:
+
+```sh
+go test ./internal/redact ./internal/config -count=1
+go test ./internal/ollamaagent -count=1
+go test ./internal/cli -run 'TestRedactionPolicyFromProject|TestOWASPLLM02' -count=1
+go build ./...
+go vet ./internal/redact ./internal/config ./internal/ollamaagent ./internal/cli ./cmd/sop-ollama-agent
+bash scripts/checks/pre-push.sh --base origin/main
+```
+
+All PASS. `TestModelInputWithPolicyRedactsUnknownFormats` and
+`TestHarnessUsesC1RedactionPolicy` exercise the real `toolharness` and the actual
+model-input renderers for an ordinary file, `git_diff`, SAFE `run_command`,
+exact inventory values, and the user prompt. The 17-case live campaign was not
+repeated; it remains the pre-C1 baseline and is unchanged by this implementation.
+
+Verified behavior with C1 enabled:
+
+- `opaque_secret=opaque-live-value-42` is redacted in ordinary files, diffs,
+  SAFE command output, and the user prompt.
+- Exact inventory values of arbitrary format are redacted.
+- `.env.example`/`.env.sample` placeholders and ordinary source remain visible.
+- `secretary`, `keyboard`, `monkey`, and public-key names are not newly redacted.
+- With C1 disabled, the previous behavior is preserved and the pre-C1 residual
+  remains.
+
+### Residual limits
+
+C1 does not close all unknown-format disclosure. Values that are not in the
+inventory, do not have a credential-like key, and do not match an approved known
+format still pass; hardlink aliases, artifact persistence, retrieval/handoff,
+notification prose, provider retention, and general DLP are unchanged. The
+feature is opt-in, so the repository's default configuration remains at the
+pre-C1 residual until an operator enables it.
 
 
 ## Handoff to Plan 04

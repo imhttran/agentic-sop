@@ -229,6 +229,10 @@ add "completion":"ALREADY_SATISFIED" and "evidence":{"acceptance":[{"criterion":
 // Like toolResultMessage, its output passes through the shared model-input
 // redaction: task and caller input can carry credential-shaped values too.
 func userPrompt(req agent.Request) string {
+	return userPromptWithPolicy(req, redact.Policy{})
+}
+
+func userPromptWithPolicy(req agent.Request, policy redact.Policy) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Task:\n%s\n", strings.TrimSpace(req.Task))
 	if len(req.Deliverables) > 0 {
@@ -247,7 +251,7 @@ func userPrompt(req agent.Request) string {
 		fmt.Fprintf(&b, "\nAlready-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
 		b.WriteString(alreadySatisfiedContract)
 	}
-	return redact.ModelInput(b.String(), os.Environ())
+	return redact.ModelInputWithPolicy(b.String(), os.Environ(), policy)
 }
 
 // toolResultMessage renders a tool outcome for the next model turn. A tool error
@@ -259,8 +263,12 @@ func userPrompt(req agent.Request) string {
 // model conversation, including through a failure diagnostic. It is not general
 // DLP; unknown formats remain a documented limit.
 func toolResultMessage(name, result string, err error) string {
+	return toolResultMessageWithPolicy(name, result, err, redact.Policy{})
+}
+
+func toolResultMessageWithPolicy(name, result string, err error, policy redact.Policy) string {
 	if err != nil {
-		return fmt.Sprintf("Tool %q failed: %s\n\nContinue: fix the call or choose another tool.", name, redact.ModelInput(err.Error(), os.Environ()))
+		return fmt.Sprintf("Tool %q failed: %s\n\nContinue: fix the call or choose another tool.", name, redact.ModelInputWithPolicy(err.Error(), os.Environ(), policy))
 	}
-	return fmt.Sprintf("Tool %q result:\n%s", name, redact.ModelInput(result, os.Environ()))
+	return fmt.Sprintf("Tool %q result:\n%s", name, redact.ModelInputWithPolicy(result, os.Environ(), policy))
 }

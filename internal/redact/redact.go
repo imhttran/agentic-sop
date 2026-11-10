@@ -186,8 +186,12 @@ type hit struct {
 // already claimed is never re-examined, which is what keeps a written marker
 // from being matched again.
 func findHits(s string) []hit {
+	return findHitsWithRules(s, rules)
+}
+
+func findHitsWithRules(s string, ruleSet []rule) []hit {
 	var hits []hit
-	for _, r := range rules {
+	for _, r := range ruleSet {
 		for _, idx := range r.re.FindAllStringSubmatchIndex(s, -1) {
 			mStart, mEnd := idx[0], idx[1]
 			vStart, vEnd := mStart, mEnd
@@ -223,7 +227,11 @@ func overlaps(hits []hit, start, end int) bool {
 // render replaces each hit with its marker, in text order. valueOnly keeps the
 // part of the match that is not the secret.
 func render(s string, m Marker, valueOnly bool) string {
-	hits := findHits(s)
+	return renderWithRules(s, m, valueOnly, rules)
+}
+
+func renderWithRules(s string, m Marker, valueOnly bool, ruleSet []rule) string {
+	hits := findHitsWithRules(s, ruleSet)
 	if len(hits) == 0 {
 		return s
 	}
