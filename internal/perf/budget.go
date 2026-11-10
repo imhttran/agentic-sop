@@ -43,7 +43,9 @@ func CheckTokenBudget(ctx context.Context) error {
 	if sum.UnreportedCalls > 0 {
 		return fmt.Errorf("%w: %d earlier call(s) did not report usage, so %s cannot be enforced", ErrTokenBudgetExceeded, sum.UnreportedCalls, EnvMaxTotalTokens)
 	}
-	if used := sum.Input + sum.Output; used >= budget {
+	// Negative reports are never counted, so a negative total or sum means the
+	// int64 counters overflowed: fail closed instead of reading it as small.
+	if used := sum.Input + sum.Output; sum.Input < 0 || sum.Output < 0 || used < 0 || used >= budget {
 		return fmt.Errorf("%w: %d of %d tokens used (%s)", ErrTokenBudgetExceeded, used, budget, EnvMaxTotalTokens)
 	}
 	return nil

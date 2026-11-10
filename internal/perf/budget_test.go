@@ -3,6 +3,7 @@ package perf
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -37,6 +38,12 @@ func TestCheckTokenBudget(t *testing.T) {
 	AddUsage(negative, "m", -5000, 10)
 	if err := CheckTokenBudget(negative); !errors.Is(err, ErrTokenBudgetExceeded) {
 		t.Fatalf("negative usage report: err = %v, want refusal", err)
+	}
+	overflow := WithUsage(context.Background(), &Usage{})
+	AddUsage(overflow, "m", math.MaxInt64/2+1, 0)
+	AddUsage(overflow, "m", math.MaxInt64/2+1, 0)
+	if err := CheckTokenBudget(overflow); !errors.Is(err, ErrTokenBudgetExceeded) {
+		t.Fatalf("overflowed usage total: err = %v, want refusal", err)
 	}
 	if err := CheckTokenBudget(context.Background()); !errors.Is(err, ErrTokenBudgetExceeded) {
 		t.Fatalf("no usage accounting: err = %v, want refusal", err)
