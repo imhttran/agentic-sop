@@ -40,13 +40,14 @@ func ncTimeout() string {
 // sandboxed runs a shell snippet inside the run_command sandbox for root.
 func sandboxed(t *testing.T, root, script string) error {
 	t.Helper()
-	argv, _, cleanup, err := isolate(root, []string{"sh", "-c", script})
+	argv, env, _, cleanup, err := isolate(root, []string{"sh", "-c", script})
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer cleanup()
 	cmd := exec.Command(argv[0], argv[1:]...)
 	cmd.Dir = root
+	cmd.Env = env
 	return cmd.Run()
 }
 
@@ -123,7 +124,7 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	}
 	if runtime.GOOS == "linux" {
 		// bubblewrap refuses a symlinked state dir outright.
-		if _, _, _, err := isolate(linked, []string{"true"}); !errors.Is(err, errIsolationUnavailable) {
+		if _, _, _, _, err := isolate(linked, []string{"true"}); !errors.Is(err, errIsolationUnavailable) {
 			t.Fatalf("symlinked state dir: err = %v, want errIsolationUnavailable", err)
 		}
 	} else if err := sandboxed(t, linked, "echo forged > real-state/state.db"); err == nil {
@@ -250,5 +251,23 @@ func TestRunCommandIsolationThrowawayGoCache(t *testing.T) {
 	if err := sandboxed(t, root, "touch "+probe); err == nil {
 		os.Remove(probe)
 		t.Fatal("the shared module cache was writable from the sandbox")
+	}
+}
+
+// The policy-checked argv follows the sandbox prefix unchanged: nothing (such
+// as an env wrapper) sits between them that could reinterpret argv[0].
+func TestIsolateKeepsArgvVerbatim(t *testing.T) {
+	needSandbox(t)
+	argv := []string{"GOFLAGS=-x", "go", "version"}
+	wrapped, env, _, cleanup, err := isolate(t.TempDir(), argv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	if got := wrapped[len(wrapped)-len(argv):]; strings.Join(got, " ") != strings.Join(argv, " ") || wrapped[len(wrapped)-len(argv)-1] == "env" {
+		t.Fatalf("argv not passed verbatim after the sandbox prefix: %q", wrapped)
+	}
+	if !strings.Contains(strings.Join(env, "\n"), "GOCACHE=") {
+		t.Fatal("GOCACHE must be set through the environment")
 	}
 }

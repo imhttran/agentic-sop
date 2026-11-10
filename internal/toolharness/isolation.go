@@ -35,16 +35,19 @@ func (h *Harness) isolationRequested() bool {
 // Each run gets its own throwaway GOCACHE, and the shared module cache is
 // read-only (go.sum verifies its content), so one run cannot poison the Go
 // caches of a later run. The caller must call cleanup after the command
-// exits. It fails closed: no backend means no run.
+// exits. GOCACHE is returned as extra environment for the child, never put on
+// the command line, so policy-checked argv cannot be reinterpreted. It fails
+// closed: no backend means no run.
 // ponytail: every sandboxed build starts with a cold build cache; seeding it
 // from a trusted snapshot would make it warm again.
-func isolate(root string, argv []string) (wrapped []string, detail string, cleanup func(), err error) {
-	wrapped, detail, cache, err := sandboxArgv(root)
+func isolate(root string, argv []string) (wrapped, env []string, detail string, cleanup func(), err error) {
+	prefix, detail, cache, err := sandboxArgv(root)
 	if err != nil {
-		return nil, "", nil, err
+		return nil, nil, "", nil, err
 	}
-	cleanup = func() { _ = os.RemoveAll(cache) }
-	return append(append(wrapped, "env", "GOCACHE="+cache), argv...), detail, cleanup, nil
+	// Both sandbox-exec and bwrap (no --clearenv) pass the environment through.
+	env = append(os.Environ(), "GOCACHE="+cache)
+	return append(prefix, argv...), env, detail, func() { _ = os.RemoveAll(cache) }, nil
 }
 
 // sandboxArgv builds the sandbox prefix and a fresh build-cache dir for one run.

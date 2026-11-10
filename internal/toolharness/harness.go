@@ -634,14 +634,15 @@ func (h *Harness) runCommandWithStatus(ctx context.Context, args map[string]any)
 		return "", false, err
 	}
 	run := argv
+	var env []string
 	if h.isolationRequested() {
 		var cleanup func()
-		if run, h.isolation, cleanup, err = isolate(root.path, argv); err != nil {
+		if run, env, h.isolation, cleanup, err = isolate(root.path, argv); err != nil {
 			return "", false, err
 		}
 		defer cleanup()
 	}
-	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run)
+	result, succeeded, raw, exit, err := h.execCaptured(ctx, root.path, run, env)
 	if err == nil && noTestsMatched(argv, result) {
 		result += "\n" + noTestMatchDiagnostic
 	}
@@ -894,18 +895,20 @@ func (h *Harness) exec(ctx context.Context, argv []string) (string, error) {
 }
 
 func (h *Harness) execWithStatus(ctx context.Context, dir string, argv []string) (string, bool, error) {
-	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv)
+	result, succeeded, _, _, err := h.execCaptured(ctx, dir, argv, nil)
 	return result, succeeded, err
 }
 
 // execCaptured runs argv and returns the display result plus the exact captured
 // output and exit code, so an evidence sink can own the raw evidence.
-func (h *Harness) execCaptured(ctx context.Context, dir string, argv []string) (result string, succeeded bool, output string, exit int, err error) {
+// env, when non-nil, replaces the inherited environment.
+func (h *Harness) execCaptured(ctx context.Context, dir string, argv, env []string) (result string, succeeded bool, output string, exit int, err error) {
 	runCtx, cancel := context.WithTimeout(ctx, h.cfg.CommandTimeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(runCtx, argv[0], argv[1:]...)
 	cmd.Dir = dir
+	cmd.Env = env
 	cmd.SysProcAttr = sysProcAttrKill()
 	cmd.Cancel = func() error {
 		if cmd.Process == nil {
