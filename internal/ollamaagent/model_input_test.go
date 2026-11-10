@@ -255,6 +255,7 @@ func TestModelInputWithPolicyRedactsUnknownFormats(t *testing.T) {
 	dir := t.TempDir()
 	gitInit(t, dir)
 	writeFile(t, dir, "opaque.txt", "opaque_secret="+opaque+"\n")
+	writeFile(t, dir, "suffixed.txt", "password1="+opaque+"\n")
 	writeFile(t, dir, "bare.txt", "the value is "+bare+"\n")
 	writeFile(t, dir, "notes.txt", ordinary+" ordinary repository content\n")
 	writeFile(t, dir, ".env.example", "SOP_TEST_API_KEY=replace-me\n")
@@ -283,6 +284,7 @@ func TestModelInputWithPolicyRedactsUnknownFormats(t *testing.T) {
 		args map[string]any
 	}{
 		{"ordinary file", toolharness.ToolReadFile, map[string]any{"path": "opaque.txt"}},
+		{"suffixed key", toolharness.ToolReadFile, map[string]any{"path": "suffixed.txt"}},
 		{"git diff", toolharness.ToolGitDiff, nil},
 		{"SAFE command", toolharness.ToolRunCommand, map[string]any{"command": "git show :opaque-tracked.txt"}},
 		{"inventory value", toolharness.ToolReadFile, map[string]any{"path": "bare.txt"}},
