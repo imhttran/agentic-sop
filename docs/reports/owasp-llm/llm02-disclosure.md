@@ -833,7 +833,11 @@ in [llm02-acceptance-request.md](llm02-acceptance-request.md) §Final closeout
 (2026-11-10). The recommendations are `INVESTIGATE` for unknown-format
 credentials, hardlink aliases, and artifact persistence; `MITIGATE` for
 caller/notification prose; `INVESTIGATE` or `ACCEPT_PROPOSED` for
-retrieval/handoff; and `TRANSFER_PROPOSED` for provider retention. No residual
+retrieval/handoff; and `TRANSFER_PROPOSED` for provider retention. The
+unknown-format proposal is
+[PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md);
+it recommends C1 (inventory + contextual key/known formats, no entropy) and
+requires an explicit policy decision. No residual
 risk is marked accepted; residual-risk acceptance and full Plan 03 per-criterion
 acceptance remain `NEEDS_HUMAN`. The bounded evidence acceptance is recorded
 separately (decision memory ID
