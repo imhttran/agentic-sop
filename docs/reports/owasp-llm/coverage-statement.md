@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `e341c3e1` (2026-11-10, LLM02 C1 hardlink-alias verification).
+**As of:** `main` at `bc735e5c` (2026-11-10, PR #378 sandbox credential hardening).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -68,9 +68,21 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     **Path authorization and model-input redaction are separate controls.**
   - SAFE `run_command` (`go test` is `SAFE`) can run model-written code that
     reads `$HOME` credential files directly, or `os.Link`s them into the repo.
-    With the opt-in `run_command` sandbox off (the default), this works; with it on, macOS denies these reads and the `ln`, and secret-named env vars are scrubbed (Linux `NOT_RUN`). This is a separate, unaccepted residual. The
-    PR #376 review did not approve Option C; the review direction is a sandbox
-    credential read-deny rule plus a cheap `Nlink > 1` check; the read-deny rule is implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial) and the `Nlink > 1` check is not.
+    With the opt-in `run_command` sandbox off (the default), this works; with it
+    on, macOS denies these reads and the `ln`, scrubs credential-named and
+    credential-shaped env values, resolves the credential locations named by
+    `KUBECONFIG`, `DOCKER_CONFIG`, `GNUPGHOME`, `CLOUDSDK_CONFIG`,
+    `GH_CONFIG_DIR`, `XDG_CONFIG_HOME`, `CARGO_HOME`, `NPM_CONFIG_USERCONFIG`,
+    `AWS_SHARED_CREDENTIALS_FILE`, and `AWS_CONFIG_FILE`, and denies the
+    `com.apple.SecurityServer` mach lookup so the Keychain is not reachable
+    (Linux `NOT_RUN`). The read-deny rule is implemented opt-in (macOS
+    `VERIFIED`, Linux `NOT_RUN`; see
+    [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
+    Still open on macOS: the parent process environment is readable with
+    `kern.procargs2` (measured; `process-info*` does not cover it), and a
+    pre-existing hardlink alias remains readable through `read_file`. This is a
+    separate, unaccepted residual. The PR #376 review did not approve Option C;
+    the `Nlink > 1` check is not implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.

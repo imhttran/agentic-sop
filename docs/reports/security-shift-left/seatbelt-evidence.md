@@ -143,7 +143,7 @@ with a cold build cache in 10 s.
 
 ### Credential read denial (LLM02)
 
-Baseline `origin/main` `823f753dfd931361b37cd9ac2b92e366d2e16ce9`, macOS arm64.
+Branch baseline `bc735e5c` (PR #378 merged), macOS arm64.
 The profile also denies reading a fixed set of home-relative credential
 locations. The names reuse `internal/sensitivepath` (`toolDirs` `.aws`, `.ssh`,
 `.kube`, `.gnupg`; files `.netrc`, `.git-credentials`, `.npmrc`) and add only
@@ -157,18 +157,28 @@ Missing entries are skipped, and an unresolvable home directory fails closed wit
 allow-default and no `file-read` allow follows, the deny wins: the command cannot
 print, copy, or hardlink a credential it cannot read.
 
-The child environment is also scrubbed: `sandboxEnv` drops every entry whose
-name matches `redact.IsSecretName` (the shared vocabulary) before adding the
-per-run `GOCACHE` override, and the audit detail records `scrubbed_env=<n>`
-(names only). Isolation-off runs keep the inherited environment unchanged.
+`homeCredentials` also resolves the credential locations named by environment
+variables: `KUBECONFIG` (a path list), `DOCKER_CONFIG` (its `config.json`),
+`GNUPGHOME`, `CLOUDSDK_CONFIG`, `GH_CONFIG_DIR`, `XDG_CONFIG_HOME` (its `gh` and
+`gcloud`), `CARGO_HOME` (`credentials.toml`), `NPM_CONFIG_USERCONFIG`,
+`AWS_SHARED_CREDENTIALS_FILE`, and `AWS_CONFIG_FILE`. Missing entries are skipped;
+a set but relative value fails closed like an unresolvable home.
+
+The child environment is scrubbed: `sandboxEnv` drops every entry whose name
+matches `redact.IsSecretName` or whose value changes under `redact.Shapes`,
+before adding the per-run `GOCACHE` override. The value rule catches a
+credential in an ordinary variable, for example `DATABASE_URL` with URL
+userinfo; `postgres://host/db` is kept. The audit detail records
+`scrubbed_env=<n>` (count only). Isolation-off runs keep the inherited
+environment unchanged.
 
 Verification:
 
 ```sh
-go test ./internal/toolharness/ -run 'TestSandboxHidesHomeCredentials|TestHomeCredentials|TestRunCommandIsolationDeniesCredential|TestIsolateScrubsSecretEnv' -v -count=1
+go test ./internal/toolharness/ -run 'TestSandboxHidesHomeCredentials|TestHomeCredentials|TestRunCommandIsolationDeniesCredential|TestRunCommandIsolationDeniesEnvOverrideCredentials|TestRunCommandIsolationDeniesKeychainAccess|TestIsolateScrubsSecretEnv|TestSandboxEnvDropsCredentialValues|TestSeatbeltProfileDeniesKeychainService' -v -count=1
 ```
 
-Observed: 6 PASS.
+Observed: 12 PASS.
 
 - `TestRunCommandIsolationDeniesCredentialRead` — a sandboxed
   `cat "$HOME/.ssh/probe"` failed, the canary did not appear in the captured
@@ -179,36 +189,67 @@ Observed: 6 PASS.
   `ln: .../.ssh/probe: Operation not permitted` (exit status 1). Because the link
   is refused, there is no alias to read; the branch that would have to prove a
   created alias is unreadable did not run on this host.
-- `TestIsolateScrubsSecretEnv` — a sandboxed `env` has no `SOP_TEST_API_KEY`,
-  keeps `GOFLAGS`, `HOME`, `PATH`, and the run's `GOCACHE` override, and a
-  sandboxed `go version` still runs.
-- `TestSandboxHidesHomeCredentials` and `TestHomeCredentialsResolveExistingEntries`
-  are deterministic profile/resolution tests and do not need a backend.
+- `TestIsolateScrubsSecretEnv` — a sandboxed `env` has no `SOP_TEST_API_KEY`
+  or credential-shaped `DATABASE_URL`, keeps `GOFLAGS`, `HOME`, `PATH`, and the
+  run's `GOCACHE` override, and a sandboxed `go version` still runs.
+- `TestSandboxEnvDropsCredentialValues` — `DATABASE_URL` with userinfo is
+  dropped; `postgres://host/db` is kept; `GOFLAGS`, `PATH`, and `HOME` stay.
+- `TestRunCommandIsolationDeniesEnvOverrideCredentials` — `GNUPGHOME` and a
+  two-entry `KUBECONFIG` list are denied, and an ordinary neighbouring file is
+  still readable. `TestHomeCredentialsIncludeEnvOverrides` and
+  `TestHomeCredentialsFailsClosedOnRelativeOverride` cover resolution and the
+  relative-value failure.
+- `TestRunCommandIsolationDeniesKeychainAccess` — a temporary keychain under the
+  sandbox root (not the login keychain) is created, a canary is added with
+  `-T /usr/bin/security`, and a sandboxed
+  `security find-generic-password -s sop-probe -w <keychain>` is refused. The
+  test deletes the keychain and never changes the user's search list.
+- `TestSandboxHidesHomeCredentials`, `TestHomeCredentialsResolveExistingEntries`,
+  and `TestSeatbeltProfileDeniesKeychainService` are deterministic profile or
+  resolution tests and do not need a backend.
   `TestHomeCredentialsFailsClosedWithoutHome` confirms an empty `HOME` returns
   `errIsolationUnavailable`.
 
-Environment variables: scrubbed inside the sandbox (`redact.IsSecretName`);
-inherited unchanged when isolation is off. In the measured shell, 15 names were
-dropped (names only): `DEEPSEEK_API_KEY`, `DOCKERHUB_TOKEN`,
-`FIRECRAWL_API_KEY`, `GEMINI_API_KEY`, `GITHUB_PERSONAL_ACCESS_TOKEN`,
-`GOOGLE_AI_API_KEY`, `HUGGINGFACE_API_KEY`, `KITCHEN_TOKEN`,
-`LLAMACPP_API_KEY`, `OLLAMA_API_KEY`, `OLMX_API_KEY`, `OPENAI_API_KEY`,
-`SOP_CONTROLLER_TOKEN`, `SOP_OMLX_API_KEY`, `SSH_AUTH_SOCK`. The substring
+Environment variables: scrubbed inside the sandbox (`redact.IsSecretName` for
+names, `redact.Shapes` for values); inherited unchanged when isolation is off.
+In the measured shell, 15 names were dropped by name (names only):
+`DEEPSEEK_API_KEY`, `DOCKERHUB_TOKEN`, `FIRECRAWL_API_KEY`, `GEMINI_API_KEY`,
+`GITHUB_PERSONAL_ACCESS_TOKEN`, `GOOGLE_AI_API_KEY`, `HUGGINGFACE_API_KEY`,
+`KITCHEN_TOKEN`, `LLAMACPP_API_KEY`, `OLLAMA_API_KEY`, `OLMX_API_KEY`,
+`OPENAI_API_KEY`, `SOP_CONTROLLER_TOKEN`, `SOP_OMLX_API_KEY`, `SSH_AUTH_SOCK`.
+The value rule dropped **0 additional names** in that shell. The substring
 matcher also drops harmless names such as `SSH_AUTH_SOCK` (and would drop
 `TERM_SESSION_ID`); no Go toolchain variable used by `go test` matches except
 `GOAUTH`, which only affects network module fetches that the sandbox denies
 anyway.
 
+Keychain: **measured reachable before this change, then denied.** With the
+pre-change profile, a sandboxed `security find-generic-password -w` on a
+temporary keychain printed `keychain-canary`. The profile now emits
+`(deny mach-lookup (global-name "com.apple.SecurityServer"))`; the same read
+returns `security: SecKeychainSearchCopyNext: The specified item could not be
+found in the keychain.` (exit status 44). `com.apple.securityd` and
+`com.apple.trustd` did not block the keychain read when denied instead.
+Certificates use the trust service, not SecurityServer: a sandboxed `go test`
+that verifies a public chain (leaf plus intermediates fetched from
+`example.com`, `Roots: x509.SystemCertPool()`) still passes under the full
+profile (`ok x509check 0.021s`), and `go version` runs.
+
+Parent environment: **measured, known limit, not fixed.** On macOS `/bin/ps` is
+setuid, so Seatbelt refuses to execute it: `sh: /bin/ps: Operation not
+permitted` (exit status 126) for both `ps eww -p $PPID` and `ps eww -ax`; a
+canary therefore does not appear through `ps`. A non-setuid read of
+`kern.procargs2` does reach the parent environment: launched with
+`SOP_TEST_API_KEY=parent-env-canary` in the test binary's environment, a probe
+found the canary in two parent processes. `(deny process-info* ...)` did not
+block it for any supported target: `self`, `same-sandbox`, `others`, `children`,
+and `pgrp` all parse and all still leaked; `parent` and `ancestors` are unbound
+variables. `(deny sysctl-read)` aborts the Go runtime (`fatal error: failed to
+get system page size`). No fix is applied.
+
 Residual measured, not fixed: a hardlink alias created before the run is still
 readable through `read_file`, because the file tools run in the SOP process, not
 the sandbox.
-
-Known limit: the macOS Keychain is reached through the `security` CLI and a
-system service, not by file reads, so the read-deny rules do not cover it.
-Measured in the sandbox: `security find-generic-password -s sop-nonexistent-probe`
-returned `security: SecKeychainSearchCopyNext: The specified item could not be
-found in the keychain.` (exit status 44). That reply proves the service was
-reachable; it is not a denial.
 
 Limits: Linux uses the bubblewrap backend
 ([bubblewrap-verification.md](bubblewrap-verification.md#run_command-opt-in-sandbox-llm03)); the

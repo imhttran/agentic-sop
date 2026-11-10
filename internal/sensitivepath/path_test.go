@@ -1,6 +1,10 @@
 package sensitivepath
 
-import "testing"
+import (
+	"os"
+	"reflect"
+	"testing"
+)
 
 // TestToolReadDenied is the approved narrow profile: well-known credential
 // files/directories and key material are denied, the documented template files
@@ -41,6 +45,49 @@ func TestToolReadDenied(t *testing.T) {
 		if got := IsToolReadDenied(tc.path); got != tc.want {
 			t.Errorf("IsToolReadDenied(%q) = %v, want %v", tc.path, got, tc.want)
 		}
+	}
+}
+
+// TestEnvCredentialPaths resolves the credential locations named by the
+// supported environment variables, including a KUBECONFIG list, and rejects a
+// relative value.
+func TestEnvCredentialPaths(t *testing.T) {
+	env := map[string]string{
+		"GNUPGHOME":                   "/env/gnupg",
+		"CLOUDSDK_CONFIG":             "/env/gcloud",
+		"GH_CONFIG_DIR":               "/env/gh",
+		"XDG_CONFIG_HOME":             "/env/xdg",
+		"DOCKER_CONFIG":               "/env/docker",
+		"CARGO_HOME":                  "/env/cargo",
+		"NPM_CONFIG_USERCONFIG":       "/env/npmrc",
+		"AWS_SHARED_CREDENTIALS_FILE": "/env/aws-creds",
+		"AWS_CONFIG_FILE":             "/env/aws-config",
+		"KUBECONFIG":                  "/env/kube1" + string(os.PathListSeparator) + "/env/kube2",
+	}
+	getenv := func(k string) string { return env[k] }
+	dirs, err := EnvCredentialDirs(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantDirs := []string{"/env/gnupg", "/env/gcloud", "/env/gh", "/env/xdg/gh", "/env/xdg/gcloud"}
+	if !reflect.DeepEqual(dirs, wantDirs) {
+		t.Fatalf("dirs = %v, want %v", dirs, wantDirs)
+	}
+	files, err := EnvCredentialFiles(getenv)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantFiles := []string{"/env/aws-config", "/env/aws-creds", "/env/cargo/credentials.toml", "/env/docker/config.json", "/env/kube1", "/env/kube2", "/env/npmrc"}
+	if !reflect.DeepEqual(files, wantFiles) {
+		t.Fatalf("files = %v, want %v", files, wantFiles)
+	}
+
+	bad := func(string) string { return "relative/path" }
+	if _, err := EnvCredentialDirs(bad); err == nil {
+		t.Fatal("relative GNUPGHOME was accepted")
+	}
+	if _, err := EnvCredentialFiles(bad); err == nil {
+		t.Fatal("relative KUBECONFIG was accepted")
 	}
 }
 
