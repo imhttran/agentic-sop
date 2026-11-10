@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `53f4c101` (2026-11-10, LLM02 C1 hardlink verification).
+**As of:** `main` at `e341c3e1` (2026-11-10, LLM02 C1 hardlink-alias verification).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -14,18 +14,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 ## Summary
 
-| OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                        | Main remaining gap                                                                                                                                                        |
-| ---------- | ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                     | One model per platform; no universal claim                                                                                                                                |
-| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS` | Not general DLP; four pre-C1 Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default and one bounded C1 residual; broader coverage `OPEN` |
-| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                         | Model provenance and publisher signatures out of SOP's control                                                                                                            |
-| LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                         | Integrity proves bytes, not benign content; provider training external                                                                                                    |
-| LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                         | Third-party rendering (terminal, IDE, Slack) external                                                                                                                     |
-| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + opt-in sandbox on macOS and Linux                                                                                                                                                                            | Sandbox off by default; cold build cache per run                                                                                                                          |
-| LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                         | Prompt secrecy is not claimed by design                                                                                                                                   |
-| LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                              | Live RAG / PostgreSQL / embeddings `NOT_RUN`                                                                                                                              |
-| LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                               | Factual correctness of model output is out of scope                                                                                                                       |
-| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                    | No dollar cap (no pricing data); some subprocess paths lack process-group termination                                                                                     |
+| OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                                                                                                                    | Main remaining gap                                                                                                                                                                                   |
+| ---------- | ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                                                                                                                 | One model per platform; no universal claim                                                                                                                                                           |
+| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) with bounded Linux live `PASS`; focused C1 hardlink verification `PASS` for 4 scoped cases | Not general DLP; four pre-C1 Linux residual exposures; hardlink path bypass with one unlisted-value residual; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
+| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                                                                                                                     | Model provenance and publisher signatures out of SOP's control                                                                                                                                       |
+| LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                                                                                                                     | Integrity proves bytes, not benign content; provider training external                                                                                                                               |
+| LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                                                                                                                     | Third-party rendering (terminal, IDE, Slack) external                                                                                                                                                |
+| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + opt-in sandbox on macOS and Linux                                                                                                                                                                                                                                        | Sandbox off by default; cold build cache per run                                                                                                                                                     |
+| LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                                                                                                                     | Prompt secrecy is not claimed by design                                                                                                                                                              |
+| LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                                                                                                                          | Live RAG / PostgreSQL / embeddings `NOT_RUN`                                                                                                                                                         |
+| LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                                                                                                           | Factual correctness of model output is out of scope                                                                                                                                                  |
+| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time/output bounds, selected process-group termination, and opt-in token budgets                                                                                                                                                                                                | No dollar cap (no pricing data); some subprocess paths lack process-group termination                                                                                                                |
 
 ## Per risk
 
@@ -48,7 +48,9 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   model-input redaction (`TestUserPromptRedactsTaskAndInput`). Diagnostics and
   notifications are redacted. A macOS live extraction campaign ran 7 of 7 cases;
   a Linux live tool-path campaign ran 17 cases (7 protected, 6 positive controls,
-  4 residual exposures). Evidence: [llm02-disclosure.md](llm02-disclosure.md) and
+  4 residual exposures), and a focused C1 hardlink-alias campaign ran 6 cases
+  (4 protected, 1 positive control, 1 unlisted-value residual). Evidence:
+  [llm02-disclosure.md](llm02-disclosure.md) and
   [llm02-acceptance-request.md](llm02-acceptance-request.md).
 - **Not covered, and why:**
   - The live campaigns predate the task-input fix; that fix is verified
@@ -58,8 +60,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Redaction is pattern-based, not general DLP, so secrets in an unknown
     format can pass. The Linux live campaign observed unknown-format values in an
     ordinary file, SAFE command output, and a diff reaching the model.
-  - A pre-existing hardlink with an ordinary name bypassed the lexical credential
-    path denial; the recognised shape was still redacted.
+  - A pre-existing hardlink with an ordinary name bypasses the lexical credential
+    path denial. The focused C1 verification (PR #373, revision `ed1ba11`,
+    artifact SHA-256 `417599e2…`, 6 requests) shows that C1 redacts known,
+    inventoried, and contextual values after the read (4 protected cases), but
+    the alias remains readable and one unlisted opaque value reached the model.
+    **Path authorization and model-input redaction are separate controls.**
+  - SAFE `run_command` (`go test` is `SAFE`) can run model-written code that
+    reads `$HOME` credential files directly, or `os.Link`s them into the repo.
+    The opt-in `run_command` sandbox restricts writes and network, not reads, so
+    this works with or without it. This is a separate, unaccepted residual. The
+    PR #376 review did not approve Option C; the review direction is a sandbox
+    credential read-deny rule plus a cheap `Nlink > 1` check, not implemented.
   - Linux live retrieval and notification sinks are `NOT_RUN`.
   - Model-output artifacts remain verbatim; retrieval/handoff/caller prose and
     provider retention remain separate boundaries.
@@ -69,8 +81,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - The designated approver has not recorded Plan 03 per-criterion acceptance;
     the final closeout matrix marks it `NEEDS_HUMAN`. Historicalized `COMPLETE`
     is not acceptance, and broader LLM02 coverage remains `OPEN`.
-  - The six-item residual-risk decision matrix recommends `INVESTIGATE` for
-    unknown-format, hardlink, and artifact risks; `MITIGATE` for notification
+  - The six-item residual-risk decision matrix records that the PR #376 review
+    did not approve Option C as it stands, and that a SAFE `run_command`
+    credential read is a separate unaccepted residual; it recommends
+    `INVESTIGATE` for
+    unknown-format and artifact risks; `MITIGATE` for notification
     prose; `INVESTIGATE`/`ACCEPT_PROPOSED` for retrieval/handoff; and
     `TRANSFER_PROPOSED` for provider retention. No residual risk is accepted.
     The unknown-format proposal is
@@ -86,13 +101,16 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     `c5df5f0`, artifact SHA-256
     `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`) `PASS`es
     for 12 scoped cases with 3 positive controls and one bounded residual. The
-    live campaign supplied inventory values in memory; external `0600` inventory
-    loading and the configuration path are unit-tested only, not validated live.
-    C1 applies to the local Ollama tool-harness boundary (`userPrompt`,
+    16-case campaign supplied inventory values in memory, so it did not exercise
+    the external loader or the configuration path. The focused hardlink campaign
+    loads an external `0600` inventory through `redact.LoadInventory` and confirms
+    that C1 does not close the hardlink path bypass; the `config.RedactionPolicy`
+    composition remains unit-tested only. C1 applies to the local Ollama
+    tool-harness boundary (`userPrompt`,
     `toolResultMessage`), not the OpenAI-compatible provider path. The repository
     configuration remains disabled, so the pre-C1 residual remains until an
-    operator enables it, and hardlink aliases and retrieval/notification sinks
-    remain unverified or `NOT_RUN`.
+    operator enables it, and retrieval/notification sinks
+    remain `NOT_RUN`.
 
 ### LLM03 Supply Chain — partial
 

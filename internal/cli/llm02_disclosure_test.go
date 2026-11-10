@@ -538,7 +538,7 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"### Plan 03 acceptance reconciliation (2026-11-10)",
 		"### Remaining evidence gaps (2026-11-10)",
 		"### Proposed final LLM02 status (2026-11-10)",
-		"### Required human decisions",
+		"### Decision packet (2026-11-10; corrected)",
 		"### Three separate claims",
 	} {
 		if !strings.Contains(report, section) {
@@ -578,7 +578,13 @@ func TestOWASPLLM02AcceptanceRequest(t *testing.T) {
 		"`MITIGATE`",
 		"`ACCEPT_PROPOSED`",
 		"`TRANSFER_PROPOSED`",
-		"15 of 16",
+		"Verified recording mechanism (no new process)",
+		"Partial criteria (do not blanket-accept)",
+		"Option C not approved",
+		"credential read-deny rule",
+		"SAFE `run_command` credential read",
+		"`Nlink > 1`",
+		"Required vs optional additional evidence",
 	} {
 		if !strings.Contains(normalized, claim) {
 			t.Errorf("acceptance request is missing the closeout claim %q", claim)
