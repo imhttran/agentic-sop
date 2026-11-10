@@ -24,18 +24,21 @@ the current decision register is [gap-register-20261109.md](gap-register-2026110
 The Plan 08 model-input credential policy A+B was approved and implemented on
 `security/llm08-model-input-credentials` (decision memory
 `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`); the Plan 08 row
-records the implementation and its residual limits. The Plan 10 wrap-up re-verified its focused checks at `main` `ed9ec2dc`
-(2026-11-09) on Darwin arm64; the Plan 10 row keeps the original Linux
-`x86_64` evidence and adds the wrap-up state and the open live-delivery
-decision.
-The wrap-up merged in PR #328 as `35340774`; full CI passed on the PR head
-`eaf34114` (run 42718751282), and CodeQL passed on the same head (run
-42718748910). A separately authorized live probe at `main` `0200ad3f` delivered
-one synthetic event through the configured Slack webhook: transport is `VERIFIED`
-(outbox `DELIVERED`, attempt 1, no retry), while Slack rendering is
-`NOT_OBSERVED`. No owning Plan 10 SOP state exists. The live-evidence
-reconciliation merged in PR #339 (`cfca3107`); full CI and CodeQL passed on the
-head `6ea8d68f`.
+records the implementation and its residual limits.
+
+Plan 10 completed its lifecycle. The wrap-up merged in PR #328 (`35340774`) with
+full CI on `eaf34114`, and the live-evidence reconciliation merged in PR #339
+(`cfca3107`). A new verify-first run at `afc92022` (content identity
+`2d6a7c8f…`) produced three `VERIFIED`/`LOCAL_DONE` tasks; all six manual criteria
+were accepted by the designated approver. The accepted-outcome stage defect was
+fixed in PR #348 (merge `3fc1b90f`), the three affected records were repaired with
+the merged binary and one audit each, and Plan 10 was historicalized `COMPLETE` at
+`2026-11-10T04:02:39.918545Z`. The original Slack transport probe remains separate
+at `0200ad3f` (`DELIVERED`, attempt 1); Slack rendering and the `#sop-alert`
+binding are still `NOT_OBSERVED`. PR-head CI `8f06afa0` passed; the merge-commit CI
+run was partially cancelled after a newer main push and is not claimed as a full
+pass. Bounded claim: **LLM10 scoped protections implemented, verified, and accepted
+with documented limitations.**
 
 | Plan    | Category                         | Workstream                                                                                                  | Report / evidence                                                                                                                                                       | Evidence state                                                                                                                                                                                                                                                                                                                                                                                                                                      | Boundary                                                                                                                                                                                                                                                                                                                                                                  |
 | ------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -48,7 +51,7 @@ head `6ea8d68f`.
 | Plan 07 | Misinformation                   | `security/llm07-misinformation` (merged PR #285); follow-up `security/llm07-content-binding`                | [llm07-misinformation.md](llm07-misinformation.md); Plan: `docs/plans/PLAN-07-SOP-LLM07-Misinformation.md`                                                              | `IMPLEMENTED` / `ENABLED` / `VERIFIED` (deterministic, macOS arm64); SOP `COMPLETE`; live-model and Linux `NOT_RUN`                                                                                                                                                                                                                                                                                                                                 | Scope is evidence used in decisions, not factual correctness. Manual acceptance evidence is now strictly bound to the reviewed repository content (D4 option 1); `run_command` subprocesses are outside the file-write boundary unless the opt-in `run_command` sandbox is on, which denies their writes under `.agent-sdlc/` (macOS only).                                                                                                                                          |
 | Plan 08 | Hidden Context Exposure          | Mac agent (`security/llm08-hidden-context-exposure`, merged in PR #286); follow-up `security/llm08-model-input-credentials` | [llm08-hidden-context.md](llm08-hidden-context.md), [llm08-campaign.json](llm08-campaign.json); plan: `docs/history/plans/PLAN-08-SOP-LLM08-Hidden-Context-Exposure.md`; proposal: [PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md) | Behavioral controls `IMPLEMENTED` / `ENABLED` / `VERIFIED` (deterministic, macOS `Darwin` arm64); notification descriptive-field redaction `VERIFIED`; model-input credential policy A+B `IMPLEMENTED` / `VERIFIED` (decision memory `f891d5cbe5dd578addbba83ee95b47c35752970219b4d0ad6d3fc2be254a741c`): direct credential paths denied for `read_file`/`search_files`/`copy_file` source (requested path and symlink target classified), every model-bound tool result and error redacted; `.env.example`/`.env.sample` and ordinary source remain usable; `commandpolicy` unchanged; historical Plan 08 manual criteria accepted at merge without a per-criterion SOP record; follow-up bounded claim `criterion-3` accepted through SOP by Tom Tran (2026-11-10); bounded live extraction `OBSERVED` on macOS arm64 with local `qwen3.5:4b` at revision `35340774c16b10236b0ca0143cc0d07c85a8e6b3` (does not validate the branch changes); a bounded Linux `amd64` live tool-path campaign (`qwen3:4b`, 17 requests) observed 7 protected cases, 6 positive controls, and 4 residual exposures | Unknown-format secrets in command output, diffs, or ordinary files, persisted model output artifacts, retrieval/handoff/caller inputs, and provider retention remain bounded gaps. Redaction is not general DLP. Prompt secrecy is not claimed. Linux live retrieval and notification sinks remain `NOT_RUN`; the Linux tool-path campaign observed the documented residual exposures, so it is bounded evidence, not full closure. |
 | Plan 09 | Vector and Embedding Weaknesses  | Linux agent (`security/llm09-retrieval`, PR #295)                                                           | [llm09-retrieval.md](llm09-retrieval.md); plan: `docs/plans/PLAN-09-SOP-LLM09-Vector-and-Embedding-Weaknesses.md`                                                       | `LOCAL_DONE` 3/3; merged in PR #295. Build, vet, tests, focused isolation checks, and CI documentation links pass. The retrieval cancellation/deadline P2 is fixed in PR #298.                                                                                                                                                                                                                                                                      | Local advisory retrieval is disabled by default; live RAG producer/PostgreSQL/embeddings remain NOT_RUN; semantic poisoning inside an authorized repository is not prevented.                                                                                                                                                                                             |
-| Plan 10 | Improper Output Handling (LLM10) | Linux agent (`security/llm10-improper-output-handling`)                                                                     | [llm10-output-handling.md](llm10-output-handling.md), [llm10-live-delivery.md](llm10-live-delivery.md), [llm10-acceptance-request.md](llm10-acceptance-request.md)                                                                                                                    | `IMPLEMENTED` / `ENABLED` / `VERIFIED` for the Linux CLI terminal and the Slack payload encoder; loopback HTTP transport `VERIFIED`; live Slack transport `VERIFIED` once at `0200ad3f` (outbox `DELIVERED`, attempt 1, no retry); reconciliation merged in PR #339 (`cfca3107`); observed Slack rendering `NOT_OBSERVED`; live-test preparation merged in PR #313 (`f557c6fd`); wrap-up re-verified at `ed9ec2dc` (Darwin arm64), merged in PR #328 (`35340774`) with full CI `PASS` on `eaf34114`; manual acceptance `GAP`; no owning SOP plan state                                                                                                                                                                                                                                                                                                                                                                                                                                       | Third-party terminal/IDE rendering, persisted Markdown rendering, and Slack auto-unfurl remain external. Shell, path, database, and protocol controls were inspected and confirmed, not re-authored. The live probe payload escaped `& < >`; Slack rendering, the channel binding, and unfurl behavior remain unobserved.                                                                                                            |
+| Plan 10 | Improper Output Handling (LLM10) | Linux agent (`security/llm10-improper-output-handling`) | [llm10-output-handling.md](llm10-output-handling.md), [llm10-live-delivery.md](llm10-live-delivery.md), [llm10-acceptance-request.md](llm10-acceptance-request.md) | `IMPLEMENTED` / `ENABLED` / `VERIFIED` / `ACCEPTED` for the scoped claim; verification/acceptance at `afc92022` (content identity `2d6a7c8f…`), all six manual criteria accepted by the designated approver; stage recovery via the merged binary from PR #348 (`3fc1b90f`), one audit per task; Plan 10 historicalized `COMPLETE` at `2026-11-10T04:02:39.918545Z`; archive `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`; live Slack transport at `0200ad3f` (`DELIVERED`, attempt 1); observed Slack rendering `NOT_OBSERVED`; PR-head CI `8f06afa0` passed, merge-commit CI partially cancelled and not claimed as a full pass. Bounded claim: **LLM10 scoped protections implemented, verified, and accepted with documented limitations.** | Third-party terminal/IDE rendering, persisted Markdown rendering, Slack auto-unfurl, Slack rendering/channel binding, Windows terminal behavior, provider/tool output as model input, and full LLM10 coverage remain unverified or bounded. Shell, path, database, and protocol controls were inspected and confirmed; one live Slack transport delivery was confirmed. |
 
 ## What the Plan 02 Linux row evidences
 
@@ -187,12 +190,20 @@ head `6ea8d68f`.
   was available, so the rendered message, the `#sop-alert` binding, and the absence
   of pings remain unobserved. The fixture is in
   [llm10-live-delivery.md](llm10-live-delivery.md), not a rendering claim.
-- The wrap-up merged in PR #328 (`35340774`); full CI passed on `eaf34114`
-  (run 42718751282). Passing CI is evidence for `OUTPUT-003` criterion 3, not a
-  manual acceptance record.
-- External rendering and unobserved Slack rendering are recorded as explicit
-  limitations, not inferred protections. Manual acceptance is `GAP`, and no owning
-  SOP plan state exists, so no lifecycle transition is claimed.
+- The verification/acceptance run at `afc92022` produced three `VERIFIED`/
+  `LOCAL_DONE` tasks; all six manual criteria were accepted by the designated
+  approver. PR #348 fixed the accepted-outcome stage transition, and the affected
+  records were repaired with the merged binary from `3fc1b90f` (one
+  `stage-recoveries.jsonl` audit per task, with task status, attempt, outcome,
+  validation, and acceptance evidence unchanged). Plan 10 was historicalized
+  `COMPLETE` at `2026-11-10T04:02:39.918545Z`; the archive is
+  `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`.
+- The PR-head CI for the fix (`8f06afa0`) passed. The merge-commit CI run for
+  `3fc1b90f` was partially cancelled after a newer main push and is not claimed as
+  a full pass. External rendering, observed Slack rendering, Slack auto-unfurl,
+  the `#sop-alert` binding, Windows terminal behavior, and provider/tool output as
+  model input remain explicit limitations. The bounded claim is: **LLM10 scoped
+  protections implemented, verified, and accepted with documented limitations.**
 
 ## What this matrix does not claim
 
@@ -206,10 +217,15 @@ head `6ea8d68f`.
 - It does not infer runtime protection from a specification, scanner `PASS`, or
   dependency plan alone.
 - It does not claim a merge, deployment, or installation. Live evidence exists only
-  for the recorded Plan 02, Plan 03, and Plan 08 bounded campaigns on their stated
-  model and platform; it is not extrapolated to other providers or operating
-  systems. The Plan 02 Linux campaign adds evidence for one Linux host and one
-  model; it does not remove the stated limits.
+  for the recorded Plan 02, Plan 03, Plan 08, and Plan 10 bounded observations on
+  their stated model and platform; it is not extrapolated to other providers or
+  operating systems. The Plan 02 Linux campaign adds evidence for one Linux host
+  and one model; the Plan 10 live transport probe is not a rendering observation.
+  These additions do not remove the stated limits.
+- For Plan 10, the bounded claim is **LLM10 scoped protections implemented,
+  verified, and accepted with documented limitations.** Lifecycle completion does
+  not extend that claim to Slack rendering/channel binding, external renderers,
+  Windows, provider/tool output as model input, or full LLM10 coverage.
 
 ## Related baseline evidence
 

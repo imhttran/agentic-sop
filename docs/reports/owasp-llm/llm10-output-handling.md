@@ -1,12 +1,13 @@
 # LLM10 — Improper output handling (SOP Linux workstream)
 
-Status: two reproduced display-sink gaps `IMPLEMENTED` and `VERIFIED` for the
-SOP-owned CLI terminal and the Slack payload encoder; loopback HTTP transport and
-one live Slack webhook delivery `VERIFIED`; observed Slack rendering
-`NOT_OBSERVED`; manual acceptance partially recorded (`OUTPUT-001` criteria 1–3
-only). Shell, path, database, and protocol boundaries were inspected and their
-existing controls confirmed. A local owning SOP state exists in `.llm10-verify`
-(not repository-owned), so this report claims no lifecycle transition.
+Status: **LLM10 scoped protections implemented, verified, and accepted with
+documented limitations.** Two display-sink gaps are `IMPLEMENTED` and `VERIFIED`
+for the SOP-owned CLI terminal and the Slack payload encoder; loopback HTTP
+transport and one live Slack webhook delivery are `VERIFIED`; observed Slack
+rendering remains `NOT_OBSERVED`. All six manual criteria are accepted, and Plan
+10 is historicalized with disposition `COMPLETE`. Shell and path boundaries,
+parameterized SQL, and protocol JSON remain owned by their existing packages.
+This report does not claim full LLM10 coverage.
 
 Baseline (original): `imhttran/agentic-sop` `main` at
 `24be0687b0ac0dec5e2e69584be67f1795c0f6f1`, merged with `main` at `985472a`
@@ -28,8 +29,8 @@ for unrelated LLM08 event-identity and redaction work. Rendering was
 A 2xx response proves endpoint acceptance, not visible rendering or the bound
 channel name. See [llm10-live-delivery.md](llm10-live-delivery.md) for the exact
 revision, command, payload fixture, delivery rows, and the observation still
-required. The prepared [acceptance request](llm10-acceptance-request.md) remains
-open for the manual criteria.
+required. The [acceptance request](llm10-acceptance-request.md) is now closed;
+see §Lifecycle closeout.
 
 The wrap-up merged in PR #328 as
 `35340774c16b10236b0ca0143cc0d07c85a8e6b3`. Full CI passed on the PR head
@@ -37,8 +38,8 @@ The wrap-up merged in PR #328 as
 [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282));
 CodeQL passed on the same head (run
 [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910)).
-The merge is not a lifecycle transition, and manual acceptance is still not
-recorded.
+The merge was not itself a lifecycle transition; the later verification,
+acceptance, and historicalization completed the lifecycle.
 
 The live-evidence reconciliation merged in PR #339 as
 `cfca31075078f5ef3d53bbd48a0ae1dec4bdd79c` from head
@@ -46,8 +47,33 @@ The live-evidence reconciliation merged in PR #339 as
 head (runs
 [42744614438](https://github.com/imhttran/agentic-sop/actions/runs/42744614438)
 and [42744611900](https://github.com/imhttran/agentic-sop/actions/runs/42744611900)).
-The merge is not a lifecycle transition, records no manual acceptance, and does
-not change the `NOT_OBSERVED` rendering state.
+The merge did not itself complete the lifecycle; the later verification run and
+historicalization did, without changing the `NOT_OBSERVED` rendering state.
+
+## Lifecycle closeout
+
+- **Verification and acceptance:** a new verify-first SOP run at
+  `afc9202290a6bb0a3a4ec09385f532c686b23b62` (content identity
+  `2d6a7c8fc45b36a7619c9b2ed85cd705ad25cefad75a03291daaccede7a0209d`) produced
+  three `VERIFIED`/`LOCAL_DONE` tasks. The six manual criteria were accepted
+  under the designated approver at that revision. This is separate from the
+  original Slack transport probe at `0200ad3f`.
+- **Stage recovery:** the accepted-outcome resume path initially left each run
+  stage at `WAITING_FOR_HUMAN`. The defect was fixed in PR #348 and the already
+  affected records were repaired with the merged binary built from
+  `3fc1b90f2dac461d0bac843ef198f49702a5f1e7` using `sop task recover-stage`. Each
+  task has one `stage-recoveries.jsonl` audit record; task status, attempt,
+  outcome, validation, and acceptance evidence were unchanged.
+- **Final disposition:** Plan `plan-10-sop-llm10-improper-output-handling` was
+  historicalized `COMPLETE` at `2026-11-10T04:02:39.918545Z`. The archive is
+  `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`; run evidence
+  remains under `.agent-sdlc/runs/OUTPUT-001..003/`.
+- **CI:** the PR-head CI for the fix (`8f06afa0`) passed. The merge-commit CI run
+  for `3fc1b90f` was partially cancelled when `origin/main` advanced and is not
+  claimed as a full pass.
+- **Attribution:** the original Slack transport evidence is at `0200ad3f`; the
+  verification/acceptance evidence is at `afc92022`; the recovery binary was built
+  from the #348 merge `3fc1b90f`. These are separate records.
 
 This report treats model, tool, provider, and configured-command output as
 untrusted at each SOP-owned sink. It does not claim protection for a third-party
@@ -279,9 +305,9 @@ Focused evidence paths:
 | Sink-specific fix, no destructive global escaping of persisted data     | `IMPLEMENTED`                                                                  | Terminal sink at the console only; artifacts and JSON unchanged                                                                                                                                                                                                                                                                                                                                                                                        |
 | Protocol data valid; diagnostics do not corrupt machine-readable output | `VERIFIED`                                                                     | `TestPromptJSONKeepsModelResultIntact`; MCP `json.Encoder`; ACP `json.Marshal`; diagnostics on stderr                                                                                                                                                                                                                                                                                                                                                  |
 | Synthetic canaries stay contained                                       | `VERIFIED` (deterministic; live payload fixture)                               | Control sequences removed from terminal and Slack bodies in tests; the live probe body escaped `& < >`; Slack rendering of the live body is `NOT_OBSERVED`                                                                                                                                                                                                                                                                                             |
-| Required checks pass; PR records OS/client coverage                     | `PASS` (automated CI); live probe `VERIFIED`; manual acceptance `GAP`          | Full CI [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) passed on `eaf34114`; focused checks pass at the live-probe revision `0200ad3f`; the PR body records Linux `x86_64`, Darwin arm64, the live probe, and the unverified external clients. Passing CI is evidence for this manual criterion, not an acceptance record. |
-| Cumulative OWASP report updated                                         | `IMPLEMENTED` (this PR)                                                        | `docs/reports/owasp-llm/README.md`                                                                                                                                                                                                                                                                                                                                                                                                                     |
-| No full coverage inferred from plan/PR existence                        | `VERIFIED`                                                                     | The matrix separates `IMPLEMENTED`, `VERIFIED`, `NOT_RUN`, `GAP`, and `NOT_APPLICABLE`                                                                                                                                                                                                                                                                                                                                                                 |
+| Required checks pass; PR records OS/client coverage | `ACCEPTED` (manual criterion); automated CI passed | Full CI [42718751282](https://github.com/imhttran/agentic-sop/actions/runs/42718751282) and CodeQL [42718748910](https://github.com/imhttran/agentic-sop/actions/runs/42718748910) passed on `eaf34114`; focused checks pass at `0200ad3f`; verification/acceptance at `afc92022`; PR-head CI `8f06afa0` passed; the merge-commit CI run was partially cancelled and is not claimed as a full pass. The six decisions are recorded in `acceptance_decisions.jsonl`; third-party clients and Slack rendering remain unverified. |
+| Cumulative OWASP report updated                                         | `VERIFIED`                                                                     | `docs/reports/owasp-llm/README.md` records the final Plan 10 disposition, bounded claim, and limitations.                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| No full coverage inferred from plan/PR existence                        | `VERIFIED`                                                                     | The matrix separates `IMPLEMENTED`, `VERIFIED`, `ACCEPTED`, `NOT_RUN`, `GAP`, and `NOT_APPLICABLE`, and records historicalization separately                                                                                                                                                                                                                                                                                                                                                                 |
 
 ## Live-evidence and governance states
 
@@ -293,9 +319,9 @@ dimensions that the matrix keeps visible.
 | Live Slack delivery (transport)              | `VERIFIED` (once)             | One authorized synthetic event was delivered through the configured webhook at `0200ad3f`; the outbox recorded `DELIVERED` on attempt 1 with `delivered=1`, `pending=0`, `exhausted=0`. See [llm10-live-delivery.md](llm10-live-delivery.md).                                                                                                  |
 | Observed Slack rendering                     | `NOT_OBSERVED`                | No authenticated Slack session was available on the test host. The channel name, visible text, and absence of pings remain a human observation.                                                                                                                                                                                                |
 | Live send authorization                      | `RECORDED` (task instruction) | The operator commissioning this work authorized one synthetic notification to `#sop-alert`; no separate signed approval reference exists in the repository.                                                                                                                                                                                    |
-| Manual acceptance by the designated approver | `PARTIAL`                     | `OUTPUT-001` criteria 1–3 were accepted in the local verification run at `afc92022` by the designated approver, bound to content identity `2d6a7c8f…`. `OUTPUT-002` criterion 7 and `OUTPUT-003` criteria 3 and 5 remain unaccepted because those tasks have not reached their own gates. Passing CI and the live transport probe are evidence, not acceptance. See [llm10-acceptance-request.md](llm10-acceptance-request.md). |
-| Manual-acceptance binding                    | `LIMITATION`                  | `sop outcome --accept` requires a run-derived `outcome.json` with a manual mapping and repository content identity. `sop task complete --external` clears `outcome.json`, so external completion cannot bind the six decisions. Plan closure does not read `acceptance_decisions.jsonl`; readiness alone is not acceptance.                    |
-| SOP lifecycle completion                     | `LOCAL / GAP`                 | A local owning state exists in `.llm10-verify` (not repository-owned): plan `ACTIVE`, `OUTPUT-001` `LOCAL_DONE`/`VERIFIED`, `OUTPUT-002` parked at `NEEDS_HUMAN`, `OUTPUT-003` `PLANNED`. `sop continue --check` returns `APPROVAL_REQUIRED`; `sop plan historicalize --check` is ineligible for unresolved work and `Unresolved verification: OUTPUT-001`. The `OUTPUT-001` run stage remains `WAITING_FOR_HUMAN`, an observed record inconsistency; records were not patched by hand. No completion or historicalization is claimed. |
+| Manual acceptance by the designated approver | `ACCEPTED` | All six manual criteria were accepted at `afc92022` (content identity `2d6a7c8f…`) by the designated approver (Tom Tran): OUTPUT-001 criteria 1–3, OUTPUT-002 criterion 7, and OUTPUT-003 criteria 3 and 5. The decisions are in `acceptance_decisions.jsonl` with attempt 0→1 recoveries. |
+| Manual-acceptance binding | `RESOLVED FOR THIS PLAN` | The six decisions are bound to the accepted outcome's content identity and attempt via `acceptance_decisions.jsonl` and `acceptance_recoveries.jsonl`. The general limitation remains: `sop outcome --accept` requires a run-derived outcome, and external completion cannot bind it. |
+| SOP lifecycle completion | `HISTORICALIZED / COMPLETE` | Plan `plan-10-sop-llm10-improper-output-handling` was historicalized `COMPLETE` at `2026-11-10T04:02:39.918545Z`. Archive: `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`. The three affected run stages were repaired with the merged binary from `3fc1b90f` (PR #348), one `stage-recoveries.jsonl` audit per task; task status, attempt, outcome, validation, and acceptance evidence were unchanged. PR-head CI `8f06afa0` passed; the merge-commit CI run was partially cancelled after a newer main push and is not claimed as a full pass. |
 
 ## Residual risks and limitations
 
@@ -313,29 +339,26 @@ dimensions that the matrix keeps visible.
 
 ## Handoff
 
-- Display-sink handling is implemented for the SOP-owned CLI terminal and the Slack
-  payload encoder; loopback HTTP transport is verified, and one authorized live
-  Slack delivery was confirmed at `0200ad3f` (outbox `DELIVERED`, attempt 1, no
-  retry). The wrap-up merged in PR #328 (`35340774`) with full CI passing on
-  `eaf34114`. Observed Slack rendering remains `NOT_OBSERVED`, and manual
-  acceptance is not recorded.
-- The merged documentation PR is not an SOP lifecycle transition: no owning plan
-  state exists, and no completion or historicalization is claimed. `sop plan
-historicalize --check` is ineligible (`no active plan is recorded`), and `sop
-continue --check` returns `HUMAN_REVIEW_REQUIRED`.
+- LLM10 scoped protections are implemented, verified, and accepted with
+  documented limitations. The CLI terminal sink and Slack payload encoder are
+  verified; loopback and one live Slack transport delivery are verified. All six
+  manual criteria are accepted and Plan 10 is historicalized `COMPLETE`.
+- The accepted-outcome stage defect was fixed in PR #348; the affected records
+  were repaired with the merged binary from `3fc1b90f`. The archive is
+  `.agent-sdlc/archive/plan-10-sop-llm10-improper-output-handling/`, with run
+  evidence under `.agent-sdlc/runs/OUTPUT-001..003/`. The original Slack probe
+  evidence remains separately attributed at `0200ad3f`.
 - No shell, path, database, or protocol violation was reproduced at the current
   baseline; those controls remain owned by their existing packages.
-- External client rendering and Slack auto-unfurl remain explicitly unverified.
-  The live transport succeeded, but the channel binding, rendered text, and
-  absence of pings still need a human observation in `#sop-alert`.
-- Bounded claim: on the verified SOP-owned sinks (CLI stdout/stderr, Slack payload
-  encoder, MCP/ACP JSON, loopback webhook transport, and one live webhook
-  delivery), SOP removes terminal control characters from console display, escapes
-  `&`/`<`/`>` in Slack mrkdwn so angle-bracket mentions and masked links cannot be
-  injected, and keeps protocol output valid JSON. This is not a claim that all
-  improper output handling is prevented, and it does not cover third-party
-  renderers, persisted Markdown rendering, Slack auto-unfurl, observed Slack
-  rendering, or unexecuted platforms.
+- Slack rendering, the `#sop-alert` channel binding, Slack auto-unfurl, external
+  terminal/IDE/editor rendering, persisted Markdown rendering, Windows terminal
+  behavior, and provider/tool output as model input remain explicit limitations.
+- Bounded claim: **LLM10 scoped protections implemented, verified, and accepted
+  with documented limitations.** On the verified SOP-owned sinks, SOP removes
+  terminal control characters from console display, escapes `&`/`<`/`>` in Slack
+  mrkdwn, keeps protocol output valid JSON, and retains the existing shell, path,
+  SQL, and authorization boundaries. One live Slack webhook transport delivery
+  was confirmed. This is not full LLM10 coverage.
 - Plan 01 (LLM03 action authority) merged to `main` at `985472a` (PR #271) while
   this branch was in review; its report is linked in the cumulative matrix. This
   plan does not depend on its code to enforce the sink-specific controls above.
