@@ -293,10 +293,49 @@ lifecycle with a valid historical positive control:
 | After rebuild  | `RebuildFromDir` again                                                                    | `Indexed=1`, `Excluded=2`; `Index.Status.Records=1`; only `HIST-KEEP` is returned                     |
 
 The valid historical record is the positive control in both the before-rebuild and
-after-rebuild states. The focused command was:
+after-rebuild states.
+
+### RETRIEVE-102 before/after rebuild acceptance mapping
+
+RETRIEVE-102 acceptance criteria (acceptance check 1 is the focused command in the
+next subsection):
+
+| Criterion                                                                            | Check                                                                                                              |
+| ------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| 1. Both the read-path before-rebuild state and the after-rebuild state are recorded. | Check 1: `go test ./internal/memindex -run TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl -count=1` |
+| 2. The modified and deleted sources are excluded in both states.                     | Check 1 (asserts `HIST-MOD` and `HIST-DEL` are absent before and after rebuild)                                    |
+| 3. The valid historical record remains retrievable as the positive control.          | Check 1 (asserts `HIST-KEEP` is returned before and after rebuild)                                                 |
+| 4. The exact focused command and observed result are recorded.                       | Manual review of §Before/after rebuild evidence and §Verification record                                           |
+
+### RETRIEVE-101 withdrawal and acceptance mapping
+
+The earlier report claim that a rebuild "silently fails to import another workspace"
+is **withdrawn**. The claim is not restated as current behavior. It was incorrect: `Index.RebuildFromDir` imports every eligible
+record in the directory it is given and applies no repository filter. The behavior the
+report now states is:
+
+- A **shared** outcomes directory imports both repositories' rows. The scoped query
+  (`Index.Search` with `Scope.Repository`) returns only the trusted repository and does
+  not return the other repository's imported row. This is query isolation, not import
+  isolation.
+- A **workspace-local** outcomes directory imports only that workspace's rows. This is
+  the supported layout for import isolation.
+
+RETRIEVE-101 acceptance mapping:
+
+| Criterion                                                                                                | Check                                                                                                             |
+| -------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1. The test measures imported rows directly, not only query results.                                     | Check 1: `go test ./internal/memindex -run TestLLM09RebuildImportVersusQueryIsolation -count=1`                   |
+| 2. A shared outcomes directory imports the cross-repository row and the scoped query does not return it. | Check 1 (asserts `RebuildReport.Indexed=2`, `Index.Status.Records=2`, and that the scoped query excludes `IMP-B`) |
+| 3. A workspace-local outcomes directory imports only its own row.                                        | Check 1 (asserts `RebuildReport.Indexed=1` and `Index.Status.Records=1` for the alpha-only directory)             |
+| 4. The report withdraws the earlier import-isolation claim and states the supported layout.              | Manual review of this section (§Rebuild and invalidation evidence)                                                |
+
+The focused commands for the RETRIEVE-101 acceptance criteria were:
 
 ```sh
-go test ./internal/memindex -run 'TestLLM09RebuildImportVersusQueryIsolation|TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl' -count=1
+go test ./internal/memindex -run TestLLM09RebuildImportVersusQueryIsolation -count=1
+# ok
+go test ./internal/memindex -run TestLLM09RebuildScopeParity -count=1
 # ok
 ```
 
@@ -311,6 +350,24 @@ go test ./internal/memindex -run 'TestLLM09RebuildImportVersusQueryIsolation|Tes
 - Rebuild removes only derived index rows; authoritative outcome files and user indexes
   are not deleted. The shared-index behavior above is an operator configuration, not a
   supported cross-project store.
+
+### RETRIEVE-103 producer-boundary and authority evidence
+
+`TestAcceptanceProducerContract` is compiled only under the `ragacceptance` tag and
+requires a live producer and PostgreSQL. It sends one single-corpus request
+(`corpus: kb`), checks that every returned item carries `kb` and populated provenance,
+then checks client-side allowlist rejection (`nope`) and producer-side allowlist
+rejection of an unconfigured corpus (`other`). It does **not** create two disposable
+corpora with overlapping document names or canaries, so it does not establish
+cross-corpus producer isolation. At this baseline `RAG_PRODUCER` and `DATABASE_URL` are
+unset, so the test is **NOT_RUN**; it fails rather than skips when either is missing.
+
+| Criterion                                                                                                                                   | Evidence and observed result                                                                                                                                                                                                                                                                                                                                                                                        |
+| ------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1. Client-side mixed-corpus rejection is stated separately from producer-side query scoping.                                                | `TestLLM09CrossCorpusCanaryRejected` (`internal/ragclient/llm09_test.go`) rejects a mixed `project-a`/`project-b` response and accepts the single-corpus control. Command: `go test ./internal/ragclient -run TestLLM09CrossCorpusCanaryRejected -count=1` → `ok`. Producer-side query scoping remains **NOT_RUN**.                                                                                                 |
+| 2. Producer-side isolation is verified with two disposable corpora and recorded revisions, or recorded `NOT_RUN` with the exact dependency. | **NOT_RUN.** Exact dependencies: `RAG_PRODUCER` and `DATABASE_URL` (both unset). The tagged test is `go test -tags ragacceptance ./internal/ragclient -run TestAcceptanceProducerContract -count=1`; its single-corpus scope is described above.                                                                                                                                                                    |
+| 3. The authority section states what the tests prove and what they do not prove, including model influence.                                 | `TestPromptKnowledgeBoundaryPresent`, `TestPromptMaliciousDelimiterCannotTerminate`, `TestLLM09MaliciousInstructionIsUntrustedData`, and `TestRequiredEvidenceMissingBlocks` pass. They prove the prompt boundary, delimiter neutralization, approval-shaped-record rejection, and required-evidence blocking. They do not prove a model cannot be persuaded by retrieved text; see §Content classes and authority. |
+| 4. No production retrieval is enabled and no mock result is presented as live evidence.                                                     | Advisory retrieval is disabled by default; RAG is disabled with a NO-GO rollout decision. The client tests use a fake runner; no mock result is presented as live producer evidence. Commands and results above are local deterministic tests only.                                                                                                                                                                 |
 
 ## Historical down-weighting
 
@@ -347,12 +404,12 @@ or scope is added beyond those lists.
 
 Follow-up plan: [`PLAN-09B-SOP-LLM09-Retrieval-Followup.md`](../../plans/PLAN-09B-SOP-LLM09-Retrieval-Followup.md).
 
-| Task         | Criterion                                                                                                      | IMPLEMENTED | ENABLED | VERIFIED                                                                    | Evidence                                                                     |
-| ------------ | -------------------------------------------------------------------------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
-| RETRIEVE-101 | Separate rebuild import scope from query scope and correct the report                                          | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildImportVersusQueryIsolation`; §Before/after rebuild evidence |
-| RETRIEVE-102 | Record before/after rebuild behavior for modified and deleted sources with a valid historical positive control | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl`              |
-| RETRIEVE-103 | Distinguish client-side response validation from producer-side corpus isolation; state authority limits        | Yes         | N/A     | **Partial** — client/authority boundary verified; producer-side **NOT_RUN** | §Backend coverage matrix; §Content classes and authority                     |
-| RETRIEVE-104 | Reconcile acceptance mappings, Plan 05/07 dependency status, and the OWASP matrix                              | Yes         | N/A     | Yes                                                                         | This section; §Dependency handoff; `docs/reports/owasp-llm/README.md`        |
+| Task         | Criterion                                                                                                      | IMPLEMENTED | ENABLED | VERIFIED                                                                    | Evidence                                                                                                                                                  |
+| ------------ | -------------------------------------------------------------------------------------------------------------- | ----------- | ------- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| RETRIEVE-101 | Separate rebuild import scope from query scope and correct the report                                          | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildImportVersusQueryIsolation`; §Before/after rebuild evidence                                                                              |
+| RETRIEVE-102 | Record before/after rebuild behavior for modified and deleted sources with a valid historical positive control | Yes         | N/A     | Yes                                                                         | `TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl`                                                                                           |
+| RETRIEVE-103 | Distinguish client-side response validation from producer-side corpus isolation; state authority limits        | Yes         | N/A     | **Partial** — client/authority boundary verified; producer-side **NOT_RUN** | §RETRIEVE-103 producer-boundary and authority evidence; `TestLLM09CrossCorpusCanaryRejected`; `producer_acceptance_test.go` (single-corpus only, NOT_RUN) |
+| RETRIEVE-104 | Reconcile acceptance mappings, Plan 05/07 dependency status, and the OWASP matrix                              | Yes         | N/A     | Yes                                                                         | This section; §Dependency handoff; `docs/reports/owasp-llm/README.md`                                                                                     |
 
 ## Verified references
 
@@ -365,7 +422,7 @@ verified location, not a placeholder.
 - `internal/retrieval/retrieval.go` — `HistoricalWeight = 0.5` and `CandidatesFromIndex`.
 - `internal/retrieval/retrieval_test.go` — `TestCandidatesFromIndexFullTextAndHistory`.
 - `internal/ragclient/ragclient.go` — `Client.Retrieve` and `decode` (client-side corpus validation).
-- `internal/ragclient/producer_acceptance_test.go` — tagged live-producer acceptance test; requires `RAG_PRODUCER` and `DATABASE_URL`.
+- `internal/ragclient/producer_acceptance_test.go` — tagged live-producer single-corpus contract and allowlist test; requires `RAG_PRODUCER` and `DATABASE_URL`. It does not establish cross-corpus producer isolation.
 - `internal/prompt/compile.go` — `safeKnowledgeText`, `knowledgeOpen`, `knowledgeClose`, and `knowledgeNotice`.
 - `internal/prompt/rag_knowledge_test.go` — prompt boundary and malicious-delimiter tests.
 - `internal/context/rag.go` — `KnowledgeItems`, untrusted evidence conversion, and byte/result bounds.
@@ -439,6 +496,8 @@ Environment: macOS arm64, Go `1.27.1`, `modernc.org/sqlite v1.59.0`, base commit
 were run in the isolated `security/llm09-retrieval-followup` worktree.
 
 ```sh
+go test ./internal/memindex -run TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl -count=1
+# ok
 go test ./internal/memindex -run TestLLM09 -count=1
 # ok
 go test ./internal/memindex -run 'TestLLM09RebuildImportVersusQueryIsolation|TestLLM09RebuildModifiedAndDeletedSourceWithHistoricalControl' -count=1

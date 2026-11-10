@@ -275,6 +275,18 @@ func TestLLM09RebuildImportVersusQueryIsolation(t *testing.T) {
 	if st.Records != 2 {
 		t.Fatalf("shared index holds %d rows, want 2", st.Records)
 	}
+	// Measure the imported rows directly from the records table, independent of
+	// Index.Search: the shared index physically holds both repositories' rows.
+	sharedRows, err := ix.HashRows(context.Background())
+	if err != nil {
+		t.Fatalf("shared hash rows: %v", err)
+	}
+	if _, ok := sharedRows["IMP-A"]; !ok {
+		t.Fatalf("shared index is missing in-scope row IMP-A: %v", sharedRows)
+	}
+	if _, ok := sharedRows["IMP-B"]; !ok {
+		t.Fatalf("shared index did not import cross-repository row IMP-B: %v", sharedRows)
+	}
 
 	// The cross-repository row is physically present, but a scoped query must not
 	// return it. This is query isolation, not import isolation.
@@ -310,6 +322,19 @@ func TestLLM09RebuildImportVersusQueryIsolation(t *testing.T) {
 	}
 	if stA.Records != 1 {
 		t.Fatalf("alpha index holds %d rows, want 1", stA.Records)
+	}
+	alphaRows, err := ixA.HashRows(context.Background())
+	if err != nil {
+		t.Fatalf("alpha hash rows: %v", err)
+	}
+	if len(alphaRows) != 1 {
+		t.Fatalf("alpha index imported %d rows, want 1: %v", len(alphaRows), alphaRows)
+	}
+	if _, ok := alphaRows["IMP-A"]; !ok {
+		t.Fatalf("alpha index is missing its own row IMP-A: %v", alphaRows)
+	}
+	if _, ok := alphaRows["IMP-B"]; ok {
+		t.Fatalf("alpha-only directory imported cross-repository row IMP-B: %v", alphaRows)
 	}
 	gotA := llm09Retrieve(t, ixA, alphaOutcomes, "project-alpha", "import isolation CANARY-ALPHA CANARY-BETA retry fix")
 	if !llm09Contains(gotA, "IMP-A") || llm09Contains(gotA, "IMP-B") {

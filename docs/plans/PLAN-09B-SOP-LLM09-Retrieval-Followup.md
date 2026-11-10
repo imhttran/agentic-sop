@@ -146,8 +146,8 @@ the untested model-influence limitation.
 
 ### Deliverables
 
-- `docs/reports/owasp-llm/llm09-retrieval.md` — backend matrix split between client-side validation and producer-side isolation; authority boundary statement; `NOT_RUN` dependency record.
-- `internal/ragclient/producer_acceptance_test.go` — reused as the live acceptance check; no mock result is recorded as live evidence.
+- `docs/reports/owasp-llm/llm09-retrieval.md` — §RETRIEVE-103 producer-boundary and authority evidence records the client/producer split, the exact commands and observed results, the authority limits, and the `NOT_RUN` dependency record.
+- `internal/ragclient/producer_acceptance_test.go` — tagged `ragacceptance` single-corpus contract and allowlist test; it does not establish cross-corpus producer isolation. No mock result is recorded as live evidence.
 
 ### Acceptance Criteria
 
@@ -167,10 +167,10 @@ the untested model-influence limitation.
 
 ### Acceptance Mapping
 
-- criterion 1: manual: docs/reports/owasp-llm/llm09-retrieval.md §Backend coverage matrix
-- criterion 2: manual: docs/reports/owasp-llm/llm09-retrieval.md §Follow-up verification
+- criterion 1: manual: docs/reports/owasp-llm/llm09-retrieval.md §RETRIEVE-103 producer-boundary and authority evidence
+- criterion 2: manual: docs/reports/owasp-llm/llm09-retrieval.md §RETRIEVE-103 producer-boundary and authority evidence
 - criterion 3: manual: docs/reports/owasp-llm/llm09-retrieval.md §Content classes and authority
-- criterion 4: manual: docs/reports/owasp-llm/llm09-retrieval.md §Follow-up verification
+- criterion 4: manual: docs/reports/owasp-llm/llm09-retrieval.md §RETRIEVE-103 producer-boundary and authority evidence
 
 ## RETRIEVE-104 — Reconcile acceptance mappings, dependency status, and the OWASP matrix
 
