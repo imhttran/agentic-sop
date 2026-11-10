@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — coverage statement
 
-**As of:** `main` at `0035fa9c` (2026-11-09, after PR #343).
+**As of:** `main` at `d69e9f63` (2026-11-10, LLM02 C1 reconciliation).
 
 This statement answers one question for each of the ten OWASP LLM risks: what
 SOP covers, where the evidence is, and what it does not cover, with the reason.
@@ -14,18 +14,18 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
 ## Summary
 
-| OWASP 2025 | Repo plan / label | Risk | Coverage | Main remaining gap |
-| --- | --- | --- | --- | --- |
-| LLM01 | Plan 02 / LLM01 | Prompt Injection | Covered (controls + bounded live campaigns) | One model per platform; no universal claim |
-| LLM02 | Plan 03 / LLM02 | Sensitive Information Disclosure | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default; broader coverage `OPEN` |
-| LLM03 | Plan 04 / LLM04 | Supply Chain | Partial | Model provenance and publisher signatures out of SOP's control |
-| LLM04 | Plan 05 / LLM05 | Data and Model Poisoning | Partial | Integrity proves bytes, not benign content; provider training external |
-| LLM05 | Plan 10 / LLM10 | Improper Output Handling | Covered for SOP's sinks | Third-party rendering (terminal, IDE, Slack) external |
-| LLM06 | Plan 01 / LLM03 | Excessive Agency | Covered (policy) + opt-in sandbox on macOS and Linux | Sandbox off by default; cold build cache per run |
-| LLM07 | Plan 08 / LLM08 | System Prompt Leakage (repo: Hidden Context Exposure) | Partial | Prompt secrecy is not claimed by design |
-| LLM08 | Plan 09 / LLM09 | Vector and Embedding Weaknesses | Covered for the shipped (disabled-by-default) path | Live RAG / PostgreSQL / embeddings `NOT_RUN` |
-| LLM09 | Plan 07 / LLM07 | Misinformation | Partial, by scope | Factual correctness of model output is out of scope |
-| LLM10 | Plan 06 / LLM06 | Unbounded Consumption | Covered for time, output, process and opt-in token budgets | No dollar cap (no pricing data) |
+| OWASP 2025 | Repo plan / label | Risk                                                  | Coverage                                                                                                                                                                                         | Main remaining gap                                                                                                                                                 |
+| ---------- | ----------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| LLM01      | Plan 02 / LLM01   | Prompt Injection                                      | Covered (controls + bounded live campaigns)                                                                                                                                                      | One model per platform; no universal claim                                                                                                                         |
+| LLM02      | Plan 03 / LLM02   | Sensitive Information Disclosure                      | Covered for the user prompt and tool results (trace + macOS/Linux live campaigns); bounded evidence acceptance `RECORDED`; C1 unknown-format redaction `IMPLEMENTED` opt-in (PRs #361/#362/#364) | Not general DLP; four Linux residual exposures; full Plan 03 acceptance `NEEDS_HUMAN`; C1 disabled by default and C1 Linux live `NOT_RUN`; broader coverage `OPEN` |
+| LLM03      | Plan 04 / LLM04   | Supply Chain                                          | Partial                                                                                                                                                                                          | Model provenance and publisher signatures out of SOP's control                                                                                                     |
+| LLM04      | Plan 05 / LLM05   | Data and Model Poisoning                              | Partial                                                                                                                                                                                          | Integrity proves bytes, not benign content; provider training external                                                                                             |
+| LLM05      | Plan 10 / LLM10   | Improper Output Handling                              | Covered for SOP's sinks                                                                                                                                                                          | Third-party rendering (terminal, IDE, Slack) external                                                                                                              |
+| LLM06      | Plan 01 / LLM03   | Excessive Agency                                      | Covered (policy) + opt-in sandbox on macOS and Linux                                                                                                                                             | Sandbox off by default; cold build cache per run                                                                                                                   |
+| LLM07      | Plan 08 / LLM08   | System Prompt Leakage (repo: Hidden Context Exposure) | Partial                                                                                                                                                                                          | Prompt secrecy is not claimed by design                                                                                                                            |
+| LLM08      | Plan 09 / LLM09   | Vector and Embedding Weaknesses                       | Covered for the shipped (disabled-by-default) path                                                                                                                                               | Live RAG / PostgreSQL / embeddings `NOT_RUN`                                                                                                                       |
+| LLM09      | Plan 07 / LLM07   | Misinformation                                        | Partial, by scope                                                                                                                                                                                | Factual correctness of model output is out of scope                                                                                                                |
+| LLM10      | Plan 06 / LLM06   | Unbounded Consumption                                 | Covered for time, output, process and opt-in token budgets                                                                                                                                       | No dollar cap (no pricing data)                                                                                                                                    |
 
 ## Per risk
 
@@ -77,11 +77,15 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     [PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md](../../plans/PROPOSAL-LLM02-UNKNOWN-FORMAT-REDACTION.md);
     C1 is now implemented opt-in (decision memory
     `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`).
-  - C1 unknown-format redaction covers exact inventory values, contextual
-    credential keys, and approved known formats; deterministic tests cover
-    placeholders, fail-closed inventory, and the real harness/user-prompt wiring.
-    The repository configuration remains disabled, so the pre-C1 residual
-    remains until an operator enables it.
+  - C1 unknown-format redaction is merged (PRs #361/#362/#364) and covers exact
+    inventory values, contextual credential keys, and approved known formats;
+    deterministic tests cover placeholders, fail-closed inventory, and the real
+    harness/user-prompt wiring. Verification is `PASS` on macOS arm64 at
+    `d69e9f63`; Linux deterministic re-verification of the final C1 code and C1
+    Linux live verification are `NOT_RUN`. C1 applies to the local Ollama
+    tool-harness boundary (`userPrompt`, `toolResultMessage`), not the
+    OpenAI-compatible provider path. The repository configuration remains
+    disabled, so the pre-C1 residual remains until an operator enables it.
 
 ### LLM03 Supply Chain — partial
 
@@ -103,6 +107,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Recovery by reindexing and by removing decision-memory entries.
 
   Evidence: [llm05-poisoning.md](llm05-poisoning.md).
+
 - **Not covered, and why:**
   - A digest proves the bytes are unchanged, not that the content is benign, so
     content poisoned inside an authorized repository is not detected.
@@ -117,6 +122,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Shell, path, database and protocol controls were inspected.
 
   Evidence: [llm10-output-handling.md](llm10-output-handling.md).
+
 - **Not covered, and why:** rendering in third-party terminals and IDEs,
   persisted Markdown, and Slack unfurl are outside SOP. How Slack rendered the
   message was not observed. Manual acceptance is pending with the approver.
@@ -136,6 +142,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
 
   Evidence: [llm03-agency.md](llm03-agency.md),
   [seatbelt-evidence.md](../security-shift-left/seatbelt-evidence.md#run_command-opt-in-sandbox-llm03).
+
 - **Not covered, and why:**
   - The sandbox is off by default.
   - On Linux the sandbox uses its own network namespace, so a test cannot
@@ -155,6 +162,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
   - Model input is redacted at the single tool-result boundary.
 
   Evidence: [llm08-hidden-context.md](llm08-hidden-context.md).
+
 - **Not covered, and why:** SOP does not treat its prompts as secret and does
   not rely on prompt secrecy for security, so prompt secrecy is not claimed.
   Secrets in an unknown format in command output, provider retention, and
@@ -196,6 +204,7 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     before every model request. It refuses the request once the run's reported
     input plus output tokens reach the budget, and fails closed when usage can't
     be measured (`TestCheckTokenBudget`, `TestTokenBudgetRefusesBeforeDispatch`).
+
 - **Not covered, and why:**
   - The budget is off by default.
   - It is a token cap, not a dollar cap: SOP has no pricing data.
