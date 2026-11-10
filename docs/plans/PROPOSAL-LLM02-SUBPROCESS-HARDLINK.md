@@ -1,6 +1,6 @@
 # Proposal — LLM02 subprocess hardlink protection
 
-Status: **PROPOSAL — NOT_APPROVED. Decision required. No production enforcement is included.**
+Status: **RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED). Option D approved; no enforcement implemented.**
 Date: 2026-11-10.
 Baseline: `origin/main` at `8c36d48c` (after PRs #381 and #384).
 Evidence: Linux `amd64`, Go 1.27.1, bubblewrap 0.9.0.
@@ -10,6 +10,28 @@ tested revision `c569cd51`), [bubblewrap-verification.md](../reports/security-sh
 [PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md](PROPOSAL-LLM02-HARDLINK-PATH-IDENTITY.md),
 [llm02-disclosure.md](../reports/owasp-llm/llm02-disclosure.md), and
 [gap-register-20261109.md](../reports/owasp-llm/gap-register-20261109.md).
+
+## Recorded decision
+
+- **Decision:** `APPROVE_OPTION_D_SUBPROCESS_HARDLINK`
+- **Disposition:** `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`
+- **Authority:** explicit repository-operator approval in the governance instruction.
+- **Decision-memory identity:** repository `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`,
+  source `operator:option-d-subprocess-hardlink-2026-11-10`.
+- **Date:** 2026-11-10.
+- **Evidence:** PR #385 merge `afff6b3e`; PR #384 Linux campaign artifact
+  `1baa836ba7511d73dc79c907e6e6af01d86ca62936d634d08c1687b8ddb661f3`; PR #381
+  implementation `4911f916`; feasibility probes in
+  `internal/toolharness/isolation_hardlink_feasibility_test.go`.
+- **Accepted risk:** a pre-existing ordinary-name hardlink to a protected
+  credential can remain readable by a SAFE `run_command` subprocess inside the
+  opt-in Bubblewrap sandbox.
+- **Not accepted:** direct credential reads with isolation off, Option C-bounded,
+  other LLM02 residual risks, Plan 03 acceptance, and full LLM02 completion.
+- **Preserved:** opt-in isolation; A+B, C1, and Option C Phase 1 file-tool
+  protections; direct credential-path and symlink denial.
+- **No production enforcement** is added. The record is a repository-scoped
+  decision-memory entry; it does not create Plan 03 acceptance.
 
 ## Problem
 
@@ -149,9 +171,8 @@ It is not proposed here.
 
 ## Recommendation
 
-**Option D — accept the residual**, with Option C-bounded available only if the
-operator explicitly wants a partial workspace/home defense and accepts its
-outside-scope limitation.
+**Option D is approved and recorded.** Option C-bounded is not authorized. The
+residual is accepted for the documented scope; it is not marked closed.
 
 Rationale:
 
@@ -165,12 +186,13 @@ Rationale:
   It remains a real local residual, but accepting it is more defensible than
   shipping an enforcement layer with a false sense of completeness.
 
-If the operator chooses the residual, record it as accepted for this scope; do
-not mark the subprocess hardlink risk closed.
+The subprocess hardlink risk remains a real residual. It is accepted only for
+this bounded scope and is not marked fixed or closed.
 
 ## Exact policy decision required
 
-One of:
+**Decision recorded 2026-11-10: Option D. Option C-bounded is not authorized.**
+The options below are retained as the evaluation history.
 
 1. **Accept Option D (recommended):** retain the current path masks and A+B/C1;
    accept the residual that a pre-existing ordinary-name hardlink can be read by
@@ -185,9 +207,10 @@ One of:
 3. **Reject both:** leave the current documentation and revisit if the threat
    model changes.
 
-Status: **NOT_APPROVED.** No production enforcement is included.
+Status: **RECORDED — Option D accepted; Option C-bounded not authorized; no
+production enforcement is included.**
 
-## Implementation boundaries if Option C-bounded is authorized
+## Implementation boundaries (not authorized; retained for a future Option C-bounded decision)
 
 - `internal/toolharness/isolation.go` only: a run-local identity/alias scan
   before `bubblewrapArgs`; no shared mutable registry with the file-tool
@@ -219,7 +242,9 @@ Status: **NOT_APPROVED.** No production enforcement is included.
 
 ## Residual limitations
 
-- The recommended Option D leaves the demonstrated alias readable.
+- The subprocess hardlink residual is
+  `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)`; the alias remains
+  readable and is not fixed.
 - Option C-bounded would leave aliases outside the scanned roots, post-snapshot
   aliases, replacement/inode-reuse cases, and any alias created between the
   scan and the mount.
