@@ -11,7 +11,23 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
+
+// probeEndpointReachable reports whether the fixed live endpoint accepts a TCP
+// connection from the current process. It is the positive control for the
+// Seatbelt live-network rule; the campaign child calls it from inside the
+// sandbox.
+func probeEndpointReachable() bool {
+	conn, err := net.DialTimeout("tcp", "127.0.0.1:11434", 2*time.Second)
+	if err != nil {
+		return false
+	}
+	_ = conn.Close()
+	return true
+}
+
+func probeEndpointDetail() string { return "tcp 127.0.0.1:11434" }
 
 // TestDarwinIsolationBlocksOrdinaryWorkspace proves the isolation boundary is
 // enforced by the OS, not by a temporary directory convention: a sandboxed

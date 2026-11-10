@@ -1,4 +1,4 @@
-//go:build darwin && (llm01_live || llm08_live || llm02_live)
+//go:build (darwin || linux) && (llm01_live || llm08_live || llm02_live)
 
 package evaltarget
 
@@ -6,6 +6,8 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -74,7 +76,9 @@ func campaignControls(t *testing.T, lc LiveCase) (Controls, func()) {
 	return &ProductionControls{Approvals: svc, TaskID: taskID}, func() { _ = st.Close() }
 }
 
-// runBoundaryProbes proves the sandbox rules from inside the boundary.
+// runBoundaryProbes proves the sandbox rules from inside the boundary. Each
+// network denial that has a host-side positive control records that control in
+// its detail, so a failed connection alone is never treated as evidence.
 func runBoundaryProbes(t *testing.T, outside string) []campaignProbe {
 	t.Helper()
 	dial := func(host, port string) bool {
@@ -91,11 +95,33 @@ func runBoundaryProbes(t *testing.T, outside string) []campaignProbe {
 			outsideRead = true
 		}
 	}
-	return []campaignProbe{
-		{Name: "endpoint_reachable", OK: dial("127.0.0.1", "11434"), Detail: "tcp 127.0.0.1:11434"},
-		{Name: "other_loopback_denied", OK: !dial("127.0.0.1", "11435"), Detail: "tcp 127.0.0.1:11435"},
-		{Name: "non_loopback_denied", OK: !dial("1.1.1.1", "443"), Detail: "tcp 1.1.1.1:443"},
+	negativePort := strings.TrimSpace(os.Getenv("SOP_LIVE_NEGATIVE_PORT"))
+	if negativePort == "" {
+		negativePort = "11435"
+	}
+	negativeControl := strings.TrimSpace(os.Getenv("SOP_LIVE_NEGATIVE_CONTROL"))
+	if negativeControl == "" {
+		negativeControl = "not-recorded"
+	}
+	externalControl := strings.TrimSpace(os.Getenv("SOP_LIVE_EXTERNAL_REACHABLE"))
+	if externalControl == "" {
+		externalControl = "not-recorded"
+	}
+	probes := []campaignProbe{
+		{Name: "endpoint_reachable", OK: probeEndpointReachable(), Detail: probeEndpointDetail()},
+		{Name: "other_loopback_denied", OK: !dial("127.0.0.1", negativePort), Detail: "tcp 127.0.0.1:" + negativePort + "; host_control_reachable=" + negativeControl},
+		{Name: "non_loopback_denied", OK: !dial("1.1.1.1", "443"), Detail: "tcp 1.1.1.1:443; host_control_reachable=" + externalControl},
 		{Name: "filesystem_outside_denied", OK: !outsideRead, Detail: outside},
 		{Name: "secret_env_scrubbed", OK: os.Getenv("OPENAI_API_KEY") == "", Detail: "OPENAI_API_KEY"},
 	}
+	if runtime.GOOS == "linux" {
+		// On Linux the endpoint is transported over a Unix socket, so direct TCP to
+		// the same loopback port must also be denied. On macOS the live profile
+		// permits that TCP destination directly, so the probe does not apply.
+		probes = append(probes, campaignProbe{
+			Name: "endpoint_direct_tcp_denied", OK: !dial("127.0.0.1", "11434"),
+			Detail: "tcp 127.0.0.1:11434 from inside the live sandbox",
+		})
+	}
+	return probes
 }

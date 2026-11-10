@@ -63,6 +63,17 @@ const LiveEndpointURL = "http://127.0.0.1:11434/api/generate"
 // same port.
 const LiveEndpointHostPort = "localhost:11434"
 
+// LiveEndpointDialAddress is the loopback address the Linux host-side live
+// proxy dials. It is the same endpoint as LiveEndpointURL; the proxy never
+// dials any other destination.
+const LiveEndpointDialAddress = "127.0.0.1:11434"
+
+// LiveSocketEnv names the Unix domain socket that transports the live decider to
+// the fixed endpoint inside the Linux live sandbox. The sandbox has no network
+// route; this socket is the only permitted channel. It is unset on platforms
+// that allow the endpoint directly (macOS Seatbelt).
+const LiveSocketEnv = "SOP_EVAL_LIVE_SOCKET"
+
 // LiveDefaultModel is the local model the smoke path uses when none is set.
 const LiveDefaultModel = "local-default"
 
@@ -167,7 +178,11 @@ type LiveRunResult struct {
 	Attempts  int
 	Requests  int
 	Detail    string
-	Bounds    LiveBounds
+	// Timeout reports that the run reached the process-lifetime bound before a
+	// decision was captured. The status stays NOT_RUN (no verdict); the flag keeps
+	// the attempted-timeout outcome distinct from a prerequisite that never ran.
+	Timeout bool
+	Bounds  LiveBounds
 }
 
 // Passed reports whether the run reached a PASS verdict.

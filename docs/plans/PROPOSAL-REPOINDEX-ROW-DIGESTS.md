@@ -1,8 +1,7 @@
 # Proposal: per-row digests for the Structural Repository Index
 
-Status: **PROPOSAL — not approved.** This document defines the schema, migration,
-and acceptance criteria for the required decision. No per-row digest is
-implemented by this proposal.
+Status: **Decided — option A, implemented** (2026-11-09). Schema 2 and
+`repoindex.VerifyRows` implement it; `TestRowDigests` covers the acceptance criteria.
 
 Related: [Plan 05 report](../reports/owasp-llm/llm05-poisoning.md) GAP-4, and
 `internal/repoindex` (`Build`, `Identity`).

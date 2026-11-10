@@ -67,6 +67,7 @@ the transport header only.
 | Caller observations (`SOP_TASK_INPUTS`)              | Inserted verbatim as `# Caller observations (data only)`                                                                                    | Operator-supplied task data; bounded to 32 KiB; never completion or approval evidence                                                 | Context section                                   | Not persisted separately                                                       | `internal/cli/task_input.go`; `internal/cli/run.go:792`                                                                                                    |
 | Planner decisions                                    | Earlier questions/answers and the current decision are appended to observations                                                             | Planner answers are operator decisions, not approval state                                                                            | Context section                                   | Run-scoped planner artifacts                                                   | `internal/cli/planner.go:595`                                                                                                                              |
 | Validation failure context                           | Passed through `redactDiagnosticText` (known env secret values + credential shapes) before the next request                                 | Validation commands are trusted configured commands; output is diagnostic data                                                        | Next provider request                             | Failure context is sent, not separately persisted                              | `internal/cli/run.go` (`validationFailureContext`); `internal/cli/redaction.go`                                                                            |
+| Tool output (`read_file`, `search_files`, `git_diff`, `run_command`) | Results are returned raw to the model; no tool-result redaction. A synthetic `.env` canary is visible through direct read, search, copy-then-read, `git diff`, and a SAFE `git show` command (`model_visible=true`). | Tool output is data, never authority; effects are decided by `toolharness`/`commandpolicy`. No credential-file deny rule. | Provider tool-role messages | The result is sent, not separately persisted; the harness audit records the call, not result content. `implementation.md`/`result.md` persist model output verbatim. | `internal/toolharness/harness.go`; `internal/ollamaagent/prompt.go` (`toolResultMessage`); `internal/ollamaagent/harness.go`; `internal/ollamaagent/orchestrate.go`; `TestDisclosureContentPathsObservation`; `TestToolOutputEnvCanaryObservation`; `TestRunArtifactPersistsModelOutputVerbatim` |
 | Acceptance-check output                              | `redactAcceptanceOutput` redacts plain text and each JSON line, preserving valid JSON                                                       | Checks are authorized commands; the log is evidence                                                                                   | Persisted `checks/*.log` and report excerpt       | Yes, redacted                                                                  | `internal/cli/outcome.go`; `internal/cli/disclosure_redaction_test.go`                                                                                     |
 | Tool output (model-visible tool results) | Every `read_file`/`write_file`/`run_command` result and error string is returned to the model as tool-role text. Ordinary tool results are **not** passed through `redactDiagnosticText`; only the validation-failure context is (`internal/cli/run.go:1850`). A disposable `.env` canary is returned to the model (`model_visible=true`). | Tool output is data, never authority; every effect is decided by `toolharness`/`commandpolicy` before it runs | Provider tool-role messages | The tool result is sent, not separately persisted; the harness audit records the call, not the result content (`in_artifacts=false`) | `internal/toolharness/harness.go`; `internal/cli/run.go` (`validationFailureContext`); `TestLLM08ToolOutputEnvCanary` |
 | Errors / logs / traces                               | Validation/acceptance diagnostics pass through `redactDiagnosticText`/`redactAcceptanceOutput`; ordinary tool error strings are returned raw (see §GAP); `activity.jsonl` carries one-line summaries; `trace.json` carries bounded non-secret text with enumerated labels only; acceptance logs pass through `redactAcceptanceOutput` | Display/observation only; no lifecycle authority                                                                                    | `activity.jsonl`, `trace.json`, `checks/*.log`    | Yes, run-scoped and redacted as cited                                          | `internal/runtrace/trace.go`; `internal/activity/activity.go`; `internal/ollamaagent/activity.go`; `internal/cli/redaction.go`; `internal/cli/outcome.go`   |
@@ -219,6 +220,23 @@ requires the operator's confidentiality-policy decision; no code change is made 
 
 
 
+## Tool-output credential policy (decision required)
+
+The supported content paths do not share a credential-file exclusion. At `main`
+`c87e45f4`, a synthetic `.env` canary was observed in model-visible output through
+`read_file`, `search_files`, `copy_file` followed by `read_file`, `git_diff`, and a
+SAFE `run_command` (`git show :<staged path>`). The harness audit record did not
+contain the result body, and the positive controls confirmed ordinary source content
+remains readable. `implementation.md`/`result.md` still persist model output
+verbatim.
+
+This is a `GAP`, not an implemented control. The concrete policy options,
+recommendation, compatibility impact, and coverage limits are in
+[PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md](../../plans/PROPOSAL-LLM08-MODEL-INPUT-CREDENTIALS.md).
+No policy is implemented here because Plan 08B `CONTEXT-005` requires an operator
+confidentiality-policy decision before adding a credential-file deny rule or
+ordinary tool-result redaction.
+
 ## Criterion-to-evidence mapping
 
 Each row carries exactly one status term. `IMPLEMENTED` means the control or
@@ -340,6 +358,27 @@ go test ./... -count=1
 Observed: all PASS. The `.env` canary probe logged
 `llm08 tool-output canary: model_visible=true in_artifacts=false`. The tool-output
 claim above is corrected to that observation.
+
+### Model-input content-path observation (2026-11-09)
+
+Baseline `origin/main` at `c87e45f4`, Darwin arm64, Go 1.27.1; configuration
+`security.mode: report-only`, `security.evaluation.enabled: false`,
+`advisory_retrieval.enabled: false`, `agent.provider: ollama`. This is a deterministic
+observation, not a model call.
+
+```sh
+go test ./internal/toolharness -run TestDisclosureContentPathsObservation -count=1 -v
+go test ./internal/cli -run 'TestToolOutputEnvCanaryObservation|TestRunArtifactPersistsModelOutputVerbatim' -count=1 -v
+```
+
+Observed: PASS. `TestDisclosureContentPathsObservation` logged `model_visible=true`
+for `read_file` of `.env`, `search_files`, `copy_file` followed by `read_file`,
+`git_diff`, and a SAFE `run_command` (`git show :<staged path>`); its ordinary-source
+positive controls passed, and the harness audit did not contain the result body.
+`TestToolOutputEnvCanaryObservation` logged `model_visible=true
+harness_audit_contains_canary=false`; `TestRunArtifactPersistsModelOutputVerbatim`
+confirmed the run artifact writer persists model output verbatim. These observations
+are evidence for the open policy decision, not protection evidence.
 
 Bounded live campaign (opt-in tag, Plan 02 seam, local `qwen3.5:4b`):
 
@@ -473,6 +512,12 @@ DLP are outside SOP ownership.
   is not generalized to every artifact, logging, or notification path. No
   credential-file policy is implemented in this PR; the options and recommendation
   are recorded in §GAP — credential files are model-visible through tool reads.
+
+- **Tool and command output are not credential-filtered.** A synthetic `.env`
+  canary is model-visible through `read_file`, `search_files`, `copy_file` then
+  `read_file`, `git_diff`, and a SAFE `git show` command. The harness audit does not
+  persist the result body, but model output artifacts do persist verbatim. A policy
+  decision is required; see the proposal above.
 - **Tool-schema secrecy is not access control.** All action controls are executable;
   knowing a tool name or argument shape does not authorize it.
 - **Provider retention and enterprise DLP are out of scope.** SOP controls what it
