@@ -408,14 +408,16 @@ cells. No Plan 03 per-criterion acceptance decision exists for any criterion.
 
 ### Residual-risk decision matrix (2026-11-10)
 
-Recommendations are proposals, not approved risk decisions. No residual risk is
-accepted. Priority follows demonstrated exposure first; hypothetical or
+Recommendations are proposals, not approved risk decisions. Exactly one bounded
+residual is recorded as accepted: the Option D subprocess hardlink alias (see
+§Recorded residual-risk decisions). Every other residual in this matrix remains
+unaccepted. Priority follows demonstrated exposure first; hypothetical or
 external-only gaps follow.
 
 | Priority | Residual item                                                               | Verified behavior and exposure                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | Existing protection                                                                                                  | Recommendation                                                                                                                                                                                                                                                                                                   | Compatibility impact and policy decision                                                                                                                                                       | Acceptance criteria for a proposed mitigation                                                                                                                                                                  |
 | -------- | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1        | Unknown-format credentials in ordinary files, diffs, or SAFE command output | Pre-C1, `redact.ModelInput` used only known env values and shapes; Linux live `READ-OPAQUE`, `COMMAND-OPAQUE`, and `DIFF-OPAQUE` reached the model and the model reproduced them. C1 is now implemented opt-in: exact inventory values, a precise assignment rule, contextual credential keys, and approved known formats. `TestModelInputWithPolicyRedactsUnknownFormats` and the real-harness wiring test pass. With C1 disabled, the pre-C1 residual remains.                                                                                                                           | A+B shape/path redaction plus C1 (external inventory + contextual keys/known formats; no entropy).                   | `MITIGATE` — C1 implemented and authorized (decision memory `e233daee7645d770d0813713b82523e4272d0b6ccb03c3e5974e5f434f0debe1`), opt-in. Remaining decision: enable it in project configuration, pursue C2 entropy, or accept the residual.                                                                      | C1 config/inventory lifecycle; no default behavior change; possible over-redaction of credential-like keys, with placeholder exemptions.                                                       | Implemented tests: exact inventory, contextual positives/negatives, known formats, placeholder/positive controls, fail-closed inventory, real harness/user-prompt wiring, and default-disabled behavior.       |
-| 2        | Hardlink or path alias with an ordinary name                                | `resolveIn` resolves symlinks; the credential-path check is lexical, so a hardlink alias is not resolved and the path read is allowed. Pre-C1 Linux live (`LLM02-LIVE-HARDLINK`) and the focused C1 verification (PR #373, revision `ed1ba11`, artifact SHA-256 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`, 6 requests) both observed the alias read. Under C1, known env values, exact inventory values, and contextual credential keys were redacted in the model input (4 protected cases), but one unlisted opaque value reached the model and was reproduced. | Symlink resolution; narrow credential-path denial; shape redaction; C1 known/inventoried/contextual value redaction. | `PENDING` — the merged PR #376 proposal is `NOT_APPROVED`; its review concluded Option C should not be approved as it stands. Review direction: a credential read-deny rule in the opt-in `run_command` sandbox plus a cheap `Nlink > 1` check; not implemented. Do not approve Option C or accept the residual. | Read-deny needs an operator-enabled sandbox and a credential-folder list; `Nlink > 1` has false positives on pnpm `node_modules`. No policy decision is requested here.                        | Deny alias reads of configured credential paths; ordinary files and legitimate non-credential hardlinks unaffected; no content read before the identity decision; deterministic tests and a performance bound. |
+| 2        | Hardlink or path alias with an ordinary name                                | `resolveIn` resolves symlinks; the credential-path check is lexical, so a hardlink alias is not resolved and the path read is allowed. Pre-C1 Linux live (`LLM02-LIVE-HARDLINK`) and the focused C1 verification (PR #373, revision `ed1ba11`, artifact SHA-256 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`, 6 requests) both observed the alias read. Under C1, known env values, exact inventory values, and contextual credential keys were redacted in the model input (4 protected cases), but one unlisted opaque value reached the model and was reproduced. | Symlink resolution; narrow credential-path denial; shape redaction; C1 known/inventoried/contextual value redaction. | `PARTIALLY_DECIDED` — the PR #376 review declined Option C as proposed. The operator later approved and implemented **Option C Phase 1** on Linux for protected workspace credential aliases (PR #381). The file-tool hardlink/path alias in this row remains unaccepted. The review's separate sandbox read-deny control is implemented opt-in (macOS `VERIFIED`; Linux `VERIFIED` for direct reads and symlinks per PR #384); `Nlink > 1` is not implemented. The bounded subprocess hardlink alias is accepted under Option D (§Recorded residual-risk decisions). | Read-deny needs an operator-enabled sandbox and a credential-folder list; `Nlink > 1` has false positives on pnpm `node_modules`. No policy decision is requested here.                        | Deny alias reads of configured credential paths; ordinary files and legitimate non-credential hardlinks unaffected; no content read before the identity decision; deterministic tests and a performance bound. |
 | 3        | Verbatim model-output artifact persistence                                  | `implementation.md` (`internal/cli/run.go`) and `result.md` (`internal/cli/prompt.go`) are written as produced. `TestRunArtifactPersistsModelOutputVerbatim` records the path; the Linux evidence artifact stores four reproduced opaque values.                                                                                                                                                                                                                                                                                                                                           | Upstream model-input/tool-result redaction; run artifacts are SOP-owned, run-scoped evidence.                        | `INVESTIGATE` a design that preserves audit evidence while redacting or access-controlling sensitive content (for example a redacted view plus a restricted raw record). If rejected, `ACCEPT_PROPOSED` as a separate sink risk.                                                                                 | Redaction can hide evidence; a dual-artifact or access-control design adds storage, retention, and review behavior. Policy decision: approve artifact handling or accept the sink residual.    | Audit integrity and replayability preserved; redaction tests; access control for any raw record; no loss of required validation/review evidence.                                                               |
 | 4        | Caller-owned and notification prose                                         | `notify.NewEvent` applies `redact.Shapes` to `Reason`, `NextAction`, and `Outcome` before persistence/delivery; `TestLLM08NotificationRedactsCredentialShapes` and `TestLLM08OutboxRowOmitsSecret` pass. Known env values and unknown formats are not covered by `redact.Shapes`; Linux live notification remains `NOT_RUN`.                                                                                                                                                                                                                                                               | Shape redaction; notification target/URL redaction; current lifecycle producers pass fixed/generic reasons.          | `MITIGATE` by extending `redactDescriptive` to `redact.ModelInput` (known env values plus shapes) and adding focused tests. If caller-owned unknown prose is preferred, `ACCEPT_PROPOSED`.                                                                                                                       | Low compatibility cost; caller prose may be over-redacted. Policy decision: approve the extension or accept caller-owned unknown-format prose.                                                 | Env-value and shape redaction in `Reason`/`NextAction`/`Outcome`; ordinary prose preserved; outbox and channel payload tests; no delivery behavior change.                                                     |
 | 5        | Retrieval and handoff inputs                                                | Retrieval is disabled by default; `retrievalboundary` validates corpus/scope and `memindex` filters. Handoff redacts known secret-named env values; `userPrompt` shape-redacts the rendered prompt. Live retrieval is `NOT_RUN`; handoff capsule persistence still lacks shape/unknown-format redaction.                                                                                                                                                                                                                                                                                   | Scope checks before search; handoff env redaction; model-input redaction at the prompt boundary.                     | `INVESTIGATE` live retrieval and handoff-persistence behavior. If the disabled-by-default boundary is sufficient, `ACCEPT_PROPOSED`.                                                                                                                                                                             | Live RAG needs a producer/index and a scoped canary; handoff persistence changes are local. Policy decision: authorize live retrieval verification or accept the disabled-by-default boundary. | A scoped live retrieval canary with no unrelated evidence; handoff persistence tests; no scope widening; `NOT_RUN` preserved if not executed.                                                                  |
@@ -423,8 +425,11 @@ external-only gaps follow.
 
 ### Separate residual: SAFE `run_command` credential read (2026-11-10)
 
-This residual is separate from the hardlink/path-alias item and is **not
-accepted**. It was identified in the PR #376 review.
+This residual is separate from the hardlink/path-alias item. The **direct
+credential read with isolation off** remains **not accepted**. The
+**pre-existing subprocess hardlink alias** is accepted only under the bounded
+Option D decision (§Recorded residual-risk decisions). It was identified in the
+PR #376 review.
 
 - `go test ./...` is classified `SAFE` by `internal/commandpolicy`, so
   `run_command` can execute model-written test code without an approval.
@@ -437,26 +442,32 @@ accepted**. It was identified in the PR #376 review.
 - Before this change the opt-in `run_command` sandbox stopped neither route: it
   restricted writes and network, not reads. It now denies reads of the fixed
   home credential list and refuses `ln` from it on macOS (`VERIFIED`), hides
-  them with bubblewrap on Linux (`NOT_RUN`), and scrubs secret-named env vars.
-  With isolation off (the default) both routes stay open.
-- Implemented opt-in (macOS `VERIFIED`, Linux `NOT_RUN`): a credential read-deny rule in the sandbox for `~/.ssh`, `~/.aws`, `~/.config/gh`, and similar folders,
-  plus a cheap `Nlink > 1` check. This blocks the direct read and the hardlink
-  route only when isolation is enabled.
-- Status: `GAP` / code-path finding from review; no live campaign. Not
-  accepted.
+  them with bubblewrap on Linux (`VERIFIED` for direct reads and symlinks per
+  PR #384), and scrubs secret-named env vars. With isolation off (the default)
+  both routes stay open.
+- Implemented opt-in (macOS `VERIFIED`; Linux `VERIFIED` for direct reads and
+  symlinks per PR #384): a credential read-deny rule in the sandbox for
+  `~/.ssh`, `~/.aws`, `~/.config/gh`, and similar folders. A cheap `Nlink > 1`
+  check is not implemented. This blocks the direct read and the `ln`
+  hardlink-creation route only when isolation is enabled; a pre-existing alias
+  remains readable and is accepted under Option D.
+- Status: `GAP` for direct reads with isolation off, which are **not accepted**.
+  Linux is `VERIFIED` for direct reads and symlinks (PR #384). The pre-existing
+  subprocess hardlink alias is `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS
+  (BOUNDED)` under Option D (PR #387); it is not fixed or closed.
 
 Priority rationale:
 
 1. **Unknown-format credentials** — demonstrated in three Linux live cases. C1 is implemented opt-in and verified deterministically; the pre-C1 residual remains when the feature is disabled, and formats outside inventory/context/known formats remain even when enabled.
-2. **Hardlink alias** — demonstrated in pre-C1 Linux live and deterministic evidence, and re-verified under C1 (PR #373): the alias remains readable (path bypass), C1 redacts known, inventoried, and contextual values, and one unlisted opaque value remains exposed. Option C is not approved after the PR #376 review; the review direction is a sandbox read-deny rule plus a cheap `Nlink > 1` check.
+2. **Hardlink alias** — demonstrated in pre-C1 Linux live and deterministic evidence, and re-verified under C1 (PR #373): the file-tool alias remains readable (path bypass), C1 redacts known, inventoried, and contextual values, and one unlisted opaque value remains exposed. Option C Phase 1 covers protected workspace credential aliases on Linux (PR #381); the file-tool alias residual remains unaccepted. The bounded subprocess hardlink alias is accepted under Option D (PR #387).
 3. **Artifact persistence** — demonstrated by the production write paths and the deterministic test; the tradeoff is audit evidence versus redaction.
 4. **Caller/notification prose** — shape redaction already exists and is tested; unknown-format caller prose is a bounded, lower-priority extension.
 5. **Retrieval/handoff** — disabled by default or scope-controlled; live retrieval is `NOT_RUN`, so evidence is insufficient for a live claim.
 6. **Provider retention/general DLP** — outside SOP ownership; transfer rather than mitigate.
-7. **SAFE `run_command` credential read** — code-path finding from the PR #376 review; separate from the hardlink item and not accepted.
+7. **SAFE `run_command` credential read** — code-path finding from the PR #376 review; separate from the hardlink item. Direct reads with isolation off remain unaccepted; the bounded pre-existing subprocess hardlink alias is accepted under Option D.
 
-No residual risk is marked accepted. Each item requires a separate authorization
-decision.
+Only the bounded Option D subprocess hardlink alias is marked accepted. Each
+remaining item requires a separate authorization decision.
 
 ### Plan 03 acceptance reconciliation (2026-11-10)
 
@@ -493,6 +504,29 @@ decision.
 The 17-case Linux tool-path campaign was not repeated. No new live evidence was
 generated for this disposition.
 
+### Recorded residual-risk decisions (2026-11-10)
+
+These are recorded operator risk decisions with bounded scope. They are not Plan
+03 acceptance, do not change any of the 16 cells, and are not general
+disclosure-security claims.
+
+| Decision | Disposition | Recorded identity | Scope recorded | Explicitly not covered |
+| --- | --- | --- | --- | --- |
+| Option C Phase 1 | `APPROVED` and `IMPLEMENTED` (Linux) | decision memory `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, source `operator:option-c-phase1-2026-11-10`; PR #381 | Hardlink/path identity enforcement for protected credential paths inside the workspace, Linux only | macOS and Windows (follow-ups); the broader Option C declined in the PR #376 review; ordinary-file aliases |
+| Option D | `RISK_ACCEPTED — SUBPROCESS HARDLINK ALIAS (BOUNDED)` | decision memory repository `a01d2007e600ff5b4fa76eebb0eb8a8e6644efaeb68183beb66c14d0a462a2db`, source `operator:option-d-subprocess-hardlink-2026-11-10`; PR #387 | A pre-existing ordinary-name hardlink to a protected credential remains readable by a SAFE `run_command` subprocess **inside the opt-in Bubblewrap sandbox** | Direct credential reads with isolation off; Option C-bounded; any further subprocess enforcement; other LLM02 residuals; Plan 03 acceptance; full LLM02 completion |
+
+Option D (`APPROVE_OPTION_D_SUBPROCESS_HARDLINK`) does not mark the subprocess
+hardlink vulnerability fixed. The PR #376 review record and its `NOT_APPROVED`
+conclusion for Option C as proposed are preserved: Option C Phase 1 is a later,
+narrower operator approval, not a re-reading of that review.
+
+Unaccepted residuals remain: the file-tool hardlink/path alias (matrix item 2),
+unknown-format credentials, verbatim artifact persistence, caller and
+notification prose, retrieval and handoff inputs, provider retention, and direct
+credential reads with isolation off. PR #389 proposes `ACCEPT_PROPOSED` for the
+context-free unknown-format residual; that remains a pending decision, not a
+recorded one.
+
 ### C1 reconciliation and required Linux evidence (2026-11-10; updated for merged evidence)
 
 This subsection reconciles the merged C1 implementation with the evidence. It
@@ -507,7 +541,7 @@ Separated status:
 | C1 deterministic verification           | macOS arm64 `PASS` at `d69e9f63`; Linux `amd64` `PASS` recorded in the campaign report at baseline `5ff526a` (final C1 code `85a754d4`)                                                                                                                                                     |
 | C1 Linux live verification              | `PASS` for 12 scoped cases, 3 positive controls, 1 bounded residual (PR #370, campaign revision `c5df5f0` on `5ff526a`; artifact `llm02-c1-linux-campaign.json`, SHA-256 `14e41eaf1a7f23ffad37cadc35e7f7e45910777d2fea64115455475e2ca16cfa`)                                                |
 | C1 Linux hardlink-alias verification    | `PASS` for 4 protected cases and 1 positive control, with 1 unlisted-value residual; path bypass observed and not closed (PR #373, revision `ed1ba11` on `5aba800`; artifact `llm02-c1-hardlink-campaign.json`, SHA-256 `417599e2a561f202dc70ead1243ae70d3487f614d45c395bc1ba7a10f7cadfb3`) |
-| Remaining residual disclosure risks     | Six-item matrix unchanged; none accepted                                                                                                                                                                                                                                                    |
+| Remaining residual disclosure risks     | Six-item matrix unchanged; only the bounded Option D subprocess hardlink alias is accepted (§Recorded residual-risk decisions); every other item remains unaccepted                                                                                                                          |
 | Formal Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                                                                                       |
 
 Scope boundary: C1 applies to the local Ollama tool-harness model-input
@@ -559,8 +593,10 @@ Coverage of the merged campaign and remaining untested scope:
 - The campaign is one model (`qwen3:4b`), one Linux `amd64` host, and one recorded
   run per case; it is not general DLP or universal disclosure prevention.
 
-The live campaign `PASS` is evidence, not acceptance. No residual risk is
-accepted, and Plan 03 per-criterion acceptance remains `0/16` / `NEEDS_HUMAN`.
+The live campaign `PASS` is evidence, not acceptance. Only the bounded Option D
+subprocess hardlink alias is recorded as accepted (§Recorded residual-risk
+decisions); no other residual is, and Plan 03 per-criterion acceptance remains
+`0/16` / `NEEDS_HUMAN`.
 
 ### C1 hardlink-alias verification (2026-11-10, Linux)
 
@@ -608,10 +644,12 @@ Option C decision history (do not revoke earlier approvals):
   [gap-register-20261109.md](gap-register-20261109.md).
 - The review's alternative is a separate control, not a replacement for Phase 1:
   the opt-in `run_command` sandbox credential read-deny is implemented (PRs #378
-  and #383; macOS `VERIFIED`, Linux `NOT_RUN`; see
-  [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial),
-  and the `Nlink > 1` check is not implemented.
-- No residual risk is accepted. The Linux workstream owns the focused test and
+  and #383; macOS `VERIFIED`; Linux `VERIFIED` for direct reads and symlinks per
+  PR #384; see [llm02-disclosure.md](llm02-disclosure.md) §Sandbox
+  credential-read denial). The `Nlink > 1` check is not implemented.
+- Only the bounded Option D subprocess hardlink alias is recorded as accepted
+  (§Recorded residual-risk decisions); the file-tool alias and every other
+  residual remain unaccepted. The Linux workstream owns the focused test and
   artifact; this request only integrates its result.
 
 ### Proposed final LLM02 status (2026-11-10)
@@ -623,7 +661,7 @@ Option C decision history (do not revoke earlier approvals):
 | Bounded evidence acceptance      | `RECORDED` (decision memory ID `59d986984142bef314ea784a401b204cd57b7ca1664f570b4763c13a5f580c98`)                                                                                                                                                                                                                                                                                                                                           |
 | Plan 03 per-criterion acceptance | `0/16`; `NEEDS_HUMAN`                                                                                                                                                                                                                                                                                                                                                                                                                        |
 | C1 unknown-format redaction      | `IMPLEMENTED` opt-in (PRs #361/#362/#364); deterministic macOS verification at `d69e9f63` and Linux at `5ff526a`; bounded Linux live `PASS` (PR #370, `c5df5f0`, artifact `14e41eaf…`); focused hardlink verification `PASS` for 4 scoped cases with one unlisted residual (PR #373, `ed1ba11`, artifact `417599e2…`); hardlink path bypass not closed; no acceptance                                                                        |
-| Residual risks                   | Not accepted; C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C Phase 1 approved and implemented on Linux (PR #381; macOS/Windows follow-ups), and the separate opt-in sandbox credential read-deny is implemented (macOS `VERIFIED`, Linux `NOT_RUN`; `Nlink > 1` not implemented); SAFE `run_command` credential read is a separate unaccepted residual; `INVESTIGATE` (unknown-format, artifact), `MITIGATE` (notification prose), and `TRANSFER_PROPOSED` (provider retention) remain pending |
+| Residual risks                   | Only the bounded Option D subprocess hardlink alias is accepted (PR #387); every other residual is unaccepted. C1 unknown-format mitigation is `IMPLEMENTED` (opt-in); hardlink Option C Phase 1 approved and implemented on Linux (PR #381; macOS/Windows follow-ups); the separate opt-in sandbox credential read-deny is implemented (macOS `VERIFIED`; Linux `VERIFIED` for direct reads and symlinks per PR #384; `Nlink > 1` not implemented); direct credential reads with isolation off remain unaccepted; unknown-format (PR #389 recommends `ACCEPT_PROPOSED`), artifact, notification prose, and retrieval/handoff decisions remain open; provider retention is `TRANSFER_PROPOSED` |
 | Broader LLM02 security coverage  | `OPEN`                                                                                                                                                                                                                                                                                                                                                                                                                                       |
 | Final disposition                | Ready for operator disposition; not fully closed                                                                                                                                                                                                                                                                                                                                                                                             |
 
@@ -633,9 +671,9 @@ required per-criterion acceptance are recorded.
 
 ### Decision packet (2026-11-10; corrected)
 
-This packet lists only decisions still required. It records no acceptance, accepts
-no residual risk, and changes no lifecycle state. Each row is a separate
-decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
+This packet lists only decisions still required. It records no Plan 03
+acceptance and no new risk decision, and changes no lifecycle state. Each row is
+a separate decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
 `DISCLOSE-002.*`.
 
 **Verified recording mechanism (no new process):**
@@ -673,30 +711,52 @@ decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
 | `003.5` | Unavailable live prerequisites produce `NOT_RUN` and leave the relevant acceptance incomplete.                                       | Historical `NOT_RUN`; Linux live retrieval/notification `NOT_RUN`; acceptance incomplete.                                                                          | **Not acceptable as demonstrated**; leave unaccepted.                                               | The criterion's consequence is incomplete acceptance.                                                                        | Accepting it as met requires a waiver/risk decision for the missing live evidence.                |
 | `003.6` | Required verification passes and a focused PR records changed paths and residual risks.                                              | CI on the named PRs; focused PRs; residual sections.                                                                                                               | Accept.                                                                                             | Does not accept residual risks.                                                                                              | No.                                                                                               |
 
+**Check-mapped criteria (verified by archived checks, not manual decisions):**
+
+The archived plan maps three criteria to archived checks. `sop outcome --plan …
+--accept` rejects them as check-mapped, so they cannot be recorded as manual
+decisions; their status is `check-unverified` until an authorized operator runs
+the archived check. A passing check is evidence for the revision it tested; it
+is not current-HEAD verification and not human acceptance.
+
+| Criterion | Archived check command |
+| --- | --- |
+| `DISCLOSE-002.1` | `go test ./internal/cli ./internal/agent -count=1` |
+| `DISCLOSE-002.2` | `go test ./internal/retrievalboundary ./internal/memindex ./internal/handoff ./internal/notify ./internal/acp ./internal/controller/sopclient ./internal/outcomefile -count=1` |
+| `DISCLOSE-002.3` | `go test ./internal/cli ./internal/agent -count=1` |
+
+There are three check-mapped criteria but two distinct commands (`.1` and `.3`
+share the first). Both are `go test`, classified `SAFE` by
+`internal/commandpolicy`, so `sop outcome --plan … --run-check` may execute them
+without an approval bypass. Neither has been run for acceptance.
+
 **Partial criteria (do not blanket-accept):**
 
-- `001.3` and `002.2` — the deterministic scope/validation contract is met;
-  live retrieval is optional additional evidence and is `NOT_RUN`. Accept the
+- `001.3` — manual. The deterministic scope/validation contract is met; live
+  retrieval is optional additional evidence and is `NOT_RUN`. Accept the
   deterministic scope with live retrieval excluded, or defer. A live-retrieval
   claim without that evidence needs a waiver.
-- `002.1` — the declared protected classes are met; the unknown-format,
-  hardlink-path, and unlisted-value residuals are observed. Accept only the
-  protected-class scope with residuals excluded, or make a risk decision/waiver
-  for full acceptance.
+- `002.1` and `002.2` — check-mapped (see above). The declared protected classes
+  and the scope/rejection contract are covered by the archived checks; verify
+  them with `--run-check`, not a manual decision. The unknown-format,
+  hardlink-path, and unlisted-value residuals are observed and remain
+  unaccepted; a claim beyond the protected classes needs a separate risk
+  decision.
 - `003.5` — `NOT_RUN` by design; it leaves acceptance incomplete. It is not
   acceptable as demonstrated. Leaving it unaccepted is the default; treating it
   as met requires a waiver/risk decision for the missing live evidence.
 
-**Hardlink risk — Option C Phase 1 implemented on Linux; no residual accepted:**
+**Hardlink risk — Option C Phase 1 implemented on Linux; the file-tool alias remains unaccepted:**
 
 - PR #376 merged as an investigation record; its review did not approve Option C
   as proposed. The operator later approved Option C Phase 1 (decision memory
   `a01d2007…`), and PR #381 implemented it on Linux (`VERIFIED`; macOS and
   Windows are follow-ups).
 - The opt-in sandbox credential read-deny rule is a separate control (macOS
-  `VERIFIED`, Linux `NOT_RUN`; see [llm02-disclosure.md](llm02-disclosure.md)
-  §Sandbox credential-read denial). The `Nlink > 1` check is not implemented.
-  This packet accepts no residual.
+  `VERIFIED`; Linux `VERIFIED` for direct reads and symlinks per PR #384; see
+  [llm02-disclosure.md](llm02-disclosure.md) §Sandbox credential-read denial).
+  The `Nlink > 1` check is not implemented. This packet records no new risk
+  decision.
 - The C1 hardlink evidence is integrated: 4 protected, 1 positive control, 1
   unlisted residual at `ed1ba11` (artifact `417599e2…`). Path authorization and
   C1 model-input redaction remain separate controls; C1 does not prevent file
@@ -704,14 +764,14 @@ decision; this is **not** a block acceptance of `DISCLOSE-001.*` or
 
 **Other residual risks (risk decisions, not criterion acceptance):**
 
-- SAFE `run_command` credential read: enable the opt-in sandbox read-deny rule (implemented; macOS `VERIFIED`, Linux `NOT_RUN`) / accept. Separate from hardlink; not accepted.
+- SAFE `run_command` credential read: the opt-in sandbox read-deny rule is implemented (macOS `VERIFIED`; Linux `VERIFIED` for direct reads and symlinks per PR #384). Direct reads with isolation off remain **not accepted**; the bounded pre-existing subprocess hardlink alias is accepted under Option D (PR #387).
 - Unknown-format credentials: enable C1 / pursue C2 entropy / accept.
 - Artifact persistence: investigate / accept.
 - Notification prose: mitigate / accept.
 - Retrieval/handoff: investigate / accept the disabled-by-default boundary.
 - Provider retention: transfer / accept.
 
-No residual risk is accepted by this record.
+This packet records no Plan 03 acceptance and no new risk decision; the existing Option D bounded acceptance is unchanged.
 
 **Required vs optional additional evidence:**
 
@@ -739,8 +799,10 @@ No residual risk is accepted by this record.
 
 The bounded evidence acceptance is already recorded in decision memory. The
 recommended disposition, in priority order, is: investigate a bounded
-unknown-format detector; defer the hardlink/path-alias disposition to the Linux
-path-identity approval decision on the merged PR #376 proposal; investigate an audit-preserving artifact
+unknown-format detector (PR #389 proposes `ACCEPT_PROPOSED`); keep the
+file-tool hardlink/path-alias residual open (Option C Phase 1 covers protected
+workspace credentials on Linux, and the bounded subprocess alias is accepted
+under Option D); investigate an audit-preserving artifact
 design; mitigate notification
 prose by extending the existing redaction to `redact.ModelInput`; investigate or
 accept the disabled-by-default retrieval/handoff boundary; and transfer provider
@@ -749,7 +811,7 @@ approvals. Do not claim full LLM02 coverage or universal disclosure prevention.
 
 ## Exact next action
 
-The designated approver must choose one of the decisions in §Required human
-decisions. Until an authorized acceptance decision exists, the matrix keeps the
+The designated approver must choose one of the decisions in §Decision packet
+(2026-11-10; corrected). Until an authorized acceptance decision exists, the matrix keeps the
 live row at `OBSERVED`, the user-prompt fix at `VERIFIED (deterministic)`, and
 Plan 03 acceptance at `NEEDS_HUMAN`. No acceptance is recorded by this request.
