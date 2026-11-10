@@ -6,7 +6,25 @@ import (
 	"os/exec"
 	"strings"
 	"testing"
+
+	"github.com/imhttran/agentic-sop/internal/agent"
 )
+
+// Task and caller input reach the model through userPrompt, so they pass the
+// same model-input redaction as tool results; ordinary text is unchanged.
+func TestUserPromptRedactsTaskAndInput(t *testing.T) {
+	const taskCanary = "sk-llm02-task-canary-not-a-real-secret"
+	const inputCanary = "sk-llm02-input-canary-not-a-real-secret"
+	got := userPrompt(agent.Request{Task: "fix login, key " + taskCanary, Input: "context " + inputCanary})
+	for _, c := range []string{taskCanary, inputCanary} {
+		if strings.Contains(got, c) {
+			t.Fatalf("prompt leaked %q:\n%s", c, got)
+		}
+	}
+	if !strings.Contains(got, "fix login") || !strings.Contains(got, "[redacted]") {
+		t.Fatalf("prompt lost ordinary text or redaction marker:\n%s", got)
+	}
+}
 
 const (
 	llm08EnvCanary     = "sk-llm08-env-canary-not-a-real-secret"

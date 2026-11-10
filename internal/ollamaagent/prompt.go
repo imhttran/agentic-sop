@@ -226,6 +226,8 @@ add "completion":"ALREADY_SATISFIED" and "evidence":{"acceptance":[{"criterion":
 }
 
 // userPrompt renders the task, input, and output requirements from the request.
+// Like toolResultMessage, its output passes through the shared model-input
+// redaction: task and caller input can carry credential-shaped values too.
 func userPrompt(req agent.Request) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "Task:\n%s\n", strings.TrimSpace(req.Task))
@@ -245,7 +247,7 @@ func userPrompt(req agent.Request) string {
 		fmt.Fprintf(&b, "\nAlready-satisfied verification contract:\nAcceptance criteria: %q\nRequired validation commands: %q\n", req.AcceptanceCriteria, req.ValidationCommands)
 		b.WriteString(alreadySatisfiedContract)
 	}
-	return b.String()
+	return redact.ModelInput(b.String(), os.Environ())
 }
 
 // toolResultMessage renders a tool outcome for the next model turn. A tool error
