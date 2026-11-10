@@ -111,6 +111,17 @@ func TestRunCommandIsolationDeniesStateDirWrite(t *testing.T) {
 	if !found {
 		t.Fatalf("fresh GOCACHE %s dropped from writable dirs", fresh)
 	}
+	// A cache path through a planted symlink is dropped, not followed.
+	planted := filepath.Join(t.TempDir(), "planted")
+	if err := os.Symlink(t.TempDir(), planted); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOCACHE", filepath.Join(planted, "cache"))
+	for _, d := range writableDirs(root) {
+		if strings.HasSuffix(d, "cache") && !strings.Contains(d, "go-build") {
+			t.Fatalf("cache path through a symlink kept as %s", d)
+		}
+	}
 	home, _ := os.UserHomeDir()
 	if err := sandboxed(t, root, "touch "+filepath.Join(home, ".sop-isolation-probe")); err == nil {
 		os.Remove(filepath.Join(home, ".sop-isolation-probe"))

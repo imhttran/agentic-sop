@@ -76,16 +76,29 @@ func writableDirs(root string) []string {
 	} else if home, err := os.UserHomeDir(); err == nil {
 		dirs = append(dirs, filepath.Join(home, "go", "pkg", "mod"))
 	}
-	var out []string
-	for _, d := range dirs {
+	out := []string{root}
+	for _, d := range dirs[1:] {
 		if !filepath.IsAbs(d) {
 			continue
 		}
-		if c, err := evalExisting(d); err == nil {
+		// Refuse a path that crosses a symlink (other than the macOS system
+		// aliases): an earlier sandboxed run could have planted one in a
+		// writable dir to widen this run's allow rule.
+		if c, err := evalExisting(d); err == nil && c == systemAlias(filepath.Clean(d)) {
 			out = append(out, c)
 		}
 	}
 	return out
+}
+
+// systemAlias maps the macOS /var, /tmp and /etc symlinks to their real paths.
+func systemAlias(p string) string {
+	for _, a := range []string{"/var", "/tmp", "/etc"} {
+		if p == a || strings.HasPrefix(p, a+"/") {
+			return "/private" + p
+		}
+	}
+	return p
 }
 
 // seatbeltProfile is allow-default with network and file-write denied, then
