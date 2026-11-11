@@ -15,26 +15,26 @@ To use one: start a fresh agent session in this repository and paste the
 
 ## Gap index
 
-| #   | OWASP        | Gap                                                                 | Kind            | Status | PR / evidence    |
-| --- | ------------ | ------------------------------------------------------------------- | --------------- | ------ | ---------------- |
-| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Open   |                  |
-| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | Open   |                  |
-| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Open   |                  |
-| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Open   |                  |
-| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Open   |                  |
-| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Open   |                  |
-| 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | Open   |                  |
-| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Open   |                  |
-| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | Open   |                  |
-| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Open   |                  |
-| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open   |                  |
-| 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Open   |                  |
-| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | Open   |                  |
-| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Open   |                  |
-| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Open   |                  |
-| 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done   | PR #398 (merged) |
-| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Open   |                  |
-| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open   |                  |
+| #   | OWASP        | Gap                                                                 | Kind            | Status      | PR / evidence    |
+| --- | ------------ | ------------------------------------------------------------------- | --------------- | ----------- | ---------------- |
+| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Open        |                  |
+| 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | Open        |                  |
+| 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | In progress | (this PR)        |
+| 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Open        |                  |
+| 5   | LLM02        | Hardlink alias: no `Nlink > 1` check; macOS not covered             | Code, gated     | Open        |                  |
+| 6   | LLM02        | macOS sandbox: parent environment readable via `kern.procargs2`     | Investigation   | Open        |                  |
+| 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | Open        |                  |
+| 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Open        |                  |
+| 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | Open        |                  |
+| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Open        |                  |
+| 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
+| 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Open        |                  |
+| 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | Open        |                  |
+| 14  | LLM08        | Live RAG with PostgreSQL and embeddings `NOT_RUN`                   | Evidence        | Open        |                  |
+| 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Open        |                  |
+| 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
+| 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Open        |                  |
+| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open        |                  |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list
 only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or

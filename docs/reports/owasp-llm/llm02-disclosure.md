@@ -1080,11 +1080,13 @@ redaction:
 ### Verification (final merged state)
 
 Scope boundary: the C1 policy is applied at the local Ollama tool-harness
-model-input boundary only — `userPrompt` and `toolResultMessage` (success and
-error) in `internal/ollamaagent`. The OpenAI-compatible provider request path is
-not a C1 boundary in the approved scope, and the system prompt is not redacted.
-A live C1 campaign must therefore exercise the Ollama tool harness, not the
-OpenAI-compatible path. The merged 16-case live campaign supplied inventory
+model-input boundary — `userPrompt` and `toolResultMessage` (success and error)
+in `internal/ollamaagent`. The agent chat transports (OpenAI-compatible,
+llama.cpp, MLX, and Ollama chat) were not C1 boundaries until the OWASP gap 3
+change: `agent.Redacted`, wrapped in the CLI agent factory, now scrubs each
+request's task, input, and output requirements under the same policy, with the
+baseline known-format pass always on. The system prompt is still not redacted.
+A live C1 campaign on the chat transports has not been run. The merged 16-case live campaign supplied inventory
 values in memory (`redact.Policy{Enabled: true, Values: [...]}`), so it did not
 exercise the external loader or the configuration path. The focused hardlink
 campaign (PR #373) does load an external `0600` inventory through the production
