@@ -1,6 +1,6 @@
 # OWASP LLM Top 10 — end-to-end prompts for the remaining gaps
 
-**As of:** `main` at `6bea81b1` (2026-11-10). **Status:** working aid, not a plan
+**As of:** `main` at `b444f1bf` (2026-11-11). **Status:** working aid, not a plan
 of record and not normative.
 
 One prompt per open gap, taken from
