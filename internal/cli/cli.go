@@ -197,11 +197,20 @@ func defaultDeps() deps {
 				// factory cannot otherwise see (the agent layer cannot import
 				// internal/config). It never substitutes another provider.
 				dir, _ := os.Getwd()
+				policy, err := redactionPolicyFromProject(dir)
+				if err != nil {
+					return nil, err
+				}
 				a, err := agent.NewOpenAICompatibleExecution(openAICompatibleExecutionEndpoint(dir), model)
 				if err != nil {
 					return nil, err
 				}
-				return agent.NewChecked(a), nil
+				return agent.NewChecked(agent.NewRedacted(a, policy)), nil
+			}
+			dir, _ := os.Getwd()
+			policy, err := redactionPolicyFromProject(dir)
+			if err != nil {
+				return nil, err
 			}
 			a, err := agent.FromConfig(provider, model)
 			if err != nil {
@@ -210,7 +219,7 @@ func defaultDeps() deps {
 			if c, ok := a.(*agent.CommandAgent); ok {
 				a = c.WithClass(class)
 			}
-			return agent.NewChecked(a), nil
+			return agent.NewChecked(agent.NewRedacted(a, policy)), nil
 		},
 		newResources: func(dir string) (resume.Observer, error) {
 			return &gitHubResources{branches: git.New(dir), prs: github.NewCommandClient(dir)}, nil

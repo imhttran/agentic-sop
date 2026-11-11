@@ -119,7 +119,11 @@ for LLM Applications 2025 ID. The second gives the repository's plan.
     that C1 does not close the hardlink path bypass; the `config.RedactionPolicy`
     composition remains unit-tested only. C1 applies to the local Ollama
     tool-harness boundary (`userPrompt`,
-    `toolResultMessage`), not the OpenAI-compatible provider path. The repository
+    `toolResultMessage`) and, since the OWASP gap 3 change, to every agent chat
+    transport the CLI builds (`agent.Redacted`, `TestRedactedBeforeChatTransports`
+    for OpenAI-compatible and Ollama chat, C1 on and off). The baseline
+    known-format pass now also runs on those transports, which previously had none.
+    No live campaign covers them yet. The repository
     configuration remains disabled, so the pre-C1 residual remains until an
     operator enables it, and retrieval/notification sinks
     remain `NOT_RUN`.
