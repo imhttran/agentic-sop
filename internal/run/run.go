@@ -165,9 +165,15 @@ func (r *Run) SetStage(stage Stage) error {
 	return r.save()
 }
 
-// Write stores an artifact file inside the run directory.
+// Write stores an artifact file inside the run directory. Artifacts can carry model
+// output and diff content, so they are owner-only: a file already present keeps its
+// old mode under WriteFile, hence the explicit chmod.
 func (r *Run) Write(name, content string) error {
-	return os.WriteFile(filepath.Join(r.dir, name), []byte(content), 0o644)
+	path := filepath.Join(r.dir, name)
+	if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+		return err
+	}
+	return os.Chmod(path, 0o600)
 }
 
 // attemptFileName stores the last attempt's outcome signature. Unlike state.json
