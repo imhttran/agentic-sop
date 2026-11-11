@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/imhttran/agentic-sop/decision"
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // This file defines the Runner seam: the boundary between the Julia adapter and
@@ -229,6 +230,7 @@ func (r *CommandRunner) Run(ctx context.Context, in Inputs) (Outputs, error) {
 	}
 
 	cmd := exec.CommandContext(ctx, r.Command[0], r.Command[1:]...)
+	procgroup.Bind(cmd)
 	cmd.Stdin = bytes.NewReader(body)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

@@ -7,6 +7,8 @@ import (
 	"os/exec"
 	"sort"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // changedPaths lists repository-relative paths that differ between commit and the
@@ -68,6 +70,7 @@ func statusPaths(s string) []string {
 
 func gitOutput(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
+	procgroup.Bind(cmd)
 	cmd.Dir = dir
 	out, err := cmd.Output()
 	if err != nil {

@@ -10,6 +10,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 type runnerFunc func(ctx context.Context, name string, args ...string) ([]byte, error)
@@ -29,6 +31,7 @@ func NewCommandClient(dir string) *CommandClient {
 func execRunner(dir string) runnerFunc {
 	return func(ctx context.Context, name string, args ...string) ([]byte, error) {
 		cmd := exec.CommandContext(ctx, name, args...)
+		procgroup.Bind(cmd)
 		cmd.Dir = dir
 		cmd.Env = append(os.Environ(), "GH_PROMPT_DISABLED=1")
 

@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/imhttran/agentic-sop/internal/procgroup"
 )
 
 // CommandError describes a failed git invocation.
@@ -34,6 +36,7 @@ func (e *CommandError) Unwrap() error { return e.Err }
 // and it disables interactive prompting.
 func run(ctx context.Context, dir string, args ...string) (string, error) {
 	cmd := exec.CommandContext(ctx, "git", args...)
+	procgroup.Bind(cmd)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
 
