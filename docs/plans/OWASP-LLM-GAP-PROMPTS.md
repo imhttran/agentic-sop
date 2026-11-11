@@ -26,7 +26,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 7   | LLM02        | Model-output artifacts persisted verbatim                           | Investigation   | In progress | PR #408 (option C); option A pending, proposal PR #407 |
 | 8   | LLM02        | Operator decisions: Plan 03 acceptance, C1 default, residuals       | Decision packet | Waiting on operator | PR #409 |
 | 9   | LLM03        | Scanner integrity: hash-then-exec race, pins, signatures            | Code, gated     | In progress | PR #410 (race closed); policy proposal in docs/plans |
-| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | Open        |                  |
+| 10  | LLM04        | No production reader verifies repository index rows                 | Code            | In progress | PR #411 (guard; digests latent) |
 | 11  | LLM04        | RAG producer does not emit `chunk_hash`                             | Cross-repo code | Open        |                  |
 | 12  | LLM05        | Slack rendering and channel binding unobserved                      | Evidence        | Open        |                  |
 | 13  | LLM06        | Sandbox off by default; Linux host sockets outside `/tmp`, `/run`   | Code, gated     | Open        |                  |
