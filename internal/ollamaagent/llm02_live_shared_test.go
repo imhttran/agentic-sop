@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -149,8 +150,15 @@ func llm02LiveProbes(t *testing.T, outside string) []llm02LiveProbe {
 			outsideRead = true
 		}
 	}
+	// Linux denies direct TCP to the model endpoint; the model is reached only through
+	// the Unix-socket bridge. The macOS profile allows localhost:11434 on purpose, so
+	// direct access is recorded as allowed by design there.
+	endpoint := llm02LiveProbe{Name: "endpoint_direct_tcp_denied", OK: !dial("127.0.0.1", "11434"), Detail: "tcp 127.0.0.1:11434 from inside the live sandbox"}
+	if runtime.GOOS == "darwin" {
+		endpoint = llm02LiveProbe{Name: "endpoint_direct_tcp_allowed_by_design", OK: dial("127.0.0.1", "11434"), Detail: "tcp 127.0.0.1:11434 from inside the macOS sandbox: allowed by design (network-outbound localhost:11434)"}
+	}
 	return []llm02LiveProbe{
-		{Name: "endpoint_direct_tcp_denied", OK: !dial("127.0.0.1", "11434"), Detail: "tcp 127.0.0.1:11434 from inside the live sandbox"},
+		endpoint,
 		{Name: "non_loopback_denied", OK: !dial("1.1.1.1", "443"), Detail: "tcp 1.1.1.1:443"},
 		{Name: "filesystem_outside_denied", OK: !outsideRead, Detail: outside},
 		{Name: "secret_env_scrubbed", OK: os.Getenv("OPENAI_API_KEY") == "", Detail: "OPENAI_API_KEY"},

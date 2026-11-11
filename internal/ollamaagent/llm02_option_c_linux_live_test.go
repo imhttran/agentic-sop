@@ -61,7 +61,10 @@ func runLLM02OptionCDriver(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	root := t.TempDir()
+	root := realDir(t, t.TempDir())
+	// The binary is copied into the sandbox root on both platforms. On macOS the
+	// build directory is outside the profile's readable paths, so sandbox-exec
+	// refuses to execute a test binary run in place.
 	sandboxExe := filepath.Join(root, "ollamaagent.test")
 	if err := llm02CopyExecutable(exe, sandboxExe); err != nil {
 		t.Fatalf("copy evaluation binary into the sandbox: %v", err)
@@ -322,7 +325,7 @@ func runLLM02OptionCChild(t *testing.T) {
 	art.Probes = append(art.Probes, llm02LiveProbe{
 		Name:   "endpoint_via_socket",
 		OK:     observed,
-		Detail: "at least one real model request completed through the Unix-socket bridge",
+		Detail: optionCEndpointDetail(),
 	})
 	art.FinishedAt = time.Now().UTC().Format(time.RFC3339)
 	data, err := json.MarshalIndent(art, "", "  ")
@@ -394,4 +397,23 @@ func optionCIsolation() string {
 		return "sandbox-exec opt-in live profile: network-outbound localhost:11434 only; all other network denied"
 	}
 	return "bwrap opt-in live profile: private network namespace; fixed model endpoint reached only through a Unix-socket bridge; all other network denied"
+}
+
+// realDir resolves symlinks in a temporary directory. On macOS t.TempDir sits under
+// /var, a symlink to /private/var; the sandbox profile matches the resolved path.
+func realDir(t *testing.T, dir string) string {
+	t.Helper()
+	resolved, err := filepath.EvalSymlinks(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return resolved
+}
+
+// optionCEndpointDetail says how the model was reached on this platform.
+func optionCEndpointDetail() string {
+	if runtime.GOOS == "darwin" {
+		return "at least one real model request completed directly to localhost:11434 inside the macOS profile"
+	}
+	return "at least one real model request completed through the Unix-socket bridge"
 }
