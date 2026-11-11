@@ -13,7 +13,8 @@ import (
 // adapter (internal/decision/command) must stay independent of execution-model
 // routing, of any provider implementation, and of the lifecycle/approval/domain
 // packages. The seam is a leaf: it can depend on nothing in this module except the
-// contract itself. This is the structural half of "providers evaluate; SOP governs":
+// contract itself, plus internal/procgroup, a process-group utility with no routing or
+// governance logic. This is the structural half of "providers evaluate; SOP governs":
 // the decision surface cannot reach model routing or governance state because it
 // has no edge to them.
 
@@ -26,9 +27,12 @@ const internalImportPrefix = moduleImportPrefix + "internal/"
 // import. internal/decision is a leaf (no internal import); the process adapter may
 // import only the contract it implements.
 var decisionSeamPackages = map[string]map[string]bool{
-	"internal/decision":         nil, // leaf: no internal import at all
-	"internal/decision/command": {internalImportPrefix + "decision": true},
-	"internal/decision/bridge":  {internalImportPrefix + "decision": true},
+	"internal/decision": nil, // leaf: no internal import at all
+	"internal/decision/command": {
+		internalImportPrefix + "decision":  true,
+		internalImportPrefix + "procgroup": true,
+	},
+	"internal/decision/bridge": {internalImportPrefix + "decision": true},
 	"internal/decision/commandprofile": {
 		internalImportPrefix + "decision":        true,
 		internalImportPrefix + "decision/bridge": true,

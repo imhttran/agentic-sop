@@ -51,16 +51,11 @@ func TestCommandContextBindsProcessGroup(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Known gaps, each with its reason. Remove an entry when the file binds a group.
-	// internal/decision/command is a SEAM-005 leaf (see decision_seam_test.go), which
-	// allows no import beyond internal/decision; binding it needs an operator decision.
-	exempt := map[string]bool{"internal/decision/command/command.go": true}
-
 	var missing []string
 	for _, f := range starts {
 		rel, _ := filepath.Rel(root, f.path)
 		rel = filepath.ToSlash(rel)
-		if exempt[rel] || strings.Contains(f.src, "procgroup.Bind(") || helper[filepath.Dir(f.path)] {
+		if strings.Contains(f.src, "procgroup.Bind(") || helper[filepath.Dir(f.path)] {
 			continue
 		}
 		missing = append(missing, rel)
