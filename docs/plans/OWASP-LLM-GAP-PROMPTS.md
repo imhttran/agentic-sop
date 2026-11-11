@@ -17,7 +17,7 @@ To use one: start a fresh agent session in this repository and paste the
 
 | #   | OWASP        | Gap                                                                 | Kind            | Status      | PR / evidence    |
 | --- | ------------ | ------------------------------------------------------------------- | --------------- | ----------- | ---------------- |
-| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | In progress | PR #422 (Linux verdicts for all five cases); macOS second model pending |
+| 1   | LLM01        | Linux case with no verdict; one model per platform                  | Evidence        | Done        | PR #422 (Linux verdicts for all five cases); PR #424 (macOS second model) |
 | 2   | LLM02        | Live campaigns predate the task-input fix; Linux sinks `NOT_RUN`    | Evidence        | Open        |                  |
 | 3   | LLM02        | C1 redaction not on the OpenAI-compatible provider path             | Code            | Done        | PR #400 (merged) |
 | 4   | LLM02, LLM07 | Model context outside the user prompt and tool results              | Code            | Done        | PR #402 (merged) |
