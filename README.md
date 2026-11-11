@@ -175,7 +175,7 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
 
 ## Status
 
-### Current delivery notes (2026-11-10)
+### Current delivery notes (2026-11-11)
 
 - All ten OWASP LLM workstreams have merged implementation or evidence, but the
   [evidence matrix](docs/reports/owasp-llm/README.md) is not a compliance
@@ -184,14 +184,19 @@ waives work; see the [approval guide](docs/guides/APPROVALS.md#invalidating-a-ga
   (PR #343) and bubblewrap on Linux (PR #354). PR #356 gives every isolated run a
   throwaway Go build cache and keeps the shared module cache read-only.
 - Plan 03 has bounded macOS and Linux observations, model-input redaction, and
-  separately recorded bounded-evidence acceptance. C1 contextual redaction plus seven
-  approved known credential formats are implemented but remain opt-in; full
-  per-criterion acceptance and unaccepted residual risks remain open.
+  separately recorded bounded-evidence acceptance. PR #400 applies baseline
+  model-input redaction to every CLI-built chat transport and carries C1 policy when
+  enabled; no live chat-transport campaign has run. C1 contextual redaction plus
+  seven approved known credential formats remain opt-in; full per-criterion
+  acceptance and unaccepted residual risks remain open.
 - Plan 08 notification events now redact exact environment-secret values and
   credential-like resolution commands before persistence or delivery (PR #393).
 - Plan 05 per-row digests and chunk-hash verification, Plan 04 scanner pins, and
   Plan 09 retrieval-boundary reconciliation are merged. Live producer-side RAG
   isolation remains `NOT_RUN`, and retrieval remains disabled by default.
+- Every `exec.CommandContext` subprocess path now binds process-group termination,
+  enforced by an architecture guard (PR #398). Token budgeting remains opt-in and
+  does not provide a monetary cap.
 - Plan 10's scoped protections are implemented, verified, accepted, and
   historicalized `COMPLETE`; Slack transport was delivered once, while client
   rendering and channel binding remain unobserved.
