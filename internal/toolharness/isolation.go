@@ -198,16 +198,22 @@ func homeCredentials() ([]credentialPath, error) {
 	return out, nil
 }
 
-// maxHomeSocketEntries bounds the home scan. Exceeding it fails closed, so the command
-// is refused rather than run with a socket unmasked.
-const maxHomeSocketEntries = 20000
+const (
+	// maxHomeSocketDepth and maxHomeSocketEntries bound the home scan. Exceeding either
+	// fails closed, so the command is refused rather than run with a socket unmasked.
+	maxHomeSocketDepth   = 4
+	maxHomeSocketEntries = 20000
+)
 
-// homeSocketPaths lists the Unix sockets under the user's home directory, with symlinks
-// resolved. Any error during the scan fails closed. A symlink to a socket masks its real
-// target; a symlink to a directory fails closed, since its contents cannot be bounded
-// here. Dangling symlinks have no target yet and are skipped.
-// ponytail: a socket created after the scan is not masked. Upgrade: mask at connect
-// time, or hide the home tree.
+// homeSocketPaths lists the Unix sockets under the user's home directory, up to a
+// bounded depth and entry count. The home path is resolved first, so a symlinked home
+// is walked rather than treated as a single entry. Directory symlinks are followed
+// (for example a runner's ~/.ghcup pointing at a toolchain outside home) with a
+// visited set so a link cycle terminates; a symlink to a socket masks its real target,
+// and a dangling symlink is skipped. Any other error, or a walk past the bounds, fails
+// closed.
+// ponytail: a socket created after the scan, or deeper than the depth bound, is not
+// masked. Upgrade: mask at connect time, or hide the home tree.
 func homeSocketPaths() ([]credentialPath, error) {
 	home, err := os.UserHomeDir()
 	if err != nil || home == "" {
@@ -219,39 +225,60 @@ func homeSocketPaths() ([]credentialPath, error) {
 	}
 	var out []credentialPath
 	entries := 0
-	err = filepath.WalkDir(home, func(p string, d fs.DirEntry, err error) error {
+	visited := map[string]bool{}
+	var walk func(dir string, depth int) error
+	walk = func(dir string, depth int) error {
+		if depth >= maxHomeSocketDepth {
+			return nil
+		}
+		real, err := filepath.EvalSymlinks(dir)
 		if err != nil {
 			return err
 		}
-		if p == home {
-			return nil
+		if visited[real] {
+			return nil // a symlink cycle, or the same tree reached twice
 		}
-		entries++
-		if entries > maxHomeSocketEntries {
-			return fmt.Errorf("home has more than %d entries; socket masking cannot complete", maxHomeSocketEntries)
+		visited[real] = true
+		des, err := os.ReadDir(real)
+		if err != nil {
+			return err
 		}
-		switch {
-		case d.Type()&fs.ModeSocket != 0:
-			out = append(out, credentialPath{path: p, dir: false})
-		case d.Type()&fs.ModeSymlink != 0:
-			target, err := filepath.EvalSymlinks(p)
-			if err != nil {
-				return nil // dangling: no target to connect to yet
+		for _, d := range des {
+			entries++
+			if entries > maxHomeSocketEntries {
+				return fmt.Errorf("home has more than %d entries; socket masking cannot complete", maxHomeSocketEntries)
 			}
-			info, err := os.Stat(target)
-			if err != nil {
-				return err
-			}
-			if info.IsDir() {
-				return fmt.Errorf("symlink %s points to a directory; its sockets cannot be bounded", p)
-			}
-			if info.Mode()&fs.ModeSocket != 0 {
-				out = append(out, credentialPath{path: target, dir: false})
+			p := filepath.Join(real, d.Name())
+			switch {
+			case d.Type()&fs.ModeSocket != 0:
+				out = append(out, credentialPath{path: p, dir: false})
+			case d.IsDir():
+				if err := walk(p, depth+1); err != nil {
+					return err
+				}
+			case d.Type()&fs.ModeSymlink != 0:
+				target, err := filepath.EvalSymlinks(p)
+				if err != nil {
+					continue // dangling: no target to connect to yet
+				}
+				info, err := os.Stat(target)
+				if err != nil {
+					return err
+				}
+				if info.IsDir() {
+					if err := walk(target, depth+1); err != nil {
+						return err
+					}
+					continue
+				}
+				if info.Mode()&fs.ModeSocket != 0 {
+					out = append(out, credentialPath{path: target, dir: false})
+				}
 			}
 		}
 		return nil
-	})
-	if err != nil {
+	}
+	if err := walk(home, 0); err != nil {
 		return nil, fmt.Errorf("%w: home socket scan: %v", errIsolationUnavailable, err)
 	}
 	return out, nil
@@ -261,8 +288,9 @@ func homeSocketPaths() ([]credentialPath, error) {
 // bound read-write, a private /tmp and an empty /run (hiding host sockets such
 // as Docker's), the SOP state dir read-only, and a private network namespace
 // in which only the sandbox's own loopback exists.
-// ponytail: a Unix socket outside /tmp and /run (for example under $HOME)
-// stays connectable; a deny-default view would close that.
+// ponytail: a Unix socket outside /tmp and /run that the bounded home scan
+// does not reach (too deep, or outside $HOME) stays connectable; a deny-default
+// view would close that.
 func bubblewrapArgs(root string, writable []string, denyRead []credentialPath) []string {
 	args := []string{
 		"--ro-bind", "/", "/",
