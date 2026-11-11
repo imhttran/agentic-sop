@@ -34,7 +34,7 @@ To use one: start a fresh agent session in this repository and paste the
 | 15  | LLM09        | Subprocess can write SOP state with the sandbox off; live `NOT_RUN` | Code + evidence | Waiting on operator | fingerprint check was NO-GO (2026-11-09); the sandbox that denies .agent-sdlc writes is opt-in; default-on waits on gap 13 |
 | 16  | LLM10        | Five subprocess paths without process-group termination             | Code            | Done        | PR #398 (merged) |
 | 17  | LLM10        | Token budget is off by default and is not a dollar cap              | Code, optional  | Done | PR #417 (merged): option A, token budget only |
-| 18  | All          | Coverage statement and evidence matrix lag PRs #393 and #394        | Docs            | Open        |                  |
+| 18  | All          | Coverage statement and evidence matrix lag current merged evidence  | Docs            | In progress | PR #425          |
 
 **Tracking.** The Status and PR / evidence columns track progress on this list
 only. Statuses: `Open`, `In progress`, `Waiting on operator` (a proposal or
